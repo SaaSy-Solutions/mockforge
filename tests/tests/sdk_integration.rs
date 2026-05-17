@@ -35,7 +35,6 @@ async fn test_rust_sdk_integration() {
         }
     };
 
-    let http_port = server.http_port();
     // The mockforge management API (`/__mockforge/api/*`) is mounted on the
     // HTTP server, not the admin UI server (which has RBAC middleware that
     // would reject our anonymous requests). Use http_port; the older

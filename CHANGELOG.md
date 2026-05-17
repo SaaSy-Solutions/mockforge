@@ -1,3 +1,21 @@
+## [0.3.137] - 2026-05-17
+
+### Fixed
+
+- **[Reality]** Client-side "Connections opened" counter now appears for `--rps`-only runs (Issue #79 round 6 follow-up)
+  - Root cause: the parser was reading `http_req_connecting.values.count` from k6's `summary.json`, but k6's Trend metric never emits a `count` field — only `avg/min/med/max/p(90)/p(95)`. The field was always absent, so `tcp_connect_samples` was always 0 and the connection-count line never printed for non-`--cps` runs.
+  - Fix: the generated k6 script now declares a dedicated `mockforge_connections_opened` Counter and increments it whenever `res.timings.connecting > 0` (i.e. a fresh TCP socket was opened). The Rust parser reads this Counter's `count` directly. Works for both `--cps` runs (≈ total requests) and pooled-reuse runs (≈ `vus_max`).
+  - Also: TCP-connect / TLS-handshake timing lines now print whenever the Trend has a non-zero `avg`, not when `count > 0` (which was unreliable). New `test_connections_opened_counter_present` regression test guards both the Counter declaration and the per-request increment.
+
+- **[Reality]** `--scenario constant` now runs at full VU concurrency from t=0 (Issue #79 round 6 follow-up)
+  - Root cause: Srikanth reported that `--vus 5 -d 600s` took until the ~6-minute mark to reach 5 VUs and then ramped DOWN. The k6 template always wrote `startVUs: 0`, so even `--scenario constant`'s single `{duration: '600s', target: 5}` stage made `ramping-vus` linearly interpolate from 0 → 5 across the whole window.
+  - Fix: for `Constant`, `startVUs` is seeded at `max_vus` so concurrency is at full from the start. Ramping scenarios (`RampUp`/`Spike`/`Stress`/`Soak`) still start at 0 and let their stages drive the curve. Guarded by `test_constant_scenario_starts_at_target_vus`.
+
+### Added
+
+- **[DevX]** Pre-flight warning when `--vus` is too low for `--rps` (Issue #79 round 6 follow-up)
+  - `mockforge bench --rps N --vus M` now warns before launch when `M × 10 < N` (rule of thumb: 1 VU at ~100ms latency sustains ~10 req/s). The warning suggests a higher `--vus` value (`ceil(rps / 10)`), so users hit by k6's "Insufficient VUs, reached M active VUs and cannot initialize more" message know what to change.
+
 ## [0.3.136] - 2026-05-15
 
 ### Added
@@ -165,16 +183,16 @@
   - When set, the existing `--http-port` listener stays plain HTTP and a parallel TLS listener spins up on `--https-port`, sharing the same router and admin UI
   - Example: `mockforge serve --http-port 80 --https-port 443 --tls-cert server.pem --tls-key key.pem`
   - `--https-port` requires `--tls-cert` + `--tls-key` and must differ from `--http-port`
-- **[Bench]** `bench-chunked --spec` to drive the native chunked bench from POST/PUT/PATCH operations in an OpenAPI spec (#328, #79)
+- **[Reality]** `bench-chunked --spec` to drive the native chunked bench from POST/PUT/PATCH operations in an OpenAPI spec (#328, #79)
   - When `--spec` is set, `--target` becomes the base URL and the bench iterates each matching operation sequentially, each running for `--duration`
   - `--operation-id <id>` narrows to a single op
-- **[Bench]** `bench-chunked` now captures and prints up to five non-2xx response samples — status, `Server` header, first 256 bytes of body (#329, #79)
+- **[Reality]** `bench-chunked` now captures and prints up to five non-2xx response samples — status, `Server` header, first 256 bytes of body (#329, #79)
   - Critical for diagnosing the "503 from bench, 200 in MockForge log" pattern (almost always an upstream proxy timing out on a slow chunked upload)
   - Hint output for 5xx spells out the proxy-timeout math: each request takes >= `(total_size_bytes / chunk_size_bytes) * chunk_interval_ms` ms
 
 ### Changed
 
-- **[Bench]** `bench-chunked` CLI help: `--total-size-bytes` is now explicitly documented as **per-request** (not total over the run), with the chunks-per-request formula in the help text. Resolves repeat user confusion (#328, #79)
+- **[Reality]** `bench-chunked` CLI help: `--total-size-bytes` is now explicitly documented as **per-request** (not total over the run), with the chunks-per-request formula in the help text. Resolves repeat user confusion (#328, #79)
 
 ## [0.3.125] - 2026-05-02
 
@@ -191,7 +209,7 @@
   - `connection_error_kind: tcp_reset` — TCP RST at accept time (`SO_LINGER=0` then drop). Clients see `ECONNRESET`
   - `connection_error_kind: tcp_close` — TCP FIN at accept time. Clients see EOF before any HTTP response
   - `connection_error_kind: http_503` (default) — application-layer 503 on a healthy connection (back-compat)
-- **[Bench]** `mockforge bench-chunked` — native Rust chunked-encoding traffic generator (#306, #79)
+- **[Reality]** `mockforge bench-chunked` — native Rust chunked-encoding traffic generator (#306, #79)
   - Bypasses k6 entirely. Each worker streams body via `reqwest::Body::wrap_stream`, no Content-Length, guaranteed wire chunking
   - Supports `--concurrency`, `--duration`, `--chunk-size-bytes`, `--total-size-bytes`, `--chunk-interval-ms`, `--header`, `--insecure`
 - **[TUI]** Peak metrics tracked alongside current values in the dashboard (#306, #79)
@@ -206,7 +224,7 @@
 - **[Chaos]** `partial_response` now distinguishes chunked vs non-chunked truncation (#306, #79):
   - Non-chunked: truncates body but keeps original `Content-Length` header — clients see unexpected EOF
   - Chunked: truncates before terminating chunk — no `0\r\n\r\n`, real protocol violation
-- **[Bench]** k6 templates: `bench --chunked-request-bodies` adds `Transfer-Encoding: chunked` header (best-effort — k6/Go's `net/http` may still send Content-Length based on body type)
+- **[Reality]** k6 templates: `bench --chunked-request-bodies` adds `Transfer-Encoding: chunked` header (best-effort — k6/Go's `net/http` may still send Content-Length based on body type)
 
 ### Notes
 
@@ -276,15 +294,15 @@ The crates are all published and resolvable on crates.io
 
 ### Added
 
-- **[Bench]** Field-level schema validation errors in conformance failure details (#79)
+- **[Reality]** Field-level schema validation errors in conformance failure details (#79)
   - Violations now show specific field path, violation type, expected/actual values
   - Uses `jsonschema::validate()` instead of `is_valid()` for detailed error reporting
   - Displayed in terminal output and `conformance-failure-details.json`
-- **[Bench]** HAR-to-YAML generator: `mockforge har-to-conformance --har file.har` (#79)
+- **[Reality]** HAR-to-YAML generator: `mockforge har-to-conformance --har file.har` (#79)
   - Converts browser HAR captures to custom compliance YAML
   - Auto-detects base URL, filters static assets, extracts response headers and JSON body field types
   - Output compatible with `--conformance-custom`
-- **[Bench]** Multi-target conformance: `--conformance` + `--targets-file` now works (#79)
+- **[Reality]** Multi-target conformance: `--conformance` + `--targets-file` now works (#79)
   - Runs conformance tests against each target sequentially using native executor
   - Per-target reports in `output/target_N/conformance-report.json`
   - Combined summary in `multi-target-conformance-summary.json`
@@ -293,16 +311,16 @@ The crates are all published and resolvable on crates.io
 
 ### Fixed
 
-- **[Bench]** Add `summary.json` to spec-driven conformance `handleSummary` (#79)
+- **[Reality]** Add `summary.json` to spec-driven conformance `handleSummary` (#79)
   - Custom conformance tests (via `--conformance-custom`) now generate `summary.json`
 
 ## [0.3.101] - 2026-03-26
 
 ### Fixed
 
-- **[Bench]** Skip automatic Authorization (Basic/Bearer) headers when Cookie header is provided via `--conformance-header` (#79)
+- **[Reality]** Skip automatic Authorization (Basic/Bearer) headers when Cookie header is provided via `--conformance-header` (#79)
   - Users managing session-based auth no longer get conflicting Basic Auth headers
-- **[Bench]** Add `summary.json` output to reference conformance generator's `handleSummary` (#79)
+- **[Reality]** Add `summary.json` output to reference conformance generator's `handleSummary` (#79)
 
 ## [0.3.100] - 2026-03-24
 
@@ -325,19 +343,19 @@ The crates are all published and resolvable on crates.io
 
 ### Fixed
 
-- **[Bench]** Fix zero stats in multi-target summary — removed deprecated `--summary-export` flag; rely solely on `handleSummary()` for writing `summary.json` (#79)
-- **[Bench]** Fix failed_requests metric reading `.fails` (success count) instead of `.passes` (failure count) from k6 Rate metric (#79)
-- **[Bench]** Fix k6 script path not found when CWD is set to output dir — now uses absolute script path (#79)
-- **[Bench]** Fix `--summary-export` absolute path for CWD mismatch (#79)
-- **[Bench]** Fix k6 API server port conflict in multi-target mode — each parallel instance gets a unique port (#79)
-- **[Bench]** Treat k6 exit code 99 (thresholds crossed) as warning, still parse results (#79)
-- **[Bench]** Warn when `--conformance` is used with `--targets-file` (not yet supported) (#79)
+- **[Reality]** Fix zero stats in multi-target summary — removed deprecated `--summary-export` flag; rely solely on `handleSummary()` for writing `summary.json` (#79)
+- **[Reality]** Fix failed_requests metric reading `.fails` (success count) instead of `.passes` (failure count) from k6 Rate metric (#79)
+- **[Reality]** Fix k6 script path not found when CWD is set to output dir — now uses absolute script path (#79)
+- **[Reality]** Fix `--summary-export` absolute path for CWD mismatch (#79)
+- **[Reality]** Fix k6 API server port conflict in multi-target mode — each parallel instance gets a unique port (#79)
+- **[Reality]** Treat k6 exit code 99 (thresholds crossed) as warning, still parse results (#79)
+- **[Reality]** Warn when `--conformance` is used with `--targets-file` (not yet supported) (#79)
 - **[Core]** Downgrade contract diff `$ref` resolver warnings from WARN to DEBUG (#79)
 
 ### Added
 
-- **[Bench]** Total elapsed time in multi-target summary output and `aggregated_summary.json` (#79)
-- **[Bench]** `all_targets.csv` file with per-target metrics for easy parsing (#79)
+- **[Reality]** Total elapsed time in multi-target summary output and `aggregated_summary.json` (#79)
+- **[Reality]** `all_targets.csv` file with per-target metrics for easy parsing (#79)
 - **[UI]** Host header column in admin dashboard Recent Logs (#79)
 - **[TUI]** Client IP and Host columns in both Dashboard and Logs screens (#79)
 
@@ -367,9 +385,9 @@ The crates are all published and resolvable on crates.io
 
 ### Added
 
-- **[Bench]** `--conformance-delay` flag to add delay between conformance requests (#79)
-- **[Bench]** k6 output logging to file for debugging (#79)
-- **[Bench]** 429 rate-limit detection and error clarity in conformance output (#79)
+- **[Reality]** `--conformance-delay` flag to add delay between conformance requests (#79)
+- **[Reality]** k6 output logging to file for debugging (#79)
+- **[Reality]** 429 rate-limit detection and error clarity in conformance output (#79)
 
 ### Fixed
 
@@ -381,16 +399,16 @@ The crates are all published and resolvable on crates.io
 
 ### Added
 
-- **[Bench]** Native conformance executor with API, UI dashboard, and SDK integration (#79)
-- **[Bench]** Conformance report UX improvements and custom test authoring (#79)
-- **[Bench]** Full request/response detail capture for conformance failures (#79)
-- **[Bench]** OWASP API Top 10 coverage mapping in conformance reports (#79)
+- **[Reality]** Native conformance executor with API, UI dashboard, and SDK integration (#79)
+- **[Reality]** Conformance report UX improvements and custom test authoring (#79)
+- **[Reality]** Full request/response detail capture for conformance failures (#79)
+- **[Reality]** OWASP API Top 10 coverage mapping in conformance reports (#79)
 
 ### Fixed
 
-- **[Bench]** Eliminate misleading error rate in conformance output (#79)
-- **[Bench]** Deduplicate native executor checks, write failure details file (#79)
-- **[Bench]** Custom conformance checks now emit failure details (#79)
+- **[Reality]** Eliminate misleading error rate in conformance output (#79)
+- **[Reality]** Deduplicate native executor checks, write failure details file (#79)
+- **[Reality]** Custom conformance checks now emit failure details (#79)
 - **[Core/Bench]** Resolve 3 conformance test failures (#79)
 - **[UI/Bench]** Fix empty routes and add endpoint details to conformance (#79)
 
@@ -461,7 +479,7 @@ The crates are all published and resolvable on crates.io
 
 ### Changed
 
-- **[Bench]** Spec-driven conformance generator now sends `X-Mockforge-Response-Status` header for `response:400` and `response:404` checks (#79)
+- **[Reality]** Spec-driven conformance generator now sends `X-Mockforge-Response-Status` header for `response:400` and `response:404` checks (#79)
   - Tells the mock server which status code to return, enabling accurate status-code conformance testing
 
 ## [0.3.72] - 2026-03-04
@@ -472,17 +490,17 @@ The crates are all published and resolvable on crates.io
   - `validate_auth_config_on_startup()` now logs a warning instead of returning an error
   - Auto-generated JWT secret fallback so the admin UI works out of the box
   - Default users are seeded even without `ENVIRONMENT=development`, so login works immediately
-- **[Bench]** Fix duplicate session ID in conformance Cookie headers (#79)
+- **[Reality]** Fix duplicate session ID in conformance Cookie headers (#79)
   - Removed invalid `noCookies: true` from k6 options (not a real k6 option; k6 silently ignores it)
   - Added `http.cookieJar().clear(BASE_URL)` before and after each request when custom Cookie headers are present
   - Prevents k6's internal cookie jar from re-sending server `Set-Cookie` values alongside custom headers
   - Applied to both reference-mode (`generator.rs`) and spec-driven (`spec_driven.rs`) generators
-- **[Bench]** Fix missing single-quote escaping in spec-driven `format_headers()` (#79)
+- **[Reality]** Fix missing single-quote escaping in spec-driven `format_headers()` (#79)
   - Header values containing single quotes are now properly escaped, matching `generator.rs` behavior
 
 ### Added
 
-- **[Bench]** Conformance report now shows individual failed checks with pass/fail counts (#79)
+- **[Reality]** Conformance report now shows individual failed checks with pass/fail counts (#79)
   - New "Failed Checks" section after the category summary table lists each check that failed
   - When not using `--conformance-all-operations`, prints a tip suggesting it for endpoint-level detail
 
@@ -490,23 +508,23 @@ The crates are all published and resolvable on crates.io
 
 ### Fixed
 
-- **[Bench]** Remove dead `CUSTOM_HEADERS` JS const from conformance generators (#79)
+- **[Reality]** Remove dead `CUSTOM_HEADERS` JS const from conformance generators (#79)
   - Custom header values are now inlined directly into each request instead of referencing an unused JS constant
   - Eliminates confusing dead code in generated k6 scripts
-- **[Bench]** Add `noCookies: true` to k6 options when Cookie header is in custom headers (#79)
+- **[Reality]** Add `noCookies: true` to k6 options when Cookie header is in custom headers (#79)
   - Prevents k6's automatic cookie jar from duplicating cookies on subsequent requests
   - Fixes duplicate session ID / authentication failures reported by @srikr
-- **[Bench]** Fix conformance report file not found after k6 execution (#79)
+- **[Reality]** Fix conformance report file not found after k6 execution (#79)
   - `handleSummary` now writes `conformance-report.json` to an absolute path matching the output directory
   - Previously wrote to a relative path based on k6's CWD, causing the CLI to report "Conformance report not generated"
 
 ### Added
 
-- **[Bench]** `--conformance-all-operations` flag for full-endpoint conformance testing (#79)
+- **[Reality]** `--conformance-all-operations` flag for full-endpoint conformance testing (#79)
   - Default mode tests one representative operation per feature check (fast feature-coverage)
   - New flag tests ALL operations with path-qualified check names (e.g., `method:GET:/api/users`)
   - Addresses user confusion about "only 5 endpoints tested"
-- **[Bench]** Conformance coverage summary output (#79)
+- **[Reality]** Conformance coverage summary output (#79)
   - After generating conformance tests, prints "Conformance: N operations analyzed, M unique checks generated"
   - When using default mode with fewer checks than operations, shows tip about `--conformance-all-operations`
 
@@ -525,40 +543,40 @@ The crates are all published and resolvable on crates.io
 
 ### Fixed
 
-- **[Bench]** Spec-driven conformance: global security requirement detection (#79)
+- **[Reality]** Spec-driven conformance: global security requirement detection (#79)
   - `annotate_security()` now falls back to `spec.security` (root-level) when an operation has no operation-level security defined
   - APIs that only define security globally are now correctly detected
-- **[Bench]** Spec-driven conformance: SecurityScheme type resolution (#79)
+- **[Reality]** Spec-driven conformance: SecurityScheme type resolution (#79)
   - Security schemes are now resolved from `components.securitySchemes` to detect actual type (`HTTP/bearer`, `APIKey`, `HTTP/basic`) instead of relying on name heuristics alone
   - A scheme named "myAuth" that is actually an `apiKey` type is now correctly identified
   - Name-based heuristic retained as fallback for unresolvable schemes
-- **[Bench]** Spec-driven conformance: ContentNegotiation detection (#79)
+- **[Reality]** Spec-driven conformance: ContentNegotiation detection (#79)
   - `ContentNegotiation` feature is now detected when a response defines multiple content types (e.g., both `application/json` and `application/xml`)
   - Previously only worked in reference mode
-- **[Bench]** CLI help text for `--conformance-categories` now includes `response-validation` (#79)
+- **[Reality]** CLI help text for `--conformance-categories` now includes `response-validation` (#79)
 
 ### Added
 
-- **[Bench]** 5 new conformance tests: ResponseValidation with schema check, global security, SecurityScheme resolution, ContentNegotiation detection, single-type negative case (#79)
+- **[Reality]** 5 new conformance tests: ResponseValidation with schema check, global security, SecurityScheme resolution, ContentNegotiation detection, single-type negative case (#79)
 
 ## [0.3.56] - 2026-02-14
 
 ### Added
 
-- **[Bench]** Conformance category filtering (#79)
+- **[Reality]** Conformance category filtering (#79)
   - New `--conformance-categories` flag to run only specific conformance categories (e.g., `--conformance-categories "parameters,security"`)
   - Case-insensitive category matching with validation against known categories
-- **[Bench]** Spec-driven conformance testing (#79)
+- **[Reality]** Spec-driven conformance testing (#79)
   - When `--conformance --spec my-api.json` is provided, analyzes the user's actual OpenAPI spec to detect which features their API exercises
   - Generates conformance tests against real endpoints instead of reference `/conformance/` paths
   - Full `$ref` resolution with cycle detection for parameters, schemas, request bodies, and responses
   - Detects: parameter types, request body formats, schema types/composition/formats/constraints, response codes, security schemes
-- **[Bench]** Response schema validation (#79)
+- **[Reality]** Response schema validation (#79)
   - In spec-driven mode, validates response bodies against OpenAPI response schemas
   - `SchemaValidatorGenerator` produces JavaScript validation expressions from OpenAPI schemas
   - Supports object (required fields, property types), array, string (format regex, enum, length), integer/number (range), boolean validation
   - Wrapped in try-catch for resilient k6 execution
-- **[Bench]** SARIF 2.1.0 report output (#79)
+- **[Reality]** SARIF 2.1.0 report output (#79)
   - New `--conformance-report-format sarif` flag outputs conformance results in SARIF 2.1.0 format
   - Compatible with GitHub Code Scanning, VS Code SARIF Viewer, and CI/CD pipelines
   - Maps each conformance feature to a SARIF rule with OpenAPI spec section links
@@ -568,16 +586,16 @@ The crates are all published and resolvable on crates.io
 
 ### Added
 
-- **[Bench]** Per-server stats in multi-target mode (#79)
+- **[Reality]** Per-server stats in multi-target mode (#79)
   - `K6Results` now parses RPS, VUs, and full latency breakdown (min/med/p90/p95/p99/max) from k6 `summary.json`
   - `AggregatedMetrics` includes `total_rps`, `avg_rps`, `total_vus_max`
   - Multi-target reporter shows per-target RPS, VUs, and full latency breakdown
   - `aggregated_summary.json` includes all new metrics in both aggregated and per-target sections
-- **[Bench]** Per-target spec support for multi-target mode (#79)
+- **[Reality]** Per-target spec support for multi-target mode (#79)
   - Targets file JSON format now supports `"spec"` field for per-target OpenAPI specs
   - Each target can use a different spec file for heterogeneous fan-out
   - Example: `[{"url": "https://server1", "spec": "spec_a.json"}, {"url": "https://server2", "spec": "spec_b.json"}]`
-- **[Bench]** OpenAPI 3.0.0 conformance testing (#79)
+- **[Reality]** OpenAPI 3.0.0 conformance testing (#79)
   - New `--conformance` flag generates and runs comprehensive k6 scripts exercising 47 OpenAPI 3.0.0 features across 10 categories (Parameters, Request Bodies, Schema Types, Composition, String Formats, Constraints, Response Codes, HTTP Methods, Content Negotiation, Security)
   - Reports per-category pass/fail rates with colored terminal output
   - Supports `--conformance-api-key`, `--conformance-basic-auth`, `--conformance-report` for security scheme testing
@@ -587,7 +605,7 @@ The crates are all published and resolvable on crates.io
 
 ### Fixed
 
-- **[Bench]** fix(bench): deliver CRS payloads as path injection + form-encoded body (#79)
+- **[Reality]** fix(bench): deliver CRS payloads as path injection + form-encoded body (#79)
   - Added `inject_as_path` field to `SecurityPayload` — URI payloads without query params (e.g., CRS 942101: `POST /1234%20OR%201=1`) now replace the request path via `encodeURI()` so WAFs inspect `REQUEST_FILENAME` instead of `ARGS`
   - Added `form_encoded_body` field to `SecurityPayload` — body payloads from CRS tests (e.g., 942432: `var=;;dd foo bar`) now sent as `application/x-www-form-urlencoded` so WAFs parse form data into `ARGS` for character counting
   - Updated `k6_script.hbs` and `k6_crud_flow.hbs` templates to handle both new delivery mechanisms
@@ -598,7 +616,7 @@ The crates are all published and resolvable on crates.io
 
 ### Fixed
 
-- **[Bench]** fix(bench): URL-encode URI payloads + strip form keys from body payloads (#79)
+- **[Reality]** fix(bench): URL-encode URI payloads + strip form keys from body payloads (#79)
   - URI security payloads now wrapped in `encodeURIComponent()` for valid HTTP transport — WAFs decode before inspection (fixes 942101)
   - Form-encoded body payloads now have form key prefix stripped (`var=;;dd foo bar` → `;;dd foo bar`) so WAF ARGS parsing sees the attack payload directly (fixes 942432)
   - Confirmed SQLi detection: 45/46 rules (97.8%), up from 43/46 (93.5%)
@@ -607,7 +625,7 @@ The crates are all published and resolvable on crates.io
 
 ### Fixed
 
-- **[Bench]** fix(bench): Group multi-part WAFBench payloads + decode body payloads + fix Cookie/CookieJar conflict (#79)
+- **[Reality]** fix(bench): Group multi-part WAFBench payloads + decode body payloads + fix Cookie/CookieJar conflict (#79)
   - Multi-part CRS test cases (URI + headers + body) now grouped by `group_id` and sent together in one HTTP request instead of being split across separate requests (fixes 942290)
   - Body payloads from CRS YAML files are now form-URL-decoded before injection (`%22+WAITFOR+DELAY+%27` → `" WAITFOR DELAY '`) so WAFs see actual SQL patterns in JSON bodies (fixes 942240, 942320, 942432)
   - URI payloads from path-only CRS tests are now URL-decoded and stripped of leading `/` artifact (fixes 942101)
@@ -620,7 +638,7 @@ The crates are all published and resolvable on crates.io
 
 ### Fixed
 
-- **[Bench]** fix(bench): Accept all WAFBench CRS payloads without attack-pattern filter (#79)
+- **[Reality]** fix(bench): Accept all WAFBench CRS payloads without attack-pattern filter (#79)
   - Removed overly strict `attack-pattern` category filter that was silently dropping valid CRS test cases
   - All CRS YAML test cases now loaded regardless of their `attack_type` metadata
 
@@ -628,7 +646,7 @@ The crates are all published and resolvable on crates.io
 
 ### Fixed
 
-- **[Bench]** fix(bench): Use per-request CookieJar instead of shared EMPTY_JAR (#79)
+- **[Reality]** fix(bench): Use per-request CookieJar instead of shared EMPTY_JAR (#79)
   - Each HTTP request now creates its own `new http.CookieJar()` instead of sharing a global empty jar
   - Prevents cookie cross-contamination between requests in security testing
 
@@ -636,7 +654,7 @@ The crates are all published and resolvable on crates.io
 
 ### Fixed
 
-- **[Bench]** fix(bench): Send raw security payloads + use dedicated empty cookie jar (#79)
+- **[Reality]** fix(bench): Send raw security payloads + use dedicated empty cookie jar (#79)
   - Security payloads now sent as raw strings without additional encoding
   - Dedicated empty CookieJar per request prevents k6's default cookie accumulation
 
@@ -644,7 +662,7 @@ The crates are all published and resolvable on crates.io
 
 ### Fixed
 
-- **[Bench]** fix(bench): Cycle security payloads per-operation + clear cookies in API2 tests (#79)
+- **[Reality]** fix(bench): Cycle security payloads per-operation + clear cookies in API2 tests (#79)
   - Security payloads now cycle per-operation block (each API endpoint gets a different payload)
   - Previously all operations in one VU iteration used the same payload
   - OWASP API2 (Broken Auth) tests now properly clear cookies between requests
@@ -660,7 +678,7 @@ The crates are all published and resolvable on crates.io
 
 ### Fixed
 
-- **[Bench]** fix(bench): Security payloads now injected + cookie dedup in all templates (#79)
+- **[Reality]** fix(bench): Security payloads now injected + cookie dedup in all templates (#79)
   - Security payloads now properly injected in both k6_script.hbs and k6_crud_flow.hbs templates
   - Cookie deduplication applied to all HTTP request paths in both templates
   - Comprehensive test suite added for issue #79 security pipeline
@@ -674,13 +692,13 @@ The crates are all published and resolvable on crates.io
 
 ### Fixed
 
-- **[Bench]** fix(bench): WAFBench payloads now distributed across VUs for better coverage (#79)
+- **[Reality]** fix(bench): WAFBench payloads now distributed across VUs for better coverage (#79)
   - Changed payload cycling to use VU-based offset: `(__VU - 1) % payloads.length`
   - Previously all 50 VUs started at index 0 and cycled through same sequence
   - Now each VU starts at a different payload, maximizing attack coverage in shorter test runs
   - With 50 VUs and 30 payloads, all payloads are tested from the start
 
-- **[Bench]** fix(bench): OWASP API tests now include custom headers in all requests (#79)
+- **[Reality]** fix(bench): OWASP API tests now include custom headers in all requests (#79)
   - Added `CUSTOM_HEADERS` to API8 verbose error test (malformed JSON body test)
   - Added `CUSTOM_HEADERS` to API9 discovery paths test
   - Added `CUSTOM_HEADERS` to API9 API versions test
@@ -690,7 +708,7 @@ The crates are all published and resolvable on crates.io
 
 ### Fixed
 
-- **[Bench]** fix(bench): Security payloads now actually applied to requests in k6 scripts (#79)
+- **[Reality]** fix(bench): Security payloads now actually applied to requests in k6 scripts (#79)
   - Updated k6_script.hbs template to call `getNextSecurityPayload()` and `applySecurityPayload()`
   - Previously, security payload functions were defined but never called in generated scripts
   - Security payloads now properly injected into request bodies for POST/PUT/PATCH
@@ -700,10 +718,10 @@ The crates are all published and resolvable on crates.io
 
 ### Fixed
 
-- **[Bench]** fix(bench): XSS payloads now inject into ALL string fields, not just the first one (#79)
+- **[Reality]** fix(bench): XSS payloads now inject into ALL string fields, not just the first one (#79)
   - Removed `break` statement from `applySecurityPayload()` loop in security_payloads.rs
   - Ensures WAF can detect payloads regardless of which field it scans
-- **[Bench]** fix(bench): Added `jar: null` to remaining OWASP HTTP calls to prevent cookie duplication (#79)
+- **[Reality]** fix(bench): Added `jar: null` to remaining OWASP HTTP calls to prevent cookie duplication (#79)
   - Fixed testBrokenAuth empty token test
   - Fixed testMisconfiguration verbose error test
   - Fixed testInventory discovery paths and API versions checks
@@ -715,11 +733,11 @@ The crates are all published and resolvable on crates.io
 
 ### Fixed
 
-- **[Bench]** fix(bench): WAFBench XSS attacks now properly injected into request body (#79)
+- **[Reality]** fix(bench): WAFBench XSS attacks now properly injected into request body (#79)
   - Removed location check from `applySecurityPayload()` - ALL payloads now injected into body for POST/PUT
   - WAFBench payloads correctly pass location info (uri/header/body) to k6 scripts
   - Header payloads include header name for proper injection into specified headers
-- **[Bench]** fix(bench): Cookie header duplication in OWASP and security tests (#79)
+- **[Reality]** fix(bench): Cookie header duplication in OWASP and security tests (#79)
   - Added `jar: null` to all HTTP request params to disable k6's automatic cookie jar
   - Prevents duplicate cookies when user provides Cookie header via `--headers` flag
   - Applied to k6_script.hbs, k6_crud_flow.hbs, and OWASP generator
@@ -728,40 +746,40 @@ The crates are all published and resolvable on crates.io
 
 ### Fixed
 
-- **[Bench]** fix(bench): pass custom headers from `--headers` flag to OWASP tests (#79)
+- **[Reality]** fix(bench): pass custom headers from `--headers` flag to OWASP tests (#79)
   - Cookie and other custom headers are now included in all OWASP request helpers
   - Fixes issue where `avi-sessionid=None` was being sent instead of actual cookie values
-- **[Bench]** fix(bench): WAFBench loader now handles single YAML file paths (#79)
+- **[Reality]** fix(bench): WAFBench loader now handles single YAML file paths (#79)
   - Previously only directories or glob patterns were supported
   - Single file paths like `/path/to/941100.yaml` now work correctly
-- **[Bench]** Verified CRS v3.3 format compatibility with full CoreRuleSet test suite
+- **[Reality]** Verified CRS v3.3 format compatibility with full CoreRuleSet test suite
   - Tested with 175 files, 1512 payloads (692 XSS, 505 SQLi, 304 Command Injection, 11 Path Traversal)
 
 ## [0.3.37] - 2026-01-12
 
 ### Added
 
-- **[Bench]** feat(bench): add WAFBench cycle-all mode (`--wafbench-cycle-all`) to test all payloads sequentially (#79)
-- **[Bench]** feat(bench): add `--owasp-iterations` parameter to control OWASP test iterations per VU (#79)
-- **[Bench]** feat(bench): OWASP tests now respect `--vus` parameter for concurrent testing (#79)
+- **[Reality]** feat(bench): add WAFBench cycle-all mode (`--wafbench-cycle-all`) to test all payloads sequentially (#79)
+- **[Reality]** feat(bench): add `--owasp-iterations` parameter to control OWASP test iterations per VU (#79)
+- **[Reality]** feat(bench): OWASP tests now respect `--vus` parameter for concurrent testing (#79)
 
 ### Fixed
 
-- **[Bench]** fix(bench): WAFBench payloads now properly injected in standard bench mode (not just CRUD flow)
-- **[Bench]** fix(bench): OWASP APIs now use random UUIDs per request instead of static IDs for BOLA testing (#79)
-- **[Bench]** fix(bench): OWASP auth tokens with special characters (quotes, backslashes) now properly escaped (#79)
-- **[Bench]** fix(bench): prevent Handlebars double-escaping of pre-escaped JavaScript values
-- **[Bench]** fix(bench): WAFBench security payloads now integrated into CRUD flow requests (#79)
-- **[Bench]** fix(owasp): use `http.del()` instead of `http.delete()` for k6 compatibility (#79)
-- **[Bench]** fix(owasp): add `--base-path` support for OWASP API testing (#79)
-- **[Bench]** fix(bench): remove undefined `totalRequestCount` variable reference
-- **[Bench]** fix(bench): support CRS v3.3 WAFBench format and pass `--insecure` to OWASP tests
+- **[Reality]** fix(bench): WAFBench payloads now properly injected in standard bench mode (not just CRUD flow)
+- **[Reality]** fix(bench): OWASP APIs now use random UUIDs per request instead of static IDs for BOLA testing (#79)
+- **[Reality]** fix(bench): OWASP auth tokens with special characters (quotes, backslashes) now properly escaped (#79)
+- **[Reality]** fix(bench): prevent Handlebars double-escaping of pre-escaped JavaScript values
+- **[Reality]** fix(bench): WAFBench security payloads now integrated into CRUD flow requests (#79)
+- **[Reality]** fix(owasp): use `http.del()` instead of `http.delete()` for k6 compatibility (#79)
+- **[Reality]** fix(owasp): add `--base-path` support for OWASP API testing (#79)
+- **[Reality]** fix(bench): remove undefined `totalRequestCount` variable reference
+- **[Reality]** fix(bench): support CRS v3.3 WAFBench format and pass `--insecure` to OWASP tests
 
 ## [0.3.33] - 2026-01-10
 
 ### Fixed
 
-- **[Bench]** fix(bench): multiple fixes for OWASP and WAFBench testing
+- **[Reality]** fix(bench): multiple fixes for OWASP and WAFBench testing
   - Support CRS v3.3 format in WAFBench parser
   - Pass `--insecure` flag to OWASP tests for self-signed certificates
 
@@ -769,48 +787,48 @@ The crates are all published and resolvable on crates.io
 
 ### Fixed
 
-- **[Bench]** fix(bench): fix extracted value substitution in CRUD flows
-- **[Bench]** fix(bench): OWASP k6 configuration improvements
+- **[Reality]** fix(bench): fix extracted value substitution in CRUD flows
+- **[Reality]** fix(bench): OWASP k6 configuration improvements
 
 ## [0.3.30] - 2026-01-07
 
 ### Added
 
-- **[Bench]** feat(bench): add `merge_body` support for CRUD flows - merge extracted values with request body
-- **[Bench]** feat(bench): add `inject_attacks` data model for security testing in CRUD flows
+- **[Reality]** feat(bench): add `merge_body` support for CRUD flows - merge extracted values with request body
+- **[Reality]** feat(bench): add `inject_attacks` data model for security testing in CRUD flows
 
 ## [0.3.28] - 2026-01-06
 
 ### Added
 
-- **[Bench]** feat(bench): add nested path extraction for CRUD flows (e.g., `results[0].id`)
-- **[Bench]** feat(bench): add filter extraction for CRUD flows (e.g., `results[?name=='test'].id`)
+- **[Reality]** feat(bench): add nested path extraction for CRUD flows (e.g., `results[0].id`)
+- **[Reality]** feat(bench): add filter extraction for CRUD flows (e.g., `results[?name=='test'].id`)
 
 ## [0.3.27] - 2026-01-05
 
 ### Added
 
-- **[Bench]** feat(bench): add full body extraction for CRUD flows
-- **[Bench]** feat(bench): add key filtering for extracted values
+- **[Reality]** feat(bench): add full body extraction for CRUD flows
+- **[Reality]** feat(bench): add key filtering for extracted values
 
 ## [0.3.26] - 2026-01-04
 
 ### Added
 
-- **[Bench]** feat(bench): add aliased extraction for CRUD flow value chaining
+- **[Reality]** feat(bench): add aliased extraction for CRUD flow value chaining
   - Extract values with aliases (e.g., `id as poolId`) for use in subsequent requests
 
 ## [0.3.24] - 2026-01-03
 
 ### Fixed
 
-- **[Bench]** fix(bench): use correct variable name in CRUD flow extracted value replacement
+- **[Reality]** fix(bench): use correct variable name in CRUD flow extracted value replacement
 
 ## [0.3.22] - 2026-01-02
 
 ### Added
 
-- **[Bench]** feat(bench): add OWASP API Security Top 10 testing mode (#79)
+- **[Reality]** feat(bench): add OWASP API Security Top 10 testing mode (#79)
   - Test for BOLA (API1), Broken Auth (API2), Mass Assignment (API3), Resource Consumption (API4)
   - Test for Function Auth (API5), SSRF (API7), Misconfiguration (API8), Inventory (API9), Unsafe Consumption (API10)
   - Configurable test categories with `--owasp-categories`
