@@ -51,6 +51,8 @@ jobs:
 
       - name: Cache cargo dependencies
         uses: Swatinem/rust-cache@v2
+        with:
+          env-vars: "CARGO_HOME"
 
       - name: Build release binary
         id: build

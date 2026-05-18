@@ -20,10 +20,10 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # Shared self-hosted runner: cap parallelism + isolate CARGO_HOME per run to avoid
-  # registry/lockfile churn from sibling runners. Same pattern as integration-tests.yml.
+  # Shared self-hosted runner: cap parallelism + isolate CARGO_HOME per runner instance
+  # to avoid registry/lockfile churn from sibling runners. Same pattern as integration-tests.yml.
   CARGO_BUILD_JOBS: "4"
-  CARGO_HOME: /tmp/cargo-mockforge-e2e-${{ github.run_id }}
+  CARGO_HOME: /tmp/cargo-mockforge-e2e-${{ runner.name }}
   RUSTUP_TOOLCHAIN: stable
 
 concurrency:
@@ -86,6 +86,8 @@ jobs:
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
+        with:
+          env-vars: "CARGO_HOME"
 
       - name: Build registry-server
         # Retry once under shared-runner resource pressure, same as the sibling workflow.

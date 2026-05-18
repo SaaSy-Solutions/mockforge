@@ -31,7 +31,7 @@ env:
   CARGO_BUILD_JOBS: "4"
   # Isolate cargo state from `/home/actions/.cargo` (shared with 7
   # sibling runners). See integration-tests.yml for the full rationale.
-  CARGO_HOME: /tmp/cargo-mockforge-${{ github.run_id }}
+  CARGO_HOME: /tmp/cargo-mockforge-${{ runner.name }}
   RUSTUP_TOOLCHAIN: stable
 
 jobs:

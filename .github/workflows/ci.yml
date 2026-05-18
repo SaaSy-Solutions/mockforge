@@ -18,7 +18,12 @@ env:
   RUST_BACKTRACE: 1
   # Isolate cargo state from `/home/actions/.cargo` (shared with 7
   # sibling runners). See integration-tests.yml for the full rationale.
-  CARGO_HOME: /tmp/cargo-mockforge-${{ github.run_id }}
+  # Keyed by runner.name (stable per machine, unique across siblings) so the
+  # path is stable across runs on the same runner — Swatinem/rust-cache
+  # restores target/*.d files whose paths reference CARGO_HOME, and run_id
+  # changed those paths every run, leaving dangling refs that surfaced as
+  # `(never executed) No such file or directory` rustc spawn failures.
+  CARGO_HOME: /tmp/cargo-mockforge-${{ runner.name }}
   CARGO_BUILD_JOBS: "4"
   RUSTUP_TOOLCHAIN: stable
   # Reality level for mock testing (1-5, default: 3)
@@ -66,6 +71,8 @@ jobs:
     # Swatinem/rust-cache@v2 below covers the same use case (target/ caching).
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
+      with:
+        env-vars: "CARGO_HOME"
 
     - name: Check formatting
       run: cargo fmt --all -- --check
@@ -158,6 +165,8 @@ jobs:
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
+      with:
+        env-vars: "CARGO_HOME"
 
     - name: Run warning gate
       run: bash scripts/lint-warning-gate.sh
@@ -180,6 +189,8 @@ jobs:
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
+      with:
+        env-vars: "CARGO_HOME"
 
     - name: Run ratchet preview
       run: bash scripts/lint-warning-ratchet-preview.sh
@@ -276,6 +287,8 @@ jobs:
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
+      with:
+        env-vars: "CARGO_HOME"
 
     - name: Generate coverage report
       run: cargo llvm-cov --workspace --exclude mockforge-desktop --lcov --output-path lcov.info
@@ -305,6 +318,8 @@ jobs:
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
+      with:
+        env-vars: "CARGO_HOME"
 
     - name: Check MSRV compatibility
       run: |
@@ -441,6 +456,7 @@ jobs:
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
       with:
+        env-vars: "CARGO_HOME"
         key: ${{ matrix.target }}
 
     - name: Build binary

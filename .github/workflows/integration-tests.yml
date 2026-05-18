@@ -30,10 +30,14 @@ env:
   # sibling runners). When saas-platform / apiary / aca runners run
   # `cargo install ...`, they churn the shared registry and lock files,
   # which surfaces in mockforge jobs as "(never executed) No such file
-  # or directory" rustc spawn failures. `github.run_id` (not
-  # `runner.temp`, which is only valid at job level) gives a per-run
-  # path that's fresh, disposable, and untouched by siblings.
-  CARGO_HOME: /tmp/cargo-mockforge-${{ github.run_id }}
+  # or directory" rustc spawn failures. Keyed by `runner.name` so the
+  # path is unique per runner instance (no cross-runner collision) AND
+  # stable across runs on the same runner — switching from `github.run_id`
+  # to `runner.name` because `Swatinem/rust-cache` restores target/*.d
+  # files whose absolute paths reference CARGO_HOME; a path that changed
+  # every run produced the same "No such file or directory" symptom from
+  # within mockforge's own state, defeating the isolation. See #446.
+  CARGO_HOME: /tmp/cargo-mockforge-${{ runner.name }}
   # Force rustup to use stable regardless of whatever a sibling repo
   # pinned as the user-level default. `dtolnay/rust-toolchain@stable`
   # installs stable but does not change the default; RUSTUP_TOOLCHAIN
@@ -91,6 +95,8 @@ jobs:
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
+        with:
+          env-vars: "CARGO_HOME"
 
       - name: Build MockForge binary (needed for integration tests)
         # Retry once on transient "No such file or directory" / SIGKILL

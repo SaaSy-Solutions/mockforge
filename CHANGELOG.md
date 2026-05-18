@@ -2,6 +2,10 @@
 
 ### Fixed
 
+- **[Build]** CI rust-cache no longer poisons builds with dangling `target/*.d` paths (Issue #446)
+  - Root cause: every workflow set `CARGO_HOME=/tmp/cargo-mockforge-${{ github.run_id }}` (unique per run) so the next run's `Swatinem/rust-cache@v2` restored a `target/` whose `.d` files referenced the *previous* run's CARGO_HOME — long since deleted. Surfaced as `error: could not compile <crate> ... (never executed) No such file or directory (os error 2)` on chronically red jobs (Test stable, Incremental Warning Gate, Code Coverage).
+  - Fix: switched every `CARGO_HOME` to `runner.name` (stable per machine, still unique across the 7 sibling runners that share the host) so cached dep-info paths remain valid across runs on the same runner. Added `with: env-vars: "CARGO_HOME"` to all 13 `Swatinem/rust-cache@v2` invocations so the cache key partitions by runner — different runners can't restore each other's caches and re-introduce the same staleness across the runner pool. Five workflow files updated for `CARGO_HOME` (ci, integration-tests, benchmarks, contract-diff, registry-e2e) plus env-vars added across ci, integration-tests, registry-e2e, chaos-testing, jcs-fuzz, mutation-testing, and release.
+
 - **[Reality]** Client-side "Connections opened" counter now appears for `--rps`-only runs (Issue #79 round 6 follow-up)
   - Root cause: the parser was reading `http_req_connecting.values.count` from k6's `summary.json`, but k6's Trend metric never emits a `count` field — only `avg/min/med/max/p(90)/p(95)`. The field was always absent, so `tcp_connect_samples` was always 0 and the connection-count line never printed for non-`--cps` runs.
   - Fix: the generated k6 script now declares a dedicated `mockforge_connections_opened` Counter and increments it whenever `res.timings.connecting > 0` (i.e. a fresh TCP socket was opened). The Rust parser reads this Counter's `count` directly. Works for both `--cps` runs (≈ total requests) and pooled-reuse runs (≈ `vus_max`).
