@@ -77,7 +77,7 @@ rustls-pemfile = "2.0"
 tokio-rustls = "0.26"
 axum-server = { version = "0.8", features = ["tls-rustls-no-provider"] }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "migrate"], optional = true }
-dashmap = { version = "6.1", optional = true }
+dashmap = { version = "6.2", optional = true }
 mockforge-pipelines = { version = "0.3.70", path = "../mockforge-pipelines", optional = true }
 mockforge-runtime-daemon = { version = "0.3.95", path = "../mockforge-runtime-daemon", optional = true }
 mockforge-kafka = { version = "0.3.70", path = "../mockforge-kafka", optional = true }
