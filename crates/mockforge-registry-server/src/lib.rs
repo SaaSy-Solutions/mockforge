@@ -27,6 +27,7 @@ pub mod email;
 pub mod error;
 pub mod fly_logs;
 pub mod fly_metrics;
+pub mod fly_nats;
 pub mod handlers;
 pub mod metrics;
 pub mod middleware;
