@@ -22,7 +22,7 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { RefreshCw, Play, X, ChevronDown, ChevronRight } from 'lucide-react';
-import { useWorkspaceStore } from '../store/workspaceStore';
+import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 import {
   cloudTestGeneratorApi,
   subscribeToJobStream,
