@@ -6,12 +6,14 @@
 //! in `incident_events` as `notification_sent`; the per-incident
 //! "we're done with this one" marker is `notification_dispatched`.
 //!
-//! Real outbound HTTP for `webhook` and `slack` channels (both are just
-//! incoming-webhook POSTs of a JSON body). `email` and `pagerduty`
-//! channels are recorded as attempts with `kind=skipped` for now —
-//! email needs an SMTP/SES provider, PagerDuty needs an Events-API
-//! mapping; both are follow-up slices once we have a customer asking
-//! for them.
+//! Real outbound for `webhook`, `slack`, and `email` channels. The
+//! `email` path uses the shared `crate::email::EmailService`, which
+//! also powers verification/reset/security alerts; it auto-picks the
+//! configured provider (Postmark / Brevo / SMTP) from env. When no
+//! provider is configured the attempt is recorded as `skipped` with a
+//! reason that surfaces the missing config — the dispatcher does not
+//! silently pretend to send. `pagerduty` is still skipped pending the
+//! Events-API mapping (#552).
 //!
 //! Reliability:
 //! - 5s tick cadence so a real outage shows up in seconds, not minutes.
@@ -237,9 +239,7 @@ async fn send_to_channel(
 ) -> ChannelResult {
     match channel.kind.as_str() {
         "webhook" | "slack" => post_webhook_style(client, channel, incident).await,
-        "email" => ChannelResult::Skipped {
-            reason: "email channel: SMTP/SES integration not yet wired".into(),
-        },
+        "email" => send_email(channel, incident).await,
         "pagerduty" => ChannelResult::Skipped {
             reason: "pagerduty channel: Events API mapping not yet wired".into(),
         },
@@ -300,6 +300,113 @@ async fn post_webhook_style(
             error: e.to_string(),
         },
     }
+}
+
+/// Email channel. Reads recipient from `channel.config.to` (a single
+/// address string). The send goes through `EmailService::from_env()`,
+/// which auto-picks Postmark / Brevo / SMTP based on `EMAIL_PROVIDER`
+/// — the same env-driven configuration the registry uses for
+/// verification, password-reset, and security-alert mails. When no
+/// provider is configured we record `skipped` with a reason rather
+/// than silently "sending" into the Disabled no-op, so the operator
+/// can tell their alert is not actually going out.
+async fn send_email(channel: &NotificationChannel, incident: &Incident) -> ChannelResult {
+    use crate::email::{EmailMessage, EmailService};
+
+    let to = match channel.config.get("to").and_then(|v| v.as_str()) {
+        Some(s) if !s.trim().is_empty() => s.trim().to_string(),
+        _ => {
+            return ChannelResult::Failed {
+                error: "channel.config.to missing or empty (expected a single email address)"
+                    .into(),
+            };
+        }
+    };
+
+    let service = match EmailService::from_env() {
+        Ok(s) => s,
+        Err(e) => {
+            return ChannelResult::Failed {
+                error: format!("email service init failed: {e}"),
+            };
+        }
+    };
+
+    if !service.is_configured() {
+        return ChannelResult::Skipped {
+            reason: "email provider not configured on registry server \
+                 (set EMAIL_PROVIDER + provider-specific env vars)"
+                .into(),
+        };
+    }
+
+    let subject =
+        format!("[{}] {}: {}", incident.severity.to_uppercase(), incident.source, incident.title);
+    let description = incident.description.as_deref().unwrap_or("(no description)");
+
+    let text_body = format!(
+        "MockForge incident\n\n\
+         Severity:    {sev}\n\
+         Source:      {src}\n\
+         Title:       {title}\n\
+         Description: {desc}\n\
+         \n\
+         Incident ID: {id}\n\
+         Org:         {org}\n\
+         Created at:  {created}\n",
+        sev = incident.severity,
+        src = incident.source,
+        title = incident.title,
+        desc = description,
+        id = incident.id,
+        org = incident.org_id,
+        created = incident.created_at,
+    );
+
+    let html_body = format!(
+        "<!DOCTYPE html><html><body style=\"font-family:-apple-system,Segoe UI,Roboto,sans-serif\">\
+         <h2 style=\"margin:0 0 8px 0\">[{sev_caps}] {title}</h2>\
+         <p style=\"color:#555\">Source: <code>{src}</code></p>\
+         <p>{desc_html}</p>\
+         <hr><table style=\"font-size:13px;color:#666\">\
+         <tr><td>Incident ID</td><td><code>{id}</code></td></tr>\
+         <tr><td>Org</td><td><code>{org}</code></td></tr>\
+         <tr><td>Created</td><td>{created}</td></tr>\
+         </table></body></html>",
+        sev_caps = incident.severity.to_uppercase(),
+        title = html_escape(&incident.title),
+        src = html_escape(&incident.source),
+        desc_html = html_escape(description),
+        id = incident.id,
+        org = incident.org_id,
+        created = incident.created_at,
+    );
+
+    let message = EmailMessage {
+        to,
+        subject,
+        html_body,
+        text_body,
+    };
+
+    match service.send(message).await {
+        // 250 is the SMTP "requested mail action okay, completed" code;
+        // for API providers (Postmark/Brevo) we still use 250 as the
+        // "the provider accepted the send" marker so the JSON shape in
+        // `incident_events` is uniform with the webhook-style channels.
+        Ok(()) => ChannelResult::Sent { status_code: 250 },
+        Err(e) => ChannelResult::Failed {
+            error: format!("email send failed via {}: {e}", service.provider_name()),
+        },
+    }
+}
+
+fn html_escape(input: &str) -> String {
+    input
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
 }
 
 /// User-facing test-fire: post a synthetic incident-shaped payload to a
@@ -382,10 +489,59 @@ mod tests {
     // which belong in integration tests under tests/. The matcher itself
     // already has coverage there.
 
+    use super::*;
+
+    fn fake_incident() -> Incident {
+        synthetic_incident(uuid::Uuid::nil())
+    }
+
+    fn email_channel(config: serde_json::Value) -> NotificationChannel {
+        NotificationChannel {
+            id: uuid::Uuid::nil(),
+            org_id: uuid::Uuid::nil(),
+            name: "test-email".into(),
+            kind: "email".into(),
+            config,
+            enabled: true,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        }
+    }
+
     #[test]
     fn smoke_module_links() {
         // Anchor: this module must exist for the registry main.rs wiring
         // to compile. If the worker is removed, main.rs breaks first
         // — this test is just a no-op safety net for the cfg(test) build.
+    }
+
+    #[tokio::test]
+    async fn email_missing_to_is_failure() {
+        // No `to` field — operator misconfigured the channel. We surface
+        // this as Failed (not Skipped) because skipped means "wiring is
+        // fine but provider isn't ready"; this is a real config bug the
+        // operator needs to fix on their side.
+        let channel = email_channel(serde_json::json!({}));
+        let result = send_email(&channel, &fake_incident()).await;
+        match result {
+            ChannelResult::Failed { error } => {
+                assert!(error.contains("channel.config.to"), "unexpected error: {error}");
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn email_blank_to_is_failure() {
+        let channel = email_channel(serde_json::json!({ "to": "   " }));
+        let result = send_email(&channel, &fake_incident()).await;
+        assert!(matches!(result, ChannelResult::Failed { .. }));
+    }
+
+    #[test]
+    fn html_escape_handles_injection_chars() {
+        assert_eq!(html_escape("a & b"), "a &amp; b");
+        assert_eq!(html_escape("<script>"), "&lt;script&gt;");
+        assert_eq!(html_escape("\"quoted\""), "&quot;quoted&quot;");
     }
 }
