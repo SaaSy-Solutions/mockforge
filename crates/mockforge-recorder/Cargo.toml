@@ -51,8 +51,11 @@ har = "0.8"
 similar = { version = "2.3", features = ["inline"] }
 serde_path_to_error = "0.1"
 
-# HTTP client for LLM calls
+# HTTP client for LLM calls + capture forwarder
 reqwest = { workspace = true }
+
+# Prometheus counters for the capture forwarder (#553)
+prometheus = "0.14"
 
 # Core types for OpenAPI generation
 mockforge-core = { version = "0.3.70", path = "../mockforge-core" }
