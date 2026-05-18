@@ -7,9 +7,10 @@
 //!
 //! ## Wire format
 //!
-//! OTLP/HTTP with JSON encoding. The protobuf path is a follow-up — most
-//! exporters can be configured to use JSON, and operators who need
-//! protobuf can stand up an `otel-collector` sidecar that converts.
+//! OTLP/HTTP with JSON encoding lives here. The gRPC receiver (#548) lives
+//! in `crate::otlp_grpc` and shares this module's persistence helper
+//! (`persist_span_rows`) so both paths land in the same `runtime_traces`
+//! table with identical row shape.
 //!
 //! ## Storage
 //!
@@ -89,20 +90,44 @@ pub async fn ingest_traces(
     // resource attributes through onto each span so a query like "spans
     // where service.name = 'foo'" can be answered without a join.
     let rows = flatten_resource_spans(&payload.resource_spans);
+    let pool = state.db.pool();
+    let (spans_received, spans_stored) = persist_span_rows(pool, deployment_id, rows).await?;
+
+    Ok(Json(OtlpExportTraceServiceResponse {
+        spans_received,
+        spans_stored,
+        message: if spans_received == 0 {
+            "no spans found in payload"
+        } else {
+            "ok"
+        },
+    }))
+}
+
+/// Maximum spans persisted from a single OTLP batch. Defense against a
+/// runaway exporter flooding `runtime_traces`. The gRPC path enforces the
+/// same cap via `persist_span_rows`.
+pub(crate) const MAX_BATCH: usize = 1000;
+
+/// Persist a batch of flattened spans into `runtime_traces`. Shared by
+/// the HTTP/JSON handler above and the gRPC handler in `crate::otlp_grpc`,
+/// so the storage layer stays single-sourced regardless of wire format.
+///
+/// Returns `(received, stored)`. `received` is the input row count (pre-
+/// truncation); `stored` is the number that actually made it into the
+/// table — individual rows that fail to INSERT are logged and skipped so
+/// one bad span doesn't reject the whole batch.
+pub(crate) async fn persist_span_rows(
+    pool: &sqlx::PgPool,
+    deployment_id: Uuid,
+    rows: Vec<SpanRow>,
+) -> ApiResult<(usize, usize)> {
     let total_spans = rows.len();
 
     if total_spans == 0 {
-        return Ok(Json(OtlpExportTraceServiceResponse {
-            spans_received: 0,
-            spans_stored: 0,
-            message: "no spans found in payload",
-        }));
+        return Ok((0, 0));
     }
 
-    // Cap accepted batch size as a defense against runaway exporters.
-    // Match the in-container shipper's guardrail conceptually — one batch
-    // shouldn't be able to flood the table.
-    const MAX_BATCH: usize = 1000;
     let rows = if rows.len() > MAX_BATCH {
         tracing::warn!(
             deployment_id = %deployment_id,
@@ -115,7 +140,6 @@ pub async fn ingest_traces(
         &rows[..]
     };
 
-    let pool = state.db.pool();
     let mut tx = pool.begin().await.map_err(ApiError::Database)?;
     let mut stored = 0usize;
     for row in rows {
@@ -165,30 +189,28 @@ pub async fn ingest_traces(
         "OTLP traces ingested"
     );
 
-    Ok(Json(OtlpExportTraceServiceResponse {
-        spans_received: total_spans,
-        spans_stored: stored,
-        message: "ok",
-    }))
+    Ok((total_spans, stored))
 }
 
 /// Internal representation of a flattened OTLP span ready for INSERT.
-struct SpanRow {
-    trace_id: String,
-    span_id: String,
-    parent_span_id: Option<String>,
-    service_name: Option<String>,
-    name: String,
-    kind: Option<i16>,
-    start_unix_nano: i64,
-    end_unix_nano: i64,
-    occurred_at: DateTime<Utc>,
-    status_code: Option<i16>,
-    status_message: Option<String>,
-    attributes: serde_json::Value,
-    events: serde_json::Value,
-    links: serde_json::Value,
-    resource_attributes: serde_json::Value,
+/// `pub(crate)` so `crate::otlp_grpc` can build rows from the prost-
+/// generated proto types and hand them to `persist_span_rows`.
+pub(crate) struct SpanRow {
+    pub(crate) trace_id: String,
+    pub(crate) span_id: String,
+    pub(crate) parent_span_id: Option<String>,
+    pub(crate) service_name: Option<String>,
+    pub(crate) name: String,
+    pub(crate) kind: Option<i16>,
+    pub(crate) start_unix_nano: i64,
+    pub(crate) end_unix_nano: i64,
+    pub(crate) occurred_at: DateTime<Utc>,
+    pub(crate) status_code: Option<i16>,
+    pub(crate) status_message: Option<String>,
+    pub(crate) attributes: serde_json::Value,
+    pub(crate) events: serde_json::Value,
+    pub(crate) links: serde_json::Value,
+    pub(crate) resource_attributes: serde_json::Value,
 }
 
 /// Walk the OTLP envelope and flatten it into per-span rows. We're
