@@ -377,6 +377,14 @@ const cloudNavItemIds = new Set([
   // worker is Phase 3 — jobs created here sit in 'queued' until that
   // lands. The page surfaces this honestly via an inline banner.
   'test-generator',
+  // Time Travel (#466 Phase 2) — per-deployment virtual-clock control via
+  // cloudTimeTravelApi against /api/v1/hosted-mocks/{deployment_id}
+  // /time-travel/* (registry proxies over Fly 6PN to port 3000). Only
+  // the 7 clock-control endpoints are wired in cloud mode (status /
+  // enable / disable / advance / set / scale / reset); cron jobs and
+  // mutation rules stay local-only because they manage scenario state,
+  // not a hosted mock's single-process clock.
+  'time-travel',
   // Notification channels (cloud-only) — incident dispatch destinations
   // wired through cloudNotificationsApi.
   'notification-channels',

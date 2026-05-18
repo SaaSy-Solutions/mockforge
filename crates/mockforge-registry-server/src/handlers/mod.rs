@@ -54,6 +54,7 @@ pub mod test_generation;
 pub mod test_runs;
 pub mod test_schedules;
 pub mod test_suites;
+pub mod time_travel;
 pub mod tokens;
 pub mod trust_roots;
 pub mod tunnels;
