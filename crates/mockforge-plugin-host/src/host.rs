@@ -30,7 +30,7 @@ use mockforge_plugin_loader::{
 use tokio::sync::{mpsc, oneshot};
 
 use crate::blocklist::Blocklist;
-use crate::signing::{SignatureVerifier, VerificationError};
+use crate::signing::{SignatureVerifier, TrustStore, VerificationError};
 
 /// How often the actor sweeps loaded plugins against the
 /// blocklist. The poll task itself updates the shared
@@ -39,6 +39,14 @@ use crate::signing::{SignatureVerifier, VerificationError};
 /// blocklist landed) and unloads them. 30s gives sub-minute
 /// reaction time without busy-looping.
 const SWEEP_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
+
+/// How often the actor sweeps loaded plugins against the live
+/// trust store (issue #549). Same cadence as the blocklist sweep —
+/// the operational story is identical: an out-of-band trust-root
+/// revocation lands in the shared TrustStore (via the refresh
+/// task), and the actor notices it on its next tick. Hot-unload is
+/// out of scope per the issue, so this only emits warn logs.
+const TRUST_ROOT_SWEEP_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// Actor channel capacity. Generous because cloud-plugins ops are
 /// rare (load/unload at attach time, invoke once per request) and
@@ -58,6 +66,13 @@ struct PluginEntry {
     /// Pinned version, used when constructing per-invocation
     /// `PluginContext`.
     version: PluginVersion,
+    /// Trust-root key id that signed this plugin at load time, if
+    /// any. Used by [`Host::sweep_revoked_trust_roots`] to flag
+    /// plugins whose root has since been removed from the
+    /// [`crate::signing::TrustStore`] by the refresh loop. `None`
+    /// for plugins loaded in [`crate::signing::SignatureMode::Optional`]
+    /// without a signature (the "unsigned" path).
+    publisher_key_id: Option<String>,
     /// Tempfile holding the WASM bytes — kept alive so the file
     /// doesn't get GC'd while the sandbox is loaded.
     _wasm_file: tempfile::NamedTempFile,
@@ -119,7 +134,13 @@ impl Host {
         let sandbox = PluginSandbox::new(loader_config);
         let metrics_bus = sandbox.metrics_bus();
 
-        let actor: HostActor = Box::pin(actor_loop(sandbox, verifier, blocklist, cmd_rx));
+        // Capture the trust store handle before the verifier is
+        // moved into the actor so the periodic sweep can consult
+        // the live key set without coordinating with the actor
+        // beyond the existing mpsc channel.
+        let trust_store_handle = verifier.store();
+        let actor: HostActor =
+            Box::pin(actor_loop(sandbox, verifier, blocklist, trust_store_handle, cmd_rx));
 
         (Self { started_at, cmd_tx }, actor, metrics_bus)
     }
@@ -200,6 +221,24 @@ impl Host {
         reply_rx.await.map_err(|_| HostError::ActorGone)?
     }
 
+    /// Sweep loaded plugins against the live trust store and emit
+    /// `tracing::warn!` for any whose signing key is no longer in
+    /// the active set. Hot-unload is **out of scope** per issue
+    /// #549 — operators get an observability signal and decide
+    /// whether to detach.
+    ///
+    /// Returns the names of the plugins that were flagged. Used by
+    /// the on-refresh hook in `main.rs` to surface revocations
+    /// promptly (the actor also runs this on a periodic tick).
+    pub async fn sweep_revoked_trust_roots(&self) -> Result<Vec<String>, HostError> {
+        let (reply_tx, reply_rx) = oneshot::channel();
+        self.cmd_tx
+            .send(Command::SweepTrustRoots { reply: reply_tx })
+            .await
+            .map_err(|_| HostError::ActorGone)?;
+        reply_rx.await.map_err(|_| HostError::ActorGone)
+    }
+
     /// List currently-loaded plugins. For diagnostics.
     pub async fn loaded_plugins(&self) -> Result<Vec<(String, PluginId)>, HostError> {
         let (reply_tx, reply_rx) = oneshot::channel();
@@ -238,6 +277,9 @@ enum Command {
     ListPlugins {
         reply: oneshot::Sender<Vec<(String, PluginId)>>,
     },
+    SweepTrustRoots {
+        reply: oneshot::Sender<Vec<String>>,
+    },
 }
 
 /// Actor task. Owns the `PluginSandbox` and the plugin map for the
@@ -247,6 +289,7 @@ async fn actor_loop(
     sandbox: PluginSandbox,
     verifier: SignatureVerifier,
     blocklist: Blocklist,
+    trust_store: TrustStore,
     mut cmd_rx: mpsc::Receiver<Command>,
 ) {
     let mut plugins: HashMap<String, PluginEntry> = HashMap::new();
@@ -258,6 +301,9 @@ async fn actor_loop(
 
     let mut sweep_ticker = tokio::time::interval(SWEEP_INTERVAL);
     sweep_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
+    let mut trust_root_sweep_ticker = tokio::time::interval(TRUST_ROOT_SWEEP_INTERVAL);
+    trust_root_sweep_ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
     loop {
         tokio::select! {
@@ -331,13 +377,58 @@ async fn actor_loop(
                             .collect();
                         let _ = reply.send(snapshot);
                     }
+                    Command::SweepTrustRoots { reply } => {
+                        let flagged = sweep_trust_roots(&trust_store, &plugins);
+                        let _ = reply.send(flagged);
+                    }
                 }
             }
             _ = sweep_ticker.tick() => {
                 sweep_blocklist(&sandbox, &blocklist, &mut plugins).await;
             }
+            _ = trust_root_sweep_ticker.tick() => {
+                let _ = sweep_trust_roots(&trust_store, &plugins);
+            }
         }
     }
+}
+
+/// Walk the loaded plugin map and `tracing::warn!` for any plugin
+/// whose `publisher_key_id` is no longer in the live trust store
+/// (issue #549). Hot-unload is out of scope per the issue, so this
+/// is observability-only — operators get a clear signal and a stable
+/// per-line shape (`plugin_name`, `publisher_key_id`) for alerting.
+///
+/// Plugins loaded without a signature (`publisher_key_id == None`)
+/// are skipped — there's nothing to compare against.
+///
+/// Returns the names of plugins flagged so callers (the on-refresh
+/// hook in main.rs, or the test harness) can assert on the
+/// observation without scraping logs.
+fn sweep_trust_roots(
+    trust_store: &TrustStore,
+    plugins: &HashMap<String, PluginEntry>,
+) -> Vec<String> {
+    // Snapshot once and check against the in-memory set — cheaper
+    // than calling `store.get(key_id)` per plugin which would take
+    // the read lock N times.
+    let active: std::collections::HashSet<String> = trust_store.key_ids().into_iter().collect();
+    let mut flagged = Vec::new();
+    for (name, entry) in plugins {
+        let Some(key_id) = entry.publisher_key_id.as_deref() else {
+            continue;
+        };
+        if !active.contains(key_id) {
+            tracing::warn!(
+                plugin_name = %name,
+                publisher_key_id = %key_id,
+                "loaded plugin signed by a trust root that is no longer active — hot-unload is \
+                 out of scope; operator action required"
+            );
+            flagged.push(name.clone());
+        }
+    }
+    flagged
 }
 
 /// Walk the loaded plugin map and unload any whose
@@ -441,11 +532,22 @@ async fn handle_load(
     let instance = sandbox.create_plugin_instance(&load_ctx).await?;
     debug_assert_eq!(instance.state, PluginState::Ready);
 
+    // Record which trust-root signed the plugin (if any) so the
+    // periodic trust-root sweep can flag it later if the root is
+    // revoked. `Verified { key_id }` carries the resolved id;
+    // `SkippedUnsigned` carries no key id, which we represent as
+    // `None`.
+    let publisher_key_id = match &outcome {
+        crate::signing::VerificationOutcome::Verified { key_id } => Some(key_id.clone()),
+        crate::signing::VerificationOutcome::SkippedUnsigned => None,
+    };
+
     plugins.insert(
         plugin_name.to_string(),
         PluginEntry {
             plugin_id: plugin_id.clone(),
             version,
+            publisher_key_id,
             _wasm_file: wasm_file,
             _permissions: permissions,
         },

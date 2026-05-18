@@ -22,8 +22,9 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use mockforge_plugin_host::{
-    run_exporter, run_poll_loop, run_server, Blocklist, BlocklistConfig, ExporterConfig, Host,
-    ServerConfig, SignatureMode, SignatureVerifier, TrustStore,
+    run_exporter, run_poll_loop, run_server, run_trust_root_refresh_loop, validate_trust_roots_url,
+    Blocklist, BlocklistConfig, ExporterConfig, Host, ServerConfig, SignatureMode,
+    SignatureVerifier, TrustRootCacheConfig, TrustStore,
 };
 use mockforge_plugin_loader::PluginLoaderConfig;
 
@@ -40,9 +41,11 @@ fn main() -> Result<()> {
     let trust_store = env_trust_store()?;
     let signature_mode = env_signature_mode();
     let verifier = SignatureVerifier::new(trust_store, signature_mode);
+    let trust_store_handle = verifier.store();
     let blocklist = Blocklist::new();
     let blocklist_config = env_blocklist_config();
     let exporter_config = env_exporter_config();
+    let trust_root_cache_config = env_trust_root_cache_config()?;
 
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
@@ -51,6 +54,10 @@ fn main() -> Result<()> {
         trusted_keys = verifier.trusted_key_count(),
         blocklist_url = blocklist_config.as_ref().map(|c| c.url.as_str()).unwrap_or("(disabled)"),
         exporter_url = exporter_config.as_ref().map(|c| c.url.as_str()).unwrap_or("(disabled)"),
+        trust_root_url = trust_root_cache_config
+            .as_ref()
+            .map(|c| c.url.as_str())
+            .unwrap_or("(disabled)"),
         "mockforge-plugin-host starting"
     );
 
@@ -87,6 +94,37 @@ fn main() -> Result<()> {
                 None => Box::pin(std::future::pending()),
             };
 
+        // Trust-root refresh — issue #549. The refresh hook just
+        // logs the removed key ids; the host actor's own
+        // post-refresh sweep is what actually flags loaded
+        // plugins (it inspects its plugin map against the live
+        // TrustStore on a tick).
+        let host_for_hook = host.clone();
+        let trust_root_future: std::pin::Pin<Box<dyn std::future::Future<Output = ()>>> =
+            match trust_root_cache_config {
+                Some(cfg) => {
+                    Box::pin(run_trust_root_refresh_loop(cfg, trust_store_handle, move |removed| {
+                        // Nudge the host to do a fresh sweep so
+                        // operators see the warn-log promptly,
+                        // not on the next 30-second tick.
+                        let host = host_for_hook.clone();
+                        tokio::spawn(async move {
+                            if let Err(err) = host.sweep_revoked_trust_roots().await {
+                                tracing::warn!(
+                                    error = %err,
+                                    "trust-root sweep on refresh failed"
+                                );
+                            }
+                        });
+                        tracing::warn!(
+                            removed_key_ids = ?removed,
+                            "trust roots removed by registry refresh"
+                        );
+                    }))
+                }
+                None => Box::pin(std::future::pending()),
+            };
+
         tokio::select! {
             _ = actor => {
                 tracing::error!("plugin-host actor exited unexpectedly");
@@ -103,6 +141,10 @@ fn main() -> Result<()> {
             _ = exporter_future => {
                 tracing::error!("metric exporter exited unexpectedly");
                 Err(anyhow::anyhow!("metric exporter exited"))
+            }
+            _ = trust_root_future => {
+                tracing::error!("trust-root refresh loop exited unexpectedly");
+                Err(anyhow::anyhow!("trust-root refresh loop exited"))
             }
             _ = shutdown_signal() => {
                 tracing::info!("plugin-host received shutdown signal — exiting");
@@ -134,6 +176,44 @@ fn env_exporter_config() -> Option<ExporterConfig> {
         }
     }
     Some(cfg)
+}
+
+/// Build a [`TrustRootCacheConfig`] from env vars, or `None` if no
+/// `MOCKFORGE_PLUGIN_HOST_TRUST_ROOT_URL` is set. Issue #549 — the
+/// URL is whole-path, including the `/api/v1/organizations/{org_id}
+/// /trust-roots` suffix, so the host stays org-agnostic and the
+/// orchestrator owns the composition.
+///
+/// Env vars:
+///   - `MOCKFORGE_PLUGIN_HOST_TRUST_ROOT_URL` — required to enable.
+///   - `MOCKFORGE_PLUGIN_HOST_TRUST_ROOT_INTERVAL_SECS` — optional;
+///     default 60s. Min 1s (the refresh task floors `0` to `1` to
+///     avoid a busy loop).
+///   - `MOCKFORGE_PLUGIN_HOST_TRUST_ROOT_BEARER` — optional service-
+///     account token for auth against the registry.
+///
+/// Returns an error (not just `None`) when the URL is set but
+/// malformed — fail-fast at boot is much better than silently
+/// running with an empty trust store.
+fn env_trust_root_cache_config() -> Result<Option<TrustRootCacheConfig>> {
+    let Ok(url) = std::env::var("MOCKFORGE_PLUGIN_HOST_TRUST_ROOT_URL") else {
+        return Ok(None);
+    };
+    validate_trust_roots_url(&url).map_err(|err| {
+        anyhow::anyhow!("invalid MOCKFORGE_PLUGIN_HOST_TRUST_ROOT_URL={url}: {err}")
+    })?;
+    let mut cfg = TrustRootCacheConfig::new(url);
+    if let Ok(secs) = std::env::var("MOCKFORGE_PLUGIN_HOST_TRUST_ROOT_INTERVAL_SECS") {
+        if let Ok(n) = secs.parse::<u64>() {
+            cfg.interval = std::time::Duration::from_secs(n.max(1));
+        }
+    }
+    if let Ok(token) = std::env::var("MOCKFORGE_PLUGIN_HOST_TRUST_ROOT_BEARER") {
+        if !token.is_empty() {
+            cfg.bearer_token = Some(token);
+        }
+    }
+    Ok(Some(cfg))
 }
 
 /// Build a [`BlocklistConfig`] from env vars, or `None` if no

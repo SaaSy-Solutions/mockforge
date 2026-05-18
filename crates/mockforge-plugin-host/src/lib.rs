@@ -41,6 +41,7 @@ pub mod metering;
 pub mod protocol;
 pub mod server;
 pub mod signing;
+pub mod trust_root_cache;
 
 pub use blocklist::{run_poll_loop, Blocklist, BlocklistConfig, BlocklistEntry, PollError};
 pub use host::{Host, HostActor, HostError};
@@ -50,4 +51,8 @@ pub use server::{run_server, ServerConfig};
 pub use signing::{
     SignatureMode, SignatureVerifier, TrustStore, TrustStoreError, VerificationError,
     VerificationOutcome,
+};
+pub use trust_root_cache::{
+    run_trust_root_refresh_loop, validate_trust_roots_url, RefreshError, TrustRootCacheConfig,
+    DEFAULT_REFRESH_INTERVAL_SECS,
 };

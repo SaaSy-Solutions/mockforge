@@ -47,6 +47,7 @@
 
 use std::collections::HashMap;
 use std::path::Path;
+use std::sync::{Arc, RwLock};
 
 use base64::Engine;
 use ed25519_dalek::{Signature, Verifier, VerifyingKey};
@@ -68,10 +69,18 @@ pub enum SignatureMode {
     Optional,
 }
 
-/// Map from publisher key id → 32-byte Ed25519 public key.
+/// Cheaply-cloneable, atomically-swappable map from publisher key id
+/// → 32-byte Ed25519 public key.
+///
+/// The inner map lives behind an `Arc<RwLock<...>>` so the trust-root
+/// refresh task (see [`crate::trust_root_cache`]) can replace the
+/// active key set without coordinating with the verifier — clones of
+/// this handle observe the new contents on their next lookup. Issue
+/// #549 wires the cache into the host actor so revocations on the
+/// control plane propagate within one refresh window.
 #[derive(Debug, Clone, Default)]
 pub struct TrustStore {
-    keys: HashMap<String, VerifyingKey>,
+    inner: Arc<RwLock<HashMap<String, VerifyingKey>>>,
 }
 
 impl TrustStore {
@@ -82,23 +91,60 @@ impl TrustStore {
 
     /// Number of currently-active trust roots.
     pub fn len(&self) -> usize {
-        self.keys.len()
+        // `read()` on a healthy `RwLock` only fails if a writer
+        // panicked while holding the lock — at that point the
+        // process is in a corrupt state and reporting "0 trust
+        // roots" is the safest fail-closed answer the verifier
+        // can give.
+        self.inner.read().map(|guard| guard.len()).unwrap_or(0)
     }
 
     /// Whether this store has any trust roots.
     pub fn is_empty(&self) -> bool {
-        self.keys.is_empty()
+        self.len() == 0
     }
 
     /// Insert a key. Returns the previous binding for `key_id` if
     /// any (rotation case).
-    pub fn insert(&mut self, key_id: String, key: VerifyingKey) -> Option<VerifyingKey> {
-        self.keys.insert(key_id, key)
+    pub fn insert(&self, key_id: String, key: VerifyingKey) -> Option<VerifyingKey> {
+        match self.inner.write() {
+            Ok(mut guard) => guard.insert(key_id, key),
+            Err(_) => None,
+        }
     }
 
-    /// Look up a key by id.
-    pub fn get(&self, key_id: &str) -> Option<&VerifyingKey> {
-        self.keys.get(key_id)
+    /// Look up a key by id. Returns a cloned `VerifyingKey` rather
+    /// than a borrow so callers don't have to hold the read lock
+    /// across the (potentially slow) signature verification.
+    pub fn get(&self, key_id: &str) -> Option<VerifyingKey> {
+        self.inner.read().ok().and_then(|guard| guard.get(key_id).copied())
+    }
+
+    /// Replace the entire set of active trust roots. Called by the
+    /// trust-root refresh task on every successful poll; the
+    /// verifier observes the new set on its next `get` without
+    /// coordinating. Returns the snapshot of `(key_id)` entries
+    /// that were removed (i.e. present before, absent after) so
+    /// the caller can warn about loaded plugins signed by the
+    /// revoked roots.
+    pub fn replace(&self, new_keys: HashMap<String, VerifyingKey>) -> Vec<String> {
+        let Ok(mut guard) = self.inner.write() else {
+            return Vec::new();
+        };
+        let removed: Vec<String> =
+            guard.keys().filter(|k| !new_keys.contains_key(*k)).cloned().collect();
+        *guard = new_keys;
+        removed
+    }
+
+    /// Snapshot the current set of trust-root key ids. Used by the
+    /// host actor to decide which loaded plugins to warn about
+    /// when a refresh removes a root.
+    pub fn key_ids(&self) -> Vec<String> {
+        self.inner
+            .read()
+            .map(|guard| guard.keys().cloned().collect())
+            .unwrap_or_default()
     }
 
     /// Build from a JSON object `{ "key_id": "<base64-pubkey>", ... }`.
@@ -107,25 +153,9 @@ impl TrustStore {
             serde_json::from_str(json).map_err(|err| TrustStoreError::InvalidJson {
                 err: err.to_string(),
             })?;
-        let mut store = Self::new();
+        let store = Self::new();
         for (key_id, b64_value) in raw {
-            let bytes = base64::engine::general_purpose::STANDARD
-                .decode(b64_value.as_bytes())
-                .map_err(|err| TrustStoreError::InvalidBase64 {
-                    key_id: key_id.clone(),
-                    err: err.to_string(),
-                })?;
-            let key_bytes: [u8; 32] =
-                bytes.as_slice().try_into().map_err(|_| TrustStoreError::InvalidKeyLength {
-                    key_id: key_id.clone(),
-                    actual_bytes: bytes.len(),
-                })?;
-            let key = VerifyingKey::from_bytes(&key_bytes).map_err(|err| {
-                TrustStoreError::InvalidKey {
-                    key_id: key_id.clone(),
-                    err: err.to_string(),
-                }
-            })?;
+            let key = decode_ed25519_key(&key_id, &b64_value)?;
             store.insert(key_id, key);
         }
         Ok(store)
@@ -140,6 +170,29 @@ impl TrustStore {
         })?;
         Self::from_json_str(&contents)
     }
+}
+
+/// Shared helper — decode a single `(key_id, base64)` pair into a
+/// verified `VerifyingKey`. Used by both [`TrustStore::from_json_str`]
+/// (env-var path) and [`crate::trust_root_cache`] (registry API
+/// path).
+pub fn decode_ed25519_key(key_id: &str, b64_value: &str) -> Result<VerifyingKey, TrustStoreError> {
+    let bytes =
+        base64::engine::general_purpose::STANDARD
+            .decode(b64_value.as_bytes())
+            .map_err(|err| TrustStoreError::InvalidBase64 {
+                key_id: key_id.to_string(),
+                err: err.to_string(),
+            })?;
+    let key_bytes: [u8; 32] =
+        bytes.as_slice().try_into().map_err(|_| TrustStoreError::InvalidKeyLength {
+            key_id: key_id.to_string(),
+            actual_bytes: bytes.len(),
+        })?;
+    VerifyingKey::from_bytes(&key_bytes).map_err(|err| TrustStoreError::InvalidKey {
+        key_id: key_id.to_string(),
+        err: err.to_string(),
+    })
 }
 
 /// Errors building a trust store from external input.
@@ -295,6 +348,9 @@ impl SignatureVerifier {
                 let signed_payload = build_signed_payload(wasm_bytes, manifest_bytes);
                 key.verify(&signed_payload, &signature)
                     .map_err(|err| VerificationError::SignatureMismatch(err.to_string()))?;
+                // Owned `VerifyingKey` here is intentional — see
+                // `TrustStore::get` for the read-lock-lifetime
+                // rationale.
 
                 Ok(VerificationOutcome::Verified {
                     key_id: key_id.to_string(),
@@ -311,6 +367,16 @@ impl SignatureVerifier {
     /// Number of active trust roots.
     pub fn trusted_key_count(&self) -> usize {
         self.store.len()
+    }
+
+    /// Shared handle to the underlying [`TrustStore`]. Cheaply
+    /// cloneable; the trust-root refresh task uses this to swap in
+    /// fresh keys without rebuilding the verifier (which would
+    /// require coordinating with the actor that owns it). See
+    /// [`crate::trust_root_cache::run_trust_root_refresh_loop`] for
+    /// the polling side.
+    pub fn store(&self) -> TrustStore {
+        self.store.clone()
     }
 }
 
@@ -403,7 +469,7 @@ mod tests {
 
     fn make_store_with_test_key(key_id: &str) -> (TrustStore, SigningKey) {
         let (sk, vk) = fixture_keypair();
-        let mut store = TrustStore::new();
+        let store = TrustStore::new();
         store.insert(key_id.to_string(), vk);
         (store, sk)
     }
@@ -607,6 +673,64 @@ mod tests {
     fn build_signed_payload_v2_starts_with_version_prefix() {
         let payload = build_signed_payload(b"abc", Some(b"manifest"));
         assert!(payload.starts_with(PREFIX_V2_WASM_AND_MANIFEST));
+    }
+
+    #[test]
+    fn trust_store_replace_returns_removed_key_ids() {
+        // Two keys initially; replace with a set that keeps one and
+        // drops the other → the removed id surfaces in the return
+        // value so the host actor can warn about loaded plugins.
+        let (_, vk) = fixture_keypair();
+        let store = TrustStore::new();
+        store.insert("keep".to_string(), vk);
+        store.insert("drop".to_string(), vk);
+
+        let mut new_keys = HashMap::new();
+        new_keys.insert("keep".to_string(), vk);
+        new_keys.insert("fresh".to_string(), vk);
+        let removed = store.replace(new_keys);
+        assert_eq!(removed, vec!["drop".to_string()]);
+        // The new set is now active.
+        assert!(store.get("keep").is_some());
+        assert!(store.get("fresh").is_some());
+        assert!(store.get("drop").is_none());
+    }
+
+    #[test]
+    fn trust_store_clones_share_inner_state() {
+        // Refresh task and verifier both hold their own clone — a
+        // write through one must be visible through the other.
+        let (_, vk) = fixture_keypair();
+        let a = TrustStore::new();
+        let b = a.clone();
+        a.insert("k".to_string(), vk);
+        assert!(b.get("k").is_some());
+    }
+
+    #[test]
+    fn trust_store_key_ids_returns_snapshot() {
+        let (_, vk) = fixture_keypair();
+        let store = TrustStore::new();
+        store.insert("k1".to_string(), vk);
+        store.insert("k2".to_string(), vk);
+        let mut ids = store.key_ids();
+        ids.sort();
+        assert_eq!(ids, vec!["k1".to_string(), "k2".to_string()]);
+    }
+
+    #[test]
+    fn decode_ed25519_key_round_trips() {
+        let (_, vk) = fixture_keypair();
+        let b64 = b64(vk.as_bytes());
+        let decoded = decode_ed25519_key("test", &b64).unwrap();
+        assert_eq!(decoded.as_bytes(), vk.as_bytes());
+    }
+
+    #[test]
+    fn decode_ed25519_key_rejects_short_input() {
+        let b64 = b64(&[0u8; 16]);
+        let err = decode_ed25519_key("test", &b64).unwrap_err();
+        assert!(matches!(err, TrustStoreError::InvalidKeyLength { .. }));
     }
 
     #[test]
