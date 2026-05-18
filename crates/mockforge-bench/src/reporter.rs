@@ -85,30 +85,35 @@ impl TerminalReporter {
         // when k6 actually opened sockets. Helpful even without `--cps`
         // because it lets you compare "k6 opened N connections" against
         // the server's `connections_total_opened` and detect whether
-        // your proxy is keeping the upstream pool warm. `tcp_connect_samples`
-        // is k6's `http_req_connecting.count`, which is the number of
-        // request iterations that had to wait for a new TCP socket — i.e.
-        // a fresh connection.
-        if results.tcp_connect_samples > 0 {
-            if !cps_mode {
-                // Surface the count in non-CPS mode too — Srikanth's "open
-                // connection on the client" ask.
-                println!(
-                    "  Connections opened:   {} ({} conn/s avg)",
-                    results.tcp_connect_samples.to_string().cyan(),
-                    format!(
-                        "{:.1}",
-                        results.tcp_connect_samples as f64 / duration_secs.max(1) as f64
-                    )
+        // your proxy is keeping the upstream pool warm.
+        //
+        // Round 6 follow-up: `tcp_connect_samples` is now sourced from the
+        // template's `mockforge_connections_opened` Counter (incremented when
+        // `res.timings.connecting > 0`). That gives an accurate count for
+        // both `--cps` (≈ total requests) and the pooled-reuse case (≈ vus_max)
+        // — Srikanth's "Open/Closed Connection Counter not showing for RPS"
+        // report on Issue #79.
+        if results.tcp_connect_samples > 0 && !cps_mode {
+            // Surface the count in non-CPS mode too — Srikanth's "open
+            // connection on the client" ask.
+            println!(
+                "  Connections opened:   {} ({} conn/s avg)",
+                results.tcp_connect_samples.to_string().cyan(),
+                format!("{:.1}", results.tcp_connect_samples as f64 / duration_secs.max(1) as f64)
                     .cyan(),
-                );
-            }
+            );
+        }
+        // Print TCP/TLS timing whenever the avg is non-zero. Don't gate on
+        // samples count — k6's Trend metric exposes avg/max in summary.json
+        // but not count, so the count check was always false even when k6
+        // had real samples. Issue #79 round 6 follow-up.
+        if results.tcp_connect_avg_ms > 0.0 || results.tcp_connect_max_ms > 0.0 {
             println!(
                 "  TCP connect:          avg {:.2}ms, max {:.2}ms",
                 results.tcp_connect_avg_ms, results.tcp_connect_max_ms,
             );
         }
-        if results.tls_handshake_samples > 0 {
+        if results.tls_handshake_avg_ms > 0.0 || results.tls_handshake_max_ms > 0.0 {
             println!(
                 "  TLS handshake:        avg {:.2}ms, max {:.2}ms",
                 results.tls_handshake_avg_ms, results.tls_handshake_max_ms,
@@ -120,7 +125,9 @@ impl TerminalReporter {
         // bound on streams, not sockets. Surface it as an open-connection
         // ceiling so users can sanity-check against the server's
         // `connections_open` gauge.
-        if results.vus_max > 0 && (cps_mode || results.tcp_connect_samples > 0) {
+        if results.vus_max > 0
+            && (cps_mode || results.tcp_connect_samples > 0 || results.tcp_connect_avg_ms > 0.0)
+        {
             println!(
                 "  Peak concurrent VUs:  {} (max open conns from client side)",
                 results.vus_max.to_string().cyan(),

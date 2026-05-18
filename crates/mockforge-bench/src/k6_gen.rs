@@ -57,6 +57,17 @@ pub struct K6ScriptTemplateData {
     /// Max VUs to pre-allocate for the `constant-arrival-rate` executor.
     /// Issue #79 (round 5).
     pub max_vus: u32,
+    /// Starting VU count for the `ramping-vus` executor. For
+    /// `--scenario constant` this is set to `max_vus` so the test runs at
+    /// full concurrency immediately. For ramping scenarios it's 0 so the
+    /// stages drive the ramp.
+    ///
+    /// Issue #79 round 6 follow-up: Srikanth reported that `--vus 5 -d 600s`
+    /// took until the ~6-minute mark to reach 5 VUs because `startVUs: 0` +
+    /// a single `{duration: '600s', target: 5}` stage made `ramping-vus`
+    /// linearly ramp from 0 → 5 across the whole window. Setting startVUs
+    /// to the target for `Constant` collapses that ramp.
+    pub start_vus: u32,
 }
 
 /// Typed template data for `k6_crud_flow.hbs`.
@@ -366,6 +377,13 @@ impl K6ScriptGenerator {
             no_keep_alive: self.config.no_keep_alive,
             duration_secs: self.config.duration_secs,
             max_vus: self.config.max_vus,
+            // For Constant we want the test at full VU count from t=0; for the
+            // ramping scenarios (RampUp / Spike / Stress / Soak) k6 needs to
+            // start from 0 and let the stages drive the curve.
+            start_vus: match self.config.scenario {
+                LoadScenario::Constant => self.config.max_vus,
+                _ => 0,
+            },
         })
     }
 
@@ -926,6 +944,150 @@ mod tests {
         assert!(
             script.contains("Connection Rate:"),
             "--cps summary must include 'Connection Rate:' (Srikanth's round-5 ask)"
+        );
+    }
+
+    /// Issue #79 round 6 follow-up: Srikanth reported `--vus 5 -d 600s` taking
+    /// until the 6-minute mark to reach 5 VUs because the script always set
+    /// `startVUs: 0`, so k6's `ramping-vus` linearly ramped 0 → 5 over the
+    /// whole window. For `--scenario constant` we now seed startVUs at the
+    /// target so the test runs at full concurrency from t=0.
+    #[test]
+    fn test_constant_scenario_starts_at_target_vus() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+
+        let operation = ApiOperation {
+            method: "get".to_string(),
+            path: "/u".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("u".to_string()),
+        };
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+        };
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            base_path: None,
+            scenario: LoadScenario::Constant,
+            duration_secs: 600,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+            security_testing_enabled: false,
+            chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
+        };
+        let script = K6ScriptGenerator::new(config, vec![template]).generate().unwrap();
+        assert!(
+            script.contains("startVUs: 5,"),
+            "--scenario constant must seed startVUs at max_vus, not 0; got:\n{}",
+            script
+        );
+        // RampUp should still start at 0 — confirm we didn't break ramps.
+        let ramp_config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            base_path: None,
+            scenario: LoadScenario::RampUp,
+            duration_secs: 600,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+            security_testing_enabled: false,
+            chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
+        };
+        let ramp_template = RequestTemplate {
+            operation: ApiOperation {
+                method: "get".to_string(),
+                path: "/u".to_string(),
+                operation: Operation::default(),
+                operation_id: Some("u".to_string()),
+            },
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+        };
+        let ramp_script =
+            K6ScriptGenerator::new(ramp_config, vec![ramp_template]).generate().unwrap();
+        assert!(
+            ramp_script.contains("startVUs: 0,"),
+            "--scenario ramp-up must keep startVUs at 0 so stages drive the ramp; got:\n{}",
+            ramp_script
+        );
+    }
+
+    /// Issue #79 round 6 follow-up: srikr's `--rps 100 --vus 5` summary showed
+    /// no "Connections opened" line because the client-side connection counter
+    /// was reading `http_req_connecting.values.count` — a field that doesn't
+    /// exist (k6's Trend metric only emits avg/min/med/max/p90/p95). The fix
+    /// adds a dedicated Counter (`mockforge_connections_opened`) that the
+    /// template increments whenever `res.timings.connecting > 0`. This test
+    /// guards both the metric declaration and the per-request increment so
+    /// the connection counter can't silently regress.
+    #[test]
+    fn test_connections_opened_counter_present() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+
+        let operation = ApiOperation {
+            method: "get".to_string(),
+            path: "/u".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("u".to_string()),
+        };
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+        };
+        let config = K6Config {
+            target_url: "https://api.example.com".to_string(),
+            base_path: None,
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 5,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+            security_testing_enabled: false,
+            chunked_request_bodies: false,
+            target_rps: Some(50),
+            no_keep_alive: false,
+        };
+        let script = K6ScriptGenerator::new(config, vec![template]).generate().unwrap();
+        assert!(
+            script.contains("new Counter('mockforge_connections_opened')"),
+            "template must declare the mockforge_connections_opened Counter"
+        );
+        assert!(
+            script.contains("mockforge_connections_opened.add(1)"),
+            "template must increment mockforge_connections_opened on new TCP connect"
+        );
+        assert!(
+            script.contains("res.timings.connecting > 0"),
+            "template must gate the connection-opened increment on \
+             res.timings.connecting > 0 (only fires when a fresh socket was opened)"
         );
     }
 

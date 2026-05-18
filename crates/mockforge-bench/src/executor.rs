@@ -312,11 +312,18 @@ impl K6Executor {
         let server_fault = &json["metrics"]["mockforge_server_fault_total"]["values"]["count"];
 
         // Issue #79 (round 5) — surface TCP connect / TLS handshake stats and
-        // a connection-rate count for `--cps` runs. k6's `http_req_connecting`
-        // is "time spent establishing TCP connection"; with `noConnectionReuse`
-        // it fires per request, so `count` is effectively connections opened.
+        // a connection-rate count for `--cps` runs.
+        //
+        // Round 6 follow-up: k6's `http_req_connecting` Trend doesn't expose a
+        // `count` field in summary.json (only avg/min/med/max/p90/p95), so we
+        // can't use it for "connections opened". The template now feeds a
+        // dedicated Counter, `mockforge_connections_opened`, every time a
+        // request's `res.timings.connecting > 0`. That gives us an accurate
+        // count for both `--cps` (≈ total_requests) and pooled-reuse (≈ vus_max)
+        // runs. The Trend is still useful for the avg/max timing display.
         let tcp_connecting = &json["metrics"]["http_req_connecting"]["values"];
         let tls_handshake = &json["metrics"]["http_req_tls_handshaking"]["values"];
+        let mf_conns_opened = &json["metrics"]["mockforge_connections_opened"]["values"]["count"];
 
         Ok(K6Results {
             total_requests: json["metrics"]["http_reqs"]["values"]["count"].as_u64().unwrap_or(0),
@@ -341,10 +348,19 @@ impl K6Executor {
             server_injected_jitter_samples: server_jitter["count"].as_u64().unwrap_or(0),
             server_injected_jitter_avg_ms: server_jitter["avg"].as_f64().unwrap_or(0.0),
             server_reported_faults: server_fault.as_u64().unwrap_or(0),
-            tcp_connect_samples: tcp_connecting["count"].as_u64().unwrap_or(0),
+            // Counter from the template, not the Trend's count (which is
+            // absent in k6 summary JSON).
+            tcp_connect_samples: mf_conns_opened.as_u64().unwrap_or(0),
             tcp_connect_avg_ms: tcp_connecting["avg"].as_f64().unwrap_or(0.0),
             tcp_connect_max_ms: tcp_connecting["max"].as_f64().unwrap_or(0.0),
-            tls_handshake_samples: tls_handshake["count"].as_u64().unwrap_or(0),
+            // TLS handshake Trend has no `count` either; gate display on avg>0.
+            tls_handshake_samples: if tls_handshake["avg"].as_f64().unwrap_or(0.0) > 0.0 {
+                // Use connection count as a proxy — every new TLS session
+                // requires a handshake.
+                mf_conns_opened.as_u64().unwrap_or(0)
+            } else {
+                0
+            },
             tls_handshake_avg_ms: tls_handshake["avg"].as_f64().unwrap_or(0.0),
             tls_handshake_max_ms: tls_handshake["max"].as_f64().unwrap_or(0.0),
         })

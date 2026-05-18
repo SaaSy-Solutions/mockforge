@@ -59,7 +59,7 @@ async fn test_http_basic_get() {
     // Create a stub via Admin API
     let client = Client::new();
     let stub_response = client
-        .post(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
         .json(&json!({
             "path": "/api/users",
             "method": "GET",
@@ -79,7 +79,7 @@ async fn test_http_basic_get() {
 
     // Make GET request
     let response = client
-        .get(&format!("http://localhost:{}/api/users", http_port))
+        .get(format!("http://localhost:{}/api/users", http_port))
         .send()
         .await
         .expect("Failed to make GET request");
@@ -111,7 +111,7 @@ async fn test_http_post_with_validation() {
     // Create POST stub
     let client = Client::new();
     let stub_response = client
-        .post(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
         .json(&json!({
             "path": "/api/users",
             "method": "POST",
@@ -132,7 +132,7 @@ async fn test_http_post_with_validation() {
 
     // Make POST request
     let response = client
-        .post(&format!("http://localhost:{}/api/users", http_port))
+        .post(format!("http://localhost:{}/api/users", http_port))
         .json(&json!({
             "name": "Alice",
             "email": "alice@example.com"
@@ -168,7 +168,7 @@ async fn test_http_dynamic_stub_creation() {
 
     // Create stub via Admin API
     let stub_response = client
-        .post(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
         .json(&json!({
             "path": "/api/test",
             "method": "GET",
@@ -185,7 +185,7 @@ async fn test_http_dynamic_stub_creation() {
 
     // Verify stub works
     let test_response = client
-        .get(&format!("http://localhost:{}/api/test", http_port))
+        .get(format!("http://localhost:{}/api/test", http_port))
         .send()
         .await
         .expect("Failed to test stub");
@@ -216,7 +216,7 @@ async fn test_http_stub_update() {
 
     // Create initial stub
     let create_response = client
-        .post(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
         .json(&json!({
             "path": "/api/update-test",
             "method": "GET",
@@ -236,7 +236,7 @@ async fn test_http_stub_update() {
 
     // Update stub
     let update_response = client
-        .put(&format!("http://localhost:{}/__mockforge/api/mocks/{}", admin_port, stub_id))
+        .put(format!("http://localhost:{}/__mockforge/api/mocks/{}", admin_port, stub_id))
         .json(&json!({
             "path": "/api/update-test",
             "method": "GET",
@@ -253,7 +253,7 @@ async fn test_http_stub_update() {
 
     // Verify updated stub
     let test_response = client
-        .get(&format!("http://localhost:{}/api/update-test", http_port))
+        .get(format!("http://localhost:{}/api/update-test", http_port))
         .send()
         .await
         .expect("Failed to test updated stub");
@@ -284,7 +284,7 @@ async fn test_http_stub_deletion() {
 
     // Create stub
     let create_response = client
-        .post(&format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
         .json(&json!({
             "path": "/api/delete-test",
             "method": "GET",
@@ -304,7 +304,7 @@ async fn test_http_stub_deletion() {
 
     // Verify stub exists
     let test_response = client
-        .get(&format!("http://localhost:{}/api/delete-test", http_port))
+        .get(format!("http://localhost:{}/api/delete-test", http_port))
         .send()
         .await
         .expect("Failed to test stub");
@@ -313,7 +313,7 @@ async fn test_http_stub_deletion() {
 
     // Delete stub
     let delete_response = client
-        .delete(&format!("http://localhost:{}/__mockforge/api/mocks/{}", admin_port, stub_id))
+        .delete(format!("http://localhost:{}/__mockforge/api/mocks/{}", admin_port, stub_id))
         .send()
         .await
         .expect("Failed to delete stub");
@@ -322,7 +322,7 @@ async fn test_http_stub_deletion() {
 
     // Verify stub is gone (should return 404)
     let test_response = client
-        .get(&format!("http://localhost:{}/api/delete-test", http_port))
+        .get(format!("http://localhost:{}/api/delete-test", http_port))
         .send()
         .await
         .expect("Failed to test deleted stub");

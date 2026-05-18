@@ -26,6 +26,14 @@ const server_injected_latency_ms = new Trend('mockforge_server_injected_latency_
 const server_injected_jitter_ms = new Trend('mockforge_server_injected_jitter_ms');
 const server_fault_total = new Counter('mockforge_server_fault_total');
 
+// Issue #79 round 6 follow-up — k6's built-in `http_req_connecting` is a Trend
+// (no `count` field in summary.json), so we can't read total connections opened
+// from it. Track explicitly with a Counter: every request whose
+// `res.timings.connecting > 0` had to establish a fresh TCP socket. With
+// connection reuse on (the default without `--cps`) this ≈ vus_max for the
+// run; with `noConnectionReuse`/`--cps` it equals total requests.
+const mockforge_connections_opened = new Counter('mockforge_connections_opened');
+
 // Test configuration
 export const options = {
   {{#if skip_tls_verify}}
@@ -57,7 +65,13 @@ export const options = {
       maxVUs: {{max_vus}},
       {{else}}
       executor: 'ramping-vus',
-      startVUs: 0,
+      // Issue #79 round 6 follow-up — Srikanth saw `--vus 5 -d 600s --cps`
+      // take until the ~6-minute mark to reach 5 VUs because startVUs was
+      // always 0 and `ramping-vus` linearly interpolates between current and
+      // target. For `--scenario constant` we now seed startVUs at the target
+      // so the test runs at full concurrency from t=0; ramp scenarios still
+      // start at 0 and let their stages drive the curve.
+      startVUs: {{start_vus}},
       stages: [
         {{#each stages}}
         { duration: '{{this.duration}}', target: {{this.target}} },
@@ -76,8 +90,14 @@ export const options = {
 // Inspect MockForge response headers and feed the chaos-signal trends/counter.
 // Called after every http.* invocation in the body so server-injected latency
 // and faults surface in summary.json next to the standard k6 metrics.
+// Also tracks new TCP/TLS connection opens via res.timings.connecting > 0
+// (Issue #79 round 6 follow-up — client-side connection count for --rps runs).
 function recordMockForgeChaosHeaders(res) {
-  if (!res || !res.headers) return;
+  if (!res) return;
+  if (res.timings && res.timings.connecting > 0) {
+    mockforge_connections_opened.add(1);
+  }
+  if (!res.headers) return;
   const lat = res.headers['X-Mockforge-Injected-Latency-Ms'] || res.headers['x-mockforge-injected-latency-ms'];
   const jit = res.headers['X-Mockforge-Injected-Jitter-Ms'] || res.headers['x-mockforge-injected-jitter-ms'];
   const fault = res.headers['X-Mockforge-Fault'] || res.headers['x-mockforge-fault'];
