@@ -38,7 +38,6 @@ jobs:
     timeout-minutes: 45
 
     env:
-      CARGO_HOME: /tmp/cargo-mockforge-e2e-${{ runner.name }}
       # Bound ports on the compose file. Kept non-default so multiple runners on the
       # same host could in principle parallelize by overriding these.
       PG_PORT: "55432"
@@ -65,6 +64,13 @@ jobs:
       STRIPE_WEBHOOK_SECRET: "whsec_e2e_test_secret"
 
     steps:
+      - name: Set per-runner CARGO_HOME
+        # `runner.name` is unavailable in workflow- or job-level `env:` blocks
+        # (GH Actions context: `runner.*` is step-scoped). Writing to
+        # `$GITHUB_ENV` here exports it to every subsequent step in this job,
+        # including the rust-toolchain composite action and rust-cache.
+        run: echo "CARGO_HOME=/tmp/cargo-mockforge-e2e-${{ runner.name }}" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@v6
 

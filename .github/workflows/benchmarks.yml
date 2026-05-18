@@ -35,13 +35,18 @@ jobs:
   benchmark:
     name: Run Benchmarks
     runs-on: [self-hosted, linux, x64, rust]
-    env:
-      CARGO_HOME: /tmp/cargo-mockforge-${{ runner.name }}
     permissions:
       contents: write
       pull-requests: write
 
     steps:
+      - name: Set per-runner CARGO_HOME
+        # `runner.name` is unavailable in workflow- or job-level `env:` blocks
+        # (GH Actions context: `runner.*` is step-scoped). Writing to
+        # `$GITHUB_ENV` here exports it to every subsequent step in this job,
+        # including the rust-toolchain composite action and rust-cache.
+        run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
       - name: Checkout code
         uses: actions/checkout@v6
         with:

@@ -43,8 +43,6 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: [self-hosted, linux, x64, rust]
-    env:
-      CARGO_HOME: /tmp/cargo-mockforge-${{ runner.name }}
     # 30 min was tight even on a warm target/. After the target/ size
     # guard wipes at >30GB, cold rebuilds take ~25 min plus test time,
     # which overran the prior limit. 60 min leaves headroom for the
@@ -52,6 +50,13 @@ jobs:
     timeout-minutes: 60
 
     steps:
+      - name: Set per-runner CARGO_HOME
+        # `runner.name` is unavailable in workflow- or job-level `env:` blocks
+        # (GH Actions context: `runner.*` is step-scoped). Writing to
+        # `$GITHUB_ENV` here exports it to every subsequent step in this job,
+        # including the rust-toolchain composite action and rust-cache.
+        run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
       - name: Checkout repository
         uses: actions/checkout@v6
 
@@ -149,8 +154,6 @@ jobs:
   e2e-tests:
     name: E2E Tests
     runs-on: [self-hosted, linux, x64, rust]
-    env:
-      CARGO_HOME: /tmp/cargo-mockforge-${{ runner.name }}
     # Serialize after integration-tests. Both jobs build the workspace
     # in release mode and share the self-hosted runner's target/ and
     # ~/.cargo dirs. When they ran in parallel the rustc process could
@@ -163,6 +166,13 @@ jobs:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
 
     steps:
+      - name: Set per-runner CARGO_HOME
+        # `runner.name` is unavailable in workflow- or job-level `env:` blocks
+        # (GH Actions context: `runner.*` is step-scoped). Writing to
+        # `$GITHUB_ENV` here exports it to every subsequent step in this job,
+        # including the rust-toolchain composite action and rust-cache.
+        run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
       - name: Checkout code
         uses: actions/checkout@v6
 
