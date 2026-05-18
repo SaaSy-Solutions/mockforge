@@ -6,14 +6,17 @@
 //! in `incident_events` as `notification_sent`; the per-incident
 //! "we're done with this one" marker is `notification_dispatched`.
 //!
-//! Real outbound for `webhook`, `slack`, and `email` channels. The
-//! `email` path uses the shared `crate::email::EmailService`, which
-//! also powers verification/reset/security alerts; it auto-picks the
-//! configured provider (Postmark / Brevo / SMTP) from env. When no
-//! provider is configured the attempt is recorded as `skipped` with a
-//! reason that surfaces the missing config — the dispatcher does not
-//! silently pretend to send. `pagerduty` is still skipped pending the
-//! Events-API mapping (#552).
+//! Real outbound for all four channel kinds: `webhook` and `slack`
+//! post a JSON body to `channel.config.url`; `email` uses the shared
+//! `crate::email::EmailService` (Postmark / Brevo / SMTP, picked from
+//! env); `pagerduty` posts an Events API v2 `trigger` event using the
+//! channel's stored `routing_key`. The PagerDuty `dedup_key` is the
+//! incident UUID so a future resolve-side dispatcher (not yet
+//! implemented — the current tick only fires on incident open) can
+//! close the same alert via `event_action: "resolve"`. When the email
+//! provider isn't configured the attempt is recorded as `skipped`
+//! with a reason that surfaces the missing config — the dispatcher
+//! does not silently pretend to send.
 //!
 //! Reliability:
 //! - 5s tick cadence so a real outage shows up in seconds, not minutes.
@@ -240,9 +243,7 @@ async fn send_to_channel(
     match channel.kind.as_str() {
         "webhook" | "slack" => post_webhook_style(client, channel, incident).await,
         "email" => send_email(channel, incident).await,
-        "pagerduty" => ChannelResult::Skipped {
-            reason: "pagerduty channel: Events API mapping not yet wired".into(),
-        },
+        "pagerduty" => post_pagerduty(client, channel, incident).await,
         other => ChannelResult::Skipped {
             reason: format!("unknown channel kind: {other}"),
         },
@@ -409,6 +410,105 @@ fn html_escape(input: &str) -> String {
         .replace('"', "&quot;")
 }
 
+/// PagerDuty Events API v2: POST a `trigger` event to
+/// `https://events.pagerduty.com/v2/enqueue`. The routing key lives in
+/// `channel.config.routing_key` (or `channel.config.integration_key` —
+/// both names are common in PagerDuty docs, so we accept either). The
+/// `dedup_key` is the incident UUID, so a future resolve-side
+/// dispatcher can close the same alert by replaying the same event
+/// with `event_action: "resolve"`. Custom event URL via
+/// `MOCKFORGE_PAGERDUTY_ENQUEUE_URL` for tests.
+async fn post_pagerduty(
+    client: &reqwest::Client,
+    channel: &NotificationChannel,
+    incident: &Incident,
+) -> ChannelResult {
+    let routing_key = match channel
+        .config
+        .get("routing_key")
+        .or_else(|| channel.config.get("integration_key"))
+        .and_then(|v| v.as_str())
+    {
+        Some(k) if !k.trim().is_empty() => k.trim().to_string(),
+        _ => {
+            return ChannelResult::Failed {
+                error: "channel.config.routing_key missing or empty \
+                    (PagerDuty integration key, 32 hex chars)"
+                    .into(),
+            };
+        }
+    };
+
+    let url = std::env::var("MOCKFORGE_PAGERDUTY_ENQUEUE_URL")
+        .unwrap_or_else(|_| "https://events.pagerduty.com/v2/enqueue".to_string());
+
+    let summary =
+        format!("[{}] {}: {}", incident.severity.to_uppercase(), incident.source, incident.title);
+
+    let body = serde_json::json!({
+        "routing_key": routing_key,
+        "event_action": "trigger",
+        // Dedupe on the incident UUID so retries within the dispatcher
+        // (or a future resolve-side replay) collapse onto one alert
+        // instead of fanning out into per-tick noise.
+        "dedup_key": incident.id.to_string(),
+        "payload": {
+            "summary": summary,
+            "source": incident.source,
+            "severity": pagerduty_severity(&incident.severity),
+            "component": incident.source_ref,
+            "custom_details": {
+                "incident_id": incident.id,
+                "org_id": incident.org_id,
+                "workspace_id": incident.workspace_id,
+                "title": incident.title,
+                "description": incident.description,
+                "status": incident.status,
+                "created_at": incident.created_at,
+            },
+        },
+    });
+
+    match client.post(&url).json(&body).send().await {
+        Ok(resp) => {
+            let status_code = resp.status().as_u16();
+            if resp.status().is_success() {
+                // PagerDuty returns 202 Accepted on success with a JSON
+                // envelope `{ "status": "success", "message": "...",
+                // "dedup_key": "..." }`. We don't parse it — the HTTP
+                // code is enough.
+                ChannelResult::Sent { status_code }
+            } else {
+                // Read the body for the error detail when we can. PD
+                // returns useful messages like "routing_key invalid"
+                // here.
+                let detail = resp.text().await.unwrap_or_default();
+                let truncated = detail.chars().take(200).collect::<String>();
+                ChannelResult::Failed {
+                    error: format!("PagerDuty returned HTTP {status_code}: {truncated}"),
+                }
+            }
+        }
+        Err(e) => ChannelResult::Failed {
+            error: e.to_string(),
+        },
+    }
+}
+
+/// Map MockForge incident severities to the four PagerDuty Events API
+/// v2 severities (`critical`, `error`, `warning`, `info`). Anything we
+/// don't explicitly recognise downgrades to `info` — better to receive
+/// a low-priority alert than to have PagerDuty reject the event for an
+/// invalid severity.
+fn pagerduty_severity(severity: &str) -> &'static str {
+    match severity.to_ascii_lowercase().as_str() {
+        "critical" | "fatal" => "critical",
+        "error" | "high" => "error",
+        "warning" | "warn" | "medium" => "warning",
+        _ => "info",
+    }
+}
+
 /// User-facing test-fire: post a synthetic incident-shaped payload to a
 /// single channel and return the result. Used by the
 /// `POST /notification-channels/{id}/test-fire` route so operators can
@@ -508,6 +608,19 @@ mod tests {
         }
     }
 
+    fn pagerduty_channel(config: serde_json::Value) -> NotificationChannel {
+        NotificationChannel {
+            id: uuid::Uuid::nil(),
+            org_id: uuid::Uuid::nil(),
+            name: "test-pd".into(),
+            kind: "pagerduty".into(),
+            config,
+            enabled: true,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        }
+    }
+
     #[test]
     fn smoke_module_links() {
         // Anchor: this module must exist for the registry main.rs wiring
@@ -543,5 +656,69 @@ mod tests {
         assert_eq!(html_escape("a & b"), "a &amp; b");
         assert_eq!(html_escape("<script>"), "&lt;script&gt;");
         assert_eq!(html_escape("\"quoted\""), "&quot;quoted&quot;");
+    }
+
+    #[test]
+    fn pd_severity_maps_known_buckets() {
+        assert_eq!(pagerduty_severity("CRITICAL"), "critical");
+        assert_eq!(pagerduty_severity("fatal"), "critical");
+        assert_eq!(pagerduty_severity("error"), "error");
+        assert_eq!(pagerduty_severity("HIGH"), "error");
+        assert_eq!(pagerduty_severity("warning"), "warning");
+        assert_eq!(pagerduty_severity("medium"), "warning");
+        assert_eq!(pagerduty_severity("info"), "info");
+        assert_eq!(pagerduty_severity("low"), "info");
+        assert_eq!(pagerduty_severity("something-weird"), "info");
+        assert_eq!(pagerduty_severity(""), "info");
+    }
+
+    #[tokio::test]
+    async fn pd_missing_routing_key_is_failure() {
+        let client = reqwest::Client::new();
+        let channel = pagerduty_channel(serde_json::json!({}));
+        let result = post_pagerduty(&client, &channel, &fake_incident()).await;
+        match result {
+            ChannelResult::Failed { error } => {
+                assert!(error.contains("routing_key"), "unexpected error: {error}");
+            }
+            other => panic!("expected Failed, got {other:?}"),
+        }
+    }
+
+    #[tokio::test]
+    async fn pd_accepts_integration_key_alias() {
+        // PagerDuty docs use both names interchangeably. We accept
+        // either; the missing-key path should NOT fire when only
+        // `integration_key` is present. We verify by pointing the
+        // dispatcher at a 127.0.0.1 port that nothing's listening on
+        // and asserting the failure is a network error (the request
+        // was actually attempted), not a missing-key validation error.
+        std::env::set_var("MOCKFORGE_PAGERDUTY_ENQUEUE_URL", "http://127.0.0.1:1/v2/enqueue");
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_millis(200))
+            .build()
+            .unwrap();
+        let channel = pagerduty_channel(serde_json::json!({ "integration_key": "abc123" }));
+        let result = post_pagerduty(&client, &channel, &fake_incident()).await;
+        match result {
+            ChannelResult::Failed { error } => {
+                // Network error (connection refused / timeout), NOT the
+                // routing_key validation error.
+                assert!(
+                    !error.contains("routing_key"),
+                    "should have accepted integration_key but got validation error: {error}"
+                );
+            }
+            other => panic!("expected Failed (network), got {other:?}"),
+        }
+        std::env::remove_var("MOCKFORGE_PAGERDUTY_ENQUEUE_URL");
+    }
+
+    #[tokio::test]
+    async fn pd_blank_routing_key_is_failure() {
+        let client = reqwest::Client::new();
+        let channel = pagerduty_channel(serde_json::json!({ "routing_key": "   " }));
+        let result = post_pagerduty(&client, &channel, &fake_incident()).await;
+        assert!(matches!(result, ChannelResult::Failed { .. }));
     }
 }
