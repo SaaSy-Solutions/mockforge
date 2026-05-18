@@ -364,6 +364,12 @@ const cloudNavItemIds = new Set([
   // without workspace_id are invisible until the shipper backfill lands;
   // cloud-shipped captures (--cloud-ship) work today.
   'logs',
+  // World State (#464 Phase 2) — per-deployment graph + snapshot + layers
+  // + slice query via cloudWorldStateApi against /api/v1/hosted-mocks/
+  // {deployment_id}/world-state/*. The local `/stream` WebSocket isn't
+  // proxied yet (Phase 2 follow-up); cloud mode polls every 5s, which
+  // matches the local TanStack Query refetchInterval.
+  'world-state',
   // Time Travel (#466 Phase 2) — per-deployment virtual-clock control via
   // cloudTimeTravelApi against /api/v1/hosted-mocks/{deployment_id}
   // /time-travel/* (registry proxies over Fly 6PN to port 3000). Only
@@ -404,6 +410,12 @@ const cloudHiddenNavItemIds = new Set([
   // cloud-enabled — keeping both visible just adds sidebar noise.
   'metrics',                // → pillar-analytics (request rate / latency / errors live there)
   'performance',            // → cloud-test-runs (k6 / load runs already covered)
+  // ApiExplorerPage is already cloud-aware (takes a `deployment` prop and
+  // fetches the OpenAPI spec from the runtime). It is reached by clicking
+  // "Open" on a deployment in HostedMocksPage, not standalone from the
+  // sidebar — keeping it visible suggested a global explorer that does not
+  // exist in cloud mode.
+  'api-explorer',           // → reached via HostedMocksPage "Open" action
 ]);
 
 // In cloud mode, items outside the allowlist are shown as disabled "Local only"

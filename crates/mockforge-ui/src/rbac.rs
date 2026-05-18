@@ -297,6 +297,16 @@ pub async fn rbac_middleware(mut request: Request, next: Next) -> Result<Respons
     // (crates/mockforge-ui/src/registry_admin.rs) which carries its own
     // JWT-based auth layer — the rbac middleware would reject every request
     // before it reached the registry_admin handlers. Bypass it wholesale.
+    //
+    // /api/resilience/* is the chaos circuit-breaker / bulkhead dashboard
+    // (mockforge_chaos::create_resilience_router). In cloud mode the
+    // registry's reqwest proxy reaches this over Fly 6PN private network
+    // (#468 Phase 3) without an admin token — port 9080 isn't exposed via
+    // any Fly public `[[services]]` entry, so the network boundary IS the
+    // auth boundary. Locally the admin server is opt-in via --admin, same
+    // as /__mockforge/*. Both GET (read state) and POST (reset) are exempt
+    // for the same reason: anyone who can reach 9080 is already on a
+    // trust boundary controlled by the operator.
     let is_public_route = path == "/"
         || path.starts_with("/assets/")
         || path == "/__mockforge/auth/login"
@@ -308,6 +318,7 @@ pub async fn rbac_middleware(mut request: Request, next: Next) -> Result<Respons
         || path == "/sw.js"
         || path == "/api-docs"
         || path.starts_with("/api/admin/registry/")
+        || path.starts_with("/api/resilience/")
         || (method == "GET" && path.starts_with("/__mockforge/"));
 
     if is_public_route {

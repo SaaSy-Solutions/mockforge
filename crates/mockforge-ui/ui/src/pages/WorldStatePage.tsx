@@ -21,8 +21,19 @@ import {
   type WorldStateEdge,
 } from '../hooks/useWorldState';
 import { DashboardLoading, ErrorState } from '../components/ui/LoadingStates';
+import { isCloudMode } from '../utils/cloudMode';
+import { CloudWorldStateView } from './CloudWorldStateView';
 
 export const WorldStatePage: React.FC = () => {
+  // #464 Phase 2: in cloud mode, dispatch to the per-deployment cloud view
+  // backed by cloudWorldStateApi (/api/v1/hosted-mocks/{id}/world-state/*).
+  // Local mode keeps the singleton-runtime hooks below unchanged — they
+  // hit /api/world-state/* directly on the mockforge process the browser
+  // is talking to.
+  if (isCloudMode()) {
+    return <CloudWorldStateView />;
+  }
+
   const [selectedNode, setSelectedNode] = useState<WorldStateNode | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<WorldStateEdge | null>(null);
   const [enabledLayers, setEnabledLayers] = useState<Set<string>>(new Set());

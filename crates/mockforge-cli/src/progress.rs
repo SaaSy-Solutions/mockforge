@@ -187,8 +187,31 @@ pub fn parse_address(addr_str: &str, context: &str) -> Result<SocketAddr, CliErr
             format!("Invalid {} address '{}': {}", context, addr_str, e),
             ExitCode::ConfigurationError,
         )
-        .with_suggestion("Ensure the address is in the correct format (e.g., '127.0.0.1:8080' or '0.0.0.0:3000')".to_string())
+        .with_suggestion("Ensure the address is in the correct format (e.g., '127.0.0.1:8080', '0.0.0.0:3000', or '[::]:8080' for IPv6)".to_string())
     })
+}
+
+/// Build a `host:port` string that handles bare IPv6 hosts correctly.
+///
+/// `SocketAddr::from_str` requires IPv6 literals to be wrapped in `[...]`,
+/// so naively `format!("{host}:{port}")` with `host = "::"` yields the
+/// ambiguous `":::9080"` and fails to parse. This helper detects unbracketed
+/// IPv6 hosts (anything containing `:` that doesn't already start with `[`)
+/// and adds the brackets. IPv4 hosts and already-bracketed IPv6 hosts pass
+/// through unchanged.
+///
+/// Examples:
+/// * `("0.0.0.0", 80)` → `"0.0.0.0:80"`
+/// * `("127.0.0.1", 80)` → `"127.0.0.1:80"`
+/// * `("::", 80)` → `"[::]:80"`
+/// * `("::1", 80)` → `"[::1]:80"`
+/// * `("[::]", 80)` → `"[::]:80"`
+pub fn format_bind_address(host: &str, port: u16) -> String {
+    if host.contains(':') && !host.starts_with('[') {
+        format!("[{host}]:{port}")
+    } else {
+        format!("{host}:{port}")
+    }
 }
 
 /// Helper function to require a config value with a meaningful error
@@ -690,5 +713,44 @@ mod tests {
         let result = utils::validate_output_dir(&file_path);
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().exit_code, ExitCode::InvalidArguments);
+    }
+
+    // format_bind_address tests — covers the IPv6 bracketing bug that
+    // surfaced as `:::9080` parse failures during the #468 cloud rollout.
+
+    #[test]
+    fn format_bind_address_ipv4_passes_through() {
+        assert_eq!(format_bind_address("0.0.0.0", 80), "0.0.0.0:80");
+        assert_eq!(format_bind_address("127.0.0.1", 3000), "127.0.0.1:3000");
+    }
+
+    #[test]
+    fn format_bind_address_ipv6_unbracketed_gets_brackets() {
+        // Bare IPv6 literals. SocketAddr::parse needs them wrapped — this
+        // is the actual bug the helper exists to fix.
+        assert_eq!(format_bind_address("::", 9080), "[::]:9080");
+        assert_eq!(format_bind_address("::1", 9080), "[::1]:9080");
+        assert_eq!(format_bind_address("fe80::1", 9080), "[fe80::1]:9080");
+    }
+
+    #[test]
+    fn format_bind_address_ipv6_already_bracketed_passes_through() {
+        assert_eq!(format_bind_address("[::]", 9080), "[::]:9080");
+        assert_eq!(format_bind_address("[::1]", 9080), "[::1]:9080");
+    }
+
+    #[test]
+    fn format_bind_address_then_parse_round_trips() {
+        // The whole point of the helper: feed its output to parse_address
+        // and get a valid SocketAddr.
+        for (host, port) in [
+            ("0.0.0.0", 80),
+            ("127.0.0.1", 3000),
+            ("::", 9080),
+            ("::1", 9080),
+        ] {
+            let s = format_bind_address(host, port);
+            parse_address(&s, "test").unwrap_or_else(|e| panic!("failed on {s:?}: {e:?}"));
+        }
     }
 }
