@@ -1,0 +1,9 @@
+# pnpm 11 managed-builds policy. Without this, `pnpm install --frozen-lockfile`
+# exits non-zero with `ERR_PNPM_IGNORED_BUILDS` for esbuild/vue-demi (their
+# postinstall scripts fetch the native bundler binary / generate the legacy
+# Vue 2/3 shim). Putting it here rather than `package.json#pnpm` matches the
+# v11 docs — the `pnpm` field in package.json is still accepted, but the
+# CI image's pnpm appears to read this file first.
+onlyBuiltDependencies:
+  - esbuild
+  - vue-demi

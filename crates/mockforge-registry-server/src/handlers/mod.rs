@@ -61,6 +61,7 @@ pub mod two_factor;
 pub mod usage;
 pub mod users_me;
 pub mod verification;
+pub mod world_state;
 
 // Marketplace, settings, security, GDPR, and audit handlers
 pub mod audit;

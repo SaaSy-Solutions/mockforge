@@ -417,6 +417,28 @@ impl BenchCommand {
 
         let security_testing_enabled = self.security_test || self.wafbench_dir.is_some();
 
+        // Issue #79 round 6 follow-up — Srikanth reported k6 emitting
+        // "Insufficient VUs, reached 5 active VUs and cannot initialize more"
+        // when running `--rps 100 --vus 5`. With the `constant-arrival-rate`
+        // executor, k6 needs roughly `rps × avg_request_seconds` VUs to keep
+        // up; if `--vus` is too low it can't sustain the rate. Warn pre-flight
+        // so users know to bump `--vus` rather than chase the warning.
+        if let Some(rps) = self.target_rps {
+            // Rule of thumb: at ~100ms avg latency, 1 VU sustains ~10 req/s.
+            // If `--vus * 10 < --rps`, the configured VU pool likely can't
+            // drive the requested rate end-to-end and k6 will warn.
+            if self.vus.saturating_mul(10) < rps {
+                TerminalReporter::print_warning(&format!(
+                    "--vus {} may be insufficient for --rps {}. k6 needs roughly \
+                     rps × avg_request_seconds VUs to sustain the rate; bump --vus \
+                     (e.g. --vus {}) if you see \"Insufficient VUs\" warnings.",
+                    self.vus,
+                    rps,
+                    rps.div_ceil(10).max(self.vus + 1),
+                ));
+            }
+        }
+
         let k6_config = K6Config {
             target_url: self.target.clone(),
             base_path,

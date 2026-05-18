@@ -1,5 +1,23 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.137] - 2026-05-17
+
+### Fixed
+
+- **[Reality]** Client-side "Connections opened" counter now appears for `--rps`-only runs (Issue #79 round 6 follow-up)
+  - Root cause: the parser was reading `http_req_connecting.values.count` from k6's `summary.json`, but k6's Trend metric never emits a `count` field — only `avg/min/med/max/p(90)/p(95)`. The field was always absent, so `tcp_connect_samples` was always 0 and the connection-count line never printed for non-`--cps` runs.
+  - Fix: the generated k6 script now declares a dedicated `mockforge_connections_opened` Counter and increments it whenever `res.timings.connecting > 0` (i.e. a fresh TCP socket was opened). The Rust parser reads this Counter's `count` directly. Works for both `--cps` runs (≈ total requests) and pooled-reuse runs (≈ `vus_max`).
+  - Also: TCP-connect / TLS-handshake timing lines now print whenever the Trend has a non-zero `avg`, not when `count > 0` (which was unreliable). New `test_connections_opened_counter_present` regression test guards both the Counter declaration and the per-request increment.
+
+- **[Reality]** `--scenario constant` now runs at full VU concurrency from t=0 (Issue #79 round 6 follow-up)
+  - Root cause: Srikanth reported that `--vus 5 -d 600s` took until the ~6-minute mark to reach 5 VUs and then ramped DOWN. The k6 template always wrote `startVUs: 0`, so even `--scenario constant`'s single `{duration: '600s', target: 5}` stage made `ramping-vus` linearly interpolate from 0 → 5 across the whole window.
+  - Fix: for `Constant`, `startVUs` is seeded at `max_vus` so concurrency is at full from the start. Ramping scenarios (`RampUp`/`Spike`/`Stress`/`Soak`) still start at 0 and let their stages drive the curve. Guarded by `test_constant_scenario_starts_at_target_vus`.
+
+### Added
+
+- **[DevX]** Pre-flight warning when `--vus` is too low for `--rps` (Issue #79 round 6 follow-up)
+  - `mockforge bench --rps N --vus M` now warns before launch when `M × 10 < N` (rule of thumb: 1 VU at ~100ms latency sustains ~10 req/s). The warning suggests a higher `--vus` value (`ceil(rps / 10)`), so users hit by k6's "Insufficient VUs, reached M active VUs and cannot initialize more" message know what to change.
+
 ## [0.3.132] - 2026-05-12
 
 ### Added

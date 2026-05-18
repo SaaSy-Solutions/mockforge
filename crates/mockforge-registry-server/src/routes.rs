@@ -530,6 +530,33 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/hosted-mocks/{deployment_id}/resilience/bulkheads/{service}/reset",
             post(handlers::resilience::reset_bulkhead),
         )
+        // World-state routes (#464 / part of #459) — Phase 1 runtime proxy.
+        // Proxy the 5 HTTP endpoints of `mockforge-http::handlers::world_state`
+        // over Fly 6PN to `{fly-app}.internal:3000/api/world-state/*`. The
+        // WebSocket `/stream` is intentionally deferred to Phase 2 — the
+        // local UI polls every 5s as its default refresh, so cloud users
+        // get a fully functional snapshot/graph/layers/query surface from
+        // Phase 1 even without push deltas.
+        .route(
+            "/api/v1/hosted-mocks/{deployment_id}/world-state/snapshot",
+            get(handlers::world_state::get_snapshot),
+        )
+        .route(
+            "/api/v1/hosted-mocks/{deployment_id}/world-state/snapshot/{snapshot_id}",
+            get(handlers::world_state::get_snapshot_by_id),
+        )
+        .route(
+            "/api/v1/hosted-mocks/{deployment_id}/world-state/graph",
+            get(handlers::world_state::get_graph),
+        )
+        .route(
+            "/api/v1/hosted-mocks/{deployment_id}/world-state/layers",
+            get(handlers::world_state::get_layers),
+        )
+        .route(
+            "/api/v1/hosted-mocks/{deployment_id}/world-state/query",
+            post(handlers::world_state::query),
+        )
         // Test Generator routes (#469 / part of #459) — Phase 1 data plane.
         // Async LLM jobs that read the workspace's runtime_captures corpus
         // and emit generated test scenarios. Rows land in 'queued' state;

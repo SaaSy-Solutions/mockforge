@@ -65,9 +65,20 @@ repos:
     files: ^crates/[^/]+/migrations/.+\.sql$
   - id: clippy
     name: clippy
-    entry: cargo clippy --all-targets --all-features --workspace --exclude mockforge-desktop
+    # Scoped clippy — maps changed files to their owning workspace crate via
+    # `crates/<name>/...` and runs `cargo clippy -p <crate>` for each affected
+    # crate instead of the whole workspace. Falls back to a full --workspace
+    # run when a workspace-root file (Cargo.toml/Cargo.lock) changes, when a
+    # changed file lives outside crates/<name>/, or when >= 10 crates are
+    # affected. Matches the .claude/rules/self-verification.md policy.
+    # See `scripts/precommit/clippy_scoped.py` and issue #538.
+    entry: python3 scripts/precommit/clippy_scoped.py
     language: system
-    pass_filenames: false
+    pass_filenames: true
+    # Only fire on Rust source or Cargo manifest changes. Docs / UI / CI
+    # config edits skip clippy entirely, which is the big iteration-speed
+    # win (pre-commit clippy was 5-15 min per commit before this).
+    files: '(\.rs$|(^|/)Cargo\.toml$|(^|/)Cargo\.lock$)'
     # `cargo check` is intentionally NOT run here. `cargo clippy --all-targets
     # --all-features` is a strict superset of `cargo check --workspace` (clippy
     # type-checks everything check does, plus more targets/features). Running

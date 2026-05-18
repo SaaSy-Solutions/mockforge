@@ -98,6 +98,29 @@ async fn register_and_setup(base_url: &str, pool: &PgPool) -> E2e {
     assert!(status.is_success(), "create org {}: {}", status, body);
     let org_id = body["id"].as_str().expect("no org id").to_string();
 
+    // Lift the free-plan max_projects=1 cap so tests can create more than
+    // one workspace under the same org (workspace_isolation needs two).
+    // Mirrors the gate in handlers::cloud_workspaces::create_workspace,
+    // which reads `org.limits_json.max_projects` and falls back to 1.
+    // -1 means unlimited.
+    let org_uuid_for_limits = Uuid::parse_str(&org_id).expect("org id not UUID");
+    sqlx::query(
+        r#"
+        UPDATE organizations
+        SET limits_json = jsonb_set(
+            COALESCE(limits_json, '{}'::jsonb),
+            '{max_projects}',
+            '-1'::jsonb,
+            true
+        )
+        WHERE id = $1
+        "#,
+    )
+    .bind(org_uuid_for_limits)
+    .execute(pool)
+    .await
+    .expect("relax org limits failed");
+
     // Workspace
     let res = client
         .post(format!("{}/api/v1/workspaces", base_url))
