@@ -160,8 +160,21 @@ prometheus = { version = "0.14", features = ["process"] }
 # instead of buffering the whole body in memory.
 reqwest = { version = "0.12", features = ["json", "stream"] }
 
+# Real-time Fly runtime-log subscription (#556). Fly publishes log
+# lines on the `logs.<app>.<region>.<machine>` NATS subject; this
+# replaces the REST poll loop with a push subscription when the
+# registry server is reachable to Fly's internal NATS proxy
+# (`[fdaa::3]:4223`), and falls back to polling otherwise.
+async-nats = { version = "0.43", default-features = false, features = ["server_2_10", "ring"] }
+
 # `futures::StreamExt` adapters for the streaming download path.
 futures-util = "0.3"
+
+# `async_stream::stream!` macro — lets the runtime-logs SSE handler
+# express "phase 1: forward NATS messages, phase 2: drop into REST
+# polling fallback" as a single async block instead of an enum-based
+# state machine driven through `unfold`.
+async-stream = "0.3"
 
 # SMTP email sending (feature: `email`)
 lettre = { version = "0.11", features = ["tokio1-native-tls", "builder", "smtp-transport"], optional = true }

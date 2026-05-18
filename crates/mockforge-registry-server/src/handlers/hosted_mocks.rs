@@ -1176,71 +1176,122 @@ pub async fn stream_runtime_logs(
     Ok(Sse::new(stream).keep_alive(KeepAlive::default()))
 }
 
-/// Build the SSE event stream for runtime logs. Each tick polls Fly with a
-/// `since` cursor that advances past the latest entry observed so we don't
-/// duplicate events on refetch.
+/// Build the SSE event stream for runtime logs.
+///
+/// Tries the real-time NATS subscription first (#556 / `fly_nats`).
+/// If `FLY_ORG_SLUG` + `FLYIO_API_TOKEN` are both set AND the NATS
+/// connection succeeds within `FLY_NATS_CONNECT_TIMEOUT_MS` (default
+/// 1.5s), each incoming log message is forwarded as an SSE event the
+/// moment it arrives — sub-second delivery instead of the 2s poll
+/// floor.
+///
+/// Falls back to the historical REST poll loop when:
+/// - `FLY_ORG_SLUG` is unset (local-dev / self-hosted), or
+/// - the connect call fails (no route to `[fdaa::3]:4223` outside Fly,
+///   bad credentials, NATS proxy unavailable), or
+/// - any subsequent NATS error closes the subscription mid-stream.
+///
+/// The fallback preserves the user-visible "Fly runtime logs are not
+/// configured" hint when no `FLYIO_API_TOKEN` is set at all — both
+/// paths agree on that surface.
 fn build_runtime_logs_stream(app_name: String) -> impl Stream<Item = Result<Event, Infallible>> {
-    use futures_util::stream::unfold;
+    use async_stream::stream;
+    use futures_util::StreamExt;
 
-    /// Per-stream poll state: cursor + tick count for an initial empty-poll
-    /// quietness. We start the cursor a few seconds in the past so the first
-    /// poll picks up "what's happening now" without dumping the whole window.
-    struct State {
-        cursor: DateTime<Utc>,
-        client: Option<&'static crate::fly_logs::FlyLogsClient>,
-        app_name: String,
-        emitted_unconfigured: bool,
-    }
-
-    let state = State {
-        cursor: Utc::now() - chrono::Duration::seconds(30),
-        client: crate::fly_logs::global(),
-        app_name,
-        emitted_unconfigured: false,
-    };
-
-    unfold(state, |mut st| async move {
-        // Slow poll loop. 2 seconds keeps the UI responsive without hammering
-        // Fly's API; tighten once we move to the NATS subscription path
-        // (#232).
-        if st.client.is_none() && !st.emitted_unconfigured {
-            st.emitted_unconfigured = true;
-            let event = Event::default()
-                .event("config")
-                .data("Fly runtime logs are not configured (FLYIO_API_TOKEN unset)");
-            return Some((Ok(event), st));
-        }
-
-        tokio::time::sleep(std::time::Duration::from_secs(2)).await;
-
-        let Some(client) = st.client else {
-            // Configured-flag already emitted; keep stream alive with a
-            // periodic comment so the connection doesn't close.
-            let event = Event::default().comment("idle");
-            return Some((Ok(event), st));
+    stream! {
+        // Phase 1: try NATS subscription. Silent failure here is fine —
+        // most installs (local-dev, self-hosted off Fly) can't reach the
+        // proxy and shouldn't see a banner about it.
+        let nats_sub = match crate::fly_nats::FlyNatsConfig::from_env() {
+            Some(cfg) => {
+                match crate::fly_nats::subscribe_app(&cfg, &app_name).await {
+                    Ok(sub) => {
+                        tracing::debug!(
+                            app = %app_name,
+                            "runtime-logs SSE using NATS subscription",
+                        );
+                        Some(sub)
+                    }
+                    Err(err) => {
+                        // Likely "no route to host" off Fly. Drop to
+                        // polling without telling the operator — the
+                        // poll loop is the documented user-facing path
+                        // and we don't want to surface internal-network
+                        // noise.
+                        tracing::debug!(
+                            app = %app_name,
+                            error = %err,
+                            "Fly NATS subscribe failed; falling back to polling",
+                        );
+                        None
+                    }
+                }
+            }
+            None => None,
         };
 
-        match client.fetch_recent(&st.app_name, Some(st.cursor), None).await {
-            Ok(entries) if entries.is_empty() => {
-                let event = Event::default().comment("no-new-logs");
-                Some((Ok(event), st))
+        if let Some(mut sub) = nats_sub {
+            // NATS path: forward each incoming message as it arrives.
+            while let Some(msg) = sub.subscriber.next().await {
+                let Some(entry) = crate::fly_nats::parse_message(&msg.payload) else {
+                    continue;
+                };
+                // Wrap as a single-element list so the SSE payload shape
+                // matches the polling path (always a JSON array). That
+                // way the UI doesn't need to branch on transport.
+                let payload =
+                    serde_json::to_string(&vec![entry]).unwrap_or_else(|_| "[]".to_string());
+                yield Ok(Event::default().event("logs").data(payload));
             }
-            Ok(entries) => {
-                // Advance cursor to the newest entry we just emitted.
-                if let Some(latest) = entries.iter().map(|e| e.timestamp).max() {
-                    st.cursor = latest;
+            // Subscription closed (connection lost or NATS proxy went
+            // away). Surface as an SSE error event then drop into the
+            // poll fallback so the user still gets logs.
+            yield Ok(Event::default().event("info").data(
+                r#"{"message":"Real-time NATS subscription ended, switching to polling"}"#,
+            ));
+        }
+
+        // Phase 2: polling fallback. Either we never had NATS or the
+        // subscription ended.
+        let client = crate::fly_logs::global();
+        let mut cursor: DateTime<Utc> = Utc::now() - chrono::Duration::seconds(30);
+        let mut emitted_unconfigured = false;
+
+        loop {
+            if client.is_none() && !emitted_unconfigured {
+                emitted_unconfigured = true;
+                yield Ok(Event::default()
+                    .event("config")
+                    .data("Fly runtime logs are not configured (FLYIO_API_TOKEN unset)"));
+                continue;
+            }
+
+            tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+
+            let Some(c) = client else {
+                yield Ok(Event::default().comment("idle"));
+                continue;
+            };
+
+            match c.fetch_recent(&app_name, Some(cursor), None).await {
+                Ok(entries) if entries.is_empty() => {
+                    yield Ok(Event::default().comment("no-new-logs"));
                 }
-                let payload = serde_json::to_string(&entries).unwrap_or_else(|_| "[]".to_string());
-                let event = Event::default().event("logs").data(payload);
-                Some((Ok(event), st))
-            }
-            Err(err) => {
-                let payload = serde_json::json!({ "error": err.to_string() }).to_string();
-                let event = Event::default().event("error").data(payload);
-                Some((Ok(event), st))
+                Ok(entries) => {
+                    if let Some(latest) = entries.iter().map(|e| e.timestamp).max() {
+                        cursor = latest;
+                    }
+                    let payload =
+                        serde_json::to_string(&entries).unwrap_or_else(|_| "[]".to_string());
+                    yield Ok(Event::default().event("logs").data(payload));
+                }
+                Err(err) => {
+                    let payload = serde_json::json!({ "error": err.to_string() }).to_string();
+                    yield Ok(Event::default().event("error").data(payload));
+                }
             }
         }
-    })
+    }
 }
 
 /// One captured request/response event. Mirrors `RequestLogEvent` in
