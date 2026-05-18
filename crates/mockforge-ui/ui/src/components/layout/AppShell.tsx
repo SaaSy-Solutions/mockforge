@@ -370,6 +370,13 @@ const cloudNavItemIds = new Set([
   // proxied yet (Phase 2 follow-up); cloud mode polls every 5s, which
   // matches the local TanStack Query refetchInterval.
   'world-state',
+  // Test Generator (#469 Phase 2) — async LLM jobs over runtime_captures
+  // via cloudTestGeneratorApi against /api/v1/workspaces/{id}/test-generation
+  // /jobs. Phase 1 shipped the data plane (table + 4 CRUD endpoints + TS
+  // client); Phase 2 ships the page branch. The background BYOK LLM
+  // worker is Phase 3 — jobs created here sit in 'queued' until that
+  // lands. The page surfaces this honestly via an inline banner.
+  'test-generator',
   // Notification channels (cloud-only) — incident dispatch destinations
   // wired through cloudNotificationsApi.
   'notification-channels',
