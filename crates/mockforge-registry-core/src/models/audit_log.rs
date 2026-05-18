@@ -83,6 +83,13 @@ pub enum AuditEventType {
     PluginBlocklistHit,
     OrgTrustRootCreated,
     OrgTrustRootRevoked,
+    // Platform signing-root rotation (RFC §8.2 / §9, Issue #550).
+    // Operator-scoped events — recorded with the operator's org_id (or
+    // the platform operator's tenant when SaaSy Solutions itself runs
+    // the rotation).
+    PlatformSigningRotationStarted,
+    PlatformSigningKeyRetired,
+    PlatformSigningKeyRevoked,
     // Admin actions
     AdminImpersonation,
 }
@@ -151,6 +158,9 @@ impl AuditEventType {
             "plugin_blocklist_hit" => Some(Self::PluginBlocklistHit),
             "org_trust_root_created" => Some(Self::OrgTrustRootCreated),
             "org_trust_root_revoked" => Some(Self::OrgTrustRootRevoked),
+            "platform_signing_rotation_started" => Some(Self::PlatformSigningRotationStarted),
+            "platform_signing_key_retired" => Some(Self::PlatformSigningKeyRetired),
+            "platform_signing_key_revoked" => Some(Self::PlatformSigningKeyRevoked),
             "admin_impersonation" => Some(Self::AdminImpersonation),
             _ => None,
         }
@@ -219,6 +229,9 @@ impl AuditEventType {
             Self::PluginBlocklistHit => "plugin_blocklist_hit",
             Self::OrgTrustRootCreated => "org_trust_root_created",
             Self::OrgTrustRootRevoked => "org_trust_root_revoked",
+            Self::PlatformSigningRotationStarted => "platform_signing_rotation_started",
+            Self::PlatformSigningKeyRetired => "platform_signing_key_retired",
+            Self::PlatformSigningKeyRevoked => "platform_signing_key_revoked",
             Self::AdminImpersonation => "admin_impersonation",
         }
     }
@@ -426,6 +439,9 @@ mod tests {
             AuditEventType::InvitationCreated,
             AuditEventType::InvitationRevoked,
             AuditEventType::InvitationAccepted,
+            AuditEventType::PlatformSigningRotationStarted,
+            AuditEventType::PlatformSigningKeyRetired,
+            AuditEventType::PlatformSigningKeyRevoked,
             AuditEventType::AdminImpersonation,
         ];
         for variant in variants {

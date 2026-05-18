@@ -29,6 +29,7 @@ members = [
     "crates/mockforge-plugin-loader",
     "crates/mockforge-plugin-registry",
     "crates/mockforge-plugin-sdk",
+    "crates/mockforge-platform-signing",
 
     # Observability & tracing
     "crates/mockforge-observability",

@@ -35,6 +35,9 @@ pub mod middleware;
 /// cloud-core extraction.
 pub use mockforge_registry_core::models;
 pub mod pillar_tracking_init;
+/// HSM-backed platform signing-root rotation (Issue #550, RFC §8.2 / §9).
+/// Audit-aware wrapper around [`mockforge_platform_signing`].
+pub mod platform_signing;
 pub mod redis;
 pub mod routes;
 pub mod run_queue;
