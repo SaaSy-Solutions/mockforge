@@ -33,6 +33,8 @@ import {
   Assessment as AssessmentIcon,
   AutoFixHigh as AutoFixHighIcon,
 } from '@mui/icons-material';
+import { isCloudMode } from '../utils/cloudMode';
+import { CloudTestGeneratorView } from './CloudTestGeneratorView';
 
 interface TestFixture {
   name: string;
@@ -82,6 +84,15 @@ function CodeBlock({ content, maxHeight = '500px' }: { content: string; maxHeigh
 }
 
 const TestGeneratorPage: React.FC = () => {
+  // #469 Phase 2: in cloud mode, delegate to the workspace-scoped cloud
+  // view backed by cloudTestGeneratorApi. The cloud surface is async
+  // (jobs queued to a background LLM worker landing in Phase 3) and
+  // BYOK-aware; local mode keeps the existing in-process generator UI
+  // below unchanged.
+  if (isCloudMode()) {
+    return <CloudTestGeneratorView />;
+  }
+
   const [format, setFormat] = useState('rust_reqwest');
   const [protocol, setProtocol] = useState('Http');
   const [limit, setLimit] = useState(50);

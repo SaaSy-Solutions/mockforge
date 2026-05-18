@@ -141,7 +141,18 @@ jobs:
           COSIGN_EXPERIMENTAL: "true"
           IMAGE_DIGEST: ${{ steps.build-and-push.outputs.digest }}
           IMAGE_REF: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          REGISTRY: ${{ env.REGISTRY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          # cosign uses its own auth chain when pushing signature manifests
+          # to the OCI registry — the `docker/login-action` step earlier
+          # only authenticates `docker` itself. Without an explicit
+          # `cosign login`, the signature push to
+          # ghcr.io/saasy-solutions/mockforge fails with
+          # `DENIED: permission_denied: write_package` even though the job
+          # has `packages: write` (cosign can't read the workflow's
+          # permission grants; it needs creds in its own keyring).
+          cosign login "$REGISTRY" --username "$GITHUB_ACTOR" --password "$GITHUB_TOKEN"
           cosign sign --yes "${IMAGE_REF}@${IMAGE_DIGEST}"
 
       # Self-hosted runner keeps its disk between jobs, so prune old

@@ -557,6 +557,31 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/hosted-mocks/{deployment_id}/world-state/query",
             post(handlers::world_state::query),
         )
+        // Test Generator routes (#469 / part of #459) — Phase 1 data plane.
+        // Async LLM jobs that read the workspace's runtime_captures corpus
+        // and emit generated test scenarios. Rows land in 'queued' state;
+        // the Phase 2 worker (separate PR) transitions them through
+        // 'running' → terminal and writes the result blob.
+        .route(
+            "/api/v1/workspaces/{workspace_id}/test-generation/jobs",
+            post(handlers::test_generation::create_job)
+                .get(handlers::test_generation::list_jobs),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/test-generation/jobs/{job_id}",
+            get(handlers::test_generation::get_job),
+        )
+        .route(
+            "/api/v1/workspaces/{workspace_id}/test-generation/jobs/{job_id}/cancel",
+            post(handlers::test_generation::cancel_job),
+        )
+        // SSE stream for live job-status updates (#469 Phase 4). Poll
+        // endpoints above remain authoritative; this is the low-latency
+        // option for clients that want sub-second updates.
+        .route(
+            "/api/v1/workspaces/{workspace_id}/test-generation/jobs/{job_id}/stream",
+            get(handlers::test_generation::stream_job),
+        )
         // Time-travel routes (#466 / part of #459). Proxy the runtime's
         // /__mockforge/time-travel/* endpoints over Fly 6PN to
         // `{fly-app}.internal:3000/__mockforge/time-travel/*`. Only the 7
