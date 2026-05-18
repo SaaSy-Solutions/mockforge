@@ -99,6 +99,28 @@ impl EmailService {
         Self::new(config)
     }
 
+    /// Whether a real provider is configured. Returns false when
+    /// `EMAIL_PROVIDER` is unset or set to a value that doesn't map to
+    /// a known provider — in that case `send()` no-ops and silently
+    /// returns Ok, which is fine for user-onboarding paths (where a
+    /// missing welcome email isn't an outage) but surprising for the
+    /// incident dispatcher (where the operator believes their alert
+    /// went out). Callers that need to surface "not configured" to the
+    /// user should check this before calling `send`.
+    pub fn is_configured(&self) -> bool {
+        !matches!(self.config.provider, EmailProvider::Disabled)
+    }
+
+    /// Name of the configured provider, for logging / observability.
+    pub fn provider_name(&self) -> &'static str {
+        match self.config.provider {
+            EmailProvider::Postmark => "postmark",
+            EmailProvider::Brevo => "brevo",
+            EmailProvider::Smtp => "smtp",
+            EmailProvider::Disabled => "disabled",
+        }
+    }
+
     /// Send an email
     pub async fn send(&self, message: EmailMessage) -> Result<()> {
         match &self.config.provider {
