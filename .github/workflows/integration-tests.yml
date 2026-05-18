@@ -26,18 +26,6 @@ env:
   # consistent with rustc being killed under CPU/memory pressure
   # without triggering the OOM-killer log).
   CARGO_BUILD_JOBS: "4"
-  # Isolate cargo state from `/home/actions/.cargo` (shared with 7
-  # sibling runners). When saas-platform / apiary / aca runners run
-  # `cargo install ...`, they churn the shared registry and lock files,
-  # which surfaces in mockforge jobs as "(never executed) No such file
-  # or directory" rustc spawn failures. Keyed by `runner.name` so the
-  # path is unique per runner instance (no cross-runner collision) AND
-  # stable across runs on the same runner — switching from `github.run_id`
-  # to `runner.name` because `Swatinem/rust-cache` restores target/*.d
-  # files whose absolute paths reference CARGO_HOME; a path that changed
-  # every run produced the same "No such file or directory" symptom from
-  # within mockforge's own state, defeating the isolation. See #446.
-  CARGO_HOME: /tmp/cargo-mockforge-${{ runner.name }}
   # Force rustup to use stable regardless of whatever a sibling repo
   # pinned as the user-level default. `dtolnay/rust-toolchain@stable`
   # installs stable but does not change the default; RUSTUP_TOOLCHAIN
@@ -55,6 +43,8 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: [self-hosted, linux, x64, rust]
+    env:
+      CARGO_HOME: /tmp/cargo-mockforge-${{ runner.name }}
     # 30 min was tight even on a warm target/. After the target/ size
     # guard wipes at >30GB, cold rebuilds take ~25 min plus test time,
     # which overran the prior limit. 60 min leaves headroom for the
@@ -159,6 +149,8 @@ jobs:
   e2e-tests:
     name: E2E Tests
     runs-on: [self-hosted, linux, x64, rust]
+    env:
+      CARGO_HOME: /tmp/cargo-mockforge-${{ runner.name }}
     # Serialize after integration-tests. Both jobs build the workspace
     # in release mode and share the self-hosted runner's target/ and
     # ~/.cargo dirs. When they ran in parallel the rustc process could

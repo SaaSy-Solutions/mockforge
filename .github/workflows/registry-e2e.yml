@@ -20,10 +20,11 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # Shared self-hosted runner: cap parallelism + isolate CARGO_HOME per runner instance
-  # to avoid registry/lockfile churn from sibling runners. Same pattern as integration-tests.yml.
+  # Cap cargo parallelism. The self-hosted runner is 8 vCPU shared with
+  # 7 other runners; unrestricted `-j` produces flakes under contention.
+  # `CARGO_HOME` is set per-job (not here) — it must reference `runner.name`,
+  # which the workflow parser only resolves once a runner is assigned.
   CARGO_BUILD_JOBS: "4"
-  CARGO_HOME: /tmp/cargo-mockforge-e2e-${{ runner.name }}
   RUSTUP_TOOLCHAIN: stable
 
 concurrency:
@@ -37,6 +38,7 @@ jobs:
     timeout-minutes: 45
 
     env:
+      CARGO_HOME: /tmp/cargo-mockforge-e2e-${{ runner.name }}
       # Bound ports on the compose file. Kept non-default so multiple runners on the
       # same host could in principle parallelize by overriding these.
       PG_PORT: "55432"
