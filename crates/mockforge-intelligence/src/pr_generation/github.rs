@@ -3,7 +3,7 @@
 //! This module provides functionality for creating pull requests on GitHub.
 
 use crate::pr_generation::types::{PRFileChange, PRFileChangeType, PRRequest, PRResult};
-use crate::Error;
+use mockforge_foundation::{Error, Result};
 use reqwest::Client;
 
 /// GitHub PR client
@@ -29,7 +29,7 @@ impl GitHubPRClient {
     }
 
     /// Create a pull request
-    pub async fn create_pr(&self, request: PRRequest) -> crate::Result<PRResult> {
+    pub async fn create_pr(&self, request: PRRequest) -> Result<PRResult> {
         // Step 1: Get base branch SHA
         let base_sha = self.get_branch_sha(&self.base_branch).await?;
 
@@ -65,7 +65,7 @@ impl GitHubPRClient {
         Ok(pr)
     }
 
-    async fn get_branch_sha(&self, branch: &str) -> crate::Result<String> {
+    async fn get_branch_sha(&self, branch: &str) -> Result<String> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/git/ref/heads/{}",
             self.owner, self.repo, branch
@@ -96,7 +96,7 @@ impl GitHubPRClient {
             .pipe(Ok)
     }
 
-    async fn create_branch(&self, branch: &str, sha: &str) -> crate::Result<()> {
+    async fn create_branch(&self, branch: &str, sha: &str) -> Result<()> {
         let url = format!("https://api.github.com/repos/{}/{}/git/refs", self.owner, self.repo);
 
         let body = serde_json::json!({
@@ -131,7 +131,7 @@ impl GitHubPRClient {
         branch: &str,
         file_change: &PRFileChange,
         parent_sha: &str,
-    ) -> crate::Result<String> {
+    ) -> Result<String> {
         // First, create blob with file content
         let blob_sha = self.create_blob(&file_change.content).await?;
 
@@ -154,7 +154,7 @@ impl GitHubPRClient {
         branch: &str,
         file_change: &PRFileChange,
         parent_sha: &str,
-    ) -> crate::Result<String> {
+    ) -> Result<String> {
         // Create tree without the file
         let tree_sha = self.create_tree_delete(parent_sha, &file_change.path).await?;
 
@@ -169,7 +169,7 @@ impl GitHubPRClient {
         Ok(commit_sha)
     }
 
-    async fn create_blob(&self, content: &str) -> crate::Result<String> {
+    async fn create_blob(&self, content: &str) -> Result<String> {
         let url = format!("https://api.github.com/repos/{}/{}/git/blobs", self.owner, self.repo);
 
         let body = serde_json::json!({
@@ -209,7 +209,7 @@ impl GitHubPRClient {
         path: &str,
         blob_sha: &str,
         mode: &str,
-    ) -> crate::Result<String> {
+    ) -> Result<String> {
         let url = format!("https://api.github.com/repos/{}/{}/git/trees", self.owner, self.repo);
 
         let body = serde_json::json!({
@@ -248,7 +248,7 @@ impl GitHubPRClient {
             .pipe(Ok)
     }
 
-    async fn create_tree_delete(&self, base_tree_sha: &str, path: &str) -> crate::Result<String> {
+    async fn create_tree_delete(&self, base_tree_sha: &str, path: &str) -> Result<String> {
         let url = format!("https://api.github.com/repos/{}/{}/git/trees", self.owner, self.repo);
 
         let body = serde_json::json!({
@@ -292,7 +292,7 @@ impl GitHubPRClient {
         parent_sha: &str,
         tree_sha: &str,
         message: &str,
-    ) -> crate::Result<String> {
+    ) -> Result<String> {
         let url = format!("https://api.github.com/repos/{}/{}/git/commits", self.owner, self.repo);
 
         let body = serde_json::json!({
@@ -327,7 +327,7 @@ impl GitHubPRClient {
             .pipe(Ok)
     }
 
-    async fn update_branch_ref(&self, branch: &str, sha: &str) -> crate::Result<()> {
+    async fn update_branch_ref(&self, branch: &str, sha: &str) -> Result<()> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/git/refs/heads/{}",
             self.owner, self.repo, branch
@@ -355,11 +355,7 @@ impl GitHubPRClient {
         Ok(())
     }
 
-    async fn create_pull_request(
-        &self,
-        request: &PRRequest,
-        _head_sha: &str,
-    ) -> crate::Result<PRResult> {
+    async fn create_pull_request(&self, request: &PRRequest, _head_sha: &str) -> Result<PRResult> {
         let url = format!("https://api.github.com/repos/{}/{}/pulls", self.owner, self.repo);
 
         let body = serde_json::json!({
@@ -404,7 +400,7 @@ impl GitHubPRClient {
         })
     }
 
-    async fn add_labels(&self, pr_number: u64, labels: &[String]) -> crate::Result<()> {
+    async fn add_labels(&self, pr_number: u64, labels: &[String]) -> Result<()> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/issues/{}/labels",
             self.owner, self.repo, pr_number
@@ -431,7 +427,7 @@ impl GitHubPRClient {
         Ok(())
     }
 
-    async fn request_reviewers(&self, pr_number: u64, reviewers: &[String]) -> crate::Result<()> {
+    async fn request_reviewers(&self, pr_number: u64, reviewers: &[String]) -> Result<()> {
         let url = format!(
             "https://api.github.com/repos/{}/{}/pulls/{}/requested_reviewers",
             self.owner, self.repo, pr_number

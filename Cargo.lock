@@ -7885,6 +7885,7 @@ dependencies = [
  "jsonwebtoken",
  "mockforge-core",
  "mockforge-foundation",
+ "mockforge-intelligence",
  "mockforge-pipelines",
  "parking_lot",
  "reqwest 0.12.28",
@@ -7967,6 +7968,7 @@ dependencies = [
  "matchit 0.8.4",
  "mockforge-data",
  "mockforge-foundation",
+ "mockforge-intelligence",
  "mockforge-openapi",
  "mockforge-template-expansion",
  "notify 8.2.0",
@@ -8355,13 +8357,17 @@ name = "mockforge-intelligence"
 version = "0.3.137"
 dependencies = [
  "async-trait",
+ "base64 0.22.1",
  "chrono",
- "mockforge-core",
+ "mockforge-foundation",
  "mockforge-template-expansion",
  "rand 0.9.4",
+ "reqwest 0.12.28",
+ "schemars 0.8.22",
  "serde",
  "serde_json",
  "tracing",
+ "urlencoding",
  "uuid",
 ]
 
@@ -8515,6 +8521,7 @@ dependencies = [
  "mockforge-core",
  "mockforge-foundation",
  "mockforge-import",
+ "mockforge-intelligence",
  "mockforge-openapi",
  "once_cell",
  "parking_lot",

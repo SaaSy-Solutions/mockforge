@@ -4,7 +4,9 @@
 
 use super::{PipelineStepExecutor, StepContext, StepResult};
 use anyhow::Result;
-use mockforge_core::pr_generation::{PRFileChange, PRFileChangeType, PRGenerator, PRRequest};
+use mockforge_intelligence::pr_generation::{
+    PRFileChange, PRFileChangeType, PRGenerator, PRRequest,
+};
 use serde_json::Value;
 use std::collections::HashMap;
 use tracing::{debug, error, info};

@@ -10,6 +10,9 @@
 //! Currently migrated:
 //! - `ai_response`: Typed AI response generation helpers
 //! - `behavioral_cloning`: Probability models, sequence learning, edge amplification
+//! - `pr_generation`: GitHub/GitLab PR generation client (Issue #562 phase 1 —
+//!   moved out of `mockforge-core` because it only depends on
+//!   `mockforge_foundation::Error`, no other core internals)
 //!
 //! Full migration of `intelligent_behavior`, `ai_contract_diff`, `ai_studio`,
 //! and `behavioral_economics` is blocked by circular dependencies with
@@ -18,3 +21,4 @@
 
 pub mod ai_response;
 pub mod behavioral_cloning;
+pub mod pr_generation;

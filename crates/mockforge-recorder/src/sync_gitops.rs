@@ -9,7 +9,7 @@ use crate::{
     sync::{DetectedChange, GitOpsConfig},
     Result,
 };
-use mockforge_core::pr_generation::{
+use mockforge_intelligence::pr_generation::{
     PRFileChange, PRFileChangeType, PRGenerator, PRProvider, PRRequest,
 };
 use std::path::PathBuf;
@@ -67,7 +67,7 @@ impl GitOpsSyncHandler {
         database: &RecorderDatabase,
         changes: &[DetectedChange],
         sync_cycle_id: &str,
-    ) -> Result<Option<mockforge_core::pr_generation::PRResult>> {
+    ) -> Result<Option<mockforge_intelligence::pr_generation::PRResult>> {
         if !self.config.enabled {
             return Ok(None);
         }

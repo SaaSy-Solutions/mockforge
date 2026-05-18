@@ -344,8 +344,11 @@ pub mod performance;
 pub mod pillar_tracking;
 /// Pillar metadata system for compile-time pillar tagging
 pub mod pillars;
-#[cfg(feature = "contracts")]
-pub mod pr_generation;
+/// PR generation lives in `mockforge_intelligence::pr_generation` (Issue #562
+/// phase 1); re-exported here so existing `crate::pr_generation::*` call sites
+/// and external users that imported `mockforge_core::pr_generation::*` keep
+/// compiling without churn.
+pub use mockforge_intelligence::pr_generation;
 pub mod priority_handler;
 pub mod protocol_abstraction;
 /// Protocol server lifecycle trait for uniform server startup and shutdown

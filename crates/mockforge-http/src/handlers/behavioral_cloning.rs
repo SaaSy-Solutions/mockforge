@@ -8,6 +8,7 @@
 
 use axum::extract::{Path, Query, State};
 use axum::response::Json;
+use mockforge_core::scenarios::{ScenarioDefinition, ScenarioStep};
 use mockforge_intelligence::behavioral_cloning::types::BehavioralSequence;
 use mockforge_intelligence::behavioral_cloning::{
     EdgeAmplificationConfig, EdgeAmplifier, EndpointProbabilityModel, ProbabilisticModel,
@@ -578,13 +579,50 @@ pub async fn generate_sequence_scenario(
         .find(|s| s.id == sequence_id)
         .ok_or_else(|| format!("Sequence {} not found", sequence_id))?;
 
-    let scenario = SequenceLearner::generate_sequence_scenario(&sequence);
+    let scenario = sequence_to_scenario_definition(&sequence);
 
     Ok(Json(json!({
         "success": true,
         "sequence_id": sequence_id,
         "scenario": scenario
     })))
+}
+
+/// Convert a learned `BehavioralSequence` into a `ScenarioDefinition`.
+///
+/// Lives in this crate (not `mockforge-intelligence`) because
+/// `ScenarioDefinition` is owned by `mockforge-core` and intelligence
+/// must not depend on core — that cycle is what blocked extracting the AI
+/// submodules in the first place (Issue #562).
+fn sequence_to_scenario_definition(sequence: &BehavioralSequence) -> ScenarioDefinition {
+    let mut scenario =
+        ScenarioDefinition::new(&sequence.id, &sequence.name).with_tags(sequence.tags.clone());
+
+    if let Some(description) = &sequence.description {
+        scenario.description = Some(description.clone());
+    }
+
+    for (idx, step) in sequence.steps.iter().enumerate() {
+        let mut scenario_step = ScenarioStep::new(
+            format!("step_{}", idx),
+            step.name.as_deref().unwrap_or(&step.endpoint),
+            &step.method,
+            &step.endpoint,
+        )
+        .expect_status(200);
+
+        if let Some(delay) = step.expected_delay_ms {
+            scenario_step.delay_ms = Some(delay);
+        }
+
+        for (key, value) in &step.conditions {
+            scenario_step.query_params.insert(key.clone(), value.clone());
+        }
+
+        scenario = scenario.add_step(scenario_step);
+    }
+
+    scenario
 }
 
 /// Create router for behavioral cloning endpoints

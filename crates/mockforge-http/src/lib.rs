@@ -2984,11 +2984,11 @@ pub async fn build_router_with_chains_and_multi_tenant(
     // Add PR generation endpoints (optional - only if configured)
     {
         use crate::handlers::pr_generation::{pr_generation_router, PRGenerationState};
-        use mockforge_core::pr_generation::{PRGenerator, PRProvider};
+        use mockforge_intelligence::pr_generation::{PRGenerator, PRProvider};
         use std::sync::Arc;
 
         // Load PR generation config from environment or use default
-        let pr_config = mockforge_core::pr_generation::PRGenerationConfig::from_env();
+        let pr_config = mockforge_intelligence::pr_generation::PRGenerationConfig::from_env();
 
         let generator = if pr_config.enabled && pr_config.token.is_some() {
             let token = pr_config.token.as_ref().unwrap().clone();

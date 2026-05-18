@@ -3,7 +3,7 @@
 //! This module provides functionality for creating merge requests on GitLab.
 
 use crate::pr_generation::types::{PRFileChange, PRFileChangeType, PRRequest, PRResult};
-use crate::Error;
+use mockforge_foundation::{Error, Result};
 use reqwest::Client;
 
 /// GitLab PR client
@@ -31,7 +31,7 @@ impl GitLabPRClient {
     }
 
     /// Create a merge request (PR)
-    pub async fn create_pr(&self, request: PRRequest) -> crate::Result<PRResult> {
+    pub async fn create_pr(&self, request: PRRequest) -> Result<PRResult> {
         // GitLab API uses project ID or path
         let project_path = format!("{}/{}", self.owner, self.repo);
 
@@ -61,7 +61,7 @@ impl GitLabPRClient {
         Ok(mr)
     }
 
-    async fn create_branch(&self, branch: &str) -> crate::Result<()> {
+    async fn create_branch(&self, branch: &str) -> Result<()> {
         let project_path = format!("{}/{}", self.owner, self.repo);
         let url = format!(
             "{}/projects/{}/repository/branches",
@@ -98,7 +98,7 @@ impl GitLabPRClient {
         Ok(())
     }
 
-    async fn commit_file(&self, branch: &str, file_change: &PRFileChange) -> crate::Result<()> {
+    async fn commit_file(&self, branch: &str, file_change: &PRFileChange) -> Result<()> {
         let project_path = format!("{}/{}", self.owner, self.repo);
         let url = format!(
             "{}/projects/{}/repository/files/{}",
@@ -142,7 +142,7 @@ impl GitLabPRClient {
         Ok(())
     }
 
-    async fn create_file(&self, branch: &str, file_change: &PRFileChange) -> crate::Result<()> {
+    async fn create_file(&self, branch: &str, file_change: &PRFileChange) -> Result<()> {
         let project_path = format!("{}/{}", self.owner, self.repo);
         let url = format!(
             "{}/projects/{}/repository/files/{}",
@@ -181,7 +181,7 @@ impl GitLabPRClient {
         Ok(())
     }
 
-    async fn delete_file(&self, branch: &str, file_change: &PRFileChange) -> crate::Result<()> {
+    async fn delete_file(&self, branch: &str, file_change: &PRFileChange) -> Result<()> {
         let project_path = format!("{}/{}", self.owner, self.repo);
         let url = format!(
             "{}/projects/{}/repository/files/{}",
@@ -220,7 +220,7 @@ impl GitLabPRClient {
         &self,
         request: &PRRequest,
         project_path: &str,
-    ) -> crate::Result<PRResult> {
+    ) -> Result<PRResult> {
         let url = format!(
             "{}/projects/{}/merge_requests",
             self.api_url,
@@ -273,7 +273,7 @@ impl GitLabPRClient {
         mr_number: u64,
         labels: &[String],
         project_path: &str,
-    ) -> crate::Result<()> {
+    ) -> Result<()> {
         let url = format!(
             "{}/projects/{}/merge_requests/{}",
             self.api_url,
