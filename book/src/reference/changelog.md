@@ -1,6 +1,6 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
-## [0.3.138] - 2026-05-19
+## [0.3.139] - 2026-05-19
 
 ### Added
 
