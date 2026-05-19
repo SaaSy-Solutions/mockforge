@@ -10,8 +10,9 @@ use crate::ai_contract_diff::{
 };
 use crate::contract_validation::ContractValidator;
 use crate::intelligent_behavior::{config::IntelligentBehaviorConfig, llm_client::LlmClient};
-use crate::{OpenApiSpec, Result};
 use chrono::Utc;
+use mockforge_foundation::Result;
+use mockforge_openapi::OpenApiSpec;
 use serde::{Deserialize, Serialize};
 
 /// Contract diff handler for NL queries
@@ -100,10 +101,10 @@ impl ContractDiffHandler {
                             link_to_viewer: Some(format!("/contract-diff?request_id={}", request_id.unwrap_or_default())),
                         })
                     } else {
-                        Err(crate::Error::internal("OpenAPI spec is required for analysis"))
+                        Err(mockforge_foundation::Error::internal("OpenAPI spec is required for analysis"))
                     }
                 } else {
-                    Err(crate::Error::internal("Captured request is required for analysis"))
+                    Err(mockforge_foundation::Error::internal("Captured request is required for analysis"))
                 }
             }
             ContractDiffIntent::CompareVersions { spec1_path, spec2_path, filters } => {
@@ -147,7 +148,7 @@ impl ContractDiffHandler {
                         link_to_viewer: Some("/contract-diff".to_string()),
                     })
                 } else {
-                    Err(crate::Error::internal("OpenAPI spec is required for breaking changes analysis"))
+                    Err(mockforge_foundation::Error::internal("OpenAPI spec is required for breaking changes analysis"))
                 }
             }
             ContractDiffIntent::Unknown => {

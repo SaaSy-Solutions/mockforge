@@ -50,7 +50,7 @@ use crate::intelligent_behavior::{
     llm_client::{LlmClient, LlmUsage},
     types::LlmGenerationRequest,
 };
-use crate::Result;
+use mockforge_foundation::Result;
 // Data types re-exported from foundation.
 pub use mockforge_foundation::ai_studio_types::{
     AppliedSystem, GeneratedSystem, SystemArtifact, SystemGenerationRequest, SystemMetadata,

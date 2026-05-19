@@ -13,7 +13,7 @@ use crate::failure_analysis::{
 use crate::intelligent_behavior::llm_client::LlmClient;
 use crate::intelligent_behavior::types::LlmGenerationRequest;
 use crate::intelligent_behavior::IntelligentBehaviorConfig;
-use crate::Result;
+use mockforge_foundation::Result;
 use serde::{Deserialize, Serialize};
 
 /// Debug analyzer for test failure analysis

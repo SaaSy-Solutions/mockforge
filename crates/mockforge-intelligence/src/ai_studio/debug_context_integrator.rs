@@ -9,8 +9,8 @@ use crate::ai_studio::debug_context::{
     DriftHistoryEntry, FailureInjectionConfig, PersonaContext, RealityContext, ScenarioContext,
 };
 use crate::reality::{RealityConfig, RealityEngine, RealityLevel};
-use crate::Result;
 use async_trait::async_trait;
+use mockforge_foundation::Result;
 use serde_json::Value;
 use std::collections::HashMap;
 

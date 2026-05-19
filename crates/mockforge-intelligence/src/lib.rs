@@ -39,6 +39,7 @@
 
 pub mod ai_contract_diff;
 pub mod ai_response;
+pub mod ai_studio;
 pub mod behavioral_cloning;
 pub mod contract_validation;
 pub mod failure_analysis;

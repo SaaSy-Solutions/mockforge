@@ -38,8 +38,8 @@ use crate::intelligent_behavior::{
     llm_client::{LlmClient, LlmUsage},
     types::LlmGenerationRequest,
 };
-use crate::Result;
 use chrono::Utc;
+use mockforge_foundation::Result;
 // Data types re-exported from foundation.
 pub use mockforge_foundation::ai_studio_types::{
     AppState, BehaviorPolicy, BehavioralTraits, CartItem, CartState, CreateAgentRequest,
@@ -112,14 +112,14 @@ impl BehavioralSimulator {
             if self.use_existing_personas {
                 existing_id.clone()
             } else {
-                return Err(crate::Error::internal(
+                return Err(mockforge_foundation::Error::internal(
                     "Using existing personas is disabled".to_string(),
                 ));
             }
         } else if request.generate_persona {
             // Generate new persona if allowed
             if !self.allow_new_personas {
-                return Err(crate::Error::internal(
+                return Err(mockforge_foundation::Error::internal(
                     "Generating new personas is disabled".to_string(),
                 ));
             }
@@ -129,7 +129,7 @@ impl BehavioralSimulator {
                 self.agents.values().filter(|a| !a.persona_id.starts_with("existing-")).count();
 
             if new_persona_count >= self.max_new_personas {
-                return Err(crate::Error::internal(format!(
+                return Err(mockforge_foundation::Error::internal(format!(
                     "Maximum new personas limit ({}) reached",
                     self.max_new_personas
                 )));
@@ -138,7 +138,7 @@ impl BehavioralSimulator {
             // Generate new persona ID (in production, would call persona generator)
             format!("persona-{}", Uuid::new_v4())
         } else {
-            return Err(crate::Error::internal(
+            return Err(mockforge_foundation::Error::internal(
                 "Either persona_id or generate_persona must be provided".to_string(),
             ));
         };
@@ -186,7 +186,9 @@ impl BehavioralSimulator {
         let mut agent = if let Some(ref agent_id) = request.agent_id {
             self.agents
                 .get(agent_id)
-                .ok_or_else(|| crate::Error::internal("Agent not found".to_string()))?
+                .ok_or_else(|| {
+                    mockforge_foundation::Error::internal("Agent not found".to_string())
+                })?
                 .clone()
         } else if let Some(ref persona_id) = request.persona_id {
             // Find existing agent for persona or create new one
@@ -208,7 +210,7 @@ impl BehavioralSimulator {
                 self.create_agent(&create_request).await?
             }
         } else {
-            return Err(crate::Error::internal(
+            return Err(mockforge_foundation::Error::internal(
                 "Either agent_id or persona_id must be provided".to_string(),
             ));
         };
@@ -366,8 +368,9 @@ Consider:
         agent: &NarrativeAgent,
         trigger_event: &Option<String>,
     ) -> Result<String> {
-        let state_json = serde_json::to_string_pretty(&agent.state_awareness)
-            .map_err(|e| crate::Error::internal(format!("Failed to serialize state: {}", e)))?;
+        let state_json = serde_json::to_string_pretty(&agent.state_awareness).map_err(|e| {
+            mockforge_foundation::Error::internal(format!("Failed to serialize state: {}", e))
+        })?;
 
         let trigger_text = trigger_event
             .as_ref()
@@ -402,7 +405,7 @@ What should the user do next?"#,
         } else if response.is_object() {
             response
         } else {
-            return Err(crate::Error::internal(
+            return Err(mockforge_foundation::Error::internal(
                 "LLM response is not a valid JSON object".to_string(),
             ));
         };
