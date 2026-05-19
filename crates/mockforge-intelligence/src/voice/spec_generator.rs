@@ -3,8 +3,8 @@
 //! This module generates OpenAPI 3.0 specifications from parsed voice commands
 //! using the existing OpenApiSpec infrastructure.
 
-use crate::openapi::OpenApiSpec;
-use crate::Result;
+use mockforge_foundation::Result;
+use mockforge_openapi::OpenApiSpec;
 use openapiv3::*;
 use serde_json::Value;
 
@@ -311,7 +311,7 @@ impl VoiceSpecGenerator {
             "DELETE" => path_item.delete = Some(operation),
             "PATCH" => path_item.patch = Some(operation),
             _ => {
-                return Err(crate::Error::internal(format!(
+                return Err(mockforge_foundation::Error::internal(format!(
                     "Unsupported HTTP method: {}",
                     endpoint.method
                 )));
@@ -331,7 +331,7 @@ impl VoiceSpecGenerator {
         let paths = spec_json
             .get_mut("paths")
             .and_then(|p| p.as_object_mut())
-            .ok_or_else(|| crate::Error::internal("Invalid spec JSON structure"))?;
+            .ok_or_else(|| mockforge_foundation::Error::internal("Invalid spec JSON structure"))?;
 
         let path_item = paths
             .entry(endpoint.path.clone())
@@ -339,7 +339,7 @@ impl VoiceSpecGenerator {
 
         let path_obj = path_item
             .as_object_mut()
-            .ok_or_else(|| crate::Error::internal("Invalid path item"))?;
+            .ok_or_else(|| mockforge_foundation::Error::internal("Invalid path item"))?;
 
         // Create operation object
         let mut operation = serde_json::Map::new();

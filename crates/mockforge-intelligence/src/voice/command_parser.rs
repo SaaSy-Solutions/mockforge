@@ -6,7 +6,7 @@
 use crate::intelligent_behavior::{
     config::IntelligentBehaviorConfig, llm_client::LlmClient, types::LlmGenerationRequest,
 };
-use crate::Result;
+use mockforge_foundation::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
@@ -125,14 +125,14 @@ don't include it in the response."#;
         // Parse the response into ParsedCommand
         let response_str = serde_json::to_string(&response).unwrap_or_default();
         let parsed: ParsedCommand = serde_json::from_value(response).map_err(|e| {
-            crate::Error::config(format!(
+            mockforge_foundation::Error::config(format!(
                 "Failed to parse LLM response as ParsedCommand: {}. Response: {}",
                 e, response_str
             ))
         })?;
 
         // Record the voice-command event so the AI pillar dashboard reflects usage.
-        crate::pillar_tracking::record_ai_usage(
+        mockforge_foundation::pillar_tracking::record_ai_usage(
             None,
             None,
             "voice_command",
@@ -219,7 +219,7 @@ and include a "question" or "confirmation" field in the response."#;
         // Parse response
         let response_str = serde_json::to_string(&response).unwrap_or_default();
         let parsed: ParsedCommand = serde_json::from_value(response).map_err(|e| {
-            crate::Error::config(format!(
+            mockforge_foundation::Error::config(format!(
                 "Failed to parse conversational LLM response: {}. Response: {}",
                 e, response_str
             ))
@@ -326,7 +326,7 @@ Be specific and extract all details mentioned in the command."#;
         // Parse the response into ParsedWorkspaceScenario
         let response_str = serde_json::to_string(&response).unwrap_or_default();
         let parsed: ParsedWorkspaceScenario = serde_json::from_value(response).map_err(|e| {
-            crate::Error::config(format!(
+            mockforge_foundation::Error::config(format!(
                 "Failed to parse LLM response as ParsedWorkspaceScenario: {}. Response: {}",
                 e, response_str
             ))
@@ -459,7 +459,7 @@ Be specific and extract all details mentioned in the command. Ensure at least 2-
         // Parse the response into ParsedWorkspaceCreation
         let response_str = serde_json::to_string(&response).unwrap_or_default();
         let parsed: ParsedWorkspaceCreation = serde_json::from_value(response).map_err(|e| {
-            crate::Error::config(format!(
+            mockforge_foundation::Error::config(format!(
                 "Failed to parse LLM response as ParsedWorkspaceCreation: {}. Response: {}",
                 e, response_str
             ))
@@ -524,7 +524,7 @@ Examples:
         // Parse the response into ParsedRealityContinuum
         let response_str = serde_json::to_string(&response).unwrap_or_default();
         let parsed: ParsedRealityContinuum = serde_json::from_value(response).map_err(|e| {
-            crate::Error::config(format!(
+            mockforge_foundation::Error::config(format!(
                 "Failed to parse LLM response as ParsedRealityContinuum: {}. Response: {}",
                 e, response_str
             ))
@@ -588,7 +588,7 @@ Examples:
         // Parse the response into ParsedDriftBudget
         let response_str = serde_json::to_string(&response).unwrap_or_default();
         let parsed: ParsedDriftBudget = serde_json::from_value(response).map_err(|e| {
-            crate::Error::config(format!(
+            mockforge_foundation::Error::config(format!(
                 "Failed to parse LLM response as ParsedDriftBudget: {}. Response: {}",
                 e, response_str
             ))

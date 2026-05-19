@@ -3,8 +3,8 @@
 //! This module manages conversation context and state for iterative API building
 //! through voice commands.
 
-use crate::openapi::OpenApiSpec;
-use crate::Result;
+use mockforge_foundation::Result;
+use mockforge_openapi::OpenApiSpec;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -58,10 +58,9 @@ impl ConversationManager {
         command: &str,
         spec: Option<OpenApiSpec>,
     ) -> Result<()> {
-        let state = self
-            .conversations
-            .get_mut(id)
-            .ok_or_else(|| crate::Error::internal(format!("Conversation {} not found", id)))?;
+        let state = self.conversations.get_mut(id).ok_or_else(|| {
+            mockforge_foundation::Error::internal(format!("Conversation {} not found", id))
+        })?;
 
         // Add command to history
         state.context.history.push(ConversationEntry {

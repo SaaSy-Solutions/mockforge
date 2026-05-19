@@ -32,6 +32,7 @@ reqwest = { workspace = true }
 schemars = { version = "0.8", features = ["derive"], optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = { workspace = true }
 sha2 = { workspace = true }
 tokio = { workspace = true }
 tracing = { workspace = true }

@@ -3,8 +3,8 @@
 //! Generates complete workspace configurations from parsed scenario descriptions,
 //! including OpenAPI specs, chaos configs, initial data, and workspace structure.
 
-use crate::Result;
 use chrono::Utc;
+use mockforge_foundation::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use serde_yaml;
@@ -262,7 +262,10 @@ impl WorkspaceScenarioGenerator {
 
         // Convert to YAML string
         serde_yaml::to_string(&config).map_err(|e| {
-            crate::Error::config(format!("Failed to serialize chaos config to YAML: {}", e))
+            mockforge_foundation::Error::config(format!(
+                "Failed to serialize chaos config to YAML: {}",
+                e
+            ))
         })
     }
 
