@@ -1,0 +1,54 @@
+[package]
+name = "mockforge-platform-signing"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+description = "HSM-backed platform signing-root for MockForge (RFC §8.2 / §9). Defines the PlatformSigner trait, AWS KMS backend, and dual-control rotation state machine used to authenticate first-party cloud plugins."
+repository.workspace = true
+homepage.workspace = true
+documentation.workspace = true
+readme = "README.md"
+keywords = ["mockforge", "kms", "signing", "hsm", "rotation"]
+categories = ["cryptography", "development-tools"]
+publish = false
+
+[features]
+# AWS KMS backend. Off by default so OSS consumers (CLI, plugin-host
+# in self-hosted mode) don't pull the AWS SDK transitive tree. The
+# registry server turns it on via its `storage-s3` umbrella feature.
+aws-kms = ["dep:aws-sdk-kms", "dep:aws-config", "dep:aws-smithy-types"]
+
+[dependencies]
+# Sign/verify primitives. We accept ECDSA P-256 / P-384 signatures
+# from KMS in DER form and verify them with ring; for the legacy
+# Ed25519 publisher path see `mockforge-plugin-host::signing`.
+ring = { workspace = true }
+
+# AWS SDK (feature: `aws-kms`). Version-pinned to match
+# `mockforge-registry-server::storage` so cargo can resolve a single
+# AWS smithy stack across the workspace.
+aws-sdk-kms = { version = "1.50", optional = true }
+aws-config = { version = "1.1", optional = true }
+aws-smithy-types = { version = "1.2", optional = true }
+
+# Async
+async-trait = { workspace = true }
+tokio = { workspace = true, features = ["sync"] }
+
+# Serialization
+serde = { workspace = true }
+serde_json = { workspace = true }
+serde_jcs = { workspace = true }
+
+# Errors / logging / time
+thiserror = { workspace = true }
+tracing = { workspace = true }
+chrono = { workspace = true }
+base64 = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "test-util", "rt-multi-thread"] }
+
+[lints]
+workspace = true

@@ -29,7 +29,13 @@ saas = [
   "oauth",
   "saml",
   "cache-redis",
+  "platform-signing-aws-kms",
 ]
+
+# HSM-backed platform signing-root rotation via AWS KMS (Issue #550).
+# Off in OSS builds — the registry can still load + verify rotation
+# events emitted by the cloud control plane without minting them.
+platform-signing-aws-kms = ["mockforge-platform-signing/aws-kms"]
 
 # Storage backends. Exactly one should be enabled per consumer.
 postgres = ["sqlx/postgres"]
@@ -139,6 +145,7 @@ x509-parser = { version = "0.17", optional = true }
 rustls-pemfile = { version = "2.0", optional = true }
 
 # Internal dependencies
+mockforge-platform-signing = { path = "../mockforge-platform-signing" }
 mockforge-registry-core = { path = "../mockforge-registry-core", default-features = false, features = ["postgres"] }
 mockforge-analytics = { version = "0.3.70", path = "../mockforge-analytics" }
 mockforge-collab = { version = "0.3.70", path = "../mockforge-collab" }

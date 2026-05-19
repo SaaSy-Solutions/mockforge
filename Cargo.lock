@@ -958,6 +958,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "aws-sdk-kms"
+version = "1.102.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22b682ef733ec24c300b11cec2df9bfea7ee4bf48ab2030c832e27db92b69c68"
+dependencies = [
+ "aws-credential-types",
+ "aws-runtime",
+ "aws-smithy-async",
+ "aws-smithy-http",
+ "aws-smithy-json",
+ "aws-smithy-observability",
+ "aws-smithy-runtime",
+ "aws-smithy-runtime-api",
+ "aws-smithy-types",
+ "aws-types",
+ "bytes",
+ "fastrand 2.4.1",
+ "http 0.2.12",
+ "http 1.4.0",
+ "regex-lite",
+ "tracing",
+]
+
+[[package]]
 name = "aws-sdk-s3"
 version = "1.124.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -8539,6 +8563,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "mockforge-platform-signing"
+version = "0.3.137"
+dependencies = [
+ "async-trait",
+ "aws-config",
+ "aws-sdk-kms",
+ "aws-smithy-types",
+ "base64 0.22.1",
+ "chrono",
+ "ring",
+ "serde",
+ "serde_jcs",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "mockforge-plugin-cli"
 version = "0.3.137"
 dependencies = [
@@ -8856,6 +8899,7 @@ dependencies = [
  "mockforge-core",
  "mockforge-federation",
  "mockforge-observability",
+ "mockforge-platform-signing",
  "mockforge-plugin-registry",
  "mockforge-registry-core",
  "mockforge-scenarios",
