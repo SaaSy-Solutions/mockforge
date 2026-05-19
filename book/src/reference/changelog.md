@@ -1,22 +1,56 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
-## [0.3.137] - 2026-05-17
+## [0.3.137] - 2026-05-18
+
+### Added
+
+- **[Cloud][Reality]** Cloud-mode **World State** — per-deployment graph + snapshot + layers + slice-query surface (#464, #528)
+  - Registry proxies 5 HTTP endpoints (`snapshot`, `snapshot/{id}`, `graph?layers=…`, `layers`, `query`) over Fly 6PN to `{fly-app}.internal:3000/api/world-state/*`. Wire format mirrors cloudResilience and cloudTimeTravel: `{ runtime_state: "live" | "unreachable", data }`. `unreachable` carries `data: null` so the UI renders an honest empty state.
+  - New `CloudWorldStateView` reuses the existing `StateLayerPanel`, `WorldStateGraph`, and `StateNodeInspector` components so the visualization is identical to local mode. Deployment selector auto-picks the first active hosted-mock; multi-deployment orgs get a dropdown. 5-second polling matches the local TanStack Query `refetchInterval`.
+  - `'world-state'` added to `cloudNavItemIds`. WebSocket `/stream` upstream is intentionally not proxied — polling parity is functionally equivalent for the cadence the local UI uses, and ws-tunneling through 6PN is a follow-up.
+- **[Cloud][Reality]** Cloud-mode **Time Travel** — controllable virtual clock on hosted-mock deployments (#466, #527)
+  - 7 clock-control endpoints proxied (`status`, `enable`, `disable`, `advance`, `set`, `scale`, `reset`). Targets the hosted mock's main HTTP port (3000) — not the admin port — because the time-travel router mounts there for reachability when admin isn't publicly exposed.
+  - New `CloudTimeTravelView` with a runtime-unreachable banner that disables the control fieldset so users don't fire mutations that'll bounce back. Cron jobs + mutation rules stay local-only — they manage scenario state, not a hosted mock's single-process clock.
+  - `'time-travel'` added to `cloudNavItemIds`.
+- **[Cloud][AI]** Cloud-mode **Test Generator** — async LLM jobs over runtime_captures (#469, #529)
+  - New `cloud_test_generation_jobs` table + 4 CRUD endpoints + SSE stream (`GET .../jobs/{id}/stream`) for live progress.
+  - Background tokio worker drains the queue with `FOR UPDATE SKIP LOCKED` claims, processes up to `TEST_GENERATION_WORKER_CONCURRENCY` (default 4) jobs in parallel per tick, and dispatches via the same `ai::client` + `ai::quota` pipeline `ai_studio` uses — so quota and billing semantics stay consistent. BYOK skips the platform token quota; paid plans without BYOK succeed via the platform key (`MOCKFORGE_PLATFORM_LLM_API_KEY` + provider/model/endpoint env vars).
+  - Worker is forgiving: best-effort JSON parse strips ```` ```json ```` fences, recovers from prose wrappers, falls back to a `{ raw_content }` wrapper. Cancellation race is safe — terminal writes are gated on `WHERE status = 'running'` so a user-cancel mid-flight wins.
+  - New `CloudTestGeneratorView` with job timeline + create form + expandable detail rows + SSE-driven sub-second updates on expanded non-terminal rows. `'test-generator'` added to `cloudNavItemIds`.
+- **[DevX]** Pre-flight warning when `--vus` is too low for `--rps` (#79 round 6 follow-up, #543)
+  - `mockforge bench --rps N --vus M` now warns before launch when `M × 10 < N` (rule of thumb: 1 VU at ~100ms latency sustains ~10 req/s). The warning suggests a higher `--vus` value (`ceil(rps / 10)`), so users hit by k6's "Insufficient VUs, reached M active VUs and cannot initialize more" message know what to change.
+
+### Changed
+
+- **[CI][Reality]** `release.yml` gates Fly deploy + crates.io publish + Helm chart push on the `release` job's `cargo test --workspace --release` (#447, #526)
+  - All three downstream jobs (`deploy-registry`, `publish`, `helm`) now `needs: release`. A tag with red tests no longer ships to Fly / crates.io / the Helm repo.
+- **[DevX]** `pr_generation` moved out of `mockforge-core` into `mockforge-intelligence` and the intelligence → core cycle was broken (#562 phase 1, #571)
+  - `mockforge-intelligence` dropped its `mockforge-core` dep, freeing `mockforge-core` to take a `mockforge-intelligence` dep. `mockforge_core::pr_generation` is preserved as a `pub use` re-export for backwards compat.
 
 ### Fixed
 
-- **[Reality]** Client-side "Connections opened" counter now appears for `--rps`-only runs (Issue #79 round 6 follow-up)
+- **[DevX]** CI rust-cache no longer poisons builds with dangling `target/*.d` paths (#446, #570)
+  - `CARGO_HOME` switched from per-run to per-runner-name so cached dep-info paths remain valid across runs on the same runner. `Swatinem/rust-cache@v2` invocations now partition the cache key by runner.
+- **[Reality]** Client-side "Connections opened" counter now appears for `--rps`-only runs (#79 round 6 follow-up, #543)
   - Root cause: the parser was reading `http_req_connecting.values.count` from k6's `summary.json`, but k6's Trend metric never emits a `count` field — only `avg/min/med/max/p(90)/p(95)`. The field was always absent, so `tcp_connect_samples` was always 0 and the connection-count line never printed for non-`--cps` runs.
   - Fix: the generated k6 script now declares a dedicated `mockforge_connections_opened` Counter and increments it whenever `res.timings.connecting > 0` (i.e. a fresh TCP socket was opened). The Rust parser reads this Counter's `count` directly. Works for both `--cps` runs (≈ total requests) and pooled-reuse runs (≈ `vus_max`).
   - Also: TCP-connect / TLS-handshake timing lines now print whenever the Trend has a non-zero `avg`, not when `count > 0` (which was unreliable). New `test_connections_opened_counter_present` regression test guards both the Counter declaration and the per-request increment.
 
-- **[Reality]** `--scenario constant` now runs at full VU concurrency from t=0 (Issue #79 round 6 follow-up)
+- **[Reality]** `--scenario constant` now runs at full VU concurrency from t=0 (#79 round 6 follow-up, #543)
   - Root cause: Srikanth reported that `--vus 5 -d 600s` took until the ~6-minute mark to reach 5 VUs and then ramped DOWN. The k6 template always wrote `startVUs: 0`, so even `--scenario constant`'s single `{duration: '600s', target: 5}` stage made `ramping-vus` linearly interpolate from 0 → 5 across the whole window.
   - Fix: for `Constant`, `startVUs` is seeded at `max_vus` so concurrency is at full from the start. Ramping scenarios (`RampUp`/`Spike`/`Stress`/`Soak`) still start at 0 and let their stages drive the curve. Guarded by `test_constant_scenario_starts_at_target_vus`.
+- **[Cloud][Reality]** Cloud Resilience dashboard could not reach hosted mocks over Fly 6PN (#468 follow-up, #542, #544)
+  - `mockforge serve --admin` was binding the admin port to `127.0.0.1`, so the registry proxy's `{fly-app}.internal:9080` reach failed silently (#542 — bind dual-stack). UI's `/api/resilience/*` paths also sat behind auth middleware that doesn't run in proxied cloud mode, so the proxy's outbound calls 401'd (#544 — explicit exempt prefix). Both fixes were needed for the cloud Resilience tab to render live state instead of perpetual `runtime_state: unreachable`.
+- **[UI][Build]** Allow `esbuild` / `vue-demi` build scripts under pnpm 11's managed-builds policy (#525, #533)
+  - `pnpm-workspace.yaml` declares the two packages in `onlyBuiltDependencies` so production docker builds succeed.
+- **[UI][Build]** Pin pnpm to 10.15.0 in the docker stages (#525 follow-up, #536)
+  - 10.15.0 predates the managed-builds policy that triggered #525 in the first place.
+- **[UI][Cloud]** Hide `api-explorer` from cloud sidebar (#459 follow-up, #537)
+- **[CI][Docker]** Explicit cosign login so signature push to GHCR succeeds (#546)
 
-### Added
+## [0.3.137] cloud-parity meta tracker
 
-- **[DevX]** Pre-flight warning when `--vus` is too low for `--rps` (Issue #79 round 6 follow-up)
-  - `mockforge bench --rps N --vus M` now warns before launch when `M × 10 < N` (rule of thumb: 1 VU at ~100ms latency sustains ~10 req/s). The warning suggests a higher `--vus` value (`ceil(rps / 10)`), so users hit by k6's "Insufficient VUs, reached M active VUs and cannot initialize more" message know what to change.
+This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/459) — the cloud-parity meta tracker for the 14 "Local only" nav items. **14 / 14** addressed: 8 shipped end-to-end across prior releases (Graph #460, Virtual Backends #461, Logs #462, Metrics-folded #463, World State #464, Observability #465, Performance-folded #467, Resilience #468), 4 explicitly kept local-only (Proxy Inspector #470, SMTP Mailbox #471, MQTT Broker #472, Kafka Broker #473), 2 land in this release (Time Travel #466, Test Generator #469).
 
 ## [0.3.132] - 2026-05-12
 
