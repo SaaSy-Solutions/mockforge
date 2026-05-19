@@ -1964,12 +1964,16 @@ pub async fn handle_serve(
 
             match mockforge_recorder::RecorderDatabase::new(&recorder_config.database_path).await {
                 Ok(db) => {
-                    // Attach the cloud-sync handle when running on a hosted
-                    // mock (#234 part 2). On local / self-hosted runs the
-                    // env vars are absent and the handle is a no-op.
+                    // Attach the cloud captures forwarder when running
+                    // on a hosted mock (#553, supersedes #234 part 2).
+                    // The forwarder POSTs each capture to the registry
+                    // ingest endpoint as it lands, treating cloud
+                    // Postgres as the durable source-of-truth. On
+                    // local / self-hosted runs the env vars are absent
+                    // and the handle is a no-op.
                     let cloud_sync = mockforge_recorder::cloud_sync::from_env();
                     if cloud_sync.is_active() {
-                        println!("✅ Recorder cloud-sync enabled — captures will mirror to MockForge Cloud");
+                        println!("✅ Recorder capture forwarder enabled — captures will forward to MockForge Cloud");
                     }
                     let recorder =
                         Arc::new(mockforge_recorder::Recorder::new(db).with_cloud_sync(cloud_sync));

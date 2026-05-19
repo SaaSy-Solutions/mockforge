@@ -42,10 +42,14 @@ impl Recorder {
         }
     }
 
-    /// Attach a cloud-sync handle. When configured, every completed
-    /// exchange (after `record_response`) is shipped to the cloud
-    /// ingest endpoint in addition to being stored locally. The local
-    /// SQLite stays the canonical store; cloud is the durable mirror.
+    /// Attach the cloud capture forwarder handle (#553). When
+    /// configured, every completed exchange (after `record_response`)
+    /// is forwarded to the registry's `runtime_captures` ingest
+    /// endpoint as soon as it lands, one POST per capture. Local
+    /// SQLite is still written for diagnostics, but cloud Postgres is
+    /// the durable source-of-truth (per #240 / #242) and survives
+    /// machine restart / reschedule. See `cloud_sync` module docs for
+    /// backpressure (bounded mpsc, drop-on-full) and retry policy.
     pub fn with_cloud_sync(mut self, handle: CaptureCloudSyncHandle) -> Self {
         self.cloud_sync = handle;
         self
@@ -104,10 +108,12 @@ impl Recorder {
         let request_id = response.request_id.clone();
         self.db.insert_response(&response).await?;
 
-        // Ship the now-complete exchange to cloud Postgres if the handle
-        // is configured. Local SQLite stays canonical so a transient
-        // ship failure doesn't lose data — the cloud is a durable mirror,
-        // not the source of truth.
+        // Forward the now-complete exchange to cloud Postgres if the
+        // handle is configured (#553). Cloud is the durable
+        // source-of-truth on hosted mocks; local SQLite is a debugging
+        // buffer that gets wiped on every machine cycle. The
+        // forwarder's bounded mpsc + retry loop guarantees we never
+        // block the recorder hot path waiting for the registry.
         if self.cloud_sync.is_active() {
             if let Ok(Some(request)) = self.db.get_request(&request_id).await {
                 self.cloud_sync.enqueue(RecordedExchange {
