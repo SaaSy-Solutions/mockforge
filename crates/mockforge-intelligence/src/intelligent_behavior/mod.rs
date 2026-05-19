@@ -21,12 +21,12 @@
 //!
 //! # Example Usage
 //!
-//! ```rust,no_run
-//! use mockforge_core::intelligent_behavior::{
+//! ```rust,ignore
+//! use mockforge_intelligence::intelligent_behavior::{
 //!     StatefulAiContext, BehaviorModel, IntelligentBehaviorConfig,
 //! };
 //!
-//! # async fn example() -> mockforge_core::Result<()> {
+//! # async fn example() -> mockforge_foundation::Result<()> {
 //! // Create a stateful context
 //! let config = IntelligentBehaviorConfig::default();
 //! let mut context = StatefulAiContext::new("session_123", config);

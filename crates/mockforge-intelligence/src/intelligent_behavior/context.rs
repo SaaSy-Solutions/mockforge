@@ -9,7 +9,7 @@ use tokio::sync::RwLock;
 use super::config::IntelligentBehaviorConfig;
 use super::memory::VectorMemoryStore;
 use super::types::{InteractionRecord, SessionState};
-use crate::Result;
+use mockforge_foundation::Result;
 
 /// Stateful AI context manager
 ///

@@ -2,7 +2,7 @@
 //!
 //! This module provides a client for generating embeddings for semantic search.
 
-use crate::Result;
+use mockforge_foundation::Result;
 
 /// Embedding client for generating vector embeddings
 pub struct EmbeddingClient {
@@ -45,7 +45,7 @@ impl EmbeddingClient {
     pub async fn generate_embedding(&self, text: &str) -> Result<Vec<f32>> {
         match self.provider.as_str() {
             "openai" | "openai-compatible" => self.generate_openai_embedding(text).await,
-            _ => Err(crate::Error::internal(format!(
+            _ => Err(mockforge_foundation::Error::internal(format!(
                 "Unsupported embedding provider: {}",
                 self.provider
             ))),
@@ -68,7 +68,7 @@ impl EmbeddingClient {
             .api_key
             .clone()
             .or_else(|| std::env::var("OPENAI_API_KEY").ok())
-            .ok_or_else(|| crate::Error::internal("OpenAI API key not found"))?;
+            .ok_or_else(|| mockforge_foundation::Error::internal("OpenAI API key not found"))?;
 
         let request_body = serde_json::json!({
             "model": self.model,
@@ -82,30 +82,37 @@ impl EmbeddingClient {
             request = request.header("Authorization", format!("Bearer {}", api_key));
         }
 
-        let response =
-            request.json(&request_body).send().await.map_err(|e| {
-                crate::Error::internal(format!("Embedding API request failed: {}", e))
-            })?;
+        let response = request.json(&request_body).send().await.map_err(|e| {
+            mockforge_foundation::Error::internal(format!("Embedding API request failed: {}", e))
+        })?;
 
         if !response.status().is_success() {
             let error_text = response.text().await.unwrap_or_default();
-            return Err(crate::Error::internal(format!("Embedding API error: {}", error_text)));
+            return Err(mockforge_foundation::Error::internal(format!(
+                "Embedding API error: {}",
+                error_text
+            )));
         }
 
         let response_json: serde_json::Value = response.json().await.map_err(|e| {
-            crate::Error::config(format!("Failed to parse embedding response: {}", e))
+            mockforge_foundation::Error::config(format!(
+                "Failed to parse embedding response: {}",
+                e
+            ))
         })?;
 
         // Extract embedding vector
         let embedding: Vec<f32> = response_json["data"][0]["embedding"]
             .as_array()
-            .ok_or_else(|| crate::Error::internal("Invalid embedding response format"))?
+            .ok_or_else(|| {
+                mockforge_foundation::Error::internal("Invalid embedding response format")
+            })?
             .iter()
             .filter_map(|v| v.as_f64().map(|f| f as f32))
             .collect();
 
         if embedding.is_empty() {
-            return Err(crate::Error::internal("Empty embedding returned"));
+            return Err(mockforge_foundation::Error::internal("Empty embedding returned"));
         }
 
         Ok(embedding)

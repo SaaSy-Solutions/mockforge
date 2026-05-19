@@ -310,13 +310,17 @@ pub mod graph;
 pub mod import;
 #[cfg(feature = "contracts")]
 pub mod incidents;
-#[cfg(feature = "ai")]
-// Data types moved to mockforge-foundation (A12/A17);
-// MockAI, RuleGenerator, OpenApiSpecGenerator stay here (LLM-bound).
-pub mod intelligent_behavior;
 /// `latency` was promoted to [`mockforge_foundation::latency`]; re-exported
 /// here so the legacy `mockforge_core::latency::*` path continues to resolve.
 pub(crate) use mockforge_foundation::latency;
+/// `intelligent_behavior` lives in `mockforge_intelligence::intelligent_behavior`
+/// (Issue #562 phase 2). Re-exported here so existing
+/// `crate::intelligent_behavior::*` call sites inside core (voice, reality,
+/// graph, ai_contract_diff, ai_studio, contract_drift, failure_analysis) and
+/// external `mockforge_core::intelligent_behavior::*` consumers keep
+/// compiling without churn. Data types had already been promoted to
+/// `mockforge-foundation` (A12/A17); this PR moved the LLM-bound engines too.
+pub use mockforge_intelligence::intelligent_behavior;
 pub mod lifecycle;
 #[cfg(feature = "advanced")]
 // Config types moved to mockforge-foundation (A14);

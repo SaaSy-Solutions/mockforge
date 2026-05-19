@@ -4,7 +4,8 @@
 //! relationships between entities in OpenAPI specifications, enabling
 //! automatic generation of related data.
 
-use crate::{OpenApiSpec, Result};
+use mockforge_foundation::Result;
+use mockforge_openapi::OpenApiSpec;
 use openapiv3::{ReferenceOr, Schema};
 
 /// Represents a relationship between two entities

@@ -13,8 +13,8 @@ use super::pagination_intelligence::{
 use super::rule_generator::{ExamplePair, RuleGenerator};
 use super::types::BehaviorRules;
 use super::validation_generator::{RequestContext, ValidationGenerator};
-use crate::openapi::OpenApiSpec;
-use crate::Result;
+use mockforge_foundation::Result;
+use mockforge_openapi::OpenApiSpec;
 use serde_json::Value;
 use std::collections::HashMap;
 use uuid;

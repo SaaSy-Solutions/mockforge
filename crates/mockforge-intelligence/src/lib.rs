@@ -13,12 +13,17 @@
 //! - `pr_generation`: GitHub/GitLab PR generation client (Issue #562 phase 1 —
 //!   moved out of `mockforge-core` because it only depends on
 //!   `mockforge_foundation::Error`, no other core internals)
+//! - `intelligent_behavior`: LLM-driven behavior model, persona-aware response
+//!   generation, OpenAPI-backed example/rule generation (Issue #562 phase 2 —
+//!   the AI cluster's leaf module, depends only on `mockforge-openapi` and
+//!   `mockforge-foundation`)
 //!
-//! Full migration of `intelligent_behavior`, `ai_contract_diff`, `ai_studio`,
-//! and `behavioral_economics` is blocked by circular dependencies with
-//! non-deprecated core code (openapi, reality, priority_handler, etc.) that
-//! require a foundation-types crate to untangle.
+//! The remaining AI cluster (`ai_contract_diff`, `ai_studio`,
+//! `threat_modeling::*`) can now follow the same `pub use mockforge_intelligence::*;`
+//! pattern from `mockforge-core` — phase 2 already removed the transitive
+//! coupling that blocked them.
 
 pub mod ai_response;
 pub mod behavioral_cloning;
+pub mod intelligent_behavior;
 pub mod pr_generation;

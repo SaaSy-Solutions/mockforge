@@ -5,7 +5,7 @@
 
 use super::context::StatefulAiContext;
 use super::types::BehaviorRules;
-use crate::Result;
+use mockforge_foundation::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 

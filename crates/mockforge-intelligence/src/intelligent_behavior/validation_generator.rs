@@ -8,7 +8,7 @@ use super::config::BehaviorModelConfig;
 use super::llm_client::LlmClient;
 use super::mutation_analyzer::{ValidationIssue, ValidationIssueType, ValidationSeverity};
 use super::types::LlmGenerationRequest;
-use crate::Result;
+use mockforge_foundation::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -307,7 +307,7 @@ impl ValidationGenerator {
         let llm_client = self
             .llm_client
             .as_ref()
-            .ok_or_else(|| crate::Error::internal("LLM client not available"))?;
+            .ok_or_else(|| mockforge_foundation::Error::internal("LLM client not available"))?;
 
         let issue_type_str = format!("{:?}", issue.issue_type);
         let field_str =
@@ -381,7 +381,7 @@ impl ValidationGenerator {
         let llm_client = self
             .llm_client
             .as_ref()
-            .ok_or_else(|| crate::Error::internal("LLM client not available"))?;
+            .ok_or_else(|| mockforge_foundation::Error::internal("LLM client not available"))?;
 
         let system_prompt = "You are an API error response generator. Generate realistic error responses in JSON format.";
         let user_prompt = format!(

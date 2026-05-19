@@ -9,7 +9,7 @@ use super::context::StatefulAiContext;
 use super::llm_client::LlmClient;
 use super::rule_generator::PaginatedResponse;
 use super::types::LlmGenerationRequest;
-use crate::Result;
+use mockforge_foundation::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -320,7 +320,7 @@ impl PaginationIntelligence {
         let llm_client = self
             .llm_client
             .as_ref()
-            .ok_or_else(|| crate::Error::internal("LLM client not available"))?;
+            .ok_or_else(|| mockforge_foundation::Error::internal("LLM client not available"))?;
 
         // Build context about the request
         let context_summary = context.build_context_summary().await;

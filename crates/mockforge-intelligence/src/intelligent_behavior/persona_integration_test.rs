@@ -9,9 +9,9 @@
 #[cfg(test)]
 mod tests {
     use crate::intelligent_behavior::config::{Persona, PersonasConfig};
-    use crate::openapi::response::ResponseGenerator;
-    use crate::openapi::spec::OpenApiSpec;
-    use crate::openapi_routes::OpenApiRouteRegistry;
+    use mockforge_openapi::openapi_routes::OpenApiRouteRegistry;
+    use mockforge_openapi::response::ResponseGenerator;
+    use mockforge_openapi::spec::OpenApiSpec;
     use openapiv3::ReferenceOr;
     use serde_json::Value;
     use std::collections::HashMap;

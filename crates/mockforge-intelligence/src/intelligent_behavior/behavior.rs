@@ -11,7 +11,7 @@ use super::context::StatefulAiContext;
 use super::llm_client::LlmClient;
 use super::rules::EvaluationContext;
 use super::types::{BehaviorRules, LlmGenerationRequest};
-use crate::Result;
+use mockforge_foundation::Result;
 
 /// Behavior model that uses LLMs to generate intelligent responses
 pub struct BehaviorModel {
@@ -114,11 +114,11 @@ impl BehaviorModel {
                         if !state.state.contains_key("auth_token")
                             && !state.state.contains_key("user_id")
                         {
-                            return Err(crate::Error::internal(message.clone()));
+                            return Err(mockforge_foundation::Error::internal(message.clone()));
                         }
                     }
                     super::rules::RuleAction::Error { status, message } => {
-                        return Err(crate::Error::internal(format!(
+                        return Err(mockforge_foundation::Error::internal(format!(
                             "Rule '{}' failed: {} (status {})",
                             rule.name, message, status
                         )));

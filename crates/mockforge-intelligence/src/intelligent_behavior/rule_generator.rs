@@ -8,7 +8,7 @@ use super::config::BehaviorModelConfig;
 use super::llm_client::LlmClient;
 use super::rules::{ConsistencyRule, RuleAction, StateMachine, StateTransition};
 use super::types::{BehaviorRules, LlmGenerationRequest};
-use crate::Result;
+use mockforge_foundation::Result;
 // Data types re-exported from foundation so consumers can use them without
 // depending on deprecated core modules.
 pub use mockforge_foundation::intelligent_behavior::rule_types::{
@@ -617,7 +617,7 @@ impl RuleGenerator {
         let llm_client = self
             .llm_client
             .as_ref()
-            .ok_or_else(|| crate::Error::internal("LLM client not available"))?;
+            .ok_or_else(|| mockforge_foundation::Error::internal("LLM client not available"))?;
 
         // Build prompt with examples
         let examples_json = serde_json::to_string(examples)?;
@@ -691,7 +691,7 @@ impl RuleGenerator {
         let llm_client = self
             .llm_client
             .as_ref()
-            .ok_or_else(|| crate::Error::internal("LLM client not available"))?;
+            .ok_or_else(|| mockforge_foundation::Error::internal("LLM client not available"))?;
 
         let examples_summary: Vec<String> = examples
             .iter()

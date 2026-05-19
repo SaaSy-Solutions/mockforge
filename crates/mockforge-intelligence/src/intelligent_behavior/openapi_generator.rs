@@ -6,9 +6,9 @@
 use super::config::BehaviorModelConfig;
 use super::llm_client::LlmClient;
 use super::types::LlmGenerationRequest;
-use crate::openapi::spec::OpenApiSpec;
-use crate::Result;
 use chrono::{DateTime, Utc};
+use mockforge_foundation::Result;
+use mockforge_openapi::spec::OpenApiSpec;
 use openapiv3::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -105,7 +105,7 @@ impl OpenApiSpecGenerator {
         let start_time = Utc::now();
 
         if exchanges.is_empty() {
-            return Err(crate::Error::internal(
+            return Err(mockforge_foundation::Error::internal(
                 "No HTTP exchanges provided for OpenAPI generation",
             ));
         }
@@ -501,7 +501,7 @@ impl OpenApiSpecGenerator {
         // Use the first exchange as a template
         let first = exchanges
             .first()
-            .ok_or_else(|| crate::Error::internal("No exchanges provided"))?;
+            .ok_or_else(|| mockforge_foundation::Error::internal("No exchanges provided"))?;
 
         let mut operation = Operation {
             summary: Some(format!("{} {}", first.method, first.path)),

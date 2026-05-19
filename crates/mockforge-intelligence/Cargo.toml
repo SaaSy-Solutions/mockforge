@@ -17,14 +17,23 @@ categories = ["development-tools::testing"]
 # `ScenarioDefinition` (the one method that produced one now lives in
 # `mockforge-http::handlers::behavioral_cloning`, the only caller).
 mockforge-foundation = { path = "../mockforge-foundation", default-features = false }
+# `intelligent_behavior` (#562 phase 2) needs `OpenApiSpec`, `ResponseGenerator`,
+# and `OpenApiRouteRegistry`. `mockforge-openapi` is foundation-only, so this
+# dep is cycle-safe — it does NOT pull `mockforge-core` back in.
+mockforge-openapi = { path = "../mockforge-openapi" }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
+indexmap = "2.14"
+openapiv3 = { workspace = true }
 rand = { workspace = true }
+regex = { workspace = true }
 reqwest = { workspace = true }
 schemars = { version = "0.8", features = ["derive"], optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true }
 tracing = { workspace = true }
 urlencoding = { workspace = true }
 uuid = { workspace = true }

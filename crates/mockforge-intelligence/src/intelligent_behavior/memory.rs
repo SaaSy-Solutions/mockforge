@@ -10,7 +10,7 @@ use tokio::sync::RwLock;
 use super::config::VectorStoreConfig;
 use super::embedding_client::{cosine_similarity, EmbeddingClient};
 use super::types::InteractionRecord;
-use crate::Result;
+use mockforge_foundation::Result;
 
 /// Vector memory store for persistent, searchable interaction history
 pub struct VectorMemoryStore {
