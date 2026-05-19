@@ -2,6 +2,13 @@
 
 ### Changed
 
+- **[Architecture]** `ai_contract_diff` moved to `mockforge-intelligence`, `pillars` + `pillar_tracking` re-homed to `mockforge-foundation` (Issue #562 phase 4)
+  - Phase 3 deferred `ai_contract_diff` because its `DiffAnalyzer::analyze_with_recommendations` called `crate::pillar_tracking::record_ai_usage` — an analytics global living in `mockforge-core` that would have re-introduced an intelligence → core dep. Phase 4 unblocks it by promoting `pillars.rs` (568 LOC) and `pillar_tracking.rs` (207 LOC) to `mockforge-foundation`. Both files were already self-contained (only depend on `serde`/`chrono`/`once_cell`/`async_trait`/`tracing`), so the move is mechanical.
+  - With pillar_tracking in foundation, `ai_contract_diff` (7 files / ~2,380 LOC) moves cleanly to `mockforge-intelligence`. The single `pillar_tracking::record_ai_usage("ai_generation", {"type":"contract_diff",...})` call site is preserved — analytics dashboards keep receiving contract-diff usage events unchanged.
+  - Backwards compat: `mockforge_core::pillars`, `mockforge_core::pillar_tracking`, and `mockforge_core::ai_contract_diff` are all preserved as `pub use` re-exports. Every existing call site — 10+ files using `pillar_tracking` (ui, registry-server, scenarios, http, cli, ai_studio, voice, contract_validation, workspace) and the 5+ files using `ai_contract_diff` (http, cli, in-core consumers) — keeps compiling unchanged.
+  - `mockforge-foundation` gained `once_cell` + `tracing` workspace deps (both already used by every dependent crate; this just makes the dep direct).
+  - `ai_studio` remains in core — needs `reality`, `voice`, `failure_analysis`, and `contract_validation` extracted first (12 of 17 sub-files are otherwise clean post-phase-4, but a partial split would fracture module identity). Documented in `mockforge-intelligence/src/lib.rs`.
+
 - **[Architecture]** `threat_modeling` (security analyzers) moved out of `mockforge-core::contract_drift` into `mockforge-intelligence` (Issue #562 phase 3)
   - 8 files / ~1,300 LOC: `dos_analyzer`, `error_analyzer`, `pii_detector`, `remediation_generator`, `schema_analyzer`, `threat_analyzer`, `types`, `mod`.
   - Foreign deps swapped to their home crates: `crate::Result` → `mockforge_foundation::Result`, `crate::openapi::OpenApiSpec` → `mockforge_openapi::OpenApiSpec`. `crate::intelligent_behavior::*` stays as `crate::intelligent_behavior::*` because it's now a sibling module in `mockforge-intelligence` (phase 2 moved it there).
