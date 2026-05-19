@@ -46,3 +46,4 @@ pub mod intelligent_behavior;
 pub mod pr_generation;
 pub mod reality;
 pub mod threat_modeling;
+pub mod voice;

@@ -22,7 +22,7 @@
 use crate::intelligent_behavior::{
     config::IntelligentBehaviorConfig, llm_client::LlmClient, types::LlmGenerationRequest,
 };
-use crate::Result;
+use mockforge_foundation::Result;
 // Hook types are defined in mockforge-chaos, but we use serde_json::Value to avoid circular dependency
 // When used, they should be deserialized from JSON
 type Hook = serde_json::Value;
@@ -136,7 +136,7 @@ appropriate condition structures."#;
         // Since Hook is now serde_json::Value, we can return the response directly
         // Just validate it's a valid JSON object
         if !response.is_object() {
-            return Err(crate::Error::internal(format!(
+            return Err(mockforge_foundation::Error::internal(format!(
                 "LLM response is not a JSON object. Response: {}",
                 serde_json::to_string(&response).unwrap_or_default()
             )));

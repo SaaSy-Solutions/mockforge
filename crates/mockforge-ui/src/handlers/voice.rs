@@ -12,8 +12,8 @@ use mockforge_core::voice::{
     command_parser::{ParsedWorkspaceCreation, VoiceCommandParser},
     hook_transpiler::HookTranspiler,
     spec_generator::VoiceSpecGenerator,
-    workspace_builder::WorkspaceBuilder,
     workspace_scenario_generator::{GeneratedWorkspaceScenario, WorkspaceScenarioGenerator},
+    WorkspaceBuilder,
 };
 use mockforge_foundation::intelligent_behavior::IntelligentBehaviorConfig;
 use serde::{Deserialize, Serialize};

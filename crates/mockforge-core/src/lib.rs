@@ -439,8 +439,16 @@ pub mod tls;
 pub mod traffic_shaping;
 pub mod validation;
 pub mod verification;
+/// `voice` was split in Issue #562 phase 7. Six leaf files (command_parser,
+/// conversation, hook_transpiler, spec_generator, workspace_scenario_generator,
+/// mod) moved to `mockforge_intelligence::voice`. `voice_workspace` (formerly
+/// `voice::workspace_builder`) stays here because it depends on multi_tenant,
+/// scenarios, workspace, contract_drift, and reality_continuum — all core-only.
+/// The `voice` shim consolidates both halves so external callers see one API.
 #[cfg(feature = "voice")]
 pub mod voice;
+#[cfg(feature = "voice")]
+pub mod voice_workspace;
 #[cfg(feature = "workspace-mgmt")]
 // Workspace family (Workspace, WorkspaceConfig, WorkspaceRegistry, etc.) —
 // 11k+ LoC surface area. Staying in core; future extraction would need

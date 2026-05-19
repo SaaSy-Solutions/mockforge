@@ -2,6 +2,12 @@
 
 ### Changed
 
+- **[Architecture]** `voice` split: 6 leaf files moved to `mockforge-intelligence`, `workspace_builder` stays in core (Issue #562 phase 7)
+  - The wall: `voice` (3,769 LOC across 7 files) was the last AI cluster blocker. Scoping showed all heavy deps (`multi_tenant`, `scenarios`, `workspace`, `contract_drift`, `reality_continuum`) are concentrated in a single file (`workspace_builder.rs`, 536 LOC). The other 6 files (3,233 LOC) only depend on `mockforge-openapi` + sibling `intelligent_behavior` + `mockforge-foundation`.
+  - Split, not whole-move: `command_parser`, `conversation`, `hook_transpiler`, `spec_generator`, `workspace_scenario_generator`, `mod` → `mockforge_intelligence::voice`. `workspace_builder` renamed to `mockforge_core::voice_workspace` (stays in core; needs the heavy deps and the imports go back through `crate::voice::*` shim).
+  - Backwards compat: new `mockforge_core::voice` shim consolidates both halves with `pub use mockforge_intelligence::voice::*; pub use crate::voice_workspace::{BuiltWorkspace, WorkspaceBuilder};` plus sub-module re-exports (`command_parser`, `spec_generator`, etc.) so existing path-style imports keep working. `mockforge-ui` handler updated one import (`workspace_builder::WorkspaceBuilder` → `WorkspaceBuilder` since it now comes through the top-level shim).
+  - Brings `ai_studio` to **0 dirty sub-files**. Phase 8 will move ai_studio whole.
+
 - **[Architecture]** `reality` moved to `mockforge-intelligence`, `chaos_utilities` re-homed to `mockforge-foundation` (Issue #562 phase 6)
   - `reality.rs` (541 LOC) holds `ChaosConfig` as a struct field — moving it to intelligence required `ChaosConfig` to live in a crate intelligence can depend on (foundation). `chaos_utilities.rs` (500 LOC) only depends on `failure_injection` + `latency`, both already in foundation, so the move is mechanical.
   - The `RealityEngine::apply_to_config` inherent method (which pokes at concrete `ServerConfig` sub-structs) moved to `mockforge_core::reality_apply::apply_reality_to_server_config` as a free function. Keeping it on `RealityEngine` would have forced intelligence → core dep again. CLI updated to use the new helper (one call site).
