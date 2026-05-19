@@ -26,14 +26,6 @@ env:
   # consistent with rustc being killed under CPU/memory pressure
   # without triggering the OOM-killer log).
   CARGO_BUILD_JOBS: "4"
-  # Isolate cargo state from `/home/actions/.cargo` (shared with 7
-  # sibling runners). When saas-platform / apiary / aca runners run
-  # `cargo install ...`, they churn the shared registry and lock files,
-  # which surfaces in mockforge jobs as "(never executed) No such file
-  # or directory" rustc spawn failures. `github.run_id` (not
-  # `runner.temp`, which is only valid at job level) gives a per-run
-  # path that's fresh, disposable, and untouched by siblings.
-  CARGO_HOME: /tmp/cargo-mockforge-${{ github.run_id }}
   # Force rustup to use stable regardless of whatever a sibling repo
   # pinned as the user-level default. `dtolnay/rust-toolchain@stable`
   # installs stable but does not change the default; RUSTUP_TOOLCHAIN
@@ -58,6 +50,13 @@ jobs:
     timeout-minutes: 60
 
     steps:
+      - name: Set per-runner CARGO_HOME
+        # `runner.name` is unavailable in workflow- or job-level `env:` blocks
+        # (GH Actions context: `runner.*` is step-scoped). Writing to
+        # `$GITHUB_ENV` here exports it to every subsequent step in this job,
+        # including the rust-toolchain composite action and rust-cache.
+        run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
       - name: Checkout repository
         uses: actions/checkout@v6
 
@@ -91,6 +90,8 @@ jobs:
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
+        with:
+          env-vars: "CARGO_HOME"
 
       - name: Build MockForge binary (needed for integration tests)
         # Retry once on transient "No such file or directory" / SIGKILL
@@ -165,6 +166,13 @@ jobs:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
 
     steps:
+      - name: Set per-runner CARGO_HOME
+        # `runner.name` is unavailable in workflow- or job-level `env:` blocks
+        # (GH Actions context: `runner.*` is step-scoped). Writing to
+        # `$GITHUB_ENV` here exports it to every subsequent step in this job,
+        # including the rust-toolchain composite action and rust-cache.
+        run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
       - name: Checkout code
         uses: actions/checkout@v6
 

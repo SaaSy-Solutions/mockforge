@@ -20,10 +20,11 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # Shared self-hosted runner: cap parallelism + isolate CARGO_HOME per run to avoid
-  # registry/lockfile churn from sibling runners. Same pattern as integration-tests.yml.
+  # Cap cargo parallelism. The self-hosted runner is 8 vCPU shared with
+  # 7 other runners; unrestricted `-j` produces flakes under contention.
+  # `CARGO_HOME` is set per-job (not here) — it must reference `runner.name`,
+  # which the workflow parser only resolves once a runner is assigned.
   CARGO_BUILD_JOBS: "4"
-  CARGO_HOME: /tmp/cargo-mockforge-e2e-${{ github.run_id }}
   RUSTUP_TOOLCHAIN: stable
 
 concurrency:
@@ -63,6 +64,13 @@ jobs:
       STRIPE_WEBHOOK_SECRET: "whsec_e2e_test_secret"
 
     steps:
+      - name: Set per-runner CARGO_HOME
+        # `runner.name` is unavailable in workflow- or job-level `env:` blocks
+        # (GH Actions context: `runner.*` is step-scoped). Writing to
+        # `$GITHUB_ENV` here exports it to every subsequent step in this job,
+        # including the rust-toolchain composite action and rust-cache.
+        run: echo "CARGO_HOME=/tmp/cargo-mockforge-e2e-${{ runner.name }}" >> "$GITHUB_ENV"
+
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -86,6 +94,8 @@ jobs:
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
+        with:
+          env-vars: "CARGO_HOME"
 
       - name: Build registry-server
         # Retry once under shared-runner resource pressure, same as the sibling workflow.

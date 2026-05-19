@@ -16,9 +16,6 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # Isolate cargo state from `/home/actions/.cargo` (shared with 7
-  # sibling runners). See integration-tests.yml for the full rationale.
-  CARGO_HOME: /tmp/cargo-mockforge-${{ github.run_id }}
   CARGO_BUILD_JOBS: "4"
   RUSTUP_TOOLCHAIN: stable
   # Reality level for mock testing (1-5, default: 3)
@@ -47,6 +44,13 @@ jobs:
           - stable
 
     steps:
+    - name: Set per-runner CARGO_HOME
+      # `runner.name` is unavailable in workflow- or job-level `env:` blocks
+      # (GH Actions context: `runner.*` is step-scoped). Writing to
+      # `$GITHUB_ENV` here exports it to every subsequent step in this job,
+      # including the rust-toolchain composite action and rust-cache.
+      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
     - name: Checkout repository
       uses: actions/checkout@v6
 
@@ -66,6 +70,8 @@ jobs:
     # Swatinem/rust-cache@v2 below covers the same use case (target/ caching).
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
+      with:
+        env-vars: "CARGO_HOME"
 
     - name: Check formatting
       run: cargo fmt --all -- --check
@@ -95,6 +101,13 @@ jobs:
     runs-on: [self-hosted, linux, x64, rust]
 
     steps:
+      - name: Set per-runner CARGO_HOME
+        # `runner.name` is unavailable in workflow- or job-level `env:` blocks
+        # (GH Actions context: `runner.*` is step-scoped). Writing to
+        # `$GITHUB_ENV` here exports it to every subsequent step in this job,
+        # including the rust-toolchain composite action and rust-cache.
+        run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
       - name: Checkout code
         uses: actions/checkout@v6
 
@@ -147,6 +160,13 @@ jobs:
     env:
       CARGO_INCREMENTAL: "0"
     steps:
+    - name: Set per-runner CARGO_HOME
+      # `runner.name` is unavailable in workflow- or job-level `env:` blocks
+      # (GH Actions context: `runner.*` is step-scoped). Writing to
+      # `$GITHUB_ENV` here exports it to every subsequent step in this job,
+      # including the rust-toolchain composite action and rust-cache.
+      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
     - name: Checkout repository
       uses: actions/checkout@v6
 
@@ -158,6 +178,8 @@ jobs:
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
+      with:
+        env-vars: "CARGO_HOME"
 
     - name: Run warning gate
       run: bash scripts/lint-warning-gate.sh
@@ -169,6 +191,13 @@ jobs:
     env:
       CARGO_INCREMENTAL: "0"
     steps:
+    - name: Set per-runner CARGO_HOME
+      # `runner.name` is unavailable in workflow- or job-level `env:` blocks
+      # (GH Actions context: `runner.*` is step-scoped). Writing to
+      # `$GITHUB_ENV` here exports it to every subsequent step in this job,
+      # including the rust-toolchain composite action and rust-cache.
+      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
     - name: Checkout repository
       uses: actions/checkout@v6
 
@@ -180,6 +209,8 @@ jobs:
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
+      with:
+        env-vars: "CARGO_HOME"
 
     - name: Run ratchet preview
       run: bash scripts/lint-warning-ratchet-preview.sh
@@ -188,6 +219,13 @@ jobs:
     name: Security Audit
     runs-on: [self-hosted, linux, x64, rust]
     steps:
+    - name: Set per-runner CARGO_HOME
+      # `runner.name` is unavailable in workflow- or job-level `env:` blocks
+      # (GH Actions context: `runner.*` is step-scoped). Writing to
+      # `$GITHUB_ENV` here exports it to every subsequent step in this job,
+      # including the rust-toolchain composite action and rust-cache.
+      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
     - name: Checkout repository
       uses: actions/checkout@v6
 
@@ -261,6 +299,13 @@ jobs:
     # trend on main; if a PR needs per-branch coverage, use workflow_dispatch.
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
     steps:
+    - name: Set per-runner CARGO_HOME
+      # `runner.name` is unavailable in workflow- or job-level `env:` blocks
+      # (GH Actions context: `runner.*` is step-scoped). Writing to
+      # `$GITHUB_ENV` here exports it to every subsequent step in this job,
+      # including the rust-toolchain composite action and rust-cache.
+      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
     - name: Checkout repository
       uses: actions/checkout@v6
 
@@ -276,6 +321,8 @@ jobs:
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
+      with:
+        env-vars: "CARGO_HOME"
 
     - name: Generate coverage report
       run: cargo llvm-cov --workspace --exclude mockforge-desktop --lcov --output-path lcov.info
@@ -292,6 +339,13 @@ jobs:
     env:
       CARGO_INCREMENTAL: "0"
     steps:
+    - name: Set per-runner CARGO_HOME
+      # `runner.name` is unavailable in workflow- or job-level `env:` blocks
+      # (GH Actions context: `runner.*` is step-scoped). Writing to
+      # `$GITHUB_ENV` here exports it to every subsequent step in this job,
+      # including the rust-toolchain composite action and rust-cache.
+      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
     - name: Checkout repository
       uses: actions/checkout@v6
 
@@ -305,6 +359,8 @@ jobs:
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
+      with:
+        env-vars: "CARGO_HOME"
 
     - name: Check MSRV compatibility
       run: |
@@ -315,6 +371,13 @@ jobs:
     name: Spell Check
     runs-on: [self-hosted, linux, x64, rust]
     steps:
+    - name: Set per-runner CARGO_HOME
+      # `runner.name` is unavailable in workflow- or job-level `env:` blocks
+      # (GH Actions context: `runner.*` is step-scoped). Writing to
+      # `$GITHUB_ENV` here exports it to every subsequent step in this job,
+      # including the rust-toolchain composite action and rust-cache.
+      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
     - name: Checkout repository
       uses: actions/checkout@v6
 
@@ -326,6 +389,13 @@ jobs:
     runs-on: [self-hosted, linux, x64, rust]
     if: github.event_name == 'pull_request'
     steps:
+    - name: Set per-runner CARGO_HOME
+      # `runner.name` is unavailable in workflow- or job-level `env:` blocks
+      # (GH Actions context: `runner.*` is step-scoped). Writing to
+      # `$GITHUB_ENV` here exports it to every subsequent step in this job,
+      # including the rust-toolchain composite action and rust-cache.
+      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
     - name: Checkout repository
       uses: actions/checkout@v6
       with:
@@ -380,6 +450,13 @@ jobs:
             name: windows-x64
 
     steps:
+    - name: Set per-runner CARGO_HOME
+      # `runner.name` is unavailable in workflow- or job-level `env:` blocks
+      # (GH Actions context: `runner.*` is step-scoped). Writing to
+      # `$GITHUB_ENV` here exports it to every subsequent step in this job,
+      # including the rust-toolchain composite action and rust-cache.
+      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
     - name: Checkout repository
       uses: actions/checkout@v6
       with:
@@ -441,6 +518,7 @@ jobs:
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
       with:
+        env-vars: "CARGO_HOME"
         key: ${{ matrix.target }}
 
     - name: Build binary
@@ -482,6 +560,13 @@ jobs:
     permissions:
       contents: write
     steps:
+    - name: Set per-runner CARGO_HOME
+      # `runner.name` is unavailable in workflow- or job-level `env:` blocks
+      # (GH Actions context: `runner.*` is step-scoped). Writing to
+      # `$GITHUB_ENV` here exports it to every subsequent step in this job,
+      # including the rust-toolchain composite action and rust-cache.
+      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
     - name: Checkout repository
       uses: actions/checkout@v6
 

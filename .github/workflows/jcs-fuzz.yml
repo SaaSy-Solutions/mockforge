@@ -60,6 +60,7 @@ jobs:
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
         with:
+          env-vars: "CARGO_HOME"
           key: jcs-fuzz
 
       # Compile separately so that infrastructure failures (linker

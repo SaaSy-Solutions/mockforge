@@ -39,9 +39,6 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   CARGO_BUILD_JOBS: "4"
-  # Isolate cargo state from `/home/actions/.cargo` (shared with 7
-  # sibling runners). See integration-tests.yml for the full rationale.
-  CARGO_HOME: /tmp/cargo-mockforge-${{ github.run_id }}
   RUSTUP_TOOLCHAIN: stable
 
 jobs:
@@ -53,6 +50,13 @@ jobs:
       pull-requests: write
 
     steps:
+      - name: Set per-runner CARGO_HOME
+        # `runner.name` is unavailable in workflow- or job-level `env:` blocks
+        # (GH Actions context: `runner.*` is step-scoped). Writing to
+        # `$GITHUB_ENV` here exports it to every subsequent step in this job,
+        # including the rust-toolchain composite action and rust-cache.
+        run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
       - name: Checkout code
         uses: actions/checkout@v6
 

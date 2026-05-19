@@ -61,6 +61,8 @@ jobs:
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
+      with:
+        env-vars: "CARGO_HOME"
 
     # mockforge-cli's default features do NOT include `ws`/`grpc`/`mqtt` (see
     # crates/mockforge-cli/Cargo.toml). The mockforge-integration-tests crate
@@ -130,6 +132,8 @@ jobs:
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
+      with:
+        env-vars: "CARGO_HOME"
 
     - name: Publish crates
       # Delegates to scripts/publish-crates.sh, which:
