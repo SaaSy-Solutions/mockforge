@@ -105,7 +105,7 @@ pub struct ContractDiffAnalyzer {
 
 impl ContractDiffAnalyzer {
     /// Create a new contract diff analyzer
-    pub fn new(config: ContractDiffConfig) -> crate::Result<Self> {
+    pub fn new(config: ContractDiffConfig) -> mockforge_foundation::Result<Self> {
         let diff_analyzer = DiffAnalyzer::new(config.clone());
         let recommendation_engine = RecommendationEngine::new(config.clone())?;
         let semantic_analyzer = SemanticAnalyzer::new(config.clone())?;
@@ -125,7 +125,7 @@ impl ContractDiffAnalyzer {
         &self,
         request: &CapturedRequest,
         spec: &crate::openapi::OpenApiSpec,
-    ) -> crate::Result<ContractDiffResult> {
+    ) -> mockforge_foundation::Result<ContractDiffResult> {
         // Step 1: Perform structural diff analysis
         let mut result = self.diff_analyzer.analyze_request(request, spec).await?;
 
@@ -192,7 +192,7 @@ impl ContractDiffAnalyzer {
         after_spec: &crate::openapi::OpenApiSpec,
         endpoint_path: &str,
         method: &str,
-    ) -> crate::Result<Option<SemanticDriftResult>> {
+    ) -> mockforge_foundation::Result<Option<SemanticDriftResult>> {
         // Layer 2: Semantic analysis
         if self.config.semantic_analysis_enabled {
             let semantic_result = self

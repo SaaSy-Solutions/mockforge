@@ -7,7 +7,7 @@
 //! - Large payload sizes
 
 use super::types::{ThreatCategory, ThreatFinding, ThreatLevel};
-use crate::openapi::OpenApiSpec;
+use mockforge_openapi::OpenApiSpec;
 use openapiv3::ReferenceOr;
 use std::collections::HashMap;
 

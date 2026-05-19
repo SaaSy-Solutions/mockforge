@@ -7,7 +7,7 @@ use super::types::{ContractDiffConfig, Mismatch, Recommendation};
 use crate::intelligent_behavior::config::BehaviorModelConfig;
 use crate::intelligent_behavior::llm_client::LlmClient;
 use crate::intelligent_behavior::types::LlmGenerationRequest;
-use crate::Result;
+use mockforge_foundation::Result;
 use std::collections::HashMap;
 
 /// AI-powered recommendation engine
@@ -94,7 +94,7 @@ impl RecommendationEngine {
         let llm_client = self
             .llm_client
             .as_ref()
-            .ok_or_else(|| crate::Error::internal("LLM client not initialized"))?;
+            .ok_or_else(|| mockforge_foundation::Error::internal("LLM client not initialized"))?;
 
         // Build prompt for LLM
         let prompt = self.build_recommendation_prompt(mismatches, context);

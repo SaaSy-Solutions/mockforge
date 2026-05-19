@@ -2,6 +2,12 @@
 
 ### Changed
 
+- **[Architecture]** `threat_modeling` (security analyzers) moved out of `mockforge-core::contract_drift` into `mockforge-intelligence` (Issue #562 phase 3)
+  - 8 files / ~1,300 LOC: `dos_analyzer`, `error_analyzer`, `pii_detector`, `remediation_generator`, `schema_analyzer`, `threat_analyzer`, `types`, `mod`.
+  - Foreign deps swapped to their home crates: `crate::Result` → `mockforge_foundation::Result`, `crate::openapi::OpenApiSpec` → `mockforge_openapi::OpenApiSpec`. `crate::intelligent_behavior::*` stays as `crate::intelligent_behavior::*` because it's now a sibling module in `mockforge-intelligence` (phase 2 moved it there).
+  - Backwards compat: `mockforge_core::contract_drift::threat_modeling` is preserved as `pub use mockforge_intelligence::threat_modeling;` from `mockforge-core/src/contract_drift/mod.rs`. External callers (`mockforge-http`, `mockforge-cli`) continue to import via the `mockforge_core::contract_drift::threat_modeling` path — zero caller-side churn.
+  - `ai_contract_diff` was scoped out of this phase because its `DiffAnalyzer::analyze_with_recommendations` calls `crate::pillar_tracking::record_ai_usage`, which is an analytics global living in `mockforge-core` and would either need re-homing or a callback-injection refactor to move cleanly. Documented as a phase-4 prerequisite in `mockforge-intelligence/src/lib.rs`.
+
 - **[Architecture]** `intelligent_behavior` (AI cluster leaf) moved out of `mockforge-core` into `mockforge-intelligence` (Issue #562 phase 2)
   - With the cycle broken in phase 1, the leaf of the AI cluster could move. `intelligent_behavior`'s only foreign deps were `mockforge_core::Result` (now `mockforge_foundation::Result`) and `mockforge_core::openapi::OpenApiSpec` / `openapi_routes::OpenApiRouteRegistry` / `openapi::response::ResponseGenerator` — all of which already live in `mockforge-openapi` (the core paths were just re-exports). `mockforge-openapi` itself depends only on `mockforge-foundation`, so the migration stays cycle-safe.
   - 24 files (~7,800 LOC) moved: `behavior`, `cache`, `condition_evaluator`, `config`, `context`, `embedding_client`, `history`, `llm_client`, `memory`, `mockai`, `mutation_analyzer`, `openapi_generator`, `pagination_intelligence`, `relationship_inference`, `rule_generator`, `rules`, `session`, `spec_suggestion`, `sub_scenario`, `types`, `validation_generator`, `visual_layout`.

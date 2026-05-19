@@ -4,7 +4,7 @@
 //! by analyzing field names, descriptions, and schema patterns.
 
 use super::types::{ThreatCategory, ThreatFinding, ThreatLevel};
-use crate::openapi::OpenApiSpec;
+use mockforge_openapi::OpenApiSpec;
 use regex::Regex;
 use std::collections::HashMap;
 
