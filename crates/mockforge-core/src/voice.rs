@@ -50,3 +50,10 @@ pub use mockforge_intelligence::voice::*;
 pub use mockforge_intelligence::voice::{
     command_parser, conversation, hook_transpiler, spec_generator, workspace_scenario_generator,
 };
+
+// `voice_workspace` was previously a sub-module of `voice` (path:
+// `mockforge_core::voice::workspace_builder`). Phase 7 promoted it to a
+// top-level core module, but the integration test
+// `tests/tests/voice_workspace_creation.rs` still imports via the old
+// path. Alias for caller backwards compat.
+pub use crate::voice_workspace as workspace_builder;
