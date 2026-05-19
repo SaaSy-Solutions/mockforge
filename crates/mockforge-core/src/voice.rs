@@ -9,6 +9,32 @@
 //! multi_tenant, scenarios, workspace, contract_drift, and reality_continuum —
 //! all still core-only.
 //!
+//! ## Why `voice_workspace` is not extracted (do not attempt)
+//!
+//! It is tempting to "finish the job" and move `voice_workspace` into
+//! `mockforge-intelligence` too. **Do not.** It would introduce a real
+//! dependency cycle:
+//!
+//! ```text
+//! mockforge_intelligence::voice::voice_workspace
+//!   → mockforge_core::multi_tenant::MultiTenantWorkspaceRegistry
+//!     → mockforge_core::workspace
+//!     → mockforge_core::contract_drift
+//!       → mockforge_intelligence::threat_modeling   (re-exported from core)
+//! ```
+//!
+//! The five blocker modules (`multi_tenant`, `workspace`, `contract_drift`,
+//! `reality_continuum::engine`, `scenarios`) are **domain primitives**, not
+//! AI features — they belong with the rest of core. Moving the live
+//! `MultiTenantWorkspaceRegistry` engine (not just its data types) is what
+//! `voice_workspace` actually needs, so promoting POD types to
+//! `mockforge-foundation` does not help either.
+//!
+//! `mockforge-intelligence` does **not** consume `voice_workspace` — only
+//! `mockforge-cli/voice_commands.rs` and `mockforge-ui/handlers/voice.rs` do.
+//! The cycle is already broken; this file's location is a feature, not a
+//! debt. Issue #562 is complete.
+//!
 //! This shim re-exports both halves so existing
 //! `mockforge_core::voice::{VoiceCommandParser, WorkspaceBuilder, ...}` call
 //! sites keep working unchanged.

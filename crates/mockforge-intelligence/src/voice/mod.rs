@@ -18,6 +18,17 @@
 //! depends on `multi_tenant`, `scenarios`, `workspace`, `contract_drift`, and
 //! `reality_continuum` — all still core-only. The `mockforge_core::voice::*`
 //! shim consolidates both halves so callers see one unified public API.
+//!
+//! ## Do not extract `voice_workspace` into this crate
+//!
+//! See the matching rationale in `mockforge_core::voice` (the shim) for the
+//! full cycle diagram. Short version: `voice_workspace` calls the live
+//! `MultiTenantWorkspaceRegistry` engine, and the 5 modules it depends on are
+//! domain primitives that belong in core. Importing them here would invert
+//! the established `core → intelligence` dep direction
+//! (already in use via `contract_drift` re-exporting `threat_modeling`) and
+//! reintroduce the cycle that Issue #562 phase 1 broke. Issue #562 is
+//! complete; the location of `voice_workspace` is a feature, not debt.
 
 pub mod command_parser;
 pub mod conversation;

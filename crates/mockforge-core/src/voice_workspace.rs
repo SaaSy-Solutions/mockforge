@@ -7,6 +7,16 @@
 //! - Behavioral scenario generation
 //! - Reality continuum configuration
 //! - Drift budget configuration
+//!
+//! ## Why this file lives in `mockforge-core`, not `mockforge-intelligence`
+//!
+//! It's the orchestration half of `voice`, and `voice`'s 6 leaf files moved
+//! to `mockforge-intelligence` during Issue #562 phase 7. This 7th file
+//! depends on 5 core-only domain primitives (`multi_tenant`, `workspace`,
+//! `contract_drift`, `reality_continuum`, `scenarios::types`) — moving it
+//! into intelligence would introduce a real dep cycle (intelligence →
+//! core → intelligence via `threat_modeling`). See
+//! `crates/mockforge-core/src/voice.rs` for the full diagram. Don't move it.
 
 use crate::contract_drift::{DriftBudget, DriftBudgetConfig};
 use crate::multi_tenant::MultiTenantWorkspaceRegistry;
