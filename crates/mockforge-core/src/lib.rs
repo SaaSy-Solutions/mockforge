@@ -218,19 +218,23 @@
 
 #[cfg(feature = "advanced")]
 pub mod ab_testing;
-#[cfg(feature = "ai")]
-// Data types moved to mockforge-foundation (A15/A19);
-// ContractDiffAnalyzer stays here as it is LLM-bound.
-pub mod ai_contract_diff;
+/// `ai_contract_diff` lives in `mockforge_intelligence::ai_contract_diff`
+/// (Issue #562 phase 4). Re-exported here so existing
+/// `crate::ai_contract_diff::*` call sites inside core (`ai_studio` /
+/// `contract_diff_handler`, `request_capture`) and external
+/// `mockforge_core::ai_contract_diff::*` consumers (mockforge-http,
+/// mockforge-cli) keep compiling unchanged.
+pub use mockforge_intelligence::ai_contract_diff;
 #[cfg(feature = "ai")]
 #[deprecated(note = "Will be extracted to mockforge-intelligence crate")]
 pub mod ai_response;
-/// AI Studio - Unified AI Copilot for all AI-powered features.
-/// Data types moved to mockforge-foundation (A20); engines
-/// (ApiCritiqueEngine, SystemGenerator, BehavioralSimulator,
-/// ArtifactFreezer) stay here as they hold LlmClient + do I/O.
-#[cfg(feature = "ai")]
-pub mod ai_studio;
+/// `ai_studio` lives in `mockforge_intelligence::ai_studio` (Issue #562
+/// phase 8 — the final AI cluster module). Re-exported here so existing
+/// `mockforge_core::ai_studio::*` call sites (mockforge-http handlers,
+/// mockforge-ui handlers) keep compiling unchanged. The whole-module move
+/// was unblocked by phases 5–7 extracting failure_analysis,
+/// contract_validation, reality, and voice (leaves).
+pub use mockforge_intelligence::ai_studio;
 /// Behavioral cloning of backends - learn from recorded traffic to create realistic mock behavior
 #[cfg(feature = "ai")]
 #[deprecated(note = "Will be extracted to mockforge-intelligence crate")]
@@ -241,7 +245,11 @@ pub mod behavioral_economics;
 #[allow(dead_code)]
 pub(crate) mod cache;
 pub mod chain_execution;
-pub mod chaos_utilities;
+/// `chaos_utilities` moved to `mockforge_foundation::chaos_utilities`
+/// (Issue #562 phase 6) so `mockforge_intelligence::reality` can hold
+/// `ChaosConfig` fields without taking a dep on core. Re-exported here
+/// for backwards compat.
+pub use mockforge_foundation::chaos_utilities;
 #[cfg(feature = "advanced")]
 #[deprecated(note = "Will be extracted to mockforge-import crate")]
 pub mod codegen;
@@ -267,9 +275,11 @@ pub mod consumer_contracts;
 /// here because they depend on OpenApiSpec and jsonschema validators.
 pub mod contract_drift;
 #[cfg(feature = "contracts")]
-/// Contract validation for ensuring API contracts match specifications.
-/// Depends on OpenApiSpec; stays in core.
-pub mod contract_validation;
+/// `contract_validation` lives in `mockforge_intelligence::contract_validation`
+/// (Issue #562 phase 5). Re-exported here so existing
+/// `mockforge_core::contract_validation::*` call sites
+/// (mockforge-cli, in-core ai_studio) keep compiling unchanged.
+pub use mockforge_intelligence::contract_validation;
 /// Contract webhooks for notifying external systems about contract changes
 #[cfg(feature = "contracts")]
 #[allow(dead_code)]
@@ -291,10 +301,15 @@ pub mod drift_gitops;
 // Encryption utility; stays in core (small, widely used).
 pub mod encryption;
 pub mod error;
-pub mod failure_analysis;
 /// `failure_injection` was promoted to [`mockforge_foundation::failure_injection`];
 /// re-exported here for backwards compatibility.
 pub(crate) use mockforge_foundation::failure_injection;
+/// `failure_analysis` lives in `mockforge_intelligence::failure_analysis`
+/// (Issue #562 phase 5). Re-exported here so existing
+/// `mockforge_core::failure_analysis::*` call sites
+/// (mockforge-ui handlers, in-core workspace/request + ai_studio/debug_analyzer)
+/// keep compiling unchanged.
+pub use mockforge_intelligence::failure_analysis;
 pub mod fidelity;
 /// Generic fixture loading utilities shared across protocol crates
 pub mod fixture_store;
@@ -310,13 +325,17 @@ pub mod graph;
 pub mod import;
 #[cfg(feature = "contracts")]
 pub mod incidents;
-#[cfg(feature = "ai")]
-// Data types moved to mockforge-foundation (A12/A17);
-// MockAI, RuleGenerator, OpenApiSpecGenerator stay here (LLM-bound).
-pub mod intelligent_behavior;
 /// `latency` was promoted to [`mockforge_foundation::latency`]; re-exported
 /// here so the legacy `mockforge_core::latency::*` path continues to resolve.
 pub(crate) use mockforge_foundation::latency;
+/// `intelligent_behavior` lives in `mockforge_intelligence::intelligent_behavior`
+/// (Issue #562 phase 2). Re-exported here so existing
+/// `crate::intelligent_behavior::*` call sites inside core (voice, reality,
+/// graph, ai_contract_diff, ai_studio, contract_drift, failure_analysis) and
+/// external `mockforge_core::intelligent_behavior::*` consumers keep
+/// compiling without churn. Data types had already been promoted to
+/// `mockforge-foundation` (A12/A17); this PR moved the LLM-bound engines too.
+pub use mockforge_intelligence::intelligent_behavior;
 pub mod lifecycle;
 #[cfg(feature = "advanced")]
 // Config types moved to mockforge-foundation (A14);
@@ -340,10 +359,15 @@ pub(crate) use mockforge_openapi::openapi_routes;
 pub mod output_control;
 pub mod overrides;
 pub mod performance;
-/// Pillar usage tracking utilities
-pub mod pillar_tracking;
-/// Pillar metadata system for compile-time pillar tagging
-pub mod pillars;
+/// `pillar_tracking` and `pillars` were promoted to
+/// [`mockforge_foundation::pillar_tracking`] and
+/// [`mockforge_foundation::pillars`] (Issue #562 phase 4) so AI modules
+/// living in `mockforge-intelligence` can record pillar usage without
+/// taking a dep on `mockforge-core`. Re-exported here so existing
+/// `mockforge_core::pillar_tracking::*` and `mockforge_core::pillars::*`
+/// call sites (10+ files: ui, registry-server, scenarios, http, cli,
+/// ai_studio, voice, contract_validation, workspace) keep resolving.
+pub use mockforge_foundation::{pillar_tracking, pillars};
 /// PR generation lives in `mockforge_intelligence::pr_generation` (Issue #562
 /// phase 1); re-exported here so existing `crate::pr_generation::*` call sites
 /// and external users that imported `mockforge_core::pr_generation::*` keep
@@ -357,7 +381,13 @@ pub mod protocol_server;
 /// Import from `mockforge_proxy` instead of `mockforge_core::proxy`.
 #[deprecated(note = "Use mockforge_proxy crate directly")]
 pub mod proxy;
-pub mod reality;
+/// `reality` lives in `mockforge_intelligence::reality` (Issue #562 phase 6).
+/// Re-exported here so existing `mockforge_core::reality::*` call sites
+/// keep compiling unchanged. The `apply_to_config` inherent method moved
+/// to `mockforge_core::reality_apply::apply_reality_to_server_config`
+/// (it pokes at concrete `ServerConfig` sub-structs and belongs in core).
+pub use mockforge_intelligence::reality;
+pub mod reality_apply;
 #[cfg(feature = "advanced")]
 pub mod reality_continuum;
 pub mod record_replay;
@@ -410,8 +440,16 @@ pub mod tls;
 pub mod traffic_shaping;
 pub mod validation;
 pub mod verification;
+/// `voice` was split in Issue #562 phase 7. Six leaf files (command_parser,
+/// conversation, hook_transpiler, spec_generator, workspace_scenario_generator,
+/// mod) moved to `mockforge_intelligence::voice`. `voice_workspace` (formerly
+/// `voice::workspace_builder`) stays here because it depends on multi_tenant,
+/// scenarios, workspace, contract_drift, and reality_continuum — all core-only.
+/// The `voice` shim consolidates both halves so external callers see one API.
 #[cfg(feature = "voice")]
 pub mod voice;
+#[cfg(feature = "voice")]
+pub mod voice_workspace;
 #[cfg(feature = "workspace-mgmt")]
 // Workspace family (Workspace, WorkspaceConfig, WorkspaceRegistry, etc.) —
 // 11k+ LoC surface area. Staying in core; future extraction would need

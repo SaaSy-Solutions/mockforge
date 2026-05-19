@@ -17,14 +17,26 @@ categories = ["development-tools::testing"]
 # `ScenarioDefinition` (the one method that produced one now lives in
 # `mockforge-http::handlers::behavioral_cloning`, the only caller).
 mockforge-foundation = { path = "../mockforge-foundation", default-features = false }
+# `intelligent_behavior` (#562 phase 2) needs `OpenApiSpec`, `ResponseGenerator`,
+# and `OpenApiRouteRegistry`. `mockforge-openapi` is foundation-only, so this
+# dep is cycle-safe — it does NOT pull `mockforge-core` back in.
+mockforge-openapi = { path = "../mockforge-openapi" }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
+dirs = "5.0"
+indexmap = "2.14"
+once_cell = { workspace = true }
+openapiv3 = { workspace = true }
 rand = { workspace = true }
+regex = { workspace = true }
 reqwest = { workspace = true }
 schemars = { version = "0.8", features = ["derive"], optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
+serde_yaml = { workspace = true }
+sha2 = { workspace = true }
+tokio = { workspace = true }
 tracing = { workspace = true }
 urlencoding = { workspace = true }
 uuid = { workspace = true }
@@ -33,6 +45,14 @@ uuid = { workspace = true }
 # Mirrors mockforge-core's `schema` feature so the moved `pr_generation`
 # types still gate their `JsonSchema` derive the same way.
 schema = ["schemars", "mockforge-foundation/schema"]
+# Mirrors mockforge-core's `database` feature so ai_studio's org_controls_db
+# (sqlx-backed) only compiles when the consumer opts in.
+database = ["sqlx"]
+
+[dependencies.sqlx]
+version = "0.8"
+features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid"]
+optional = true
 
 [dev-dependencies]
 mockforge-template-expansion = { path = "../mockforge-template-expansion" }

@@ -14,7 +14,10 @@ pub mod forecasting;
 pub mod grpc_contract;
 pub mod mqtt_kafka_contracts;
 pub mod protocol_contracts;
-pub mod threat_modeling;
+/// `threat_modeling` lives in `mockforge_intelligence::threat_modeling`
+/// (Issue #562 phase 3). Re-exported here so existing
+/// `crate::contract_drift::threat_modeling::*` paths keep resolving.
+pub use mockforge_intelligence::threat_modeling;
 pub mod types;
 pub mod websocket_contract;
 

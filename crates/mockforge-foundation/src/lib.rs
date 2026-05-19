@@ -11,6 +11,7 @@
 
 pub mod ai_response;
 pub mod ai_studio_types;
+pub mod chaos_utilities;
 pub mod clock;
 pub mod contract_diff_types;
 pub mod contract_drift_types;
@@ -21,6 +22,8 @@ pub mod incidents_types;
 pub mod intelligent_behavior;
 pub mod latency;
 pub mod multi_tenant_types;
+pub mod pillar_tracking;
+pub mod pillars;
 pub mod protocol;
 pub mod protocol_contract_types;
 pub mod rate_counters;
