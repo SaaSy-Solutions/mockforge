@@ -51,7 +51,7 @@
 - **[CI][Docker]** Explicit cosign login so signature push to GHCR succeeds (#546)
   - GHCR rejected the unsigned cosign push with 401 after PAT-vs-GITHUB_TOKEN cleanup; cosign now logs in explicitly before push.
 
-## [0.3.137] cloud-parity meta tracker
+### Cloud-parity meta tracker
 
 This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/459) — the cloud-parity meta tracker for the 14 "Local only" nav items. **14 / 14** addressed: 8 shipped end-to-end across prior releases (Graph #460, Virtual Backends #461, Logs #462, Metrics-folded #463, World State #464, Observability #465, Performance-folded #467, Resilience #468), 4 explicitly kept local-only (Proxy Inspector #470, SMTP Mailbox #471, MQTT Broker #472, Kafka Broker #473), 2 land in this release (Time Travel #466, Test Generator #469).
 
