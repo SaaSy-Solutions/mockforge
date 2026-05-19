@@ -228,12 +228,13 @@ pub use mockforge_intelligence::ai_contract_diff;
 #[cfg(feature = "ai")]
 #[deprecated(note = "Will be extracted to mockforge-intelligence crate")]
 pub mod ai_response;
-/// AI Studio - Unified AI Copilot for all AI-powered features.
-/// Data types moved to mockforge-foundation (A20); engines
-/// (ApiCritiqueEngine, SystemGenerator, BehavioralSimulator,
-/// ArtifactFreezer) stay here as they hold LlmClient + do I/O.
-#[cfg(feature = "ai")]
-pub mod ai_studio;
+/// `ai_studio` lives in `mockforge_intelligence::ai_studio` (Issue #562
+/// phase 8 — the final AI cluster module). Re-exported here so existing
+/// `mockforge_core::ai_studio::*` call sites (mockforge-http handlers,
+/// mockforge-ui handlers) keep compiling unchanged. The whole-module move
+/// was unblocked by phases 5–7 extracting failure_analysis,
+/// contract_validation, reality, and voice (leaves).
+pub use mockforge_intelligence::ai_studio;
 /// Behavioral cloning of backends - learn from recorded traffic to create realistic mock behavior
 #[cfg(feature = "ai")]
 #[deprecated(note = "Will be extracted to mockforge-intelligence crate")]

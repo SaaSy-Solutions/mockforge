@@ -5,9 +5,9 @@
 //! authoritative overrides (DB overrides YAML).
 
 use crate::ai_studio::budget_manager::AiFeature;
-use crate::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use mockforge_foundation::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

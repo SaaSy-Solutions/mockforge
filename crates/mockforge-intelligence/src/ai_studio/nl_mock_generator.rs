@@ -8,7 +8,8 @@ use crate::ai_studio::artifact_freezer::{ArtifactFreezer, FreezeMetadata};
 use crate::ai_studio::config::DeterministicModeConfig;
 use crate::intelligent_behavior::IntelligentBehaviorConfig;
 use crate::voice::{command_parser::VoiceCommandParser, spec_generator::VoiceSpecGenerator};
-use crate::{OpenApiSpec, Result};
+use mockforge_foundation::Result;
+use mockforge_openapi::OpenApiSpec;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::hash_map::DefaultHasher;
@@ -151,7 +152,7 @@ impl MockGenerator {
         };
 
         // Record AI pillar usage (ai_generation type=mock)
-        crate::pillar_tracking::record_ai_usage(
+        mockforge_foundation::pillar_tracking::record_ai_usage(
             _workspace_id.map(String::from),
             None,
             "ai_generation",
@@ -210,7 +211,7 @@ impl MockGenerator {
         } else {
             "ai_generation"
         };
-        crate::pillar_tracking::record_ai_usage(
+        mockforge_foundation::pillar_tracking::record_ai_usage(
             None,
             None,
             metric_name,

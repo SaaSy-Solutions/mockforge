@@ -3,8 +3,8 @@
 //! This module provides functionality to freeze AI-generated artifacts into
 //! deterministic YAML/JSON files for version control and reproducible testing.
 
-use crate::Result;
 use chrono::Utc;
+use mockforge_foundation::Result;
 // Data types re-exported from foundation.
 pub use mockforge_foundation::ai_studio_types::{FreezeMetadata, FreezeRequest, FrozenArtifact};
 use serde_json::Value;
@@ -62,7 +62,10 @@ impl ArtifactFreezer {
         // Ensure parent directory exists
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).await.map_err(|e| {
-                crate::Error::io_with_context("create frozen artifacts directory", e.to_string())
+                mockforge_foundation::Error::io_with_context(
+                    "create frozen artifacts directory",
+                    e.to_string(),
+                )
             })?;
         }
 
@@ -114,18 +117,18 @@ impl ArtifactFreezer {
         // Serialize to the requested format
         let content_str = if request.format == "yaml" || request.format == "yml" {
             serde_yaml::to_string(&frozen_content).map_err(|e| {
-                crate::Error::internal(format!("Failed to serialize to YAML: {}", e))
+                mockforge_foundation::Error::internal(format!("Failed to serialize to YAML: {}", e))
             })?
         } else {
             serde_json::to_string_pretty(&frozen_content).map_err(|e| {
-                crate::Error::internal(format!("Failed to serialize to JSON: {}", e))
+                mockforge_foundation::Error::internal(format!("Failed to serialize to JSON: {}", e))
             })?
         };
 
         // Write to file
-        fs::write(&path, content_str)
-            .await
-            .map_err(|e| crate::Error::io_with_context("write frozen artifact", e.to_string()))?;
+        fs::write(&path, content_str).await.map_err(|e| {
+            mockforge_foundation::Error::io_with_context("write frozen artifact", e.to_string())
+        })?;
 
         Ok(FrozenArtifact {
             artifact_type: request.artifact_type.clone(),
@@ -199,17 +202,18 @@ impl ArtifactFreezer {
 
         // Search for matching files
         let mut entries = fs::read_dir(&self.base_dir).await.map_err(|e| {
-            crate::Error::io_with_context("read frozen artifacts directory", e.to_string())
+            mockforge_foundation::Error::io_with_context(
+                "read frozen artifacts directory",
+                e.to_string(),
+            )
         })?;
 
         let mut latest_match: Option<FrozenArtifact> = None;
         let mut latest_time = chrono::DateTime::<Utc>::MIN_UTC;
 
-        while let Some(entry) = entries
-            .next_entry()
-            .await
-            .map_err(|e| crate::Error::io_with_context("read directory entry", e.to_string()))?
-        {
+        while let Some(entry) = entries.next_entry().await.map_err(|e| {
+            mockforge_foundation::Error::io_with_context("read directory entry", e.to_string())
+        })? {
             let path = entry.path();
             if path.is_file() {
                 let file_name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
@@ -224,7 +228,10 @@ impl ArtifactFreezer {
                 if matches {
                     // Try to load the file
                     let content = fs::read_to_string(&path).await.map_err(|e| {
-                        crate::Error::io_with_context("read frozen artifact", e.to_string())
+                        mockforge_foundation::Error::io_with_context(
+                            "read frozen artifact",
+                            e.to_string(),
+                        )
                     })?;
 
                     let content_value: Value = if path.extension().and_then(|e| e.to_str())
@@ -232,11 +239,17 @@ impl ArtifactFreezer {
                         || path.extension().and_then(|e| e.to_str()) == Some("yml")
                     {
                         serde_yaml::from_str(&content).map_err(|e| {
-                            crate::Error::internal(format!("Failed to parse YAML: {}", e))
+                            mockforge_foundation::Error::internal(format!(
+                                "Failed to parse YAML: {}",
+                                e
+                            ))
                         })?
                     } else {
                         serde_json::from_str(&content).map_err(|e| {
-                            crate::Error::internal(format!("Failed to parse JSON: {}", e))
+                            mockforge_foundation::Error::internal(format!(
+                                "Failed to parse JSON: {}",
+                                e
+                            ))
                         })?
                     };
 
