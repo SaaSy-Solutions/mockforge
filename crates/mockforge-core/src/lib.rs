@@ -270,9 +270,11 @@ pub mod consumer_contracts;
 /// here because they depend on OpenApiSpec and jsonschema validators.
 pub mod contract_drift;
 #[cfg(feature = "contracts")]
-/// Contract validation for ensuring API contracts match specifications.
-/// Depends on OpenApiSpec; stays in core.
-pub mod contract_validation;
+/// `contract_validation` lives in `mockforge_intelligence::contract_validation`
+/// (Issue #562 phase 5). Re-exported here so existing
+/// `mockforge_core::contract_validation::*` call sites
+/// (mockforge-cli, in-core ai_studio) keep compiling unchanged.
+pub use mockforge_intelligence::contract_validation;
 /// Contract webhooks for notifying external systems about contract changes
 #[cfg(feature = "contracts")]
 #[allow(dead_code)]
@@ -294,10 +296,15 @@ pub mod drift_gitops;
 // Encryption utility; stays in core (small, widely used).
 pub mod encryption;
 pub mod error;
-pub mod failure_analysis;
 /// `failure_injection` was promoted to [`mockforge_foundation::failure_injection`];
 /// re-exported here for backwards compatibility.
 pub(crate) use mockforge_foundation::failure_injection;
+/// `failure_analysis` lives in `mockforge_intelligence::failure_analysis`
+/// (Issue #562 phase 5). Re-exported here so existing
+/// `mockforge_core::failure_analysis::*` call sites
+/// (mockforge-ui handlers, in-core workspace/request + ai_studio/debug_analyzer)
+/// keep compiling unchanged.
+pub use mockforge_intelligence::failure_analysis;
 pub mod fidelity;
 /// Generic fixture loading utilities shared across protocol crates
 pub mod fixture_store;

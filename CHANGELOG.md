@@ -2,6 +2,11 @@
 
 ### Changed
 
+- **[Architecture]** `contract_validation` + `failure_analysis` moved to `mockforge-intelligence` (Issue #562 phase 5)
+  - Both modules are tiny leaves with near-zero core coupling: `contract_validation.rs` (590 LOC, single file, only `serde` non-internal deps) and `failure_analysis/` (4 files / ~512 LOC, only depends on sibling `intelligent_behavior`). Inline `crate::openapi::OpenApiSpec` and `crate::pillar_tracking::record_contracts_usage` references in `contract_validation` swapped to their home crates (`mockforge_openapi` / `mockforge_foundation::pillar_tracking`).
+  - Backwards compat: `mockforge_core::{contract_validation, failure_analysis}` preserved as `pub use mockforge_intelligence::*;`. Zero churn for 4 external callers (mockforge-ui handlers, mockforge-cli, in-core ai_studio + workspace).
+  - Brings `ai_studio` one step closer to a clean whole-module move: 5 dirty sub-files → 3 dirty (debug_context + debug_context_integrator still need `reality`; nl_mock_generator still needs `voice`).
+
 - **[Architecture]** `ai_contract_diff` moved to `mockforge-intelligence`, `pillars` + `pillar_tracking` re-homed to `mockforge-foundation` (Issue #562 phase 4)
   - Phase 3 deferred `ai_contract_diff` because its `DiffAnalyzer::analyze_with_recommendations` called `crate::pillar_tracking::record_ai_usage` — an analytics global living in `mockforge-core` that would have re-introduced an intelligence → core dep. Phase 4 unblocks it by promoting `pillars.rs` (568 LOC) and `pillar_tracking.rs` (207 LOC) to `mockforge-foundation`. Both files were already self-contained (only depend on `serde`/`chrono`/`once_cell`/`async_trait`/`tracing`), so the move is mechanical.
   - With pillar_tracking in foundation, `ai_contract_diff` (7 files / ~2,380 LOC) moves cleanly to `mockforge-intelligence`. The single `pillar_tracking::record_ai_usage("ai_generation", {"type":"contract_diff",...})` call site is preserved — analytics dashboards keep receiving contract-diff usage events unchanged.

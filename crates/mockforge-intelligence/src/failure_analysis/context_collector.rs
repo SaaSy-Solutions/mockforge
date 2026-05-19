@@ -3,8 +3,8 @@
 //! Collects comprehensive context about a request failure, including
 //! active configurations, rules, and execution details.
 
-use crate::Result;
 use chrono::Utc;
+use mockforge_foundation::Result;
 use serde_json::Value;
 use std::collections::HashMap;
 

@@ -188,14 +188,14 @@ impl ContractValidator {
     /// Validate OpenAPI spec against live API
     pub async fn validate_openapi(
         &self,
-        spec: &crate::openapi::OpenApiSpec,
+        spec: &mockforge_openapi::OpenApiSpec,
         base_url: &str,
     ) -> ValidationResult {
         let mut result = ValidationResult::new();
 
         // Record the active validation mode for the Contracts pillar dashboard.
         let mode = if self.strict_mode { "enforce" } else { "warn" };
-        crate::pillar_tracking::record_contracts_usage(
+        mockforge_foundation::pillar_tracking::record_contracts_usage(
             None,
             None,
             "validation_mode",
@@ -309,8 +309,8 @@ impl ContractValidator {
     /// Compare two OpenAPI specs and detect breaking changes
     pub fn compare_specs(
         &self,
-        old_spec: &crate::openapi::OpenApiSpec,
-        new_spec: &crate::openapi::OpenApiSpec,
+        old_spec: &mockforge_openapi::OpenApiSpec,
+        new_spec: &mockforge_openapi::OpenApiSpec,
     ) -> ValidationResult {
         let mut result = ValidationResult::new();
 
