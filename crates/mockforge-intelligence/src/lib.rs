@@ -21,14 +21,19 @@
 //!   error / threat / remediation generators) for the contract-drift pillar
 //!   (Issue #562 phase 3). Depends only on sibling `intelligent_behavior` +
 //!   `mockforge-openapi` + `mockforge-foundation`.
+//! - `ai_contract_diff`: LLM-assisted OpenAPI diff with semantic analysis,
+//!   confidence scoring, recommendations, and correction proposals (Issue #562
+//!   phase 4). Records `ai_generation` pillar usage via the now-foundation
+//!   `pillar_tracking` global, so the analytics dashboard keeps reflecting
+//!   contract-diff activity unchanged.
 //!
 //! Still in `mockforge-core` and worth migrating in follow-ups:
-//! - `ai_contract_diff`: pulls `crate::pillar_tracking::record_ai_usage`
-//!   (analytics global). Needs the tracking hook re-homed or injected before
-//!   it can move cleanly.
 //! - `ai_studio`: pulls `reality`, `voice`, `failure_analysis`, and
 //!   `contract_validation` — all still core-only. Blocked until those move.
+//!   12 of 17 sub-files are otherwise clean (only depend on `intelligent_behavior`
+//!   and `ai_contract_diff`, both now in this crate).
 
+pub mod ai_contract_diff;
 pub mod ai_response;
 pub mod behavioral_cloning;
 pub mod intelligent_behavior;

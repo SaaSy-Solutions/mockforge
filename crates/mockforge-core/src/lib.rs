@@ -218,10 +218,13 @@
 
 #[cfg(feature = "advanced")]
 pub mod ab_testing;
-#[cfg(feature = "ai")]
-// Data types moved to mockforge-foundation (A15/A19);
-// ContractDiffAnalyzer stays here as it is LLM-bound.
-pub mod ai_contract_diff;
+/// `ai_contract_diff` lives in `mockforge_intelligence::ai_contract_diff`
+/// (Issue #562 phase 4). Re-exported here so existing
+/// `crate::ai_contract_diff::*` call sites inside core (`ai_studio` /
+/// `contract_diff_handler`, `request_capture`) and external
+/// `mockforge_core::ai_contract_diff::*` consumers (mockforge-http,
+/// mockforge-cli) keep compiling unchanged.
+pub use mockforge_intelligence::ai_contract_diff;
 #[cfg(feature = "ai")]
 #[deprecated(note = "Will be extracted to mockforge-intelligence crate")]
 pub mod ai_response;
@@ -344,10 +347,15 @@ pub(crate) use mockforge_openapi::openapi_routes;
 pub mod output_control;
 pub mod overrides;
 pub mod performance;
-/// Pillar usage tracking utilities
-pub mod pillar_tracking;
-/// Pillar metadata system for compile-time pillar tagging
-pub mod pillars;
+/// `pillar_tracking` and `pillars` were promoted to
+/// [`mockforge_foundation::pillar_tracking`] and
+/// [`mockforge_foundation::pillars`] (Issue #562 phase 4) so AI modules
+/// living in `mockforge-intelligence` can record pillar usage without
+/// taking a dep on `mockforge-core`. Re-exported here so existing
+/// `mockforge_core::pillar_tracking::*` and `mockforge_core::pillars::*`
+/// call sites (10+ files: ui, registry-server, scenarios, http, cli,
+/// ai_studio, voice, contract_validation, workspace) keep resolving.
+pub use mockforge_foundation::{pillar_tracking, pillars};
 /// PR generation lives in `mockforge_intelligence::pr_generation` (Issue #562
 /// phase 1); re-exported here so existing `crate::pr_generation::*` call sites
 /// and external users that imported `mockforge_core::pr_generation::*` keep

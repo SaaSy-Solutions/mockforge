@@ -8129,6 +8129,7 @@ dependencies = [
  "async-trait",
  "chrono",
  "mockforge-template-expansion",
+ "once_cell",
  "rand 0.9.4",
  "regex",
  "reqwest 0.12.28",
@@ -8139,6 +8140,7 @@ dependencies = [
  "serde_yaml",
  "thiserror 2.0.18",
  "tokio",
+ "tracing",
  "url",
  "uuid",
 ]

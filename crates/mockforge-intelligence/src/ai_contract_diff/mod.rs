@@ -124,7 +124,7 @@ impl ContractDiffAnalyzer {
     pub async fn analyze(
         &self,
         request: &CapturedRequest,
-        spec: &crate::openapi::OpenApiSpec,
+        spec: &mockforge_openapi::OpenApiSpec,
     ) -> mockforge_foundation::Result<ContractDiffResult> {
         // Step 1: Perform structural diff analysis
         let mut result = self.diff_analyzer.analyze_request(request, spec).await?;
@@ -166,7 +166,7 @@ impl ContractDiffAnalyzer {
         result.confidence = ConfidenceScorer::calculate_overall_confidence(&result.mismatches);
 
         // Record AI pillar usage (ai_generation type=contract_diff) so the dashboard reflects contract-diff activity.
-        crate::pillar_tracking::record_ai_usage(
+        mockforge_foundation::pillar_tracking::record_ai_usage(
             None,
             None,
             "ai_generation",
@@ -188,8 +188,8 @@ impl ContractDiffAnalyzer {
     /// to detect both structural and meaning changes between contract versions.
     pub async fn compare_specs(
         &self,
-        before_spec: &crate::openapi::OpenApiSpec,
-        after_spec: &crate::openapi::OpenApiSpec,
+        before_spec: &mockforge_openapi::OpenApiSpec,
+        after_spec: &mockforge_openapi::OpenApiSpec,
         endpoint_path: &str,
         method: &str,
     ) -> mockforge_foundation::Result<Option<SemanticDriftResult>> {
