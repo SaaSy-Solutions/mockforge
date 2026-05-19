@@ -71,6 +71,7 @@ CRATES=(
   mockforge-plugin-registry
   mockforge-registry-core
   mockforge-security-core
+  mockforge-platform-signing
   mockforge-template-expansion
   mockforge-tracing
   mockforge-tui
