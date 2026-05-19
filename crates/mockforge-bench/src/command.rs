@@ -423,18 +423,38 @@ impl BenchCommand {
         // executor, k6 needs roughly `rps × avg_request_seconds` VUs to keep
         // up; if `--vus` is too low it can't sustain the rate. Warn pre-flight
         // so users know to bump `--vus` rather than chase the warning.
+        //
+        // Round 8 (#79): the static 100ms heuristic was wrong for fast targets
+        // (~2ms latency). Probe the actual target first to measure baseline
+        // latency, then derive a more accurate sizing recommendation. Fall
+        // back to the 100ms heuristic only when the probe can't reach the
+        // target (auth-gated endpoints, strict WAFs, etc).
         if let Some(rps) = self.target_rps {
-            // Rule of thumb: at ~100ms avg latency, 1 VU sustains ~10 req/s.
-            // If `--vus * 10 < --rps`, the configured VU pool likely can't
-            // drive the requested rate end-to-end and k6 will warn.
-            if self.vus.saturating_mul(10) < rps {
+            let probe =
+                crate::preflight::probe_target_latency(&self.target, 3, self.skip_tls_verify).await;
+
+            let (required_vus, basis) = match probe {
+                Some(p) => (
+                    p.required_vus(rps),
+                    format!("avg {:.1}ms (measured)", p.avg_latency.as_secs_f64() * 1000.0),
+                ),
+                None => (rps.div_ceil(10), "~100ms (default — probe failed)".to_string()),
+            };
+
+            if self.vus < required_vus {
                 TerminalReporter::print_warning(&format!(
-                    "--vus {} may be insufficient for --rps {}. k6 needs roughly \
-                     rps × avg_request_seconds VUs to sustain the rate; bump --vus \
-                     (e.g. --vus {}) if you see \"Insufficient VUs\" warnings.",
+                    "--vus {} may be insufficient for --rps {} (baseline latency {}). \
+                     k6's constant-arrival-rate needs ≈ rps × latency_secs VUs to sustain \
+                     the rate; bump --vus to ~{} if you see \"Insufficient VUs\" warnings.",
                     self.vus,
                     rps,
-                    rps.div_ceil(10).max(self.vus + 1),
+                    basis,
+                    required_vus.max(self.vus + 1),
+                ));
+            } else if probe.is_some() {
+                TerminalReporter::print_progress(&format!(
+                    "Pre-flight probe: target latency {} — --vus {} is sufficient for --rps {}",
+                    basis, self.vus, rps,
                 ));
             }
         }
