@@ -2,6 +2,12 @@
 
 ### Changed
 
+- **[Architecture]** `reality` moved to `mockforge-intelligence`, `chaos_utilities` re-homed to `mockforge-foundation` (Issue #562 phase 6)
+  - `reality.rs` (541 LOC) holds `ChaosConfig` as a struct field — moving it to intelligence required `ChaosConfig` to live in a crate intelligence can depend on (foundation). `chaos_utilities.rs` (500 LOC) only depends on `failure_injection` + `latency`, both already in foundation, so the move is mechanical.
+  - The `RealityEngine::apply_to_config` inherent method (which pokes at concrete `ServerConfig` sub-structs) moved to `mockforge_core::reality_apply::apply_reality_to_server_config` as a free function. Keeping it on `RealityEngine` would have forced intelligence → core dep again. CLI updated to use the new helper (one call site).
+  - Backwards compat: `mockforge_core::{chaos_utilities, reality}` preserved as `pub use`. Existing `RealityEngine`, `RealityConfig`, `RealityLevel`, `ChaosConfig`, etc. continue resolving via `mockforge_core::*` for all 5+ external callers (cli, http, ui, registry, scenarios, etc.).
+  - Brings `ai_studio` to **1 dirty sub-file**: `nl_mock_generator.rs` (depends on `voice`). After phase 7 extracts voice, `ai_studio` moves whole in phase 8.
+
 - **[Architecture]** `contract_validation` + `failure_analysis` moved to `mockforge-intelligence` (Issue #562 phase 5)
   - Both modules are tiny leaves with near-zero core coupling: `contract_validation.rs` (590 LOC, single file, only `serde` non-internal deps) and `failure_analysis/` (4 files / ~512 LOC, only depends on sibling `intelligent_behavior`). Inline `crate::openapi::OpenApiSpec` and `crate::pillar_tracking::record_contracts_usage` references in `contract_validation` swapped to their home crates (`mockforge_openapi` / `mockforge_foundation::pillar_tracking`).
   - Backwards compat: `mockforge_core::{contract_validation, failure_analysis}` preserved as `pub use mockforge_intelligence::*;`. Zero churn for 4 external callers (mockforge-ui handlers, mockforge-cli, in-core ai_studio + workspace).

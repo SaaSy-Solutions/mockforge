@@ -44,4 +44,5 @@ pub mod contract_validation;
 pub mod failure_analysis;
 pub mod intelligent_behavior;
 pub mod pr_generation;
+pub mod reality;
 pub mod threat_modeling;
