@@ -102,6 +102,25 @@ impl TerminalReporter {
                 format!("{:.1}", results.tcp_connect_samples as f64 / duration_secs.max(1) as f64)
                     .cyan(),
             );
+
+            // Issue #79 round 8 — Srikanth saw 7425 connections opened with
+            // --vus 5, expecting ~5 (one per VU under pooled reuse). When
+            // `tcp_connect_samples` is much larger than `vus_max`, the target
+            // is closing the socket between requests (proxy upstream pool
+            // disabled, server `Connection: close`, etc). Without --cps,
+            // ratios > 5× indicate connection reuse isn't happening.
+            if results.vus_max > 0 {
+                let reuse_ratio = results.tcp_connect_samples as f64 / results.vus_max as f64;
+                if reuse_ratio > 5.0 {
+                    println!(
+                        "  {}: {:.0}× more sockets opened than concurrent VUs — \
+                         the target is closing connections (proxy pool disabled, \
+                         `Connection: close`, or short upstream idle timeout).",
+                        "Connection reuse NOT detected".yellow().bold(),
+                        reuse_ratio,
+                    );
+                }
+            }
         }
         // Print TCP/TLS timing whenever the avg is non-zero. Don't gate on
         // samples count — k6's Trend metric exposes avg/max in summary.json

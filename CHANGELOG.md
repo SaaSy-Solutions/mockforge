@@ -1,3 +1,13 @@
+## [0.3.138] - 2026-05-19
+
+### Added
+
+- **[DevX]** Adaptive pre-flight latency probe for `--vus` sizing (#79 round 8)
+  - `mockforge bench --rps N --vus M` now does a 3-request HEAD/GET probe of the target before launch to measure baseline latency, then recommends `--vus` based on `ceil(rps × measured_latency_secs) + 1` instead of the static "100ms / 10 req-per-VU" heuristic. Fixes a false-positive on Srikanth's fast targets (~2ms response time) where the old heuristic warned "bump to --vus 100" when --vus 5 was actually plenty.
+  - If the probe can't reach the target (auth-gated, strict WAF, etc.), falls back to the previous 100ms heuristic so the warning still fires when warranted. When the probe succeeds AND `--vus` is sufficient, prints a confirmation line so users know the size check passed.
+- **[Reality]** "Connection reuse NOT detected" diagnostic in bench summary (#79 round 8)
+  - When `tcp_connect_samples > 5 × vus_max` in pooled-reuse mode (no `--cps`), the bench reporter now prints a yellow warning explaining the target is closing sockets between requests. Addresses Srikanth's 0.3.137 question: "I expected 5 connections with --vus 5 but see 7425" — the counter is correct, the proxy isn't pooling. The new line makes that interpretation explicit so users don't have to guess.
+
 ## [0.3.137] - 2026-05-18
 
 ### Added

@@ -19,6 +19,7 @@ pub mod owasp_api;
 pub mod parallel_executor;
 pub mod parallel_requests;
 pub mod param_overrides;
+pub mod preflight;
 pub mod reporter;
 pub mod request_gen;
 pub mod scenarios;
