@@ -26,16 +26,22 @@
 //!   phase 4). Records `ai_generation` pillar usage via the now-foundation
 //!   `pillar_tracking` global, so the analytics dashboard keeps reflecting
 //!   contract-diff activity unchanged.
+//! - `contract_validation`: OpenAPI-spec-to-response contract validator (Issue
+//!   #562 phase 5). Single file; depends only on `serde` + `mockforge-openapi`
+//!   + `mockforge-foundation::pillar_tracking`.
+//! - `failure_analysis`: LLM-driven failure context + narrative generator
+//!   (Issue #562 phase 5). Depends only on sibling `intelligent_behavior`.
 //!
 //! Still in `mockforge-core` and worth migrating in follow-ups:
-//! - `ai_studio`: pulls `reality`, `voice`, `failure_analysis`, and
-//!   `contract_validation` — all still core-only. Blocked until those move.
-//!   12 of 17 sub-files are otherwise clean (only depend on `intelligent_behavior`
-//!   and `ai_contract_diff`, both now in this crate).
+//! - `ai_studio`: 3 sub-files still pull `reality` (debug_context,
+//!   debug_context_integrator) and `voice` (nl_mock_generator). Reality is
+//!   moveable next; voice is the wall and a multi-day campaign.
 
 pub mod ai_contract_diff;
 pub mod ai_response;
 pub mod behavioral_cloning;
+pub mod contract_validation;
+pub mod failure_analysis;
 pub mod intelligent_behavior;
 pub mod pr_generation;
 pub mod threat_modeling;
