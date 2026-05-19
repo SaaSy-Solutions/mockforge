@@ -10,6 +10,33 @@
 - **[Reality]** "Connection reuse NOT detected" diagnostic in bench summary (#79 round 8)
   - When `tcp_connect_samples > 5 × vus_max` in pooled-reuse mode (no `--cps`), the bench reporter now prints a yellow warning explaining the target is closing sockets between requests. Addresses Srikanth's 0.3.137 question: "I expected 5 connections with --vus 5 but see 7425" — the counter is correct, the proxy isn't pooling. The new line makes that interpretation explicit so users don't have to guess.
 
+## [0.3.138] - 2026-05-19
+
+### Added
+
+- **[Cloud][Reality]** Cloud-mode **Time Travel** — controllable virtual clock on hosted-mock deployments (#466, #527)
+- **[Cloud][AI]** Cloud-mode **Test Generator** — async LLM jobs over runtime_captures (#469, #529)
+- **[Cloud][Reality]** Real-time runtime-logs SSE via Fly NATS subscription (#556, #559)
+- **[Cloud][Reality]** OTLP gRPC trace receiver alongside HTTP/JSON (#548, #566)
+- **[Cloud][Reality]** Per-capture cloud forwarder with backpressure + retry (#553, #564)
+- **[Cloud][Reality]** Trust-root boot — plugin host fetches + refreshes active trust roots from registry (#549, #565)
+- **[Cloud][Reality]** HSM-backed platform signing-root rotation via AWS KMS (#550, #567)
+- **[Cloud][Reality]** Email notification channel via EmailService (#551, #557)
+- **[Cloud][Reality]** PagerDuty notification channel via Events API v2 (#552, #558)
+- **[CI][Reality]** Nightly hosted-mocks smoke workflow (#554, #563)
+
+### Changed
+
+- **[DevX]** `pr_generation` moved out of `mockforge-core` into `mockforge-intelligence`; intelligence → core dep cycle broken (#562 phase 1, #571)
+- **[DevX]** ADR auditing `mockforge-http` for intelligence/proxy extraction (#555, #561)
+
+### Fixed
+
+- **[DevX]** CI rust-cache no longer poisons builds with dangling `target/*.d` paths (#446, #570)
+- **[UI][Cloud]** CloudTestGeneratorView import path corrected (#547)
+
+> **Note:** Time Travel (#527) and Test Generator (#529) were initially attributed to 0.3.137 in the historical changelog block below. Both PRs landed after the v0.3.137 tag (efa43d20) had already been published, so they actually ship in 0.3.138.
+
 ## [0.3.137] - 2026-05-18
 
 ### Added

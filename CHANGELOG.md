@@ -8,6 +8,52 @@
 - **[Reality]** "Connection reuse NOT detected" diagnostic in bench summary (#79 round 8)
   - When `tcp_connect_samples > 5 × vus_max` in pooled-reuse mode (no `--cps`), the bench reporter now prints a yellow warning explaining the target is closing sockets between requests. Addresses Srikanth's 0.3.137 question: "I expected 5 connections with --vus 5 but see 7425" — the counter is correct, the proxy isn't pooling. The new line makes that interpretation explicit so users don't have to guess.
 
+## [0.3.138] - 2026-05-19
+
+### Added
+
+- **[Cloud][Reality]** Cloud-mode **Time Travel** — controllable virtual clock on hosted-mock deployments (#466, #527)
+  - 7 clock-control endpoints proxied (`status`, `enable`, `disable`, `advance`, `set`, `scale`, `reset`) over Fly 6PN. Wire format mirrors cloudResilience and cloudWorldState: `{ runtime_state: "live" | "unreachable", data }`. The runtime-unreachable branch disables the control fieldset so users don't fire mutations that'll bounce back.
+  - New `CloudTimeTravelView` reuses the local TimeTravelPage shape. Cron jobs + mutation rules stay local-only — they manage scenario state, not a hosted mock's single-process clock.
+  - **Note:** these entries were originally written into the 0.3.137 changelog block — the PRs landed after the v0.3.137 tag (efa43d20) was published to crates.io, so they actually ship in 0.3.138.
+- **[Cloud][AI]** Cloud-mode **Test Generator** — async LLM jobs over runtime_captures (#469, #529)
+  - New `cloud_test_generation_jobs` table + 4 CRUD endpoints + SSE stream (`GET .../jobs/{id}/stream`) for live progress.
+  - Background tokio worker drains the queue with `FOR UPDATE SKIP LOCKED` claims, processes up to `TEST_GENERATION_WORKER_CONCURRENCY` (default 4) jobs in parallel per tick, dispatched via the same `ai::client` + `ai::quota` pipeline `ai_studio` uses. BYOK skips the platform token quota; paid plans without BYOK succeed via the platform key.
+  - Worker is forgiving: best-effort JSON parse strips ```` ```json ```` fences, recovers from prose wrappers, falls back to a `{ raw_content }` wrapper. Cancellation race is safe — terminal writes are gated on `WHERE status = 'running'`.
+  - New `CloudTestGeneratorView` with job timeline, create form, expandable detail rows, and SSE-driven sub-second updates on expanded non-terminal rows.
+- **[Cloud][Reality]** Real-time runtime-logs SSE via Fly NATS subscription (#556, #559)
+  - The registry now subscribes to Fly's NATS log stream and re-broadcasts deployment logs over SSE so the cloud UI can render live logs without polling. Replaces the previous pull-based log endpoint.
+- **[Cloud][Reality]** OTLP gRPC trace receiver alongside HTTP/JSON (#548, #566)
+  - Registry exposes a standard `:4317` OTLP gRPC endpoint in addition to the existing HTTP/JSON path. Hosted mocks can now use OpenTelemetry SDKs configured for either transport.
+- **[Cloud][Reality]** Per-capture cloud forwarder with backpressure + retry (#553, #564)
+  - `mockforge-recorder` gained a registry-bound forwarder that streams individual captures to the cloud control plane with exponential-backoff retries and a bounded in-memory buffer for backpressure. Replaces the old end-of-recording bulk upload.
+- **[Cloud][Reality]** Trust-root boot — plugin host fetches + refreshes active trust roots from registry (#549, #565)
+  - The plugin host fetches the active set of plugin trust roots from the registry on boot and refreshes them on a schedule, so signed manifests written against rotated trust roots verify without a host redeploy.
+- **[Cloud][Reality]** HSM-backed platform signing-root rotation via AWS KMS (#550, #567)
+  - Platform signing roots can now be rotated end-to-end via AWS KMS without exposing private key material to host code. Replaces the file-backed signing root used in earlier versions.
+- **[Cloud][Reality]** Email notification channel via EmailService (#551, #557)
+  - Registry's notification dispatcher gained an Email transport alongside Slack, so cloud incidents/alerts can fan out to email recipients configured per-organization.
+- **[Cloud][Reality]** PagerDuty notification channel via Events API v2 (#552, #558)
+  - Same dispatcher gained a PagerDuty Events API v2 transport. Incidents created in cloud can now page on-call rotations directly.
+- **[CI][Reality]** Nightly hosted-mocks smoke workflow (#554, #563)
+  - New `hosted-mocks-smoke.yml` runs nightly against the production Fly deployments to catch regressions that pass per-PR CI but break in cloud. Outputs feed the runtime daemon's smoke incidents tab.
+
+### Changed
+
+- **[DevX]** `pr_generation` moved out of `mockforge-core` into `mockforge-intelligence`; the intelligence → core dependency cycle was broken (#562 phase 1, #571)
+  - `mockforge-intelligence` dropped its `mockforge-core` dep, freeing `mockforge-core` to take a `mockforge-intelligence` dep without Cargo rejecting it. The two real uses (`mockforge_core::Result` and `mockforge_core::scenarios::ScenarioDefinition`) moved to `mockforge_foundation::Result` and `mockforge-http::handlers::behavioral_cloning`.
+  - Backwards compat: `mockforge_core::pr_generation` is preserved as `pub use mockforge_intelligence::pr_generation;` — existing call sites compile unchanged. External callers (`mockforge-recorder`, `mockforge-pipelines`, `mockforge-http`, `mockforge-collab`) updated to import from the new home.
+- **[DevX]** ADR auditing `mockforge-http` for intelligence/proxy extraction (#555, #561)
+  - Documentation-only ADR (`docs/adr/0001-mockforge-http-extraction.md`) recording the dependency analysis and migration plan that #562 phase 1 acts on.
+
+### Fixed
+
+- **[DevX]** CI rust-cache no longer poisons builds with dangling `target/*.d` paths (#446, #570)
+  - Root cause: every workflow set `CARGO_HOME=/tmp/cargo-mockforge-${{ github.run_id }}` (unique per run) so the next run's `Swatinem/rust-cache@v2` restored a `target/` whose `.d` files referenced the *previous* run's CARGO_HOME — long since deleted. Surfaced as `error: could not compile <crate> ... (never executed) No such file or directory (os error 2)` on chronically red jobs.
+  - Fix: switched every `CARGO_HOME` to `runner.name` (stable per machine) and added `with: env-vars: "CARGO_HOME"` to all 13 `Swatinem/rust-cache@v2` invocations so the cache key partitions by runner.
+- **[UI][Cloud]** CloudTestGeneratorView import path corrected (`stores/useWorkspaceStore`) (#547)
+  - Minor follow-up to #529; runtime error on cloud mode without it.
+
 ## [0.3.137] - 2026-05-18
 
 ### Added
