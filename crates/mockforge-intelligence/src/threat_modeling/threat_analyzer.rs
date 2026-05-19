@@ -12,9 +12,9 @@ use super::types::{
     AggregationLevel, ThreatAssessment, ThreatCategory, ThreatFinding, ThreatLevel,
     ThreatModelingConfig,
 };
-use crate::openapi::OpenApiSpec;
-use crate::Result;
 use chrono::Utc;
+use mockforge_foundation::Result;
+use mockforge_openapi::OpenApiSpec;
 
 /// Main threat analyzer
 pub struct ThreatAnalyzer {

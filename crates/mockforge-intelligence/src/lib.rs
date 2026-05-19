@@ -17,13 +17,20 @@
 //!   generation, OpenAPI-backed example/rule generation (Issue #562 phase 2 —
 //!   the AI cluster's leaf module, depends only on `mockforge-openapi` and
 //!   `mockforge-foundation`)
+//! - `threat_modeling`: LLM-driven security analyzer (DoS / PII / schema /
+//!   error / threat / remediation generators) for the contract-drift pillar
+//!   (Issue #562 phase 3). Depends only on sibling `intelligent_behavior` +
+//!   `mockforge-openapi` + `mockforge-foundation`.
 //!
-//! The remaining AI cluster (`ai_contract_diff`, `ai_studio`,
-//! `threat_modeling::*`) can now follow the same `pub use mockforge_intelligence::*;`
-//! pattern from `mockforge-core` — phase 2 already removed the transitive
-//! coupling that blocked them.
+//! Still in `mockforge-core` and worth migrating in follow-ups:
+//! - `ai_contract_diff`: pulls `crate::pillar_tracking::record_ai_usage`
+//!   (analytics global). Needs the tracking hook re-homed or injected before
+//!   it can move cleanly.
+//! - `ai_studio`: pulls `reality`, `voice`, `failure_analysis`, and
+//!   `contract_validation` — all still core-only. Blocked until those move.
 
 pub mod ai_response;
 pub mod behavioral_cloning;
 pub mod intelligent_behavior;
 pub mod pr_generation;
+pub mod threat_modeling;

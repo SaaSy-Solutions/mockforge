@@ -6,9 +6,9 @@
 use super::types::{
     CapturedRequest, ContractDiffResult, DiffMetadata, Mismatch, MismatchSeverity, MismatchType,
 };
-use crate::openapi::OpenApiSpec;
-use crate::schema_diff::validation_diff;
-use crate::Result;
+use mockforge_foundation::schema_diff::validation_diff;
+use mockforge_foundation::Result;
+use mockforge_openapi::OpenApiSpec;
 use serde_json::Value;
 use std::collections::HashMap;
 

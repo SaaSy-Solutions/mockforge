@@ -4,7 +4,7 @@
 //! based on detected mismatches and recommendations.
 
 use super::types::{CorrectionProposal, Mismatch, PatchOperation, Recommendation};
-use crate::openapi::OpenApiSpec;
+use mockforge_openapi::OpenApiSpec;
 use serde_json::{json, Value};
 use std::collections::HashMap;
 

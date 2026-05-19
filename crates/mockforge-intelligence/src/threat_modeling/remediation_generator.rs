@@ -7,7 +7,7 @@ use super::types::{RemediationSuggestion, ThreatFinding};
 use crate::intelligent_behavior::config::BehaviorModelConfig;
 use crate::intelligent_behavior::llm_client::LlmClient;
 use crate::intelligent_behavior::types::LlmGenerationRequest;
-use crate::Result;
+use mockforge_foundation::Result;
 
 /// Remediation generator using AI
 pub struct RemediationGenerator {

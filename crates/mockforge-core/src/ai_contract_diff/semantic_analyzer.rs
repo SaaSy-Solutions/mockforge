@@ -8,8 +8,8 @@ use super::types::{ContractDiffConfig, Mismatch, MismatchSeverity, MismatchType}
 use crate::intelligent_behavior::config::BehaviorModelConfig;
 use crate::intelligent_behavior::llm_client::LlmClient;
 use crate::intelligent_behavior::types::LlmGenerationRequest;
-use crate::openapi::OpenApiSpec;
-use crate::Result;
+use mockforge_foundation::Result;
+use mockforge_openapi::OpenApiSpec;
 // Semantic drift data types re-exported from foundation.
 pub use mockforge_foundation::contract_diff_types::{SemanticChangeType, SemanticDriftResult};
 use openapiv3;
