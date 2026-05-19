@@ -65,11 +65,18 @@ tempfile = "3"
 # registry-fetch path lands.
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 
-# HTTP client for the kill-switch blocklist poll task (RFC §8.3).
+# HTTP client for the kill-switch blocklist poll task (RFC §8.3)
+# and the trust-root refresh loop (issue #549).
 reqwest = { workspace = true }
 # Workspace chrono already enables serde — used by BlocklistEntry's
 # `revoked_at` field on the wire format.
 chrono = { workspace = true }
+# URL validation for the trust-root endpoint configured via env.
+url.workspace = true
 
 [dev-dependencies]
 tempfile = "3"
+# HTTP mock server for the trust-root refresh integration tests.
+wiremock = "0.6"
+# Async runtime extras for time-based integration tests.
+tokio = { workspace = true, features = ["test-util"] }
