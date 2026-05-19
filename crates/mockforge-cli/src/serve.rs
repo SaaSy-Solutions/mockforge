@@ -486,7 +486,11 @@ pub(crate) async fn build_server_config_from_cli(serve_args: &ServeArgs) -> Serv
 
             // Apply reality configuration to subsystems
             let reality_engine = mockforge_core::RealityEngine::with_level(level);
-            reality_engine.apply_to_config(&mut config).await;
+            mockforge_core::reality_apply::apply_reality_to_server_config(
+                &reality_engine,
+                &mut config,
+            )
+            .await;
         } else {
             eprintln!(
                 "⚠️  Invalid reality level: {}. Must be between 1 and 5. Using default.",
@@ -497,7 +501,8 @@ pub(crate) async fn build_server_config_from_cli(serve_args: &ServeArgs) -> Serv
         // Apply reality configuration from config file if enabled
         let level = config.reality.level;
         let reality_engine = mockforge_core::RealityEngine::with_level(level);
-        reality_engine.apply_to_config(&mut config).await;
+        mockforge_core::reality_apply::apply_reality_to_server_config(&reality_engine, &mut config)
+            .await;
     }
 
     config

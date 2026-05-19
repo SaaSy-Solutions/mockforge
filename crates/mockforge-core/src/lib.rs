@@ -244,7 +244,11 @@ pub mod behavioral_economics;
 #[allow(dead_code)]
 pub(crate) mod cache;
 pub mod chain_execution;
-pub mod chaos_utilities;
+/// `chaos_utilities` moved to `mockforge_foundation::chaos_utilities`
+/// (Issue #562 phase 6) so `mockforge_intelligence::reality` can hold
+/// `ChaosConfig` fields without taking a dep on core. Re-exported here
+/// for backwards compat.
+pub use mockforge_foundation::chaos_utilities;
 #[cfg(feature = "advanced")]
 #[deprecated(note = "Will be extracted to mockforge-import crate")]
 pub mod codegen;
@@ -376,7 +380,13 @@ pub mod protocol_server;
 /// Import from `mockforge_proxy` instead of `mockforge_core::proxy`.
 #[deprecated(note = "Use mockforge_proxy crate directly")]
 pub mod proxy;
-pub mod reality;
+/// `reality` lives in `mockforge_intelligence::reality` (Issue #562 phase 6).
+/// Re-exported here so existing `mockforge_core::reality::*` call sites
+/// keep compiling unchanged. The `apply_to_config` inherent method moved
+/// to `mockforge_core::reality_apply::apply_reality_to_server_config`
+/// (it pokes at concrete `ServerConfig` sub-structs and belongs in core).
+pub use mockforge_intelligence::reality;
+pub mod reality_apply;
 #[cfg(feature = "advanced")]
 pub mod reality_continuum;
 pub mod record_replay;

@@ -6,9 +6,9 @@
 //! between "stubbed simplicity" (level 1) and "production chaos" (level 5) by
 //! automatically coordinating chaos engineering, latency injection, and MockAI behaviors.
 
-use crate::chaos_utilities::ChaosConfig;
 use crate::intelligent_behavior::config::IntelligentBehaviorConfig;
-use crate::latency::{LatencyDistribution, LatencyProfile};
+use mockforge_foundation::chaos_utilities::ChaosConfig;
+use mockforge_foundation::latency::{LatencyDistribution, LatencyProfile};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -422,51 +422,10 @@ impl RealityEngine {
         *config = preset.config;
     }
 
-    /// Apply reality configuration to a ServerConfig
-    ///
-    /// This method updates the provided ServerConfig with chaos, latency, and MockAI
-    /// settings from the current reality level. This should be called when initializing
-    /// the server or when the reality level changes.
-    pub async fn apply_to_config(&self, config: &mut crate::config::ServerConfig) {
-        let reality_config = self.get_config().await;
-
-        // Apply chaos configuration
-        if config.reality.enabled {
-            // Update chaos config if it exists in observability
-            if let Some(ref mut chaos_eng) = config.observability.chaos {
-                chaos_eng.enabled = reality_config.chaos.enabled;
-                if let Some(ref mut fault) = chaos_eng.fault_injection {
-                    fault.enabled = reality_config.chaos.enabled;
-                    fault.http_error_probability = reality_config.chaos.error_rate;
-                    fault.timeout_errors = reality_config.chaos.inject_timeouts;
-                    fault.timeout_ms = reality_config.chaos.timeout_ms;
-                }
-                if let Some(ref mut latency) = chaos_eng.latency {
-                    latency.enabled = reality_config.latency.base_ms > 0;
-                    latency.fixed_delay_ms = Some(reality_config.latency.base_ms);
-                    latency.jitter_percent = if reality_config.latency.jitter_ms > 0 {
-                        (reality_config.latency.jitter_ms as f64
-                            / reality_config.latency.base_ms as f64)
-                            .min(1.0)
-                    } else {
-                        0.0
-                    };
-                }
-            }
-        }
-
-        // Apply latency configuration
-        if config.reality.enabled {
-            config.core.default_latency = reality_config.latency.clone();
-            config.core.latency_enabled = reality_config.latency.base_ms > 0;
-        }
-
-        // Apply MockAI configuration
-        if config.reality.enabled {
-            config.mockai.enabled = reality_config.mockai.enabled;
-            config.mockai.intelligent_behavior = reality_config.mockai.clone();
-        }
-    }
+    // `apply_to_config` moved to `mockforge_core::reality_apply::apply_reality_to_server_config`
+    // (Issue #562 phase 6) — it takes a concrete `mockforge_core::config::ServerConfig`
+    // and only callers that already have that type need it (the CLI). Keeping it
+    // in `mockforge-intelligence` would force intelligence → core dep again.
 }
 
 impl Default for RealityEngine {
