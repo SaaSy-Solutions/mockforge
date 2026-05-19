@@ -1,5 +1,13 @@
 ## [0.3.137] - 2026-05-17
 
+### Changed
+
+- **[Architecture]** `pr_generation` moved out of `mockforge-core` into `mockforge-intelligence` and the intelligence → core cycle was broken (Issue #562 phase 1)
+  - Why this matters: the ADR for #555 (`docs/adr/0001-mockforge-http-extraction.md`) and the `mockforge-intelligence/src/lib.rs` docstring both identified the bidirectional `mockforge-core` ↔ `mockforge-intelligence` dependency as the blocker behind every other AI submodule extraction. With the cycle broken, future moves (`behavioral_economics`, `ai_contract_diff`, `ai_studio`, etc.) become mechanical — they no longer have to fight the dep graph.
+  - How the cycle was broken: `mockforge-intelligence` dropped its `mockforge-core` dep entirely. The two real uses (`mockforge_core::Result` and `mockforge_core::scenarios::ScenarioDefinition`) became `mockforge_foundation::Result` (zero-cost swap — `core::Result` already re-exports `foundation::Result`) and a one-method move of `SequenceLearner::generate_sequence_scenario` into `mockforge-http::handlers::behavioral_cloning` (its only caller). That freed `mockforge-core` to take a `mockforge-intelligence` dep without Cargo rejecting it.
+  - Backwards compat: `mockforge_core::pr_generation` is preserved as `pub use mockforge_intelligence::pr_generation;`. Every existing `crate::pr_generation::*` import inside core (e.g., `config::mod` and `drift_gitops::handler`) keeps compiling unchanged. External callers (`mockforge-recorder`, `mockforge-pipelines`, `mockforge-http`, `mockforge-collab`) updated to import from the new home; the `mockforge_core::pr_generation` path remains valid for any out-of-tree consumers.
+  - `mockforge-intelligence` gained a `schema` feature mirroring core's (so the migrated types still gate their `JsonSchema` derive the same way) and grew the deps `pr_generation` needs (`base64`, `reqwest`, `urlencoding`, `mockforge-foundation`).
+
 ### Fixed
 
 - **[Reality]** Client-side "Connections opened" counter now appears for `--rps`-only runs (Issue #79 round 6 follow-up)

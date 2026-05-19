@@ -5,13 +5,13 @@
 
 use crate::error::{CollabError, Result};
 use chrono::{DateTime, Utc};
-use mockforge_core::pr_generation::{
-    PRFileChange, PRFileChangeType, PRGenerator, PRProvider, PRRequest,
-};
 use mockforge_foundation::workspace_promotion::MockEnvironmentName;
 use mockforge_foundation::workspace_promotion::PromotionService as PromotionServiceTrait;
 use mockforge_foundation::workspace_promotion::{
     PromotionEntityType, PromotionHistory, PromotionHistoryEntry, PromotionRequest, PromotionStatus,
+};
+use mockforge_intelligence::pr_generation::{
+    PRFileChange, PRFileChangeType, PRGenerator, PRProvider, PRRequest,
 };
 use serde_json;
 use sqlx::{Pool, Sqlite};
@@ -853,11 +853,11 @@ impl PromotionServiceTrait for PromotionService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockforge_core::pr_generation::PRProvider;
     use mockforge_foundation::workspace_promotion::MockEnvironmentName;
     use mockforge_foundation::workspace_promotion::{
         PromotionEntityType, PromotionRequest, PromotionStatus,
     };
+    use mockforge_intelligence::pr_generation::PRProvider;
     use sqlx::SqlitePool;
 
     async fn setup_test_db() -> Pool<Sqlite> {

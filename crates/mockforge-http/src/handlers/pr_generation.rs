@@ -8,7 +8,7 @@ use axum::response::Json;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 
-use mockforge_core::pr_generation::{
+use mockforge_intelligence::pr_generation::{
     PRFileChange, PRFileChangeType, PRGenerator, PRTemplateContext,
 };
 

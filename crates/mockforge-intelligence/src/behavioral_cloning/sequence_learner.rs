@@ -5,8 +5,7 @@
 
 use crate::behavioral_cloning::types::BehavioralSequence;
 use async_trait::async_trait;
-use mockforge_core::scenarios::ScenarioDefinition;
-use mockforge_core::Result;
+use mockforge_foundation::Result;
 use std::collections::HashMap;
 
 /// Trait for querying trace data for sequence learning
@@ -293,44 +292,10 @@ impl SequenceLearner {
         Ok(learned_sequences)
     }
 
-    /// Generate a scenario definition from a learned sequence
-    ///
-    /// Converts a BehavioralSequence into a ScenarioDefinition
-    /// that can be executed by the ScenarioExecutor.
-    pub fn generate_sequence_scenario(sequence: &BehavioralSequence) -> ScenarioDefinition {
-        use mockforge_core::scenarios::ScenarioStep;
-
-        let mut scenario =
-            ScenarioDefinition::new(&sequence.id, &sequence.name).with_tags(sequence.tags.clone());
-
-        if let Some(description) = &sequence.description {
-            scenario.description = Some(description.clone());
-        }
-
-        // Convert sequence steps to scenario steps
-        for (idx, step) in sequence.steps.iter().enumerate() {
-            let mut scenario_step = ScenarioStep::new(
-                format!("step_{}", idx),
-                step.name.as_deref().unwrap_or(&step.endpoint),
-                &step.method,
-                &step.endpoint,
-            )
-            .expect_status(200); // Default, could be learned
-
-            if let Some(delay) = step.expected_delay_ms {
-                scenario_step.delay_ms = Some(delay);
-            }
-
-            // Add conditions as query params if needed
-            for (key, value) in &step.conditions {
-                scenario_step.query_params.insert(key.clone(), value.clone());
-            }
-
-            scenario = scenario.add_step(scenario_step);
-        }
-
-        scenario
-    }
+    // `generate_sequence_scenario` lives in mockforge-http (the only caller)
+    // — keeping ScenarioDefinition out of this crate is what lets
+    // mockforge-intelligence stop depending on mockforge-core and lets
+    // mockforge-core depend on mockforge-intelligence (see Issue #562).
 
     /// Check if an incoming request matches a learned sequence
     ///

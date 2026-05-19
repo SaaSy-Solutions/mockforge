@@ -6,7 +6,7 @@
 use crate::behavioral_cloning::types::{
     EdgeAmplificationConfig, EndpointProbabilityModel, ErrorPattern,
 };
-use mockforge_core::Result;
+use mockforge_foundation::Result;
 
 /// Edge amplifier for increasing rare error frequency
 pub struct EdgeAmplifier;

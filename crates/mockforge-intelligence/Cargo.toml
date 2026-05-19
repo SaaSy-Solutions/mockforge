@@ -10,14 +10,29 @@ keywords = ["mock", "ai", "llm", "intelligence"]
 categories = ["development-tools::testing"]
 
 [dependencies]
-mockforge-core = { path = "../mockforge-core" }
+# Intentionally NO `mockforge-core` dep — Issue #562 broke this cycle so
+# `mockforge-core` can re-export modules that live here (currently
+# `pr_generation`). The only thing this crate needs from core was
+# `Result`/`Error` (now sourced from `mockforge-foundation` directly) and
+# `ScenarioDefinition` (the one method that produced one now lives in
+# `mockforge-http::handlers::behavioral_cloning`, the only caller).
+mockforge-foundation = { path = "../mockforge-foundation", default-features = false }
 async-trait = { workspace = true }
+base64 = { workspace = true }
 chrono = { workspace = true }
 rand = { workspace = true }
+reqwest = { workspace = true }
+schemars = { version = "0.8", features = ["derive"], optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 tracing = { workspace = true }
+urlencoding = { workspace = true }
 uuid = { workspace = true }
+
+[features]
+# Mirrors mockforge-core's `schema` feature so the moved `pr_generation`
+# types still gate their `JsonSchema` derive the same way.
+schema = ["schemars", "mockforge-foundation/schema"]
 
 [dev-dependencies]
 mockforge-template-expansion = { path = "../mockforge-template-expansion" }

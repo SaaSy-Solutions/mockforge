@@ -20,6 +20,9 @@ missing_docs = "deny"
 
 [dependencies]
 mockforge-foundation = { path = "../mockforge-foundation", default-features = false }
+# `pr_generation` lives in mockforge-intelligence (Issue #562 phase 1);
+# re-exported from `crate::pr_generation` for in-crate and external callers.
+mockforge-intelligence = { path = "../mockforge-intelligence" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
@@ -107,7 +110,7 @@ windows = { version = "0.62", features = ["Win32_Security_Credentials"] }
 default = ["data", "ai", "contracts", "workspace-mgmt", "voice", "advanced", "scripting"]
 scripting = ["rquickjs", "mockforge-foundation/scripting"]
 parallel-routes = ["rayon"]
-schema = ["schemars", "mockforge-foundation/schema"]
+schema = ["schemars", "mockforge-foundation/schema", "mockforge-intelligence/schema"]
 database = ["sqlx"]
 data = ["mockforge-data"]
 persona-graph = []

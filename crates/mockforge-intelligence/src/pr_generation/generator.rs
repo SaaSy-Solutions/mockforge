@@ -5,6 +5,7 @@
 use crate::pr_generation::templates::{PRTemplate, PRTemplateContext};
 use crate::pr_generation::types::{PRProvider, PRRequest, PRResult};
 use crate::pr_generation::{GitHubPRClient, GitLabPRClient};
+use mockforge_foundation::{Error, Result};
 
 /// PR generator that works with multiple providers
 #[derive(Debug, Clone)]
@@ -40,7 +41,7 @@ impl PRGenerator {
         files: Vec<crate::pr_generation::types::PRFileChange>,
         labels: Vec<String>,
         reviewers: Vec<String>,
-    ) -> crate::Result<PRResult> {
+    ) -> Result<PRResult> {
         let title = PRTemplate::generate_title(&context);
         let body = PRTemplate::generate_body(&context);
 
@@ -64,20 +65,20 @@ impl PRGenerator {
     }
 
     /// Create a PR
-    pub async fn create_pr(&self, request: PRRequest) -> crate::Result<PRResult> {
+    pub async fn create_pr(&self, request: PRRequest) -> Result<PRResult> {
         match self.provider {
             PRProvider::GitHub => {
                 let client = self
                     .github_client
                     .as_ref()
-                    .ok_or_else(|| crate::Error::internal("GitHub client not configured"))?;
+                    .ok_or_else(|| Error::internal("GitHub client not configured"))?;
                 client.create_pr(request).await
             }
             PRProvider::GitLab => {
                 let client = self
                     .gitlab_client
                     .as_ref()
-                    .ok_or_else(|| crate::Error::internal("GitLab client not configured"))?;
+                    .ok_or_else(|| Error::internal("GitLab client not configured"))?;
                 client.create_pr(request).await
             }
         }
