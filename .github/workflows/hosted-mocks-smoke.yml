@@ -1,0 +1,370 @@
+name: Hosted Mocks Smoke Test
+
+# Recurring verification of the three deferred post-merge items from #219
+# (WebSocket reachability), #222 (reality slider), and #231 (Kafka
+# advertised listeners) — see #554 for context.
+#
+# Each nightly run:
+#   1. Deploys a fresh hosted mock per protocol against the staging
+#      registry, polls until the Fly machine is `active`.
+#   2. Drives a live client against the .fly.dev hostname:
+#        - WebSocket: wscat round-trip against `/ws`.
+#        - Reality slider: HTTP GET at ratio=0 then ratio=1, asserts the
+#          `X-MockForge-Source` header flips from absent/`mock` to `upstream`.
+#        - Kafka: kcat metadata fetch + produce/consume round-trip.
+#   3. Tears down each deployment (best-effort; failure here is logged
+#      but does not mask earlier failures).
+#
+# Required secrets (must be configured on the repo or the smoke job will
+# bail at the first auth step):
+#   REGISTRY_BASE_URL       — e.g. https://staging-api.mockforge.dev
+#   REGISTRY_SMOKE_TOKEN    — bearer token for a smoke-scoped service user
+#                              with `HostedMockCreate` + delete permissions
+#   REALITY_UPSTREAM_URL    — public HTTP endpoint the reality-slider proxy
+#                              forwards to (must echo a stable response so
+#                              the smoke can diff mock vs upstream)
+#
+# If a required secret is missing, the workflow surfaces a clear failure
+# message; add the secret under repo Settings → Secrets → Actions.
+
+on:
+  schedule:
+    # 06:00 UTC daily.
+    - cron: '0 6 * * *'
+  workflow_dispatch: {}
+
+# One smoke at a time. A previous run that's still tearing down would
+# otherwise race the new run's deploys.
+concurrency:
+  group: hosted-mocks-smoke
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  smoke:
+    name: Smoke staging hosted mocks
+    # Per repo CI-cost policy: prefer self-hosted runners over GHA-hosted.
+    runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 25
+
+    env:
+      REGISTRY_BASE_URL: ${{ secrets.REGISTRY_BASE_URL }}
+      REGISTRY_SMOKE_TOKEN: ${{ secrets.REGISTRY_SMOKE_TOKEN }}
+      REALITY_UPSTREAM_URL: ${{ secrets.REALITY_UPSTREAM_URL }}
+      # Tag deployments so a stuck run is easy to garbage-collect from the
+      # Fly dashboard.
+      SMOKE_TAG: smoke554-${{ github.run_id }}
+
+    steps:
+      - name: Checkout (for issue-creation script)
+        uses: actions/checkout@v6
+
+      - name: Pre-flight — required tooling and secrets
+        id: preflight
+        run: |
+          set -euo pipefail
+          missing=()
+          for tool in curl jq wscat kcat; do
+            if ! command -v "$tool" >/dev/null 2>&1; then
+              missing+=("$tool")
+            fi
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing tooling on runner: ${missing[*]}"
+            echo "::error::Install on the self-hosted runner: apt-get install -y kafkacat (kcat) && npm install -g wscat"
+            exit 1
+          fi
+
+          if [ -z "${REGISTRY_BASE_URL:-}" ] || [ -z "${REGISTRY_SMOKE_TOKEN:-}" ] || [ -z "${REALITY_UPSTREAM_URL:-}" ]; then
+            echo "::error::One of REGISTRY_BASE_URL / REGISTRY_SMOKE_TOKEN / REALITY_UPSTREAM_URL secrets is missing."
+            echo "::error::Configure under repo Settings → Secrets → Actions. See workflow header for details."
+            exit 1
+          fi
+          echo "OK preflight"
+
+      - name: Run smoke checks
+        id: smoke
+        # Don't fail the job on first error — we want to capture which step
+        # failed for the issue body and still attempt teardown afterwards.
+        continue-on-error: true
+        run: |
+          set +e
+
+          AUTH_HEADER="Authorization: Bearer ${REGISTRY_SMOKE_TOKEN}"
+          CT_HEADER='Content-Type: application/json'
+          DEPLOY_IDS_FILE="${RUNNER_TEMP:-/tmp}/smoke-deploy-ids"
+          : > "$DEPLOY_IDS_FILE"
+          echo "$DEPLOY_IDS_FILE" >> "$GITHUB_OUTPUT"
+          echo "deploy_ids_file=$DEPLOY_IDS_FILE" >> "$GITHUB_OUTPUT"
+
+          fail() {
+            echo "::error::Smoke failed at step: $1"
+            echo "failure_step=$1" >> "$GITHUB_OUTPUT"
+            {
+              echo "failure_detail<<EOF"
+              echo "$2"
+              echo "EOF"
+            } >> "$GITHUB_OUTPUT"
+            exit 1
+          }
+
+          # Create a hosted-mock with the given protocol set + optional
+          # upstream URL. Echoes the JSON response on stdout, or fails on
+          # non-2xx. Persists the deployment id so the teardown step can
+          # clean up even if a later assertion fails.
+          create_deploy() {
+            local label="$1" protocols_json="$2" upstream="$3"
+            local body
+            body=$(jq -n \
+              --arg name "smoke-${label}-${SMOKE_TAG}" \
+              --arg slug "smoke-${label}-${SMOKE_TAG}" \
+              --arg desc "Smoke #554 / ${label}" \
+              --argjson protos "$protocols_json" \
+              --arg upstream "$upstream" \
+              '{name:$name, slug:$slug, description:$desc, config_json:{}, enabled_protocols:$protos}
+               + (if $upstream == "" then {} else {upstream_url:$upstream} end)')
+            local resp_file="${RUNNER_TEMP:-/tmp}/create-${label}.json"
+            local code
+            code=$(curl -sS -o "$resp_file" -w '%{http_code}' --max-time 30 \
+              -X POST "${REGISTRY_BASE_URL}/api/v1/hosted-mocks" \
+              -H "$AUTH_HEADER" -H "$CT_HEADER" \
+              --data "$body" || echo "000")
+            if [ "$code" != "200" ] && [ "$code" != "201" ]; then
+              fail "create-${label}" "POST /api/v1/hosted-mocks (${label}) returned ${code}; body: $(head -c 400 "$resp_file" 2>/dev/null)"
+            fi
+            local id
+            id=$(jq -r '.id' "$resp_file")
+            if [ -z "$id" ] || [ "$id" = "null" ]; then
+              fail "create-${label}" "Create succeeded but no id in response: $(head -c 400 "$resp_file")"
+            fi
+            echo "$id" >> "$DEPLOY_IDS_FILE"
+            cat "$resp_file"
+          }
+
+          # Poll the deployment until it reaches `active` (and a
+          # deployment_url is populated). Bounded retries; the orchestrator
+          # polls every 10s and Fly machine boot is typically <60s.
+          wait_active() {
+            local id="$1" label="$2"
+            local deadline=$(( $(date +%s) + 360 ))
+            local last=""
+            while [ "$(date +%s)" -lt "$deadline" ]; do
+              local resp_file="${RUNNER_TEMP:-/tmp}/get-${label}.json"
+              local code
+              code=$(curl -sS -o "$resp_file" -w '%{http_code}' --max-time 15 \
+                -H "$AUTH_HEADER" \
+                "${REGISTRY_BASE_URL}/api/v1/hosted-mocks/${id}" || echo "000")
+              if [ "$code" = "200" ]; then
+                local status url
+                status=$(jq -r '.status // empty' "$resp_file")
+                url=$(jq -r '.deployment_url // empty' "$resp_file")
+                last="status=${status} url=${url}"
+                if [ "$status" = "active" ] && [ -n "$url" ] && [ "$url" != "null" ]; then
+                  echo "$url"
+                  return 0
+                fi
+              else
+                last="HTTP ${code}: $(head -c 200 "$resp_file")"
+              fi
+              sleep 10
+            done
+            fail "wait-active-${label}" "Deployment ${id} (${label}) did not reach active within 360s; last seen: ${last}"
+          }
+
+          # 1) WebSocket smoke (#219). Deploy http+ws, connect via wscat,
+          #    echo a unique token, assert it comes back.
+          echo "::group::WebSocket smoke (#219)"
+          WS_JSON=$(create_deploy "ws" '["http","ws"]' "")
+          WS_ID=$(echo "$WS_JSON" | jq -r '.id')
+          WS_URL=$(wait_active "$WS_ID" "ws")
+          WS_HOST=$(echo "$WS_URL" | sed -E 's|^https?://||; s|/.*$||')
+          WS_TOKEN="ping-${SMOKE_TAG}"
+          # wscat -x sends the message, exits after the first response.
+          WS_OUT_FILE="${RUNNER_TEMP:-/tmp}/wscat.out"
+          if ! timeout 30 wscat -c "wss://${WS_HOST}/ws" -x "$WS_TOKEN" -w 5 > "$WS_OUT_FILE" 2>&1; then
+            fail "ws-connect" "wscat against wss://${WS_HOST}/ws failed: $(head -c 600 "$WS_OUT_FILE")"
+          fi
+          if ! grep -q "$WS_TOKEN" "$WS_OUT_FILE"; then
+            fail "ws-echo" "wscat connected but echo token not seen in response. Output: $(head -c 600 "$WS_OUT_FILE")"
+          fi
+          echo "OK ws -> echoed token at wss://${WS_HOST}/ws"
+          echo "::endgroup::"
+
+          # 2) Reality slider smoke (#222). Deploy http with upstream set,
+          #    drive the workspace ratio to 0 (mock) then 1 (upstream),
+          #    assert the X-MockForge-Source response header flips.
+          echo "::group::Reality slider smoke (#222)"
+          RL_JSON=$(create_deploy "reality" '["http"]' "$REALITY_UPSTREAM_URL")
+          RL_ID=$(echo "$RL_JSON" | jq -r '.id')
+          RL_URL=$(wait_active "$RL_ID" "reality")
+
+          # The reality_continuum_ratio is per-workspace state on the
+          # deployment itself; set via its consistency API. Use the slug
+          # as the workspace id (matches mockforge-cli's default).
+          RL_WORKSPACE="smoke-reality-${SMOKE_TAG}"
+          set_ratio() {
+            local ratio="$1"
+            local resp_file="${RUNNER_TEMP:-/tmp}/ratio-${ratio}.json"
+            local code
+            code=$(curl -sS -o "$resp_file" -w '%{http_code}' --max-time 15 \
+              -X POST "${RL_URL}/api/v1/consistency/reality-ratio?workspace=${RL_WORKSPACE}" \
+              -H "$CT_HEADER" \
+              --data "{\"ratio\": ${ratio}}" || echo "000")
+            if [ "$code" != "200" ] && [ "$code" != "204" ]; then
+              fail "reality-set-${ratio}" "set reality ratio=${ratio} returned ${code}; body: $(head -c 300 "$resp_file")"
+            fi
+          }
+
+          probe_source_header() {
+            local label="$1"
+            local hdr_file="${RUNNER_TEMP:-/tmp}/probe-${label}.h"
+            curl -sS -D "$hdr_file" -o /dev/null --max-time 15 \
+              -H "X-MockForge-Workspace: ${RL_WORKSPACE}" \
+              "${RL_URL}/" || true
+            grep -i '^x-mockforge-source:' "$hdr_file" | awk -F': ' '{print tolower($2)}' | tr -d '\r\n'
+          }
+
+          set_ratio "0"
+          MOCK_SRC=$(probe_source_header "mock")
+          # At ratio=0 the reality proxy short-circuits and never sets the
+          # header. Absent or literally "mock" both qualify as mock-served.
+          if [ -n "$MOCK_SRC" ] && [ "$MOCK_SRC" != "mock" ]; then
+            fail "reality-mock" "Expected no X-MockForge-Source (or 'mock') at ratio=0, got '${MOCK_SRC}'"
+          fi
+
+          set_ratio "1"
+          UP_SRC=$(probe_source_header "upstream")
+          if [ "$UP_SRC" != "upstream" ]; then
+            fail "reality-upstream" "Expected X-MockForge-Source=upstream at ratio=1, got '${UP_SRC}'"
+          fi
+          echo "OK reality slider -> mock=${MOCK_SRC:-<absent>} upstream=${UP_SRC}"
+          echo "::endgroup::"
+
+          # 3) Kafka smoke (#231). Deploy http+kafka, fetch metadata via
+          #    kcat -L, then produce+consume a round-trip message.
+          echo "::group::Kafka smoke (#231)"
+          KF_JSON=$(create_deploy "kafka" '["http","kafka"]' "")
+          KF_ID=$(echo "$KF_JSON" | jq -r '.id')
+          KF_URL=$(wait_active "$KF_ID" "kafka")
+          KF_HOST=$(echo "$KF_URL" | sed -E 's|^https?://||; s|/.*$||')
+          KF_BROKER="${KF_HOST}:9092"
+
+          META_FILE="${RUNNER_TEMP:-/tmp}/kcat-meta.out"
+          if ! timeout 30 kcat -b "$KF_BROKER" -L > "$META_FILE" 2>&1; then
+            fail "kafka-metadata" "kcat -L against ${KF_BROKER} failed: $(head -c 600 "$META_FILE")"
+          fi
+          # Assert kcat saw at least one broker advertised.
+          if ! grep -qE "[0-9]+ brokers?:" "$META_FILE" || grep -qE "0 brokers:" "$META_FILE"; then
+            fail "kafka-advertised" "kcat metadata did not list any brokers for ${KF_BROKER}. Output: $(head -c 600 "$META_FILE")"
+          fi
+
+          KF_TOPIC="smoke-${SMOKE_TAG}"
+          KF_MSG="hello-${SMOKE_TAG}"
+          PROD_FILE="${RUNNER_TEMP:-/tmp}/kcat-prod.out"
+          if ! echo "$KF_MSG" | timeout 30 kcat -b "$KF_BROKER" -t "$KF_TOPIC" -P > "$PROD_FILE" 2>&1; then
+            fail "kafka-produce" "kcat produce to ${KF_TOPIC} failed: $(head -c 400 "$PROD_FILE")"
+          fi
+
+          CONS_FILE="${RUNNER_TEMP:-/tmp}/kcat-cons.out"
+          # -C consume, -e exit at end of topic, -o beginning to read what
+          # we just produced, -q quiet to suppress %p info lines.
+          if ! timeout 30 kcat -b "$KF_BROKER" -t "$KF_TOPIC" -C -e -o beginning -q > "$CONS_FILE" 2>&1; then
+            fail "kafka-consume" "kcat consume from ${KF_TOPIC} failed: $(head -c 400 "$CONS_FILE")"
+          fi
+          if ! grep -q "$KF_MSG" "$CONS_FILE"; then
+            fail "kafka-roundtrip" "Produced '${KF_MSG}' but did not see it on consume. Got: $(head -c 400 "$CONS_FILE")"
+          fi
+          echo "OK kafka -> metadata + produce/consume on ${KF_BROKER}"
+          echo "::endgroup::"
+
+          echo "All hosted-mock smoke checks passed."
+
+      - name: Teardown smoke deployments
+        # Always run, even if smoke failed — we don't want orphan Fly
+        # machines piling up. Failures here are warnings, not job failures.
+        if: always()
+        env:
+          DEPLOY_IDS_FILE: ${{ steps.smoke.outputs.deploy_ids_file }}
+        run: |
+          set +e
+          if [ -z "${DEPLOY_IDS_FILE:-}" ] || [ ! -f "$DEPLOY_IDS_FILE" ]; then
+            echo "No deploy-ids file recorded; skipping teardown."
+            exit 0
+          fi
+          while read -r id; do
+            [ -z "$id" ] && continue
+            code=$(curl -sS -o /tmp/del.out -w '%{http_code}' --max-time 30 \
+              -X DELETE "${REGISTRY_BASE_URL}/api/v1/hosted-mocks/${id}" \
+              -H "Authorization: Bearer ${REGISTRY_SMOKE_TOKEN}" || echo "000")
+            if [ "$code" = "200" ] || [ "$code" = "204" ]; then
+              echo "Deleted ${id}"
+            else
+              echo "::warning::Failed to delete ${id} (HTTP ${code}): $(head -c 200 /tmp/del.out)"
+            fi
+          done < "$DEPLOY_IDS_FILE"
+
+      - name: Open GitHub issue on failure
+        # Same dedupe pattern as production-smoke.yml: title rotates daily
+        # so a sustained outage groups into one issue per day.
+        if: steps.smoke.outputs.failure_step != ''
+        uses: actions/github-script@v9
+        env:
+          STEP: ${{ steps.smoke.outputs.failure_step }}
+          DETAIL: ${{ steps.smoke.outputs.failure_detail }}
+          RUN_URL: ${{ format('{0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) }}
+        with:
+          script: |
+            const step = process.env.STEP;
+            const detail = process.env.DETAIL || '(no detail)';
+            const runUrl = process.env.RUN_URL;
+            const today = new Date().toISOString().slice(0, 10);
+            const title = `Hosted-mocks smoke: ${step} failing on staging (${today})`;
+
+            const existing = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'hosted-mocks-smoke',
+              per_page: 50,
+            });
+            const dup = existing.data.find(i => i.title === title);
+            const body = [
+              `**Hosted-mocks smoke test failed at step: \`${step}\`**`,
+              ``,
+              `Run: ${runUrl}`,
+              ``,
+              `Detail:`,
+              '```',
+              detail.slice(0, 4000),
+              '```',
+              ``,
+              `_Automated alert from \`hosted-mocks-smoke.yml\` — recurring verification of #219 (WS), #222 (reality slider), and #231 (Kafka). Close when the next nightly run passes. See #554 for context._`,
+            ].join('\n');
+
+            if (dup) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: dup.number,
+                body: `Still failing on run ${runUrl}.\n\nDetail:\n\`\`\`\n${detail.slice(0, 4000)}\n\`\`\``,
+              });
+              console.log(`Commented on existing issue #${dup.number}`);
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['hosted-mocks-smoke', 'bug'],
+              });
+              console.log(`Opened issue #${created.data.number}`);
+            }
+
+      - name: Fail job if smoke detected a problem
+        if: steps.smoke.outputs.failure_step != ''
+        run: |
+          echo "Smoke step '${{ steps.smoke.outputs.failure_step }}' failed — see issue tracker."
+          exit 1
