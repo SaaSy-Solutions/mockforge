@@ -25,7 +25,9 @@ use mockforge_registry_server::middleware::request_id::request_id_middleware;
 use mockforge_registry_server::redis::RedisPool;
 use mockforge_registry_server::storage::PluginStorage;
 use mockforge_registry_server::store::PgRegistryStore;
-use mockforge_registry_server::{deployment, pillar_tracking_init, routes, workers, AppState};
+use mockforge_registry_server::{
+    deployment, otlp_grpc, pillar_tracking_init, routes, workers, AppState,
+};
 
 use axum::response::IntoResponse;
 use mockforge_observability::get_global_registry;
@@ -225,6 +227,21 @@ async fn main() -> Result<()> {
     ));
     let _cleanup_handle = cleanup_worker.start();
     tracing::info!("Deployment cleanup worker started");
+
+    // Start the OTLP gRPC trace receiver (#548) on a separate listener.
+    // Defaults to 4317 (canonical OTLP gRPC port); customers can pin a
+    // different port via MOCKFORGE_OTLP_GRPC_PORT. Set to 0 to disable.
+    let otlp_grpc_port: u16 = std::env::var("MOCKFORGE_OTLP_GRPC_PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(4317);
+    let _otlp_grpc_handle = if otlp_grpc_port == 0 {
+        tracing::info!("OTLP gRPC receiver disabled (MOCKFORGE_OTLP_GRPC_PORT=0)");
+        None
+    } else {
+        let otlp_addr = SocketAddr::from(([0, 0, 0, 0], otlp_grpc_port));
+        Some(otlp_grpc::spawn_otlp_grpc_server(state.clone(), otlp_addr))
+    };
 
     // Build router
     let app = create_app(state, rate_limiter);

@@ -189,6 +189,14 @@ async-stripe = { version = "0.41", default-features = false, features = ["runtim
 # handing the path to the scanner subprocess).
 tempfile = "3"
 
+# OTLP gRPC trace receiver (#548). Same tonic 0.14 line as `mockforge-grpc`
+# so the workspace doesn't end up with two server-side tonic versions.
+# `opentelemetry-proto` ships the prost-generated `TraceService` server stubs
+# under the `gen-tonic` feature; `trace` narrows the proto modules compiled.
+tonic = { version = "0.14", default-features = false, features = ["server", "transport", "router"] }
+prost = "0.14"
+opentelemetry-proto = { version = "0.32", default-features = false, features = ["gen-tonic", "trace"] }
+
 [dev-dependencies]
 tokio-test = "0.4"
 reqwest = { version = "0.12", features = ["json"] }

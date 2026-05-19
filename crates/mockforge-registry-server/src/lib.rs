@@ -31,6 +31,7 @@ pub mod fly_nats;
 pub mod handlers;
 pub mod metrics;
 pub mod middleware;
+pub mod otlp_grpc;
 /// Domain models now live in `mockforge-registry-core`. Re-exported here
 /// so existing `crate::models::X` paths continue to resolve during the
 /// cloud-core extraction.

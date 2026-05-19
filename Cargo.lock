@@ -8851,7 +8851,9 @@ dependencies = [
  "mockforge-registry-core",
  "mockforge-scenarios",
  "oauth2",
+ "opentelemetry-proto 0.32.0",
  "prometheus",
+ "prost 0.14.3",
  "qrcode",
  "quick-xml 0.31.0",
  "rand 0.8.6",
@@ -8872,6 +8874,7 @@ dependencies = [
  "thiserror 1.0.69",
  "tokio",
  "tokio-test",
+ "tonic 0.14.6",
  "totp-lite",
  "tower 0.5.3",
  "tower-http 0.6.10",
@@ -10374,6 +10377,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "opentelemetry"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0142c63252a9e054e68a4c61a5778f7b14f576274d593f8ce883d191a099682"
+dependencies = [
+ "futures-core",
+ "futures-sink",
+ "js-sys",
+ "pin-project-lite",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "opentelemetry-jaeger"
 version = "0.21.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -10399,7 +10415,7 @@ dependencies = [
  "futures-core",
  "http 0.2.12",
  "opentelemetry 0.22.0",
- "opentelemetry-proto",
+ "opentelemetry-proto 0.5.0",
  "opentelemetry-semantic-conventions 0.14.0",
  "opentelemetry_sdk 0.22.1",
  "prost 0.12.6",
@@ -10418,6 +10434,19 @@ dependencies = [
  "opentelemetry_sdk 0.22.1",
  "prost 0.12.6",
  "tonic 0.11.0",
+]
+
+[[package]]
+name = "opentelemetry-proto"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "56d658ba1faf63f7b9c492cfbe6e0ec365440a16132d3270c1065f7b33f1b638"
+dependencies = [
+ "opentelemetry 0.32.0",
+ "opentelemetry_sdk 0.32.0",
+ "prost 0.14.3",
+ "tonic 0.14.6",
+ "tonic-prost",
 ]
 
 [[package]]
@@ -10484,6 +10513,22 @@ dependencies = [
  "futures-util",
  "opentelemetry 0.31.0",
  "percent-encoding",
+ "rand 0.9.4",
+ "thiserror 2.0.18",
+]
+
+[[package]]
+name = "opentelemetry_sdk"
+version = "0.32.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "368afaed344110f40b179bb8fbe54bc52d98f9bd2b281799ef32487c2650c956"
+dependencies = [
+ "futures-channel",
+ "futures-executor",
+ "futures-util",
+ "opentelemetry 0.32.0",
+ "percent-encoding",
+ "portable-atomic",
  "rand 0.9.4",
  "thiserror 2.0.18",
 ]
