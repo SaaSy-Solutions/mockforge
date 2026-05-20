@@ -143,18 +143,18 @@ async fn test_plugin_marketplace_workflow() {
     let mut helper = MarketplaceTestHelper::new(base_url);
 
     // Step 1: Register and authenticate
-    let timestamp = chrono::Utc::now().timestamp();
+    let test_id = Uuid::new_v4().simple();
     helper
         .register_user(
-            &format!("testuser_{}", timestamp),
-            &format!("test_{}@example.com", timestamp),
+            &format!("testuser_{}", test_id),
+            &format!("test_{}@example.com", test_id),
         )
         .await
         .expect("Failed to register user");
 
     // Step 2: Create organization
     helper
-        .create_org(&format!("test-org-{}", timestamp))
+        .create_org(&format!("test-org-{}", test_id))
         .await
         .expect("Failed to create organization");
 
@@ -168,7 +168,7 @@ async fn test_plugin_marketplace_workflow() {
         .post(format!("{}/api/v1/plugins/publish", helper.base_url))
         .header("Authorization", helper.auth_header().unwrap())
         .json(&json!({
-            "name": format!("test-plugin-{}", timestamp),
+            "name": format!("test-plugin-{}", test_id),
             "version": "1.0.0",
             "description": "Test plugin for E2E testing",
             "category": "testing",
@@ -192,7 +192,7 @@ async fn test_plugin_marketplace_workflow() {
     let publish_body: serde_json::Value =
         publish_response.json().await.expect("Failed to parse response");
     assert_eq!(publish_body["success"], true);
-    let plugin_name = format!("test-plugin-{}", timestamp);
+    let plugin_name = format!("test-plugin-{}", test_id);
 
     // Step 4: Search for the plugin
     let search_response = helper
@@ -264,18 +264,18 @@ async fn test_template_marketplace_workflow() {
     let mut helper = MarketplaceTestHelper::new(base_url);
 
     // Step 1: Register and authenticate
-    let timestamp = chrono::Utc::now().timestamp();
+    let test_id = Uuid::new_v4().simple();
     helper
         .register_user(
-            &format!("testuser_{}", timestamp),
-            &format!("test_{}@example.com", timestamp),
+            &format!("testuser_{}", test_id),
+            &format!("test_{}@example.com", test_id),
         )
         .await
         .expect("Failed to register user");
 
     // Step 2: Create organization
     helper
-        .create_org(&format!("test-org-{}", timestamp))
+        .create_org(&format!("test-org-{}", test_id))
         .await
         .expect("Failed to create organization");
 
@@ -284,7 +284,7 @@ async fn test_template_marketplace_workflow() {
     let checksum = MarketplaceTestHelper::calculate_checksum(&package_data);
     let package_base64 = base64::engine::general_purpose::STANDARD.encode(&package_data);
 
-    let template_name = format!("test-template-{}", timestamp);
+    let template_name = format!("test-template-{}", test_id);
     let publish_response = helper
         .client
         .post(format!("{}/api/v1/templates/publish", helper.base_url))
@@ -354,18 +354,18 @@ async fn test_scenario_marketplace_workflow() {
     let mut helper = MarketplaceTestHelper::new(base_url);
 
     // Step 1: Register and authenticate
-    let timestamp = chrono::Utc::now().timestamp();
+    let test_id = Uuid::new_v4().simple();
     helper
         .register_user(
-            &format!("testuser_{}", timestamp),
-            &format!("test_{}@example.com", timestamp),
+            &format!("testuser_{}", test_id),
+            &format!("test_{}@example.com", test_id),
         )
         .await
         .expect("Failed to register user");
 
     // Step 2: Create organization
     helper
-        .create_org(&format!("test-org-{}", timestamp))
+        .create_org(&format!("test-org-{}", test_id))
         .await
         .expect("Failed to create organization");
 
@@ -374,7 +374,7 @@ async fn test_scenario_marketplace_workflow() {
     let checksum = MarketplaceTestHelper::calculate_checksum(&package_data);
     let package_base64 = base64::engine::general_purpose::STANDARD.encode(&package_data);
 
-    let scenario_name = format!("test-scenario-{}", timestamp);
+    let scenario_name = format!("test-scenario-{}", test_id);
     let manifest = json!({
         "name": scenario_name.clone(),
         "version": "1.0.0",
@@ -456,11 +456,11 @@ async fn test_upload_validation_errors() {
     let mut helper = MarketplaceTestHelper::new(base_url);
 
     // Register and authenticate
-    let timestamp = chrono::Utc::now().timestamp();
+    let test_id = Uuid::new_v4().simple();
     helper
         .register_user(
-            &format!("testuser_{}", timestamp),
-            &format!("test_{}@example.com", timestamp),
+            &format!("testuser_{}", test_id),
+            &format!("test_{}@example.com", test_id),
         )
         .await
         .expect("Failed to register user");
@@ -475,7 +475,7 @@ async fn test_upload_validation_errors() {
         .post(format!("{}/api/v1/plugins/publish", helper.base_url))
         .header("Authorization", helper.auth_header().unwrap())
         .json(&json!({
-            "name": format!("test-plugin-{}", timestamp),
+            "name": format!("test-plugin-{}", test_id),
             "version": "1.0.0",
             "description": "Test plugin",
             "category": "testing",
@@ -532,7 +532,7 @@ async fn test_upload_validation_errors() {
         .post(format!("{}/api/v1/plugins/publish", helper.base_url))
         .header("Authorization", helper.auth_header().unwrap())
         .json(&json!({
-            "name": format!("test-plugin-{}", timestamp),
+            "name": format!("test-plugin-{}", test_id),
             "version": "1.0.0",
             "description": "Test plugin",
             "category": "testing",
@@ -561,16 +561,16 @@ async fn test_template_star_flow() {
         std::env::var("REGISTRY_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
     let mut helper = MarketplaceTestHelper::new(base_url);
 
-    let timestamp = chrono::Utc::now().timestamp();
+    let test_id = Uuid::new_v4().simple();
     helper
         .register_user(
-            &format!("staruser_{}", timestamp),
-            &format!("star_{}@example.com", timestamp),
+            &format!("staruser_{}", test_id),
+            &format!("star_{}@example.com", test_id),
         )
         .await
         .expect("Failed to register user");
     helper
-        .create_org(&format!("star-org-{}", timestamp))
+        .create_org(&format!("star-org-{}", test_id))
         .await
         .expect("Failed to create organization");
 
@@ -578,7 +578,7 @@ async fn test_template_star_flow() {
     let package_data = MarketplaceTestHelper::create_test_package();
     let checksum = MarketplaceTestHelper::calculate_checksum(&package_data);
     let package_base64 = base64::engine::general_purpose::STANDARD.encode(&package_data);
-    let template_name = format!("star-template-{}", timestamp);
+    let template_name = format!("star-template-{}", test_id);
     let version = "1.0.0";
 
     let publish_response = helper
