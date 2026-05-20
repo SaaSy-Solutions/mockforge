@@ -145,10 +145,7 @@ async fn test_plugin_marketplace_workflow() {
     // Step 1: Register and authenticate
     let test_id = Uuid::new_v4().simple();
     helper
-        .register_user(
-            &format!("testuser_{}", test_id),
-            &format!("test_{}@example.com", test_id),
-        )
+        .register_user(&format!("testuser_{}", test_id), &format!("test_{}@example.com", test_id))
         .await
         .expect("Failed to register user");
 
@@ -266,10 +263,7 @@ async fn test_template_marketplace_workflow() {
     // Step 1: Register and authenticate
     let test_id = Uuid::new_v4().simple();
     helper
-        .register_user(
-            &format!("testuser_{}", test_id),
-            &format!("test_{}@example.com", test_id),
-        )
+        .register_user(&format!("testuser_{}", test_id), &format!("test_{}@example.com", test_id))
         .await
         .expect("Failed to register user");
 
@@ -356,10 +350,7 @@ async fn test_scenario_marketplace_workflow() {
     // Step 1: Register and authenticate
     let test_id = Uuid::new_v4().simple();
     helper
-        .register_user(
-            &format!("testuser_{}", test_id),
-            &format!("test_{}@example.com", test_id),
-        )
+        .register_user(&format!("testuser_{}", test_id), &format!("test_{}@example.com", test_id))
         .await
         .expect("Failed to register user");
 
@@ -458,10 +449,7 @@ async fn test_upload_validation_errors() {
     // Register and authenticate
     let test_id = Uuid::new_v4().simple();
     helper
-        .register_user(
-            &format!("testuser_{}", test_id),
-            &format!("test_{}@example.com", test_id),
-        )
+        .register_user(&format!("testuser_{}", test_id), &format!("test_{}@example.com", test_id))
         .await
         .expect("Failed to register user");
 
@@ -563,10 +551,7 @@ async fn test_template_star_flow() {
 
     let test_id = Uuid::new_v4().simple();
     helper
-        .register_user(
-            &format!("staruser_{}", test_id),
-            &format!("star_{}@example.com", test_id),
-        )
+        .register_user(&format!("staruser_{}", test_id), &format!("star_{}@example.com", test_id))
         .await
         .expect("Failed to register user");
     helper
