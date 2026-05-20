@@ -695,7 +695,7 @@ mod tests {
         // was actually attempted), not a missing-key validation error.
         std::env::set_var("MOCKFORGE_PAGERDUTY_ENQUEUE_URL", "http://127.0.0.1:1/v2/enqueue");
         let client = reqwest::Client::builder()
-            .timeout(std::time::Duration::from_millis(200))
+            .timeout(Duration::from_millis(200))
             .build()
             .unwrap();
         let channel = pagerduty_channel(serde_json::json!({ "integration_key": "abc123" }));
