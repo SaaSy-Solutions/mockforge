@@ -252,7 +252,7 @@ impl ProbabilisticModel {
     /// Sample a status code based on learned distribution
     pub fn sample_status_code(model: &EndpointProbabilityModel) -> u16 {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let random: f64 = rng.gen_range(0.0..1.0);
 
         let mut cumulative = 0.0;
@@ -275,7 +275,7 @@ impl ProbabilisticModel {
     /// Sample latency based on learned distribution
     pub fn sample_latency(model: &EndpointProbabilityModel) -> u64 {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Use normal distribution approximation based on mean and std_dev
         let mean = model.latency_distribution.mean;
@@ -299,7 +299,7 @@ impl ProbabilisticModel {
         _conditions: Option<&HashMap<String, String>>,
     ) -> Option<&'a ErrorPattern> {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let random: f64 = rng.gen_range(0.0..1.0);
 
         let mut cumulative = 0.0;

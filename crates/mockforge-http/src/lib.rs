@@ -1899,8 +1899,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
             // Register route using `any()` since we need full Request access for template expansion
             let expected_method = method.to_uppercase();
             // Clone Arc for the closure - Arc is Send-safe
-            // Note: RouteChaosInjector is marked as Send+Sync via unsafe impl, but the compiler
-            // is conservative because rng() is available in the rand crate, even though we use thread_rng()
+            // Note: RouteChaosInjector is marked as Send+Sync via unsafe impl, so we have to
+            // clone the Arc rather than move the inner injector into the route handler.
             let injector_clone = injector.clone();
             app = app.route(
                 &path,

@@ -10,7 +10,7 @@ use argon2::{
     Algorithm, Argon2, Params, Version,
 };
 use pbkdf2::pbkdf2_hmac;
-use rand::{thread_rng, Rng};
+use rand::{rng, Rng};
 use sha2::Sha256;
 
 /// Key derivation method
@@ -250,7 +250,7 @@ impl KeyDerivationManager {
     #[allow(dead_code)]
     pub fn generate_salt() -> String {
         let mut salt = [0u8; 16];
-        let mut rng = thread_rng();
+        let mut rng = rng();
         rng.fill(&mut salt);
         base64::Engine::encode(&base64::engine::general_purpose::STANDARD, salt)
     }
