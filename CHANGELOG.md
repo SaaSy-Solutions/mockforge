@@ -2096,3 +2096,4 @@ If you need to do a manual release:
 - [ ] Version bumped in all `Cargo.toml` files
 - [ ] Breaking changes documented (if any)
 - [ ] CI passes on all branches
+
