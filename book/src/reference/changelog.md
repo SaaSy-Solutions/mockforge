@@ -1,5 +1,13 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.140] - 2026-05-20
+
+### Fixed
+
+- **[DevX]** Pre-flight `--vus` probe now factors in operations-per-iteration (#79 round 9)
+  - The round-8 probe assumed 1 iteration = 1 request, but k6's `constant-arrival-rate` counts iterations and every iteration calls every operation in the spec. Srikanth's 12-op spec at `--rps 100` with 15ms latency reported "--vus 5 is sufficient" and then k6 still emitted "Insufficient VUs, reached 5 active VUs" mid-run because real iteration time was 15ms × 12 ops, not 15ms.
+  - Fix: `ProbeResult::required_vus(rps, num_operations)` now multiplies by spec operation count. Same call site change in `command.rs`. New tests `required_vus_scales_with_operation_count` and `required_vus_treats_zero_operations_as_one`. The pre-flight progress / warning lines now print the operation count so users see what the math used.
+
 ## [0.3.139] - 2026-05-19
 
 ### Added

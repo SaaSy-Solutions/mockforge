@@ -429,32 +429,49 @@ impl BenchCommand {
         // latency, then derive a more accurate sizing recommendation. Fall
         // back to the 100ms heuristic only when the probe can't reach the
         // target (auth-gated endpoints, strict WAFs, etc).
+        //
+        // Round 9 (#79): factor in operation count. k6's constant-arrival-rate
+        // counts ITERATIONS, not requests — and every iteration runs all N
+        // operations sequentially, so required VUs scale with N. Srikanth's
+        // 12-op spec at --rps 100 with 15ms latency needs ~19 VUs, not 3.
+        let num_ops = operations.len() as u32;
         if let Some(rps) = self.target_rps {
             let probe =
                 crate::preflight::probe_target_latency(&self.target, 3, self.skip_tls_verify).await;
 
             let (required_vus, basis) = match probe {
                 Some(p) => (
-                    p.required_vus(rps),
+                    p.required_vus(rps, num_ops),
                     format!("avg {:.1}ms (measured)", p.avg_latency.as_secs_f64() * 1000.0),
                 ),
-                None => (rps.div_ceil(10), "~100ms (default — probe failed)".to_string()),
+                None => {
+                    // Static fallback: ~100ms heuristic × num_ops per iteration.
+                    let fallback = (rps as u64)
+                        .saturating_mul(num_ops.max(1) as u64)
+                        .div_ceil(10)
+                        .min(u32::MAX as u64) as u32;
+                    (fallback, "~100ms (default — probe failed)".to_string())
+                }
             };
 
             if self.vus < required_vus {
                 TerminalReporter::print_warning(&format!(
-                    "--vus {} may be insufficient for --rps {} (baseline latency {}). \
-                     k6's constant-arrival-rate needs ≈ rps × latency_secs VUs to sustain \
-                     the rate; bump --vus to ~{} if you see \"Insufficient VUs\" warnings.",
+                    "--vus {} may be insufficient for --rps {} × {} ops/iteration \
+                     (baseline latency {}). k6's constant-arrival-rate counts ITERATIONS \
+                     and each runs every operation in the spec — required ≈ rps × ops × \
+                     latency_secs VUs. Bump --vus to ~{} if you see \"Insufficient VUs\" \
+                     warnings.",
                     self.vus,
                     rps,
+                    num_ops,
                     basis,
                     required_vus.max(self.vus + 1),
                 ));
             } else if probe.is_some() {
                 TerminalReporter::print_progress(&format!(
-                    "Pre-flight probe: target latency {} — --vus {} is sufficient for --rps {}",
-                    basis, self.vus, rps,
+                    "Pre-flight probe: target latency {}, {} ops/iteration — --vus {} \
+                     is sufficient for --rps {}",
+                    basis, num_ops, self.vus, rps,
                 ));
             }
         }

@@ -23,12 +23,26 @@ pub struct ProbeResult {
 }
 
 impl ProbeResult {
-    /// Required VUs to sustain `target_rps` end-to-end, given the observed
-    /// latency. Formula: `rps × latency_secs`, with a small +1 safety margin.
+    /// Required VUs to sustain `target_rps` end-to-end with `num_operations`
+    /// per iteration.
+    ///
+    /// Why `num_operations` matters: k6's `constant-arrival-rate` executor
+    /// (set by `--rps`) targets ITERATIONS per second, not requests. Each
+    /// iteration runs every operation in the generated script sequentially.
+    /// So sustaining `--rps R` with a spec of `N` operations actually needs
+    /// `R × N × latency_secs` VUs, not `R × latency_secs`.
+    ///
+    /// Issue #79 round 9 — Srikanth saw "Pre-flight probe: --vus 5 is
+    /// sufficient" followed by k6 emitting "Insufficient VUs" mid-run.
+    /// Cause: he had a ~12-operation spec, so the real iteration time
+    /// was ~12 × measured latency, not 1 ×.
+    ///
+    /// Formula: `rps × num_operations × latency_secs + 1` (safety margin).
     /// Returns at least 1.
-    pub fn required_vus(&self, target_rps: u32) -> u32 {
+    pub fn required_vus(&self, target_rps: u32, num_operations: u32) -> u32 {
         let lat_secs = self.avg_latency.as_secs_f64().max(0.001);
-        let raw = (target_rps as f64 * lat_secs).ceil() as u32;
+        let ops = num_operations.max(1) as f64;
+        let raw = (target_rps as f64 * ops * lat_secs).ceil() as u32;
         raw.saturating_add(1).max(1)
     }
 }
@@ -93,15 +107,28 @@ mod tests {
             avg_latency: Duration::from_millis(2),
             samples: 3,
         };
-        // 1000 rps × 2ms = 2 VU + 1 margin = 3
-        assert_eq!(fast.required_vus(1000), 3);
+        // Single-op spec: 1000 rps × 1 op × 2ms = 2 VU + 1 margin = 3
+        assert_eq!(fast.required_vus(1000, 1), 3);
 
         let slow = ProbeResult {
             avg_latency: Duration::from_millis(100),
             samples: 3,
         };
-        // 100 rps × 100ms = 10 VU + 1 margin = 11
-        assert_eq!(slow.required_vus(100), 11);
+        // Single-op: 100 rps × 1 op × 100ms = 10 VU + 1 margin = 11
+        assert_eq!(slow.required_vus(100, 1), 11);
+    }
+
+    #[test]
+    fn required_vus_scales_with_operation_count() {
+        // Issue #79 round 9 — Srikanth saw "vus 5 is sufficient" then k6
+        // hit Insufficient VUs because his spec had ~12 operations per
+        // iteration. With 15ms baseline × 12 ops × 100 rps = 18 VUs.
+        let probe = ProbeResult {
+            avg_latency: Duration::from_millis(15),
+            samples: 3,
+        };
+        assert_eq!(probe.required_vus(100, 1), 3); // single op
+        assert_eq!(probe.required_vus(100, 12), 19); // 12 ops + 1 margin
     }
 
     #[test]
@@ -110,8 +137,19 @@ mod tests {
             avg_latency: Duration::from_micros(50),
             samples: 1,
         };
-        // (1 × 0.001s clamp) × 1 = 1, +1 margin = 2
-        assert!(fast.required_vus(1) >= 1);
+        // (1 × 0.001s clamp) × 1 op × 1 rps = 1, +1 margin = 2
+        assert!(fast.required_vus(1, 1) >= 1);
+    }
+
+    #[test]
+    fn required_vus_treats_zero_operations_as_one() {
+        let probe = ProbeResult {
+            avg_latency: Duration::from_millis(10),
+            samples: 1,
+        };
+        // num_operations=0 should clamp to 1 so we never divide-by-zero
+        // upstream or report an impossible "0 VUs" recommendation.
+        assert_eq!(probe.required_vus(100, 0), probe.required_vus(100, 1));
     }
 
     #[tokio::test]
