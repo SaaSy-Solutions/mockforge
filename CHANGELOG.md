@@ -3,7 +3,7 @@
 ### Fixed
 
 - **[DevX]** `mockforge-foundation::pillars` doctests now reference the actual crate path (release-gate fix)
-  - All 9 doctests imported `use mockforge_core::pillars::...`, but the `Pillar` enum lives in `mockforge-foundation` itself. The mismatch caused `cargo test --doc -p mockforge-foundation` to fail with `cannot find module or crate \`mockforge_core\``, which gates the Release workflow's `cargo test --workspace --release` step — so the v0.3.140 tag's `Create Release` job failed and Publish-to-crates.io was skipped. Replaced `mockforge_core::pillars` → `mockforge_foundation::pillars` across all 9 doctests. 11 doctests now pass.
+  - All 9 doctests imported `use mockforge_core::pillars::...`, but the `Pillar` enum lives in `mockforge-foundation` itself. The mismatch caused `cargo test --doc -p mockforge-foundation` to fail with ``cannot find module or crate `mockforge_core` ``, which gates the Release workflow's `cargo test --workspace --release` step — so the v0.3.140 tag's `Create Release` job failed and Publish-to-crates.io was skipped. Replaced `mockforge_core::pillars` → `mockforge_foundation::pillars` across all 9 doctests. 11 doctests now pass.
   - **0.3.140 was never published to crates.io**; this release ships the round-9 bench fix originally intended for that version, plus this doctest fix on top.
 
 ## [0.3.140] - 2026-05-20
@@ -2096,4 +2096,3 @@ If you need to do a manual release:
 - [ ] Version bumped in all `Cargo.toml` files
 - [ ] Breaking changes documented (if any)
 - [ ] CI passes on all branches
-
