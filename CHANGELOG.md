@@ -1,5 +1,10 @@
 ## [0.3.139] - 2026-05-19
 
+### Fixed
+
+- **[Cloud]** Drop unnecessary `std::time::` qualifier in `incident_dispatcher` PagerDuty timeout
+  - `Duration` is already imported at the top of `crates/mockforge-registry-server/src/workers/incident_dispatcher.rs`, so the fully-qualified `std::time::Duration::from_millis(200)` at line 698 was tripping the workspace-wide `-Dunused_qualifications` ratchet. The Incremental Warning Gate started failing on this when PR #573 landed; this clears it without touching behaviour.
+
 ### Added
 
 - **[DevX]** Adaptive pre-flight latency probe for `--vus` sizing (#79 round 8)
