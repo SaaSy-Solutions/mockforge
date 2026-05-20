@@ -768,7 +768,7 @@ mod tests {
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         rt.block_on(async move {
             let verifier = SignatureVerifier::new(
-                crate::signing::TrustStore::new(),
+                TrustStore::new(),
                 crate::signing::SignatureMode::Optional,
             );
             let (host, actor, _bus) =
@@ -875,7 +875,7 @@ mod tests {
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         rt.block_on(async move {
             let verifier = SignatureVerifier::new(
-                crate::signing::TrustStore::new(),
+                TrustStore::new(),
                 crate::signing::SignatureMode::Required,
             );
             let (host, actor, _bus) =
@@ -940,7 +940,7 @@ mod tests {
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         rt.block_on(async move {
             let verifier = SignatureVerifier::new(
-                crate::signing::TrustStore::new(),
+                TrustStore::new(),
                 crate::signing::SignatureMode::Optional,
             );
             let (host, actor, _bus) =
