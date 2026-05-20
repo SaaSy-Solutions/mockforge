@@ -159,7 +159,12 @@ mod tests {
                 crate::signing::TrustStore::new(),
                 crate::signing::SignatureMode::Optional,
             );
-            let (host, actor, _bus) = Host::new(PluginLoaderConfig::default(), verifier, crate::blocklist::Blocklist::new());
+            let (host, actor, _bus) = Host::new(
+                PluginLoaderConfig::default(),
+                verifier,
+                crate::blocklist::Blocklist::new(),
+                crate::platform_trust_root_cache::PlatformTrustStore::new(),
+            );
             let server_host = host.clone();
             tokio::select! {
                 result = body(host) => result,

@@ -112,6 +112,31 @@ impl Request {
     }
 }
 
+/// Summary of the host's currently-trusted key sets — embedded in
+/// [`Response::HealthOk`] so the parent process can surface it on its
+/// own healthz endpoint without an additional round-trip. Optional on
+/// the wire so older mockforge versions parsing newer responses, and
+/// newer mockforges parsing older responses, both keep working.
+///
+/// `publisher_keys`: Ed25519 publisher trust roots (issue #549). Empty
+/// when the host runs in [`crate::signing::SignatureMode::Optional`]
+/// without any roots configured.
+///
+/// `platform_signing_keys`: ECDSA P-256/P-384 platform signing roots
+/// (issue #568) — the keys that authenticate first-party MockForge
+/// cloud plugins and (in a follow-up) sign the kill-switch blocklist.
+/// The runbook's "verify the host fleet" step compares this against
+/// the registry's view via `/api/internal/plugin-rotation-events`.
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub struct TrustSummary {
+    /// Ids of trusted publisher (Ed25519) keys, sorted lexicographically.
+    pub publisher_keys: Vec<String>,
+    /// Ids of trusted platform signing-root (ECDSA) keys, sorted
+    /// lexicographically.
+    pub platform_signing_keys: Vec<String>,
+}
+
 /// Response from the plugin host back to main mockforge.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -123,6 +148,13 @@ pub enum Response {
         id: Uuid,
         /// Process uptime in seconds.
         uptime_secs: u64,
+        /// Currently-trusted publisher and platform-signing roots.
+        /// Optional on the wire — older hosts omit it; newer parent
+        /// processes treat the absence as "host doesn't surface trust
+        /// info" rather than "no trust roots configured". The IPC
+        /// handler in this crate always populates it (issue #568).
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        trust: Option<TrustSummary>,
     },
     /// Plugin operation succeeded. Body is operation-specific.
     Ok {
@@ -284,9 +316,38 @@ mod tests {
         let resp = Response::HealthOk {
             id: Uuid::new_v4(),
             uptime_secs: 42,
+            trust: None,
         };
         let json = serde_json::to_string(&resp).unwrap();
         assert!(json.contains("\"kind\":\"health_ok\""));
+    }
+
+    #[test]
+    fn health_ok_omits_trust_field_when_none() {
+        // Forward-compat: an older host that doesn't surface trust
+        // info still emits a parseable HealthOk for newer clients.
+        let resp = Response::HealthOk {
+            id: Uuid::new_v4(),
+            uptime_secs: 42,
+            trust: None,
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(!json.contains("trust"), "trust should be omitted, got {}", json);
+    }
+
+    #[test]
+    fn health_ok_serializes_trust_summary_when_present() {
+        let resp = Response::HealthOk {
+            id: Uuid::new_v4(),
+            uptime_secs: 1,
+            trust: Some(TrustSummary {
+                publisher_keys: vec!["pk1".into()],
+                platform_signing_keys: vec!["arn-1".into(), "arn-2".into()],
+            }),
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        assert!(json.contains("\"platform_signing_keys\":[\"arn-1\",\"arn-2\"]"));
+        assert!(json.contains("\"publisher_keys\":[\"pk1\"]"));
     }
 
     #[test]

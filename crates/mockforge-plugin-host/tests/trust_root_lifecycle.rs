@@ -114,6 +114,7 @@ fn trust_root_lifecycle_register_load_revoke_reload() {
             },
             verifier,
             Blocklist::new(),
+            mockforge_plugin_host::PlatformTrustStore::new(),
         );
 
         // ─── Spawn the refresh loop. Short interval so the test
@@ -301,6 +302,7 @@ fn sweep_flags_loaded_plugin_when_trust_root_is_revoked() {
             },
             verifier,
             Blocklist::new(),
+            mockforge_plugin_host::PlatformTrustStore::new(),
         );
 
         let outcome = tokio::select! {

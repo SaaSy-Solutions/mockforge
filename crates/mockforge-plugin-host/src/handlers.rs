@@ -15,6 +15,7 @@ pub async fn handle(host: &Host, request: Request) -> Response {
         Request::Health { id } => Response::HealthOk {
             id,
             uptime_secs: host.uptime_secs(),
+            trust: Some(host.trust_summary().await),
         },
 
         Request::LoadPlugin {
@@ -153,6 +154,7 @@ mod tests {
                 },
                 verifier,
                 crate::blocklist::Blocklist::new(),
+                crate::platform_trust_root_cache::PlatformTrustStore::new(),
             );
             tokio::select! {
                 result = body(host) => result,

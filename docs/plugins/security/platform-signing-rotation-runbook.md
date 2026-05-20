@@ -170,15 +170,23 @@ curl -X POST https://registry.mockforge.dev/api/internal/platform-signing/begin-
   }"
 ```
 
-> The HTTP handler that backs this endpoint ships in a follow-up PR
-> (see [Issue #551](https://github.com/SaaSy-Solutions/mockforge/issues/551))
-> — it depends on the live-reload work in #549. Until that lands,
-> operators drive the same flow via a one-shot Rust binary:
->
-> ```bash
-> cargo run -p mockforge-registry-server --bin rotate-platform-key -- \
->   --to-key-id "$NEW_ARN" --transition-window-days 30
-> ```
+For air-gapped deployments (or for the very first rotation in a
+brand-new cluster, before the operator JWT is provisioned), the same
+audit-aware [`begin_handover`](../../../crates/mockforge-registry-server/src/platform_signing.rs)
+call is also exposed as a one-shot binary that runs directly against
+the registry's database:
+
+```bash
+cargo run -p mockforge-registry-server --bin rotate-platform-key -- \
+  --to-key-id "$NEW_ARN" \
+  --transition-window-days 30 \
+  --operator-org-id  "$OPERATOR_ORG_UUID" \
+  --operator-user-id "$OPERATOR_USER_UUID"
+```
+
+Both paths write the same `platform_signing_rotation_started` audit
+row; auditors can't tell them apart from the row contents (good — the
+audit story is identical either way).
 
 The response is a JSON `RotationEvent`:
 
@@ -209,20 +217,32 @@ The registry:
 
 ### 4. Watch the fleet pick up the new key
 
-Plugin-hosts poll the rotation-event endpoint on the same 60-second
-cadence they use for the kill-switch (RFC §8.2). Within 60s of step 3,
-every host should be in the "two trusted keys" state.
+Plugin-hosts poll
+`GET /api/internal/plugin-rotation-events` on the same 60-second
+cadence they use for the kill-switch (RFC §8.2), driven by the
+[`MOCKFORGE_PLUGIN_HOST_ROTATION_URL`](../../../crates/mockforge-plugin-host/src/main.rs)
+env var. Within 60s of step 3, every host should be in the
+"two trusted keys" state.
 
-Verify with the host's `/healthz` endpoint (extended in #549):
+The host's trust set surfaces through its IPC Health response (which
+the parent `mockforge` process is responsible for re-exposing on its
+own `/healthz`):
 
 ```bash
-curl https://<plugin-host>/healthz | jq '.trust.platform_signing_keys'
+# Single host — fastest path is to talk to the IPC socket directly.
+echo '{"kind":"health","id":"00000000-0000-0000-0000-000000000000"}' \
+  | nc -U /tmp/plugin-host.sock \
+  | jq '.trust.platform_signing_keys'
 # Expect: ["<OLD_ARN>", "<NEW_ARN>"]
+
+# Fleet — main mockforge surfaces the IPC payload on its healthz.
+curl https://<mockforge-fleet-host>/healthz | jq '.plugin_host.trust.platform_signing_keys'
 ```
 
 If hosts are still showing only `<OLD_ARN>` after 5 minutes, do NOT
 proceed to step 5 — there's a propagation problem, debug the host
-poll loop.
+poll loop (`MOCKFORGE_PLUGIN_HOST_ROTATION_URL` set? bearer token
+correct? `/api/internal/plugin-rotation-events` returning the event?).
 
 ### 5. Update the plugin-host release pipeline
 
@@ -383,16 +403,29 @@ second independently verifies the published event).
 ### Verify the host fleet
 
 ```bash
-# Every host returns its currently-trusted platform-signing key ids
-# on /healthz.platform_signing_keys.
+# Every host's trust set surfaces via main mockforge's healthz
+# (which forwards the plugin-host IPC Health payload).
 for host in $(get-host-fleet); do
-  curl -s "https://$host/healthz" | jq -r '.trust.platform_signing_keys[]'
+  curl -s "https://$host/healthz" \
+    | jq -r '.plugin_host.trust.platform_signing_keys[]'
 done | sort -u
 ```
 
 After the transition window closes, the set should equal `{"$NEW_ARN"}`
 exactly. Stragglers indicate a host that didn't poll — investigate,
 restart if necessary.
+
+The registry's own view is on
+`GET /api/internal/plugin-rotation-events`:
+
+```bash
+curl -s https://registry.mockforge.dev/api/internal/plugin-rotation-events \
+  -H "Authorization: Bearer $MOCKFORGE_INTERNAL_API_TOKEN" \
+  | jq '{phase, trusted_key_ids}'
+```
+
+If the fleet's set and the registry's `trusted_key_ids` diverge, the
+registry is the source of truth — stragglers need to refresh.
 
 ---
 

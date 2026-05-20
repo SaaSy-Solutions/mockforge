@@ -75,4 +75,9 @@ pub struct AppState {
     /// time, in parallel with `db`, so that both Postgres (SaaS) and SQLite
     /// (OSS admin) backends can satisfy the same handler code.
     pub store: Arc<dyn RegistryStore>,
+    /// HSM-backed platform-signing rotation control (Issue #568). `None`
+    /// when the deployment didn't configure `MOCKFORGE_PLATFORM_SIGNING_KMS_KEY_ID`
+    /// (OSS smoke runs, dev) — the corresponding HTTP endpoints answer
+    /// 503 in that case.
+    pub platform_signing: Option<Arc<dyn platform_signing::PlatformSigningController>>,
 }
