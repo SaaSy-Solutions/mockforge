@@ -26,7 +26,7 @@
 //! Or use the `Pillar` enum programmatically:
 //!
 //! ```rust
-//! use mockforge_core::pillars::{Pillar, PillarMetadata};
+//! use mockforge_foundation::pillars::{Pillar, PillarMetadata};
 //!
 //! let metadata = PillarMetadata::new()
 //!     .with_pillar(Pillar::Reality)
@@ -104,7 +104,7 @@ impl Pillar {
     /// # Examples
     ///
     /// ```
-    /// use mockforge_core::pillars::Pillar;
+    /// use mockforge_foundation::pillars::Pillar;
     ///
     /// assert_eq!(Pillar::Reality.as_str(), "reality");
     /// assert_eq!(Pillar::Contracts.as_str(), "contracts");
@@ -127,7 +127,7 @@ impl Pillar {
     /// # Examples
     ///
     /// ```
-    /// use mockforge_core::pillars::Pillar;
+    /// use mockforge_foundation::pillars::Pillar;
     ///
     /// assert_eq!(Pillar::from_str("reality"), Some(Pillar::Reality));
     /// assert_eq!(Pillar::from_str("REALITY"), Some(Pillar::Reality));
@@ -152,7 +152,7 @@ impl Pillar {
     /// # Examples
     ///
     /// ```
-    /// use mockforge_core::pillars::Pillar;
+    /// use mockforge_foundation::pillars::Pillar;
     ///
     /// assert_eq!(Pillar::Reality.display_name(), "[Reality]");
     /// assert_eq!(Pillar::Contracts.display_name(), "[Contracts]");
@@ -172,7 +172,7 @@ impl Pillar {
     /// # Examples
     ///
     /// ```
-    /// use mockforge_core::pillars::Pillar;
+    /// use mockforge_foundation::pillars::Pillar;
     ///
     /// let all = Pillar::all();
     /// assert_eq!(all.len(), 5);
@@ -273,7 +273,7 @@ impl PillarMetadata {
     /// # Examples
     ///
     /// ```
-    /// use mockforge_core::pillars::{Pillar, PillarMetadata};
+    /// use mockforge_foundation::pillars::{Pillar, PillarMetadata};
     ///
     /// let doc = "//! Pillars: [Reality][AI]\n//! This module does something";
     /// let metadata = PillarMetadata::from_doc_comment(doc).unwrap();
@@ -324,7 +324,7 @@ impl Default for PillarMetadata {
 /// # Examples
 ///
 /// ```
-/// use mockforge_core::pillars::{Pillar, parse_pillar_tags_from_scenario_tags};
+/// use mockforge_foundation::pillars::{Pillar, parse_pillar_tags_from_scenario_tags};
 ///
 /// let tags = vec!["[Cloud]".to_string(), "auth".to_string(), "[Contracts][Reality]".to_string()];
 /// let pillars = parse_pillar_tags_from_scenario_tags(&tags);
@@ -366,7 +366,7 @@ pub fn parse_pillar_tags_from_scenario_tags(tags: &[String]) -> Vec<Pillar> {
 /// # Examples
 ///
 /// ```
-/// use mockforge_core::pillars::has_pillar_tags;
+/// use mockforge_foundation::pillars::has_pillar_tags;
 ///
 /// assert!(has_pillar_tags("[Cloud]"));
 /// assert!(has_pillar_tags("[Contracts][Reality]"));
@@ -397,7 +397,7 @@ pub fn has_pillar_tags(tag: &str) -> bool {
 /// # Examples
 ///
 /// ```
-/// use mockforge_core::pillars::{Pillar, pillar_metadata_from_scenario_tags};
+/// use mockforge_foundation::pillars::{Pillar, pillar_metadata_from_scenario_tags};
 ///
 /// let tags = vec!["[Cloud]".to_string(), "[Contracts]".to_string(), "auth".to_string()];
 /// let metadata = pillar_metadata_from_scenario_tags(&tags);
