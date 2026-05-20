@@ -76,8 +76,8 @@ impl ApiToken {
         use base64::{engine::general_purpose, Engine as _};
         let token_suffix = {
             use rand::Rng;
-            let mut rng = rand::thread_rng();
-            let random_bytes: Vec<u8> = (0..32).map(|_| rng.gen()).collect();
+            let mut rng = rand::rng();
+            let random_bytes: Vec<u8> = (0..32).map(|_| rng.random()).collect();
             general_purpose::STANDARD.encode(&random_bytes)
         };
         let full_token = format!("mfx_{}", token_suffix);

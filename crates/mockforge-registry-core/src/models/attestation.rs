@@ -174,7 +174,7 @@ mod tests {
         // code, we build the key from random bytes directly.
         use rand::RngCore;
         let mut secret = [0u8; 32];
-        rand::thread_rng().fill_bytes(&mut secret);
+        rand::rng().fill_bytes(&mut secret);
         let signing = SigningKey::from_bytes(&secret);
         let pk_b64 =
             base64::engine::general_purpose::STANDARD.encode(signing.verifying_key().to_bytes());
@@ -405,7 +405,7 @@ mod jcs_fuzz {
             // Build a keypair the same way the attestation tests do:
             // fill 32 bytes from the OS RNG and wrap.
             let mut secret = [0u8; 32];
-            rand::thread_rng().fill_bytes(&mut secret);
+            rand::rng().fill_bytes(&mut secret);
             let signing = SigningKey::from_bytes(&secret);
             let key = UserPublicKey {
                 id: Uuid::new_v4(),

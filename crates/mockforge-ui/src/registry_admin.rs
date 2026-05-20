@@ -793,7 +793,7 @@ async fn create_invitation(
     use base64::{engine::general_purpose, Engine as _};
     use rand::RngCore;
     let mut buf = [0u8; 32];
-    rand::thread_rng().fill_bytes(&mut buf);
+    rand::rng().fill_bytes(&mut buf);
     let nonce = general_purpose::URL_SAFE_NO_PAD.encode(buf);
     let payload = InvitePayload {
         kind: "invite".into(),
