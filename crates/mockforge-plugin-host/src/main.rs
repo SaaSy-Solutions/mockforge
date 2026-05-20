@@ -22,9 +22,10 @@ use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use mockforge_plugin_host::{
-    run_exporter, run_poll_loop, run_server, run_trust_root_refresh_loop, validate_trust_roots_url,
-    Blocklist, BlocklistConfig, ExporterConfig, Host, ServerConfig, SignatureMode,
-    SignatureVerifier, TrustRootCacheConfig, TrustStore,
+    run_exporter, run_platform_trust_refresh_loop, run_poll_loop, run_server,
+    run_trust_root_refresh_loop, seed_from_env, validate_trust_roots_url, Blocklist,
+    BlocklistConfig, ExporterConfig, Host, PlatformTrustCacheConfig, PlatformTrustStore,
+    ServerConfig, SignatureMode, SignatureVerifier, TrustRootCacheConfig, TrustStore,
 };
 use mockforge_plugin_loader::PluginLoaderConfig;
 
@@ -46,6 +47,12 @@ fn main() -> Result<()> {
     let blocklist_config = env_blocklist_config();
     let exporter_config = env_exporter_config();
     let trust_root_cache_config = env_trust_root_cache_config()?;
+    // Platform signing-root trust set (#568). The cache is empty when
+    // neither the boot-time embedded roots nor the rotation-events URL
+    // are configured — main mockforge in that mode just doesn't
+    // surface a non-empty `platform_signing_keys` set on healthz.
+    let platform_trust = PlatformTrustStore::new();
+    let platform_rotation_cfg = env_platform_rotation_config();
 
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
@@ -55,6 +62,10 @@ fn main() -> Result<()> {
         blocklist_url = blocklist_config.as_ref().map(|c| c.url.as_str()).unwrap_or("(disabled)"),
         exporter_url = exporter_config.as_ref().map(|c| c.url.as_str()).unwrap_or("(disabled)"),
         trust_root_url = trust_root_cache_config
+            .as_ref()
+            .map(|c| c.url.as_str())
+            .unwrap_or("(disabled)"),
+        platform_rotation_url = platform_rotation_cfg
             .as_ref()
             .map(|c| c.url.as_str())
             .unwrap_or("(disabled)"),
@@ -70,8 +81,33 @@ fn main() -> Result<()> {
         .context("building Tokio current-thread runtime")?;
 
     rt.block_on(async move {
-        let (host, actor, metrics_bus) =
-            Host::new(PluginLoaderConfig::default(), verifier, blocklist.clone());
+        // Seed embedded platform-signing roots from env (#568). Errors
+        // here are fatal — running with no embedded root means the
+        // host can't accept any rotation event, and that'd be a silent
+        // security failure in production.
+        match seed_from_env(&platform_trust).await {
+            Ok(n) if n > 0 => {
+                tracing::info!(seeded = n, "platform-signing embedded roots loaded");
+            }
+            Ok(_) => {
+                tracing::info!(
+                    "no platform-signing embedded roots configured (MOCKFORGE_PLATFORM_TRUST_ROOTS unset); \
+                     rotation-event poll loop will reject every event until manually seeded"
+                );
+            }
+            Err(err) => {
+                return Err(anyhow::anyhow!(
+                    "failed to parse MOCKFORGE_PLATFORM_TRUST_ROOTS: {err}"
+                ));
+            }
+        };
+
+        let (host, actor, metrics_bus) = Host::new(
+            PluginLoaderConfig::default(),
+            verifier,
+            blocklist.clone(),
+            platform_trust.clone(),
+        );
 
         // The blocklist poller is Send (just an HTTP client) so it
         // could in principle be tokio::spawn'd, but driving it
@@ -91,6 +127,17 @@ fn main() -> Result<()> {
         let exporter_future: std::pin::Pin<Box<dyn std::future::Future<Output = ()>>> =
             match exporter_config {
                 Some(cfg) => Box::pin(run_exporter(cfg, (*metrics_bus).clone())),
+                None => Box::pin(std::future::pending()),
+            };
+
+        // Platform-rotation refresh — issue #568. Polls
+        // `/api/internal/plugin-rotation-events`, verifies any new
+        // event with the verifier in `mockforge-platform-signing`,
+        // and extends the platform trust store with the new key
+        // while stamping the previous one for expiry.
+        let platform_rotation_future: std::pin::Pin<Box<dyn std::future::Future<Output = ()>>> =
+            match platform_rotation_cfg {
+                Some(cfg) => Box::pin(run_platform_trust_refresh_loop(cfg, platform_trust)),
                 None => Box::pin(std::future::pending()),
             };
 
@@ -145,6 +192,10 @@ fn main() -> Result<()> {
             _ = trust_root_future => {
                 tracing::error!("trust-root refresh loop exited unexpectedly");
                 Err(anyhow::anyhow!("trust-root refresh loop exited"))
+            }
+            _ = platform_rotation_future => {
+                tracing::error!("platform-rotation refresh loop exited unexpectedly");
+                Err(anyhow::anyhow!("platform-rotation refresh loop exited"))
             }
             _ = shutdown_signal() => {
                 tracing::info!("plugin-host received shutdown signal — exiting");
@@ -214,6 +265,37 @@ fn env_trust_root_cache_config() -> Result<Option<TrustRootCacheConfig>> {
         }
     }
     Ok(Some(cfg))
+}
+
+/// Build a [`PlatformTrustCacheConfig`] from env vars, or `None` if
+/// `MOCKFORGE_PLUGIN_HOST_ROTATION_URL` is unset. Issue #568.
+///
+/// Env vars:
+///   - `MOCKFORGE_PLUGIN_HOST_ROTATION_URL` — required to enable.
+///     Should point at the registry's
+///     `/api/internal/plugin-rotation-events`.
+///   - `MOCKFORGE_PLUGIN_HOST_ROTATION_INTERVAL_SECS` — optional;
+///     default 60s (matches the trust-root + blocklist cadences).
+///   - `MOCKFORGE_PLUGIN_HOST_ROTATION_BEARER` — shared internal
+///     token. The host fleet shares the same token the runbook
+///     gives operators; the registry rejects requests without it.
+fn env_platform_rotation_config() -> Option<PlatformTrustCacheConfig> {
+    let url = std::env::var("MOCKFORGE_PLUGIN_HOST_ROTATION_URL").ok()?;
+    if url.is_empty() {
+        return None;
+    }
+    let mut cfg = PlatformTrustCacheConfig::new(url);
+    if let Ok(secs) = std::env::var("MOCKFORGE_PLUGIN_HOST_ROTATION_INTERVAL_SECS") {
+        if let Ok(n) = secs.parse::<u64>() {
+            cfg.interval = std::time::Duration::from_secs(n.max(1));
+        }
+    }
+    if let Ok(token) = std::env::var("MOCKFORGE_PLUGIN_HOST_ROTATION_BEARER") {
+        if !token.is_empty() {
+            cfg.bearer_token = Some(token);
+        }
+    }
+    Some(cfg)
 }
 
 /// Build a [`BlocklistConfig`] from env vars, or `None` if no

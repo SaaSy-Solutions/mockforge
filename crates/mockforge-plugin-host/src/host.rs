@@ -30,6 +30,8 @@ use mockforge_plugin_loader::{
 use tokio::sync::{mpsc, oneshot};
 
 use crate::blocklist::Blocklist;
+use crate::platform_trust_root_cache::PlatformTrustStore;
+use crate::protocol::TrustSummary;
 use crate::signing::{SignatureVerifier, TrustStore, VerificationError};
 
 /// How often the actor sweeps loaded plugins against the
@@ -82,13 +84,20 @@ struct PluginEntry {
 }
 
 /// Long-lived plugin-host handle. `Send + Sync` — internally just an
-/// `mpsc::Sender` and an `Arc<Instant>`. All real state lives in
-/// the actor future returned by [`Host::new`], which the caller
-/// drives on the current task.
+/// `mpsc::Sender`, an `Arc<Instant>`, and cheap clones of the trust
+/// stores. All real state lives in the actor future returned by
+/// [`Host::new`], which the caller drives on the current task.
 #[derive(Clone)]
 pub struct Host {
     started_at: Arc<Instant>,
     cmd_tx: mpsc::Sender<Command>,
+    /// Publisher (Ed25519) trust store. Cheap clone — internally an
+    /// `Arc<RwLock<_>>`. Held on the handle so the IPC Health
+    /// response can surface the trusted-key set without coordinating
+    /// with the actor.
+    publisher_trust: TrustStore,
+    /// Platform (ECDSA P-256/P-384) trust store. Issue #568.
+    platform_trust: PlatformTrustStore,
 }
 
 /// Future returned by [`Host::new`] that owns the `PluginSandbox`
@@ -122,6 +131,7 @@ impl Host {
         loader_config: PluginLoaderConfig,
         verifier: SignatureVerifier,
         blocklist: Blocklist,
+        platform_trust: PlatformTrustStore,
     ) -> (Self, HostActor, Arc<mockforge_plugin_loader::InvocationMetricsBus>) {
         let (cmd_tx, cmd_rx) = mpsc::channel(CHANNEL_CAPACITY);
         let started_at = Arc::new(Instant::now());
@@ -139,15 +149,39 @@ impl Host {
         // the live key set without coordinating with the actor
         // beyond the existing mpsc channel.
         let trust_store_handle = verifier.store();
+        let publisher_trust = trust_store_handle.clone();
         let actor: HostActor =
             Box::pin(actor_loop(sandbox, verifier, blocklist, trust_store_handle, cmd_rx));
 
-        (Self { started_at, cmd_tx }, actor, metrics_bus)
+        (
+            Self {
+                started_at,
+                cmd_tx,
+                publisher_trust,
+                platform_trust,
+            },
+            actor,
+            metrics_bus,
+        )
     }
 
     /// Process uptime in whole seconds.
     pub fn uptime_secs(&self) -> u64 {
         self.started_at.elapsed().as_secs()
+    }
+
+    /// Snapshot the currently-trusted key sets for the IPC Health
+    /// response. Issue #568 — the runbook's fleet-verification step
+    /// reads the per-host result of this call (via the parent
+    /// process's healthz endpoint).
+    pub async fn trust_summary(&self) -> TrustSummary {
+        let mut publisher_keys = self.publisher_trust.key_ids();
+        publisher_keys.sort();
+        let platform_signing_keys = self.platform_trust.key_ids().await;
+        TrustSummary {
+            publisher_keys,
+            platform_signing_keys,
+        }
     }
 
     /// Load a plugin from inline WASM bytes. The bytes are written
@@ -737,7 +771,8 @@ mod tests {
                 crate::signing::TrustStore::new(),
                 crate::signing::SignatureMode::Optional,
             );
-            let (host, actor, _bus) = Host::new(loader_config(), verifier, Blocklist::new());
+            let (host, actor, _bus) =
+                Host::new(loader_config(), verifier, Blocklist::new(), PlatformTrustStore::new());
             tokio::select! {
                 result = body(host) => result,
                 _ = actor => panic!("actor exited before test body finished"),
@@ -843,7 +878,8 @@ mod tests {
                 crate::signing::TrustStore::new(),
                 crate::signing::SignatureMode::Required,
             );
-            let (host, actor, _bus) = Host::new(loader_config(), verifier, Blocklist::new());
+            let (host, actor, _bus) =
+                Host::new(loader_config(), verifier, Blocklist::new(), PlatformTrustStore::new());
             tokio::select! {
                 result = body(host) => result,
                 _ = actor => panic!("actor exited before test body finished"),
@@ -907,7 +943,8 @@ mod tests {
                 crate::signing::TrustStore::new(),
                 crate::signing::SignatureMode::Optional,
             );
-            let (host, actor, _bus) = Host::new(loader_config(), verifier, blocklist);
+            let (host, actor, _bus) =
+                Host::new(loader_config(), verifier, blocklist, PlatformTrustStore::new());
             tokio::select! {
                 result = body(host) => result,
                 _ = actor => panic!("actor exited before test body finished"),

@@ -38,6 +38,7 @@ pub mod blocklist;
 pub mod handlers;
 pub mod host;
 pub mod metering;
+pub mod platform_trust_root_cache;
 pub mod protocol;
 pub mod server;
 pub mod signing;
@@ -46,7 +47,12 @@ pub mod trust_root_cache;
 pub use blocklist::{run_poll_loop, Blocklist, BlocklistConfig, BlocklistEntry, PollError};
 pub use host::{Host, HostActor, HostError};
 pub use metering::{run_exporter, ExportedMetric, ExporterConfig};
-pub use protocol::{Request, Response};
+pub use platform_trust_root_cache::{
+    apply_rotation_event, parse_embedded_roots, run_platform_trust_refresh_loop, seed_from_env,
+    PlatformRefreshError, PlatformTrustCacheConfig, PlatformTrustStore, TrustedPlatformKey,
+    DEFAULT_REFRESH_INTERVAL_SECS as PLATFORM_DEFAULT_REFRESH_INTERVAL_SECS, ENV_EMBEDDED_ROOTS,
+};
+pub use protocol::{Request, Response, TrustSummary};
 pub use server::{run_server, ServerConfig};
 pub use signing::{
     SignatureMode, SignatureVerifier, TrustStore, TrustStoreError, VerificationError,

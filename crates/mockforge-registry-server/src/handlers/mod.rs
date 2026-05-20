@@ -35,6 +35,7 @@ pub mod organizations;
 pub mod otlp;
 pub mod password_reset;
 pub mod pillar_analytics;
+pub mod platform_signing;
 pub mod plugins;
 pub mod projects;
 pub mod public_keys;

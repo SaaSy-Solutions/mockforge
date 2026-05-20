@@ -65,6 +65,13 @@ tempfile = "3"
 # registry-fetch path lands.
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 
+# Platform signing-root rotation verifier (issue #568). The host
+# never *mints* signatures — it only verifies incoming rotation
+# events against its currently-trusted set — so we depend on the
+# crate without the `aws-kms` feature (which would pull in the
+# AWS SDK transitive tree).
+mockforge-platform-signing = { version = "0.3.139", path = "../mockforge-platform-signing" }
+
 # HTTP client for the kill-switch blocklist poll task (RFC §8.3)
 # and the trust-root refresh loop (issue #549).
 reqwest = { workspace = true }

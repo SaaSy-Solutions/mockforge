@@ -80,6 +80,32 @@ pub enum SignerError {
     UnexpectedPublicKey(String),
 }
 
+/// Forward [`PlatformSigner`] through a boxed trait object so a
+/// `RotationStateMachine<Box<dyn PlatformSigner>>` is a valid concrete
+/// instantiation. This is the type that `mockforge-registry-server`
+/// stores in `AppState`: the binary's startup code may build either an
+/// `AwsKmsSigner` (production) or a `MockSigner` (tests / OSS smoke
+/// runs), and erasing to `Box<dyn _>` keeps the rest of the call sites
+/// free of cargo features.
+#[async_trait]
+impl PlatformSigner for Box<dyn PlatformSigner> {
+    fn key_id(&self) -> &str {
+        (**self).key_id()
+    }
+
+    fn algorithm(&self) -> SigningAlgorithm {
+        (**self).algorithm()
+    }
+
+    async fn public_key_der(&self) -> Result<Vec<u8>, SignerError> {
+        (**self).public_key_der().await
+    }
+
+    async fn sign(&self, message: &[u8]) -> Result<Vec<u8>, SignerError> {
+        (**self).sign(message).await
+    }
+}
+
 /// Software-keypair signer for tests. **Never use in production** — the
 /// private bytes live in process memory, which defeats the entire point
 /// of this crate.

@@ -129,6 +129,30 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/internal/contract-diff/score",
             post(handlers::internal_contract_diff::score_contract_drift),
         )
+        // Platform signing-root rotation control plane (#568, follow-up to
+        // #550 / #567). Auth: shared internal-API bearer token (same as
+        // the runner endpoints above). The runbook drives these; the
+        // plugin-host fleet polls `plugin-rotation-events`.
+        //
+        // Note: deliberately mounted at `/api/internal/...` (no `v1`) so
+        // it matches the runbook URLs verbatim. The runner endpoints
+        // above predate the convention; both forms route through here.
+        .route(
+            "/api/internal/platform-signing/begin-handover",
+            post(handlers::platform_signing::begin_handover),
+        )
+        .route(
+            "/api/internal/platform-signing/retire-old",
+            post(handlers::platform_signing::retire_old),
+        )
+        .route(
+            "/api/internal/platform-signing/emergency-revoke",
+            post(handlers::platform_signing::emergency_revoke),
+        )
+        .route(
+            "/api/internal/plugin-rotation-events",
+            get(handlers::platform_signing::list_rotation_events),
+        )
         // Marketplace: scenarios (public)
         .route("/api/v1/marketplace/scenarios/search", post(handlers::scenarios::search_scenarios))
         .route("/api/v1/marketplace/scenarios/{name}", get(handlers::scenarios::get_scenario))

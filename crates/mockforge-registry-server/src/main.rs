@@ -159,6 +159,29 @@ async fn main() -> Result<()> {
     let store: Arc<dyn mockforge_registry_server::store::RegistryStore> =
         Arc::new(PgRegistryStore::new(db.pool().clone()));
 
+    // HSM-backed platform-signing controller (Issue #568). Off by default;
+    // boots only when MOCKFORGE_PLATFORM_SIGNING_KMS_KEY_ID is set on a
+    // build that has the `platform-signing-aws-kms` feature enabled.
+    // When absent, the rotation HTTP endpoints respond 503.
+    #[cfg(feature = "platform-signing-aws-kms")]
+    let platform_signing =
+        match mockforge_registry_server::platform_signing::aws_kms_controller_from_env(
+            db.pool().clone(),
+        )
+        .await
+        {
+            Ok(opt) => opt,
+            Err(err) => {
+                // Refuse to boot — the runbook treats a misconfigured signing
+                // root as a critical security control failure.
+                return Err(anyhow::anyhow!(
+                    "failed to initialize platform-signing controller: {err}"
+                ));
+            }
+        };
+    #[cfg(not(feature = "platform-signing-aws-kms"))]
+    let platform_signing = None;
+
     // Create app state
     let state = AppState {
         db: db.clone(),
@@ -169,6 +192,7 @@ async fn main() -> Result<()> {
         redis,
         circuit_breakers,
         store,
+        platform_signing,
     };
 
     // Start background workers
