@@ -767,10 +767,8 @@ mod tests {
     {
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         rt.block_on(async move {
-            let verifier = SignatureVerifier::new(
-                TrustStore::new(),
-                crate::signing::SignatureMode::Optional,
-            );
+            let verifier =
+                SignatureVerifier::new(TrustStore::new(), crate::signing::SignatureMode::Optional);
             let (host, actor, _bus) =
                 Host::new(loader_config(), verifier, Blocklist::new(), PlatformTrustStore::new());
             tokio::select! {
@@ -874,10 +872,8 @@ mod tests {
     {
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         rt.block_on(async move {
-            let verifier = SignatureVerifier::new(
-                TrustStore::new(),
-                crate::signing::SignatureMode::Required,
-            );
+            let verifier =
+                SignatureVerifier::new(TrustStore::new(), crate::signing::SignatureMode::Required);
             let (host, actor, _bus) =
                 Host::new(loader_config(), verifier, Blocklist::new(), PlatformTrustStore::new());
             tokio::select! {
@@ -939,10 +935,8 @@ mod tests {
     {
         let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().unwrap();
         rt.block_on(async move {
-            let verifier = SignatureVerifier::new(
-                TrustStore::new(),
-                crate::signing::SignatureMode::Optional,
-            );
+            let verifier =
+                SignatureVerifier::new(TrustStore::new(), crate::signing::SignatureMode::Optional);
             let (host, actor, _bus) =
                 Host::new(loader_config(), verifier, blocklist, PlatformTrustStore::new());
             tokio::select! {
