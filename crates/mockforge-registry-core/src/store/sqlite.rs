@@ -546,7 +546,7 @@ impl RegistryStore for SqliteRegistryStore {
         use base64::{engine::general_purpose, Engine as _};
         use rand::RngCore;
         let mut buf = [0u8; 32];
-        rand::thread_rng().fill_bytes(&mut buf);
+        rand::rng().fill_bytes(&mut buf);
         let full_token = format!("mfx_{}", general_purpose::URL_SAFE_NO_PAD.encode(buf));
         let token_prefix: String = full_token.chars().take(12).collect();
         let hashed_token = bcrypt::hash(&full_token, bcrypt::DEFAULT_COST)
@@ -1253,7 +1253,7 @@ impl RegistryStore for SqliteRegistryStore {
         use base64::{engine::general_purpose, Engine as _};
         use rand::RngCore;
         let mut buf = [0u8; 32];
-        rand::thread_rng().fill_bytes(&mut buf);
+        rand::rng().fill_bytes(&mut buf);
         let token = general_purpose::URL_SAFE_NO_PAD.encode(buf);
         let id = Uuid::new_v4();
         let now = Utc::now();
@@ -4809,7 +4809,7 @@ mod tests {
         // 1. Generate a keypair locally — the server only ever sees the
         //    public half. Same `from_bytes(random)` shape the CLI uses.
         let mut secret = [0u8; 32];
-        rand::thread_rng().fill_bytes(&mut secret);
+        rand::rng().fill_bytes(&mut secret);
         let signing = SigningKey::from_bytes(&secret);
         let public_b64 =
             base64::engine::general_purpose::STANDARD.encode(signing.verifying_key().to_bytes());

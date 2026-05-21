@@ -80,7 +80,7 @@ bcrypt = "0.15"
 totp-lite = "2.0" # TOTP (Time-based One-Time Password) for 2FA
 qrcode = "0.14" # QR code generation for 2FA setup
 data-encoding = "2.11" # Base32 encoding for TOTP secrets
-rand = "0.8" # Random number generation for tokens
+rand = { workspace = true } # Random number generation for tokens
 
 # Storage (feature: `storage-s3`)
 aws-sdk-s3 = { version = "1.124", optional = true }

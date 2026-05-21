@@ -444,8 +444,8 @@ fn get_default_scopes(provider: OAuthProvider) -> Scope {
 /// Generate state token for CSRF protection
 fn generate_state_token() -> String {
     use rand::Rng;
-    let mut rng = rand::thread_rng();
-    let bytes: [u8; 32] = rng.gen();
+    let mut rng = rand::rng();
+    let bytes: [u8; 32] = rng.random();
     hex::encode(bytes)
 }
 

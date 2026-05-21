@@ -23,8 +23,8 @@ impl VerificationToken {
         // Generate random token (must be done before any await to ensure Send)
         use rand::Rng;
         let token_bytes: [u8; 32] = {
-            let mut rng = rand::thread_rng();
-            rng.gen()
+            let mut rng = rand::rng();
+            rng.random()
         };
         use base64::{engine::general_purpose, Engine as _};
         let token = general_purpose::URL_SAFE_NO_PAD.encode(token_bytes);

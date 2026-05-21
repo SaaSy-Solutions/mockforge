@@ -65,7 +65,7 @@ mockforge-collab = { version = "0.3.70", path = "../mockforge-collab" }
 mockforge-recorder = { version = "0.3.70", path = "../mockforge-recorder" }
 mockforge-federation = { version = "0.3.70", path = "../mockforge-federation" }
 base64 = { workspace = true }
-rand = "0.8"
+rand = { workspace = true }
 jsonwebtoken = "9.3"
 bcrypt = "0.15"
 tokio-util = { version = "0.7", features = ["time"] }
