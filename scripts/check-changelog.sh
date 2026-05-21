@@ -7,15 +7,37 @@ if git status --porcelain | grep -Eq '^[^?]'; then
   exit 1
 fi
 
-changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD)
+# Pick a "what changed in this change-set" diff range that survives both call
+# sites. Two contexts:
+#
+#   1. CI on a pull_request event. `actions/checkout@v6` checks out the
+#      synthetic merge commit at `refs/pull/<N>/merge`. `git diff-tree -r HEAD`
+#      on a merge commit returns the *combined* diff (files where the two
+#      parents disagreed and the merge had to choose) — which is empty for any
+#      clean merge. So this script was previously failing CI runs whose
+#      CHANGELOG.md edit lived in a non-merge-touching commit (e.g. the most
+#      recent push amended *only* a different file), even though the PR
+#      clearly modified CHANGELOG.md across its full diff.
+#
+#   2. Local cargo-release via `scripts/release.sh`. HEAD is the actual
+#      version-bump commit on a regular branch; `diff-tree -r HEAD` returns
+#      its real file list.
+#
+# GitHub Actions exports $GITHUB_BASE_REF in pull_request contexts (and only
+# there), so we use it as the signal to switch modes.
+if [ -n "${GITHUB_BASE_REF:-}" ]; then
+  changed_files=$(git diff --name-only "origin/${GITHUB_BASE_REF}...HEAD")
+else
+  changed_files=$(git diff-tree --no-commit-id --name-only -r HEAD)
+fi
 
 if ! grep -qx 'CHANGELOG.md' <<<"$changed_files"; then
-  echo "The latest commit does not update CHANGELOG.md. Add the changelog entry first." >&2
+  echo "CHANGELOG.md was not modified in this change. Add the changelog entry first." >&2
   exit 1
 fi
 
 if ! grep -qx 'book/src/reference/changelog.md' <<<"$changed_files"; then
-  echo "The latest commit does not update book/src/reference/changelog.md. Keep the docs in sync before releasing." >&2
+  echo "book/src/reference/changelog.md was not modified. Keep the docs in sync before releasing." >&2
   exit 1
 fi
 

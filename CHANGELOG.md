@@ -1,3 +1,9 @@
+## [Unreleased]
+
+### Fixed
+
+- **[DevX]** `scripts/check-changelog.sh` now uses the PR-wide diff in CI instead of `git diff-tree -r HEAD` (which returns the empty combined diff on the synthetic `refs/pull/<N>/merge` commit `actions/checkout` uses). Previously every PR whose CHANGELOG.md edit landed in a commit that the merge didn't have to reconcile would fail the "Changelog Validation" gate even though the workflow's own outer condition correctly detected the edit (caught on #595's release PR). Now switches modes on `$GITHUB_BASE_REF`: PR-wide `git diff --name-only origin/$GITHUB_BASE_REF...HEAD` in CI, single-commit `diff-tree -r HEAD` locally for the cargo-release flow.
+
 ## [0.3.141] - 2026-05-20
 
 ### Fixed
