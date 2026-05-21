@@ -5,8 +5,8 @@
 //! cross-linked for unified contract health tracking.
 
 use crate::ai_contract_diff::semantic_analyzer::{SemanticChangeType, SemanticDriftResult};
-use crate::incidents::types::{IncidentSeverity, IncidentStatus};
 use chrono::Utc;
+use mockforge_foundation::incidents_types::{IncidentSeverity, IncidentStatus};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;

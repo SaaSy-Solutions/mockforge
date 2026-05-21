@@ -2,7 +2,7 @@
 //!
 //! This module provides formatting for Slack webhook messages when drift incidents are created.
 
-use crate::incidents::types::{DriftIncident, IncidentSeverity, IncidentType};
+use mockforge_foundation::incidents_types::{DriftIncident, IncidentSeverity, IncidentType};
 use serde_json::{json, Value};
 
 /// Format a drift incident as a Slack message

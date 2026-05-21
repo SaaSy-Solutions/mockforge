@@ -2,7 +2,7 @@
 //!
 //! This module provides integrations with external systems like Jira, Linear, etc.
 
-use crate::incidents::types::{DriftIncident, ExternalTicket};
+use mockforge_foundation::incidents_types::{DriftIncident, ExternalTicket};
 use serde::{Deserialize, Serialize};
 
 /// Configuration for external integrations
