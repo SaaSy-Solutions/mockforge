@@ -28,6 +28,7 @@ tracing-opentelemetry = "0.22"
 mockforge-core = { version = "0.3.70", path = "../mockforge-core", features = ["schema"] }
 mockforge-openapi = { path = "../mockforge-openapi" }
 mockforge-foundation = { path = "../mockforge-foundation" }
+mockforge-contracts = { path = "../mockforge-contracts" }
 mockforge-import = { path = "../mockforge-import" }
 mockforge-workspace = { path = "../mockforge-workspace" }
 mockforge-http = { version = "0.3.70", path = "../mockforge-http", optional = true }

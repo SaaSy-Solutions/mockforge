@@ -7833,6 +7833,7 @@ dependencies = [
  "mockforge-amqp",
  "mockforge-bench",
  "mockforge-chaos",
+ "mockforge-contracts",
  "mockforge-core",
  "mockforge-data",
  "mockforge-federation",
