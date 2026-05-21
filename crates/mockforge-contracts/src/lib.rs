@@ -41,17 +41,23 @@
 //!
 //! - **consumer_contracts**: Consumer-driven contract tracking and violation detection
 //! - **contract_validation**: Contract validation types and CI/CD pipeline integration
-//! - **incidents**: Incident management with Jira/Slack integrations
 //! - **contract_drift**: Drift detection types, consumer mapping, fitness functions, and forecasting
 //! - **diff_types**: Core diff analysis types shared across contract modules
 //! - **protocol**: Protocol type enumeration
+//!
+//! Incident management types live in `mockforge_foundation::incidents_types`;
+//! the structural manager/store implementations live in `mockforge_core::incidents`,
+//! and the AI-coupled `semantic_manager` + Jira/Slack integrations live in
+//! `mockforge_intelligence::incidents` (#562 phase 9). This crate's previous
+//! `incidents` module was a dead-weight duplicate with zero external callers
+//! (only `contract_drift::forecasting` referenced it via `crate::incidents::types`)
+//! and was deleted under #600.
 
 pub mod consumer_contracts;
 pub mod contract_drift;
 pub mod contract_validation;
 pub mod diff_types;
 pub mod error;
-pub mod incidents;
 pub mod protocol;
 pub mod schema_diff;
 

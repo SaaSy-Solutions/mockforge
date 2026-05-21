@@ -4,8 +4,8 @@
 //! that can be used for predicting future changes.
 
 use super::types::{ForecastPattern, PatternAnalysis, PatternType};
-use crate::incidents::types::{DriftIncident, IncidentType};
 use chrono::{DateTime, Utc};
+use mockforge_foundation::incidents_types::{DriftIncident, IncidentType};
 
 /// Pattern analyzer for detecting change patterns
 pub struct PatternAnalyzer {
@@ -372,8 +372,8 @@ impl PatternAnalyzer {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::incidents::types::{IncidentSeverity, IncidentStatus};
     use chrono::Duration;
+    use mockforge_foundation::incidents_types::{IncidentSeverity, IncidentStatus};
 
     fn create_test_incident(
         id: &str,

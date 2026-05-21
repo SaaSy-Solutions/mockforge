@@ -6,8 +6,8 @@
 use super::pattern_analyzer::PatternAnalyzer;
 use super::statistical_model::StatisticalModel;
 use super::types::{ChangeForecast, ForecastingConfig, PatternAnalysis};
-use crate::incidents::types::DriftIncident;
 use chrono::{DateTime, Duration, Utc};
+use mockforge_foundation::incidents_types::DriftIncident;
 
 /// Main forecaster for API change predictions
 pub struct Forecaster {

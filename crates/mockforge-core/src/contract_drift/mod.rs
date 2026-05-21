@@ -10,7 +10,6 @@ pub mod budget_engine;
 pub mod consumer_mapping;
 pub mod field_tracking;
 pub mod fitness;
-pub mod forecasting;
 pub mod grpc_contract;
 pub mod mqtt_kafka_contracts;
 pub mod protocol_contracts;
@@ -31,11 +30,6 @@ pub use field_tracking::{FieldCountRecord, FieldCountTracker};
 pub use fitness::{
     FitnessEvaluator, FitnessFunction, FitnessFunctionRegistry, FitnessFunctionType, FitnessScope,
     FitnessTestResult,
-};
-pub use forecasting::{
-    ChangeForecast, ForecastAggregationLevel, ForecastPattern, ForecastStatistics, Forecaster,
-    ForecastingConfig, PatternAnalysis, PatternAnalyzer, PatternSignature, PatternType,
-    SeasonalPattern, StatisticalModel,
 };
 pub use grpc_contract::{diff_grpc_contracts, GrpcContract};
 pub use mqtt_kafka_contracts::{
