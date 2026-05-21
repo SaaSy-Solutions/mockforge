@@ -5,6 +5,7 @@
 
 use crate::behavioral_economics::actions::BehaviorAction;
 use crate::behavioral_economics::conditions::BehaviorCondition;
+use mockforge_foundation::{Error, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -97,17 +98,17 @@ impl BehaviorRule {
     }
 
     /// Validate the rule
-    pub fn validate(&self) -> crate::Result<()> {
+    pub fn validate(&self) -> Result<()> {
         if self.name.trim().is_empty() {
-            return Err(crate::Error::internal("Rule name cannot be empty"));
+            return Err(Error::internal("Rule name cannot be empty"));
         }
 
         if matches!(self.rule_type, RuleType::Scriptable) {
             if self.script.is_none() {
-                return Err(crate::Error::internal("Scriptable rules must have a script"));
+                return Err(Error::internal("Scriptable rules must have a script"));
             }
             if self.script_language.is_none() {
-                return Err(crate::Error::internal("Scriptable rules must have a script_language"));
+                return Err(Error::internal("Scriptable rules must have a script_language"));
             }
         }
 

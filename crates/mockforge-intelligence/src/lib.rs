@@ -31,16 +31,16 @@
 //!   + `mockforge-foundation::pillar_tracking`.
 //! - `failure_analysis`: LLM-driven failure context + narrative generator
 //!   (Issue #562 phase 5). Depends only on sibling `intelligent_behavior`.
-//!
-//! Still in `mockforge-core` and worth migrating in follow-ups:
-//! - `ai_studio`: 3 sub-files still pull `reality` (debug_context,
-//!   debug_context_integrator) and `voice` (nl_mock_generator). Reality is
-//!   moveable next; voice is the wall and a multi-day campaign.
+//! - `behavioral_economics`: Declarative + scriptable rule engine that makes
+//!   mocks react to pressure, load, pricing, fraud, and customer segments
+//!   (Issue #562 phase 8). Self-contained — the only core-side dep was
+//!   `crate::Result`, now sourced from `mockforge-foundation` directly.
 
 pub mod ai_contract_diff;
 pub mod ai_response;
 pub mod ai_studio;
 pub mod behavioral_cloning;
+pub mod behavioral_economics;
 pub mod contract_validation;
 pub mod failure_analysis;
 pub mod intelligent_behavior;

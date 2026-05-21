@@ -239,8 +239,10 @@ pub use mockforge_intelligence::ai_studio;
 #[cfg(feature = "ai")]
 #[deprecated(note = "Will be extracted to mockforge-intelligence crate")]
 pub mod behavioral_cloning;
+// Re-export shim for `behavioral_economics`, which moved to
+// `mockforge-intelligence` in Issue #562 phase 8. The shim file at
+// `src/behavioral_economics.rs` re-exports the new home.
 #[cfg(feature = "advanced")]
-// behavioral_economics depends on priority_handler + core internals; staying in core.
 pub mod behavioral_economics;
 #[allow(dead_code)]
 pub(crate) mod cache;

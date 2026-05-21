@@ -3,7 +3,7 @@
 //! Defines actions that can be executed when behavior conditions are met.
 //! Actions modify mock behavior, responses, or trigger chaos rules.
 
-use crate::Result;
+use mockforge_foundation::Result;
 use serde::{Deserialize, Serialize};
 
 /// Behavior action
