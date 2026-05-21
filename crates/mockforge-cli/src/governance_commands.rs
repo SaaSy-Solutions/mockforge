@@ -8,8 +8,8 @@
 
 use chrono::{DateTime, Utc};
 use clap::Subcommand;
+use mockforge_contracts::contract_drift::forecasting::{Forecaster, ForecastingConfig};
 use mockforge_core::{
-    contract_drift::forecasting::{Forecaster, ForecastingConfig},
     contract_drift::threat_modeling::{
         ThreatAnalyzer, ThreatAssessment, ThreatLevel, ThreatModelingConfig,
     },
