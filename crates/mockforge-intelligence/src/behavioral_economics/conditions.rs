@@ -4,7 +4,7 @@
 //! should trigger. Conditions can be simple (latency threshold) or composite
 //! (multiple conditions with logical operators).
 
-use crate::Result;
+use mockforge_foundation::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

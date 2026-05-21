@@ -7,7 +7,7 @@ use crate::behavioral_economics::actions::ActionExecutor;
 use crate::behavioral_economics::conditions::ConditionEvaluator;
 use crate::behavioral_economics::config::BehavioralEconomicsConfig;
 use crate::behavioral_economics::rules::BehaviorRule;
-use crate::Result;
+use mockforge_foundation::Result;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info, warn};
