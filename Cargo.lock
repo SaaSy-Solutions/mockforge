@@ -8386,6 +8386,8 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "dirs 5.0.1",
+ "hex",
+ "hmac 0.12.1",
  "indexmap 2.14.0",
  "mockforge-foundation",
  "mockforge-openapi",

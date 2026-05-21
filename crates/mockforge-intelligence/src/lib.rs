@@ -35,6 +35,14 @@
 //!   mocks react to pressure, load, pricing, fraud, and customer segments
 //!   (Issue #562 phase 8). Self-contained — the only core-side dep was
 //!   `crate::Result`, now sourced from `mockforge-foundation` directly.
+//! - `incidents`: AI-coupled pieces of drift-incident management — semantic
+//!   incident manager (built on `ai_contract_diff::semantic_analyzer`) and
+//!   Jira/Slack/webhook integrations (Issue #562 phase 9). The structural
+//!   `IncidentManager` and in-memory `IncidentStore` stay in `mockforge-core`;
+//!   the shared types (`DriftIncident`, `IncidentSeverity`, ...) live in
+//!   `mockforge_foundation::incidents_types`. Core re-exports this module so
+//!   the legacy `mockforge_core::incidents::{semantic_manager, integrations,
+//!   slack_formatter, jira_formatter}` paths keep resolving.
 
 pub mod ai_contract_diff;
 pub mod ai_response;
@@ -43,6 +51,7 @@ pub mod behavioral_cloning;
 pub mod behavioral_economics;
 pub mod contract_validation;
 pub mod failure_analysis;
+pub mod incidents;
 pub mod intelligent_behavior;
 pub mod pr_generation;
 pub mod reality;

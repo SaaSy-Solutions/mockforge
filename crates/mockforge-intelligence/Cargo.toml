@@ -25,6 +25,12 @@ async-trait = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }
 dirs = "5.0"
+# `incidents::integrations::WebhookIntegration` signs outgoing webhook
+# payloads with HMAC-SHA256 (Issue #562 phase 9 — moved from
+# `mockforge-core`); both hex and hmac were already on the workspace's
+# pinned versions for the core crate.
+hex = { workspace = true }
+hmac = { workspace = true }
 indexmap = "2.14"
 once_cell = { workspace = true }
 openapiv3 = { workspace = true }
