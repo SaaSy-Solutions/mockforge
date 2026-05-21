@@ -190,15 +190,11 @@ pub async fn generate_key(out: &Path, force: bool) -> Result<()> {
     // Fill 32 bytes from the OS entropy source. We go through rand's
     // default RNG rather than depending on a specific `rand_core`
     // version — `fill_bytes` has been stable across the rand 0.7 → 0.9
-    // drift we see in the workspace. `thread_rng` was renamed to `rng`
-    // in rand 0.9, so we keep the deprecated call behind an allow so
-    // clippy `-D warnings` still passes on both versions. Once the
-    // workspace settles on 0.9+ exclusively this can become `rand::rng()`.
-    #[allow(deprecated)]
-    let mut thread_rng = rand::thread_rng();
+    // drift we see in the workspace.
+    let mut rng = rand::rng();
     use rand::RngCore;
     let mut secret = [0u8; 32];
-    thread_rng.fill_bytes(&mut secret);
+    rng.fill_bytes(&mut secret);
     let signing = SigningKey::from_bytes(&secret);
     let public_b64 =
         base64::engine::general_purpose::STANDARD.encode(signing.verifying_key().to_bytes());

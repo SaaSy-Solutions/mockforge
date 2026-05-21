@@ -262,7 +262,7 @@ impl DeceptiveCanaryRouter {
     /// Random routing
     fn random_route(&self) -> bool {
         use rand::Rng;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         let random_value: f64 = rng.gen();
         random_value < self.config.traffic_percentage
     }

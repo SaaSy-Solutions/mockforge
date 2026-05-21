@@ -81,7 +81,7 @@ pub async fn select_variant(
 fn select_variant_random(
     allocations: &[crate::ab_testing::types::VariantAllocation],
 ) -> Result<String> {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let random_value = rng.gen_range(0.0..100.0);
     let mut cumulative = 0.0;
 
