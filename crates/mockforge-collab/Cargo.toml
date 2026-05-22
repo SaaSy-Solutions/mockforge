@@ -81,7 +81,7 @@ azure_identity = { version = "0.21", optional = true }
 # Google Cloud Storage support (optional)
 # Updated to 1.5.0 for latest API compatibility
 google-cloud-storage = { version = "1.12", optional = true }
-bytes = { version = "1", optional = true }
+bytes = { workspace = true, optional = true }
 
 # AWS S3 support (optional)
 aws-sdk-s3 = { version = "1", optional = true }

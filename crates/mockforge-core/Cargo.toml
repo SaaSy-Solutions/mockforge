@@ -70,7 +70,7 @@ roxmltree = "0.21"
 globwalk = "0.9.1"
 tempfile = { workspace = true }
 prost = "0.14"
-prost-reflect = "0.16"
+prost-reflect = { workspace = true }
 prost-types = "0.14"
 bytes = { workspace = true }
 notify = "8.2"
