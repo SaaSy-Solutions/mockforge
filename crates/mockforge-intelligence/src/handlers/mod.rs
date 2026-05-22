@@ -13,3 +13,4 @@
 //!   handler followed once intelligence grew an axum dep.
 
 pub mod pr_generation;
+pub mod semantic_drift;

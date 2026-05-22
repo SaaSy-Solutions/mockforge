@@ -5,13 +5,13 @@
 // ContractDiffAnalyzer stays in core (LLM-bound).
 #![allow(deprecated)]
 
+use crate::ai_contract_diff::{ContractDiffAnalyzer, ContractDiffConfig};
+use crate::incidents::semantic_manager::{SemanticIncident, SemanticIncidentManager};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::Json,
 };
-use mockforge_core::ai_contract_diff::{ContractDiffAnalyzer, ContractDiffConfig};
-use mockforge_core::incidents::semantic_manager::{SemanticIncident, SemanticIncidentManager};
 use mockforge_openapi::OpenApiSpec;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -21,6 +21,7 @@ use chrono::{DateTime, Utc};
 #[cfg(feature = "database")]
 use uuid::Uuid;
 
+#[cfg(feature = "database")]
 use crate::database::Database;
 
 /// Helper function to map database row to SemanticIncident
@@ -28,8 +29,8 @@ use crate::database::Database;
 fn map_row_to_semantic_incident(
     row: &sqlx::postgres::PgRow,
 ) -> Result<SemanticIncident, sqlx::Error> {
-    use mockforge_core::incidents::types::{IncidentSeverity, IncidentStatus};
     use mockforge_foundation::contract_diff_types::SemanticChangeType;
+    use mockforge_foundation::incidents_types::{IncidentSeverity, IncidentStatus};
     use sqlx::Row;
 
     let id: Uuid = row.try_get("id")?;
@@ -119,6 +120,7 @@ pub struct SemanticDriftState {
     /// Semantic incident manager
     pub manager: Arc<SemanticIncidentManager>,
     /// Database connection (optional)
+    #[cfg(feature = "database")]
     pub database: Option<Database>,
 }
 
@@ -217,10 +219,10 @@ pub async fn list_semantic_incidents(
 
     // Fallback to in-memory manager
     let status = params.status.as_deref().and_then(|s| match s {
-        "open" => Some(mockforge_core::incidents::types::IncidentStatus::Open),
-        "acknowledged" => Some(mockforge_core::incidents::types::IncidentStatus::Acknowledged),
-        "resolved" => Some(mockforge_core::incidents::types::IncidentStatus::Resolved),
-        "closed" => Some(mockforge_core::incidents::types::IncidentStatus::Closed),
+        "open" => Some(mockforge_foundation::incidents_types::IncidentStatus::Open),
+        "acknowledged" => Some(mockforge_foundation::incidents_types::IncidentStatus::Acknowledged),
+        "resolved" => Some(mockforge_foundation::incidents_types::IncidentStatus::Resolved),
+        "closed" => Some(mockforge_foundation::incidents_types::IncidentStatus::Closed),
         _ => None,
     });
 

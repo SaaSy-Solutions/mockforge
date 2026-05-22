@@ -30,7 +30,6 @@ pub mod protocol_contracts;
 pub mod risk_assessment;
 pub mod risk_simulation;
 pub mod scenario_studio;
-pub mod semantic_drift;
 pub mod snapshot_diff;
 pub mod snapshots;
 pub mod threat_modeling;
@@ -69,6 +68,9 @@ pub use forecasting::{forecasting_router, ForecastingState};
 pub use incident_replay::{
     generate_replay, import_and_generate, import_incident, IncidentReplayState,
 };
+pub use mockforge_intelligence::handlers::semantic_drift::{
+    semantic_drift_router, SemanticDriftState,
+};
 pub use performance::{performance_router, PerformanceState};
 #[cfg(feature = "pipelines")]
 pub use pipelines::{pipeline_router, PipelineState};
@@ -77,7 +79,6 @@ pub use privileged_access::{privileged_access_router, PrivilegedAccessState};
 pub use protocol_contracts::{protocol_contracts_router, ProtocolContractState};
 pub use risk_assessment::{risk_assessment_router, RiskAssessmentState};
 pub use scenario_studio::{scenario_studio_router, ScenarioStudioState};
-pub use semantic_drift::{semantic_drift_router, SemanticDriftState};
 pub use snapshots::{snapshot_router, SnapshotState};
 pub use threat_modeling::{threat_modeling_router, ThreatModelingState};
 pub use token_lifecycle::{token_lifecycle_router, TokenLifecycleState};
