@@ -219,8 +219,8 @@ sha2 = "0.10"
 # JSON Schema validation
 jsonschema = "0.33"
 
-# Binary data handling
-bytes = "1.5"
+# Protobuf reflection (paired with prost; bytes lives in the utility block above)
+prost-reflect = "0.16"
 
 # Development tools
 mdbook = "0.4"
