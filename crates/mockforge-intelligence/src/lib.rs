@@ -50,6 +50,13 @@ pub mod ai_studio;
 pub mod behavioral_cloning;
 pub mod behavioral_economics;
 pub mod contract_validation;
+/// Postgres pool wrapper used by HTTP handlers that persist drift
+/// budgets / incidents / consumer contracts. Moved here from
+/// `mockforge_http::database` under #555 (prereq for handler moves —
+/// once handlers leave `mockforge-http`, they pick up this dep without
+/// re-introducing a cycle). Gated by the `database` feature.
+#[cfg(feature = "database")]
+pub mod database;
 pub mod failure_analysis;
 pub mod incidents;
 pub mod intelligent_behavior;
