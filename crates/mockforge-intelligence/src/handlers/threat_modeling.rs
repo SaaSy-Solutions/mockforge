@@ -10,12 +10,12 @@
 // ThreatAnalyzer stays in core (OpenApiSpec + LLM dep).
 #![allow(deprecated)]
 
+use crate::threat_modeling::ThreatAnalyzer;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::Json,
 };
-use mockforge_core::contract_drift::threat_modeling::ThreatAnalyzer;
 use mockforge_foundation::threat_modeling_types::ThreatAssessment;
 use mockforge_openapi::OpenApiSpec;
 use serde::Deserialize;
@@ -101,7 +101,7 @@ pub struct ThreatModelingState {
     /// Threat analyzer
     pub analyzer: Arc<ThreatAnalyzer>,
     /// Webhook configs for notifications (optional)
-    pub webhook_configs: Vec<mockforge_core::incidents::integrations::WebhookConfig>,
+    pub webhook_configs: Vec<crate::incidents::integrations::WebhookConfig>,
     /// Database connection (optional)
     #[cfg(feature = "database")]
     pub database: Option<Database>,
@@ -594,10 +594,10 @@ pub async fn get_remediations(
 
 /// Trigger webhook notifications for threat assessment
 async fn trigger_threat_assessment_webhooks(
-    webhook_configs: &[mockforge_core::incidents::integrations::WebhookConfig],
+    webhook_configs: &[crate::incidents::integrations::WebhookConfig],
     assessment: &ThreatAssessment,
 ) {
-    use mockforge_core::incidents::integrations::send_webhook;
+    use crate::incidents::integrations::send_webhook;
     use serde_json::json;
 
     for webhook in webhook_configs {

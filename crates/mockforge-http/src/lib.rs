@@ -2524,13 +2524,15 @@ pub async fn build_router_with_chains_and_multi_tenant(
     {
         use crate::handlers::contract_health::{contract_health_router, ContractHealthState};
         use crate::handlers::forecasting::{forecasting_router, ForecastingState};
-        use crate::handlers::threat_modeling::{threat_modeling_router, ThreatModelingState};
         use mockforge_contracts::contract_drift::forecasting::{Forecaster, ForecastingConfig};
         use mockforge_core::contract_drift::threat_modeling::ThreatAnalyzer;
         use mockforge_core::incidents::semantic_manager::SemanticIncidentManager;
         use mockforge_foundation::threat_modeling_types::ThreatModelingConfig;
         use mockforge_intelligence::handlers::semantic_drift::{
             semantic_drift_router, SemanticDriftState,
+        };
+        use mockforge_intelligence::handlers::threat_modeling::{
+            threat_modeling_router, ThreatModelingState,
         };
         use std::sync::Arc;
 
