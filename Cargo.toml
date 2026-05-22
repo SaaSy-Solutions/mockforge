@@ -219,6 +219,9 @@ sha2 = "0.10"
 # JSON Schema validation
 jsonschema = "0.33"
 
+# Binary data handling
+bytes = "1.5"
+
 # Development tools
 mdbook = "0.4"
 cargo-release = "0.25"
