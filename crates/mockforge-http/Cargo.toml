@@ -97,8 +97,11 @@ route-chaos = ["mockforge-route-chaos"]
 scenario-engine = ["mockforge-scenarios"]
 # Enable richer faker-backed tokens in templating via mockforge-data
 data-faker = []
-# Database-backed analytics/forecasting handlers
-database = ["sqlx"]
+# Database-backed analytics/forecasting handlers.
+# Under Issue #555 the `Database` wrapper itself moved to
+# `mockforge-intelligence::database`; this re-export shim crate keeps
+# the same `mockforge_http::database::Database` import path working.
+database = ["sqlx", "mockforge-intelligence/database"]
 # Pipeline handler routes
 pipelines = ["mockforge-pipelines", "dashmap"]
 # Persona graph response enrichment
