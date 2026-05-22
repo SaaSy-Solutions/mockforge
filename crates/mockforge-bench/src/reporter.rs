@@ -28,6 +28,23 @@ impl TerminalReporter {
     /// equals "distinct connections opened", which is what Srikanth wanted
     /// alongside RPS.
     pub fn print_summary_with_mode(results: &K6Results, duration_secs: u64, cps_mode: bool) {
+        Self::print_summary_full(results, duration_secs, cps_mode, None);
+    }
+
+    /// Like [`print_summary_with_mode`] but accepts `num_operations` (the count
+    /// of operations the bench generated from the spec). When supplied, the
+    /// summary surfaces iteration coverage: how many iterations completed and
+    /// what fraction of the spec's operations got exercised end-to-end.
+    ///
+    /// Issue #79 round 10 — Srikanth's 11422-op spec ran for 600s with only
+    /// `--vus 5`; many iterations were cancelled mid-way and the final
+    /// summary didn't reveal which slice of the spec was actually covered.
+    pub fn print_summary_full(
+        results: &K6Results,
+        duration_secs: u64,
+        cps_mode: bool,
+        num_operations: Option<u32>,
+    ) {
         println!("\n{}", "=".repeat(60).bright_green());
         println!("{}", "Load Test Complete! ✓".bright_green().bold());
         println!("{}\n", "=".repeat(60).bright_green());
@@ -151,6 +168,38 @@ impl TerminalReporter {
                 "  Peak concurrent VUs:  {} (max open conns from client side)",
                 results.vus_max.to_string().cyan(),
             );
+        }
+
+        // Issue #79 round 10 — iteration coverage. When --rps is supplied and
+        // the spec has many operations per iteration, k6 may cancel iterations
+        // mid-walk if the duration ends before a full pass completes. Surface
+        // "iterations completed" alongside operation count so users see what
+        // fraction of the spec was actually exercised.
+        if results.iterations_completed > 0 {
+            if let Some(num_ops) = num_operations {
+                let expected_reqs_per_iter = num_ops as u64;
+                let full_iter_reqs =
+                    results.iterations_completed.saturating_mul(expected_reqs_per_iter);
+                let partial_iter_reqs = results.total_requests.saturating_sub(full_iter_reqs);
+                println!(
+                    "  Iterations:           {} complete × {} ops = {} ops fully exercised",
+                    results.iterations_completed.to_string().cyan(),
+                    num_ops.to_string().cyan(),
+                    full_iter_reqs.to_string().cyan(),
+                );
+                if partial_iter_reqs > 0 && num_ops > 1 {
+                    println!(
+                        "                        {} extra request(s) from a partially-completed \
+                         iteration — duration ended mid-walk; not every op was hit on the last pass.",
+                        partial_iter_reqs.to_string().yellow(),
+                    );
+                }
+            } else {
+                println!(
+                    "  Iterations:           {} complete",
+                    results.iterations_completed.to_string().cyan(),
+                );
+            }
         }
 
         // Issue #79 — server-injected chaos signals (latency / jitter / faults)

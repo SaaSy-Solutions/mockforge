@@ -363,6 +363,9 @@ impl K6Executor {
             },
             tls_handshake_avg_ms: tls_handshake["avg"].as_f64().unwrap_or(0.0),
             tls_handshake_max_ms: tls_handshake["max"].as_f64().unwrap_or(0.0),
+            iterations_completed: json["metrics"]["iterations"]["values"]["count"]
+                .as_u64()
+                .unwrap_or(0),
         })
     }
 }
@@ -423,6 +426,13 @@ pub struct K6Results {
     pub tls_handshake_avg_ms: f64,
     #[serde(default)]
     pub tls_handshake_max_ms: f64,
+    /// Issue #79 round 10 — k6 iteration counter from `iterations.values.count`.
+    /// For `constant-arrival-rate` (`--rps`), this is the number of full
+    /// iterations completed within the duration. When `iterations × num_ops`
+    /// is much less than `total_requests`, mid-iteration cancellation truncated
+    /// the run and not every operation in the spec was exercised.
+    #[serde(default)]
+    pub iterations_completed: u64,
 }
 
 impl K6Results {
