@@ -26,6 +26,7 @@ use chrono::{DateTime, Utc};
 #[cfg(feature = "database")]
 use uuid::Uuid;
 
+#[cfg(feature = "database")]
 use crate::database::Database;
 
 /// Helper function to map database row to ThreatAssessment
@@ -102,6 +103,7 @@ pub struct ThreatModelingState {
     /// Webhook configs for notifications (optional)
     pub webhook_configs: Vec<mockforge_core::incidents::integrations::WebhookConfig>,
     /// Database connection (optional)
+    #[cfg(feature = "database")]
     pub database: Option<Database>,
 }
 

@@ -18,6 +18,7 @@ use mockforge_contracts::contract_drift::forecasting::SeasonalPattern;
 #[cfg(feature = "database")]
 use uuid::Uuid;
 
+#[cfg(feature = "database")]
 use crate::database::Database;
 
 /// Helper function to map database row to ChangeForecast
@@ -74,6 +75,7 @@ pub struct ForecastingState {
     /// Forecaster engine
     pub forecaster: Arc<Forecaster>,
     /// Database connection (optional)
+    #[cfg(feature = "database")]
     pub database: Option<Database>,
 }
 

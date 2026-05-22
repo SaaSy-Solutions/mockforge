@@ -5,13 +5,13 @@
 // ContractDiffAnalyzer stays in core (LLM-bound).
 #![allow(deprecated)]
 
+use crate::ai_contract_diff::{ContractDiffAnalyzer, ContractDiffConfig};
+use crate::incidents::semantic_manager::{SemanticIncident, SemanticIncidentManager};
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::Json,
 };
-use mockforge_core::ai_contract_diff::{ContractDiffAnalyzer, ContractDiffConfig};
-use mockforge_core::incidents::semantic_manager::{SemanticIncident, SemanticIncidentManager};
 use mockforge_openapi::OpenApiSpec;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -21,6 +21,7 @@ use chrono::{DateTime, Utc};
 #[cfg(feature = "database")]
 use uuid::Uuid;
 
+#[cfg(feature = "database")]
 use crate::database::Database;
 
 /// Helper function to map database row to SemanticIncident
@@ -28,8 +29,8 @@ use crate::database::Database;
 fn map_row_to_semantic_incident(
     row: &sqlx::postgres::PgRow,
 ) -> Result<SemanticIncident, sqlx::Error> {
-    use mockforge_core::incidents::types::{IncidentSeverity, IncidentStatus};
     use mockforge_foundation::contract_diff_types::SemanticChangeType;
+    use mockforge_foundation::incidents_types::{IncidentSeverity, IncidentStatus};
     use sqlx::Row;
 
     let id: Uuid = row.try_get("id")?;
@@ -119,6 +120,7 @@ pub struct SemanticDriftState {
     /// Semantic incident manager
     pub manager: Arc<SemanticIncidentManager>,
     /// Database connection (optional)
+    #[cfg(feature = "database")]
     pub database: Option<Database>,
 }
 
@@ -167,30 +169,46 @@ pub async fn list_semantic_incidents(
 
         let mut bind_index = 1;
 
-        if let Some(_ws_id) = &params.workspace_id {
+        if params.workspace_id.is_some() {
             query.push_str(&format!(" AND workspace_id = ${}", bind_index));
             bind_index += 1;
         }
 
-        if let Some(_ep) = &params.endpoint {
+        if params.endpoint.is_some() {
             query.push_str(&format!(" AND endpoint = ${}", bind_index));
             bind_index += 1;
         }
 
-        if let Some(_m) = &params.method {
+        if params.method.is_some() {
             query.push_str(&format!(" AND method = ${}", bind_index));
             bind_index += 1;
         }
 
-        if let Some(_status_str) = &params.status {
+        if params.status.is_some() {
             query.push_str(&format!(" AND status = ${}", bind_index));
+            bind_index += 1;
         }
 
         let limit = params.limit.unwrap_or(100);
         query.push_str(&format!(" ORDER BY detected_at DESC LIMIT {}", limit));
 
-        // Execute query - use fetch_all for SELECT queries
-        let rows = sqlx::query(&query).fetch_all(pool).await.map_err(|e| {
+        // Execute query - use fetch_all for SELECT queries.
+        // Binds match the order in which filters were appended above.
+        let _ = bind_index; // silence unused-assignment after the last filter
+        let mut q = sqlx::query(&query);
+        if let Some(ws_id) = &params.workspace_id {
+            q = q.bind(ws_id);
+        }
+        if let Some(ep) = &params.endpoint {
+            q = q.bind(ep);
+        }
+        if let Some(m) = &params.method {
+            q = q.bind(m);
+        }
+        if let Some(s) = &params.status {
+            q = q.bind(s);
+        }
+        let rows = q.fetch_all(pool).await.map_err(|e| {
             tracing::error!("Failed to query semantic incidents: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
@@ -217,10 +235,10 @@ pub async fn list_semantic_incidents(
 
     // Fallback to in-memory manager
     let status = params.status.as_deref().and_then(|s| match s {
-        "open" => Some(mockforge_core::incidents::types::IncidentStatus::Open),
-        "acknowledged" => Some(mockforge_core::incidents::types::IncidentStatus::Acknowledged),
-        "resolved" => Some(mockforge_core::incidents::types::IncidentStatus::Resolved),
-        "closed" => Some(mockforge_core::incidents::types::IncidentStatus::Closed),
+        "open" => Some(mockforge_foundation::incidents_types::IncidentStatus::Open),
+        "acknowledged" => Some(mockforge_foundation::incidents_types::IncidentStatus::Acknowledged),
+        "resolved" => Some(mockforge_foundation::incidents_types::IncidentStatus::Resolved),
+        "closed" => Some(mockforge_foundation::incidents_types::IncidentStatus::Closed),
         _ => None,
     });
 

@@ -25,6 +25,7 @@ pub struct ContractHealthState {
     /// Semantic incident manager
     pub semantic_manager: Arc<mockforge_core::incidents::SemanticIncidentManager>,
     /// Database connection (optional)
+    #[cfg(feature = "database")]
     pub database: Option<crate::database::Database>,
 }
 

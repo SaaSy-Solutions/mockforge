@@ -186,6 +186,7 @@ pub mod coverage;
 /// `mockforge_http::database::Database` callers (4 handler files + the
 /// router init code below) keep resolving. Gated by the `database` feature,
 /// which now plumbs `mockforge-intelligence/database` transitively.
+#[cfg(feature = "database")]
 pub mod database {
     pub use mockforge_intelligence::database::*;
 }
@@ -2383,6 +2384,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     }
 
     // Initialize database connection (optional)
+    #[cfg(feature = "database")]
     let database = {
         use crate::database::Database;
         let database_url = std::env::var("DATABASE_URL").ok();
@@ -2522,12 +2524,14 @@ pub async fn build_router_with_chains_and_multi_tenant(
     {
         use crate::handlers::contract_health::{contract_health_router, ContractHealthState};
         use crate::handlers::forecasting::{forecasting_router, ForecastingState};
-        use crate::handlers::semantic_drift::{semantic_drift_router, SemanticDriftState};
         use crate::handlers::threat_modeling::{threat_modeling_router, ThreatModelingState};
         use mockforge_contracts::contract_drift::forecasting::{Forecaster, ForecastingConfig};
         use mockforge_core::contract_drift::threat_modeling::ThreatAnalyzer;
         use mockforge_core::incidents::semantic_manager::SemanticIncidentManager;
         use mockforge_foundation::threat_modeling_types::ThreatModelingConfig;
+        use mockforge_intelligence::handlers::semantic_drift::{
+            semantic_drift_router, SemanticDriftState,
+        };
         use std::sync::Arc;
 
         // Initialize forecasting
@@ -2535,6 +2539,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         let forecaster = Arc::new(Forecaster::new(forecasting_config));
         let forecasting_state = ForecastingState {
             forecaster,
+            #[cfg(feature = "database")]
             database: database.clone(),
         };
 
@@ -2542,6 +2547,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         let semantic_manager = Arc::new(SemanticIncidentManager::new());
         let semantic_state = SemanticDriftState {
             manager: semantic_manager,
+            #[cfg(feature = "database")]
             database: database.clone(),
         };
 
@@ -2589,6 +2595,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         let threat_state = ThreatModelingState {
             analyzer: threat_analyzer,
             webhook_configs,
+            #[cfg(feature = "database")]
             database: database.clone(),
         };
 
@@ -2596,6 +2603,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         let contract_health_state = ContractHealthState {
             incident_manager: incident_manager.clone(),
             semantic_manager: Arc::new(SemanticIncidentManager::new()),
+            #[cfg(feature = "database")]
             database: database.clone(),
         };
 
