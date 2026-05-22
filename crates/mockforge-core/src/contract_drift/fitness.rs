@@ -60,8 +60,10 @@ pub trait FitnessEvaluator: Send + Sync {
     /// A `FitnessTestResult` indicating whether the test passed
     fn evaluate_protocol(
         &self,
-        old_contract: Option<&dyn crate::contract_drift::protocol_contracts::ProtocolContract>,
-        new_contract: &dyn crate::contract_drift::protocol_contracts::ProtocolContract,
+        old_contract: Option<
+            &dyn mockforge_contracts::contract_drift::protocol_contracts::ProtocolContract,
+        >,
+        new_contract: &dyn mockforge_contracts::contract_drift::protocol_contracts::ProtocolContract,
         diff_result: &ContractDiffResult,
         operation_id: &str,
         config: &serde_json::Value,
@@ -177,8 +179,10 @@ impl FitnessEvaluator for ResponseSizeFitnessEvaluator {
 
     fn evaluate_protocol(
         &self,
-        old_contract: Option<&dyn crate::contract_drift::protocol_contracts::ProtocolContract>,
-        new_contract: &dyn crate::contract_drift::protocol_contracts::ProtocolContract,
+        old_contract: Option<
+            &dyn mockforge_contracts::contract_drift::protocol_contracts::ProtocolContract,
+        >,
+        new_contract: &dyn mockforge_contracts::contract_drift::protocol_contracts::ProtocolContract,
         diff_result: &ContractDiffResult,
         operation_id: &str,
         config: &serde_json::Value,
@@ -306,8 +310,10 @@ impl FitnessEvaluator for RequiredFieldFitnessEvaluator {
 
     fn evaluate_protocol(
         &self,
-        _old_contract: Option<&dyn crate::contract_drift::protocol_contracts::ProtocolContract>,
-        new_contract: &dyn crate::contract_drift::protocol_contracts::ProtocolContract,
+        _old_contract: Option<
+            &dyn mockforge_contracts::contract_drift::protocol_contracts::ProtocolContract,
+        >,
+        new_contract: &dyn mockforge_contracts::contract_drift::protocol_contracts::ProtocolContract,
         diff_result: &ContractDiffResult,
         operation_id: &str,
         config: &serde_json::Value,
@@ -423,8 +429,10 @@ impl FitnessEvaluator for FieldCountFitnessEvaluator {
 
     fn evaluate_protocol(
         &self,
-        _old_contract: Option<&dyn crate::contract_drift::protocol_contracts::ProtocolContract>,
-        new_contract: &dyn crate::contract_drift::protocol_contracts::ProtocolContract,
+        _old_contract: Option<
+            &dyn mockforge_contracts::contract_drift::protocol_contracts::ProtocolContract,
+        >,
+        new_contract: &dyn mockforge_contracts::contract_drift::protocol_contracts::ProtocolContract,
         _diff_result: &ContractDiffResult,
         operation_id: &str,
         config: &serde_json::Value,
@@ -512,8 +520,10 @@ impl FitnessEvaluator for SchemaComplexityFitnessEvaluator {
 
     fn evaluate_protocol(
         &self,
-        _old_contract: Option<&dyn crate::contract_drift::protocol_contracts::ProtocolContract>,
-        new_contract: &dyn crate::contract_drift::protocol_contracts::ProtocolContract,
+        _old_contract: Option<
+            &dyn mockforge_contracts::contract_drift::protocol_contracts::ProtocolContract,
+        >,
+        new_contract: &dyn mockforge_contracts::contract_drift::protocol_contracts::ProtocolContract,
         _diff_result: &ContractDiffResult,
         operation_id: &str,
         config: &serde_json::Value,
@@ -691,8 +701,10 @@ impl FitnessFunctionRegistry {
     /// This method evaluates fitness functions against protocol contracts (gRPC, WebSocket, MQTT, etc.)
     pub fn evaluate_all_protocol(
         &self,
-        old_contract: Option<&dyn crate::contract_drift::protocol_contracts::ProtocolContract>,
-        new_contract: &dyn crate::contract_drift::protocol_contracts::ProtocolContract,
+        old_contract: Option<
+            &dyn mockforge_contracts::contract_drift::protocol_contracts::ProtocolContract,
+        >,
+        new_contract: &dyn mockforge_contracts::contract_drift::protocol_contracts::ProtocolContract,
         diff_result: &ContractDiffResult,
         operation_id: &str,
         workspace_id: Option<&str>,
@@ -702,26 +714,26 @@ impl FitnessFunctionRegistry {
         let operation = new_contract.get_operation(operation_id);
         let (endpoint, method) = if let Some(op) = operation {
             match &op.operation_type {
-                crate::contract_drift::protocol_contracts::OperationType::HttpEndpoint {
+                mockforge_contracts::contract_drift::protocol_contracts::OperationType::HttpEndpoint {
                     path,
                     method,
                 } => (path.clone(), method.clone()),
-                crate::contract_drift::protocol_contracts::OperationType::GrpcMethod {
+                mockforge_contracts::contract_drift::protocol_contracts::OperationType::GrpcMethod {
                     service,
                     method,
                 } => {
                     // For gRPC, use service.method as endpoint
                     (format!("{}.{}", service, method), "grpc".to_string())
                 }
-                crate::contract_drift::protocol_contracts::OperationType::WebSocketMessage {
+                mockforge_contracts::contract_drift::protocol_contracts::OperationType::WebSocketMessage {
                     message_type,
                     ..
                 } => (message_type.clone(), "websocket".to_string()),
-                crate::contract_drift::protocol_contracts::OperationType::MqttTopic {
+                mockforge_contracts::contract_drift::protocol_contracts::OperationType::MqttTopic {
                     topic,
                     qos: _,
                 } => (topic.clone(), "mqtt".to_string()),
-                crate::contract_drift::protocol_contracts::OperationType::KafkaTopic {
+                mockforge_contracts::contract_drift::protocol_contracts::OperationType::KafkaTopic {
                     topic,
                     key_schema: _,
                     value_schema: _,
@@ -1231,7 +1243,7 @@ fn schema_depth_resolved(
 
 /// Estimate schema size for a protocol contract operation
 fn estimate_protocol_schema_size(
-    contract: &dyn crate::contract_drift::protocol_contracts::ProtocolContract,
+    contract: &dyn mockforge_contracts::contract_drift::protocol_contracts::ProtocolContract,
     operation_id: &str,
 ) -> f64 {
     // Get the operation schema

@@ -13,7 +13,7 @@ use axum::{
     http::StatusCode,
     response::Json,
 };
-use mockforge_core::contract_drift::protocol_contracts::{
+use mockforge_contracts::contract_drift::protocol_contracts::{
     compare_contracts, ProtocolContractRegistry,
 };
 use mockforge_core::contract_drift::{
@@ -681,19 +681,19 @@ pub async fn compare_contracts_handler(
 
             // Determine endpoint and method from operation type
             let (endpoint, method) = match &operation.operation_type {
-                mockforge_core::contract_drift::protocol_contracts::OperationType::HttpEndpoint { path, method } => {
+                mockforge_contracts::contract_drift::protocol_contracts::OperationType::HttpEndpoint { path, method } => {
                     (path.clone(), method.clone())
                 }
-                mockforge_core::contract_drift::protocol_contracts::OperationType::GrpcMethod { service, method } => {
+                mockforge_contracts::contract_drift::protocol_contracts::OperationType::GrpcMethod { service, method } => {
                     (format!("{}.{}", service, method), "grpc".to_string())
                 }
-                mockforge_core::contract_drift::protocol_contracts::OperationType::WebSocketMessage { message_type, .. } => {
+                mockforge_contracts::contract_drift::protocol_contracts::OperationType::WebSocketMessage { message_type, .. } => {
                     (message_type.clone(), "websocket".to_string())
                 }
-                mockforge_core::contract_drift::protocol_contracts::OperationType::MqttTopic { topic, qos: _ } => {
+                mockforge_contracts::contract_drift::protocol_contracts::OperationType::MqttTopic { topic, qos: _ } => {
                     (topic.clone(), "mqtt".to_string())
                 }
-                mockforge_core::contract_drift::protocol_contracts::OperationType::KafkaTopic { topic, key_schema: _, value_schema: _ } => {
+                mockforge_contracts::contract_drift::protocol_contracts::OperationType::KafkaTopic { topic, key_schema: _, value_schema: _ } => {
                     (topic.clone(), "kafka".to_string())
                 }
             };
@@ -850,13 +850,14 @@ pub async fn validate_message(
         })?,
     };
 
-    let contract_request = mockforge_core::contract_drift::protocol_contracts::ContractRequest {
-        protocol: contract.protocol(),
-        operation_id: request.operation_id.clone(),
-        payload: payload_bytes,
-        content_type: request.content_type,
-        metadata: request.metadata.unwrap_or_default(),
-    };
+    let contract_request =
+        mockforge_contracts::contract_drift::protocol_contracts::ContractRequest {
+            protocol: contract.protocol(),
+            operation_id: request.operation_id.clone(),
+            payload: payload_bytes,
+            content_type: request.content_type,
+            metadata: request.metadata.unwrap_or_default(),
+        };
 
     let validation_result =
         contract.validate(&request.operation_id, &contract_request).await.map_err(|e| {

@@ -4,13 +4,15 @@
 //! for WebSocket connections, enabling drift detection and analysis for WebSocket message schemas
 //! and topics.
 
-use crate::ai_contract_diff::{ContractDiffResult, Mismatch, MismatchSeverity, MismatchType};
 use crate::contract_drift::protocol_contracts::{
     ContractError, ContractOperation, ContractRequest, OperationType, ProtocolContract,
     ValidationError, ValidationResult,
 };
-use crate::protocol_abstraction::Protocol;
 use jsonschema::{self, Draft, Validator as JSONSchema};
+use mockforge_foundation::contract_diff_types::{
+    ContractDiffResult, Mismatch, MismatchSeverity, MismatchType,
+};
+use mockforge_foundation::protocol::Protocol;
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -326,7 +328,7 @@ impl WebSocketContract {
             mismatches,
             recommendations: Vec::new(),
             corrections: Vec::new(),
-            metadata: crate::ai_contract_diff::DiffMetadata {
+            metadata: mockforge_foundation::contract_diff_types::DiffMetadata {
                 analyzed_at: chrono::Utc::now(),
                 request_source: "websocket_contract_diff".to_string(),
                 contract_version: Some(self.version.clone()),
