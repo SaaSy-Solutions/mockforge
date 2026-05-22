@@ -51,6 +51,9 @@ pub mod behavioral_cloning;
 pub mod behavioral_economics;
 pub mod contract_validation;
 pub mod failure_analysis;
+/// HTTP handlers for AI-coupled features. New in #555 phase 2 — see
+/// `handlers/mod.rs` for migration progress.
+pub mod handlers;
 pub mod incidents;
 pub mod intelligent_behavior;
 pub mod pr_generation;
