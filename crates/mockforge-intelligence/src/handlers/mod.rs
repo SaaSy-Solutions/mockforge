@@ -11,5 +11,10 @@
 //! - [`pr_generation`]: PR generation HTTP surface (#555 phase 2). The
 //!   underlying `pr_generation` module moved in #562 phase 1; the
 //!   handler followed once intelligence grew an axum dep.
+//! - [`semantic_drift`]: Semantic-drift incident HTTP surface (#555
+//!   phase 3). All three of its foreign deps moved here in earlier #562
+//!   phases (`ai_contract_diff` in phase 4, `incidents::semantic_manager`
+//!   in phase 9) and the sqlx wrapper landed via the #611 prereq.
 
 pub mod pr_generation;
+pub mod semantic_drift;

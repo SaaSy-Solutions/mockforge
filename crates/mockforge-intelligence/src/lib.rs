@@ -52,10 +52,16 @@ pub mod behavioral_economics;
 pub mod contract_validation;
 /// Postgres pool wrapper used by HTTP handlers that persist drift
 /// budgets / incidents / consumer contracts. Moved here from
-/// `mockforge_http::database` under #555 (prereq for handler moves —
-/// once handlers leave `mockforge-http`, they pick up this dep without
-/// re-introducing a cycle). Gated by the `database` feature.
-#[cfg(feature = "database")]
+/// `mockforge_http::database` under #555 (prereq for handler moves).
+/// The `Database` type compiles in both `database` feature states
+/// (the sqlx-bearing pool field is the `#[cfg]`-gated part) so
+/// importing the module is feature-agnostic; only the connect/migrate
+/// methods short-circuit when sqlx isn't pulled in. Matches the
+/// original `mockforge-http::database` shape so the inline re-export
+/// shim in `mockforge_http::lib` works without a feature gate
+/// (`#611`-followup: the original PR landed with the gate still on
+/// `pub mod`, which broke integration tests that build the workspace
+/// without the `database` feature).
 pub mod database;
 pub mod failure_analysis;
 /// HTTP handlers for AI-coupled features. New in #555 phase 2 — see
