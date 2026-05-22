@@ -21,6 +21,7 @@ mockforge-foundation = { path = "../mockforge-foundation", default-features = fa
 # and `OpenApiRouteRegistry`. `mockforge-openapi` is foundation-only, so this
 # dep is cycle-safe — it does NOT pull `mockforge-core` back in.
 mockforge-openapi = { path = "../mockforge-openapi" }
+anyhow = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 chrono = { workspace = true }

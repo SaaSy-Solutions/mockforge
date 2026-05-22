@@ -79,9 +79,15 @@ impl Database {
     #[cfg(feature = "database")]
     pub async fn migrate_if_connected(&self) -> AnyhowResult<()> {
         if let Some(ref pool) = self.pool {
-            // Run migrations from the migrations directory
-            // Note: This requires the migrations directory to be accessible at runtime
-            match sqlx::migrate!("./migrations").run(pool.as_ref()).await {
+            // Migrations live in `mockforge-http/migrations/` (per the migration
+            // guard's "append-only, no renames" policy — sqlx records each
+            // migration's checksum + version on apply, and renaming the file is
+            // indistinguishable from a checksum mismatch). `sqlx::migrate!` is a
+            // compile-time macro that bakes the SQL content into the binary, so
+            // the relative path here is resolved at build time against
+            // `CARGO_MANIFEST_DIR`; runtime location of the SQL files doesn't
+            // matter. Issue #555 prereq.
+            match sqlx::migrate!("../mockforge-http/migrations").run(pool.as_ref()).await {
                 Ok(_) => {
                     tracing::info!("Database migrations completed successfully");
                     Ok(())

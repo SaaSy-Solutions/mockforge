@@ -39,4 +39,3 @@ CREATE TABLE IF NOT EXISTS drift_field_counts (
 CREATE INDEX IF NOT EXISTS idx_drift_field_counts_endpoint ON drift_field_counts(endpoint, method);
 CREATE INDEX IF NOT EXISTS idx_drift_field_counts_recorded ON drift_field_counts(recorded_at DESC);
 CREATE INDEX IF NOT EXISTS idx_drift_field_counts_workspace ON drift_field_counts(workspace_id);
-

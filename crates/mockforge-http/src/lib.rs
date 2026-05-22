@@ -181,7 +181,14 @@ pub mod contract_diff_middleware;
 /// used by the dashboard sampler to derive connections-per-second.
 pub mod counting_listener;
 pub mod coverage;
-pub mod database;
+/// Database connection wrapper — moved to `mockforge_intelligence::database`
+/// under #555 (prereq for handler moves). Re-exported here so existing
+/// `mockforge_http::database::Database` callers (4 handler files + the
+/// router init code below) keep resolving. Gated by the `database` feature,
+/// which now plumbs `mockforge-intelligence/database` transitively.
+pub mod database {
+    pub use mockforge_intelligence::database::*;
+}
 /// File generation service for creating mock PDF, CSV, JSON files
 pub mod file_generator;
 /// File serving for generated mock files
