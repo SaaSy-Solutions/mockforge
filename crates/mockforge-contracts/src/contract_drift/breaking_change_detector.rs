@@ -2,10 +2,10 @@
 //!
 //! This module provides utilities for detecting breaking changes based on configurable rules.
 
-use crate::ai_contract_diff::Mismatch;
 use crate::contract_drift::types::{
     BreakingChangeRule, BreakingChangeRuleConfig, BreakingChangeRuleType,
 };
+use mockforge_foundation::contract_diff_types::Mismatch;
 
 /// Detector for breaking changes
 #[derive(Debug, Clone)]
@@ -59,12 +59,12 @@ impl BreakingChangeDetector {
                 definitely_breaking.push(mismatch.clone());
             }
             // Potentially breaking: medium severity or certain mismatch types that need review
-            else if mismatch.severity == crate::ai_contract_diff::MismatchSeverity::Medium
+            else if mismatch.severity == mockforge_foundation::contract_diff_types::MismatchSeverity::Medium
                 || matches!(
                     mismatch.mismatch_type,
-                    crate::ai_contract_diff::MismatchType::FormatMismatch
-                        | crate::ai_contract_diff::MismatchType::ConstraintViolation
-                        | crate::ai_contract_diff::MismatchType::TypeMismatch
+                    mockforge_foundation::contract_diff_types::MismatchType::FormatMismatch
+                        | mockforge_foundation::contract_diff_types::MismatchType::ConstraintViolation
+                        | mockforge_foundation::contract_diff_types::MismatchType::TypeMismatch
                 )
             {
                 potentially_breaking.push(mismatch.clone());
@@ -103,7 +103,7 @@ impl Default for BreakingChangeDetector {
             BreakingChangeRule {
                 rule_type: BreakingChangeRuleType::Severity,
                 config: BreakingChangeRuleConfig::Severity {
-                    severity: crate::ai_contract_diff::MismatchSeverity::High,
+                    severity: mockforge_foundation::contract_diff_types::MismatchSeverity::High,
                     include_higher: true,
                 },
                 enabled: true,
@@ -112,7 +112,7 @@ impl Default for BreakingChangeDetector {
             BreakingChangeRule {
                 rule_type: BreakingChangeRuleType::MismatchType,
                 config: BreakingChangeRuleConfig::MismatchType {
-                    mismatch_type: crate::ai_contract_diff::MismatchType::MissingRequiredField,
+                    mismatch_type: mockforge_foundation::contract_diff_types::MismatchType::MissingRequiredField,
                 },
                 enabled: true,
             },
@@ -123,7 +123,7 @@ impl Default for BreakingChangeDetector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ai_contract_diff::{MismatchSeverity, MismatchType};
+    use mockforge_foundation::contract_diff_types::{MismatchSeverity, MismatchType};
 
     fn create_test_mismatch(mismatch_type: MismatchType, severity: MismatchSeverity) -> Mismatch {
         Mismatch {

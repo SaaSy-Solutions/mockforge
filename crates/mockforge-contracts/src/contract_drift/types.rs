@@ -6,9 +6,9 @@
 //! from `mockforge_foundation::contract_drift_types` (Phase 6 / A6 / A13).
 //!
 //! The `drift_result_from_diff` helper lives in this file because it depends on
-//! core-only types (`BreakingChangeDetector`, `ContractDiffResult`).
+//! `BreakingChangeDetector` and `ContractDiffResult` from foundation.
 
-use crate::ai_contract_diff::ContractDiffResult;
+use mockforge_foundation::contract_diff_types::ContractDiffResult;
 pub use mockforge_foundation::contract_drift_types::{
     BreakingChangeRule, BreakingChangeRuleConfig, BreakingChangeRuleType, DriftBudget,
     DriftBudgetConfig, DriftMetrics, DriftResult,

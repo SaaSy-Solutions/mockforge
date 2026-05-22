@@ -5,10 +5,8 @@
 //! This module provides functionality for tracking contract drift, managing drift budgets,
 //! and detecting breaking changes according to configurable rules.
 
-pub mod breaking_change_detector;
 pub mod budget_engine;
 pub mod consumer_mapping;
-pub mod field_tracking;
 pub mod fitness;
 pub mod grpc_contract;
 pub mod mqtt_kafka_contracts;
@@ -17,16 +15,13 @@ pub mod protocol_contracts;
 /// (Issue #562 phase 3). Re-exported here so existing
 /// `crate::contract_drift::threat_modeling::*` paths keep resolving.
 pub use mockforge_intelligence::threat_modeling;
-pub mod types;
 pub mod websocket_contract;
 
-pub use breaking_change_detector::BreakingChangeDetector;
 pub use budget_engine::DriftBudgetEngine;
 pub use consumer_mapping::{
     AppType, ConsumerImpact, ConsumerImpactAnalyzer, ConsumerMapping, ConsumerMappingRegistry,
     ConsumingApp, SDKMethod,
 };
-pub use field_tracking::{FieldCountRecord, FieldCountTracker};
 pub use fitness::{
     FitnessEvaluator, FitnessFunction, FitnessFunctionRegistry, FitnessFunctionType, FitnessScope,
     FitnessTestResult,
@@ -46,10 +41,18 @@ pub use threat_modeling::{
     RemediationSuggestion, SchemaAnalyzer, ThreatAnalyzer, ThreatAssessment, ThreatCategory,
     ThreatFinding, ThreatLevel, ThreatModelingConfig,
 };
-pub use types::{
-    BreakingChangeRule, BreakingChangeRuleConfig, BreakingChangeRuleType, DriftBudget,
-    DriftBudgetConfig, DriftMetrics, DriftResult,
-};
 pub use websocket_contract::{
     diff_websocket_contracts, MessageDirection, WebSocketContract, WebSocketMessageType,
+};
+
+// Forwarding re-exports: types, breaking_change_detector, and field_tracking have
+// moved to mockforge-contracts. Re-export from there so existing
+// `crate::contract_drift::{DriftBudgetConfig, …}` paths in core keep resolving.
+pub use mockforge_contracts::contract_drift::breaking_change_detector::BreakingChangeDetector;
+pub use mockforge_contracts::contract_drift::field_tracking::{
+    FieldCountRecord, FieldCountTracker,
+};
+pub use mockforge_contracts::contract_drift::types::{
+    drift_result_from_diff, BreakingChangeRule, BreakingChangeRuleConfig, BreakingChangeRuleType,
+    DriftBudget, DriftBudgetConfig, DriftMetrics, DriftResult,
 };
