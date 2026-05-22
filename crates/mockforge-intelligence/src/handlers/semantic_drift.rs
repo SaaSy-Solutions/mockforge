@@ -169,30 +169,46 @@ pub async fn list_semantic_incidents(
 
         let mut bind_index = 1;
 
-        if let Some(_ws_id) = &params.workspace_id {
+        if params.workspace_id.is_some() {
             query.push_str(&format!(" AND workspace_id = ${}", bind_index));
             bind_index += 1;
         }
 
-        if let Some(_ep) = &params.endpoint {
+        if params.endpoint.is_some() {
             query.push_str(&format!(" AND endpoint = ${}", bind_index));
             bind_index += 1;
         }
 
-        if let Some(_m) = &params.method {
+        if params.method.is_some() {
             query.push_str(&format!(" AND method = ${}", bind_index));
             bind_index += 1;
         }
 
-        if let Some(_status_str) = &params.status {
+        if params.status.is_some() {
             query.push_str(&format!(" AND status = ${}", bind_index));
+            bind_index += 1;
         }
 
         let limit = params.limit.unwrap_or(100);
         query.push_str(&format!(" ORDER BY detected_at DESC LIMIT {}", limit));
 
-        // Execute query - use fetch_all for SELECT queries
-        let rows = sqlx::query(&query).fetch_all(pool).await.map_err(|e| {
+        // Execute query - use fetch_all for SELECT queries.
+        // Binds match the order in which filters were appended above.
+        let _ = bind_index; // silence unused-assignment after the last filter
+        let mut q = sqlx::query(&query);
+        if let Some(ws_id) = &params.workspace_id {
+            q = q.bind(ws_id);
+        }
+        if let Some(ep) = &params.endpoint {
+            q = q.bind(ep);
+        }
+        if let Some(m) = &params.method {
+            q = q.bind(m);
+        }
+        if let Some(s) = &params.status {
+            q = q.bind(s);
+        }
+        let rows = q.fetch_all(pool).await.map_err(|e| {
             tracing::error!("Failed to query semantic incidents: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
