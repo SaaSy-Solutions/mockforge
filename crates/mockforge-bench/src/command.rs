@@ -455,18 +455,43 @@ impl BenchCommand {
             };
 
             if self.vus < required_vus {
-                TerminalReporter::print_warning(&format!(
-                    "--vus {} may be insufficient for --rps {} × {} ops/iteration \
-                     (baseline latency {}). k6's constant-arrival-rate counts ITERATIONS \
-                     and each runs every operation in the spec — required ≈ rps × ops × \
-                     latency_secs VUs. Bump --vus to ~{} if you see \"Insufficient VUs\" \
-                     warnings.",
-                    self.vus,
-                    rps,
-                    num_ops,
-                    basis,
-                    required_vus.max(self.vus + 1),
-                ));
+                // Round 10 (#79): Srikanth's 11422-op spec at --rps 100 produced
+                // a recommendation of ~10,740 VUs, which is absurd in practice.
+                // When the recommendation goes super-linear, the real fix is to
+                // reduce the workload (use --operations filter), not bump VUs.
+                // Cap the suggestion at 1000 and steer the user toward filtering.
+                const VU_RECOMMENDATION_CAP: u32 = 1000;
+                let recommendation = required_vus.max(self.vus + 1);
+                if recommendation > VU_RECOMMENDATION_CAP {
+                    TerminalReporter::print_warning(&format!(
+                        "Workload is very large: --rps {} × {} ops/iteration × {} \
+                         baseline ⇒ ~{} VUs needed end-to-end, far beyond what's \
+                         practical to drive. Two ways to fix:\n  1. Reduce \
+                         operations per iteration with `--operations 'pattern,…'` \
+                         (or `--exclude-operations`) to focus the bench on a \
+                         representative subset.\n  2. Drop `--rps` and use \
+                         `--vus {}` alone — closed-model load runs as fast as \
+                         the VU pool allows, bounded by latency, with no per-\
+                         iteration deadline. Expect 1-iteration coverage of ~{} \
+                         operations in {}s.",
+                        rps,
+                        num_ops,
+                        basis,
+                        recommendation,
+                        self.vus.max(5),
+                        num_ops,
+                        Self::parse_duration(&self.duration).unwrap_or(0),
+                    ));
+                } else {
+                    TerminalReporter::print_warning(&format!(
+                        "--vus {} may be insufficient for --rps {} × {} ops/iteration \
+                         (baseline latency {}). k6's constant-arrival-rate counts ITERATIONS \
+                         and each runs every operation in the spec — required ≈ rps × ops × \
+                         latency_secs VUs. Bump --vus to ~{} if you see \"Insufficient VUs\" \
+                         warnings.",
+                        self.vus, rps, num_ops, basis, recommendation,
+                    ));
+                }
             } else if probe.is_some() {
                 TerminalReporter::print_progress(&format!(
                     "Pre-flight probe: target latency {}, {} ops/iteration — --vus {} \
@@ -573,7 +598,12 @@ impl BenchCommand {
 
         // Print results
         let duration_secs = Self::parse_duration(&self.duration)?;
-        TerminalReporter::print_summary_with_mode(&results, duration_secs, self.no_keep_alive);
+        TerminalReporter::print_summary_full(
+            &results,
+            duration_secs,
+            self.no_keep_alive,
+            Some(num_ops),
+        );
 
         println!("\nResults saved to: {}", self.output.display());
 

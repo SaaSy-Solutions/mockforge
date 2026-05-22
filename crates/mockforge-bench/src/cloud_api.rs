@@ -853,6 +853,9 @@ fn parse_k6_summary(bytes: &[u8]) -> Result<K6Results> {
         },
         tls_handshake_avg_ms: tls_handshake["avg"].as_f64().unwrap_or(0.0),
         tls_handshake_max_ms: tls_handshake["max"].as_f64().unwrap_or(0.0),
+        iterations_completed: json["metrics"]["iterations"]["values"]["count"]
+            .as_u64()
+            .unwrap_or(0),
     })
 }
 

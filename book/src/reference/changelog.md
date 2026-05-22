@@ -1,6 +1,16 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
-## [Unreleased]
+## [0.3.142] - 2026-05-21
+
+### Changed
+
+- **[DevX]** Pre-flight `--vus` recommendation caps at 1000 for huge specs (#79 round 10)
+  - Srikanth's 11,422-operation spec at `--rps 100` (9.4ms baseline) produced a recommendation of **~10,740 VUs** — mathematically correct but practically absurd. The right answer for that workload isn't "spin up 10K VUs", it's "shrink the workload." 0.3.142 caps the printed recommendation at 1000 and, above the cap, steers users toward `--operations`/`--exclude-operations` filters or dropping `--rps` for closed-model loading.
+
+### Added
+
+- **[DevX]** Iteration coverage in bench summary (#79 round 10)
+  - New `Iterations: X complete × N ops = Y ops fully exercised` line appears whenever k6's `iterations.values.count` is non-zero. When the run ends mid-iteration (large spec, undersized VUs), a follow-up line surfaces the extra requests from the partial pass so users know the last iteration didn't cover every operation in the spec.
 
 ### Fixed
 
