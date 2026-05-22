@@ -16,6 +16,13 @@ schema = ["dep:schemars"]
 schemars = { version = "0.8", optional = true }
 mockforge-core = { path = "../mockforge-core" }
 axum = { workspace = true }
+# `server::ProxyServer` (moved from `mockforge-http` under #555 phase 1)
+# needs `tokio::sync::RwLock` + `#[tokio::test]` in its unit tests; `http`
+# crate's `HeaderName` / `HeaderValue` reach the middleware directly
+# rather than through axum's re-export so the qualified path keeps
+# working post-move.
+tokio = { workspace = true, features = ["sync", "macros", "rt-multi-thread", "time"] }
+http = "1.3"
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

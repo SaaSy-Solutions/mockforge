@@ -14,6 +14,12 @@ pub mod config;
 pub mod handler;
 pub mod middleware;
 pub mod routing;
+/// Browser/mobile intercepting proxy server. Moved from
+/// `mockforge_http::proxy_server` under #555 phase 1 — the file's only
+/// non-test caller was a re-export through http itself, and its imports
+/// already lived in this crate (`body_transform`, `config::ProxyConfig`).
+/// `mockforge_http::proxy_server` is now a thin shim re-exporting from here.
+pub mod server;
 
 // Re-export commonly used types
 pub use body_transform::BodyTransformationMiddleware;
