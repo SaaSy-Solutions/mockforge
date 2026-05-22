@@ -8,7 +8,7 @@
 //! `mockforge-foundation::protocol_contract_types` so consumers can implement
 //! and use them without depending on deprecated core modules.
 
-use crate::ai_contract_diff::{ContractDiffResult, Mismatch};
+use mockforge_foundation::contract_diff_types::{ContractDiffResult, Mismatch};
 use mockforge_foundation::protocol::Protocol;
 pub use mockforge_foundation::protocol_contract_types::{
     classify_change, extract_breaking_changes, ChangeClassification, ContractError,

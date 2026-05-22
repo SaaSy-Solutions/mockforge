@@ -5,10 +5,11 @@
 //! `FitnessTestResult`, and the consumer-mapping types are re-exported
 //! from `mockforge_foundation::contract_drift_types` (Phase 6 / A6 / A13).
 //!
-//! The `drift_result_from_diff` helper lives in this file because it depends on
-//! core-only types (`BreakingChangeDetector`, `ContractDiffResult`).
+//! The `drift_result_from_diff` helper lives here because it depends on
+//! `BreakingChangeDetector` (sibling in this crate) and `ContractDiffResult`
+//! (re-exported from `mockforge_foundation::contract_diff_types`).
 
-use crate::ai_contract_diff::ContractDiffResult;
+use mockforge_foundation::contract_diff_types::ContractDiffResult;
 pub use mockforge_foundation::contract_drift_types::{
     BreakingChangeRule, BreakingChangeRuleConfig, BreakingChangeRuleType, DriftBudget,
     DriftBudgetConfig, DriftMetrics, DriftResult,
@@ -21,7 +22,7 @@ pub use mockforge_foundation::contract_drift_types::{
 /// for the endpoint.
 ///
 /// Lives here (not in foundation) because it depends on `BreakingChangeDetector`
-/// and `ContractDiffResult`, which are only in core.
+/// (sibling in `mockforge-contracts::contract_drift`).
 pub fn drift_result_from_diff(
     diff_result: &ContractDiffResult,
     endpoint: String,

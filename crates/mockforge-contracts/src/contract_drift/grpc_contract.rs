@@ -3,12 +3,14 @@
 //! This module provides a `GrpcContract` struct that implements the `ProtocolContract` trait
 //! for gRPC services, enabling drift detection and analysis for protobuf-based APIs.
 
-use crate::ai_contract_diff::{ContractDiffResult, Mismatch, MismatchSeverity, MismatchType};
 use crate::contract_drift::protocol_contracts::{
     ContractError, ContractOperation, ContractRequest, OperationType, ProtocolContract,
     ValidationError, ValidationResult,
 };
-use crate::protocol_abstraction::Protocol;
+use mockforge_foundation::contract_diff_types::{
+    ContractDiffResult, Mismatch, MismatchSeverity, MismatchType,
+};
+use mockforge_foundation::protocol::Protocol;
 use prost_reflect::{DescriptorPool, MessageDescriptor, MethodDescriptor, ServiceDescriptor};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -232,7 +234,7 @@ impl GrpcContract {
             mismatches,
             recommendations: Vec::new(),
             corrections: Vec::new(),
-            metadata: crate::ai_contract_diff::DiffMetadata {
+            metadata: mockforge_foundation::contract_diff_types::DiffMetadata {
                 analyzed_at: chrono::Utc::now(),
                 request_source: "grpc_contract_diff".to_string(),
                 contract_version: Some(self.version.clone()),
@@ -760,10 +762,8 @@ impl GrpcContract {
                     let is_breaking = matches!(
                         (old_cardinality, new_cardinality),
                         (
-                            prost_reflect::Cardinality::Optional,
-                            prost_reflect::Cardinality::Required
-                        ) | (
-                            prost_reflect::Cardinality::Repeated,
+                            prost_reflect::Cardinality::Optional
+                                | prost_reflect::Cardinality::Repeated,
                             prost_reflect::Cardinality::Required
                         )
                     );
@@ -880,19 +880,16 @@ impl ProtocolContract for GrpcContract {
         request: &ContractRequest,
     ) -> Result<ValidationResult, ContractError> {
         // Check if the operation exists
-        let method = match self.methods.get(operation_id) {
-            Some(m) => m,
-            None => {
-                return Ok(ValidationResult {
-                    valid: false,
-                    errors: vec![ValidationError {
-                        message: format!("Method {} not found in contract", operation_id),
-                        path: Some(operation_id.to_string()),
-                        code: Some("METHOD_NOT_FOUND".to_string()),
-                    }],
-                    warnings: Vec::new(),
-                });
-            }
+        let Some(method) = self.methods.get(operation_id) else {
+            return Ok(ValidationResult {
+                valid: false,
+                errors: vec![ValidationError {
+                    message: format!("Method {} not found in contract", operation_id),
+                    path: Some(operation_id.to_string()),
+                    code: Some("METHOD_NOT_FOUND".to_string()),
+                }],
+                warnings: Vec::new(),
+            });
         };
 
         // Get the input message descriptor for this method

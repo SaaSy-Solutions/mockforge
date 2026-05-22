@@ -4,10 +4,10 @@
 
 use crate::ai_contract_diff::ContractDiffResult;
 use crate::contract_drift::consumer_mapping::ConsumerImpactAnalyzer;
-use crate::contract_drift::field_tracking::FieldCountTracker;
 use crate::contract_drift::fitness::FitnessFunctionRegistry;
-use crate::contract_drift::types::{DriftBudget, DriftBudgetConfig, DriftResult};
 use crate::openapi::OpenApiSpec;
+use mockforge_contracts::contract_drift::field_tracking::FieldCountTracker;
+use mockforge_contracts::contract_drift::types::{DriftBudget, DriftBudgetConfig, DriftResult};
 use std::sync::Arc;
 
 /// Engine for evaluating drift budgets
@@ -106,7 +106,7 @@ impl DriftBudgetEngine {
                 breaking_mismatches: vec![],
                 potentially_breaking_mismatches: vec![],
                 non_breaking_mismatches: diff_result.mismatches.clone(),
-                metrics: crate::contract_drift::types::DriftMetrics {
+                metrics: mockforge_contracts::contract_drift::types::DriftMetrics {
                     endpoint: endpoint.to_string(),
                     method: method.to_string(),
                     breaking_changes: 0,
@@ -135,7 +135,7 @@ impl DriftBudgetEngine {
                 breaking_mismatches: vec![],
                 potentially_breaking_mismatches: vec![],
                 non_breaking_mismatches: diff_result.mismatches.clone(),
-                metrics: crate::contract_drift::types::DriftMetrics {
+                metrics: mockforge_contracts::contract_drift::types::DriftMetrics {
                     endpoint: endpoint.to_string(),
                     method: method.to_string(),
                     breaking_changes: 0,
@@ -182,7 +182,7 @@ impl DriftBudgetEngine {
         };
 
         // Evaluate against budget
-        let mut result = crate::contract_drift::types::drift_result_from_diff(
+        let mut result = mockforge_contracts::contract_drift::types::drift_result_from_diff(
             diff_result,
             endpoint.to_string(),
             method.to_string(),
@@ -237,7 +237,7 @@ impl DriftBudgetEngine {
                 breaking_mismatches: vec![],
                 potentially_breaking_mismatches: vec![],
                 non_breaking_mismatches: diff_result.mismatches.clone(),
-                metrics: crate::contract_drift::types::DriftMetrics {
+                metrics: mockforge_contracts::contract_drift::types::DriftMetrics {
                     endpoint: endpoint.to_string(),
                     method: method.to_string(),
                     breaking_changes: 0,
@@ -266,7 +266,7 @@ impl DriftBudgetEngine {
                 breaking_mismatches: vec![],
                 potentially_breaking_mismatches: vec![],
                 non_breaking_mismatches: diff_result.mismatches.clone(),
-                metrics: crate::contract_drift::types::DriftMetrics {
+                metrics: mockforge_contracts::contract_drift::types::DriftMetrics {
                     endpoint: endpoint.to_string(),
                     method: method.to_string(),
                     breaking_changes: 0,
@@ -313,7 +313,7 @@ impl DriftBudgetEngine {
         };
 
         // Evaluate against budget
-        let mut result = crate::contract_drift::types::drift_result_from_diff(
+        let mut result = mockforge_contracts::contract_drift::types::drift_result_from_diff(
             diff_result,
             endpoint.to_string(),
             method.to_string(),

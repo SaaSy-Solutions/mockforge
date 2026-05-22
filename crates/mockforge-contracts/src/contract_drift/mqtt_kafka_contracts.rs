@@ -4,13 +4,15 @@
 //! `ProtocolContract` trait for MQTT and Kafka protocols, enabling drift detection and
 //! analysis for topic-based messaging systems.
 
-use crate::ai_contract_diff::{ContractDiffResult, Mismatch, MismatchSeverity, MismatchType};
 use crate::contract_drift::protocol_contracts::{
     ContractError, ContractOperation, ContractRequest, OperationType, ProtocolContract,
     ValidationError, ValidationResult,
 };
-use crate::protocol_abstraction::Protocol;
 use jsonschema::{self, Draft, Validator as JSONSchema};
+use mockforge_foundation::contract_diff_types::{
+    ContractDiffResult, Mismatch, MismatchSeverity, MismatchType,
+};
+use mockforge_foundation::protocol::Protocol;
 use serde_json::Value;
 use std::collections::HashMap;
 
@@ -230,7 +232,7 @@ impl MqttContract {
             mismatches,
             recommendations: Vec::new(),
             corrections: Vec::new(),
-            metadata: crate::ai_contract_diff::DiffMetadata {
+            metadata: mockforge_foundation::contract_diff_types::DiffMetadata {
                 analyzed_at: chrono::Utc::now(),
                 request_source: "mqtt_contract_diff".to_string(),
                 contract_version: Some(self.version.clone()),
@@ -1082,7 +1084,7 @@ impl KafkaContract {
             mismatches,
             recommendations: Vec::new(),
             corrections: Vec::new(),
-            metadata: crate::ai_contract_diff::DiffMetadata {
+            metadata: mockforge_foundation::contract_diff_types::DiffMetadata {
                 analyzed_at: chrono::Utc::now(),
                 request_source: "kafka_contract_diff".to_string(),
                 contract_version: Some(self.version.clone()),
@@ -1208,12 +1210,12 @@ impl ProtocolContract for KafkaContract {
             .map(|topic| {
                 serde_json::json!({
                     "topic": topic.topic,
-                    "key_schema": topic.key_schema.as_ref().map(|_s| {
+                    "key_schema": topic.key_schema.as_ref().map(|s| {
                         serde_json::json!({
-                            "format": topic.key_schema.as_ref().unwrap().format,
-                            "schema": topic.key_schema.as_ref().unwrap().schema,
-                            "schema_id": topic.key_schema.as_ref().unwrap().schema_id,
-                            "version": topic.key_schema.as_ref().unwrap().version,
+                            "format": s.format,
+                            "schema": s.schema,
+                            "schema_id": s.schema_id,
+                            "version": s.version,
                         })
                     }),
                     "value_schema": {

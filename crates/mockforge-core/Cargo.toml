@@ -23,6 +23,7 @@ mockforge-foundation = { path = "../mockforge-foundation", default-features = fa
 # `pr_generation` lives in mockforge-intelligence (Issue #562 phase 1);
 # re-exported from `crate::pr_generation` for in-crate and external callers.
 mockforge-intelligence = { path = "../mockforge-intelligence" }
+mockforge-contracts = { path = "../mockforge-contracts" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_yaml = { workspace = true }
