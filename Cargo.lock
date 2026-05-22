@@ -8389,6 +8389,7 @@ name = "mockforge-intelligence"
 version = "0.3.141"
 dependencies = [
  "async-trait",
+ "axum 0.8.9",
  "base64 0.22.1",
  "chrono",
  "dirs 5.0.1",
