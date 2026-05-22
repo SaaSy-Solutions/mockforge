@@ -28,6 +28,8 @@ hmac = { workspace = true }
 sha2 = { workspace = true }
 hex = "0.4"
 openapiv3 = { workspace = true }
+prost-reflect = "0.16"
+jsonschema = "0.33.0"
 
 [features]
 default = []
