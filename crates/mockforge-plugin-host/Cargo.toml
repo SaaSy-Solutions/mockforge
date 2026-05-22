@@ -57,7 +57,7 @@ uuid = { workspace = true, features = ["serde"] }
 # PluginLoadContext takes a filesystem path so we materialize the
 # bytes to a tempfile that lives for the plugin's lifetime.
 base64 = "0.22"
-tempfile = "3"
+tempfile = { workspace = true }
 
 # Ed25519 signature verification on the WASM bytes (RFC §7.2 step 3).
 # Matches the scheme used by the registry's UserPublicKey +
@@ -82,7 +82,7 @@ chrono = { workspace = true }
 url.workspace = true
 
 [dev-dependencies]
-tempfile = "3"
+tempfile = { workspace = true }
 # HTTP mock server for the trust-root refresh integration tests.
 wiremock = "0.6"
 # Async runtime extras for time-based integration tests.

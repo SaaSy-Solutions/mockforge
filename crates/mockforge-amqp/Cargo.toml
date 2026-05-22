@@ -34,7 +34,7 @@ rustls-pemfile = "2"
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
 criterion.workspace = true
-tempfile = "3"
+tempfile = { workspace = true }
 
 [[bench]]
 name = "amqp_benchmarks"

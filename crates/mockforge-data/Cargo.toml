@@ -45,7 +45,7 @@ tower-http = { version = "0.6", features = ["cors"] }
 
 # For OpenAPI specification handling
 openapiv3 = "2.2"
-jsonschema = "0.33"
+jsonschema = { workspace = true }
 
 [features]
 default = []

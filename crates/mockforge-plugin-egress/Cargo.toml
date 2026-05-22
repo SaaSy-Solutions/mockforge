@@ -45,4 +45,4 @@ tracing-subscriber = { workspace = true, features = ["fmt", "env-filter"] }
 ipnet = "2.10"
 
 [dev-dependencies]
-tempfile = "3"
+tempfile = { workspace = true }

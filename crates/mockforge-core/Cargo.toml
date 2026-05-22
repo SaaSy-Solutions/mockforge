@@ -56,7 +56,7 @@ argon2 = { workspace = true }
 hmac = { workspace = true }
 pbkdf2 = { workspace = true }
 blake3 = { workspace = true }
-jsonschema = "0.33.0"
+jsonschema = { workspace = true }
 jsonwebtoken = { workspace = true }
 sha2 = { workspace = true }
 openapiv3 = { workspace = true }
@@ -68,11 +68,11 @@ jsonptr = "0.7.1"
 jsonpath = "0.1"
 roxmltree = "0.21"
 globwalk = "0.9.1"
-tempfile = "3.27"
+tempfile = { workspace = true }
 prost = "0.14"
 prost-reflect = "0.16"
 prost-types = "0.14"
-bytes = "1.5"
+bytes = { workspace = true }
 notify = "8.2"
 # JavaScript runtime for scripting (optional — gate behind "scripting" feature)
 rquickjs = { version = "0.9", features = ["macro", "classes"], optional = true }
@@ -90,7 +90,7 @@ mockforge-data = { version = "0.3.70", path = "../mockforge-data", optional = tr
 mockforge-openapi = { version = "0.3.112", path = "../mockforge-openapi" }
 
 [dev-dependencies]
-tempfile = "3.27"
+tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "test-util"] }
 tower = { workspace = true }
 criterion = { workspace = true }
