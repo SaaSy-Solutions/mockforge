@@ -26,6 +26,7 @@ primary_region = "iad"
 #   AWS_SECRET_ACCESS_KEY - R2 API token Secret Access Key
 #   STRIPE_SECRET_KEY     - Stripe API key
 #   STRIPE_WEBHOOK_SECRET - Stripe webhook signing secret
+#   STRIPE_TRIAL_PERIOD_DAYS - Optional: free-trial days for Pro/Team checkout. Default 14. Set to 0 to disable.
 #   SMTP_HOST             - "smtp-relay.brevo.com"
 #   SMTP_PORT             - "587"
 #   SMTP_USERNAME         - Brevo login email
