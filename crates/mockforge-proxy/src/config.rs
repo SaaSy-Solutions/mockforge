@@ -147,7 +147,7 @@ impl ProxyConfig {
     /// Check if a request should be proxied
     /// Respects migration mode: mock forces mock, real forces proxy, shadow forces proxy, auto uses existing logic
     /// This is a legacy method that doesn't evaluate conditions - use should_proxy_with_condition for conditional proxying
-    pub fn should_proxy(&self, _method: &axum::http::Method, path: &str) -> bool {
+    pub fn should_proxy(&self, _method: &http::Method, path: &str) -> bool {
         if !self.enabled {
             return false;
         }
@@ -188,9 +188,9 @@ impl ProxyConfig {
     /// This method evaluates conditions in proxy rules using request context
     pub fn should_proxy_with_condition(
         &self,
-        method: &axum::http::Method,
-        uri: &axum::http::Uri,
-        headers: &axum::http::HeaderMap,
+        method: &http::Method,
+        uri: &http::Uri,
+        headers: &http::HeaderMap,
         body: Option<&[u8]>,
     ) -> bool {
         use crate::conditional::find_matching_rule;
