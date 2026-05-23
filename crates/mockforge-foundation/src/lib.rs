@@ -29,6 +29,7 @@ pub mod protocol_contract_types;
 pub mod rate_counters;
 pub mod response_generation_trace;
 pub mod response_selection;
+pub mod scenario_types;
 pub mod schema_diff;
 pub mod state_machine;
 pub mod threat_modeling_types;
