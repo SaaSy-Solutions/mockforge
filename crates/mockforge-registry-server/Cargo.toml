@@ -30,7 +30,13 @@ saas = [
   "saml",
   "cache-redis",
   "platform-signing-aws-kms",
+  "sentry",
 ]
+
+# Server-side error tracking via Sentry. No-op at runtime when SENTRY_DSN is
+# unset, so this can stay on in the saas rollup without forcing OSS users to
+# stand up a Sentry account.
+sentry = ["dep:sentry", "dep:sentry-tracing"]
 
 # HSM-backed platform signing-root rotation via AWS KMS (Issue #550).
 # Off in OSS builds — the registry can still load + verify rotation
@@ -193,6 +199,14 @@ oauth2 = { version = "4.4", features = ["reqwest"], optional = true }
 
 # Stripe payments (feature: `stripe`)
 async-stripe = { version = "0.41", default-features = false, features = ["runtime-tokio-hyper", "checkout", "webhook-events", "billing", "connect"], optional = true }
+
+# Sentry server-side error tracking (feature: `sentry`). default-features=false
+# drops the bundled native-tls transport in favour of rustls — every other
+# HTTP client in this crate (reqwest, async-stripe, oauth2) already uses
+# rustls so this keeps the dep graph consistent. `panic` auto-captures
+# panics; `tracing` is the bridge wired through sentry-tracing below.
+sentry = { version = "0.36", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"], optional = true }
+sentry-tracing = { version = "0.36", optional = true }
 
 # Tempfile handling for the scanner worker (writes artifacts to disk before
 # handing the path to the scanner subprocess).

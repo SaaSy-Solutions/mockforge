@@ -30,6 +30,9 @@ primary_region = "iad"
 #   SMTP_PORT             - "587"
 #   SMTP_USERNAME         - Brevo login email
 #   SMTP_PASSWORD         - Brevo SMTP key
+#   SENTRY_DSN            - Optional: server-side error tracking. When unset, no events are captured.
+#   SENTRY_ENVIRONMENT    - Optional: defaults to "production". Use "staging" / "preview" on non-prod apps.
+#   SENTRY_TRACES_SAMPLE_RATE - Optional: 0.0–1.0 perf trace sampling. Default 0.0 (errors only).
 
 [http_service]
   internal_port = 8080

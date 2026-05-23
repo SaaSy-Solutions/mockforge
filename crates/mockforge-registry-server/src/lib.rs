@@ -43,6 +43,8 @@ pub mod platform_signing;
 pub mod redis;
 pub mod routes;
 pub mod run_queue;
+#[cfg(feature = "sentry")]
+pub mod sentry_init;
 pub mod storage;
 /// Storage trait + backends now live in `mockforge-registry-core`.
 /// Re-exported so existing `crate::store::*` paths keep working.

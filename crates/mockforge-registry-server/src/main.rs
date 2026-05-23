@@ -35,14 +35,27 @@ use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize tracing
-    tracing_subscriber::registry()
+    // Initialize Sentry first so any panic during the rest of startup is
+    // captured. The returned guard's Drop flushes queued events on shutdown
+    // — bind it to a `main`-scoped local so it lives for the whole program.
+    // No-op at runtime when SENTRY_DSN is unset, safe on every boot.
+    #[cfg(feature = "sentry")]
+    let _sentry_guard = mockforge_registry_server::sentry_init::init();
+
+    // Initialize tracing. The sentry-tracing layer forwards `tracing::error!`
+    // (and breadcrumbs from lower levels) to Sentry; when the `sentry` feature
+    // is off or DSN is unset, the layer is a no-op at runtime.
+    let registry = tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
                 .unwrap_or_else(|_| "mockforge_registry_server=info,tower_http=debug".into()),
         )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+        .with(tracing_subscriber::fmt::layer());
+
+    #[cfg(feature = "sentry")]
+    let registry = registry.with(sentry_tracing::layer());
+
+    registry.init();
 
     // Load configuration
     let config = Config::load()?;
