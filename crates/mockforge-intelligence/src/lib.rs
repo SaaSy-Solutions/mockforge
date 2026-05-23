@@ -81,6 +81,13 @@ pub mod handlers;
 pub mod incidents;
 pub mod intelligent_behavior;
 pub mod pr_generation;
+/// RAG-based `AiGenerator` implementation (#555 phase 10 — moved from
+/// `mockforge_http::rag_ai_generator`). Both foreign deps
+/// (`AiResponseConfig`, `AiGenerator` trait) were promoted out of
+/// `mockforge-core` to `mockforge-foundation` and `mockforge-openapi`
+/// respectively, so this move stays cycle-safe with the Issue #562
+/// cycle-break.
+pub mod rag_ai_generator;
 pub mod reality;
 /// Scenario Studio — visual editor for co-editing business flows
 /// (#555 phase 7 — moved out of `mockforge-core`; only foreign ref was
