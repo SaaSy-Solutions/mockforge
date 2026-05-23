@@ -3,6 +3,15 @@
 **/*.rs.bk
 .cargo/credentials.toml
 
+# Claude Code session state
+.claude/scheduled_tasks.lock
+
+# Playwright MCP cache
+.playwright-mcp/
+
+# mdBook build output (book.toml sets build-dir = "book", so book/book/ is the output)
+book/book/
+
 # Fuzzing
 **/fuzz/corpus/
 **/fuzz/artifacts/
