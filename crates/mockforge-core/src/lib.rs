@@ -263,9 +263,13 @@ pub mod config;
 /// Connection pooling for HTTP clients with health checks and idle management
 #[allow(dead_code)]
 pub(crate) mod connection_pool;
-/// Cross-protocol consistency engine for unified state across all protocols
+/// `consistency` lives in `mockforge_intelligence::consistency` (Issue
+/// #555 phase 7 — moved out of core after its only foreign-to-core deps
+/// (`Protocol`, `RealityLevel`) were already available from foundation /
+/// intelligence). Re-exported here so existing
+/// `mockforge_core::consistency::*` call sites resolve unchanged.
 #[cfg(feature = "advanced")]
-pub mod consistency;
+pub use mockforge_intelligence::consistency;
 #[cfg(feature = "contracts")]
 #[deprecated(note = "Will be extracted to mockforge-contracts crate")]
 /// Consumer-driven contracts for tracking usage and detecting consumer-specific breaking changes
@@ -291,8 +295,13 @@ pub(crate) mod contract_webhooks;
 pub(crate) use mockforge_openapi::custom_fixture;
 /// Data source abstraction for loading test data from multiple sources
 pub mod data_source;
-/// Deceptive canary mode for routing team traffic to deceptive deploys
-pub mod deceptive_canary;
+/// `deceptive_canary` lives in `mockforge_intelligence::deceptive_canary`
+/// (Issue #555 phase 6 — self-contained module moved out of core so
+/// the still-in-http `deceptive_canary` middleware + handler can be
+/// re-homed once their other deps are detangled). Re-exported here so
+/// existing `mockforge_core::deceptive_canary::*` call sites resolve
+/// unchanged.
+pub use mockforge_intelligence::deceptive_canary;
 /// Docker Compose integration for containerized mock deployments
 #[allow(dead_code)]
 pub(crate) mod docker_compose;
@@ -312,7 +321,11 @@ pub(crate) use mockforge_foundation::failure_injection;
 /// (mockforge-ui handlers, in-core workspace/request + ai_studio/debug_analyzer)
 /// keep compiling unchanged.
 pub use mockforge_intelligence::failure_analysis;
-pub mod fidelity;
+/// `fidelity` lives in `mockforge_intelligence::fidelity` (Issue #555
+/// phase 6 — self-contained module moved out of core so the fidelity
+/// HTTP handler could follow). Re-exported here so existing
+/// `mockforge_core::fidelity::*` call sites resolve unchanged.
+pub use mockforge_intelligence::fidelity;
 /// Generic fixture loading utilities shared across protocol crates
 pub mod fixture_store;
 pub mod generate_config;
@@ -409,15 +422,15 @@ pub(crate) mod persona_lifecycle_time;
 pub mod routing;
 /// Runtime validation for SDKs (request/response validation at runtime)
 pub mod runtime_validation;
-/// Scenario Studio - Visual editor for co-editing business flows
+/// `scenario_studio` lives in `mockforge_intelligence::scenario_studio`
+/// (Issue #555 phase 7 — self-contained module moved out of core so the
+/// scenario_studio HTTP handler could follow). Re-exported here so
+/// existing `mockforge_core::scenario_studio::*` call sites resolve
+/// unchanged.
 #[cfg(feature = "advanced")]
-pub mod scenario_studio;
+pub use mockforge_intelligence::scenario_studio;
 #[cfg(feature = "advanced")]
 pub mod scenarios;
-/// `schema_diff` was promoted to [`mockforge_foundation::schema_diff`] so that
-/// leaf crates can use its `ValidationError` + diff helpers without depending
-/// on `mockforge-core`. Re-exported here for backwards compatibility.
-pub(crate) use mockforge_foundation::schema_diff;
 pub mod security;
 pub mod server_utils;
 /// Time travel and snapshot functionality for saving and restoring system states

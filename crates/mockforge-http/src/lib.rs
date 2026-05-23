@@ -2796,8 +2796,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
     // Add consistency engine and cross-protocol state management
     {
         use crate::consistency::{ConsistencyMiddlewareState, HttpAdapter};
-        use crate::handlers::consistency::{consistency_router, ConsistencyState};
-        use mockforge_core::consistency::ConsistencyEngine;
+        use mockforge_intelligence::consistency::ConsistencyEngine;
+        use mockforge_intelligence::handlers::consistency::{consistency_router, ConsistencyState};
         use std::sync::Arc;
 
         // Initialize consistency engine
@@ -2813,11 +2813,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
         };
 
         // Create X-Ray state first (needed for middleware)
-        use crate::handlers::xray::XRayState;
-        let xray_state = Arc::new(XRayState {
-            engine: consistency_engine.clone(),
-            request_contexts: std::sync::Arc::new(RwLock::new(HashMap::new())),
-        });
+        use mockforge_intelligence::handlers::xray::XRayState;
+        let xray_state = Arc::new(XRayState::new(consistency_engine.clone()));
 
         // Create consistency middleware state
         let consistency_middleware_state = ConsistencyMiddlewareState {
@@ -2904,7 +2901,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
         // Add fidelity score endpoints
         {
-            use crate::handlers::fidelity::{fidelity_router, FidelityState};
+            use mockforge_intelligence::handlers::fidelity::{fidelity_router, FidelityState};
             let fidelity_state = FidelityState::new();
             app = app.merge(fidelity_router(fidelity_state));
             debug!("Fidelity score endpoints mounted at /api/v1/workspace/:workspace_id/fidelity");
@@ -2912,7 +2909,9 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
         // Add scenario studio endpoints
         {
-            use crate::handlers::scenario_studio::{scenario_studio_router, ScenarioStudioState};
+            use mockforge_intelligence::handlers::scenario_studio::{
+                scenario_studio_router, ScenarioStudioState,
+            };
             let scenario_studio_state = ScenarioStudioState::new();
             app = app.merge(scenario_studio_router(scenario_studio_state));
             debug!("Scenario Studio endpoints mounted at /api/v1/scenario-studio");
@@ -2963,7 +2962,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
             // Add X-Ray API endpoints for browser extension
             {
-                use crate::handlers::xray::xray_router;
+                use mockforge_intelligence::handlers::xray::xray_router;
                 app = app.merge(xray_router((*xray_state).clone()));
                 debug!("X-Ray API endpoints mounted at /api/v1/xray");
             }

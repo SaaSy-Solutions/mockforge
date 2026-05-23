@@ -7,8 +7,8 @@
 //! state accordingly, ensuring all protocols reflect the unified state.
 
 use crate::consistency::{PersonaProfile, StateChangeEvent};
-use crate::protocol_abstraction::Protocol;
-use crate::Result;
+use mockforge_foundation::protocol::Protocol;
+use mockforge_foundation::Result;
 
 /// Trait for protocol adapters
 ///

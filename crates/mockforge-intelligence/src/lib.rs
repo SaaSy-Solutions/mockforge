@@ -49,6 +49,14 @@ pub mod ai_response;
 pub mod ai_studio;
 pub mod behavioral_cloning;
 pub mod behavioral_economics;
+/// Cross-protocol consistency engine (#555 phase 7 — moved from
+/// `mockforge_core::consistency` because its only foreign-to-core deps
+/// (`Protocol`, `RealityLevel`, `mockforge-data` persona types) were
+/// all available from foundation / intelligence / data, and the
+/// consistency HTTP handler needed to follow into intelligence under
+/// the #555 bucket plan).
+#[cfg(feature = "advanced")]
+pub mod consistency;
 pub mod contract_validation;
 /// Postgres pool wrapper used by HTTP handlers that persist drift
 /// budgets / incidents / consumer contracts. Moved here from
@@ -57,7 +65,16 @@ pub mod contract_validation;
 /// re-introducing a cycle). Gated by the `database` feature.
 #[cfg(feature = "database")]
 pub mod database;
+/// Deceptive-canary endpoint configuration types (#555 phase 6 — moved
+/// out of `mockforge-core` because its only callers are the (still in
+/// http) middleware + the deceptive_canary HTTP handler, and keeping
+/// the module here lets the eventual handler move follow). Self-contained.
+pub mod deceptive_canary;
 pub mod failure_analysis;
+/// Mock-quality fidelity scoring (#555 phase 6 — moved out of
+/// `mockforge-core`). Self-contained pure-Rust scoring with no foreign
+/// deps.
+pub mod fidelity;
 /// HTTP handlers for AI-coupled features. New in #555 phase 2 — see
 /// `handlers/mod.rs` for migration progress.
 pub mod handlers;
@@ -65,5 +82,11 @@ pub mod incidents;
 pub mod intelligent_behavior;
 pub mod pr_generation;
 pub mod reality;
+/// Scenario Studio — visual editor for co-editing business flows
+/// (#555 phase 7 — moved out of `mockforge-core`; only foreign ref was
+/// `crate::error::{Error, Result}` which is already a re-export of
+/// `mockforge_foundation::error`).
+#[cfg(feature = "advanced")]
+pub mod scenario_studio;
 pub mod threat_modeling;
 pub mod voice;

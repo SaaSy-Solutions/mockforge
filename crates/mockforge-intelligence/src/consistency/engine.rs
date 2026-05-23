@@ -5,9 +5,9 @@
 
 use crate::consistency::adapters::ProtocolAdapter;
 use crate::consistency::types::{EntityState, ProtocolState, StateChangeEvent, UnifiedState};
-use crate::protocol_abstraction::Protocol;
 use crate::reality::RealityLevel;
-use crate::Result;
+use mockforge_foundation::protocol::Protocol;
+use mockforge_foundation::Result;
 // ChaosScenario is defined in mockforge-chaos, but we use serde_json::Value to avoid circular dependency
 type ChaosScenario = serde_json::Value;
 use mockforge_data::PersonaProfile;

@@ -24,6 +24,10 @@ mockforge-openapi = { path = "../mockforge-openapi" }
 # `handlers::forecasting` (#555 phase 5) needs the contract-drift forecasting
 # engine. Cycle-safe: `mockforge-contracts` depends only on `mockforge-foundation`.
 mockforge-contracts = { path = "../mockforge-contracts" }
+# `consistency` (#555 phase 7) uses `mockforge_data::{PersonaProfile,
+# PersonaGraph, PersonaLifecycle, LifecyclePreset, LifecycleState}`. Cycle-safe
+# — mockforge-data has no upstream deps in this workspace.
+mockforge-data = { path = "../mockforge-data" }
 anyhow = { workspace = true }
 async-trait = { workspace = true }
 # `handlers::*` (HTTP-handler files migrated out of `mockforge-http` under
@@ -63,6 +67,17 @@ schema = ["schemars", "mockforge-foundation/schema"]
 # Mirrors mockforge-core's `database` feature so ai_studio's org_controls_db
 # (sqlx-backed) only compiles when the consumer opts in.
 database = ["sqlx"]
+# Mirrors mockforge-core's `advanced` feature so consistency / scenario_studio
+# (moved here in #555 phase 7) only compile when consumers ask for the
+# advanced feature set, same as before the move.
+advanced = []
+# Mirrors mockforge-core's `data` / `persona-graph` features so the
+# moved-in #555-phase-7 `consistency` module's persona-graph-aware code
+# paths can still be gated identically. mockforge-data is now an
+# unconditional dep on this crate, but the cfg gates are preserved so
+# the downstream API surface is unchanged.
+data = []
+persona-graph = []
 
 [dependencies.sqlx]
 version = "0.8"
