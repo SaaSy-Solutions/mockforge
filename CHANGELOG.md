@@ -1,3 +1,11 @@
+## [0.3.143] - 2026-05-23
+
+### Fixed
+
+- **[DevX]** Republish of 0.3.142 — fixes broken `mockforge-http@0.3.142` install (#79 round 10 hotfix)
+  - `cargo install mockforge-cli@0.3.142` failed with `error[E0432]: unresolved import \`crate::database::Database\`` in `mockforge-http/src/handlers/threat_modeling.rs:29` and `lib.rs:2387`. The `database` module was moved to `mockforge-intelligence` in #611, but two `use crate::database::Database;` statements weren't gated behind `#[cfg(feature = "database")]`, so default-feature builds (which is what `cargo install` uses) failed to compile. Fix landed on `main` in #616/#618 but was not in the 0.3.142 tag.
+  - 0.3.142 of the broken crates (cli, http, import, pipelines, proxy, workspace, core, bench, chaos, collab, recorder, registry-server, k8s-operator, vbr, sdk, test, reporting, ui) yanked from crates.io. 0.3.143 republishes the same #79 round-10 changes from a known-good main commit.
+
 ## [0.3.142] - 2026-05-21
 
 ### Changed
