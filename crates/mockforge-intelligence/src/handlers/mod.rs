@@ -22,8 +22,14 @@
 //!   `mockforge_foundation::threat_modeling_types`.
 
 pub mod ai_studio;
+#[cfg(feature = "advanced")]
+pub mod consistency;
 pub mod fidelity;
 pub mod forecasting;
 pub mod pr_generation;
+#[cfg(feature = "advanced")]
+pub mod scenario_studio;
 pub mod semantic_drift;
 pub mod threat_modeling;
+#[cfg(feature = "advanced")]
+pub mod xray;

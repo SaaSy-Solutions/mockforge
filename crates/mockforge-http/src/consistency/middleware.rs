@@ -18,7 +18,7 @@ pub struct ConsistencyMiddlewareState {
     /// HTTP adapter
     pub adapter: Arc<HttpAdapter>,
     /// X-Ray state for request context storage (optional)
-    pub xray_state: Option<Arc<crate::handlers::xray::XRayState>>,
+    pub xray_state: Option<Arc<mockforge_intelligence::handlers::xray::XRayState>>,
 }
 
 /// Consistency middleware
@@ -115,7 +115,7 @@ pub async fn consistency_middleware(req: Request, next: Next) -> Response<Body> 
                 // Store snapshot asynchronously (don't block request processing)
                 let xray_state_clone = xray_state.clone();
                 tokio::spawn(async move {
-                    crate::handlers::xray::store_request_context(
+                    mockforge_intelligence::handlers::xray::store_request_context(
                         &xray_state_clone,
                         request_id_clone,
                         workspace_id_clone,

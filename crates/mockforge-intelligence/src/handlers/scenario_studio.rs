@@ -2,13 +2,13 @@
 //!
 //! This module provides HTTP handlers for managing business flows in the Scenario Studio.
 
+use crate::scenario_studio::{
+    FlowDefinition, FlowExecutionResult, FlowExecutor, FlowType, FlowVariant,
+};
 use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::Json,
-};
-use mockforge_core::scenario_studio::{
-    FlowDefinition, FlowExecutionResult, FlowExecutor, FlowType, FlowVariant,
 };
 use serde::Deserialize;
 use serde_json::Value;
@@ -66,9 +66,9 @@ pub struct UpdateFlowRequest {
     /// Flow type
     pub flow_type: Option<FlowType>,
     /// Steps in the flow
-    pub steps: Option<Vec<mockforge_core::scenario_studio::FlowStep>>,
+    pub steps: Option<Vec<crate::scenario_studio::FlowStep>>,
     /// Connections between steps
-    pub connections: Option<Vec<mockforge_core::scenario_studio::FlowConnection>>,
+    pub connections: Option<Vec<crate::scenario_studio::FlowConnection>>,
     /// Variables
     pub variables: Option<HashMap<String, Value>>,
     /// Tags

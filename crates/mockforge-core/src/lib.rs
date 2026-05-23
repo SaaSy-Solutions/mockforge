@@ -263,9 +263,13 @@ pub mod config;
 /// Connection pooling for HTTP clients with health checks and idle management
 #[allow(dead_code)]
 pub(crate) mod connection_pool;
-/// Cross-protocol consistency engine for unified state across all protocols
+/// `consistency` lives in `mockforge_intelligence::consistency` (Issue
+/// #555 phase 7 — moved out of core after its only foreign-to-core deps
+/// (`Protocol`, `RealityLevel`) were already available from foundation /
+/// intelligence). Re-exported here so existing
+/// `mockforge_core::consistency::*` call sites resolve unchanged.
 #[cfg(feature = "advanced")]
-pub mod consistency;
+pub use mockforge_intelligence::consistency;
 #[cfg(feature = "contracts")]
 #[deprecated(note = "Will be extracted to mockforge-contracts crate")]
 /// Consumer-driven contracts for tracking usage and detecting consumer-specific breaking changes
@@ -418,9 +422,13 @@ pub(crate) mod persona_lifecycle_time;
 pub mod routing;
 /// Runtime validation for SDKs (request/response validation at runtime)
 pub mod runtime_validation;
-/// Scenario Studio - Visual editor for co-editing business flows
+/// `scenario_studio` lives in `mockforge_intelligence::scenario_studio`
+/// (Issue #555 phase 7 — self-contained module moved out of core so the
+/// scenario_studio HTTP handler could follow). Re-exported here so
+/// existing `mockforge_core::scenario_studio::*` call sites resolve
+/// unchanged.
 #[cfg(feature = "advanced")]
-pub mod scenario_studio;
+pub use mockforge_intelligence::scenario_studio;
 #[cfg(feature = "advanced")]
 pub mod scenarios;
 pub mod security;

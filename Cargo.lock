@@ -8398,6 +8398,7 @@ dependencies = [
  "hmac 0.12.1",
  "indexmap 2.14.0",
  "mockforge-contracts",
+ "mockforge-data",
  "mockforge-foundation",
  "mockforge-openapi",
  "mockforge-template-expansion",

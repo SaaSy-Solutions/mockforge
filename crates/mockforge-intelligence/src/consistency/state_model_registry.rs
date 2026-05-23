@@ -5,7 +5,7 @@
 //! and unified state, ensuring consistency across protocols.
 
 use crate::consistency::ConsistencyEngine;
-use crate::Result;
+use mockforge_foundation::Result;
 use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;

@@ -19,6 +19,6 @@ pub use persona_graph_response::{
     get_user_orders_via_graph,
 };
 pub use state_model_registry::StateModelRegistry;
-pub use types::{
-    EntityState, PersonaProfile, ProtocolState, SessionInfo, StateChangeEvent, UnifiedState,
-};
+#[cfg(feature = "data")]
+pub use types::PersonaProfile;
+pub use types::{EntityState, ProtocolState, SessionInfo, StateChangeEvent, UnifiedState};

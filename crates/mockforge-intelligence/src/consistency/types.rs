@@ -3,9 +3,9 @@
 //! This module defines the core data structures for maintaining unified state
 //! across all protocols in MockForge.
 
-use crate::protocol_abstraction::Protocol;
 use crate::reality::RealityLevel;
 use chrono::{DateTime, Utc};
+use mockforge_foundation::protocol::Protocol;
 // ChaosScenario is defined in mockforge-chaos, but we use serde_json::Value to avoid circular dependency
 // When used, it should be deserialized from JSON
 type ChaosScenario = Value;

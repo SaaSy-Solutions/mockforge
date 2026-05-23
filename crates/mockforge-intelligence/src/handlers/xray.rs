@@ -3,12 +3,12 @@
 //! This module provides lightweight API endpoints for the browser extension
 //! to display current state (scenario, persona, reality level, chaos rules).
 
+use crate::consistency::ConsistencyEngine;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
     response::Json,
 };
-use mockforge_core::consistency::ConsistencyEngine;
 use serde::Deserialize;
 use serde_json::Value;
 use std::collections::HashMap;
@@ -34,6 +34,20 @@ pub struct XRayState {
     pub engine: Arc<ConsistencyEngine>,
     /// Request context storage (request_id -> snapshot)
     pub(crate) request_contexts: Arc<RwLock<HashMap<String, RequestContextSnapshot>>>,
+}
+
+impl XRayState {
+    /// Construct a fresh `XRayState` over the given consistency engine.
+    ///
+    /// `request_contexts` is intentionally a private detail of this module,
+    /// so external callers (e.g. `mockforge_http::lib::init_server`) go
+    /// through this constructor instead of poking the field directly.
+    pub fn new(engine: Arc<ConsistencyEngine>) -> Self {
+        Self {
+            engine,
+            request_contexts: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
 }
 
 /// Query parameters for X-Ray operations
@@ -157,7 +171,7 @@ pub async fn store_request_context(
     state: &XRayState,
     request_id: String,
     workspace_id: String,
-    unified_state: &mockforge_core::consistency::types::UnifiedState,
+    unified_state: &crate::consistency::types::UnifiedState,
 ) {
     let state_snapshot = serde_json::to_value(unified_state).unwrap_or_default();
     let snapshot = RequestContextSnapshot {
@@ -231,7 +245,7 @@ pub async fn list_entities(
         StatusCode::NOT_FOUND
     })?;
 
-    let entities: Vec<&mockforge_core::consistency::EntityState> =
+    let entities: Vec<&crate::consistency::EntityState> =
         unified_state.entity_state.values().collect();
 
     Ok(Json(serde_json::json!({

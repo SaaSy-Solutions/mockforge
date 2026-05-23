@@ -8,11 +8,11 @@ use axum::{
     response::Json,
 };
 // ChaosScenario is now serde_json::Value to avoid circular dependency
-use mockforge_core::consistency::{
+use crate::consistency::{
     enrich_order_response, enrich_user_response, get_user_orders_via_graph, ConsistencyEngine,
     EntityState, UnifiedState,
 };
-use mockforge_core::reality::RealityLevel;
+use crate::reality::RealityLevel;
 use mockforge_data::{LifecyclePreset, LifecycleState, PersonaLifecycle, PersonaProfile};
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
@@ -148,7 +148,7 @@ pub async fn set_persona(
         })?;
 
     // Record pillar usage for persona activation
-    mockforge_core::pillar_tracking::record_reality_usage(
+    mockforge_foundation::pillar_tracking::record_reality_usage(
         Some(params.workspace.clone()),
         None,
         "smart_personas_usage",
@@ -538,7 +538,7 @@ pub async fn update_persona_lifecycles(
     State(state): State<ConsistencyState>,
     Query(params): Query<WorkspaceQuery>,
 ) -> Result<Json<Value>, StatusCode> {
-    use mockforge_core::time_travel::now as get_virtual_time;
+    use mockforge_foundation::clock::now as get_virtual_time;
 
     // Get unified state
     let mut unified_state = state.engine.get_state(&params.workspace).await.ok_or_else(|| {

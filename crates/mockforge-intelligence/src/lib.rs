@@ -49,6 +49,14 @@ pub mod ai_response;
 pub mod ai_studio;
 pub mod behavioral_cloning;
 pub mod behavioral_economics;
+/// Cross-protocol consistency engine (#555 phase 7 — moved from
+/// `mockforge_core::consistency` because its only foreign-to-core deps
+/// (`Protocol`, `RealityLevel`, `mockforge-data` persona types) were
+/// all available from foundation / intelligence / data, and the
+/// consistency HTTP handler needed to follow into intelligence under
+/// the #555 bucket plan).
+#[cfg(feature = "advanced")]
+pub mod consistency;
 pub mod contract_validation;
 /// Postgres pool wrapper used by HTTP handlers that persist drift
 /// budgets / incidents / consumer contracts. Moved here from
@@ -74,5 +82,11 @@ pub mod incidents;
 pub mod intelligent_behavior;
 pub mod pr_generation;
 pub mod reality;
+/// Scenario Studio — visual editor for co-editing business flows
+/// (#555 phase 7 — moved out of `mockforge-core`; only foreign ref was
+/// `crate::error::{Error, Result}` which is already a re-export of
+/// `mockforge_foundation::error`).
+#[cfg(feature = "advanced")]
+pub mod scenario_studio;
 pub mod threat_modeling;
 pub mod voice;
