@@ -97,13 +97,20 @@ impl Template {
         category: TemplateCategory,
         content_json: serde_json::Value,
     ) -> sqlx::Result<Self> {
+        // Templates inserted via this constructor come from
+        // `POST /api/v1/marketplace/templates/publish`, which IS the publish
+        // action. The row must be searchable immediately — `search_templates`
+        // filters on `published = TRUE`. Prior to this fix the column was
+        // hard-coded FALSE with no code path ever flipping it back to TRUE,
+        // so every just-published template was invisible to the search
+        // endpoint it was supposedly published to.
         sqlx::query_as::<_, Self>(
             r#"
             INSERT INTO templates (
                 org_id, name, slug, description, author_id, version,
                 category, content_json, published
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, FALSE)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, TRUE)
             RETURNING *
             "#,
         )
