@@ -2,7 +2,6 @@
 
 pub mod ab_testing;
 pub mod access_review;
-pub mod ai_studio;
 pub mod auth_helpers;
 #[cfg(feature = "behavioral-cloning")]
 pub mod behavioral_cloning;
@@ -18,7 +17,6 @@ pub mod deceptive_canary;
 pub mod drift_budget;
 pub mod failure_designer;
 pub mod fidelity;
-pub mod forecasting;
 pub mod incident_replay;
 pub mod oauth2_server;
 pub mod performance;
@@ -41,7 +39,6 @@ pub use ab_testing::{ab_testing_router, ABTestingState};
 pub use access_review::{
     access_review_router, AccessReviewState, ApproveAccessRequest, RevokeAccessRequest,
 };
-pub use ai_studio::{ai_studio_router, AiStudioState};
 pub use auth_helpers::OptionalAuthClaims;
 #[cfg(feature = "behavioral-cloning")]
 pub use behavioral_cloning::{
@@ -63,10 +60,11 @@ pub use failure_designer::{
     generate_scenario, preview_config, validate_rule, FailureDesignerState,
 };
 pub use fidelity::{calculate_fidelity, fidelity_router, get_fidelity, FidelityState};
-pub use forecasting::{forecasting_router, ForecastingState};
 pub use incident_replay::{
     generate_replay, import_and_generate, import_incident, IncidentReplayState,
 };
+pub use mockforge_intelligence::handlers::ai_studio::{ai_studio_router, AiStudioState};
+pub use mockforge_intelligence::handlers::forecasting::{forecasting_router, ForecastingState};
 pub use mockforge_intelligence::handlers::semantic_drift::{
     semantic_drift_router, SemanticDriftState,
 };
