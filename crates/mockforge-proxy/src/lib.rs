@@ -13,6 +13,12 @@ pub mod conditional;
 pub mod config;
 pub mod handler;
 pub mod middleware;
+/// Reality-slider mock/proxy switching middleware (#222). Moved from
+/// `mockforge_http::reality_proxy` under #555 phase 8. Only foreign dep
+/// is `mockforge_core::consistency::UnifiedState`, already in the proxy
+/// crate's dep graph. `mockforge_http::reality_proxy` is now a thin shim
+/// re-exporting from here.
+pub mod reality;
 pub mod routing;
 /// Browser/mobile intercepting proxy server. Moved from
 /// `mockforge_http::proxy_server` under #555 phase 1 — the file's only
