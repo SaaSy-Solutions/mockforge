@@ -32,7 +32,6 @@ pub mod risk_simulation;
 pub mod scenario_studio;
 pub mod snapshot_diff;
 pub mod snapshots;
-pub mod threat_modeling;
 pub mod token_lifecycle;
 pub mod webhook_test;
 pub mod world_state;
@@ -71,6 +70,9 @@ pub use incident_replay::{
 pub use mockforge_intelligence::handlers::semantic_drift::{
     semantic_drift_router, SemanticDriftState,
 };
+pub use mockforge_intelligence::handlers::threat_modeling::{
+    threat_modeling_router, ThreatModelingState,
+};
 pub use performance::{performance_router, PerformanceState};
 #[cfg(feature = "pipelines")]
 pub use pipelines::{pipeline_router, PipelineState};
@@ -80,7 +82,6 @@ pub use protocol_contracts::{protocol_contracts_router, ProtocolContractState};
 pub use risk_assessment::{risk_assessment_router, RiskAssessmentState};
 pub use scenario_studio::{scenario_studio_router, ScenarioStudioState};
 pub use snapshots::{snapshot_router, SnapshotState};
-pub use threat_modeling::{threat_modeling_router, ThreatModelingState};
 pub use token_lifecycle::{token_lifecycle_router, TokenLifecycleState};
 pub use webhook_test::{webhook_test_router, WebhookTestState};
 pub use world_state::{world_state_router, WorldStateState};
