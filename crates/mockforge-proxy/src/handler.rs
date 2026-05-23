@@ -54,7 +54,7 @@ impl ProxyHandler {
         // Convert response back to ProxyResponse
         let mut response_headers = HeaderMap::new();
         for (key, value) in response.headers() {
-            if let Ok(header_name) = axum::http::HeaderName::try_from(key.as_str()) {
+            if let Ok(header_name) = http::HeaderName::try_from(key.as_str()) {
                 response_headers.insert(header_name, value.clone());
             }
         }
@@ -125,7 +125,7 @@ impl ProxyHandler {
         // Convert response back to ProxyResponse
         let mut response_headers = HeaderMap::new();
         for (key, value) in response.headers() {
-            if let Ok(header_name) = axum::http::HeaderName::try_from(key.as_str()) {
+            if let Ok(header_name) = http::HeaderName::try_from(key.as_str()) {
                 response_headers.insert(header_name, value.clone());
             }
         }
