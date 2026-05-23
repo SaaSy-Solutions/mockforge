@@ -57,7 +57,16 @@ pub mod contract_validation;
 /// re-introducing a cycle). Gated by the `database` feature.
 #[cfg(feature = "database")]
 pub mod database;
+/// Deceptive-canary endpoint configuration types (#555 phase 6 — moved
+/// out of `mockforge-core` because its only callers are the (still in
+/// http) middleware + the deceptive_canary HTTP handler, and keeping
+/// the module here lets the eventual handler move follow). Self-contained.
+pub mod deceptive_canary;
 pub mod failure_analysis;
+/// Mock-quality fidelity scoring (#555 phase 6 — moved out of
+/// `mockforge-core`). Self-contained pure-Rust scoring with no foreign
+/// deps.
+pub mod fidelity;
 /// HTTP handlers for AI-coupled features. New in #555 phase 2 — see
 /// `handlers/mod.rs` for migration progress.
 pub mod handlers;

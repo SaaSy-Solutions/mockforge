@@ -42,7 +42,7 @@ impl SchemaComparator {
     /// Similarity score (0.0 to 1.0)
     pub fn compare(&self, mock_schema: &Value, real_schema: &Value) -> f64 {
         // Use existing schema diff functionality
-        let errors = crate::schema_diff::diff(mock_schema, real_schema);
+        let errors = mockforge_foundation::schema_diff::diff(mock_schema, real_schema);
 
         if errors.is_empty() {
             return 1.0;

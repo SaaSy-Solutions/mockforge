@@ -1,9 +1,9 @@
 //! Fidelity score API handlers
 
+use crate::fidelity::{FidelityCalculator, FidelityScore};
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use axum::response::Json;
-use mockforge_core::fidelity::{FidelityCalculator, FidelityScore};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashMap;

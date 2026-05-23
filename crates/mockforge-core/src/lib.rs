@@ -291,8 +291,13 @@ pub(crate) mod contract_webhooks;
 pub(crate) use mockforge_openapi::custom_fixture;
 /// Data source abstraction for loading test data from multiple sources
 pub mod data_source;
-/// Deceptive canary mode for routing team traffic to deceptive deploys
-pub mod deceptive_canary;
+/// `deceptive_canary` lives in `mockforge_intelligence::deceptive_canary`
+/// (Issue #555 phase 6 — self-contained module moved out of core so
+/// the still-in-http `deceptive_canary` middleware + handler can be
+/// re-homed once their other deps are detangled). Re-exported here so
+/// existing `mockforge_core::deceptive_canary::*` call sites resolve
+/// unchanged.
+pub use mockforge_intelligence::deceptive_canary;
 /// Docker Compose integration for containerized mock deployments
 #[allow(dead_code)]
 pub(crate) mod docker_compose;
@@ -312,7 +317,11 @@ pub(crate) use mockforge_foundation::failure_injection;
 /// (mockforge-ui handlers, in-core workspace/request + ai_studio/debug_analyzer)
 /// keep compiling unchanged.
 pub use mockforge_intelligence::failure_analysis;
-pub mod fidelity;
+/// `fidelity` lives in `mockforge_intelligence::fidelity` (Issue #555
+/// phase 6 — self-contained module moved out of core so the fidelity
+/// HTTP handler could follow). Re-exported here so existing
+/// `mockforge_core::fidelity::*` call sites resolve unchanged.
+pub use mockforge_intelligence::fidelity;
 /// Generic fixture loading utilities shared across protocol crates
 pub mod fixture_store;
 pub mod generate_config;
@@ -414,10 +423,6 @@ pub mod runtime_validation;
 pub mod scenario_studio;
 #[cfg(feature = "advanced")]
 pub mod scenarios;
-/// `schema_diff` was promoted to [`mockforge_foundation::schema_diff`] so that
-/// leaf crates can use its `ValidationError` + diff helpers without depending
-/// on `mockforge-core`. Re-exported here for backwards compatibility.
-pub(crate) use mockforge_foundation::schema_diff;
 pub mod security;
 pub mod server_utils;
 /// Time travel and snapshot functionality for saving and restoring system states

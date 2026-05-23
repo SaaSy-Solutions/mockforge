@@ -22,6 +22,7 @@
 //!   `mockforge_foundation::threat_modeling_types`.
 
 pub mod ai_studio;
+pub mod fidelity;
 pub mod forecasting;
 pub mod pr_generation;
 pub mod semantic_drift;

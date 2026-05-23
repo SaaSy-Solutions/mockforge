@@ -2904,7 +2904,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
         // Add fidelity score endpoints
         {
-            use crate::handlers::fidelity::{fidelity_router, FidelityState};
+            use mockforge_intelligence::handlers::fidelity::{fidelity_router, FidelityState};
             let fidelity_state = FidelityState::new();
             app = app.merge(fidelity_router(fidelity_state));
             debug!("Fidelity score endpoints mounted at /api/v1/workspace/:workspace_id/fidelity");
