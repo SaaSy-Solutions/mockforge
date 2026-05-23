@@ -39,7 +39,7 @@ mockforge-smtp = { version = "0.3.70", path = "../mockforge-smtp", optional = tr
 mockforge-mqtt = { version = "0.3.70", path = "../mockforge-mqtt", optional = true }
 mockforge-data = { version = "0.3.70", path = "../mockforge-data" }
 mockforge-ui = { version = "0.3.70", path = "../mockforge-ui", optional = true }
-mockforge-observability = { version = "0.3.70", path = "../mockforge-observability" }
+mockforge-observability = { version = "0.3.70", path = "../mockforge-observability", default-features = false, features = ["sysinfo", "log-shipper"] }
 mockforge-tracing = { version = "0.3.70", path = "../mockforge-tracing", optional = true }
 mockforge-recorder = { version = "0.3.70", path = "../mockforge-recorder", optional = true }
 mockforge-federation = { version = "0.3.70", path = "../mockforge-federation", optional = true }
@@ -118,7 +118,13 @@ cloud = [
     "kafka",
     "amqp",
     "tcp",
+    "sentry",
 ]
+# Server-side Sentry error tracking. No-op at runtime when SENTRY_DSN is
+# unset, so leaving this on in the `cloud` rollup is safe: hosted-mock
+# Fly machines that get a DSN start capturing; local `cargo install` users
+# never reach the network even with the feature compiled in.
+sentry = ["mockforge-observability/sentry"]
 # Feature-gated CLI subsystems
 admin = ["dep:mockforge-ui"]
 bench = ["dep:mockforge-bench"]
