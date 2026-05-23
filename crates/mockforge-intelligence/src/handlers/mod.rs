@@ -21,6 +21,8 @@
 //!   phase 9, and the threat types live in
 //!   `mockforge_foundation::threat_modeling_types`.
 
+pub mod ai_studio;
+pub mod forecasting;
 pub mod pr_generation;
 pub mod semantic_drift;
 pub mod threat_modeling;

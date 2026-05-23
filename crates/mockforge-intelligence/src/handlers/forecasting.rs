@@ -397,7 +397,7 @@ pub async fn refresh_forecasts(
     })?;
 
     // Map rows to DriftIncident and generate forecasts
-    use mockforge_core::incidents::types::{IncidentSeverity, IncidentStatus, IncidentType};
+    use mockforge_foundation::incidents_types::{IncidentSeverity, IncidentStatus, IncidentType};
     use sqlx::Row;
     let mut incidents = Vec::new();
     for row in rows {
@@ -489,7 +489,7 @@ pub async fn refresh_forecasts(
     }
 
     // Generate forecasts from incidents by grouping by endpoint/method
-    use mockforge_core::incidents::types::DriftIncident;
+    use mockforge_foundation::incidents_types::DriftIncident;
     use std::collections::HashMap;
     let mut forecasts_generated = 0;
     let mut endpoint_groups: HashMap<(String, String), Vec<DriftIncident>> = HashMap::new();

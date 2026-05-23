@@ -11,20 +11,18 @@
 // remaining engine imports.
 #![allow(deprecated)]
 
+use crate::ai_studio::{
+    api_critique::ApiCritiqueEngine, artifact_freezer::ArtifactFreezer,
+    behavioral_simulator::BehavioralSimulator, config::DeterministicModeConfig,
+    system_generator::SystemGenerator,
+};
+use crate::intelligent_behavior::IntelligentBehaviorConfig;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::Json,
     routing::post,
     Router,
-};
-use mockforge_core::{
-    ai_studio::{
-        api_critique::ApiCritiqueEngine, artifact_freezer::ArtifactFreezer,
-        behavioral_simulator::BehavioralSimulator, config::DeterministicModeConfig,
-        system_generator::SystemGenerator,
-    },
-    intelligent_behavior::IntelligentBehaviorConfig,
 };
 use mockforge_foundation::ai_studio_types::{
     CreateAgentRequest, CritiqueRequest, FreezeMetadata, FreezeRequest, SimulateBehaviorRequest,
@@ -111,7 +109,7 @@ pub struct ApiCritiqueRequest {
 #[derive(Debug, Serialize)]
 pub struct ApiCritiqueResponse {
     /// The critique result
-    pub critique: mockforge_core::ai_studio::api_critique::ApiCritique,
+    pub critique: crate::ai_studio::api_critique::ApiCritique,
 
     /// Artifact ID if stored
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -230,7 +228,7 @@ pub struct ApplySystemRequest {
 #[derive(Debug, Serialize)]
 pub struct ApplySystemResponse {
     /// Applied system result
-    pub applied: mockforge_core::ai_studio::system_generator::AppliedSystem,
+    pub applied: crate::ai_studio::system_generator::AppliedSystem,
 }
 
 /// Request body for freeze artifacts endpoint
@@ -556,7 +554,7 @@ mod tests {
                 api_key: None,
                 temperature: 0.7,
                 max_tokens: 2000,
-                rules: mockforge_core::intelligent_behavior::types::BehaviorRules::default(),
+                rules: crate::intelligent_behavior::types::BehaviorRules::default(),
             },
             ..Default::default()
         };
