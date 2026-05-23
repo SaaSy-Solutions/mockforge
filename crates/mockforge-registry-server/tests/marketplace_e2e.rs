@@ -192,11 +192,18 @@ async fn test_plugin_marketplace_workflow() {
     let plugin_name = format!("test-plugin-{}", test_id);
 
     // Step 4: Search for the plugin
+    //
+    // `SearchQuery` in `mockforge-plugin-registry` uses camelCase and requires
+    // `tags` and `sort` to be present (no `#[serde(default)]`). Sending only
+    // `query`/`page`/`perPage` makes axum reject the body with 422 before the
+    // handler runs.
     let search_response = helper
         .client
         .post(format!("{}/api/v1/plugins/search", helper.base_url))
         .json(&json!({
             "query": plugin_name.clone(),
+            "tags": json!([]),
+            "sort": "downloads",
             "page": 0,
             "perPage": 10
         }))
@@ -204,7 +211,11 @@ async fn test_plugin_marketplace_workflow() {
         .await
         .expect("Failed to search plugins");
 
-    assert!(search_response.status().is_success());
+    assert!(
+        search_response.status().is_success(),
+        "Plugin search failed: {:?}",
+        search_response.text().await
+    );
     let search_body: serde_json::Value =
         search_response.json().await.expect("Failed to parse response");
     assert!(!search_body["plugins"].as_array().unwrap().is_empty());
@@ -278,10 +289,13 @@ async fn test_template_marketplace_workflow() {
     let checksum = MarketplaceTestHelper::calculate_checksum(&package_data);
     let package_base64 = base64::engine::general_purpose::STANDARD.encode(&package_data);
 
+    // Templates publish under the `/marketplace/` prefix. `PublishTemplateRequest`
+    // uses `content_json` (not `content`) and `TemplateCategory` is a kebab-case
+    // enum — `"chaos"` is not a valid variant; use `"network-chaos"`.
     let template_name = format!("test-template-{}", test_id);
     let publish_response = helper
         .client
-        .post(format!("{}/api/v1/templates/publish", helper.base_url))
+        .post(format!("{}/api/v1/marketplace/templates/publish", helper.base_url))
         .header("Authorization", helper.auth_header().unwrap())
         .header("X-Org-Id", helper.org_id.unwrap().to_string())
         .json(&json!({
@@ -289,9 +303,8 @@ async fn test_template_marketplace_workflow() {
             "slug": template_name.clone(),
             "description": "Test template for E2E testing",
             "version": "1.0.0",
-            "category": "chaos",
-            "tags": vec!["test", "e2e"],
-            "content": json!({
+            "category": "network-chaos",
+            "content_json": json!({
                 "name": template_name,
                 "version": "1.0.0",
                 "description": "Test template"
@@ -311,19 +324,27 @@ async fn test_template_marketplace_workflow() {
     );
 
     // Step 4: Search for the template
+    //
+    // `TemplateSearchQuery` lives under `/marketplace/templates/search` and uses
+    // snake_case fields; `tags` is required (no `#[serde(default)]`).
     let search_response = helper
         .client
-        .post(format!("{}/api/v1/templates/search", helper.base_url))
+        .post(format!("{}/api/v1/marketplace/templates/search", helper.base_url))
         .json(&json!({
             "query": template_name.clone(),
+            "tags": json!([]),
             "page": 0,
-            "perPage": 10
+            "per_page": 10
         }))
         .send()
         .await
         .expect("Failed to search templates");
 
-    assert!(search_response.status().is_success());
+    assert!(
+        search_response.status().is_success(),
+        "Template search failed: {:?}",
+        search_response.text().await
+    );
     let search_body: serde_json::Value =
         search_response.json().await.expect("Failed to parse response");
     assert!(!search_body["templates"].as_array().unwrap().is_empty());
@@ -372,9 +393,12 @@ async fn test_scenario_marketplace_workflow() {
         "description": "Test scenario for E2E testing"
     });
 
+    // Scenarios publish/search live under the `/marketplace/` prefix.
+    // The bare `/api/v1/scenarios/*` paths are reserved for org-level listing
+    // (GET /api/v1/scenarios, GET /api/v1/scenarios/{id}) and return 405 for POST.
     let publish_response = helper
         .client
-        .post(format!("{}/api/v1/scenarios/publish", helper.base_url))
+        .post(format!("{}/api/v1/marketplace/scenarios/publish", helper.base_url))
         .header("Authorization", helper.auth_header().unwrap())
         .header("X-Org-Id", helper.org_id.unwrap().to_string())
         .json(&json!({
@@ -394,19 +418,27 @@ async fn test_scenario_marketplace_workflow() {
     );
 
     // Step 4: Search for the scenario
+    //
+    // `ScenarioSearchQuery` uses snake_case; `tags` is required (no
+    // `#[serde(default)]`).
     let search_response = helper
         .client
-        .post(format!("{}/api/v1/scenarios/search", helper.base_url))
+        .post(format!("{}/api/v1/marketplace/scenarios/search", helper.base_url))
         .json(&json!({
             "query": scenario_name.clone(),
+            "tags": json!([]),
             "page": 0,
-            "perPage": 10
+            "per_page": 10
         }))
         .send()
         .await
         .expect("Failed to search scenarios");
 
-    assert!(search_response.status().is_success());
+    assert!(
+        search_response.status().is_success(),
+        "Scenario search failed: {:?}",
+        search_response.text().await
+    );
     let search_body: serde_json::Value =
         search_response.json().await.expect("Failed to parse response");
     assert!(!search_body["scenarios"].as_array().unwrap().is_empty());
@@ -576,8 +608,7 @@ async fn test_template_star_flow() {
             "slug": template_name.clone(),
             "description": "Star-flow regression template",
             "version": version,
-            "category": "chaos",
-            "tags": vec!["test"],
+            "category": "network-chaos",
             "content_json": json!({ "name": template_name, "version": version }),
             "checksum": checksum,
             "file_size": package_data.len() as i64,
