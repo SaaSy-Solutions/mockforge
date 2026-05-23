@@ -233,12 +233,16 @@ async fn test_plugin_marketplace_workflow() {
         get_response.json().await.expect("Failed to parse response");
     assert_eq!(plugin_body["name"], plugin_name);
 
-    // Step 6: Submit a review
+    // Step 6: Submit a review.
+    //
+    // `SubmitReviewRequest` requires `version` + `rating` + `comment`. Without
+    // `version` the body is rejected with 422 before the handler runs.
     let review_response = helper
         .client
         .post(format!("{}/api/v1/plugins/{}/reviews", helper.base_url, plugin_name))
         .header("Authorization", helper.auth_header().unwrap())
         .json(&json!({
+            "version": "1.0.0",
             "rating": 5,
             "title": "Great plugin!",
             "comment": "This plugin works perfectly for testing purposes."
@@ -247,7 +251,11 @@ async fn test_plugin_marketplace_workflow() {
         .await
         .expect("Failed to submit review");
 
-    assert!(review_response.status().is_success());
+    assert!(
+        review_response.status().is_success(),
+        "Plugin review submit failed: {:?}",
+        review_response.text().await
+    );
 
     // Step 7: Get reviews
     let reviews_response = helper
@@ -327,9 +335,16 @@ async fn test_template_marketplace_workflow() {
     //
     // `TemplateSearchQuery` lives under `/marketplace/templates/search` and uses
     // snake_case fields; `tags` is required (no `#[serde(default)]`).
+    //
+    // The publish step stored the template with `org_id = $X-Org-Id`, so the
+    // search must replay both the auth header and X-Org-Id — without them,
+    // `resolve_org_context` short-circuits and the WHERE clause narrows to
+    // `org_id IS NULL`, which excludes the row we just published.
     let search_response = helper
         .client
         .post(format!("{}/api/v1/marketplace/templates/search", helper.base_url))
+        .header("Authorization", helper.auth_header().unwrap())
+        .header("X-Org-Id", helper.org_id.unwrap().to_string())
         .json(&json!({
             "query": template_name.clone(),
             "tags": json!([]),
@@ -421,9 +436,16 @@ async fn test_scenario_marketplace_workflow() {
     //
     // `ScenarioSearchQuery` uses snake_case; `tags` is required (no
     // `#[serde(default)]`).
+    //
+    // The publish step stored the scenario with `org_id = $X-Org-Id`. The
+    // search must replay both headers, otherwise `resolve_org_context` falls
+    // through and the WHERE clause narrows to `org_id IS NULL`, hiding the
+    // row we just published.
     let search_response = helper
         .client
         .post(format!("{}/api/v1/marketplace/scenarios/search", helper.base_url))
+        .header("Authorization", helper.auth_header().unwrap())
+        .header("X-Org-Id", helper.org_id.unwrap().to_string())
         .json(&json!({
             "query": scenario_name.clone(),
             "tags": json!([]),

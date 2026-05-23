@@ -63,6 +63,16 @@ jobs:
       # `DEFAULT_WEBHOOK_SECRET` constant in tests/paid_flow_e2e.rs.
       STRIPE_WEBHOOK_SECRET: "whsec_e2e_test_secret"
 
+      # Lift the rate limiter for E2E. All requests originate from
+      # localhost so they share the same `ip:unknown` bucket; the
+      # default 60/min global + 100/min per-user is exhausted by the
+      # marketplace tests' register -> org -> workspace -> publish -> search
+      # chains multiplied across 5 tests serialized by --test-threads=1.
+      # The cap is still > test demand by ~3 orders of magnitude, so
+      # any genuine runaway loop in a future test will still be caught.
+      RATE_LIMIT_PER_MINUTE: "100000"
+      RATE_LIMIT_PER_USER: "100000"
+
     steps:
       - name: Set per-runner CARGO_HOME
         # `runner.name` is unavailable in workflow- or job-level `env:` blocks
