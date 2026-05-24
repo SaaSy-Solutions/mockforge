@@ -7,7 +7,9 @@ use crate::pillars::Pillar;
 use chrono::Utc;
 use once_cell::sync::Lazy;
 use serde_json::Value;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 
 /// Optional analytics database for recording pillar usage
@@ -15,6 +17,21 @@ use tokio::sync::RwLock;
 #[allow(clippy::type_complexity)]
 static ANALYTICS_DB: Lazy<Arc<RwLock<Option<Arc<dyn PillarUsageRecorder>>>>> =
     Lazy::new(|| Arc::new(RwLock::new(None)));
+
+/// Tracks dropped/failed pillar events so we can emit a rate-limited
+/// aggregate WARN instead of one WARN per event under load.
+///
+/// Issue #79 — Srikanth's bench at `--rps 100` for 600s flooded the log
+/// with hundreds of `WARN ... Failed to record pillar usage event: pool
+/// timed out` lines (one per failed event). The events themselves are
+/// best-effort metrics — losing them under sustained load doesn't break
+/// anything functional — so the right behaviour is to drop with low-
+/// volume reporting rather than spam.
+static FAILED_EVENT_COUNT: AtomicU64 = AtomicU64::new(0);
+static LAST_FAILURE_WARN_AT: Lazy<RwLock<Instant>> = Lazy::new(|| RwLock::new(Instant::now()));
+
+/// How often we emit the aggregated "X pillar events dropped" warning.
+const FAILURE_WARN_INTERVAL: Duration = Duration::from_secs(60);
 
 /// Trait for recording pillar usage events
 /// This allows different implementations (analytics DB, API endpoint, etc.)
@@ -153,10 +170,50 @@ async fn record_pillar_usage(
         let recorder = recorder.clone();
         tokio::spawn(async move {
             if let Err(e) = recorder.record(event).await {
-                tracing::warn!("Failed to record pillar usage event: {}", e);
+                // Issue #79 — under high load (Srikanth's `--rps 100`
+                // for 600s) the analytics DB pool gets saturated and
+                // every event spawns a task that times out and logs a
+                // WARN. Pillar tracking is best-effort metrics; losing
+                // events under load is acceptable, but spamming the log
+                // with one WARN per dropped event is not. Demote per-
+                // event failures to DEBUG and emit one aggregated WARN
+                // at most every FAILURE_WARN_INTERVAL.
+                tracing::debug!("Failed to record pillar usage event: {}", e);
+                FAILED_EVENT_COUNT.fetch_add(1, Ordering::Relaxed);
+                maybe_flush_dropped_warning().await;
             }
         });
     }
+}
+
+/// Emit a single aggregated WARN summarising dropped pillar events when
+/// at least `FAILURE_WARN_INTERVAL` has elapsed since the last summary.
+/// The check is racy by design — under contention we'd rather skip a
+/// summary than serialize on a mutex. Counts not surfaced by one race
+/// roll into the next interval's summary.
+async fn maybe_flush_dropped_warning() {
+    let last = *LAST_FAILURE_WARN_AT.read().await;
+    if last.elapsed() < FAILURE_WARN_INTERVAL {
+        return;
+    }
+    // Race-aware swap: take the count we'll report, leave the rest for
+    // the next interval. Another task may have already flushed — we
+    // double-check the timestamp under the write lock and bail if so.
+    let mut last_w = LAST_FAILURE_WARN_AT.write().await;
+    if last_w.elapsed() < FAILURE_WARN_INTERVAL {
+        return;
+    }
+    let dropped = FAILED_EVENT_COUNT.swap(0, Ordering::Relaxed);
+    if dropped > 0 {
+        tracing::warn!(
+            dropped_events = dropped,
+            interval_secs = FAILURE_WARN_INTERVAL.as_secs(),
+            "pillar_tracking: dropped events in the last {}s due to analytics-DB pressure \
+             (analytics is best-effort; bench / serve behaviour is unaffected)",
+            FAILURE_WARN_INTERVAL.as_secs(),
+        );
+    }
+    *last_w = Instant::now();
 }
 
 #[cfg(test)]

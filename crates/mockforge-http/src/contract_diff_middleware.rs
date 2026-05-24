@@ -5,6 +5,7 @@
 //! This middleware captures incoming HTTP requests for contract diff analysis.
 //! It extracts request data and stores it in the capture manager.
 
+use axum::http::header::CONTENT_LENGTH;
 use axum::http::HeaderMap;
 use axum::{body::Body, extract::Request, middleware::Next, response::Response};
 use mockforge_core::{
@@ -13,8 +14,25 @@ use mockforge_core::{
 use std::collections::HashMap;
 use tracing::debug;
 
-/// Maximum request body size to buffer for capture (1 MB).
-const MAX_CAPTURE_BODY_SIZE: usize = 1024 * 1024;
+/// Maximum request body size to buffer for capture.
+///
+/// Issue #79 — Srikanth reported `200 OK` returned mid-upload on 10 MB
+/// chunked PATCH requests against MockForge. Root cause was right here:
+/// the old buffer limit was 1 MiB and the over-limit branch silently
+/// substituted `Body::empty()` before forwarding, so every downstream
+/// handler (Json/Bytes extractors, the OpenAPI route handler) saw an
+/// empty body and either parsed-error-then-responded or responded with
+/// a default — *before* the client finished uploading. The bumped
+/// default plus the cleaner "skip capture, forward original body"
+/// branch below fix both the limit and the empty-body-substitution.
+fn max_capture_body_size() -> usize {
+    const DEFAULT_MB: usize = 10;
+    std::env::var("MOCKFORGE_CONTRACT_DIFF_MAX_BODY_MB")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(DEFAULT_MB)
+        .saturating_mul(1024 * 1024)
+}
 
 /// Middleware to capture requests for contract diff analysis
 pub async fn capture_for_contract_diff(req: Request<Body>, next: Next) -> Response {
@@ -22,6 +40,26 @@ pub async fn capture_for_contract_diff(req: Request<Body>, next: Next) -> Respon
     let uri = req.uri().clone();
     let path = uri.path().to_string();
     let query = uri.query();
+    let max_body = max_capture_body_size();
+
+    // Issue #79 — if the request advertises a Content-Length larger than
+    // the capture cap, skip the capture entirely (and don't consume the
+    // body). This avoids the previous bug where over-limit bodies were
+    // replaced with Body::empty() before being forwarded to the handler.
+    let content_length = req
+        .headers()
+        .get(CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<usize>().ok());
+    if let Some(len) = content_length {
+        if len > max_body {
+            debug!(
+                "contract_diff: skipping capture for {} {} — content-length {} exceeds cap {}",
+                method, path, len, max_body
+            );
+            return next.run(req).await;
+        }
+    }
 
     // Extract headers
     let headers = extract_headers_for_capture(req.headers());
@@ -35,12 +73,29 @@ pub async fn capture_for_contract_diff(req: Request<Body>, next: Next) -> Respon
 
     // Buffer the request body so we can capture it and still forward it.
     let (parts, body) = req.into_parts();
-    let body_bytes = match axum::body::to_bytes(body, MAX_CAPTURE_BODY_SIZE).await {
+    let body_bytes = match axum::body::to_bytes(body, max_body).await {
         Ok(b) => b,
         Err(_) => {
-            // Body too large or read error — forward without capturing body.
-            let rebuilt = Request::from_parts(parts, Body::empty());
-            return next.run(rebuilt).await;
+            // Chunked body that exceeded the cap (no Content-Length to
+            // pre-check). The body has been partially consumed and we
+            // can't put it back. The least-bad behaviour is a 413
+            // PayloadTooLarge so the caller knows the request was
+            // rejected — emitting `Body::empty()` here used to silently
+            // truncate the request and cause the handler to respond
+            // before the client finished uploading. Issue #79.
+            return Response::builder()
+                .status(axum::http::StatusCode::PAYLOAD_TOO_LARGE)
+                .header(
+                    axum::http::header::CONTENT_TYPE,
+                    "application/json",
+                )
+                .body(Body::from(format!(
+                    r#"{{"error":"PAYLOAD_TOO_LARGE","message":"chunked request body exceeded contract_diff capture cap (~{} MiB); raise MOCKFORGE_CONTRACT_DIFF_MAX_BODY_MB or send Content-Length"}}"#,
+                    max_body / (1024 * 1024)
+                )))
+                .unwrap_or_else(|_| {
+                    Response::new(Body::from("payload too large"))
+                });
         }
     };
 

@@ -842,7 +842,24 @@ pub async fn build_router_with_multi_tenant(
                 let router_build_duration = router_build_start.elapsed();
                 debug!("Built OpenAPI router (took {:?})", router_build_duration);
 
-                tracing::debug!("Merging OpenAPI router with main router");
+                // Issue #79 — explicitly stamp the body-size limit on the
+                // openapi sub-router BEFORE merging it. The limit is also
+                // applied inside `OpenApiRouteRegistry::build_router_*`,
+                // but merging can drop nested layers in some axum
+                // configurations; redoing it at the merge site is cheap
+                // insurance against the "200 OK before body completes"
+                // bug Srikanth reported.
+                let body_limit_mb = std::env::var("MOCKFORGE_HTTP_BODY_LIMIT_MB")
+                    .ok()
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .unwrap_or(50);
+                let body_limit_bytes = body_limit_mb.saturating_mul(1024 * 1024);
+                let openapi_router =
+                    openapi_router.layer(axum::extract::DefaultBodyLimit::max(body_limit_bytes));
+                tracing::info!(
+                    body_limit_mb = body_limit_mb,
+                    "Merging OpenAPI router with main router"
+                );
                 app = app.merge(openapi_router);
                 tracing::debug!("Router built successfully");
             }
@@ -1866,6 +1883,24 @@ pub async fn build_router_with_chains_and_multi_tenant(
                 } else {
                     registry.build_router()
                 };
+                // Issue #79 — explicitly stamp the body-size limit on the
+                // openapi sub-router BEFORE merging. The limit is also
+                // applied inside `OpenApiRouteRegistry::build_router_*`,
+                // but axum's `merge` can drop nested layers in some
+                // configurations; redoing it at the merge site is cheap
+                // insurance against the "200 OK before body completes"
+                // bug Srikanth reported on Issue #79.
+                let body_limit_mb = std::env::var("MOCKFORGE_HTTP_BODY_LIMIT_MB")
+                    .ok()
+                    .and_then(|v| v.parse::<usize>().ok())
+                    .unwrap_or(50);
+                let body_limit_bytes = body_limit_mb.saturating_mul(1024 * 1024);
+                let spec_router =
+                    spec_router.layer(axum::extract::DefaultBodyLimit::max(body_limit_bytes));
+                tracing::info!(
+                    body_limit_mb = body_limit_mb,
+                    "Merging OpenAPI router with main router"
+                );
                 app = app.merge(spec_router);
             }
             Err(e) => {

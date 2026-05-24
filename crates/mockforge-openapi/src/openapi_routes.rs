@@ -18,7 +18,7 @@ pub mod validation;
 use crate::response::AiGenerator;
 use crate::response_rewriter::ResponseRewriter;
 use crate::{OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSpec};
-use axum::extract::{Path as AxumPath, RawQuery};
+use axum::extract::{DefaultBodyLimit, Path as AxumPath, RawQuery};
 use axum::http::HeaderMap;
 use axum::response::IntoResponse;
 use axum::routing::*;
@@ -151,6 +151,29 @@ impl Default for RouterContext {
             add_spec_endpoint: true,
         }
     }
+}
+
+/// Maximum body bytes the OpenAPI router accepts. Axum's `DefaultBodyLimit`
+/// is 2 MiB out of the box; for an HTTP **mock** that's far too low —
+/// users routinely send fixture-sized JSON, multipart uploads, or
+/// chunked-transfer test payloads in the tens of MB. When the body
+/// exceeds the limit, axum's `Bytes` / `Option<Json<Value>>` extractors
+/// truncate the body and the handler runs without ever consuming the
+/// rest of the request, so hyper sends the response and SSL Close
+/// Notify *while the client is still uploading* — which is exactly the
+/// "200 OK before all chunk requests arrived" behaviour Srikanth caught
+/// on the 10 MB chunked PCAP for Issue #79.
+///
+/// Configurable via `MOCKFORGE_HTTP_BODY_LIMIT_MB`. Default 50 MiB,
+/// which covers the realistic mock-traffic range without giving an
+/// untrusted client an unlimited memory-fill vector.
+fn openapi_body_limit_bytes() -> usize {
+    const DEFAULT_MB: usize = 50;
+    std::env::var("MOCKFORGE_HTTP_BODY_LIMIT_MB")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(DEFAULT_MB)
+        .saturating_mul(1024 * 1024)
 }
 
 impl OpenApiRouteRegistry {
@@ -872,7 +895,10 @@ impl OpenApiRouteRegistry {
             router = router.route("/openapi.json", get(move || async move { Json(spec_json) }));
         }
 
-        router
+        // Issue #79 — raise the body-size cap above axum's 2 MiB default so
+        // large chunked uploads don't get truncated mid-extraction. See
+        // `openapi_body_limit_bytes` for the rationale.
+        router.layer(DefaultBodyLimit::max(openapi_body_limit_bytes()))
     }
 
     /// Build an Axum router from the OpenAPI spec with latency injection support
@@ -1347,7 +1373,10 @@ impl OpenApiRouteRegistry {
             router = Self::route_for_method(router, axum_path, &route.method, handler);
         }
 
-        router
+        // Issue #79 — same body-limit raise as `build_router_with_context`;
+        // the AI handler also uses `Option<Json<Value>>` so axum's 2 MiB
+        // default truncates large bodies and the handler responds early.
+        router.layer(DefaultBodyLimit::max(openapi_body_limit_bytes()))
     }
 
     /// Build router with MockAI (Behavioral Mock Intelligence) support
@@ -1646,7 +1675,9 @@ impl OpenApiRouteRegistry {
             router = Self::route_for_method(router, axum_path, &route.method, handler);
         }
 
-        router
+        // Issue #79 — see `build_router_with_context`; same body-limit raise
+        // for the MockAI router.
+        router.layer(DefaultBodyLimit::max(openapi_body_limit_bytes()))
     }
 }
 

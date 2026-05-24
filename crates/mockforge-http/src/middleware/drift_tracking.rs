@@ -20,8 +20,20 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tracing::{debug, warn};
 
-/// Maximum request body size to buffer for drift tracking (1 MB).
-const MAX_DRIFT_BODY_SIZE: usize = 1024 * 1024;
+/// Maximum request body size to buffer for drift tracking.
+///
+/// Issue #79 — see `contract_diff_middleware`. Same root cause: the
+/// old hard-coded 1 MiB cap, paired with the over-cap branch
+/// substituting `Body::empty()`, broke downstream handlers on large
+/// chunked uploads. Configurable via `MOCKFORGE_DRIFT_MAX_BODY_MB`.
+fn max_drift_body_size() -> usize {
+    const DEFAULT_MB: usize = 10;
+    std::env::var("MOCKFORGE_DRIFT_MAX_BODY_MB")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(DEFAULT_MB)
+        .saturating_mul(1024 * 1024)
+}
 
 /// State for drift tracking middleware
 #[derive(Clone)]
@@ -66,6 +78,25 @@ pub async fn drift_tracking_middleware_with_extensions(
 
     let method = req.method().to_string();
     let path = req.uri().path().to_string();
+    let max_body = max_drift_body_size();
+
+    // Issue #79 — pre-check Content-Length so we skip capture cleanly
+    // for over-cap requests instead of consuming the body and then
+    // substituting `Body::empty()` (which broke downstream handlers).
+    let content_length = req
+        .headers()
+        .get(axum::http::header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<usize>().ok());
+    if let Some(len) = content_length {
+        if len > max_body {
+            debug!(
+                "drift_tracking: skipping capture for {} {} — content-length {} > cap {}",
+                method, path, len, max_body
+            );
+            return next.run(req).await;
+        }
+    }
 
     // Extract consumer identifier and headers from request
     let consumer_id = extract_consumer_id(&req);
@@ -75,12 +106,23 @@ pub async fn drift_tracking_middleware_with_extensions(
 
     // Buffer the request body so we can capture it and still forward it
     let (parts, body) = req.into_parts();
-    let body_bytes = match axum::body::to_bytes(body, MAX_DRIFT_BODY_SIZE).await {
+    let body_bytes = match axum::body::to_bytes(body, max_body).await {
         Ok(b) => b,
         Err(_) => {
-            // Body too large or read error — forward without capturing body
-            let rebuilt = Request::from_parts(parts, Body::empty());
-            return next.run(rebuilt).await;
+            // Chunked over-cap body — body partially consumed and we
+            // cannot rebuild. 413 PayloadTooLarge instead of the old
+            // silent `Body::empty()` substitution. Issue #79.
+            return Response::builder()
+                .status(axum::http::StatusCode::PAYLOAD_TOO_LARGE)
+                .header(
+                    axum::http::header::CONTENT_TYPE,
+                    "application/json",
+                )
+                .body(Body::from(format!(
+                    r#"{{"error":"PAYLOAD_TOO_LARGE","message":"chunked request body exceeded drift_tracking capture cap (~{} MiB); raise MOCKFORGE_DRIFT_MAX_BODY_MB or send Content-Length"}}"#,
+                    max_body / (1024 * 1024)
+                )))
+                .unwrap_or_else(|_| Response::new(Body::from("payload too large")));
         }
     };
 
