@@ -86,6 +86,16 @@ jobs:
       if: always()
       run: sccache --show-stats 2>/dev/null || echo "sccache was not used in this run"
 
+    # Hard gate against v0.3.142-class failures: `cargo build --workspace`
+    # passed for that release but `cargo install mockforge-cli` failed in
+    # users' hands because workspace feature unification masked an ungated
+    # import in mockforge-http. 18 crates were yanked. This step reproduces
+    # the install-path build so the same break aborts the tag BEFORE we
+    # publish anything. No untrusted input is interpolated here — the
+    # script is a static file in the repo.
+    - name: Smoke-test cargo install path
+      run: scripts/smoke-test-install.sh
+
     - name: Generate changelog
       id: changelog
       env:
