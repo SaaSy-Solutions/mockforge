@@ -21,12 +21,16 @@
 pub mod log_shipper;
 pub mod logging;
 pub mod prometheus;
+#[cfg(feature = "sentry")]
+pub mod sentry_init;
 pub mod system_metrics;
 pub mod tracing_integration;
 
 // Re-export commonly used items
 pub use logging::{init_logging, init_logging_with_otel, LoggingConfig};
 pub use prometheus::{get_global_registry, MetricsRegistry};
+#[cfg(feature = "sentry")]
+pub use sentry_init::init_sentry;
 pub use system_metrics::{start_system_metrics_collector, SystemMetricsConfig};
 pub use tracing_integration::{init_with_otel, shutdown_otel, OtelTracingConfig};
 
