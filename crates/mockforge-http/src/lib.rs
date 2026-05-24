@@ -1,8 +1,36 @@
-// TODO: remove once mockforge-intelligence, mockforge-proxy, etc. crates are extracted
-// Deprecation allowances are now scoped to individual handler files
-// (handlers/*.rs, middleware/drift_tracking.rs, rag_ai_generator.rs,
-// management/ai_gen.rs) and to specific build_router functions below,
-// rather than being crate-wide.
+// Issue #555 extracted `mockforge-intelligence` and `mockforge-proxy`
+// out of this crate; both now exist as independent workspace members.
+// AI-touching handlers (ai_studio, forecasting, fidelity, deceptive_canary,
+// consistency, scenario_studio, xray, pr_generation, semantic_drift,
+// threat_modeling, rag_ai_generator) and proxy logic (proxy_server,
+// reality_proxy) all live in their target crates; the files remaining
+// here under those names are thin `pub use ...::*` re-export shims kept
+// for one minor version so external callers don't break.
+//
+// Deprecation allowances are scoped to individual handler files
+// (handlers/*.rs, middleware/drift_tracking.rs, management/ai_gen.rs)
+// and to specific build_router functions below, rather than being
+// crate-wide.
+//
+// What remains in `mockforge-http`:
+//   - HTTP-native machinery: routing, builders, middleware, SSE, TLS,
+//     fixtures/scenarios/state-machine/time-travel/contract-diff APIs,
+//     management UI, request logging, etc.
+//   - Governance/security HTTP handlers (access_review, change_management,
+//     compliance_dashboard, consent, privileged_access, …) which front
+//     `mockforge_core::security` services and so belong in the same
+//     crate as the rest of the security-services HTTP surface, not in
+//     mockforge-intelligence.
+//   - `handlers::behavioral_cloning` — wired into both
+//     `mockforge_intelligence::behavioral_cloning` (algorithms) and
+//     `mockforge_recorder::database` (trace I/O). Since
+//     `mockforge-recorder` already depends on `mockforge-intelligence`,
+//     intelligence cannot host the orchestration layer without a cycle,
+//     so this handler stays here intentionally.
+//   - `handlers::{contract_health, drift_budget, failure_designer,
+//     incident_replay, protocol_contracts}` — coupled to
+//     `mockforge_chaos`, the chaos crate would need its own #555-style
+//     bucket before these can follow.
 
 //! # MockForge HTTP
 //!
