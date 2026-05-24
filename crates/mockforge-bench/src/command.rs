@@ -2117,7 +2117,27 @@ impl BenchCommand {
         let annotated_ops = if !self.spec.is_empty() {
             TerminalReporter::print_progress("Spec-driven conformance mode: analyzing spec...");
             let parser = SpecParser::from_file(&self.spec[0]).await?;
-            let operations = parser.get_operations();
+
+            // Issue #79 round 12 — Srikanth ran `--conformance --operations "GET,POST"`
+            // and saw DELETE/PATCH exercised anyway. Conformance silently ignored
+            // the filter. Apply it (and `--exclude-operations`) the same way the
+            // regular bench path does so users can scope the run.
+            let mut operations = if let Some(filter) = &self.operations {
+                parser.filter_operations(filter)?
+            } else {
+                parser.get_operations()
+            };
+            if let Some(exclude) = &self.exclude_operations {
+                let before_count = operations.len();
+                operations = parser.exclude_operations(operations, exclude)?;
+                let excluded_count = before_count - operations.len();
+                if excluded_count > 0 {
+                    TerminalReporter::print_progress(&format!(
+                        "Excluded {} operations matching '{}'",
+                        excluded_count, exclude
+                    ));
+                }
+            }
 
             let annotated =
                 crate::conformance::spec_driven::SpecDrivenConformanceGenerator::annotate_operations(

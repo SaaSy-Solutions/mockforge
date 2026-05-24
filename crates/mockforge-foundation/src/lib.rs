@@ -13,6 +13,7 @@ pub mod ai_response;
 pub mod ai_studio_types;
 pub mod chaos_utilities;
 pub mod clock;
+pub mod conformance_violations;
 pub mod contract_diff_types;
 pub mod contract_drift_types;
 pub mod encryption_error;

@@ -1,5 +1,17 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.145] - 2026-05-24
+
+### Added
+
+- **[Contracts][DevX]** New `Conformance` TUI screen + `/__mockforge/api/conformance/violations` endpoint (#79 round 12) — server-side counterpart to the bench-side conformance suite; every incoming request the OpenAPI router rejects for a spec violation (400/422) is captured to a bounded ring buffer and rendered in a new TUI tab.
+
+### Fixed
+
+- **[DevX]** `mockforge bench --conformance --operations 'METHOD,…'` now actually filters (#79 round 12) — `execute_conformance_test` was silently ignoring `self.operations` / `self.exclude_operations`. Also relaxed `SpecParser::filter_operations` to accept method-only form (`"GET"`) without requiring `"GET /path"`.
+- **[Reality]** Multi-target bench summary now includes connection + iteration counts (#79 round 12).
+- **[Cloud]** `pillar_tracking` no longer drives `sqlx::pool::acquire` "slow acquire" spam under load (#79 round 12) — added a 20-task in-flight cap at the recorder entry so over-pressure events are dropped immediately instead of queuing on the analytics-DB pool's 30s acquire timeout.
+
 ## [0.3.144] - 2026-05-24
 
 ### Fixed

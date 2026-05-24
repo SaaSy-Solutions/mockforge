@@ -41,6 +41,33 @@ pub struct ContractDiffWrapper {
     pub captures: Vec<ContractDiffCapture>,
 }
 
+/// Server-side spec-violation entry surfaced by the new Conformance TUI
+/// screen (Issue #79 round 12).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ConformanceViolation {
+    pub timestamp: DateTime<Utc>,
+    pub method: String,
+    pub path: String,
+    #[serde(default = "default_unknown")]
+    pub client_ip: String,
+    pub status: u16,
+    pub reason: String,
+    #[serde(default)]
+    pub category: String,
+}
+
+fn default_unknown() -> String {
+    "unknown".to_string()
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct ConformanceViolationsResponse {
+    #[serde(default)]
+    pub violations: Vec<ConformanceViolation>,
+    #[serde(default)]
+    pub total: usize,
+}
+
 // ── Dashboard ────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

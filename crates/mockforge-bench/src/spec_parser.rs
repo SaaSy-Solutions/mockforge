@@ -75,20 +75,26 @@ impl SpecParser {
         let mut filtered = Vec::new();
 
         for filter_str in filters {
+            // Issue #79 round 12 — accept both `METHOD /path` and method-only
+            // (e.g. `GET`) syntax, matching `exclude_operations`. Method-only
+            // includes every path with that method.
             let parts: Vec<&str> = filter_str.splitn(2, ' ').collect();
-            if parts.len() != 2 {
+            let (method, path_pattern) = if parts.len() == 2 {
+                (parts[0].to_uppercase(), Some(parts[1]))
+            } else if parts.len() == 1 && !parts[0].is_empty() {
+                (parts[0].to_uppercase(), None)
+            } else {
                 return Err(BenchError::Other(format!(
-                    "Invalid operation filter format: '{}'. Expected 'METHOD /path'",
+                    "Invalid operation filter format: '{}'. Expected 'METHOD /path' or 'METHOD'",
                     filter_str
                 )));
-            }
-
-            let method = parts[0].to_uppercase();
-            let path_pattern = parts[1];
+            };
 
             for op in &all_ops {
-                if op.method.to_uppercase() == method && Self::matches_path(&op.path, path_pattern)
-                {
+                let method_matches = op.method.to_uppercase() == method;
+                let path_matches =
+                    path_pattern.map(|p| Self::matches_path(&op.path, p)).unwrap_or(true);
+                if method_matches && path_matches {
                     filtered.push(op.clone());
                 }
             }

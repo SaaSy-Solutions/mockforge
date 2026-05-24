@@ -367,6 +367,29 @@ impl MockForgeClient {
         self.get_api("/__mockforge/federation/peers").await
     }
 
+    pub async fn get_conformance_violations(&self) -> Result<ConformanceViolationsResponse> {
+        let resp = self
+            .get("/__mockforge/api/conformance/violations")
+            .send()
+            .await
+            .context("GET /__mockforge/api/conformance/violations")?;
+        let status = resp.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {status} from conformance/violations");
+        }
+        let ct = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if ct.contains("text/html") {
+            anyhow::bail!("endpoint conformance/violations not available");
+        }
+        let body = resp.text().await.context("read conformance response")?;
+        serde_json::from_str::<ConformanceViolationsResponse>(&body)
+            .context("deserialise conformance response")
+    }
+
     pub async fn get_contract_diff_captures(&self) -> Result<Vec<ContractDiffCapture>> {
         // Server returns {"captures": [...]} not ApiResponse-wrapped
         let resp = self

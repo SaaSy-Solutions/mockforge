@@ -3,6 +3,7 @@
 /// Provides REST endpoints for controlling mocks, server configuration,
 /// and integration with developer tools (VS Code extension, CI/CD, etc.)
 mod ai_gen;
+mod conformance;
 mod health;
 mod import_export;
 mod migration;
@@ -11,6 +12,7 @@ mod protocols;
 mod proxy;
 
 pub use ai_gen::*;
+pub(crate) use conformance::{clear_conformance_violations, get_conformance_violations};
 pub use health::*;
 pub use import_export::*;
 pub use proxy::{BodyTransformRequest, ProxyRuleRequest, ProxyRuleResponse};
@@ -881,7 +883,14 @@ pub fn management_router(state: ManagementState) -> Router {
         .route("/mocks/{id}", delete(mocks::delete_mock))
         .route("/export", get(export_mocks))
         .route("/import", post(import_mocks))
-        .route("/spec", get(get_openapi_spec));
+        .route("/spec", get(get_openapi_spec))
+        // Issue #79 round 12 — server-side spec violation feed for the
+        // new TUI "Conformance" screen. Backed by the bounded ring
+        // buffer in `mockforge_foundation::conformance_violations` that
+        // the OpenAPI router populates whenever
+        // `validate_request_with_all` rejects an incoming request.
+        .route("/conformance/violations", get(get_conformance_violations))
+        .route("/conformance/violations", delete(clear_conformance_violations));
 
     #[cfg(feature = "smtp")]
     let router = router

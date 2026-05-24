@@ -33,6 +33,25 @@ static LAST_FAILURE_WARN_AT: Lazy<RwLock<Instant>> = Lazy::new(|| RwLock::new(In
 /// How often we emit the aggregated "X pillar events dropped" warning.
 const FAILURE_WARN_INTERVAL: Duration = Duration::from_secs(60);
 
+/// In-flight task counter — used to short-circuit event submission when
+/// the recorder is already saturated, instead of spawning more tokio
+/// tasks that will pile up on the analytics-DB pool's acquire queue.
+///
+/// Issue #79 round 12 — round 11 silenced the per-event WARN spam, but
+/// the underlying `sqlx::pool::acquire` "slow acquire" WARNs still
+/// fired because every event spawned a task that waited on the pool's
+/// 30s acquire timeout. Capping concurrency at the entry point drops
+/// the over-pressure events immediately (counted toward `FAILED_EVENT_COUNT`
+/// for the aggregate WARN) and lets the pool serve the ones in flight
+/// without bunching up.
+static IN_FLIGHT_RECORDS: AtomicU64 = AtomicU64::new(0);
+
+/// How many recorder tasks may be in flight simultaneously. Picked at
+/// 2× the analytics SqlitePool's `max_connections(10)` so a healthy
+/// pool can fully utilise its connection budget; bursts beyond that
+/// get dropped instead of queued.
+const IN_FLIGHT_LIMIT: u64 = 20;
+
 /// Trait for recording pillar usage events
 /// This allows different implementations (analytics DB, API endpoint, etc.)
 #[async_trait::async_trait]
@@ -166,10 +185,27 @@ async fn record_pillar_usage(
             timestamp: Utc::now(),
         };
 
+        // Issue #79 round 12 — short-circuit when the recorder is already
+        // saturated. Spawning more tasks just bunches them up on the
+        // analytics-DB pool's 30s acquire timeout, producing the
+        // `sqlx::pool::acquire` "slow acquire" WARN spam Srikanth still
+        // saw on v0.3.144. Cap in-flight tasks; over-cap submissions
+        // count toward the aggregated drop warning and return without
+        // spawning.
+        let current = IN_FLIGHT_RECORDS.load(Ordering::Relaxed);
+        if current >= IN_FLIGHT_LIMIT {
+            FAILED_EVENT_COUNT.fetch_add(1, Ordering::Relaxed);
+            maybe_flush_dropped_warning().await;
+            return;
+        }
+        IN_FLIGHT_RECORDS.fetch_add(1, Ordering::Relaxed);
+
         // Record asynchronously without blocking
         let recorder = recorder.clone();
         tokio::spawn(async move {
-            if let Err(e) = recorder.record(event).await {
+            let result = recorder.record(event).await;
+            IN_FLIGHT_RECORDS.fetch_sub(1, Ordering::Relaxed);
+            if let Err(e) = result {
                 // Issue #79 — under high load (Srikanth's `--rps 100`
                 // for 600s) the analytics DB pool gets saturated and
                 // every event spawns a task that times out and logs a
