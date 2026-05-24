@@ -4,6 +4,12 @@
 
 - **[Contracts][DevX]** New `Conformance` TUI screen + `/__mockforge/api/conformance/violations` endpoint (#79 round 12)
   - Server-side counterpart to the bench-side conformance suite. Every incoming request the OpenAPI router rejects for a spec violation (400/422) is now captured into a bounded ring buffer in `mockforge-foundation::conformance_violations`, served by `GET /__mockforge/api/conformance/violations`, and rendered in a new TUI tab that shows method, path, status, category, client IP, and the rejection reason. Lets you cross-check what your proxy thinks happened against what MockForge thinks happened — Srikanth's ask on Issue #79.
+  - **Extras beyond the ask** to make the cross-check-with-proxy workflow easier:
+    - `m` / `s` / `c` cycle method / status-band / category filters (status cycles `any → 4xx → 422 → 5xx`); useful when 200+ violations need scoping.
+    - `p` pauses the 5-second auto-refresh so the row under your cursor doesn't move while investigating.
+    - `e` exports the current (filtered) view to `conformance-violations-<ts>.json` in CWD — drop it next to your proxy logs and `jq` across both sides.
+    - `D` clears the server-side ring buffer (`DELETE /__mockforge/api/conformance/violations`); useful between test runs.
+    - New per-endpoint count panel shows the top offending `METHOD path` pairs in the current filtered view — quickly highlights *which* endpoints violate most, not just which categories.
 
 ### Fixed
 
