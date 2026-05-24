@@ -1,19 +1,25 @@
 //! Notification-channel dispatcher (cloud-enablement task #3 / Phase 2).
 //!
-//! Polls `incidents` for open rows that haven't been dispatched yet,
-//! evaluates each against the org's `routing_rules`, and fans out to
-//! every matched `notification_channels` row. Per-channel results land
-//! in `incident_events` as `notification_sent`; the per-incident
-//! "we're done with this one" marker is `notification_dispatched`.
+//! Polls `incidents` for two queues:
+//!
+//!   1. **Trigger queue** — open rows that haven't been dispatched yet.
+//!      Per-channel results: `notification_sent`. Per-incident marker:
+//!      `notification_dispatched`.
+//!   2. **Resolve queue** (issue #629) — resolved rows that previously
+//!      had a trigger fanout but haven't been resolve-side dispatched.
+//!      Per-channel results: `notification_resolution_sent`.
+//!      Per-incident marker: `notification_resolution_dispatched`.
+//!
+//! For each row the dispatcher evaluates the org's `routing_rules` and
+//! fans out to every matched `notification_channels` row.
 //!
 //! Real outbound for all four channel kinds: `webhook` and `slack`
 //! post a JSON body to `channel.config.url`; `email` uses the shared
 //! `crate::email::EmailService` (Postmark / Brevo / SMTP, picked from
-//! env); `pagerduty` posts an Events API v2 `trigger` event using the
-//! channel's stored `routing_key`. The PagerDuty `dedup_key` is the
-//! incident UUID so a future resolve-side dispatcher (not yet
-//! implemented — the current tick only fires on incident open) can
-//! close the same alert via `event_action: "resolve"`. When the email
+//! env); `pagerduty` posts an Events API v2 event (`trigger` or
+//! `resolve` per [`EventKind`]) using the channel's stored
+//! `routing_key`. The PagerDuty `dedup_key` is the incident UUID so a
+//! resolve replay collapses onto the same alert. When the email
 //! provider isn't configured the attempt is recorded as `skipped`
 //! with a reason that surfaces the missing config — the dispatcher
 //! does not silently pretend to send.
@@ -22,11 +28,11 @@
 //! - 5s tick cadence so a real outage shows up in seconds, not minutes.
 //! - Per-call 10s HTTP timeout so a slow channel can't stall the whole
 //!   queue.
-//! - The `notification_dispatched` marker is written even on per-channel
-//!   failure — partial failure is logged, not retried, because most of
-//!   the failures are 4xx (bad webhook URL) and a tight retry would
-//!   spam the operator's webhook receiver. Retry handling is a separate
-//!   concern.
+//! - The `notification_*_dispatched` marker is written even on
+//!   per-channel failure — partial failure is logged, not retried,
+//!   because most of the failures are 4xx (bad webhook URL) and a tight
+//!   retry would spam the operator's webhook receiver. Retry handling
+//!   is a separate concern.
 
 use std::time::Duration;
 
@@ -37,6 +43,32 @@ use tracing::{debug, error, info, warn};
 const TICK_INTERVAL: Duration = Duration::from_secs(5);
 const HTTP_TIMEOUT: Duration = Duration::from_secs(10);
 const BATCH_LIMIT: i64 = 50;
+
+/// Which lifecycle event we're dispatching. The trigger-side and
+/// resolve-side share routing logic, channel iteration, and error
+/// handling — only the payload shape differs (PagerDuty `event_action`,
+/// email subject prefix, webhook `kind` field).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EventKind {
+    Trigger,
+    Resolve,
+}
+
+impl EventKind {
+    fn label(self) -> &'static str {
+        match self {
+            EventKind::Trigger => "trigger",
+            EventKind::Resolve => "resolve",
+        }
+    }
+
+    fn subject_prefix(self) -> &'static str {
+        match self {
+            EventKind::Trigger => "",
+            EventKind::Resolve => "[RESOLVED] ",
+        }
+    }
+}
 
 pub fn start_incident_dispatcher_worker(pool: PgPool) {
     let client = match reqwest::Client::builder()
@@ -70,23 +102,42 @@ pub fn start_incident_dispatcher_worker(pool: PgPool) {
     });
 }
 
-/// One polling tick. Returns the number of incidents dispatched this
-/// tick (for tests + observability).
+/// One polling tick. Drains both the trigger queue and the resolve
+/// queue. Returns the total number of incidents dispatched this tick
+/// (sum across both queues, for tests + observability).
 pub async fn run_tick(pool: &PgPool, client: &reqwest::Client) -> sqlx::Result<u32> {
-    let pending = Incident::list_pending_dispatch(pool, BATCH_LIMIT).await?;
+    let triggered = drain_queue(pool, client, EventKind::Trigger).await?;
+    let resolved = drain_queue(pool, client, EventKind::Resolve).await?;
+    Ok(triggered + resolved)
+}
+
+async fn drain_queue(
+    pool: &PgPool,
+    client: &reqwest::Client,
+    kind: EventKind,
+) -> sqlx::Result<u32> {
+    let pending = match kind {
+        EventKind::Trigger => Incident::list_pending_dispatch(pool, BATCH_LIMIT).await?,
+        EventKind::Resolve => Incident::list_pending_resolution_dispatch(pool, BATCH_LIMIT).await?,
+    };
     if pending.is_empty() {
         return Ok(0);
     }
 
-    debug!(count = pending.len(), "incident dispatcher: processing batch");
+    debug!(
+        count = pending.len(),
+        kind = kind.label(),
+        "incident dispatcher: processing batch"
+    );
 
     let mut dispatched = 0u32;
     for incident in pending {
-        match dispatch_one(pool, client, &incident).await {
+        match dispatch_one(pool, client, &incident, kind).await {
             Ok(_) => dispatched += 1,
             Err(e) => {
                 error!(
                     incident_id = %incident.id,
+                    kind = kind.label(),
                     error = %e,
                     "incident dispatch failed; will retry next tick",
                 );
@@ -103,6 +154,7 @@ async fn dispatch_one(
     pool: &PgPool,
     client: &reqwest::Client,
     incident: &Incident,
+    kind: EventKind,
 ) -> sqlx::Result<()> {
     // 1. Find the highest-priority matching rule. If no rule matches,
     //    fall back to "all enabled channels for the org" — the user
@@ -127,11 +179,13 @@ async fn dispatch_one(
         warn!(
             incident_id = %incident.id,
             org_id = %incident.org_id,
+            kind = kind.label(),
             "no notification channels configured — marking dispatched to avoid retry loop",
         );
-        Incident::mark_dispatched(
+        mark_dispatched(
             pool,
             incident.id,
+            kind,
             &serde_json::json!({ "channels": 0, "reason": "no_channels_configured" }),
         )
         .await?;
@@ -148,14 +202,15 @@ async fn dispatch_one(
             _ => continue, // Channel deleted / disabled since rule was authored.
         };
 
-        let result = send_to_channel(client, &channel, incident).await;
+        let result = send_to_channel(client, &channel, incident, kind).await;
         match result {
             ChannelResult::Sent { status_code } => {
                 successes += 1;
-                Incident::record_notification_attempt(
+                record_attempt(
                     pool,
                     incident.id,
                     channel.id,
+                    kind,
                     &serde_json::json!({
                         "ok": true,
                         "kind": channel.kind,
@@ -166,10 +221,11 @@ async fn dispatch_one(
             }
             ChannelResult::Failed { error } => {
                 failures += 1;
-                Incident::record_notification_attempt(
+                record_attempt(
                     pool,
                     incident.id,
                     channel.id,
+                    kind,
                     &serde_json::json!({
                         "ok": false,
                         "kind": channel.kind,
@@ -180,10 +236,11 @@ async fn dispatch_one(
             }
             ChannelResult::Skipped { reason } => {
                 skipped += 1;
-                Incident::record_notification_attempt(
+                record_attempt(
                     pool,
                     incident.id,
                     channel.id,
+                    kind,
                     &serde_json::json!({
                         "ok": false,
                         "kind": channel.kind,
@@ -196,9 +253,10 @@ async fn dispatch_one(
         }
     }
 
-    Incident::mark_dispatched(
+    mark_dispatched(
         pool,
         incident.id,
+        kind,
         &serde_json::json!({
             "channels_total": channel_ids.len(),
             "successes": successes,
@@ -212,6 +270,7 @@ async fn dispatch_one(
     if failures > 0 {
         warn!(
             incident_id = %incident.id,
+            kind = kind.label(),
             successes,
             failures,
             skipped,
@@ -220,12 +279,47 @@ async fn dispatch_one(
     } else {
         info!(
             incident_id = %incident.id,
+            kind = kind.label(),
             successes,
             skipped,
             "incident dispatched",
         );
     }
     Ok(())
+}
+
+/// Route `record_*_attempt` calls to the right event_type based on
+/// EventKind. Keeps `dispatch_one` agnostic of the underlying SQL.
+async fn record_attempt(
+    pool: &PgPool,
+    incident_id: uuid::Uuid,
+    channel_id: uuid::Uuid,
+    kind: EventKind,
+    payload: &serde_json::Value,
+) -> sqlx::Result<()> {
+    match kind {
+        EventKind::Trigger => {
+            Incident::record_notification_attempt(pool, incident_id, channel_id, payload).await
+        }
+        EventKind::Resolve => {
+            Incident::record_resolution_attempt(pool, incident_id, channel_id, payload).await
+        }
+    }
+}
+
+/// Route `mark_*_dispatched` calls based on EventKind.
+async fn mark_dispatched(
+    pool: &PgPool,
+    incident_id: uuid::Uuid,
+    kind: EventKind,
+    summary: &serde_json::Value,
+) -> sqlx::Result<()> {
+    match kind {
+        EventKind::Trigger => Incident::mark_dispatched(pool, incident_id, summary).await,
+        EventKind::Resolve => {
+            Incident::mark_resolution_dispatched(pool, incident_id, summary).await
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -239,11 +333,12 @@ async fn send_to_channel(
     client: &reqwest::Client,
     channel: &NotificationChannel,
     incident: &Incident,
+    kind: EventKind,
 ) -> ChannelResult {
     match channel.kind.as_str() {
-        "webhook" | "slack" => post_webhook_style(client, channel, incident).await,
-        "email" => send_email(channel, incident).await,
-        "pagerduty" => post_pagerduty(client, channel, incident).await,
+        "webhook" | "slack" => post_webhook_style(client, channel, incident, kind).await,
+        "email" => send_email(channel, incident, kind).await,
+        "pagerduty" => post_pagerduty(client, channel, incident, kind).await,
         other => ChannelResult::Skipped {
             reason: format!("unknown channel kind: {other}"),
         },
@@ -258,6 +353,7 @@ async fn post_webhook_style(
     client: &reqwest::Client,
     channel: &NotificationChannel,
     incident: &Incident,
+    kind: EventKind,
 ) -> ChannelResult {
     let url = match channel.config.get("url").and_then(|v| v.as_str()) {
         Some(u) if !u.is_empty() => u.to_string(),
@@ -268,10 +364,19 @@ async fn post_webhook_style(
         }
     };
 
-    let summary =
-        format!("[{}] {}: {}", incident.severity.to_uppercase(), incident.source, incident.title);
+    let summary = format!(
+        "{}[{}] {}: {}",
+        kind.subject_prefix(),
+        incident.severity.to_uppercase(),
+        incident.source,
+        incident.title
+    );
     let body = serde_json::json!({
         "text": summary,
+        // `event_kind` lets webhook receivers discriminate trigger
+        // vs resolve without parsing the incident.status field
+        // (which can change again after dispatch).
+        "event_kind": kind.label(),
         "incident": {
             "id": incident.id,
             "org_id": incident.org_id,
@@ -283,6 +388,7 @@ async fn post_webhook_style(
             "title": incident.title,
             "description": incident.description,
             "created_at": incident.created_at,
+            "resolved_at": incident.resolved_at,
         },
     });
 
@@ -311,7 +417,11 @@ async fn post_webhook_style(
 /// provider is configured we record `skipped` with a reason rather
 /// than silently "sending" into the Disabled no-op, so the operator
 /// can tell their alert is not actually going out.
-async fn send_email(channel: &NotificationChannel, incident: &Incident) -> ChannelResult {
+async fn send_email(
+    channel: &NotificationChannel,
+    incident: &Incident,
+    kind: EventKind,
+) -> ChannelResult {
     use crate::email::{EmailMessage, EmailService};
 
     let to = match channel.config.get("to").and_then(|v| v.as_str()) {
@@ -341,12 +451,27 @@ async fn send_email(channel: &NotificationChannel, incident: &Incident) -> Chann
         };
     }
 
-    let subject =
-        format!("[{}] {}: {}", incident.severity.to_uppercase(), incident.source, incident.title);
+    let subject = format!(
+        "{}[{}] {}: {}",
+        kind.subject_prefix(),
+        incident.severity.to_uppercase(),
+        incident.source,
+        incident.title
+    );
     let description = incident.description.as_deref().unwrap_or("(no description)");
+    let resolved_line = match kind {
+        EventKind::Resolve => format!(
+            "Resolved at: {}\n",
+            incident
+                .resolved_at
+                .map(|t| t.to_string())
+                .unwrap_or_else(|| "(unknown)".into())
+        ),
+        EventKind::Trigger => String::new(),
+    };
 
     let text_body = format!(
-        "MockForge incident\n\n\
+        "MockForge incident {kind_label}\n\n\
          Severity:    {sev}\n\
          Source:      {src}\n\
          Title:       {title}\n\
@@ -354,7 +479,9 @@ async fn send_email(channel: &NotificationChannel, incident: &Incident) -> Chann
          \n\
          Incident ID: {id}\n\
          Org:         {org}\n\
-         Created at:  {created}\n",
+         Created at:  {created}\n\
+         {resolved_line}",
+        kind_label = kind.label(),
         sev = incident.severity,
         src = incident.source,
         title = incident.title,
@@ -362,18 +489,32 @@ async fn send_email(channel: &NotificationChannel, incident: &Incident) -> Chann
         id = incident.id,
         org = incident.org_id,
         created = incident.created_at,
+        resolved_line = resolved_line,
     );
+
+    let resolved_row = match kind {
+        EventKind::Resolve => format!(
+            "<tr><td>Resolved</td><td>{}</td></tr>",
+            incident
+                .resolved_at
+                .map(|t| t.to_string())
+                .unwrap_or_else(|| "(unknown)".into())
+        ),
+        EventKind::Trigger => String::new(),
+    };
 
     let html_body = format!(
         "<!DOCTYPE html><html><body style=\"font-family:-apple-system,Segoe UI,Roboto,sans-serif\">\
-         <h2 style=\"margin:0 0 8px 0\">[{sev_caps}] {title}</h2>\
+         <h2 style=\"margin:0 0 8px 0\">{prefix}[{sev_caps}] {title}</h2>\
          <p style=\"color:#555\">Source: <code>{src}</code></p>\
          <p>{desc_html}</p>\
          <hr><table style=\"font-size:13px;color:#666\">\
          <tr><td>Incident ID</td><td><code>{id}</code></td></tr>\
          <tr><td>Org</td><td><code>{org}</code></td></tr>\
          <tr><td>Created</td><td>{created}</td></tr>\
+         {resolved_row}\
          </table></body></html>",
+        prefix = kind.subject_prefix(),
         sev_caps = incident.severity.to_uppercase(),
         title = html_escape(&incident.title),
         src = html_escape(&incident.source),
@@ -381,6 +522,7 @@ async fn send_email(channel: &NotificationChannel, incident: &Incident) -> Chann
         id = incident.id,
         org = incident.org_id,
         created = incident.created_at,
+        resolved_row = resolved_row,
     );
 
     let message = EmailMessage {
@@ -422,6 +564,7 @@ async fn post_pagerduty(
     client: &reqwest::Client,
     channel: &NotificationChannel,
     incident: &Incident,
+    kind: EventKind,
 ) -> ChannelResult {
     let routing_key = match channel
         .config
@@ -442,32 +585,47 @@ async fn post_pagerduty(
     let url = std::env::var("MOCKFORGE_PAGERDUTY_ENQUEUE_URL")
         .unwrap_or_else(|_| "https://events.pagerduty.com/v2/enqueue".to_string());
 
-    let summary =
-        format!("[{}] {}: {}", incident.severity.to_uppercase(), incident.source, incident.title);
-
-    let body = serde_json::json!({
-        "routing_key": routing_key,
-        "event_action": "trigger",
-        // Dedupe on the incident UUID so retries within the dispatcher
-        // (or a future resolve-side replay) collapse onto one alert
-        // instead of fanning out into per-tick noise.
-        "dedup_key": incident.id.to_string(),
-        "payload": {
-            "summary": summary,
-            "source": incident.source,
-            "severity": pagerduty_severity(&incident.severity),
-            "component": incident.source_ref,
-            "custom_details": {
-                "incident_id": incident.id,
-                "org_id": incident.org_id,
-                "workspace_id": incident.workspace_id,
-                "title": incident.title,
-                "description": incident.description,
-                "status": incident.status,
-                "created_at": incident.created_at,
-            },
-        },
-    });
+    // PagerDuty's resolve event uses `event_action: "resolve"` and
+    // accepts an empty `payload` — it just keys off `dedup_key` to
+    // find the alert opened by the prior trigger.
+    let body = match kind {
+        EventKind::Trigger => {
+            let summary = format!(
+                "[{}] {}: {}",
+                incident.severity.to_uppercase(),
+                incident.source,
+                incident.title
+            );
+            serde_json::json!({
+                "routing_key": routing_key,
+                "event_action": "trigger",
+                // Dedupe on the incident UUID so retries within the dispatcher
+                // (or the resolve-side replay) collapse onto one alert
+                // instead of fanning out into per-tick noise.
+                "dedup_key": incident.id.to_string(),
+                "payload": {
+                    "summary": summary,
+                    "source": incident.source,
+                    "severity": pagerduty_severity(&incident.severity),
+                    "component": incident.source_ref,
+                    "custom_details": {
+                        "incident_id": incident.id,
+                        "org_id": incident.org_id,
+                        "workspace_id": incident.workspace_id,
+                        "title": incident.title,
+                        "description": incident.description,
+                        "status": incident.status,
+                        "created_at": incident.created_at,
+                    },
+                },
+            })
+        }
+        EventKind::Resolve => serde_json::json!({
+            "routing_key": routing_key,
+            "event_action": "resolve",
+            "dedup_key": incident.id.to_string(),
+        }),
+    };
 
     match client.post(&url).json(&body).send().await {
         Ok(resp) => {
@@ -529,7 +687,9 @@ pub async fn test_fire(channel: &NotificationChannel) -> serde_json::Value {
         }
     };
     let synthetic = synthetic_incident(channel.org_id);
-    let result = send_to_channel(&client, channel, &synthetic).await;
+    // Test-fire always exercises the trigger-side payload — operators
+    // press "send test" to confirm a real incident would reach them.
+    let result = send_to_channel(&client, channel, &synthetic, EventKind::Trigger).await;
     match result {
         ChannelResult::Sent { status_code } => serde_json::json!({
             "ok": true,
@@ -635,7 +795,7 @@ mod tests {
         // fine but provider isn't ready"; this is a real config bug the
         // operator needs to fix on their side.
         let channel = email_channel(serde_json::json!({}));
-        let result = send_email(&channel, &fake_incident()).await;
+        let result = send_email(&channel, &fake_incident(), EventKind::Trigger).await;
         match result {
             ChannelResult::Failed { error } => {
                 assert!(error.contains("channel.config.to"), "unexpected error: {error}");
@@ -647,7 +807,7 @@ mod tests {
     #[tokio::test]
     async fn email_blank_to_is_failure() {
         let channel = email_channel(serde_json::json!({ "to": "   " }));
-        let result = send_email(&channel, &fake_incident()).await;
+        let result = send_email(&channel, &fake_incident(), EventKind::Trigger).await;
         assert!(matches!(result, ChannelResult::Failed { .. }));
     }
 
@@ -676,7 +836,7 @@ mod tests {
     async fn pd_missing_routing_key_is_failure() {
         let client = reqwest::Client::new();
         let channel = pagerduty_channel(serde_json::json!({}));
-        let result = post_pagerduty(&client, &channel, &fake_incident()).await;
+        let result = post_pagerduty(&client, &channel, &fake_incident(), EventKind::Trigger).await;
         match result {
             ChannelResult::Failed { error } => {
                 assert!(error.contains("routing_key"), "unexpected error: {error}");
@@ -697,7 +857,7 @@ mod tests {
         let client =
             reqwest::Client::builder().timeout(Duration::from_millis(200)).build().unwrap();
         let channel = pagerduty_channel(serde_json::json!({ "integration_key": "abc123" }));
-        let result = post_pagerduty(&client, &channel, &fake_incident()).await;
+        let result = post_pagerduty(&client, &channel, &fake_incident(), EventKind::Trigger).await;
         match result {
             ChannelResult::Failed { error } => {
                 // Network error (connection refused / timeout), NOT the
@@ -716,7 +876,7 @@ mod tests {
     async fn pd_blank_routing_key_is_failure() {
         let client = reqwest::Client::new();
         let channel = pagerduty_channel(serde_json::json!({ "routing_key": "   " }));
-        let result = post_pagerduty(&client, &channel, &fake_incident()).await;
+        let result = post_pagerduty(&client, &channel, &fake_incident(), EventKind::Trigger).await;
         assert!(matches!(result, ChannelResult::Failed { .. }));
     }
 }
