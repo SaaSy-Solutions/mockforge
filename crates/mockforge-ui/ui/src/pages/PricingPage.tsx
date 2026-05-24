@@ -1,9 +1,37 @@
 import React from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, XCircle, ArrowRight } from 'lucide-react';
 
+// Public billing-config endpoint. Returns trial length so the pricing
+// CTA copy can stay in sync with the operator-set
+// STRIPE_TRIAL_PERIOD_DAYS env var without redeploying the UI.
+type BillingConfig = { trial_period_days: number };
+
+async function fetchBillingConfig(): Promise<BillingConfig> {
+  const res = await fetch('/api/v1/billing/config');
+  if (!res.ok) {
+    throw new Error(`billing config fetch failed: ${res.status}`);
+  }
+  return res.json();
+}
+
 export function PricingPage() {
+  // Soft-fail: if the endpoint isn't reachable (offline, OSS build,
+  // unconfigured), fall back to a sensible default rather than hiding
+  // the price page. 14 matches the backend default in config.rs.
+  const { data: billingConfig } = useQuery({
+    queryKey: ['billing-config'],
+    queryFn: fetchBillingConfig,
+    staleTime: 5 * 60 * 1000,
+    retry: 1,
+  });
+  const trialDays = billingConfig?.trial_period_days ?? 14;
+  const hasTrial = trialDays > 0;
+  const trialSubtitle = hasTrial ? `${trialDays}-day free trial · no commitment` : null;
+  const paidCtaLabel = hasTrial ? 'Start free trial' : 'Upgrade';
+
   const handleGetStarted = () => {
     // Navigate to sign up or login
     window.location.href = '/signup';
@@ -89,6 +117,9 @@ export function PricingPage() {
               <span className="text-4xl font-bold">$29</span>
               <span className="text-muted-foreground">/month</span>
             </div>
+            {trialSubtitle && (
+              <p className="text-sm text-success-600 font-medium mt-1">{trialSubtitle}</p>
+            )}
             <CardDescription>For professional developers</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -127,7 +158,7 @@ export function PricingPage() {
               </li>
             </ul>
             <Button className="w-full" variant="default" onClick={() => handleUpgrade('pro')}>
-              Upgrade to Pro
+              {hasTrial ? paidCtaLabel : 'Upgrade to Pro'}
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </CardContent>
@@ -141,6 +172,9 @@ export function PricingPage() {
               <span className="text-4xl font-bold">$99</span>
               <span className="text-muted-foreground">/month</span>
             </div>
+            {trialSubtitle && (
+              <p className="text-sm text-success-600 font-medium mt-1">{trialSubtitle}</p>
+            )}
             <CardDescription>For growing teams</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -179,7 +213,7 @@ export function PricingPage() {
               </li>
             </ul>
             <Button className="w-full" variant="outline" onClick={() => handleUpgrade('team')}>
-              Upgrade to Team
+              {hasTrial ? paidCtaLabel : 'Upgrade to Team'}
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </CardContent>

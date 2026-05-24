@@ -43,6 +43,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/faq", get(handlers::faq::get_faq))
         .route("/api/v1/legal/terms", get(handlers::legal::get_terms))
         .route("/api/v1/legal/privacy", get(handlers::legal::get_privacy))
+        // Billing config (public): trial length and other display-time
+        // settings the unauthenticated pricing page needs. Separate from
+        // the auth-gated /api/v1/billing/* routes below.
+        .route("/api/v1/billing/config", get(handlers::billing::get_billing_config))
         .route("/api/v1/legal/dpa", get(handlers::legal::get_dpa))
         .route("/api/v1/status", get(handlers::status::get_status))
         // Support contact (public, works with or without auth)
