@@ -1,3 +1,13 @@
+## [0.3.144] - 2026-05-24
+
+### Fixed
+
+- **[Reality]** OpenAPI router accepts request bodies up to 50 MiB by default (was 2 MiB axum default) — closes the "200 OK before all chunk requests arrived" PCAP behaviour Srikanth reported on Issue #79
+  - Root cause: axum 0.8's `Bytes` and `Option<Json<Value>>` extractors enforce a 2 MiB `DefaultBodyLimit`. Above that, the body gets truncated and the handler runs without consuming the rest of the request — hyper sends the response and TLS Close Notify *while the client is still uploading the body*. Srikanth saw this on a 10 MB chunked PATCH: status 200, response sent at TCP seq 1070094 while the proxy was still pushing chunks at 1070094+1434, 1071528+1434, etc. Reproduced locally with a 3 MiB JSON body to the demo spec — body got truncated at ~2 MiB, JSON parse failed mid-stream, response went out, curl logged `* HTTP error before end of send, stop sending`.
+  - Fix: every `OpenApiRouteRegistry::build_router_*` variant now mounts `axum::extract::DefaultBodyLimit::max(...)` with a 50 MiB default, configurable via `MOCKFORGE_HTTP_BODY_LIMIT_MB`. 50 MiB covers realistic mock-traffic without giving an untrusted client an unlimited memory-fill vector. Set the env var to a smaller or larger number if your specific workload demands it.
+- **[Cloud]** `pillar_tracking` no longer floods logs with one WARN per dropped event under load (#79 round 11)
+  - Under sustained `mockforge bench --rps 100` load against an admin-enabled `mockforge serve`, the analytics DB pool saturated and every failed event emitted `WARN ... Failed to record pillar usage event: pool timed out`. Pillar tracking is best-effort metrics — losing events under load is acceptable, but the WARN-spam was not. Per-event failures are now DEBUG; a single aggregated `pillar_tracking: dropped X events in the last 60s due to analytics-DB pressure` WARN fires at most every 60 seconds.
+
 ## [0.3.143] - 2026-05-23
 
 ### Fixed
