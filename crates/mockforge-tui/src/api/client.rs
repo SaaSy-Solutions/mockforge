@@ -367,6 +367,52 @@ impl MockForgeClient {
         self.get_api("/__mockforge/federation/peers").await
     }
 
+    pub async fn get_conformance_violations(&self) -> Result<ConformanceViolationsResponse> {
+        let resp = self
+            .get("/__mockforge/api/conformance/violations")
+            .send()
+            .await
+            .context("GET /__mockforge/api/conformance/violations")?;
+        let status = resp.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {status} from conformance/violations");
+        }
+        let ct = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if ct.contains("text/html") {
+            anyhow::bail!("endpoint conformance/violations not available");
+        }
+        let body = resp.text().await.context("read conformance response")?;
+        serde_json::from_str::<ConformanceViolationsResponse>(&body)
+            .context("deserialise conformance response")
+    }
+
+    /// Clear the server-side conformance violation buffer.
+    /// Returns the number of entries that were cleared.
+    pub async fn clear_conformance_violations(&self) -> Result<usize> {
+        let url = format!("{}/__mockforge/api/conformance/violations", self.base_url);
+        let mut req = self.client.delete(&url);
+        if let Some(ref token) = self.token {
+            req = req.bearer_auth(token);
+        }
+        let resp = req.send().await.context("DELETE /__mockforge/api/conformance/violations")?;
+        let status = resp.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {status} from DELETE conformance/violations");
+        }
+        #[derive(serde::Deserialize)]
+        struct Cleared {
+            cleared: usize,
+        }
+        let body = resp.text().await.context("read clear-conformance response")?;
+        serde_json::from_str::<Cleared>(&body)
+            .map(|c| c.cleared)
+            .context("deserialise clear-conformance response")
+    }
+
     pub async fn get_contract_diff_captures(&self) -> Result<Vec<ContractDiffCapture>> {
         // Server returns {"captures": [...]} not ApiResponse-wrapped
         let resp = self

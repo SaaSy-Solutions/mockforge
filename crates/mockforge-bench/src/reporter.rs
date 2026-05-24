@@ -339,6 +339,36 @@ impl TerminalReporter {
             format!("{:.2}", results.aggregated_metrics.p99_duration_ms).cyan()
         );
 
+        // Issue #79 round 12 — multi-target was missing the connection /
+        // iteration counters that single-target runs surface. Aggregate
+        // across targets and print only when k6 actually opened sockets
+        // / completed iterations on at least one target.
+        if results.aggregated_metrics.total_connections_opened > 0 {
+            println!(
+                "  Total Connections:    {}",
+                results.aggregated_metrics.total_connections_opened.to_string().cyan()
+            );
+            if results.aggregated_metrics.total_vus_max > 0 {
+                let reuse_ratio = results.aggregated_metrics.total_connections_opened as f64
+                    / results.aggregated_metrics.total_vus_max as f64;
+                if reuse_ratio > 5.0 {
+                    println!(
+                        "  {}: {:.0}× more sockets opened than concurrent VUs across all targets — \
+                         at least one target is closing connections (proxy pool disabled, \
+                         `Connection: close`, or short upstream idle timeout).",
+                        "Connection reuse NOT detected".yellow().bold(),
+                        reuse_ratio,
+                    );
+                }
+            }
+        }
+        if results.aggregated_metrics.total_iterations_completed > 0 {
+            println!(
+                "  Total Iterations:     {} complete (sum across all targets)",
+                results.aggregated_metrics.total_iterations_completed.to_string().cyan()
+            );
+        }
+
         // Show per-target summary
         let print_target = |result: &crate::parallel_executor::TargetResult| {
             let status = if result.success {
@@ -364,6 +394,16 @@ impl TerminalReporter {
                     result.results.p99_duration_ms,
                     result.results.max_duration_ms,
                 );
+                // Issue #79 round 12 — per-target connection/iteration counts
+                // (missing previously in multi-target output).
+                if result.results.tcp_connect_samples > 0 || result.results.iterations_completed > 0
+                {
+                    println!(
+                        "      Connections: {}  Iterations: {}",
+                        result.results.tcp_connect_samples.to_string().white(),
+                        result.results.iterations_completed.to_string().white(),
+                    );
+                }
             }
             if let Some(error) = &result.error {
                 println!("      Error: {}", error.red());

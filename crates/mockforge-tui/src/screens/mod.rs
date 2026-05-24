@@ -7,6 +7,7 @@ pub mod behavioral_cloning;
 pub mod chains;
 pub mod chaos;
 pub mod config;
+pub mod conformance;
 pub mod contract_diff;
 pub mod dashboard;
 pub mod federation;
@@ -96,6 +97,7 @@ pub enum ScreenId {
     ContractDiff,
     Federation,
     BehavioralCloning,
+    Conformance,
 }
 
 impl ScreenId {
@@ -123,6 +125,7 @@ impl ScreenId {
         Self::ContractDiff,
         Self::Federation,
         Self::BehavioralCloning,
+        Self::Conformance,
     ];
 
     pub fn label(self) -> &'static str {
@@ -149,6 +152,7 @@ impl ScreenId {
             Self::ContractDiff => "Contract Diff",
             Self::Federation => "Federation",
             Self::BehavioralCloning => "VBR",
+            Self::Conformance => "Conformance",
         }
     }
 
@@ -176,6 +180,7 @@ impl ScreenId {
             Self::ContractDiff => "contract_diff",
             Self::Federation => "federation",
             Self::BehavioralCloning => "behavioral_cloning",
+            Self::Conformance => "conformance",
         }
     }
 }
@@ -186,8 +191,8 @@ mod tests {
 
     #[test]
     fn all_has_correct_count() {
-        // Count the enum variants: 22 total
-        assert_eq!(ScreenId::ALL.len(), 22);
+        // Count the enum variants: 23 total (Conformance added in #79 round 12)
+        assert_eq!(ScreenId::ALL.len(), 23);
     }
 
     #[test]

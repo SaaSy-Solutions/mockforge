@@ -1,3 +1,25 @@
+## [0.3.145] - 2026-05-24
+
+### Added
+
+- **[Contracts][DevX]** New `Conformance` TUI screen + `/__mockforge/api/conformance/violations` endpoint (#79 round 12)
+  - Server-side counterpart to the bench-side conformance suite. Every incoming request the OpenAPI router rejects for a spec violation (400/422) is now captured into a bounded ring buffer in `mockforge-foundation::conformance_violations`, served by `GET /__mockforge/api/conformance/violations`, and rendered in a new TUI tab that shows method, path, status, category, client IP, and the rejection reason. Lets you cross-check what your proxy thinks happened against what MockForge thinks happened — Srikanth's ask on Issue #79.
+  - **Extras beyond the ask** to make the cross-check-with-proxy workflow easier:
+    - `m` / `s` / `c` cycle method / status-band / category filters (status cycles `any → 4xx → 422 → 5xx`); useful when 200+ violations need scoping.
+    - `p` pauses the 5-second auto-refresh so the row under your cursor doesn't move while investigating.
+    - `e` exports the current (filtered) view to `conformance-violations-<ts>.json` in CWD — drop it next to your proxy logs and `jq` across both sides.
+    - `D` clears the server-side ring buffer (`DELETE /__mockforge/api/conformance/violations`); useful between test runs.
+    - New per-endpoint count panel shows the top offending `METHOD path` pairs in the current filtered view — quickly highlights *which* endpoints violate most, not just which categories.
+
+### Fixed
+
+- **[DevX]** `mockforge bench --conformance --operations 'METHOD,…'` now actually filters (#79 round 12)
+  - Srikanth ran `--conformance --operations "GET,POST"` and saw DELETE/PATCH exercised anyway. `execute_conformance_test` never applied `self.operations` (or `self.exclude_operations`) when annotating spec operations — those flags were silently dropped. Now applied the same way the regular bench path does, including the existing wildcard / method-only syntax. Also: `SpecParser::filter_operations` now accepts the method-only form `"GET"` (same as `exclude_operations` already supported) instead of requiring `"GET /path"`.
+- **[Reality]** Multi-target bench summary now includes connection + iteration counts (#79 round 12)
+  - Srikanth's `--targets-file` runs were missing the `Connections opened` / `Iterations` lines that single-target runs surface. `AggregatedMetrics` gained `total_connections_opened` / `total_iterations_completed` plus per-target `Connections: N  Iterations: M` lines under each target, and the new aggregate shows a `Connection reuse NOT detected` warning when the cross-target sum > 5 × VUs.
+- **[Cloud]** `pillar_tracking` no longer drives `sqlx::pool::acquire` "slow acquire" spam under load (#79 round 12)
+  - Round 11 silenced per-event WARNs but the analytics-DB pool still saturated (each event spawned a tokio task that waited 30s on the 10-connection pool). Added an in-flight task cap (default 20, 2× the pool size) at the recorder entry point so over-pressure events are dropped immediately and counted toward the existing aggregated WARN. No more `sqlx::pool::acquire: acquired connection, but time to acquire exceeded slow threshold` storms.
+
 ## [0.3.144] - 2026-05-24
 
 ### Fixed

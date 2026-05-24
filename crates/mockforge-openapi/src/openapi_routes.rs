@@ -728,6 +728,42 @@ impl OpenApiRouteRegistry {
                         };
 
                         record_validation_error(&payload);
+
+                        // Issue #79 round 12 — also push to the workspace-wide
+                        // server-conformance violation ring buffer so the TUI's
+                        // "Conformance" screen can surface incoming spec
+                        // violations. Best-effort, bounded; the existing
+                        // `record_validation_error` keeps writing to its
+                        // tenant-scoped persistent store unchanged.
+                        let reason = payload
+                            .get("detail")
+                            .and_then(|d| {
+                                if d.is_string() {
+                                    d.as_str().map(|s| s.to_string())
+                                } else {
+                                    serde_json::to_string(d).ok()
+                                }
+                            })
+                            .unwrap_or_else(|| {
+                                payload
+                                    .get("error")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("request validation failed")
+                                    .to_string()
+                            });
+                        let category = classify_validation_reason(&reason);
+                        mockforge_foundation::conformance_violations::record(
+                            mockforge_foundation::conformance_violations::ServerConformanceViolation {
+                                timestamp: Utc::now(),
+                                method: method.to_string(),
+                                path: path_template.clone(),
+                                client_ip: "unknown".to_string(),
+                                status: status_code,
+                                reason,
+                                category,
+                            },
+                        );
+
                         let status = axum::http::StatusCode::from_u16(status_code)
                             .unwrap_or(axum::http::StatusCode::BAD_REQUEST);
 
@@ -1833,6 +1869,44 @@ async fn extract_multipart_from_bytes(
 
 static LAST_ERRORS: Lazy<Mutex<VecDeque<Value>>> =
     Lazy::new(|| Mutex::new(VecDeque::with_capacity(20)));
+
+/// Classify a validation error reason string into one of the
+/// `ConformanceFeature` categories used by the bench-side spec
+/// validator. Best-effort string match — keeps the server-side
+/// conformance ring buffer's `category` field meaningful for the TUI
+/// without dragging in the entire spec analyser.
+///
+/// Issue #79 round 12.
+pub fn classify_validation_reason(reason: &str) -> String {
+    let r = reason.to_ascii_lowercase();
+    if r.contains("required")
+        && (r.contains("param") || r.contains("query") || r.contains("header"))
+    {
+        return "parameters".into();
+    }
+    if r.contains("schema") || r.contains("body") || r.contains("json") {
+        return "request-body".into();
+    }
+    if r.contains("content-type") || r.contains("content type") {
+        return "content-types".into();
+    }
+    if r.contains("header") {
+        return "headers".into();
+    }
+    if r.contains("cookie") {
+        return "cookies".into();
+    }
+    if r.contains("method") {
+        return "http-methods".into();
+    }
+    if r.contains("auth") || r.contains("security") {
+        return "security".into();
+    }
+    if r.contains("enum") || r.contains("min") || r.contains("max") || r.contains("pattern") {
+        return "constraints".into();
+    }
+    String::new()
+}
 
 /// Record last validation error for Admin UI inspection
 pub fn record_validation_error(v: &Value) {

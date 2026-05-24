@@ -72,6 +72,12 @@ pub struct AggregatedMetrics {
     pub avg_rps: f64,
     /// Total max VUs across all targets
     pub total_vus_max: u32,
+    /// Total connections opened across all targets (Issue #79 round 12 —
+    /// Srikanth's multi-target bench output was missing the CPS / connection
+    /// counts that single-target runs surface).
+    pub total_connections_opened: u64,
+    /// Total iterations completed across all targets.
+    pub total_iterations_completed: u64,
 }
 
 impl AggregatedMetrics {
@@ -84,6 +90,8 @@ impl AggregatedMetrics {
         let mut p99_values = Vec::new();
         let mut total_rps = 0.0f64;
         let mut total_vus_max = 0u32;
+        let mut total_connections_opened = 0u64;
+        let mut total_iterations_completed = 0u64;
         let mut successful_count = 0usize;
 
         for result in results {
@@ -95,6 +103,8 @@ impl AggregatedMetrics {
                 p99_values.push(result.results.p99_duration_ms);
                 total_rps += result.results.rps;
                 total_vus_max += result.results.vus_max;
+                total_connections_opened += result.results.tcp_connect_samples;
+                total_iterations_completed += result.results.iterations_completed;
                 successful_count += 1;
             }
         }
@@ -143,6 +153,8 @@ impl AggregatedMetrics {
             total_rps,
             avg_rps,
             total_vus_max,
+            total_connections_opened,
+            total_iterations_completed,
         }
     }
 }
