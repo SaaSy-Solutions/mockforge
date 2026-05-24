@@ -368,7 +368,20 @@ fn create_app(state: AppState, rate_limiter: RateLimiterState) -> Router {
         .unwrap_or(10 * 1024 * 1024); // 10MB default
     tracing::info!("Request body size limit: {} bytes", max_body_size);
 
-    // Add metrics endpoint (separate router without state)
+    // Add metrics endpoint (separate router without state). Auth on this
+    // endpoint is opt-in via PROMETHEUS_SCRAPE_TOKEN — warn loudly at boot
+    // if it's unset on what looks like a public deployment, so the metric
+    // labels (workspace IDs, error rates, traffic patterns) don't leak.
+    if std::env::var("PROMETHEUS_SCRAPE_TOKEN")
+        .ok()
+        .filter(|s| !s.is_empty())
+        .is_none()
+    {
+        tracing::warn!(
+            "PROMETHEUS_SCRAPE_TOKEN is unset — /metrics is publicly readable. Set this env var \
+             to require `Authorization: Bearer <token>` on scrape requests (issue #647)."
+        );
+    }
     let metrics_router = Router::new()
         .route("/metrics", axum::routing::get(metrics_handler))
         .route("/metrics/health", axum::routing::get(|| async { "OK" }));
@@ -387,9 +400,31 @@ fn create_app(state: AppState, rate_limiter: RateLimiterState) -> Router {
         .with_state(state)
 }
 
-async fn metrics_handler() -> impl IntoResponse {
+async fn metrics_handler(headers: axum::http::HeaderMap) -> impl IntoResponse {
     use mockforge_observability::get_global_registry;
     use prometheus::{Encoder, TextEncoder};
+
+    // Optional bearer-token gate (#647). When PROMETHEUS_SCRAPE_TOKEN is set,
+    // /metrics requires `Authorization: Bearer <token>` matching it. When the
+    // env var is unset or empty, the endpoint stays open — keeps local dev
+    // and OSS deployments working unchanged. Production should always set
+    // the token because the metric labels leak workspace IDs, per-endpoint
+    // request rates, and error patterns.
+    if let Ok(required) = std::env::var("PROMETHEUS_SCRAPE_TOKEN") {
+        if !required.is_empty() {
+            let supplied = headers
+                .get(axum::http::header::AUTHORIZATION)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.strip_prefix("Bearer "));
+            if supplied != Some(required.as_str()) {
+                return (
+                    axum::http::StatusCode::UNAUTHORIZED,
+                    "metrics endpoint requires Authorization: Bearer <PROMETHEUS_SCRAPE_TOKEN>",
+                )
+                    .into_response();
+            }
+        }
+    }
 
     let encoder = TextEncoder::new();
     let metric_families = get_global_registry().registry().gather();
