@@ -45,6 +45,12 @@
 //!   slack_formatter, jira_formatter}` paths keep resolving.
 
 pub mod ai_contract_diff;
+/// HTTP-side AI response handler combining `IntelligentMockGenerator`
+/// + `DataDriftEngine` (#656 — post-#555 follow-up). Moved from
+/// `mockforge_http::ai_handler`; original `mockforge_core::{Result,
+/// Error}` imports now resolve directly to `mockforge_foundation`, so
+/// the move is cycle-safe.
+pub mod ai_handler;
 pub mod ai_response;
 pub mod ai_studio;
 pub mod behavioral_cloning;
