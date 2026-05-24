@@ -89,6 +89,7 @@ export function PricingPage() {
               <span className="text-4xl font-bold">$29</span>
               <span className="text-muted-foreground">/month</span>
             </div>
+            <p className="text-sm text-success-600 font-medium mt-1">14-day free trial · no commitment</p>
             <CardDescription>For professional developers</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -127,7 +128,7 @@ export function PricingPage() {
               </li>
             </ul>
             <Button className="w-full" variant="default" onClick={() => handleUpgrade('pro')}>
-              Upgrade to Pro
+              Start free trial
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </CardContent>
@@ -141,6 +142,7 @@ export function PricingPage() {
               <span className="text-4xl font-bold">$99</span>
               <span className="text-muted-foreground">/month</span>
             </div>
+            <p className="text-sm text-success-600 font-medium mt-1">14-day free trial · no commitment</p>
             <CardDescription>For growing teams</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -179,7 +181,7 @@ export function PricingPage() {
               </li>
             </ul>
             <Button className="w-full" variant="outline" onClick={() => handleUpgrade('team')}>
-              Upgrade to Team
+              Start free trial
               <ArrowRight className="ml-2 h-4 w-4" />
             </Button>
           </CardContent>
