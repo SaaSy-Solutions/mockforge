@@ -3,6 +3,7 @@
 /// Provides REST endpoints for controlling mocks, server configuration,
 /// and integration with developer tools (VS Code extension, CI/CD, etc.)
 mod ai_gen;
+mod chaos_admin;
 mod conformance;
 mod health;
 mod import_export;
@@ -10,12 +11,19 @@ mod migration;
 mod mocks;
 mod protocols;
 mod proxy;
+mod rule_explanations;
+mod traffic_to_openapi;
 
+// `ai_gen.rs` was split into four topic files under #656; the route
+// wiring below pulls handlers from each via these glob re-exports.
 pub use ai_gen::*;
+pub use chaos_admin::*;
 pub(crate) use conformance::{clear_conformance_violations, get_conformance_violations};
 pub use health::*;
 pub use import_export::*;
 pub use proxy::{BodyTransformRequest, ProxyRuleRequest, ProxyRuleResponse};
+pub use rule_explanations::*;
+pub use traffic_to_openapi::*;
 
 use axum::{
     body::Body,

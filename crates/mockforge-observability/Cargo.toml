@@ -46,12 +46,22 @@ tracing-opentelemetry = { version = "0.22", optional = true }
 # MockForge tracing integration (optional)
 mockforge-tracing = { version = "0.3.70", path = "../mockforge-tracing", optional = true }
 
+# Server-side Sentry error tracking (feature: `sentry`). Same 0.36 line as
+# mockforge-registry-server so the workspace only pulls one sentry tree.
+# default-features=false keeps native-tls out of the dep graph; rustls
+# matches the rest of the HTTP clients in the workspace.
+sentry = { version = "0.36", default-features = false, features = ["backtrace", "contexts", "panic", "reqwest", "rustls"], optional = true }
+sentry-tracing = { version = "0.36", optional = true }
+
 [features]
 default = ["sysinfo", "log-shipper"]
 sysinfo = ["dep:sysinfo"]
 opentelemetry = ["dep:tracing-opentelemetry", "mockforge-tracing"]
 mockforge-tracing = ["dep:mockforge-tracing"]
 log-shipper = ["dep:reqwest"]
+# Sentry error capture. Pulls in the sentry tracing layer automatically so
+# `tracing::error!` events flow to Sentry when SENTRY_DSN is set.
+sentry = ["dep:sentry", "dep:sentry-tracing"]
 
 [dev-dependencies]
 tokio-test = "0.4"

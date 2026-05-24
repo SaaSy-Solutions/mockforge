@@ -372,4 +372,92 @@ impl Incident {
         .await?;
         Ok(())
     }
+
+    /// Resolved incidents that have NOT yet had a resolve-side
+    /// notification fanout. Symmetric to `list_pending_dispatch` but
+    /// gated on:
+    ///
+    ///   1. status = 'resolved'  — the incident has been closed
+    ///   2. `notification_dispatched` exists — we previously sent a
+    ///      "trigger" alert, so there's a paired alert to close
+    ///   3. `notification_resolution_dispatched` does NOT exist —
+    ///      we haven't already sent the resolve
+    ///
+    /// Condition (2) prevents a resolve fanout for incidents that were
+    /// auto-resolved before they ever fired (created and resolved within
+    /// the dispatcher's poll window, or filtered to zero channels) —
+    /// users don't expect "your alert is resolved" emails for alerts
+    /// they never received.
+    pub async fn list_pending_resolution_dispatch(
+        pool: &PgPool,
+        limit: i64,
+    ) -> sqlx::Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>(
+            r#"
+            SELECT i.*
+              FROM incidents i
+             WHERE i.status = 'resolved'
+               AND EXISTS (
+                   SELECT 1 FROM incident_events e
+                    WHERE e.incident_id = i.id
+                      AND e.event_type = 'notification_dispatched'
+               )
+               AND NOT EXISTS (
+                   SELECT 1 FROM incident_events e
+                    WHERE e.incident_id = i.id
+                      AND e.event_type = 'notification_resolution_dispatched'
+               )
+             ORDER BY i.resolved_at ASC NULLS LAST
+             LIMIT $1
+            "#,
+        )
+        .bind(limit)
+        .fetch_all(pool)
+        .await
+    }
+
+    /// Worker-callback: record one resolution-dispatch attempt per
+    /// (incident, channel). Symmetric to `record_notification_attempt`
+    /// but uses a distinct event_type so trigger-side and resolve-side
+    /// attempts don't collide in `incident_events`.
+    pub async fn record_resolution_attempt(
+        pool: &PgPool,
+        incident_id: Uuid,
+        channel_id: Uuid,
+        result: &serde_json::Value,
+    ) -> sqlx::Result<()> {
+        let mut payload = result.clone();
+        if let Some(obj) = payload.as_object_mut() {
+            obj.insert("channel_id".into(), serde_json::json!(channel_id));
+        }
+        sqlx::query(
+            "INSERT INTO incident_events (incident_id, event_type, payload) \
+             VALUES ($1, 'notification_resolution_sent', $2)",
+        )
+        .bind(incident_id)
+        .bind(payload)
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Worker-callback: the resolve-side fanout has completed for this
+    /// incident. Inserting this row removes the incident from
+    /// `list_pending_resolution_dispatch`. Idempotent for the same
+    /// reason `mark_dispatched` is.
+    pub async fn mark_resolution_dispatched(
+        pool: &PgPool,
+        incident_id: Uuid,
+        summary: &serde_json::Value,
+    ) -> sqlx::Result<()> {
+        sqlx::query(
+            "INSERT INTO incident_events (incident_id, event_type, payload) \
+             VALUES ($1, 'notification_resolution_dispatched', $2)",
+        )
+        .bind(incident_id)
+        .bind(summary)
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
 }

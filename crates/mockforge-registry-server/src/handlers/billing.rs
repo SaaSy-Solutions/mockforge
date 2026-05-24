@@ -4,8 +4,8 @@ use axum::{extract::State, http::HeaderMap, Json};
 use serde::{Deserialize, Serialize};
 use stripe::{
     BillingPortalSession, CheckoutSession, CheckoutSessionMode, Client, CreateBillingPortalSession,
-    CreateCheckoutSession, CreateCheckoutSessionLineItems, EventObject, EventType, Invoice,
-    ListInvoices,
+    CreateCheckoutSession, CreateCheckoutSessionLineItems, CreateCheckoutSessionSubscriptionData,
+    EventObject, EventType, Invoice, ListInvoices,
 };
 use uuid::Uuid;
 
@@ -18,6 +18,31 @@ use crate::{
     },
     AppState,
 };
+
+/// Public billing-config response: thin shape that the unauthenticated
+/// pricing page can use to render trial copy without inheriting the rest
+/// of the auth-gated billing surface.
+#[derive(Serialize)]
+pub struct BillingConfigResponse {
+    /// Free-trial length in days for new Pro/Team subscriptions. `0` means
+    /// trials are disabled and checkout charges immediately — UI should
+    /// hide trial-related copy in that case.
+    pub trial_period_days: u32,
+}
+
+/// Public billing config (no auth required).
+///
+/// Returns just enough metadata for the marketing / pricing UI to render
+/// dynamic trial copy. Plan prices stay hard-coded on the client side
+/// because they're already tied to operator-set STRIPE_PRICE_ID_* env vars
+/// — exposing them here would duplicate the source of truth.
+pub async fn get_billing_config(
+    State(state): State<AppState>,
+) -> ApiResult<Json<BillingConfigResponse>> {
+    Ok(Json(BillingConfigResponse {
+        trial_period_days: state.config.stripe_trial_period_days,
+    }))
+}
 
 /// Get current subscription status
 pub async fn get_subscription(
@@ -204,6 +229,18 @@ pub async fn create_checkout(
         quantity: Some(1),
         ..Default::default()
     }]);
+
+    // Apply a free trial when one is configured. Default is 14 days (set in
+    // Config::from_env); STRIPE_TRIAL_PERIOD_DAYS=0 disables it entirely.
+    // The marketing pricing page ("Start Pro/Team Trial") promises this;
+    // without it the CTA copy is a bait-and-switch — checkout would charge
+    // immediately. Standard B2B dev-tool convention at this price point.
+    if state.config.stripe_trial_period_days > 0 {
+        checkout_params.subscription_data = Some(CreateCheckoutSessionSubscriptionData {
+            trial_period_days: Some(state.config.stripe_trial_period_days),
+            ..Default::default()
+        });
+    }
 
     // Create the checkout session
     let session = CheckoutSession::create(&client, checkout_params)

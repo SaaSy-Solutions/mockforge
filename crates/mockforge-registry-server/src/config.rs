@@ -66,6 +66,11 @@ pub struct Config {
     /// Stripe webhook secret for verifying webhook signatures
     pub stripe_webhook_secret: Option<String>,
 
+    /// Trial length for Pro/Team checkout sessions. Defaults to 14 days
+    /// (standard B2B dev-tool convention) and applies to both plans
+    /// uniformly. Set to 0 via env to disable the trial entirely.
+    pub stripe_trial_period_days: u32,
+
     /// GitHub OAuth client ID
     pub oauth_github_client_id: Option<String>,
 
@@ -173,6 +178,10 @@ impl Config {
             stripe_price_id_pro: std::env::var("STRIPE_PRICE_ID_PRO").ok(),
             stripe_price_id_team: std::env::var("STRIPE_PRICE_ID_TEAM").ok(),
             stripe_webhook_secret: std::env::var("STRIPE_WEBHOOK_SECRET").ok(),
+            stripe_trial_period_days: std::env::var("STRIPE_TRIAL_PERIOD_DAYS")
+                .ok()
+                .and_then(|v| v.parse::<u32>().ok())
+                .unwrap_or(14),
             oauth_github_client_id: std::env::var("OAUTH_GITHUB_CLIENT_ID").ok(),
             oauth_github_client_secret: std::env::var("OAUTH_GITHUB_CLIENT_SECRET").ok(),
             oauth_google_client_id: std::env::var("OAUTH_GOOGLE_CLIENT_ID").ok(),

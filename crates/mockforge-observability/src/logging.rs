@@ -144,7 +144,13 @@ pub fn init_logging(config: LoggingConfig) -> Result<(), Box<dyn std::error::Err
                 .boxed()
         };
 
-        registry.with(console_layer).with(file_layer).init();
+        // The sentry-tracing layer forwards `tracing::error!` events to Sentry
+        // when the `sentry` feature is on. It's a no-op at runtime when
+        // SENTRY_DSN was unset at init_sentry() time.
+        let composed = registry.with(console_layer).with(file_layer);
+        #[cfg(feature = "sentry")]
+        let composed = composed.with(sentry_tracing::layer());
+        composed.init();
 
         tracing::info!(
             "Logging initialized: level={}, format={}, file={}",
@@ -153,7 +159,10 @@ pub fn init_logging(config: LoggingConfig) -> Result<(), Box<dyn std::error::Err
             file_path.display()
         );
     } else {
-        registry.with(console_layer).init();
+        let composed = registry.with(console_layer);
+        #[cfg(feature = "sentry")]
+        let composed = composed.with(sentry_tracing::layer());
+        composed.init();
 
         tracing::info!(
             "Logging initialized: level={}, format={}",

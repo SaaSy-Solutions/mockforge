@@ -1,0 +1,208 @@
+# Grafana unified alerting rules for MockForge.
+#
+# Format: provisioning apiVersion 1 (https://grafana.com/docs/grafana/latest/alerting/set-up/provision-alerting-resources/file-provisioning/)
+#
+# Mount at /etc/grafana/provisioning/alerting/mockforge-alerts.yaml and
+# Grafana will reload on its provisioning interval. UIDs are stable; do
+# not rename them — annotation history and silence rules key on UID.
+#
+# Every PromQL expression references a metric that is actually recorded
+# in the workspace. See grafana/dashboards/ for the matching panels and
+# crates/mockforge-observability/src/prometheus/metrics.rs for the
+# metric definitions.
+#
+# Contact point: rules emit to the receiver configured in your routing
+# policy. Until the on-call provider integration lands (PagerDuty /
+# Opsgenie), the default `grafana-default-email` receiver fires — set
+# it to a real address via Grafana → Alerting → Contact points, or
+# define a `grafana/alerts/contactpoints.yaml` and provision it
+# alongside this file.
+
+apiVersion: 1
+
+groups:
+  # ----- Top-level service health -----
+  - orgId: 1
+    name: mockforge-service-health
+    folder: MockForge
+    interval: 1m
+    rules:
+      - uid: mockforge-error-rate-warning
+        title: MockForge — error rate elevated (>0.5%)
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+          team: mockforge
+        annotations:
+          summary: '5xx error rate above 0.5% for 5m'
+          description: |
+            sum(rate(mockforge_errors_total[5m])) / sum(rate(mockforge_requests_total[5m])) = {{ $values.C.Value | printf "%.2f%%" }}.
+            Check the Service Overview dashboard (uid mockforge-service-overview) and Sentry for new exception groups.
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: ${DS_PROMETHEUS}
+            model:
+              expr: sum(rate(mockforge_errors_total[5m])) / clamp_min(sum(rate(mockforge_requests_total[5m])), 1)
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              conditions:
+                - evaluator: { type: gt, params: [0.005] }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { type: last }
+              expression: A
+              refId: C
+
+      - uid: mockforge-error-rate-critical
+        title: MockForge — error rate spike (>1%)
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: critical
+          team: mockforge
+        annotations:
+          summary: '5xx error rate above 1% for 5m — page on-call'
+          description: |
+            sum(rate(mockforge_errors_total[5m])) / sum(rate(mockforge_requests_total[5m])) = {{ $values.C.Value | printf "%.2f%%" }}.
+            This crosses the budget for paid-customer SLO. Investigate immediately.
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: ${DS_PROMETHEUS}
+            model:
+              expr: sum(rate(mockforge_errors_total[5m])) / clamp_min(sum(rate(mockforge_requests_total[5m])), 1)
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              conditions:
+                - evaluator: { type: gt, params: [0.01] }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { type: last }
+              expression: A
+              refId: C
+
+      - uid: mockforge-latency-p99-high
+        title: MockForge — p99 latency >1s
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+          team: mockforge
+        annotations:
+          summary: 'p99 request latency above 1s for 5m'
+          description: |
+            histogram_quantile(0.99, …) = {{ $values.C.Value | printf "%.3fs" }}.
+            Likely culprit: slow database query, downstream API timeout, or chaos mode left on. Check the Service Overview latency panel and recent commits.
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: ${DS_PROMETHEUS}
+            model:
+              expr: histogram_quantile(0.99, sum by (le) (rate(mockforge_request_duration_seconds_bucket[5m])))
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              conditions:
+                - evaluator: { type: gt, params: [1.0] }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { type: last }
+              expression: A
+              refId: C
+
+      - uid: mockforge-traffic-silence
+        title: MockForge — no requests in 10m (silence canary)
+        condition: C
+        for: 10m
+        noDataState: Alerting
+        execErrState: Error
+        labels:
+          severity: critical
+          team: mockforge
+        annotations:
+          summary: 'Registry has received zero requests in 10 minutes'
+          description: |
+            Either MockForge is down, the load balancer is broken, or Prometheus stopped scraping. This is a total-outage canary — verify the public health endpoint and Fly machine state.
+            sum(rate(mockforge_requests_total[10m])) = {{ $values.A.Value }}.
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: ${DS_PROMETHEUS}
+            model:
+              expr: sum(rate(mockforge_requests_total[10m]))
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              conditions:
+                - evaluator: { type: lt, params: [0.001] }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { type: last }
+              expression: A
+              refId: C
+
+  # ----- Marketplace canary -----
+  # Any sustained error rate here is the canary for the v0.3.142-class
+  # bugs that #621 / #624 closed (org-scoping, search auth, rate limit).
+  # Sensitive on purpose — we want to know within minutes if a similar
+  # regression ships.
+  - orgId: 1
+    name: mockforge-marketplace
+    folder: MockForge
+    interval: 1m
+    rules:
+      - uid: mockforge-marketplace-errors
+        title: MockForge — marketplace errors detected
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Error
+        labels:
+          severity: warning
+          team: mockforge
+          area: marketplace
+        annotations:
+          summary: 'Marketplace operations are returning errors'
+          description: |
+            sum(rate(mockforge_marketplace_errors_total[5m])) by (error_code) shows {{ $values.A.Value }} err/s. PR #624 closed the last cascade of marketplace bugs on 2026-05-23; sustained nonzero here may indicate a regression. Check the Marketplace dashboard (uid mockforge-marketplace) for the offending error_code.
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: ${DS_PROMETHEUS}
+            model:
+              expr: sum(rate(mockforge_marketplace_errors_total[5m]))
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+                  operator: { type: and }
+                  query: { params: [A] }
+                  reducer: { type: last }
+              expression: A
+              refId: C

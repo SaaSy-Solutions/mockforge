@@ -2313,6 +2313,14 @@ fn cli_command_name(cmd: &Commands) -> &'static str {
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cli = Cli::parse();
 
+    // Initialize Sentry first so panics and errors during the rest of startup
+    // are captured. No-op at runtime when SENTRY_DSN is unset, so it's safe
+    // to call on every CLI invocation (local, CI, hosted-mock). The guard's
+    // Drop flushes queued events — bind to a main-scoped local so it lives
+    // for the whole program.
+    #[cfg(feature = "sentry")]
+    let _sentry_guard = mockforge_observability::init_sentry();
+
     // Initialize logging with the provided log level
     // Note: Full logging configuration (JSON format, file output) will be applied
     // after loading the config file in the serve command

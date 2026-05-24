@@ -6,8 +6,16 @@
 //!
 //! The data types (`AppType`, `ConsumingApp`, `SDKMethod`, `ConsumerMapping`,
 //! `ConsumerImpact`) live in `mockforge-foundation::contract_drift_types` so
-//! consumers do not need to depend on deprecated core modules. The registry and
-//! analyzer logic stays here because it does not have cross-crate consumers yet.
+//! consumers do not need to depend on deprecated core modules.
+//!
+//! Promotion to foundation (issue #605) was audited 2026-05-23 and deferred.
+//! `mockforge-http` is a cross-crate consumer of `ConsumerImpactAnalyzer` /
+//! `ConsumerMappingRegistry`, but it already depends on `mockforge-core` for
+//! many unrelated reasons, so moving the logic to foundation would not shrink
+//! its dep graph — it would only grow foundation's surface area by ~470 LOC.
+//! Promote when a consumer that does *not* already depend on `mockforge-core`
+//! needs this logic, or when the registry/analyzer become part of a stable
+//! public API surface.
 
 pub use mockforge_foundation::contract_drift_types::{
     AppType, ConsumerImpact, ConsumerMapping, ConsumingApp, SDKMethod,

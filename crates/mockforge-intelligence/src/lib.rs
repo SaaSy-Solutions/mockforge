@@ -45,6 +45,12 @@
 //!   slack_formatter, jira_formatter}` paths keep resolving.
 
 pub mod ai_contract_diff;
+/// HTTP-side AI response handler combining `IntelligentMockGenerator`
+/// + `DataDriftEngine` (#656 — post-#555 follow-up). Moved from
+/// `mockforge_http::ai_handler`; original `mockforge_core::{Result,
+/// Error}` imports now resolve directly to `mockforge_foundation`, so
+/// the move is cycle-safe.
+pub mod ai_handler;
 pub mod ai_response;
 pub mod ai_studio;
 pub mod behavioral_cloning;
@@ -81,6 +87,13 @@ pub mod handlers;
 pub mod incidents;
 pub mod intelligent_behavior;
 pub mod pr_generation;
+/// RAG-based `AiGenerator` implementation (#555 phase 10 — moved from
+/// `mockforge_http::rag_ai_generator`). Both foreign deps
+/// (`AiResponseConfig`, `AiGenerator` trait) were promoted out of
+/// `mockforge-core` to `mockforge-foundation` and `mockforge-openapi`
+/// respectively, so this move stays cycle-safe with the Issue #562
+/// cycle-break.
+pub mod rag_ai_generator;
 pub mod reality;
 /// Scenario Studio — visual editor for co-editing business flows
 /// (#555 phase 7 — moved out of `mockforge-core`; only foreign ref was
