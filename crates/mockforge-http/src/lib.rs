@@ -2,10 +2,11 @@
 // out of this crate; both now exist as independent workspace members.
 // AI-touching handlers (ai_studio, forecasting, fidelity, deceptive_canary,
 // consistency, scenario_studio, xray, pr_generation, semantic_drift,
-// threat_modeling, rag_ai_generator) and proxy logic (proxy_server,
-// reality_proxy) all live in their target crates; the files remaining
-// here under those names are thin `pub use ...::*` re-export shims kept
-// for one minor version so external callers don't break.
+// threat_modeling, rag_ai_generator, ai_handler) and proxy logic
+// (proxy_server, reality_proxy) all live in their target crates; the
+// files remaining here under those names are thin `pub use ...::*`
+// re-export shims kept for one minor version so external callers don't
+// break. (Issue #656 picked up `ai_handler` after #555's main run.)
 //
 // Deprecation allowances are scoped to individual handler files
 // (handlers/*.rs, middleware/drift_tracking.rs, management/ai_gen.rs)

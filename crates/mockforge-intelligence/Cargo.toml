@@ -78,6 +78,11 @@ advanced = []
 # the downstream API surface is unchanged.
 data = []
 persona-graph = []
+# Mirrors mockforge-http's `data-faker` feature so the moved-in
+# `handlers::spec_generation` (#656) keeps its dual data-faker /
+# stub-503 contract. mockforge-http's `data-faker` now propagates to
+# this crate so a single toggle still controls both ends.
+data-faker = []
 
 [dependencies.sqlx]
 version = "0.8"
