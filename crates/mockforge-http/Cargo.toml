@@ -95,8 +95,12 @@ world-state = ["mockforge-world-state"]
 route-chaos = ["mockforge-route-chaos"]
 # Scenario/state machine engine
 scenario-engine = ["mockforge-scenarios"]
-# Enable richer faker-backed tokens in templating via mockforge-data
-data-faker = []
+# Enable richer faker-backed tokens in templating via mockforge-data.
+# Under #656 the `management::ai_gen::generate_ai_spec` handler moved
+# to `mockforge-intelligence::handlers::spec_generation`, so this flag
+# now propagates to intelligence to keep the dual data-faker / stub-503
+# contract on a single toggle.
+data-faker = ["mockforge-intelligence/data-faker"]
 # Database-backed analytics/forecasting handlers.
 # Under Issue #555 the `Database` wrapper itself moved to
 # `mockforge-intelligence::database`; this re-export shim crate keeps

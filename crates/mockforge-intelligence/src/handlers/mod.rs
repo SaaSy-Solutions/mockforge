@@ -30,6 +30,12 @@ pub mod pr_generation;
 #[cfg(feature = "advanced")]
 pub mod scenario_studio;
 pub mod semantic_drift;
+/// AI-powered API spec generation handler. Moved from
+/// `mockforge_http::management::ai_gen` under #656 (post-#555
+/// follow-up). The original `State<ManagementState>` extractor was
+/// dropped — it was never read. Dual data-faker / stub-503 contract
+/// preserved via this crate's mirror `data-faker` feature flag.
+pub mod spec_generation;
 pub mod threat_modeling;
 #[cfg(feature = "advanced")]
 pub mod xray;
