@@ -1,5 +1,11 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.149] - 2026-05-25
+
+### Added
+
+- **[Contracts][DevX]** `mockforge bench --conformance --conformance-self-test` (#79 round 13 (4)) — positive + per-category negative driver. Sends one valid request and per-category negatives (empty body / wrong-type body / missing required query / missing required header) per spec operation; reports how many the server correctly rejected with 4xx. Writes `conformance-self-test.json` and emits a warning when any negative slipped through.
+
 ## [0.3.148] - 2026-05-25
 
 ### Fixed
