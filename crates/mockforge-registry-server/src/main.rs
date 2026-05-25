@@ -14,7 +14,6 @@ use std::time::Duration;
 use tokio::signal;
 use tower_http::cors::{AllowOrigin, Any, CorsLayer};
 use tower_http::trace::TraceLayer;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use mockforge_registry_server::circuit_breaker::{self, CircuitBreaker, CircuitBreakerRegistry};
 use mockforge_registry_server::config::Config;
@@ -35,14 +34,24 @@ use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    // Initialize tracing
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "mockforge_registry_server=info,tower_http=debug".into()),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
+    // Initialize Sentry first so panics and errors during the rest of startup
+    // are captured. No-op at runtime when SENTRY_DSN is unset. The returned
+    // guard's Drop flushes queued events on shutdown — bind it to a
+    // main-scoped local so it lives for the whole program. Uses the shared
+    // helper in mockforge-observability (PR #643) so registry-server and
+    // mockforge-cli agree on env var names + defaults.
+    #[cfg(feature = "sentry")]
+    let _sentry_guard = mockforge_observability::init_sentry();
+
+    // Initialize tracing via the shared init_logging — which automatically
+    // includes the sentry-tracing layer when the `sentry` feature is on, so
+    // `tracing::error!` flows to Sentry without an extra wire-up here.
+    if let Err(e) =
+        mockforge_observability::init_logging(mockforge_observability::LoggingConfig::default())
+    {
+        eprintln!("Failed to initialize logging: {}", e);
+        std::process::exit(1);
+    }
 
     // Load configuration
     let config = Config::load()?;

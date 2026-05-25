@@ -30,7 +30,15 @@ saas = [
   "saml",
   "cache-redis",
   "platform-signing-aws-kms",
+  "sentry",
 ]
+
+# Server-side error tracking via Sentry. Delegates to the shared helper in
+# `mockforge-observability` (PR #643) so registry-server, mockforge-cli, and
+# any future binary share one source of truth on env var names + defaults.
+# No-op at runtime when SENTRY_DSN is unset, so this stays on in the saas
+# rollup without forcing OSS users to stand up a Sentry account.
+sentry = ["mockforge-observability/sentry"]
 
 # HSM-backed platform signing-root rotation via AWS KMS (Issue #550).
 # Off in OSS builds — the registry can still load + verify rotation
@@ -155,7 +163,7 @@ mockforge-core = { version = "0.3.70", path = "../mockforge-core" }
 mockforge-federation = { version = "0.3.70", path = "../mockforge-federation" }
 mockforge-scenarios = { version = "0.3.70", path = "../mockforge-scenarios" }
 mockforge-plugin-registry = { version = "0.3.70", path = "../mockforge-plugin-registry" }
-mockforge-observability = { version = "0.3.70", path = "../mockforge-observability" }
+mockforge-observability = { version = "0.3.70", path = "../mockforge-observability", default-features = false, features = ["sysinfo", "log-shipper"] }
 # SSRF guard reused at the trigger_run handler — primary enforcement
 # before runs hit the Redis queue. The runner-side guard in
 # mockforge_bench::cloud_api is defense-in-depth.
