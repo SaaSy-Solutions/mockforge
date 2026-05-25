@@ -74,7 +74,20 @@ impl App {
             Box::new(screens::contract_diff::ContractDiffScreen::new()),
             Box::new(screens::federation::FederationScreen::new()),
             Box::new(screens::behavioral_cloning::BehavioralCloningScreen::new()),
+            Box::new(screens::conformance::ConformanceScreen::new()),
         ];
+
+        // Invariant: every entry in `ScreenId::ALL` must have a matching
+        // boxed Screen at the same index. The header renders tabs from
+        // `self.screens` and routing looks up `self.screens[i]` keyed off
+        // `ScreenId::ALL[i]` — if these go out of sync, a tab silently
+        // disappears (regression first hit in v0.3.145: Conformance was
+        // added to `ScreenId::ALL` but the Box was missed here).
+        debug_assert_eq!(
+            screens.len(),
+            ScreenId::ALL.len(),
+            "screens vec must match ScreenId::ALL length"
+        );
 
         let active_tab = if initial_tab < screens.len() {
             initial_tab
@@ -432,5 +445,26 @@ impl App {
         }
         let tabs = Line::from(tab_spans);
         frame.render_widget(Paragraph::new(tabs).style(Theme::base()), chunks[1]);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::TuiConfig;
+
+    /// Regression test for v0.3.145 → v0.3.146 hotfix: every entry in
+    /// `ScreenId::ALL` must have a corresponding `Box<dyn Screen>` in
+    /// `App::new`. When they go out of sync, the missing tab silently
+    /// disappears from the header (`render_header` iterates `self.screens`
+    /// while routing iterates `ScreenId::ALL`).
+    #[test]
+    fn app_screens_match_screen_id_all() {
+        let app = App::new(TuiConfig::default(), None);
+        assert_eq!(
+            app.screens.len(),
+            ScreenId::ALL.len(),
+            "App::new must instantiate a Screen for every ScreenId::ALL entry"
+        );
     }
 }

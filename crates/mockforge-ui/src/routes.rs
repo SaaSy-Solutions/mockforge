@@ -169,6 +169,14 @@ pub fn create_admin_router(
         .route("/__mockforge/fixtures/bulk", delete(delete_fixtures_bulk))
         .route("/__mockforge/audit/logs", get(get_audit_logs))
         .route("/__mockforge/audit/stats", get(get_audit_stats))
+        // Issue #79 round 12 hotfix — server-side conformance violations
+        // for the TUI Conformance tab. Mounted here on the admin server
+        // (where the TUI client connects) in addition to the mockforge-http
+        // management router.
+        .route(
+            "/__mockforge/api/conformance/violations",
+            get(get_conformance_violations).delete(clear_conformance_violations),
+        )
         .route("/__mockforge/fixtures/{id}/download", get(download_fixture))
         .route("/__mockforge/fixtures/{id}/rename", post(rename_fixture))
         .route("/__mockforge/fixtures/{id}/move", post(move_fixture))
