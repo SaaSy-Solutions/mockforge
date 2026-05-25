@@ -65,6 +65,12 @@ impl App {
             Box::new(screens::smoke_tests::SmokeTestsScreen::new()),
             Box::new(screens::time_travel::TimeTravelScreen::new()),
             Box::new(screens::chains::ChainsScreen::new()),
+            // Conformance is intentionally placed before Verification —
+            // Verification's `Tab` is consumed to cycle internal fields,
+            // so plain Tab nav gets stuck on it. Order must match
+            // `ScreenId::ALL`; the `app_screens_match_screen_id_all`
+            // test asserts the lengths align.
+            Box::new(screens::conformance::ConformanceScreen::new()),
             Box::new(screens::verification::VerificationScreen::new()),
             Box::new(screens::analytics::AnalyticsScreen::new()),
             Box::new(screens::recorder::RecorderScreen::new()),
@@ -74,7 +80,6 @@ impl App {
             Box::new(screens::contract_diff::ContractDiffScreen::new()),
             Box::new(screens::federation::FederationScreen::new()),
             Box::new(screens::behavioral_cloning::BehavioralCloningScreen::new()),
-            Box::new(screens::conformance::ConformanceScreen::new()),
         ];
 
         // Invariant: every entry in `ScreenId::ALL` must have a matching

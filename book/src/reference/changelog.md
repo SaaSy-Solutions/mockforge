@@ -1,5 +1,11 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.147] - 2026-05-25
+
+### Changed
+
+- **[DevX]** TUI `Conformance` tab moved before `Verification` (#79 round 12 follow-up) — Verification's `Tab` cycles internal fields so it acts as a dead-end for plain Tab nav. Putting Conformance earlier in the strip keeps it reachable.
+
 ## [0.3.146] - 2026-05-25
 
 ### Fixed
