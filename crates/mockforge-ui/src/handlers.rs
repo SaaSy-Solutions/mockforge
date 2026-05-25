@@ -1330,7 +1330,7 @@ pub async fn get_server_info(State(state): State<AdminState>) -> Json<serde_json
 /// v0.3.145 surfaced the endpoint only on the HTTP-mock port and the
 /// TUI got the SPA HTML fallback when it tried to poll.
 pub async fn get_conformance_violations(
-    axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>,
+    Query(q): Query<HashMap<String, String>>,
 ) -> impl IntoResponse {
     let snap = mockforge_foundation::conformance_violations::snapshot();
     let total = snap.len();

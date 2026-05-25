@@ -84,6 +84,19 @@ jobs:
     - name: Build workspace
       run: cargo build --workspace --exclude mockforge-desktop --verbose
 
+    # mockforge-cli's default features do NOT include `ws`/`grpc`/`mqtt` etc.
+    # The integration tests in `tests/tests/e2e/protocols/*` spawn the
+    # workspace's `mockforge` binary as a subprocess and try to connect to
+    # the per-protocol port. Without the protocol features compiled in,
+    # nothing is listening and the tests fail with `Connection refused`.
+    # release.yml has had this build step since PR #208; ci.yml was never
+    # updated to match. Placing it AFTER `cargo build --workspace` so the
+    # second build re-links mockforge with the all-protocols feature set
+    # (cargo's fingerprint is feature-aware, so it does the right thing).
+    # No untrusted input in this step.
+    - name: Build mockforge binary with all protocols (for e2e tests)
+      run: cargo build --bin mockforge --features all-protocols
+
     - name: Run tests
       run: cargo test --workspace --exclude mockforge-desktop --verbose
 
