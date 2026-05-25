@@ -346,6 +346,14 @@ pub(crate) async fn build_server_config_from_cli(serve_args: &ServeArgs) -> Serv
     }
 
     // OpenTelemetry tracing configuration
+    //
+    // Resolution order:
+    //   1. Explicit `--tracing` CLI flag (highest priority — user intent).
+    //   2. Standard OTel env vars (`OTEL_EXPORTER_OTLP_ENDPOINT`,
+    //      `OTEL_EXPORTER_JAEGER_ENDPOINT`, …). This is the "zero-config OTel"
+    //      path documented in #687: a user who follows standard OpenTelemetry
+    //      onboarding gets spans without editing config or passing CLI flags.
+    //   3. Whatever the config file said (default: disabled).
     if serve_args.tracing {
         config.observability.opentelemetry = Some(mockforge_core::config::OpenTelemetryConfig {
             enabled: true,
@@ -356,6 +364,16 @@ pub(crate) async fn build_server_config_from_cli(serve_args: &ServeArgs) -> Serv
             protocol: "grpc".to_string(),
             sampling_rate: serve_args.tracing_sampling_rate,
         });
+    } else if config.observability.opentelemetry.as_ref().is_none_or(|c| !c.enabled) {
+        // Only auto-detect when nothing else has already enabled OTel — we
+        // don't want to clobber a config-file-driven setup.
+        if let Some(env_cfg) = mockforge_core::config::OpenTelemetryConfig::from_env() {
+            tracing::info!(
+                "OpenTelemetry auto-enabled from environment (endpoint {:?})",
+                env_cfg.otlp_endpoint.as_deref().unwrap_or(env_cfg.jaeger_endpoint.as_str())
+            );
+            config.observability.opentelemetry = Some(env_cfg);
+        }
     }
 
     // API Flight Recorder configuration
