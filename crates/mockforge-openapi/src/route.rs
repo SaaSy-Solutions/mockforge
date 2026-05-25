@@ -464,6 +464,42 @@ impl OpenApiRoute {
         use crate::response_trace;
         use mockforge_foundation::response_generation_trace::ResponseGenerationTrace;
 
+        // Issue #79 round 13 — detect response-shape mismatches and
+        // record to the conformance buffer with category
+        // `response-shape`. Two failure modes worth surfacing:
+        //  (a) the caller explicitly requested a status via
+        //      `X-Mockforge-Response-Status` / status_override and the
+        //      spec doesn't define a response for it. The mock falls
+        //      back to a default, so the client gets a body that
+        //      doesn't match what the spec promised.
+        //  (b) The chosen status (after fallback) still has no
+        //      defined response and the synthesiser returns `{}`.
+        // Records once per request; useful when cross-checking the
+        // server's view of a spec against a proxy's interpretation.
+        if let Some(requested) = status_override {
+            if !self.has_response_for_status(requested) {
+                let available: Vec<String> =
+                    self.operation.responses.responses.keys().map(|k| format!("{:?}", k)).collect();
+                mockforge_foundation::conformance_violations::record(
+                    mockforge_foundation::conformance_violations::ServerConformanceViolation {
+                        timestamp: chrono::Utc::now(),
+                        method: self.method.clone(),
+                        path: self.path.clone(),
+                        client_ip: "unknown".to_string(),
+                        status: requested,
+                        reason: format!(
+                            "spec defines no response for status {} on {} {}; available: {}",
+                            requested,
+                            self.method,
+                            self.path,
+                            available.join(", ")
+                        ),
+                        category: "response-shape".to_string(),
+                    },
+                );
+            }
+        }
+
         // Use status override if the spec has a response for that code, otherwise default
         let status_code = status_override
             .filter(|code| self.has_response_for_status(*code))

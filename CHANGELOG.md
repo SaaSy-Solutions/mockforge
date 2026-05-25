@@ -1,3 +1,14 @@
+## [0.3.148] - 2026-05-25
+
+### Fixed
+
+- **[Contracts][DevX]** Conformance buffer now actually fires on the default-flow handlers (#79 round 13) — v0.3.145–0.3.147 wired the buffer infrastructure but the recording call only ran from `build_router_with_context`. The MockAI handler (`build_router_with_mockai`) and AI generator handler (`build_router_with_ai`) — both of which serve every request when their respective backends are enabled — bypassed validation entirely, so violations never populated for the default-flow routes Srikanth was hitting. Extracted the validate-then-record block into `OpenApiRouteRegistry::run_validation_with_recording` and called it at the entry of each handler closure. Confirmed with `curl -X POST .../users -d '{}'` against the demo spec now returning **HTTP 400** with the violation showing up in `GET /__mockforge/api/conformance/violations`.
+
+### Added
+
+- **[Contracts]** New `response-shape` violation category (#79 round 13) — when a request asks for a status code the spec doesn't define for that operation (e.g. spec only defines 2xx/4xx but `X-Mockforge-Response-Status: 200` is sent), record the mismatch under category `response-shape` instead of silently falling back to the default response. Addresses Srikanth's (c) question.
+- **[Contracts][DevX]** New `unknown-paths` feed + admin endpoint + TUI view (#79 round 13) — separate bounded ring buffer (`mockforge_foundation::unknown_paths`) tracks requests whose path didn't match any route in the loaded spec. Exposed at `GET /__mockforge/api/conformance/unknown-paths` (DELETE clears). TUI Conformance tab gains a `u` keystroke to toggle between violations view and unknown-paths view; the existing filter / pause / export / clear / top-endpoints controls work for both. Addresses Srikanth's (a) question — useful for cross-checking a proxy's path coverage against the server's loaded spec.
+
 ## [0.3.147] - 2026-05-25
 
 ### Changed

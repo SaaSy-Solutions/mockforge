@@ -1349,6 +1349,29 @@ pub async fn clear_conformance_violations() -> impl IntoResponse {
     Json(json!({"cleared": n}))
 }
 
+/// Issue #79 round 13 — feed of requests for paths the loaded OpenAPI
+/// spec doesn't know about. Surfaces server/client spec drift (Srikanth's
+/// (a) ask). Backed by `mockforge_foundation::unknown_paths`.
+pub async fn get_unknown_paths(
+    axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let snap = mockforge_foundation::unknown_paths::snapshot();
+    let total = snap.len();
+    let limit: Option<usize> = q.get("limit").and_then(|s| s.parse().ok());
+    let limited: Vec<_> = match limit {
+        Some(n) => snap.into_iter().take(n).collect(),
+        None => snap,
+    };
+    Json(json!({"requests": limited, "total": total}))
+}
+
+/// Clear the unknown-paths ring buffer.
+pub async fn clear_unknown_paths() -> impl IntoResponse {
+    let n = mockforge_foundation::unknown_paths::len();
+    mockforge_foundation::unknown_paths::clear();
+    Json(json!({"cleared": n}))
+}
+
 /// Get health check status
 pub async fn get_health() -> Json<HealthCheck> {
     Json(

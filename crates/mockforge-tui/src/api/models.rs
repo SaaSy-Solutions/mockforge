@@ -68,6 +68,26 @@ pub struct ConformanceViolationsResponse {
     pub total: usize,
 }
 
+/// One unmatched-path request (Issue #79 round 13).
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct UnknownPathRequest {
+    pub timestamp: DateTime<Utc>,
+    pub method: String,
+    pub path: String,
+    #[serde(default = "default_unknown")]
+    pub client_ip: String,
+    #[serde(default)]
+    pub query: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct UnknownPathsResponse {
+    #[serde(default)]
+    pub requests: Vec<UnknownPathRequest>,
+    #[serde(default)]
+    pub total: usize,
+}
+
 // ── Dashboard ────────────────────────────────────────────────────────
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

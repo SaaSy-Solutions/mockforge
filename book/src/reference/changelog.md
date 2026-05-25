@@ -1,5 +1,16 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.148] - 2026-05-25
+
+### Fixed
+
+- **[Contracts][DevX]** Conformance buffer now actually fires on the default-flow handlers (#79 round 13) — the MockAI and AI handlers bypassed validation entirely, so violations never populated for default-flow routes. Extracted `OpenApiRouteRegistry::run_validation_with_recording` and called it at the entry of each handler.
+
+### Added
+
+- **[Contracts]** New `response-shape` violation category — surfaces when a requested status code isn't defined in the spec for that operation.
+- **[Contracts][DevX]** New `unknown-paths` feed + admin endpoint + TUI view — separate ring buffer tracks requests whose path didn't match any spec route. `GET /__mockforge/api/conformance/unknown-paths`; TUI `u` toggles between violations and unknown-paths views.
+
 ## [0.3.147] - 2026-05-25
 
 ### Changed

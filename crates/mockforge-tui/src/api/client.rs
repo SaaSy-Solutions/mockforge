@@ -390,6 +390,52 @@ impl MockForgeClient {
             .context("deserialise conformance response")
     }
 
+    /// Issue #79 round 13 — fetch the unknown-paths feed (requests
+    /// whose path didn't match any route in the loaded spec).
+    pub async fn get_unknown_paths(&self) -> Result<UnknownPathsResponse> {
+        let resp = self
+            .get("/__mockforge/api/conformance/unknown-paths")
+            .send()
+            .await
+            .context("GET /__mockforge/api/conformance/unknown-paths")?;
+        let status = resp.status();
+        if !status.is_success() {
+            anyhow::bail!("HTTP {status} from unknown-paths");
+        }
+        let ct = resp
+            .headers()
+            .get(reqwest::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if ct.contains("text/html") {
+            anyhow::bail!("endpoint unknown-paths not available");
+        }
+        let body = resp.text().await.context("read unknown-paths response")?;
+        serde_json::from_str::<UnknownPathsResponse>(&body)
+            .context("deserialise unknown-paths response")
+    }
+
+    /// Clear the unknown-paths ring buffer.
+    pub async fn clear_unknown_paths(&self) -> Result<usize> {
+        let url = format!("{}/__mockforge/api/conformance/unknown-paths", self.base_url);
+        let mut req = self.client.delete(&url);
+        if let Some(ref token) = self.token {
+            req = req.bearer_auth(token);
+        }
+        let resp = req.send().await.context("DELETE /__mockforge/api/conformance/unknown-paths")?;
+        if !resp.status().is_success() {
+            anyhow::bail!("HTTP {} from DELETE unknown-paths", resp.status());
+        }
+        #[derive(serde::Deserialize)]
+        struct Cleared {
+            cleared: usize,
+        }
+        let body = resp.text().await.context("read clear-unknown-paths response")?;
+        serde_json::from_str::<Cleared>(&body)
+            .map(|c| c.cleared)
+            .context("deserialise clear-unknown-paths response")
+    }
+
     /// Clear the server-side conformance violation buffer.
     /// Returns the number of entries that were cleared.
     pub async fn clear_conformance_violations(&self) -> Result<usize> {

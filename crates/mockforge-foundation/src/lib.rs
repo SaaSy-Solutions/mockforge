@@ -34,6 +34,7 @@ pub mod scenario_types;
 pub mod schema_diff;
 pub mod state_machine;
 pub mod threat_modeling_types;
+pub mod unknown_paths;
 pub mod workspace_promotion;
 
 pub use encryption_error::{EncryptionError, EncryptionResult};

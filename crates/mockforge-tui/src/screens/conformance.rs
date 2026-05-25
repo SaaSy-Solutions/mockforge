@@ -28,7 +28,7 @@ use ratatui::{
 use tokio::sync::mpsc;
 
 use crate::api::client::MockForgeClient;
-use crate::api::models::ConformanceViolation;
+use crate::api::models::{ConformanceViolation, UnknownPathRequest};
 use crate::event::Event;
 use crate::screens::Screen;
 use crate::theme::Theme;
@@ -112,11 +112,24 @@ impl StatusFilter {
     }
 }
 
+/// Which feed the screen is showing — request-side spec violations
+/// (default) or the round-13 unknown-paths feed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ViewMode {
+    Violations,
+    UnknownPaths,
+}
+
 pub struct ConformanceScreen {
     loaded: bool,
     /// Full snapshot from the server, newest-first.
     violations: Vec<ConformanceViolation>,
     total: usize,
+    /// Round-13: unmatched-path requests captured by the HTTP fallback.
+    unknown_paths: Vec<UnknownPathRequest>,
+    unknown_total: usize,
+    /// Toggled by `u` between violations and unknown-paths views.
+    view_mode: ViewMode,
     table: TableState,
     error: Option<String>,
     last_fetch: Option<Instant>,
@@ -143,6 +156,9 @@ impl ConformanceScreen {
             loaded: false,
             violations: Vec::new(),
             total: 0,
+            unknown_paths: Vec::new(),
+            unknown_total: 0,
+            view_mode: ViewMode::Violations,
             table: TableState::new(),
             error: None,
             last_fetch: None,
@@ -154,6 +170,22 @@ impl ConformanceScreen {
             paused: false,
             flash: None,
             pending_clear: false,
+        }
+    }
+
+    fn filtered_unknown_indices(&self) -> Vec<usize> {
+        self.unknown_paths
+            .iter()
+            .enumerate()
+            .filter(|(_, r)| self.method_filter.matches(&r.method))
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    fn current_row_count(&self) -> usize {
+        match self.view_mode {
+            ViewMode::Violations => self.filtered_indices().len(),
+            ViewMode::UnknownPaths => self.filtered_unknown_indices().len(),
         }
     }
 
@@ -245,12 +277,26 @@ impl ConformanceScreen {
 
     /// Compute the top-N most-frequent `METHOD path` pairs in the
     /// current filtered view. Used by the right-side breakdown panel.
+    /// View-aware: aggregates violations or unknown-paths depending on
+    /// the active mode.
     fn top_endpoints(&self, n: usize) -> Vec<(String, usize)> {
         let mut counts: HashMap<String, usize> = HashMap::new();
-        for &idx in &self.filtered_indices() {
-            if let Some(v) = self.violations.get(idx) {
-                let key = format!("{} {}", v.method, v.path);
-                *counts.entry(key).or_insert(0) += 1;
+        match self.view_mode {
+            ViewMode::Violations => {
+                for &idx in &self.filtered_indices() {
+                    if let Some(v) = self.violations.get(idx) {
+                        let key = format!("{} {}", v.method, v.path);
+                        *counts.entry(key).or_insert(0) += 1;
+                    }
+                }
+            }
+            ViewMode::UnknownPaths => {
+                for &idx in &self.filtered_unknown_indices() {
+                    if let Some(r) = self.unknown_paths.get(idx) {
+                        let key = format!("{} {}", r.method, r.path);
+                        *counts.entry(key).or_insert(0) += 1;
+                    }
+                }
             }
         }
         let mut pairs: Vec<(String, usize)> = counts.into_iter().collect();
@@ -310,17 +356,29 @@ impl Screen for ConformanceScreen {
             }
             KeyCode::Char('m') => {
                 self.method_filter = self.method_filter.next();
-                self.table.set_total(self.filtered_indices().len());
+                self.table.set_total(self.current_row_count());
                 true
             }
             KeyCode::Char('s') => {
                 self.status_filter = self.status_filter.next();
-                self.table.set_total(self.filtered_indices().len());
+                self.table.set_total(self.current_row_count());
                 true
             }
             KeyCode::Char('c') => {
                 self.cycle_category();
-                self.table.set_total(self.filtered_indices().len());
+                self.table.set_total(self.current_row_count());
+                true
+            }
+            KeyCode::Char('u') => {
+                // Round-13: cycle between Violations (request-side spec
+                // failures) and UnknownPaths (404s for paths not in the
+                // loaded spec at all) views.
+                self.view_mode = match self.view_mode {
+                    ViewMode::Violations => ViewMode::UnknownPaths,
+                    ViewMode::UnknownPaths => ViewMode::Violations,
+                };
+                self.table.set_total(self.current_row_count());
+                self.last_fetch = None;
                 true
             }
             KeyCode::Char('p') => {
@@ -391,12 +449,28 @@ impl Screen for ConformanceScreen {
             self.pending_clear = false;
             let client_clone = client.clone();
             let tx_clone = tx.clone();
+            let view = self.view_mode;
             tokio::spawn(async move {
-                match client_clone.clear_conformance_violations().await {
+                // Clear only the active feed so the other one stays
+                // intact — round-13 added unknown-paths alongside
+                // violations and both have separate buffers.
+                let result = match view {
+                    ViewMode::Violations => client_clone.clear_conformance_violations().await,
+                    ViewMode::UnknownPaths => client_clone.clear_unknown_paths().await,
+                };
+                match result {
                     Ok(n) => {
+                        let payload = match view {
+                            ViewMode::Violations => {
+                                format!(r#"{{"violations":[],"total":0,"cleared":{n}}}"#)
+                            }
+                            ViewMode::UnknownPaths => format!(
+                                r#"{{"unknown_requests":[],"unknown_total":0,"cleared":{n}}}"#
+                            ),
+                        };
                         let _ = tx_clone.send(Event::Data {
                             screen: "conformance",
-                            payload: format!(r#"{{"violations":[],"total":0,"cleared":{n}}}"#),
+                            payload,
                         });
                     }
                     Err(err) => {
@@ -420,32 +494,77 @@ impl Screen for ConformanceScreen {
         }
         self.last_fetch = Some(Instant::now());
 
-        let client = client.clone();
-        let tx = tx.clone();
+        // Always fetch both feeds so toggling `u` is instant. Both
+        // calls are cheap GETs against bounded ring buffers.
+        let client_v = client.clone();
+        let tx_v = tx.clone();
         tokio::spawn(async move {
-            match client.get_conformance_violations().await {
+            match client_v.get_conformance_violations().await {
                 Ok(resp) => {
                     if let Ok(payload) = serde_json::to_string(&serde_json::json!({
                         "violations": resp.violations,
                         "total": resp.total,
                     })) {
-                        let _ = tx.send(Event::Data {
+                        let _ = tx_v.send(Event::Data {
                             screen: "conformance",
                             payload,
                         });
                     }
                 }
                 Err(err) => {
-                    let _ = tx.send(Event::ApiError {
+                    let _ = tx_v.send(Event::ApiError {
                         screen: "conformance",
                         message: err.to_string(),
                     });
                 }
             }
         });
+        let client_u = client.clone();
+        let tx_u = tx.clone();
+        tokio::spawn(async move {
+            match client_u.get_unknown_paths().await {
+                Ok(resp) => {
+                    if let Ok(payload) = serde_json::to_string(&serde_json::json!({
+                        "unknown_requests": resp.requests,
+                        "unknown_total": resp.total,
+                    })) {
+                        let _ = tx_u.send(Event::Data {
+                            screen: "conformance",
+                            payload,
+                        });
+                    }
+                }
+                Err(_) => {
+                    // Unknown-paths is a round-13 endpoint; older
+                    // servers don't have it. Silently ignore so older
+                    // server versions don't surface a confusing error.
+                }
+            }
+        });
     }
 
     fn on_data(&mut self, payload: &str) {
+        // Two payload shapes share this screen — violations (round 12)
+        // and unknown_requests (round 13). Try the unknown-paths shape
+        // first since it's narrower; fall through to the violations
+        // decode on miss.
+        #[derive(serde::Deserialize)]
+        struct UnknownWire {
+            unknown_requests: Vec<UnknownPathRequest>,
+            #[serde(default)]
+            unknown_total: usize,
+        }
+        if let Ok(parsed) = serde_json::from_str::<UnknownWire>(payload) {
+            self.unknown_paths = parsed.unknown_requests;
+            self.unknown_total = parsed.unknown_total;
+            if matches!(self.view_mode, ViewMode::UnknownPaths) {
+                self.table.set_total(self.current_row_count());
+            }
+            self.loaded = true;
+            self.error = None;
+            return;
+        }
+
         #[derive(serde::Deserialize)]
         struct Wire {
             violations: Vec<ConformanceViolation>,
@@ -458,14 +577,14 @@ impl Screen for ConformanceScreen {
             Ok(parsed) => {
                 self.violations = parsed.violations;
                 self.total = parsed.total;
-                self.table.set_total(self.filtered_indices().len());
+                if matches!(self.view_mode, ViewMode::Violations) {
+                    self.table.set_total(self.current_row_count());
+                }
                 self.loaded = true;
                 self.error = None;
                 if let Some(n) = parsed.cleared {
                     self.flash =
                         Some((format!("cleared {n} server-side violation(s)"), Instant::now()));
-                    // Force a fresh fetch on the next tick so we re-load
-                    // any violations that arrived between clear and ack.
                     self.last_fetch = None;
                 }
             }
@@ -494,13 +613,20 @@ impl Screen for ConformanceScreen {
         } else if self.paused {
             "[paused]  p:resume  m/s/c:filter  e:export  D:clear  Enter:detail"
         } else {
-            "j/k:navigate  m/s/c:filter  p:pause  e:export  D:clear  Enter:detail"
+            "j/k:navigate  m/s/c:filter  p:pause  e:export  D:clear  u:unknown-paths  Enter:detail"
         }
     }
 }
 
 impl ConformanceScreen {
     fn render_table(&self, frame: &mut Frame, area: Rect) {
+        match self.view_mode {
+            ViewMode::Violations => self.render_violations_table(frame, area),
+            ViewMode::UnknownPaths => self.render_unknown_paths_table(frame, area),
+        }
+    }
+
+    fn render_violations_table(&self, frame: &mut Frame, area: Rect) {
         let header = Row::new(vec![
             Cell::from("When").style(Theme::dim()),
             Cell::from("Method").style(Theme::dim()),
@@ -570,6 +696,72 @@ impl ConformanceScreen {
         frame.render_stateful_widget(table, area, &mut table_state);
     }
 
+    fn render_unknown_paths_table(&self, frame: &mut Frame, area: Rect) {
+        let header = Row::new(vec![
+            Cell::from("When").style(Theme::dim()),
+            Cell::from("Method").style(Theme::dim()),
+            Cell::from("Path").style(Theme::dim()),
+            Cell::from("Query").style(Theme::dim()),
+            Cell::from("Client").style(Theme::dim()),
+        ])
+        .height(1);
+
+        let indices = self.filtered_unknown_indices();
+        let rows: Vec<Row> = indices
+            .iter()
+            .skip(self.table.offset)
+            .take(self.table.visible_height)
+            .filter_map(|&i| self.unknown_paths.get(i))
+            .map(|r| {
+                Row::new(vec![
+                    Cell::from(r.timestamp.format("%H:%M:%S").to_string()),
+                    Cell::from(r.method.clone()).style(Theme::http_method(&r.method)),
+                    Cell::from(r.path.clone()),
+                    Cell::from(if r.query.is_empty() {
+                        "-".to_string()
+                    } else {
+                        r.query.clone()
+                    }),
+                    Cell::from(r.client_ip.clone()),
+                ])
+            })
+            .collect();
+
+        let widths = [
+            Constraint::Length(10),
+            Constraint::Length(8),
+            Constraint::Min(20),
+            Constraint::Min(15),
+            Constraint::Length(16),
+        ];
+
+        let filtered_count = indices.len();
+        let filter_suffix = self.filter_label_suffix();
+        let title = if self.unknown_total > filtered_count {
+            format!(
+                " Unknown Paths ({} buffered, {} shown{}) ",
+                self.unknown_total, filtered_count, filter_suffix
+            )
+        } else {
+            format!(" Unknown Paths ({}{}) ", filtered_count, filter_suffix)
+        };
+
+        let table = Table::new(rows, widths)
+            .header(header)
+            .row_highlight_style(Theme::highlight())
+            .block(
+                Block::default()
+                    .title(title)
+                    .title_style(Theme::title())
+                    .borders(Borders::ALL)
+                    .border_style(Theme::dim())
+                    .style(Theme::surface()),
+            );
+
+        let mut table_state = self.table.to_ratatui_state();
+        frame.render_stateful_widget(table, area, &mut table_state);
+    }
+
     fn render_top_endpoints(&self, frame: &mut Frame, area: Rect) {
         let top = self.top_endpoints(8);
         let body = if top.is_empty() {
@@ -593,39 +785,66 @@ impl ConformanceScreen {
     fn render_summary(&self, frame: &mut Frame, area: Rect) {
         let body = if let Some(flash) = self.flash_str() {
             flash.to_string()
-        } else if self.violations.is_empty() {
-            "No spec violations recorded — every incoming request matched the loaded OpenAPI spec."
-                .to_string()
         } else {
-            let by_category = {
-                let mut counts: HashMap<&str, usize> = HashMap::new();
-                for &i in &self.filtered_indices() {
-                    let Some(v) = self.violations.get(i) else {
-                        continue;
-                    };
-                    let key = if v.category.is_empty() {
-                        "(uncategorised)"
-                    } else {
-                        v.category.as_str()
-                    };
-                    *counts.entry(key).or_insert(0) += 1;
-                }
-                let mut pairs: Vec<(&&str, &usize)> = counts.iter().collect();
-                pairs.sort_by(|a, b| b.1.cmp(a.1));
-                pairs
-                    .into_iter()
-                    .take(3)
-                    .map(|(k, v)| format!("{} ({})", k, v))
-                    .collect::<Vec<_>>()
-                    .join(", ")
-            };
-            format!("Top categories: {}", by_category)
+            match self.view_mode {
+                ViewMode::Violations => self.violations_summary(),
+                ViewMode::UnknownPaths => self.unknown_paths_summary(),
+            }
         };
 
         let para = Paragraph::new(body)
             .style(Theme::dim())
             .block(Block::default().borders(Borders::ALL).border_style(Theme::dim()));
         frame.render_widget(para, area);
+    }
+
+    fn violations_summary(&self) -> String {
+        if self.violations.is_empty() {
+            return "No spec violations recorded — every incoming request matched the loaded OpenAPI spec. (`u`: view unknown-path requests instead)".to_string();
+        }
+        let mut counts: HashMap<&str, usize> = HashMap::new();
+        for &i in &self.filtered_indices() {
+            let Some(v) = self.violations.get(i) else {
+                continue;
+            };
+            let key = if v.category.is_empty() {
+                "(uncategorised)"
+            } else {
+                v.category.as_str()
+            };
+            *counts.entry(key).or_insert(0) += 1;
+        }
+        let mut pairs: Vec<(&&str, &usize)> = counts.iter().collect();
+        pairs.sort_by(|a, b| b.1.cmp(a.1));
+        let body = pairs
+            .into_iter()
+            .take(3)
+            .map(|(k, v)| format!("{} ({})", k, v))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("Top categories: {}", body)
+    }
+
+    fn unknown_paths_summary(&self) -> String {
+        if self.unknown_paths.is_empty() {
+            return "No unknown-path 404s recorded — every incoming request matched a route in the loaded spec. (`u`: switch back to violations)".to_string();
+        }
+        let mut counts: HashMap<&str, usize> = HashMap::new();
+        for &i in &self.filtered_unknown_indices() {
+            let Some(r) = self.unknown_paths.get(i) else {
+                continue;
+            };
+            *counts.entry(r.method.as_str()).or_insert(0) += 1;
+        }
+        let mut pairs: Vec<(&&str, &usize)> = counts.iter().collect();
+        pairs.sort_by(|a, b| b.1.cmp(a.1));
+        let body = pairs
+            .into_iter()
+            .take(5)
+            .map(|(k, v)| format!("{} ({})", k, v))
+            .collect::<Vec<_>>()
+            .join(", ");
+        format!("Top methods: {}", body)
     }
 
     fn filter_label_suffix(&self) -> String {

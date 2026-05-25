@@ -1145,9 +1145,29 @@ pub async fn dynamic_mock_fallback(
     State(state): State<ManagementState>,
     req: Request<Body>,
 ) -> Response {
+    // Issue #79 round 13 — capture the request method/path/query
+    // before the body is consumed so we can record unmatched 404s
+    // (Srikanth's (a) ask: surface paths the spec doesn't know about).
+    // Only records when no dynamic mock matches — if a dynamic mock
+    // serves the request, the path WAS handled, just not by OpenAPI.
+    let method = req.method().as_str().to_string();
+    let path = req.uri().path().to_string();
+    let query = req.uri().query().unwrap_or_default().to_string();
+
     match serve_dynamic_mock(&state, req).await {
         Some(resp) => resp,
-        None => StatusCode::NOT_FOUND.into_response(),
+        None => {
+            mockforge_foundation::unknown_paths::record(
+                mockforge_foundation::unknown_paths::UnknownPathRequest {
+                    timestamp: chrono::Utc::now(),
+                    method,
+                    path,
+                    client_ip: "unknown".to_string(),
+                    query,
+                },
+            );
+            StatusCode::NOT_FOUND.into_response()
+        }
     }
 }
 
