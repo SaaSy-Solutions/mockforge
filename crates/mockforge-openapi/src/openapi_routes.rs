@@ -1015,6 +1015,106 @@ impl OpenApiRouteRegistry {
         )
     }
 
+    /// Issue #79 round 13 — run the standard request-validation bookend
+    /// (validate → build error payload → record to the conformance ring
+    /// buffer) and return `Ok(())` if validation passed, or
+    /// `Err((status_code, payload))` if it failed. Centralises the logic
+    /// that previously lived inline at `build_router_with_context`
+    /// (line ~686) so the MockAI and AI handlers can share it instead
+    /// of silently bypassing validation.
+    ///
+    /// Callers should short-circuit with the returned status + payload
+    /// on `Err`; the violation has already been recorded to
+    /// `mockforge_foundation::conformance_violations` by the time this
+    /// function returns.
+    #[allow(clippy::too_many_arguments)]
+    pub fn run_validation_with_recording(
+        &self,
+        path_template: &str,
+        method: &str,
+        path_params: &Map<String, Value>,
+        query_params: &Map<String, Value>,
+        header_map: &Map<String, Value>,
+        cookie_map: &Map<String, Value>,
+        body: Option<&Value>,
+    ) -> std::result::Result<(), (u16, Value)> {
+        let e = match self.validate_request_with_all(
+            path_template,
+            method,
+            path_params,
+            query_params,
+            header_map,
+            cookie_map,
+            body,
+        ) {
+            Ok(()) => return Ok(()),
+            Err(e) => e,
+        };
+
+        let status_code = self.options.validation_status.unwrap_or_else(|| {
+            std::env::var("MOCKFORGE_VALIDATION_STATUS")
+                .ok()
+                .and_then(|s| s.parse::<u16>().ok())
+                .unwrap_or(400)
+        });
+
+        let payload = if status_code == 422 {
+            generate_enhanced_422_response(
+                self,
+                path_template,
+                method,
+                body,
+                path_params,
+                query_params,
+                header_map,
+                cookie_map,
+            )
+        } else {
+            let msg = format!("{}", e);
+            let detail_val = serde_json::from_str::<Value>(&msg).unwrap_or(serde_json::json!(msg));
+            json!({
+                "error": "request validation failed",
+                "detail": detail_val,
+                "method": method,
+                "path": path_template,
+                "timestamp": Utc::now().to_rfc3339(),
+            })
+        };
+
+        record_validation_error(&payload);
+
+        let reason = payload
+            .get("detail")
+            .and_then(|d| {
+                if d.is_string() {
+                    d.as_str().map(|s| s.to_string())
+                } else {
+                    serde_json::to_string(d).ok()
+                }
+            })
+            .unwrap_or_else(|| {
+                payload
+                    .get("error")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("request validation failed")
+                    .to_string()
+            });
+        let category = classify_validation_reason(&reason);
+        mockforge_foundation::conformance_violations::record(
+            mockforge_foundation::conformance_violations::ServerConformanceViolation {
+                timestamp: Utc::now(),
+                method: method.to_string(),
+                path: path_template.to_string(),
+                client_ip: "unknown".to_string(),
+                status: status_code,
+                reason,
+                category,
+            },
+        );
+
+        Err((status_code, payload))
+    }
+
     /// Validate request against OpenAPI spec with path/query/header/cookie params
     #[allow(clippy::too_many_arguments)]
     pub fn validate_request_with_all(
@@ -1359,13 +1459,56 @@ impl OpenApiRouteRegistry {
 
             let route_clone = (*route).clone();
             let ai_generator_clone = ai_generator.clone();
+            // Issue #79 round 13 — same validation bypass as
+            // `build_router_with_mockai`. Clone the validator into the
+            // closure and run validation before AI response generation.
+            let validator_clone = self.clone_for_validation();
 
             // Create async handler that extracts request data and builds context
-            let handler = move |headers: HeaderMap, body: Option<Json<Value>>| {
+            let handler = move |AxumPath(path_params): AxumPath<HashMap<String, String>>,
+                                axum::extract::Query(query_params): axum::extract::Query<
+                HashMap<String, String>,
+            >,
+                                headers: HeaderMap,
+                                body: Option<Json<Value>>| {
                 let route = route_clone.clone();
                 let ai_generator = ai_generator_clone.clone();
+                let validator = validator_clone.clone();
 
                 async move {
+                    // (a-pre) Run request validation against the spec
+                    // before AI response synthesis. On failure this
+                    // also records to the foundation conformance ring
+                    // buffer surfaced by the TUI Conformance tab.
+                    let mut path_map = Map::new();
+                    for (k, v) in &path_params {
+                        path_map.insert(k.clone(), Value::String(v.clone()));
+                    }
+                    let mut query_map = Map::new();
+                    for (k, v) in &query_params {
+                        query_map.insert(k.clone(), Value::String(v.clone()));
+                    }
+                    let mut header_map = Map::new();
+                    for (k, v) in headers.iter() {
+                        if let Ok(s) = v.to_str() {
+                            header_map.insert(k.to_string(), Value::String(s.to_string()));
+                        }
+                    }
+                    let body_val: Option<&Value> = body.as_ref().map(|Json(b)| b);
+                    if let Err((status_code, payload)) = validator.run_validation_with_recording(
+                        &route.path,
+                        &route.method,
+                        &path_map,
+                        &query_map,
+                        &header_map,
+                        &Map::new(),
+                        body_val,
+                    ) {
+                        let status = axum::http::StatusCode::from_u16(status_code)
+                            .unwrap_or(axum::http::StatusCode::BAD_REQUEST);
+                        return (status, Json(payload));
+                    }
+
                     tracing::debug!(
                         "Handling AI request for route: {} {}",
                         route.method,
@@ -1448,17 +1591,60 @@ impl OpenApiRouteRegistry {
             let route_clone = (*route).clone();
             let mockai_clone = mockai.clone();
             let custom_loader_clone = custom_loader.clone();
+            // Issue #79 round 13 — the MockAI handler was bypassing
+            // request validation entirely, so spec violations never
+            // populated the conformance ring buffer. Clone the
+            // validator into the closure and call
+            // `run_validation_with_recording` before fixture/MockAI/
+            // mock-response synthesis, mirroring what
+            // `build_router_with_context` does at line ~686.
+            let validator_clone = self.clone_for_validation();
 
             // Create async handler that processes requests through MockAI
             // Query params are extracted via Query extractor with HashMap
             // Note: Using Query<HashMap<String, String>> wrapped in Option to handle missing query params
-            let handler = move |query: axum::extract::Query<HashMap<String, String>>,
+            let handler = move |AxumPath(path_params): AxumPath<HashMap<String, String>>,
+                                query: axum::extract::Query<HashMap<String, String>>,
                                 headers: HeaderMap,
                                 body: Option<Json<Value>>| {
                 let route = route_clone.clone();
                 let mockai = mockai_clone.clone();
+                let validator = validator_clone.clone();
 
                 async move {
+                    // (a-pre) Run request validation against the spec
+                    // before any response synthesis. On failure this
+                    // also records to the foundation conformance ring
+                    // buffer surfaced by the TUI Conformance tab.
+                    let mut path_map = Map::new();
+                    for (k, v) in &path_params {
+                        path_map.insert(k.clone(), Value::String(v.clone()));
+                    }
+                    let mut query_map = Map::new();
+                    for (k, v) in &query.0 {
+                        query_map.insert(k.clone(), Value::String(v.clone()));
+                    }
+                    let mut header_map = Map::new();
+                    for (k, v) in headers.iter() {
+                        if let Ok(s) = v.to_str() {
+                            header_map.insert(k.to_string(), Value::String(s.to_string()));
+                        }
+                    }
+                    let body_val: Option<&Value> = body.as_ref().map(|Json(b)| b);
+                    if let Err((status_code, payload)) = validator.run_validation_with_recording(
+                        &route.path,
+                        &route.method,
+                        &path_map,
+                        &query_map,
+                        &header_map,
+                        &Map::new(),
+                        body_val,
+                    ) {
+                        let status = axum::http::StatusCode::from_u16(status_code)
+                            .unwrap_or(axum::http::StatusCode::BAD_REQUEST);
+                        return (status, Json(payload));
+                    }
+
                     tracing::info!(
                         "[FIXTURE DEBUG] Starting fixture check for {} {} (custom_loader available: {})",
                         route.method,

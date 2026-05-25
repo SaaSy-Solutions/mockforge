@@ -177,6 +177,13 @@ pub fn create_admin_router(
             "/__mockforge/api/conformance/violations",
             get(get_conformance_violations).delete(clear_conformance_violations),
         )
+        // Issue #79 round 13 — separate feed for requests whose paths
+        // don't match any route in the loaded spec. Captured by
+        // dynamic_mock_fallback when no dynamic mock matches either.
+        .route(
+            "/__mockforge/api/conformance/unknown-paths",
+            get(get_unknown_paths).delete(clear_unknown_paths),
+        )
         .route("/__mockforge/fixtures/{id}/download", get(download_fixture))
         .route("/__mockforge/fixtures/{id}/rename", post(rename_fixture))
         .route("/__mockforge/fixtures/{id}/move", post(move_fixture))
