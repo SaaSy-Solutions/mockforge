@@ -116,6 +116,13 @@ impl ScreenId {
         Self::SmokeTests,
         Self::TimeTravel,
         Self::Chains,
+        // Conformance sits before Verification — Verification's `Tab`
+        // is consumed to cycle internal fields, so it acts as a
+        // dead-end for tab navigation. Putting Conformance earlier
+        // keeps it reachable via plain Tab without forcing the user
+        // to click-and-tab around the stuck Verification screen.
+        // (Reordered after Srikanth flagged it on Issue #79 round 12.)
+        Self::Conformance,
         Self::Verification,
         Self::Analytics,
         Self::Recorder,
@@ -125,7 +132,6 @@ impl ScreenId {
         Self::ContractDiff,
         Self::Federation,
         Self::BehavioralCloning,
-        Self::Conformance,
     ];
 
     pub fn label(self) -> &'static str {

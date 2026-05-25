@@ -1,3 +1,9 @@
+## [0.3.147] - 2026-05-25
+
+### Changed
+
+- **[DevX]** TUI `Conformance` tab moved before `Verification` (#79 round 12 follow-up) — Verification consumes `Tab` to cycle its internal fields, so Tab-navigating past it required clicking elsewhere to break the focus. Putting Conformance before Verification keeps it reachable via plain Tab from the earlier screens. Srikanth's ask.
+
 ## [0.3.146] - 2026-05-25
 
 ### Fixed
