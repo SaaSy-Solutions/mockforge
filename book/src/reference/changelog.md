@@ -1,5 +1,11 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.146] - 2026-05-25
+
+### Fixed
+
+- **[DevX]** TUI `Conformance` tab now appears + admin server exposes the violations endpoint (#79 round 12 hotfix) — v0.3.145 had two bugs: (1) `ScreenId::Conformance` was added to the enum but `ConformanceScreen::new()` was missing from `App::new`'s screens vec, so the tab silently dropped from the header; (2) the endpoint was only wired into `mockforge-http`'s management router (mock-traffic port), not the admin server the TUI polls. Fixed both, plus added an `app_screens_match_screen_id_all` regression test.
+
 ## [0.3.145] - 2026-05-24
 
 ### Added

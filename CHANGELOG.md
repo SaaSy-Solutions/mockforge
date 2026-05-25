@@ -1,3 +1,11 @@
+## [0.3.146] - 2026-05-25
+
+### Fixed
+
+- **[DevX]** TUI `Conformance` tab now appears in the tab strip + admin server exposes the violations endpoint (#79 round 12 hotfix)
+  - **Bug 1 — invisible tab.** v0.3.145 added `ScreenId::Conformance` to the enum but forgot to push `ConformanceScreen::new()` onto `App::new`'s screens vec. `render_header` iterates `self.screens` so it rendered the other 22 tabs and silently dropped the new one. Fixed; also added a `debug_assert_eq!(screens.len(), ScreenId::ALL.len())` and a `app_screens_match_screen_id_all` unit test so any future enum/vec drift fails before tagging instead of after.
+  - **Bug 2 — admin server didn't expose the endpoint.** The TUI client polls the admin URL (`http://localhost:9080`) at `/__mockforge/api/conformance/violations`, but v0.3.145 only wired the route into `mockforge-http`'s management router (which runs on the *mock-traffic* HTTP port, not the admin port). TUI got the SPA HTML fallback. Added matching `get_conformance_violations` / `clear_conformance_violations` handlers in `mockforge-ui` and routed them at the same path on the admin server — both ports now serve it.
+
 ## [0.3.145] - 2026-05-24
 
 ### Added

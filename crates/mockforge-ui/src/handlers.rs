@@ -1322,6 +1322,33 @@ pub async fn get_server_info(State(state): State<AdminState>) -> Json<serde_json
     }))
 }
 
+/// Server-side conformance violations — see #79 round 12.
+///
+/// Mirrors what `mockforge-http`'s `/__mockforge/api/conformance/violations`
+/// exposes, but on the admin server too so the TUI (which talks to the
+/// admin port) can render the new `Conformance` tab. Without this,
+/// v0.3.145 surfaced the endpoint only on the HTTP-mock port and the
+/// TUI got the SPA HTML fallback when it tried to poll.
+pub async fn get_conformance_violations(
+    axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let snap = mockforge_foundation::conformance_violations::snapshot();
+    let total = snap.len();
+    let limit: Option<usize> = q.get("limit").and_then(|s| s.parse().ok());
+    let limited: Vec<_> = match limit {
+        Some(n) => snap.into_iter().take(n).collect(),
+        None => snap,
+    };
+    Json(json!({"violations": limited, "total": total}))
+}
+
+/// Clear the server-side conformance violation ring buffer.
+pub async fn clear_conformance_violations() -> impl IntoResponse {
+    let n = mockforge_foundation::conformance_violations::len();
+    mockforge_foundation::conformance_violations::clear();
+    Json(json!({"cleared": n}))
+}
+
 /// Get health check status
 pub async fn get_health() -> Json<HealthCheck> {
     Json(
