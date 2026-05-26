@@ -77,8 +77,16 @@ jobs:
       run: cargo fmt --all -- --check
       if: matrix.rust == 'stable'
 
+    # `-D unused_qualifications` mirrors the workspace-wide ratchet in
+    # scripts/lint-warning-gate.sh, but surfaces it here in the main
+    # clippy step so qualifier drift hits the same row in the PR-checks
+    # UI as the standard correctness lints. The dedicated warning-gate
+    # job has been historically ignored when red; pulling the check into
+    # the main clippy line makes it much harder to merge over.
+    # The dedicated gate stays as defense-in-depth.
+    # Static command — no untrusted input is interpolated.
     - name: Run clippy
-      run: cargo clippy --workspace --exclude mockforge-desktop --lib --bins --all-features -- -D clippy::correctness
+      run: cargo clippy --workspace --exclude mockforge-desktop --lib --bins --all-features -- -D clippy::correctness -D unused_qualifications
       if: matrix.rust == 'stable'
 
     - name: Build workspace
