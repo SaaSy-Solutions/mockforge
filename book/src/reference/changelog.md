@@ -1,5 +1,16 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.150] - 2026-05-26
+
+### Fixed
+
+- **[Reality]** Server no longer OOM-killed at startup on large specs (#79 round 14) — router construction cloned the entire routes Vec into every per-route handler (O(N²) memory; ~260 GB for an 11,422-op spec). Fixed by sharing one validator via `Arc` across all handlers. Reproduced + verified with a 22,000-operation synthetic spec.
+
+### Added
+
+- **[Reality][Contracts]** Server-side **shadow mode** (`MOCKFORGE_SHADOW_MODE=true`) (#79 round 14) — returns 200 for unknown paths and spec violations while still recording them to the conformance + unknown-paths buffers (report-only / monitor mode for proxy-replay traffic). Startup prints a `👻 SHADOW MODE ON` banner.
+- **[Contracts][DevX]** Status column on the TUI unknown-paths view — surfaces the HTTP status the server returned (404 normally, 200 in shadow mode).
+
 ## [0.3.149] - 2026-05-25
 
 ### Added
