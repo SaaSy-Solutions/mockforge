@@ -924,6 +924,18 @@ pub async fn handle_serve(
 
     println!("🚀 Starting MockForge servers...");
 
+    // Issue #79 round 14 — surface shadow mode loudly at startup so an
+    // operator never wonders why a 404/validation-rejection came back
+    // as 200. Shadow mode returns 200 for unknown paths + spec
+    // violations while still recording them to the conformance and
+    // unknown-paths buffers (report-only / monitor mode).
+    if mockforge_foundation::unknown_paths::shadow_mode_enabled() {
+        println!(
+            "👻 SHADOW MODE ON (MOCKFORGE_SHADOW_MODE) — unknown paths and spec violations \
+             return 200 but are still recorded to the Conformance tab"
+        );
+    }
+
     // Initialize the global request logger early, BEFORE any server tasks are spawned.
     // This ensures HTTP request logs are captured from the very first request,
     // not just after the admin UI router happens to initialize.

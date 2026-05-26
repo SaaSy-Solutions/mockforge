@@ -1,5 +1,12 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.150] - 2026-05-26
+
+### Added
+
+- **[Reality][Contracts]** Server-side **shadow mode** (`MOCKFORGE_SHADOW_MODE=true`) (#79 round 14) — returns 200 for unknown paths and spec violations while still recording them to the conformance + unknown-paths buffers (report-only / monitor mode for proxy-replay traffic). Startup prints a `👻 SHADOW MODE ON` banner.
+- **[Contracts][DevX]** Status column on the TUI unknown-paths view — surfaces the HTTP status the server returned (404 normally, 200 in shadow mode).
+
 ## [0.3.149] - 2026-05-25
 
 ### Added

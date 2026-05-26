@@ -1,3 +1,10 @@
+## [0.3.150] - 2026-05-26
+
+### Added
+
+- **[Reality][Contracts]** Server-side **shadow mode** (`MOCKFORGE_SHADOW_MODE=true`) (#79 round 14) — Srikanth's (a) ask. When enabled, the server returns **200** for requests it would normally reject — unknown paths (instead of 404) and spec violations (instead of 400/422) — while *still* recording them to the conformance + unknown-paths buffers. A "report-only" / monitor mode: replay proxy traffic through MockForge non-blocking and capture every violation for cross-checking, without the rejections breaking the client flow. Unknown paths get a minimal `{"shadow":true,"matched":false}` 200 stub; spec-violating requests fall through to normal response synthesis. Startup prints a `👻 SHADOW MODE ON` banner so the behavior is never a surprise.
+- **[Contracts][DevX]** Status column on the TUI unknown-paths view (#79 round 14) — the unknown-paths feed now carries the HTTP status the server actually returned (404 normally, 200 in shadow mode), surfaced as a colored `Status` column in the `u`-toggled unknown-paths view so you can tell at a glance which requests shadow mode let through.
+
 ## [0.3.149] - 2026-05-25
 
 ### Added

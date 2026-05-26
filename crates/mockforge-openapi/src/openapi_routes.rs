@@ -1112,6 +1112,16 @@ impl OpenApiRouteRegistry {
             },
         );
 
+        // Issue #79 round 14 — shadow mode: the violation is recorded
+        // above (so the Conformance tab still shows it, with its real
+        // 400/422 classification), but we return Ok so the handler
+        // proceeds to synthesise a normal 2xx response. Lets a proxy
+        // replay run flow through non-blocking while capturing every
+        // violation.
+        if mockforge_foundation::unknown_paths::shadow_mode_enabled() {
+            return Ok(());
+        }
+
         Err((status_code, payload))
     }
 
