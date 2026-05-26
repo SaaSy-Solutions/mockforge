@@ -1,9 +1,35 @@
 # Competitive Feature Matrix: API Mocking & Service Virtualization Tools
 
 **Last Updated:** 2025-01-27
+**Last Audit Recalibration:** 2026-05-25
 **Purpose:** Comprehensive feature comparison for competitive benchmarking, product positioning, and roadmap planning
 
 This document provides a detailed side-by-side comparison of MockForge against leading API mocking tools: **WireMock**, **Mockoon**, **Postman Mock Servers**, **Beeceptor**, **Mountebank**, and **MockServer**.
+
+## ⚠️ Audit Recalibration (2026-05-25)
+
+The "99.2% coverage" / per-category "100%" numbers in this document represent
+**architectural surface coverage**, not feature completeness. A multi-area
+audit ([tracked in #688](https://github.com/SaaSy-Solutions/mockforge/issues/688))
+identified 23 gaps where the ✅ symbol overstates current implementation
+status. See [FEATURE_COVERAGE_REVIEW.md](./FEATURE_COVERAGE_REVIEW.md#-audit-recalibration-2026-05-25)
+for the full reconciliation table mapping each downgraded row to its tracking
+issue (#665–#687).
+
+Notable real downgrades for competitive positioning:
+
+- **Vector memory store** (in Category 3 / 7) — in-memory only by default; not a persistent vector DB ([#669](https://github.com/SaaSy-Solutions/mockforge/issues/669))
+- **Plugin marketplace** (in Category 6) — UI exists, backend does not ([#667](https://github.com/SaaSy-Solutions/mockforge/issues/667))
+- **Cloud AI Studio** (in Category 7) — local-only, no cloud handlers ([#670](https://github.com/SaaSy-Solutions/mockforge/issues/670))
+- **6-language SDKs** (in Category 10) — code complete, not published to package registries ([#674](https://github.com/SaaSy-Solutions/mockforge/issues/674))
+- **Kafka consumer offsets** (in Category 1) — accepted but not persisted ([#676](https://github.com/SaaSy-Solutions/mockforge/issues/676))
+- **AI chaos recommendations** (in Category 3) — endpoint exists, logic empty ([#679](https://github.com/SaaSy-Solutions/mockforge/issues/679))
+
+Categories that survived the audit unscathed: **async-broker wire protocols**
+(Kafka/MQTT/AMQP — real implementations, real-client tested), **chaos
+primitives**, **core observability** (Prometheus metrics + Grafana dashboards
+match), **audit trails**, and **LLM provider integration** (real
+OpenAI/Anthropic/Ollama API calls).
 
 ## Verification Status
 
@@ -13,6 +39,9 @@ This feature matrix has been verified against the comprehensive unified feature 
 - **[Implementation Roadmap](./IMPLEMENTATION_ROADMAP.md)** - Roadmap for addressing gaps
 
 **Verification Result:** MockForge achieves **99.2% coverage** (199/202 features fully implemented, 3 with partial support).
+
+> ⚠️ See "Audit Recalibration" above — the 99.2% figure overstates the
+> 2026-05-25 reality for ~20 features tracked in issues #665–#687.
 
 ---
 

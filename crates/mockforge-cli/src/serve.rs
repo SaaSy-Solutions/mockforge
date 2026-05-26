@@ -346,6 +346,14 @@ pub(crate) async fn build_server_config_from_cli(serve_args: &ServeArgs) -> Serv
     }
 
     // OpenTelemetry tracing configuration
+    //
+    // Resolution order:
+    //   1. Explicit `--tracing` CLI flag (highest priority — user intent).
+    //   2. Standard OTel env vars (`OTEL_EXPORTER_OTLP_ENDPOINT`,
+    //      `OTEL_EXPORTER_JAEGER_ENDPOINT`, …). This is the "zero-config OTel"
+    //      path documented in #687: a user who follows standard OpenTelemetry
+    //      onboarding gets spans without editing config or passing CLI flags.
+    //   3. Whatever the config file said (default: disabled).
     if serve_args.tracing {
         config.observability.opentelemetry = Some(mockforge_core::config::OpenTelemetryConfig {
             enabled: true,
@@ -356,6 +364,16 @@ pub(crate) async fn build_server_config_from_cli(serve_args: &ServeArgs) -> Serv
             protocol: "grpc".to_string(),
             sampling_rate: serve_args.tracing_sampling_rate,
         });
+    } else if config.observability.opentelemetry.as_ref().is_none_or(|c| !c.enabled) {
+        // Only auto-detect when nothing else has already enabled OTel — we
+        // don't want to clobber a config-file-driven setup.
+        if let Some(env_cfg) = mockforge_core::config::OpenTelemetryConfig::from_env() {
+            tracing::info!(
+                "OpenTelemetry auto-enabled from environment (endpoint {:?})",
+                env_cfg.otlp_endpoint.as_deref().unwrap_or(env_cfg.jaeger_endpoint.as_str())
+            );
+            config.observability.opentelemetry = Some(env_cfg);
+        }
     }
 
     // API Flight Recorder configuration
@@ -905,6 +923,18 @@ pub async fn handle_serve(
     }
 
     println!("🚀 Starting MockForge servers...");
+
+    // Issue #79 round 14 — surface shadow mode loudly at startup so an
+    // operator never wonders why a 404/validation-rejection came back
+    // as 200. Shadow mode returns 200 for unknown paths + spec
+    // violations while still recording them to the conformance and
+    // unknown-paths buffers (report-only / monitor mode).
+    if mockforge_foundation::unknown_paths::shadow_mode_enabled() {
+        println!(
+            "👻 SHADOW MODE ON (MOCKFORGE_SHADOW_MODE) — unknown paths and spec violations \
+             return 200 but are still recorded to the Conformance tab"
+        );
+    }
 
     // Initialize the global request logger early, BEFORE any server tasks are spawned.
     // This ensures HTTP request logs are captured from the very first request,

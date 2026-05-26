@@ -8,6 +8,24 @@ use prometheus::{
 use std::sync::Arc;
 use tracing::debug;
 
+/// A single drift evaluation sample to feed into
+/// [`MetricsRegistry::record_drift_evaluation`]. Borrows the string labels
+/// so callers don't have to allocate per-request.
+///
+/// `workspace_id` should be the empty string when the request isn't tied to a
+/// specific tenant (the global "drift-by-endpoint" series remains useful and
+/// the dashboards collapse the label).
+#[derive(Debug, Clone, Copy)]
+pub struct DriftEvaluationSample<'a> {
+    pub workspace_id: &'a str,
+    pub endpoint: &'a str,
+    pub method: &'a str,
+    pub total: u32,
+    pub breaking: u32,
+    pub potentially_breaking: u32,
+    pub budget_exceeded: bool,
+}
+
 /// Global metrics registry for MockForge
 #[derive(Clone)]
 pub struct MetricsRegistry {
@@ -89,6 +107,21 @@ pub struct MetricsRegistry {
     pub marketplace_search_duration_seconds: HistogramVec,
     pub marketplace_errors_total: IntCounterVec,
     pub marketplace_items_total: IntGaugeVec,
+
+    // Contract-drift metrics (issue #678) — emitted whenever
+    // `DriftBudgetEngine::evaluate*` runs against a request via the HTTP
+    // drift-tracking middleware. Labelled by workspace and endpoint so the
+    // MockOps UI's DriftPercentageDashboard can break down per-resource.
+    /// Drift severity as a 0.0–100.0 percentage (breaking + potentially-breaking
+    /// changes ÷ total observed mismatches × 100). 0 means no drift detected.
+    pub drift_percentage: GaugeVec,
+    /// Count of total mismatches observed in the last evaluation.
+    pub drift_total_changes: IntGaugeVec,
+    /// Count of breaking changes in the last evaluation. > 0 indicates a
+    /// contract-breaking drift event that should page someone.
+    pub drift_breaking_changes: IntGaugeVec,
+    /// Boolean (0 or 1) — was the configured drift budget exceeded?
+    pub drift_budget_exceeded: IntGaugeVec,
 }
 
 impl MetricsRegistry {
@@ -495,6 +528,44 @@ impl MetricsRegistry {
         )
         .expect("Failed to create marketplace_items_total metric");
 
+        // Drift metrics (#678). Labelled by workspace + endpoint + method so
+        // both the MockOps drift dashboard and per-API alerting work.
+        let drift_percentage = GaugeVec::new(
+            Opts::new(
+                "mockforge_drift_percentage",
+                "Contract drift severity as a 0.0–100.0 percentage (breaking + potentially-breaking ÷ total observed × 100)",
+            ),
+            &["workspace_id", "endpoint", "method"],
+        )
+        .expect("Failed to create drift_percentage metric");
+
+        let drift_total_changes = IntGaugeVec::new(
+            Opts::new(
+                "mockforge_drift_total_changes",
+                "Total mismatches observed in the most recent drift evaluation",
+            ),
+            &["workspace_id", "endpoint", "method"],
+        )
+        .expect("Failed to create drift_total_changes metric");
+
+        let drift_breaking_changes = IntGaugeVec::new(
+            Opts::new(
+                "mockforge_drift_breaking_changes",
+                "Breaking changes observed in the most recent drift evaluation",
+            ),
+            &["workspace_id", "endpoint", "method"],
+        )
+        .expect("Failed to create drift_breaking_changes metric");
+
+        let drift_budget_exceeded = IntGaugeVec::new(
+            Opts::new(
+                "mockforge_drift_budget_exceeded",
+                "1 when the configured drift budget was exceeded by the most recent evaluation, 0 otherwise",
+            ),
+            &["workspace_id", "endpoint", "method"],
+        )
+        .expect("Failed to create drift_budget_exceeded metric");
+
         // Register all metrics
         registry
             .register(Box::new(requests_total.clone()))
@@ -655,6 +726,18 @@ impl MetricsRegistry {
         registry
             .register(Box::new(marketplace_items_total.clone()))
             .expect("Failed to register marketplace_items_total");
+        registry
+            .register(Box::new(drift_percentage.clone()))
+            .expect("Failed to register drift_percentage");
+        registry
+            .register(Box::new(drift_total_changes.clone()))
+            .expect("Failed to register drift_total_changes");
+        registry
+            .register(Box::new(drift_breaking_changes.clone()))
+            .expect("Failed to register drift_breaking_changes");
+        registry
+            .register(Box::new(drift_budget_exceeded.clone()))
+            .expect("Failed to register drift_budget_exceeded");
 
         debug!("Initialized Prometheus metrics registry");
 
@@ -713,7 +796,42 @@ impl MetricsRegistry {
             marketplace_search_duration_seconds,
             marketplace_errors_total,
             marketplace_items_total,
+            drift_percentage,
+            drift_total_changes,
+            drift_breaking_changes,
+            drift_budget_exceeded,
         }
+    }
+
+    /// Record a contract-drift evaluation result against the workspace +
+    /// endpoint Prometheus gauges. Closes part of #678.
+    ///
+    /// Callers pass:
+    /// - `workspace_id` — empty string for un-attributed evaluations (legacy)
+    /// - `endpoint` and `method` — the request that was evaluated
+    /// - `total`, `breaking`, `potentially_breaking`, `non_breaking` — counts
+    ///   from `DriftResult`
+    /// - `budget_exceeded` — whether the configured budget tripped
+    ///
+    /// The "drift percentage" is computed as
+    /// `(breaking + potentially_breaking) / total * 100`. A zero-total
+    /// evaluation records 0% drift (the request matched the contract
+    /// exactly).
+    pub fn record_drift_evaluation(&self, sample: DriftEvaluationSample<'_>) {
+        let pct = if sample.total == 0 {
+            0.0
+        } else {
+            (sample.breaking + sample.potentially_breaking) as f64 / sample.total as f64 * 100.0
+        };
+        let labels = [sample.workspace_id, sample.endpoint, sample.method];
+        self.drift_percentage.with_label_values(&labels).set(pct);
+        self.drift_total_changes.with_label_values(&labels).set(sample.total as i64);
+        self.drift_breaking_changes
+            .with_label_values(&labels)
+            .set(sample.breaking as i64);
+        self.drift_budget_exceeded
+            .with_label_values(&labels)
+            .set(if sample.budget_exceeded { 1 } else { 0 });
     }
 
     /// Get the underlying Prometheus registry
@@ -1111,6 +1229,80 @@ mod tests {
     fn test_global_registry() {
         let registry = get_global_registry();
         assert!(registry.is_initialized());
+    }
+
+    #[test]
+    fn test_record_drift_evaluation_basic_percentage() {
+        let registry = MetricsRegistry::new();
+        // 1 breaking + 2 potentially_breaking out of 10 total = 30%
+        registry.record_drift_evaluation(DriftEvaluationSample {
+            workspace_id: "ws-a",
+            endpoint: "/users",
+            method: "GET",
+            total: 10,
+            breaking: 1,
+            potentially_breaking: 2,
+            budget_exceeded: false,
+        });
+
+        let pct = registry.drift_percentage.with_label_values(&["ws-a", "/users", "GET"]).get();
+        assert!((pct - 30.0).abs() < f64::EPSILON);
+        assert_eq!(
+            registry.drift_total_changes.with_label_values(&["ws-a", "/users", "GET"]).get(),
+            10
+        );
+        assert_eq!(
+            registry
+                .drift_breaking_changes
+                .with_label_values(&["ws-a", "/users", "GET"])
+                .get(),
+            1
+        );
+        assert_eq!(
+            registry
+                .drift_budget_exceeded
+                .with_label_values(&["ws-a", "/users", "GET"])
+                .get(),
+            0
+        );
+    }
+
+    #[test]
+    fn test_record_drift_evaluation_zero_total_is_zero_percent() {
+        let registry = MetricsRegistry::new();
+        // No mismatches observed → 0% drift, not a divide-by-zero.
+        registry.record_drift_evaluation(DriftEvaluationSample {
+            workspace_id: "",
+            endpoint: "/health",
+            method: "GET",
+            total: 0,
+            breaking: 0,
+            potentially_breaking: 0,
+            budget_exceeded: false,
+        });
+        let pct = registry.drift_percentage.with_label_values(&["", "/health", "GET"]).get();
+        assert_eq!(pct, 0.0);
+    }
+
+    #[test]
+    fn test_record_drift_evaluation_budget_exceeded_flag() {
+        let registry = MetricsRegistry::new();
+        registry.record_drift_evaluation(DriftEvaluationSample {
+            workspace_id: "ws-b",
+            endpoint: "/orders",
+            method: "POST",
+            total: 4,
+            breaking: 2,
+            potentially_breaking: 0,
+            budget_exceeded: true,
+        });
+        assert_eq!(
+            registry
+                .drift_budget_exceeded
+                .with_label_values(&["ws-b", "/orders", "POST"])
+                .get(),
+            1
+        );
     }
 
     #[test]
