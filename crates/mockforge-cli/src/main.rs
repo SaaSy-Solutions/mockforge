@@ -2349,6 +2349,34 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         std::process::exit(1);
     }
 
+    // #677 — opt-in MockOps analytics database. Setting MOCKFORGE_ANALYTICS_DB
+    // to a sqlite path turns on the EndpointCoverage / RealityLevelStaleness
+    // / ScenarioUsage / DriftPercentage dashboards by giving the recorder
+    // helpers in `mockforge_analytics` somewhere to write. Left unset, all
+    // the `record_*_async` calls in the middleware are zero-overhead no-ops.
+    if let Ok(path) = std::env::var("MOCKFORGE_ANALYTICS_DB") {
+        if !path.is_empty() {
+            let cfg = mockforge_analytics::AnalyticsConfig {
+                database_path: std::path::PathBuf::from(&path),
+                ..Default::default()
+            };
+            match mockforge_analytics::init(cfg).await {
+                Ok(db) => {
+                    if mockforge_analytics::set_global_db(db).is_err() {
+                        tracing::warn!(
+                            "analytics database already initialised; keeping first install"
+                        );
+                    } else {
+                        tracing::info!(path = %path, "📊 MockOps analytics database installed");
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(path = %path, error = %e, "failed to open analytics database, continuing without it");
+                }
+            }
+        }
+    }
+
     // Record the invoked CLI subcommand for the DevX pillar dashboard.
     let command_name = cli_command_name(&cli.command);
     mockforge_core::pillar_tracking::record_devx_usage(

@@ -37,6 +37,9 @@ tracing = "0.1"
 # Metrics
 prometheus = { version = "0.14", features = ["process"] }
 
+# Global accessor cell for `set_global_db` / `get_global_db`
+once_cell = "1.21"
+
 # HTTP client (for querying Prometheus)
 reqwest = { version = "0.12", features = ["json"] }
 

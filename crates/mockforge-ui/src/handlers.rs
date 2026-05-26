@@ -4800,6 +4800,16 @@ pub async fn set_reality_level(
         );
     }
 
+    // #677 — record the level change so the RealityLevelStaleness dashboard
+    // has data. staleness_days=0 means "freshly updated right now". No-op
+    // when the analytics database hasn't been installed.
+    mockforge_analytics::record_reality_level_staleness_async(
+        String::new(), // workspace scoping comes when we plumb tenant ID
+        None,
+        Some(level.name().to_lowercase().replace(' ', "_")),
+        Some(0),
+    );
+
     Json(ApiResponse::success(response))
 }
 

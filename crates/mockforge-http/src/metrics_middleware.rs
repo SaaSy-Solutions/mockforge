@@ -123,6 +123,20 @@ pub async fn collect_http_metrics(
     // Record metrics with pillar information
     registry.record_http_request_with_pillar(&method, status_code, duration_seconds, pillar);
 
+    // #677 — feed the EndpointCoverage MockOps dashboard. This stays a
+    // no-op when no analytics database has been installed via
+    // `mockforge_analytics::set_global_db`, so OSS quick-start doesn't
+    // implicitly create a sqlite file. We use the raw path rather than a
+    // route-template because the analytics DB upserts by (endpoint, method,
+    // protocol) and the dashboard already groups by that triple.
+    mockforge_analytics::record_endpoint_coverage_async(
+        path.clone(),
+        Some(method.clone()),
+        "http".to_string(),
+        None, // workspace_id — see drift_tracking note about plumbing tenant ID
+        None,
+    );
+
     // Bump TPS / RPS counters for the dashboard rate sampler.
     mockforge_foundation::rate_counters::record_response(status_code);
 
