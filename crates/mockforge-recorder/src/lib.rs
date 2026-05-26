@@ -25,6 +25,7 @@ pub mod sync_gitops;
 pub mod sync_snapshots;
 pub mod sync_traffic;
 pub mod test_generation;
+pub mod trace_query;
 
 pub use api::create_api_router;
 pub use behavioral_cloning::{
