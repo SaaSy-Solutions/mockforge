@@ -1,9 +1,65 @@
 # MockForge Feature Coverage Review
 
-**Review Date:** 2025-01-27
+**Original Review Date:** 2025-01-27
+**Last Audit Recalibration:** 2026-05-25
 **Reference:** Comprehensive API Mocking & Service Virtualization Feature List
 
 This document reviews MockForge's coverage against the comprehensive feature list compiled from WireMock, Mockoon, Postman Mock Servers, Beeceptor, Mountebank, and MockServer.
+
+---
+
+## ⚠️ Audit Recalibration (2026-05-25)
+
+A multi-area audit ([tracked in #688](https://github.com/SaaSy-Solutions/mockforge/issues/688))
+found that several rows previously marked "fully implemented" overstate the
+current state. The headline "100% coverage" claim below should be read as
+**architectural surface coverage** — most features have a code path, but
+several are partial implementations, design-only, or local-only.
+
+The table below is preserved for history. Use this calibration block as the
+authoritative current state:
+
+| Claim in legacy table | Actual status (2026-05-25) | Tracking issue |
+|-----------------------|----------------------------|----------------|
+| Vector memory store ✅ | ⚠️ In-memory HashMap is the production default; no Qdrant/LanceDB wired | [#669](https://github.com/SaaSy-Solutions/mockforge/issues/669) |
+| AI-assisted mock generation (cloud) ✅ | ⚠️ Works locally; registry-server handlers missing | [#670](https://github.com/SaaSy-Solutions/mockforge/issues/670) |
+| Real-time collaboration ✅ | ⚠️ WebSocket sync works locally; cloud world-state mutation polls | [#673](https://github.com/SaaSy-Solutions/mockforge/issues/673) |
+| Plugin marketplace ✅ | ❌ UI exists; backend (`plugin-marketplace/backend/*.ts`) does not | [#667](https://github.com/SaaSy-Solutions/mockforge/issues/667) |
+| Platform-signing / secure plugins ✅ | ⚠️ Heuristic security scan; no cryptographic signature verification | [#680](https://github.com/SaaSy-Solutions/mockforge/issues/680) |
+| Java / .NET / Node / Python / Go SDKs ✅ | ⚠️ Code complete; not published to npm/PyPI/Maven/NuGet | [#674](https://github.com/SaaSy-Solutions/mockforge/issues/674) |
+| Time Travel / snapshots ✅ | ❌ Design-only — no DB schema, no capture/restore workers | [#665](https://github.com/SaaSy-Solutions/mockforge/issues/665) |
+| Cloud feature execution (chaos, contract, flows, cloning) ✅ | ❌ CRUD ships, worker pool not wired — jobs queue indefinitely | [#666](https://github.com/SaaSy-Solutions/mockforge/issues/666) |
+| SSE live-tail across cloud features ✅ | ⚠️ UI consumes, backends are empty stubs | [#668](https://github.com/SaaSy-Solutions/mockforge/issues/668) |
+| Contract verification (live drift detection) ✅ | ⚠️ Services persist; probe worker doesn't exist | [#671](https://github.com/SaaSy-Solutions/mockforge/issues/671) |
+| Behavioral cloning learns from traffic ✅ | ⚠️ Engine works; no auto-wiring from recorder to mock generation | [#675](https://github.com/SaaSy-Solutions/mockforge/issues/675) |
+| Reality slider hot-reload ✅ | ⚠️ Phases 1–3 done; Phase 4 propagation to subsystems missing | [#672](https://github.com/SaaSy-Solutions/mockforge/issues/672) |
+| AI chaos recommendations ✅ | ⚠️ Endpoint exists; pattern-detection logic empty | [#679](https://github.com/SaaSy-Solutions/mockforge/issues/679) |
+| Drift percentage tracking ✅ | ❌ Dashboard component exists; metric never emitted | [#678](https://github.com/SaaSy-Solutions/mockforge/issues/678) |
+| MockOps team-heatmap dashboards ✅ | ⚠️ React components exist; no backend queries | [#677](https://github.com/SaaSy-Solutions/mockforge/issues/677) |
+| Kafka consumer offset persistence ✅ | ⚠️ OffsetCommit/OffsetFetch are stubs — consumers can't restart cleanly | [#676](https://github.com/SaaSy-Solutions/mockforge/issues/676) |
+| `mockforge suggest` schema extrapolation ✅ | ⚠️ Engine exists; no CLI subcommand wired | [#681](https://github.com/SaaSy-Solutions/mockforge/issues/681) |
+| Async-protocol admin UI ✅ | ⚠️ Brokers real; no UI to create Kafka topics / MQTT subs / AMQP queues | [#682](https://github.com/SaaSy-Solutions/mockforge/issues/682) |
+| Async-protocol recording/replay ✅ | ❌ Recorder is HTTP-only | [#683](https://github.com/SaaSy-Solutions/mockforge/issues/683) |
+| Specialized Grafana dashboards ✅ | ⚠️ Only service-overview + marketplace exist | [#684](https://github.com/SaaSy-Solutions/mockforge/issues/684) |
+| BYOK cloud tier ✅ | ❌ Local BYOK works; cloud LlmRouter not implemented | [#685](https://github.com/SaaSy-Solutions/mockforge/issues/685) |
+| MQTT Last Will & Testament ✅ | ⚠️ Documented; no integration test | [#686](https://github.com/SaaSy-Solutions/mockforge/issues/686) |
+| OpenTelemetry exporters ✅ | ⚠️ Implemented but feature-gated off by default | [#687](https://github.com/SaaSy-Solutions/mockforge/issues/687) |
+
+### What's actually solid
+
+The audit confirmed the following areas as production-grade:
+
+- **Async brokers (Kafka, MQTT, AMQP)** — real wire protocols, ~7–11K LOC each, integration-tested with real client libraries (`rdkafka`, `rumqttc`, `lapin`)
+- **Chaos primitives** — latency, faults, rate-limit, network profiles (5G/4G/3G/2G/LEO/GEO), scenarios, traffic shaping all wired end-to-end
+- **AI plumbing** — real OpenAI / Anthropic / Ollama API calls, data-drift state machines, embeddings
+- **Observability core** — Prometheus metrics emit and Grafana dashboard queries match; audit trails (auth + request) are real
+- **No `todo!()` / `unimplemented!()` runtime panics** — the codebase doesn't lie at the language level; gaps are higher-level
+
+### How to read the legacy table below
+
+Treat ✅ as "architectural surface present" rather than "feature complete." The
+calibration table above is the source of truth until issues #665–#687 close,
+at which point this notice will be removed.
 
 ---
 
