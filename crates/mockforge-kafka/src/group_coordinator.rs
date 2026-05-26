@@ -17,7 +17,9 @@
 //! generation bumps, instance IDs for static membership, coordinator
 //! failover, transactional producer-group coordination.
 
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::time::{Duration, Instant};
 use uuid::Uuid;
 
@@ -69,26 +71,157 @@ pub struct JoinOutcome {
 /// A committed offset plus the opaque metadata blob the client wrote
 /// alongside it. librdkafka uses metadata to round-trip caller state
 /// (often empty, sometimes a JSON blob); we just store what we're given.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct CommittedOffset {
     pub offset: i64,
     pub metadata: Option<String>,
 }
 
+/// On-disk snapshot of all committed offsets. Just a flat list of
+/// `(group_id, topic, partition, offset, metadata)` rows; small,
+/// human-readable, easy to diff in a recovery scenario.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct OffsetSnapshot {
+    /// Schema version — bump if the on-disk shape changes.
+    version: u32,
+    entries: Vec<SnapshotEntry>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SnapshotEntry {
+    group_id: String,
+    topic: String,
+    partition: i32,
+    offset: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    metadata: Option<String>,
+}
+
 /// In-memory coordinator shared across all broker connections for a
 /// particular process. Held behind `Arc<tokio::sync::RwLock<_>>` in the
 /// broker.
+///
+/// Offset persistence (#676): when constructed with `new_with_persistence`,
+/// every `commit_offset` writes the full offset table back to disk and
+/// startup reads any prior snapshot back into memory. Without a path the
+/// behaviour is unchanged — offsets live only in process memory.
 #[derive(Debug, Default)]
 pub struct GroupCoordinator {
     groups: HashMap<String, GroupMembership>,
     /// Committed offsets, keyed by `(group_id, topic, partition_index)`.
     /// Survives member disconnects — that's the point of persistence.
     offsets: HashMap<(String, String, i32), CommittedOffset>,
+    /// Optional on-disk snapshot location. When set, `commit_offset`
+    /// serialises the offset table to JSON here after every write.
+    persistence_path: Option<PathBuf>,
 }
 
 impl GroupCoordinator {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Construct a coordinator that mirrors its offset table to a JSON
+    /// snapshot at `path`. If the file already exists it's read into memory
+    /// at startup so consumers reconnecting after a restart resume from
+    /// their last committed offset instead of falling back to
+    /// `auto.offset.reset`.
+    ///
+    /// The snapshot format is `{ version, entries: [...] }` — small enough
+    /// to be human-diffable in a recovery scenario. A corrupt or unreadable
+    /// snapshot is logged at WARN and treated as an empty start (the broker
+    /// must not refuse to come up because of a bad snapshot — that's
+    /// strictly worse than ephemeral offsets).
+    pub fn new_with_persistence(path: PathBuf) -> Self {
+        let mut coord = Self {
+            persistence_path: Some(path.clone()),
+            ..Self::default()
+        };
+        coord.load_snapshot();
+        coord
+    }
+
+    fn load_snapshot(&mut self) {
+        let Some(ref path) = self.persistence_path else {
+            return;
+        };
+        if !path.exists() {
+            tracing::debug!(path = %path.display(), "no Kafka offset snapshot to load");
+            return;
+        }
+        let raw = match std::fs::read_to_string(path) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(path = %path.display(), error = %e, "could not read Kafka offset snapshot; starting empty");
+                return;
+            }
+        };
+        let snapshot: OffsetSnapshot = match serde_json::from_str(&raw) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(path = %path.display(), error = %e, "Kafka offset snapshot is malformed; starting empty");
+                return;
+            }
+        };
+        for entry in snapshot.entries {
+            self.offsets.insert(
+                (entry.group_id, entry.topic, entry.partition),
+                CommittedOffset {
+                    offset: entry.offset,
+                    metadata: entry.metadata,
+                },
+            );
+        }
+        tracing::info!(
+            path = %path.display(),
+            count = self.offsets.len(),
+            "loaded Kafka offset snapshot"
+        );
+    }
+
+    fn persist_snapshot(&self) {
+        let Some(ref path) = self.persistence_path else {
+            return;
+        };
+        let entries: Vec<SnapshotEntry> = self
+            .offsets
+            .iter()
+            .map(|((g, t, p), c)| SnapshotEntry {
+                group_id: g.clone(),
+                topic: t.clone(),
+                partition: *p,
+                offset: c.offset,
+                metadata: c.metadata.clone(),
+            })
+            .collect();
+        let snapshot = OffsetSnapshot {
+            version: 1,
+            entries,
+        };
+
+        let json = match serde_json::to_string_pretty(&snapshot) {
+            Ok(s) => s,
+            Err(e) => {
+                tracing::warn!(error = %e, "failed to serialise Kafka offset snapshot");
+                return;
+            }
+        };
+
+        // Atomic write via tmp-then-rename so a crash mid-write doesn't
+        // leave a truncated snapshot file.
+        let tmp = path.with_extension("tmp");
+        if let Err(e) = std::fs::write(&tmp, &json) {
+            tracing::warn!(path = %tmp.display(), error = %e, "failed to write Kafka offset snapshot tmp");
+            return;
+        }
+        if let Err(e) = std::fs::rename(&tmp, path) {
+            tracing::warn!(
+                from = %tmp.display(),
+                to = %path.display(),
+                error = %e,
+                "failed to rename Kafka offset snapshot tmp"
+            );
+        }
     }
 
     /// Handle a JoinGroup.
@@ -222,6 +355,11 @@ impl GroupCoordinator {
     /// Persist a committed offset for `(group_id, topic, partition)`.
     /// Overwrites any previous commit — Kafka's protocol guarantees only
     /// that the *latest* commit wins.
+    ///
+    /// When the coordinator was constructed with `new_with_persistence`,
+    /// the full offset table is mirrored to disk after the in-memory
+    /// update. The persist call swallows errors (logged at WARN); a
+    /// broken snapshot store must not block consumer commits.
     pub fn commit_offset(
         &mut self,
         group_id: &str,
@@ -234,6 +372,9 @@ impl GroupCoordinator {
             (group_id.to_string(), topic.to_string(), partition),
             CommittedOffset { offset, metadata },
         );
+        if self.persistence_path.is_some() {
+            self.persist_snapshot();
+        }
     }
 
     /// Look up a previously committed offset. Returns `None` when the
@@ -379,5 +520,79 @@ mod tests {
         assert_eq!(coord.fetch_offset("g2", "t", 0).unwrap().offset, 2);
         assert_eq!(coord.fetch_offset("g1", "t", 1).unwrap().offset, 3);
         assert!(coord.fetch_offset("g1", "other", 0).is_none());
+    }
+
+    // Offset persistence (#676)
+
+    #[test]
+    fn persistence_path_none_means_no_disk_io() {
+        let mut coord = GroupCoordinator::new();
+        // Sanity: no panic, no file created, no env access.
+        coord.commit_offset("g", "t", 0, 1, None);
+        assert_eq!(coord.fetch_offset("g", "t", 0).unwrap().offset, 1);
+    }
+
+    #[test]
+    fn commit_writes_snapshot_to_disk() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("offsets.json");
+        {
+            let mut coord = GroupCoordinator::new_with_persistence(path.clone());
+            coord.commit_offset("g1", "topic-a", 0, 42, Some("checkpoint-1".into()));
+            coord.commit_offset("g1", "topic-a", 1, 7, None);
+        }
+        let raw = std::fs::read_to_string(&path).expect("snapshot should be written");
+        assert!(raw.contains("\"group_id\": \"g1\""));
+        assert!(raw.contains("\"topic\": \"topic-a\""));
+        assert!(raw.contains("\"offset\": 42"));
+        assert!(raw.contains("\"checkpoint-1\""));
+    }
+
+    #[test]
+    fn snapshot_round_trips_across_restart() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("offsets.json");
+
+        {
+            let mut coord = GroupCoordinator::new_with_persistence(path.clone());
+            coord.commit_offset("orders-consumer", "orders", 0, 1024, Some("cp-A".into()));
+            coord.commit_offset("orders-consumer", "orders", 1, 2048, None);
+            coord.commit_offset("invoices-consumer", "invoices", 0, 99, Some("cp-B".into()));
+        }
+
+        // Simulate broker restart: fresh coordinator pointed at the same snapshot.
+        let reborn = GroupCoordinator::new_with_persistence(path);
+        assert_eq!(reborn.fetch_offset("orders-consumer", "orders", 0).unwrap().offset, 1024);
+        assert_eq!(
+            reborn.fetch_offset("orders-consumer", "orders", 0).unwrap().metadata.as_deref(),
+            Some("cp-A")
+        );
+        assert_eq!(reborn.fetch_offset("orders-consumer", "orders", 1).unwrap().offset, 2048);
+        assert_eq!(reborn.fetch_offset("invoices-consumer", "invoices", 0).unwrap().offset, 99);
+    }
+
+    #[test]
+    fn malformed_snapshot_starts_empty_rather_than_panicking() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("offsets.json");
+        std::fs::write(&path, "this is not json").unwrap();
+        // Must not panic; recovery is silent (file is logged at WARN).
+        let coord = GroupCoordinator::new_with_persistence(path);
+        assert!(coord.fetch_offset("any", "any", 0).is_none());
+    }
+
+    #[test]
+    fn later_commit_replaces_disk_record() {
+        let tmp = tempfile::tempdir().unwrap();
+        let path = tmp.path().join("offsets.json");
+        {
+            let mut coord = GroupCoordinator::new_with_persistence(path.clone());
+            coord.commit_offset("g", "t", 0, 5, None);
+            coord.commit_offset("g", "t", 0, 99, Some("latest".into()));
+        }
+        let reborn = GroupCoordinator::new_with_persistence(path);
+        let fetched = reborn.fetch_offset("g", "t", 0).unwrap();
+        assert_eq!(fetched.offset, 99);
+        assert_eq!(fetched.metadata.as_deref(), Some("latest"));
     }
 }

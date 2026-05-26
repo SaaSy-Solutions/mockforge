@@ -196,8 +196,22 @@ impl KafkaMockBroker {
             config,
             topics,
             consumer_groups,
+            // #676 — opt-in offset persistence. Setting
+            // `MOCKFORGE_KAFKA_OFFSETS_DB` to a writable JSON file path
+            // mirrors every OffsetCommit to disk and reads it back at
+            // startup, so consumers reconnecting after a broker restart
+            // resume from their last committed offset instead of falling
+            // back to `auto.offset.reset`. Left unset, behaviour is
+            // unchanged (in-memory only).
             group_coordinator: Arc::new(RwLock::new(
-                crate::group_coordinator::GroupCoordinator::new(),
+                match std::env::var("MOCKFORGE_KAFKA_OFFSETS_DB") {
+                    Ok(path) if !path.is_empty() => {
+                        crate::group_coordinator::GroupCoordinator::new_with_persistence(
+                            std::path::PathBuf::from(path),
+                        )
+                    }
+                    _ => crate::group_coordinator::GroupCoordinator::new(),
+                },
             )),
             spec_registry: Arc::new(spec_registry),
             fixture_runtime: Arc::new(OnceLock::new()),
