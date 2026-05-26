@@ -759,6 +759,7 @@ fn default_bench_command(output_dir: &Path) -> BenchCommand {
         conformance_custom_filter: None,
         export_requests: false,
         validate_requests: false,
+        conformance_self_test: false,
         owasp_api_top10: false,
         owasp_categories: None,
         owasp_auth_header: "Authorization".to_string(),
