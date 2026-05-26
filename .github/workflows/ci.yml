@@ -84,8 +84,32 @@ jobs:
     - name: Build workspace
       run: cargo build --workspace --exclude mockforge-desktop --verbose
 
+    # mockforge-cli's default features do NOT include `ws`/`grpc`/`mqtt` etc.
+    # The integration tests in `tests/tests/e2e/protocols/*` spawn the
+    # workspace's `mockforge` binary as a subprocess and connect to the
+    # per-protocol port. Without those features compiled in nothing is
+    # listening and the tests fail with `Connection refused`.
+    #
+    # We build the all-protocols binary and stash a copy OUTSIDE target/.
+    # Building into target/debug/mockforge is not enough: the `Run tests`
+    # step below runs `cargo test --workspace`, which re-builds the
+    # mockforge bin with mockforge-cli's DEFAULT (ws-less) features —
+    # cargo's fingerprint is feature-aware, so it deterministically
+    # recompiles and overwrites target/debug/mockforge at the same path
+    # before any test runs. The stashed copy survives that rebuild, and
+    # `MOCKFORGE_TEST_BINARY` (honored by mockforge-test's binary resolver
+    # ahead of target/debug) points the e2e subprocess tests at it.
+    # $RUNNER_TEMP is per-runner, so sibling runners on this host don't
+    # collide. No untrusted input in either step.
+    - name: Build mockforge binary with all protocols (for e2e tests)
+      run: |
+        cargo build --bin mockforge --features all-protocols
+        cp target/debug/mockforge "$RUNNER_TEMP/mockforge-all-protocols"
+
     - name: Run tests
       run: cargo test --workspace --exclude mockforge-desktop --verbose
+      env:
+        MOCKFORGE_TEST_BINARY: ${{ runner.temp }}/mockforge-all-protocols
 
     - name: Run tests with all features
       run: cargo test --workspace --exclude mockforge-desktop --exclude mockforge-tui --all-features --verbose

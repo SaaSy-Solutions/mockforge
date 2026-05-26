@@ -85,7 +85,7 @@ pub async fn drift_tracking_middleware_with_extensions(
     // substituting `Body::empty()` (which broke downstream handlers).
     let content_length = req
         .headers()
-        .get(axum::http::header::CONTENT_LENGTH)
+        .get(http::header::CONTENT_LENGTH)
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.parse::<usize>().ok());
     if let Some(len) = content_length {
@@ -113,9 +113,9 @@ pub async fn drift_tracking_middleware_with_extensions(
             // cannot rebuild. 413 PayloadTooLarge instead of the old
             // silent `Body::empty()` substitution. Issue #79.
             return Response::builder()
-                .status(axum::http::StatusCode::PAYLOAD_TOO_LARGE)
+                .status(http::StatusCode::PAYLOAD_TOO_LARGE)
                 .header(
-                    axum::http::header::CONTENT_TYPE,
+                    http::header::CONTENT_TYPE,
                     "application/json",
                 )
                 .body(Body::from(format!(
