@@ -54,6 +54,30 @@ MockForge implements OpenTelemetry distributed tracing to provide visibility int
 
 ## Quick Start
 
+### Zero-config (recommended when an OTel collector is already configured)
+
+If the standard OpenTelemetry environment variables are set in your shell or
+container, MockForge auto-enables tracing on startup — no `--tracing` flag
+required, no config-file edits:
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4317
+export OTEL_SERVICE_NAME=mockforge-prod        # optional
+export OTEL_DEPLOYMENT_ENVIRONMENT=production  # optional
+export OTEL_TRACES_SAMPLER_ARG=0.25            # optional, 0.0–1.0
+
+mockforge serve --spec api.yaml
+# → "OpenTelemetry auto-enabled from environment (endpoint Some(\"http://collector:4317\"))"
+```
+
+Resolution order: explicit `--tracing` flag > env-var auto-detection > config file > disabled.
+Without any of the above, OTel stays a silent no-op — no startup log spam, no
+attempted dial to localhost:4317.
+
+`OTEL_EXPORTER_OTLP_ENDPOINT` (OTLP/gRPC) takes precedence over
+`OTEL_EXPORTER_JAEGER_ENDPOINT` when both are set. To use Jaeger, leave OTLP
+unset.
+
 ### 1. Enable Tracing
 
 **Option A: Configuration File**

@@ -701,6 +701,7 @@ impl ConformanceScreen {
             Cell::from("When").style(Theme::dim()),
             Cell::from("Method").style(Theme::dim()),
             Cell::from("Path").style(Theme::dim()),
+            Cell::from("Status").style(Theme::dim()),
             Cell::from("Query").style(Theme::dim()),
             Cell::from("Client").style(Theme::dim()),
         ])
@@ -717,6 +718,7 @@ impl ConformanceScreen {
                     Cell::from(r.timestamp.format("%H:%M:%S").to_string()),
                     Cell::from(r.method.clone()).style(Theme::http_method(&r.method)),
                     Cell::from(r.path.clone()),
+                    Cell::from(r.status.to_string()).style(Theme::status_code(r.status)),
                     Cell::from(if r.query.is_empty() {
                         "-".to_string()
                     } else {
@@ -731,7 +733,8 @@ impl ConformanceScreen {
             Constraint::Length(10),
             Constraint::Length(8),
             Constraint::Min(20),
-            Constraint::Min(15),
+            Constraint::Length(7),
+            Constraint::Min(12),
             Constraint::Length(16),
         ];
 

@@ -190,6 +190,7 @@ async fn test_bench_command_parse_headers() {
         conformance_custom_filter: None,
         export_requests: false,
         validate_requests: false,
+        conformance_self_test: false,
     };
 
     let headers = cmd.parse_headers().unwrap();
@@ -270,6 +271,7 @@ async fn test_bench_command_parse_headers_invalid_format() {
         conformance_custom_filter: None,
         export_requests: false,
         validate_requests: false,
+        conformance_self_test: false,
     };
 
     let result = cmd.parse_headers();

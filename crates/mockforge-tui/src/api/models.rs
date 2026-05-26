@@ -78,6 +78,14 @@ pub struct UnknownPathRequest {
     pub client_ip: String,
     #[serde(default)]
     pub query: String,
+    /// HTTP status the server returned (404 normally; 200 in shadow
+    /// mode — Issue #79 round 14). Defaults to 404 for older servers.
+    #[serde(default = "default_unknown_status")]
+    pub status: u16,
+}
+
+fn default_unknown_status() -> u16 {
+    404
 }
 
 #[derive(Debug, Clone, Deserialize)]
