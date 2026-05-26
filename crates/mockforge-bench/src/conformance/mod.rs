@@ -11,6 +11,7 @@ pub mod report;
 pub mod request_validator;
 pub mod sarif;
 pub mod schema_validator;
+pub mod self_test;
 pub mod spec;
 pub mod spec_driven;
 

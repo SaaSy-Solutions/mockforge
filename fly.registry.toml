@@ -32,6 +32,10 @@ primary_region = "iad"
 #   SMTP_USERNAME         - Brevo login email
 #   SMTP_PASSWORD         - Brevo SMTP key
 #   PROMETHEUS_SCRAPE_TOKEN - Optional: bearer token Prometheus must send to scrape /metrics. When unset, /metrics is publicly readable — set this in production (issue #647). Configure in Prometheus via `bearer_token` (or `bearer_token_file`) on the scrape config.
+#   SENTRY_DSN            - Optional: server-side error tracking. When unset/empty, no events are captured.
+#   SENTRY_ENVIRONMENT    - Optional: defaults to "production". Use "staging" / "preview" on non-prod apps.
+#   SENTRY_RELEASE        - Optional: defaults to the crate version. Override to tag deploys with a git SHA or Fly release ID.
+#   SENTRY_TRACES_SAMPLE_RATE - Optional: 0.0–1.0 perf trace sampling. Default 0.0 (errors only).
 
 [http_service]
   internal_port = 8080

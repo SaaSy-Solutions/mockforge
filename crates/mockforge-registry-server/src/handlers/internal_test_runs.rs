@@ -22,7 +22,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    models::{FitnessFunction, TestRun, UsageCounter},
+    models::{FitnessFunction, Incident, TestRun, UsageCounter},
     AppState,
 };
 use axum::extract::Query;
@@ -113,7 +113,81 @@ pub async fn run_event(
     .await
     .map_err(ApiError::Database)?;
 
+    // #673 — IncidentBus wiring. A breaking contract-diff finding is a
+    // page-someone event; raise an incident through the same dedupe
+    // pipeline the external POST endpoint uses. Failure here must not
+    // block event ingestion — log at WARN and move on. We don't await
+    // a spawn because the caller is the runner and we want any DB
+    // pressure to fall on the request, not on a detached task that
+    // could pile up unbounded.
+    if body.event_type == "diff_finding" {
+        if let Err(e) = maybe_raise_finding_incident(&state, id, &body.payload).await {
+            tracing::warn!(
+                run_id = %id,
+                seq = body.seq,
+                error = %e,
+                "failed to raise incident from diff_finding event",
+            );
+        }
+    }
+
     Ok(Json(serde_json::json!({ "appended": true })))
+}
+
+/// Inspect a `diff_finding` payload and raise an incident if it's
+/// severe enough. Severity comes from the finding payload itself
+/// (breaking | high | medium | low | unknown). The finding's
+/// `endpoint` doubles as the per-run dedupe key so repeated reports
+/// for the same endpoint within one run collapse to one incident.
+async fn maybe_raise_finding_incident(
+    state: &AppState,
+    run_id: Uuid,
+    payload: &serde_json::Value,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let severity = payload.get("severity").and_then(|v| v.as_str()).unwrap_or("unknown");
+
+    // Only "breaking" findings (or the explicit "critical"/"high"
+    // synonyms the auditor uses) page someone. Lower-severity
+    // findings live as test_run_events only — the dashboard already
+    // surfaces them without needing an incident.
+    let mapped_severity = match severity {
+        "breaking" | "critical" => "critical",
+        "high" => "high",
+        _ => return Ok(()),
+    };
+
+    let endpoint = payload.get("endpoint").and_then(|v| v.as_str()).unwrap_or("(unknown endpoint)");
+    let description = payload
+        .get("description")
+        .and_then(|v| v.as_str())
+        .unwrap_or("Breaking contract drift detected.");
+
+    // Fetch the run so we know which org to attribute the incident to.
+    // We don't error on "run gone" — that's the runner racing with a
+    // cancellation, not an incident worth raising.
+    let Some(run) = TestRun::find_by_id(state.db.pool(), run_id).await? else {
+        return Ok(());
+    };
+
+    let dedupe_key = format!("contract-drift:{run_id}:{endpoint}");
+    let title = format!("Breaking contract drift on {endpoint}");
+
+    Incident::raise(
+        state.db.pool(),
+        mockforge_registry_core::models::incident::RaiseIncidentInput {
+            org_id: run.org_id,
+            workspace_id: None,
+            source: "contract_drift",
+            source_ref: Some(&run_id.to_string()),
+            dedupe_key: &dedupe_key,
+            severity: mapped_severity,
+            title: &title,
+            description: Some(description),
+        },
+    )
+    .await?;
+
+    Ok(())
 }
 
 #[derive(Debug, Deserialize)]

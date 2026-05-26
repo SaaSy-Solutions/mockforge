@@ -85,7 +85,7 @@ pub async fn drift_tracking_middleware_with_extensions(
     // substituting `Body::empty()` (which broke downstream handlers).
     let content_length = req
         .headers()
-        .get(axum::http::header::CONTENT_LENGTH)
+        .get(http::header::CONTENT_LENGTH)
         .and_then(|v| v.to_str().ok())
         .and_then(|s| s.parse::<usize>().ok());
     if let Some(len) = content_length {
@@ -113,9 +113,9 @@ pub async fn drift_tracking_middleware_with_extensions(
             // cannot rebuild. 413 PayloadTooLarge instead of the old
             // silent `Body::empty()` substitution. Issue #79.
             return Response::builder()
-                .status(axum::http::StatusCode::PAYLOAD_TOO_LARGE)
+                .status(http::StatusCode::PAYLOAD_TOO_LARGE)
                 .header(
-                    axum::http::header::CONTENT_TYPE,
+                    http::header::CONTENT_TYPE,
                     "application/json",
                 )
                 .body(Body::from(format!(
@@ -169,6 +169,24 @@ pub async fn drift_tracking_middleware_with_extensions(
             Ok(diff_result) => {
                 // Evaluate drift budget
                 let drift_result = state.drift_engine.evaluate(&diff_result, &path, &method);
+
+                // Emit Prometheus gauges for the drift dashboard (#678). The
+                // workspace_id is not yet plumbed through the middleware —
+                // pass an empty label so a single global series records,
+                // matching the pattern used for the non-workspace
+                // `pillar_tracking` calls below. When workspace identification
+                // lands we can switch this label to the resolved id.
+                mockforge_observability::get_global_registry().record_drift_evaluation(
+                    mockforge_observability::DriftEvaluationSample {
+                        workspace_id: "",
+                        endpoint: &path,
+                        method: &method,
+                        total: drift_result.metrics.total_changes,
+                        breaking: drift_result.breaking_changes,
+                        potentially_breaking: drift_result.potentially_breaking_changes,
+                        budget_exceeded: drift_result.budget_exceeded,
+                    },
+                );
 
                 // Record contracts pillar usage for drift detection
                 mockforge_core::pillar_tracking::record_contracts_usage(
