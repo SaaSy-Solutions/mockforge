@@ -1066,6 +1066,151 @@ impl Default for OpenTelemetryConfig {
     }
 }
 
+impl OpenTelemetryConfig {
+    /// Construct a config from standard OpenTelemetry environment variables.
+    ///
+    /// Returns `Some(config)` only if at least one of the standard endpoint env
+    /// vars is set (`OTEL_EXPORTER_OTLP_ENDPOINT` or
+    /// `OTEL_EXPORTER_JAEGER_ENDPOINT`). This is the "zero-config OTel" path:
+    /// a user who follows standard OpenTelemetry onboarding (sets the env var,
+    /// runs their app) gets spans without having to pass `--tracing` to the
+    /// CLI or edit a config file.
+    ///
+    /// Recognized variables (subset of the OTel spec — only the ones we can
+    /// actually act on):
+    /// - `OTEL_EXPORTER_OTLP_ENDPOINT` — OTLP collector URL (preferred)
+    /// - `OTEL_EXPORTER_JAEGER_ENDPOINT` — Jaeger collector URL (fallback)
+    /// - `OTEL_SERVICE_NAME` — overrides the default service name
+    /// - `OTEL_TRACES_SAMPLER_ARG` — sampling probability 0.0–1.0
+    /// - `OTEL_DEPLOYMENT_ENVIRONMENT` — non-spec convenience for environment
+    ///
+    /// When neither endpoint var is set, returns `None` so the caller can
+    /// stay silent (no log spam, no startup banner).
+    pub fn from_env() -> Option<Self> {
+        let otlp = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok().filter(|s| !s.is_empty());
+        let jaeger = std::env::var("OTEL_EXPORTER_JAEGER_ENDPOINT").ok().filter(|s| !s.is_empty());
+
+        // No endpoint set → user hasn't opted in. Stay quiet.
+        if otlp.is_none() && jaeger.is_none() {
+            return None;
+        }
+
+        let mut cfg = Self {
+            enabled: true,
+            ..Self::default()
+        };
+
+        // OTLP wins when both are set — it's the modern OTel default.
+        if let Some(endpoint) = otlp {
+            cfg.otlp_endpoint = Some(endpoint);
+            cfg.protocol = "grpc".to_string();
+        } else if let Some(endpoint) = jaeger {
+            cfg.jaeger_endpoint = endpoint;
+            cfg.otlp_endpoint = None;
+        }
+
+        if let Ok(service_name) = std::env::var("OTEL_SERVICE_NAME") {
+            if !service_name.is_empty() {
+                cfg.service_name = service_name;
+            }
+        }
+        if let Ok(env) = std::env::var("OTEL_DEPLOYMENT_ENVIRONMENT") {
+            if !env.is_empty() {
+                cfg.environment = env;
+            }
+        }
+        if let Ok(rate) = std::env::var("OTEL_TRACES_SAMPLER_ARG") {
+            if let Ok(parsed) = rate.parse::<f64>() {
+                if (0.0..=1.0).contains(&parsed) {
+                    cfg.sampling_rate = parsed;
+                }
+            }
+        }
+
+        Some(cfg)
+    }
+}
+
+#[cfg(test)]
+mod opentelemetry_config_tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    // OTel env vars are process-global. Serialize tests that mutate them so
+    // they don't race when run via `cargo test` (which uses a thread pool).
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    fn clear_otel_env() {
+        for var in [
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+            "OTEL_EXPORTER_JAEGER_ENDPOINT",
+            "OTEL_SERVICE_NAME",
+            "OTEL_DEPLOYMENT_ENVIRONMENT",
+            "OTEL_TRACES_SAMPLER_ARG",
+        ] {
+            std::env::remove_var(var);
+        }
+    }
+
+    #[test]
+    fn from_env_returns_none_when_no_endpoint_set() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_otel_env();
+        assert!(OpenTelemetryConfig::from_env().is_none());
+    }
+
+    #[test]
+    fn from_env_picks_up_otlp_endpoint() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_otel_env();
+        std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4317");
+        let cfg = OpenTelemetryConfig::from_env().expect("should auto-enable");
+        assert!(cfg.enabled);
+        assert_eq!(cfg.otlp_endpoint.as_deref(), Some("http://collector:4317"));
+        assert_eq!(cfg.protocol, "grpc");
+        clear_otel_env();
+    }
+
+    #[test]
+    fn from_env_picks_up_jaeger_endpoint_when_no_otlp() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_otel_env();
+        std::env::set_var("OTEL_EXPORTER_JAEGER_ENDPOINT", "http://jaeger:14268/api/traces");
+        let cfg = OpenTelemetryConfig::from_env().expect("should auto-enable");
+        assert!(cfg.enabled);
+        assert_eq!(cfg.jaeger_endpoint, "http://jaeger:14268/api/traces");
+        assert!(cfg.otlp_endpoint.is_none());
+        clear_otel_env();
+    }
+
+    #[test]
+    fn from_env_applies_service_name_and_sampling() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_otel_env();
+        std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4317");
+        std::env::set_var("OTEL_SERVICE_NAME", "mockforge-prod");
+        std::env::set_var("OTEL_DEPLOYMENT_ENVIRONMENT", "production");
+        std::env::set_var("OTEL_TRACES_SAMPLER_ARG", "0.25");
+        let cfg = OpenTelemetryConfig::from_env().expect("should auto-enable");
+        assert_eq!(cfg.service_name, "mockforge-prod");
+        assert_eq!(cfg.environment, "production");
+        assert!((cfg.sampling_rate - 0.25).abs() < f64::EPSILON);
+        clear_otel_env();
+    }
+
+    #[test]
+    fn from_env_rejects_invalid_sampling_rate() {
+        let _g = ENV_LOCK.lock().unwrap();
+        clear_otel_env();
+        std::env::set_var("OTEL_EXPORTER_OTLP_ENDPOINT", "http://collector:4317");
+        std::env::set_var("OTEL_TRACES_SAMPLER_ARG", "9.0");
+        let cfg = OpenTelemetryConfig::from_env().expect("should auto-enable");
+        // Invalid value rejected; falls back to default sampling rate.
+        assert!((cfg.sampling_rate - 1.0).abs() < f64::EPSILON);
+        clear_otel_env();
+    }
+}
+
 /// API Flight Recorder configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]

@@ -4,6 +4,14 @@
 # Vue 2/3 shim). Putting it here rather than `package.json#pnpm` matches the
 # v11 docs — the `pnpm` field in package.json is still accepted, but the
 # CI image's pnpm appears to read this file first.
+#
+# `packages: ['.']` is required because pnpm 11 treats the presence of a
+# pnpm-workspace.yaml as "this directory is a workspace root" and refuses
+# to install if no packages are listed. Single-element list keeps the
+# existing flat layout — the UI dir is a single package, not a multi-pkg
+# workspace.
+packages:
+  - .
 onlyBuiltDependencies:
   - esbuild
   - vue-demi

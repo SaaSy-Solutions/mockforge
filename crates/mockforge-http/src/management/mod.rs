@@ -1157,6 +1157,16 @@ pub async fn dynamic_mock_fallback(
     match serve_dynamic_mock(&state, req).await {
         Some(resp) => resp,
         None => {
+            // Issue #79 round 14 — shadow mode returns 200 for unknown
+            // paths (instead of 404) while still recording them, so a
+            // proxy replay flows through non-blocking. The recorded
+            // `status` reflects what the client actually saw.
+            let shadow = mockforge_foundation::unknown_paths::shadow_mode_enabled();
+            let status = if shadow {
+                StatusCode::OK
+            } else {
+                StatusCode::NOT_FOUND
+            };
             mockforge_foundation::unknown_paths::record(
                 mockforge_foundation::unknown_paths::UnknownPathRequest {
                     timestamp: chrono::Utc::now(),
@@ -1164,9 +1174,22 @@ pub async fn dynamic_mock_fallback(
                     path,
                     client_ip: "unknown".to_string(),
                     query,
+                    status: status.as_u16(),
                 },
             );
-            StatusCode::NOT_FOUND.into_response()
+            if shadow {
+                // Minimal JSON stub so clients expecting a body don't
+                // choke. Shadow mode is for traffic-replay observability,
+                // not realistic response shapes.
+                (
+                    StatusCode::OK,
+                    [(axum::http::header::CONTENT_TYPE, "application/json")],
+                    r#"{"shadow":true,"matched":false}"#,
+                )
+                    .into_response()
+            } else {
+                StatusCode::NOT_FOUND.into_response()
+            }
         }
     }
 }
