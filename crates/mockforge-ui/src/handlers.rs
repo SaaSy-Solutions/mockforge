@@ -4631,7 +4631,7 @@ pub async fn get_reality_level(
 /// Set reality level
 #[derive(Deserialize)]
 pub struct SetRealityLevelRequest {
-    level: u8,
+    pub level: u8,
 }
 
 pub async fn set_reality_level(

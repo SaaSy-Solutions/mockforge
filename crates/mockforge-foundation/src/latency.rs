@@ -338,6 +338,14 @@ impl LatencyInjector {
         Ok(None)
     }
 
+    /// Borrow the current latency profile (read-only).
+    ///
+    /// Mostly useful from tests and the admin UI for verifying that
+    /// hot-reload calls actually mutated the injector.
+    pub fn profile(&self) -> &LatencyProfile {
+        &self.latency_profile
+    }
+
     /// Update latency profile at runtime
     ///
     /// This allows changing the latency profile without recreating the injector.
