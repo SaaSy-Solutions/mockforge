@@ -1,0 +1,82 @@
+name: Publish mockforge-sdk to Maven Central
+
+# Publishes `sdk/java/` as `com.mockforge:mockforge-sdk` on Maven Central.
+# Mirrors `npm-publish-sdk.yml` for the Java SDK so #674 closes uniformly
+# across registries.
+#
+# Triggers:
+#   1. `workflow_dispatch` — manual publish (RC, dry-runs).
+#   2. `push` on a tag matching `java-sdk-v*` (e.g. `java-sdk-v0.1.0`).
+#
+# Prereqs (one-time setup on the repo):
+#   - `OSSRH_USERNAME` + `OSSRH_TOKEN` repo secrets (Sonatype Central
+#     portal user-token credentials).
+#   - `MAVEN_GPG_PRIVATE_KEY` + `MAVEN_GPG_PASSPHRASE` repo secrets
+#     (ascii-armored signing key for Central's GPG requirement).
+#   - `pom.xml` must include the standard Central metadata
+#     (developers, scm, distributionManagement); the SDK pom.xml ships
+#     the essentials.
+
+on:
+  push:
+    tags:
+      - 'java-sdk-v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (verify only, no deploy)'
+        required: false
+        default: 'false'
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/java
+    env:
+      DRY_RUN: ${{ github.event.inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up JDK 17 + Maven Central credentials
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+          server-id: ossrh
+          server-username: MAVEN_USERNAME
+          server-password: MAVEN_PASSWORD
+          gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
+          gpg-passphrase: MAVEN_GPG_PASSPHRASE
+
+      - name: Sanity-check pom.xml version
+        run: |
+          ver=$(mvn -q -Dexec.executable=echo -Dexec.args='${project.version}' --non-recursive exec:exec)
+          if [ -z "$ver" ] || [ "$ver" = "0.0.0" ]; then
+            echo "pom.xml version missing or 0.0.0" >&2
+            exit 1
+          fi
+          echo "version $ver"
+
+      - name: Verify build + tests
+        run: mvn -B verify
+
+      - name: Publish to Maven Central
+        if: ${{ env.DRY_RUN != 'true' }}
+        env:
+          MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
+          MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
+        # -P release activates the gpg + nexus-staging plugins. If the
+        # SDK's pom doesn't have a `release` profile yet, this step
+        # fails loudly — the fix is a pom change, not a workflow bug.
+        run: mvn -B -P release deploy
