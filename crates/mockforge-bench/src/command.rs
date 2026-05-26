@@ -200,6 +200,13 @@ pub struct BenchCommand {
     /// When true, validate each request against the OpenAPI spec and report
     /// violations to `conformance-request-violations.json`.
     pub validate_requests: bool,
+    /// Issue #79 round 13 (4) — when true, replace the standard
+    /// conformance run with a positive + per-category negative
+    /// self-test driver. Verifies that the server actually rejects
+    /// the negatives with 4xx (i.e. its validator is wired correctly).
+    /// Useful to confirm the round-13 (3) validator-bypass fix took
+    /// effect against the user's spec.
+    pub conformance_self_test: bool,
 
     // === OWASP API Security Top 10 Testing ===
     /// Enable OWASP API Security Top 10 testing mode
@@ -706,6 +713,7 @@ impl BenchCommand {
                 conformance_custom_filter: None,
                 export_requests: false,
                 validate_requests: false,
+                conformance_self_test: false,
             },
             targets,
             max_concurrency,
@@ -2154,6 +2162,68 @@ impl BenchCommand {
             None
         };
 
+        // Issue #79 round 13 (4) — `--conformance-self-test` replaces
+        // the standard conformance run with a positive + per-category
+        // negative driver that verifies the server actually rejects
+        // bad requests with 4xx. Wires the spec-annotated operations
+        // through `conformance::self_test::run_self_test` and prints
+        // the resulting pass/fail matrix.
+        if self.conformance_self_test {
+            let Some(ops) = annotated_ops else {
+                TerminalReporter::print_error(
+                    "--conformance-self-test requires --spec; no operations to test",
+                );
+                return Ok(());
+            };
+            let cfg = crate::conformance::self_test::SelfTestConfig {
+                target_url: self.target.clone(),
+                skip_tls_verify: self.skip_tls_verify,
+                timeout: std::time::Duration::from_secs(30),
+                // `custom_headers` was already moved into the
+                // `ConformanceConfig` above; re-derive from `self` so
+                // we don't borrow it twice.
+                extra_headers: self
+                    .conformance_headers
+                    .iter()
+                    .filter_map(|h| {
+                        let (n, v) = h.split_once(':')?;
+                        Some((n.trim().to_string(), v.trim().to_string()))
+                    })
+                    .collect(),
+                delay_between_requests: std::time::Duration::from_millis(self.conformance_delay_ms),
+            };
+            TerminalReporter::print_progress(&format!(
+                "Self-test mode: driving {} operations with positive + per-category negative cases",
+                ops.len()
+            ));
+            let report =
+                crate::conformance::self_test::run_self_test(&ops, &cfg).await.map_err(|e| {
+                    crate::error::BenchError::Other(format!("self-test client error: {e}"))
+                })?;
+            TerminalReporter::print_progress(&report.render_summary());
+            // Persist the JSON report alongside the regular conformance
+            // report so it's grep-able next to the buffer dump from the
+            // admin endpoint.
+            let json_path = self.output.join("conformance-self-test.json");
+            if let Ok(json) = serde_json::to_string_pretty(&report) {
+                let _ = std::fs::write(&json_path, json);
+                TerminalReporter::print_progress(&format!(
+                    "Self-test report written to {}",
+                    json_path.display()
+                ));
+            }
+            if !report.all_passed() {
+                TerminalReporter::print_warning(
+                    "Self-test detected gaps — server let through at least one request that should have been a 4xx",
+                );
+            } else {
+                TerminalReporter::print_success(
+                    "Self-test passed — all positive cases accepted and all negative cases rejected",
+                );
+            }
+            return Ok(());
+        }
+
         // Request validation against OpenAPI spec (if --validate-requests is set)
         if self.validate_requests && !self.spec.is_empty() {
             TerminalReporter::print_progress("Validating requests against OpenAPI spec...");
@@ -2949,6 +3019,7 @@ mod tests {
             conformance_custom_filter: None,
             export_requests: false,
             validate_requests: false,
+            conformance_self_test: false,
         };
 
         let headers = cmd.parse_headers().unwrap();
@@ -3027,6 +3098,7 @@ mod tests {
             conformance_custom_filter: None,
             export_requests: false,
             validate_requests: false,
+            conformance_self_test: false,
         };
 
         assert_eq!(cmd.get_spec_display_name(), "test.yaml");
@@ -3101,6 +3173,7 @@ mod tests {
             conformance_custom_filter: None,
             export_requests: false,
             validate_requests: false,
+            conformance_self_test: false,
         };
 
         assert_eq!(cmd_multi.get_spec_display_name(), "2 spec files");

@@ -2110,6 +2110,18 @@ enum Commands {
         /// Violations are written to conformance-request-violations.json.
         #[arg(long)]
         validate_requests: bool,
+
+        /// Issue #79 round 13 — replace the standard conformance run
+        /// with a positive + per-category negative driver. For each
+        /// spec operation: send one valid request (expect 2xx) plus
+        /// negatives per category (empty body, wrong-type body,
+        /// missing required query/header) and report how many were
+        /// correctly rejected with 4xx. Useful to verify the server's
+        /// validator is actually wired for the given spec. Requires
+        /// --spec. Writes `conformance-self-test.json` to the output
+        /// directory alongside the regular report.
+        #[arg(long)]
+        conformance_self_test: bool,
     },
 
     /// Native Rust chunked-encoding traffic generator.
@@ -2973,6 +2985,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             conformance_custom_filter,
             export_requests,
             validate_requests,
+            conformance_self_test,
         } => {
             // Validate that either --target or --targets-file is provided, but not both
             match (&target, &targets_file) {
@@ -3065,6 +3078,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 conformance_custom_filter,
                 export_requests,
                 validate_requests,
+                conformance_self_test,
             };
 
             if let Err(e) = bench_cmd.execute().await {

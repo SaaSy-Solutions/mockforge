@@ -1,3 +1,9 @@
+## [0.3.149] - 2026-05-25
+
+### Added
+
+- **[Contracts][DevX]** `mockforge bench --conformance --conformance-self-test` (#79 round 13 (4)) — positive + per-category negative driver against a live server. For each annotated operation in `--spec`: sends one valid request (expect 2xx) plus per-category negatives (empty body, wrong-type body, missing required query param, missing required header) and reports how many the server correctly rejected with 4xx. Writes `conformance-self-test.json` to the output dir; prints a one-line-per-category pass/fail summary; emits a warning when any negative case slipped through. Useful for verifying the round-13 (3) validator-bypass fix took effect against the user's spec.
+
 ## [0.3.148] - 2026-05-25
 
 ### Fixed
