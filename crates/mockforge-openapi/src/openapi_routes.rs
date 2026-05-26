@@ -417,12 +417,20 @@ impl OpenApiRouteRegistry {
 
         let deduped = self.deduplicated_routes();
         let ctx = Arc::new(ctx);
+        // Issue #79 round 14 hotfix — share ONE validator across all
+        // route handlers via Arc. Previously each of N route closures
+        // captured its own `clone_for_validation()` (which deep-clones
+        // the entire N-element routes Vec), making router construction
+        // O(N²) in memory — ~260 GB resident for an 11,422-operation
+        // spec (Microsoft Graph), which the OOM killer reaped right
+        // after "Stored N routes". An Arc clone is 8 bytes.
+        let validator = Arc::new(self.clone_for_validation());
         for (axum_path, route) in &deduped {
             tracing::debug!("Adding route: {} {}", route.method, route.path);
             let operation = route.operation.clone();
             let method = route.method.clone();
             let path_template = route.path.clone();
-            let validator = self.clone_for_validation();
+            let validator = validator.clone();
             let route_clone = (*route).clone();
             let ctx = ctx.clone();
 
@@ -1464,15 +1472,19 @@ impl OpenApiRouteRegistry {
         let deduped = self.deduplicated_routes();
         tracing::debug!("Building router with AI support from {} routes", self.routes.len());
 
+        // Issue #79 round 14 hotfix — one shared validator (Arc) instead
+        // of a per-route deep clone. See `build_router_with_context` for
+        // the O(N²)/OOM rationale.
+        let validator = Arc::new(self.clone_for_validation());
         for (axum_path, route) in &deduped {
             tracing::debug!("Adding AI-enabled route: {} {}", route.method, route.path);
 
             let route_clone = (*route).clone();
             let ai_generator_clone = ai_generator.clone();
             // Issue #79 round 13 — same validation bypass as
-            // `build_router_with_mockai`. Clone the validator into the
-            // closure and run validation before AI response generation.
-            let validator_clone = self.clone_for_validation();
+            // `build_router_with_mockai`. Run validation before AI
+            // response generation; the validator is shared via Arc.
+            let validator_clone = validator.clone();
 
             // Create async handler that extracts request data and builds context
             let handler = move |AxumPath(path_params): AxumPath<HashMap<String, String>>,
@@ -1595,6 +1607,10 @@ impl OpenApiRouteRegistry {
         tracing::debug!("Building router with MockAI support from {} routes", self.routes.len());
 
         let custom_loader = self.custom_fixture_loader.clone();
+        // Issue #79 round 14 hotfix — one shared validator (Arc) instead
+        // of a per-route deep clone. See `build_router_with_context` for
+        // the O(N²)/OOM rationale.
+        let validator = Arc::new(self.clone_for_validation());
         for (axum_path, route) in &deduped {
             tracing::debug!("Adding MockAI-enabled route: {} {}", route.method, route.path);
 
@@ -1603,12 +1619,10 @@ impl OpenApiRouteRegistry {
             let custom_loader_clone = custom_loader.clone();
             // Issue #79 round 13 — the MockAI handler was bypassing
             // request validation entirely, so spec violations never
-            // populated the conformance ring buffer. Clone the
-            // validator into the closure and call
+            // populated the conformance ring buffer. Run
             // `run_validation_with_recording` before fixture/MockAI/
-            // mock-response synthesis, mirroring what
-            // `build_router_with_context` does at line ~686.
-            let validator_clone = self.clone_for_validation();
+            // mock-response synthesis; the validator is shared via Arc.
+            let validator_clone = validator.clone();
 
             // Create async handler that processes requests through MockAI
             // Query params are extracted via Query extractor with HashMap
