@@ -127,6 +127,26 @@ impl MonitoredService {
         .await
     }
 
+    /// Return every enabled monitored service with a non-empty
+    /// `openapi_spec_url`. Used by the contract probe worker (#671) to
+    /// pick services that can actually be fetched from a network URL;
+    /// services with only `openapi_spec_inline` or no spec are skipped
+    /// because the probe is "go fetch the live spec and diff it."
+    pub async fn list_probeable(pool: &PgPool) -> sqlx::Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>(
+            r#"
+            SELECT *
+            FROM monitored_services
+            WHERE enabled = TRUE
+              AND openapi_spec_url IS NOT NULL
+              AND openapi_spec_url <> ''
+            ORDER BY workspace_id, name
+            "#,
+        )
+        .fetch_all(pool)
+        .await
+    }
+
     pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM monitored_services WHERE id = $1")
             .bind(id)

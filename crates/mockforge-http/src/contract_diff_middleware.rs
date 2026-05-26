@@ -84,9 +84,9 @@ pub async fn capture_for_contract_diff(req: Request<Body>, next: Next) -> Respon
             // truncate the request and cause the handler to respond
             // before the client finished uploading. Issue #79.
             return Response::builder()
-                .status(axum::http::StatusCode::PAYLOAD_TOO_LARGE)
+                .status(http::StatusCode::PAYLOAD_TOO_LARGE)
                 .header(
-                    axum::http::header::CONTENT_TYPE,
+                    http::header::CONTENT_TYPE,
                     "application/json",
                 )
                 .body(Body::from(format!(

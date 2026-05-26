@@ -1,3 +1,20 @@
+## [0.3.150] - 2026-05-26
+
+### Fixed
+
+- **[Reality]** Server no longer OOM-killed at startup on large specs (#79 round 14) — building the OpenAPI router cloned the *entire* routes Vec into every per-route handler closure (each closure captured its own `clone_for_validation()`), making router construction **O(N²) in memory**: ~260 GB resident for an 11,422-operation spec (Microsoft Graph), which the OOM killer reaped immediately after the `Stored N routes` log line. Srikanth hit this on 0.3.148/0.3.149. Fixed by sharing a single validator across all handlers via `Arc` (per-closure cost drops from a full deep clone to an 8-byte pointer). Applies to all three router builders (`build_router_with_context`, `build_router_with_mockai`, `build_router_with_ai`). Reproduced with a 22,000-operation synthetic spec: pre-fix died with `memory allocation failed` right after `Stored 22000 routes`; post-fix starts and serves cleanly.
+
+### Added
+
+- **[Reality][Contracts]** Server-side **shadow mode** (`MOCKFORGE_SHADOW_MODE=true`) (#79 round 14) — Srikanth's (a) ask. When enabled, the server returns **200** for requests it would normally reject — unknown paths (instead of 404) and spec violations (instead of 400/422) — while *still* recording them to the conformance + unknown-paths buffers. A "report-only" / monitor mode: replay proxy traffic through MockForge non-blocking and capture every violation for cross-checking, without the rejections breaking the client flow. Unknown paths get a minimal `{"shadow":true,"matched":false}` 200 stub; spec-violating requests fall through to normal response synthesis. Startup prints a `👻 SHADOW MODE ON` banner so the behavior is never a surprise.
+- **[Contracts][DevX]** Status column on the TUI unknown-paths view (#79 round 14) — the unknown-paths feed now carries the HTTP status the server actually returned (404 normally, 200 in shadow mode), surfaced as a colored `Status` column in the `u`-toggled unknown-paths view so you can tell at a glance which requests shadow mode let through.
+
+## [0.3.149] - 2026-05-25
+
+### Added
+
+- **[Contracts][DevX]** `mockforge bench --conformance --conformance-self-test` (#79 round 13 (4)) — positive + per-category negative driver against a live server. For each annotated operation in `--spec`: sends one valid request (expect 2xx) plus per-category negatives (empty body, wrong-type body, missing required query param, missing required header) and reports how many the server correctly rejected with 4xx. Writes `conformance-self-test.json` to the output dir; prints a one-line-per-category pass/fail summary; emits a warning when any negative case slipped through. Useful for verifying the round-13 (3) validator-bypass fix took effect against the user's spec.
+
 ## [0.3.148] - 2026-05-25
 
 ### Fixed
