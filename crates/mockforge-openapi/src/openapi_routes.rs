@@ -1108,6 +1108,22 @@ impl OpenApiRouteRegistry {
                     .to_string()
             });
         let category = classify_validation_reason(&reason);
+        // Issue #79 round 15 — Srikanth asked for server-side logs of
+        // *why* a request was a violation. Emit one line per violation
+        // under a dedicated target so it can be enabled precisely
+        // (`RUST_LOG=mockforge::conformance=debug`) without turning on
+        // firehose debug logging. DEBUG (not WARN) so it doesn't spam
+        // the default log under load — the aggregate is in the
+        // Conformance tab / API; this is the opt-in detail channel.
+        tracing::debug!(
+            target: "mockforge::conformance",
+            method = %method,
+            path = %path_template,
+            status = status_code,
+            category = %category,
+            reason = %reason,
+            "request conformance violation"
+        );
         mockforge_foundation::conformance_violations::record(
             mockforge_foundation::conformance_violations::ServerConformanceViolation {
                 timestamp: Utc::now(),

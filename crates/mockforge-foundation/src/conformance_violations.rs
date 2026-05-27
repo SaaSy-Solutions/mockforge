@@ -19,6 +19,7 @@ use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// A single server-side conformance violation captured at the OpenAPI
 /// router. Mirrors `ConformanceViolation` semantics from the bench-side
@@ -48,10 +49,18 @@ const DEFAULT_BUFFER_SIZE: usize = 256;
 static VIOLATIONS: Lazy<Mutex<VecDeque<ServerConformanceViolation>>> =
     Lazy::new(|| Mutex::new(VecDeque::with_capacity(DEFAULT_BUFFER_SIZE)));
 
+/// Lifetime count of violations recorded since process start (Issue #79
+/// round 15). The ring buffer only keeps the most recent
+/// `DEFAULT_BUFFER_SIZE`; this counter answers Srikanth's "I sent 656k
+/// requests but only see 256" — the 256 is the buffer cap, this is the
+/// true total seen.
+static TOTAL_SEEN: AtomicU64 = AtomicU64::new(0);
+
 /// Record a violation. Old entries are dropped when the buffer is full
 /// (FIFO). Cheap enough to call from the hot path — uses a parking_lot
 /// Mutex which is uncontended in steady state.
 pub fn record(violation: ServerConformanceViolation) {
+    TOTAL_SEEN.fetch_add(1, Ordering::Relaxed);
     let mut buf = VIOLATIONS.lock();
     if buf.len() == DEFAULT_BUFFER_SIZE {
         buf.pop_front();
@@ -65,14 +74,22 @@ pub fn snapshot() -> Vec<ServerConformanceViolation> {
     buf.iter().rev().cloned().collect()
 }
 
-/// Number of violations currently buffered.
+/// Number of violations currently buffered (≤ `DEFAULT_BUFFER_SIZE`).
 pub fn len() -> usize {
     VIOLATIONS.lock().len()
 }
 
-/// Clear the buffer. Primarily for tests and TUI "reset" actions.
+/// Lifetime total of violations recorded since process start, including
+/// ones the ring buffer has since evicted.
+pub fn total_seen() -> u64 {
+    TOTAL_SEEN.load(Ordering::Relaxed)
+}
+
+/// Clear the buffer and reset the lifetime counter. Primarily for tests
+/// and TUI "reset" actions.
 pub fn clear() {
     VIOLATIONS.lock().clear();
+    TOTAL_SEEN.store(0, Ordering::Relaxed);
 }
 
 #[cfg(test)]

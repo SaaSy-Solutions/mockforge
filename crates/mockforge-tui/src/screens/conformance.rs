@@ -22,7 +22,7 @@ use std::time::Instant;
 use crossterm::event::{KeyCode, KeyEvent};
 use ratatui::{
     layout::{Constraint, Layout, Rect},
-    widgets::{Block, Borders, Cell, Paragraph, Row, Table},
+    widgets::{Block, Borders, Cell, Paragraph, Row, Table, Wrap},
     Frame,
 };
 use tokio::sync::mpsc;
@@ -125,9 +125,14 @@ pub struct ConformanceScreen {
     /// Full snapshot from the server, newest-first.
     violations: Vec<ConformanceViolation>,
     total: usize,
+    /// Round-15: lifetime count of violations seen server-side (the
+    /// buffer caps `total` at 256; this is the true total).
+    total_seen: u64,
     /// Round-13: unmatched-path requests captured by the HTTP fallback.
     unknown_paths: Vec<UnknownPathRequest>,
     unknown_total: usize,
+    /// Round-15: lifetime count of unknown-path requests seen.
+    unknown_total_seen: u64,
     /// Toggled by `u` between violations and unknown-paths views.
     view_mode: ViewMode,
     table: TableState,
@@ -156,8 +161,10 @@ impl ConformanceScreen {
             loaded: false,
             violations: Vec::new(),
             total: 0,
+            total_seen: 0,
             unknown_paths: Vec::new(),
             unknown_total: 0,
+            unknown_total_seen: 0,
             view_mode: ViewMode::Violations,
             table: TableState::new(),
             error: None,
@@ -423,14 +430,21 @@ impl Screen for ConformanceScreen {
         if self.detail_open {
             let detail =
                 self.selected_detail().unwrap_or_else(|| "(no violation selected)".to_string());
-            let para = Paragraph::new(detail).scroll((self.detail_scroll, 0)).block(
-                Block::default()
-                    .title(" Violation Detail (Esc to close) ")
-                    .title_style(Theme::title())
-                    .borders(Borders::ALL)
-                    .border_style(Theme::dim())
-                    .style(Theme::surface()),
-            );
+            // Issue #79 round 15 — wrap long lines so big Microsoft
+            // Graph paths and validation reasons are fully readable
+            // (Srikanth couldn't see the full path/reason). j/k still
+            // scroll vertically through the wrapped detail.
+            let para = Paragraph::new(detail)
+                .wrap(Wrap { trim: false })
+                .scroll((self.detail_scroll, 0))
+                .block(
+                    Block::default()
+                        .title(" Violation Detail (Esc to close, j/k scroll) ")
+                        .title_style(Theme::title())
+                        .borders(Borders::ALL)
+                        .border_style(Theme::dim())
+                        .style(Theme::surface()),
+                );
             frame.render_widget(para, area);
             return;
         }
@@ -504,6 +518,7 @@ impl Screen for ConformanceScreen {
                     if let Ok(payload) = serde_json::to_string(&serde_json::json!({
                         "violations": resp.violations,
                         "total": resp.total,
+                        "total_seen": resp.total_seen,
                     })) {
                         let _ = tx_v.send(Event::Data {
                             screen: "conformance",
@@ -527,6 +542,7 @@ impl Screen for ConformanceScreen {
                     if let Ok(payload) = serde_json::to_string(&serde_json::json!({
                         "unknown_requests": resp.requests,
                         "unknown_total": resp.total,
+                        "unknown_total_seen": resp.total_seen,
                     })) {
                         let _ = tx_u.send(Event::Data {
                             screen: "conformance",
@@ -553,10 +569,13 @@ impl Screen for ConformanceScreen {
             unknown_requests: Vec<UnknownPathRequest>,
             #[serde(default)]
             unknown_total: usize,
+            #[serde(default)]
+            unknown_total_seen: u64,
         }
         if let Ok(parsed) = serde_json::from_str::<UnknownWire>(payload) {
             self.unknown_paths = parsed.unknown_requests;
             self.unknown_total = parsed.unknown_total;
+            self.unknown_total_seen = parsed.unknown_total_seen;
             if matches!(self.view_mode, ViewMode::UnknownPaths) {
                 self.table.set_total(self.current_row_count());
             }
@@ -571,12 +590,15 @@ impl Screen for ConformanceScreen {
             #[serde(default)]
             total: usize,
             #[serde(default)]
+            total_seen: u64,
+            #[serde(default)]
             cleared: Option<usize>,
         }
         match serde_json::from_str::<Wire>(payload) {
             Ok(parsed) => {
                 self.violations = parsed.violations;
                 self.total = parsed.total;
+                self.total_seen = parsed.total_seen;
                 if matches!(self.view_mode, ViewMode::Violations) {
                     self.table.set_total(self.current_row_count());
                 }
@@ -671,13 +693,20 @@ impl ConformanceScreen {
 
         let filtered_count = indices.len();
         let filter_suffix = self.filter_label_suffix();
+        // Round-15: show lifetime `total_seen` alongside the buffered
+        // count so a 656k-request run doesn't look like "only 256".
+        let seen_suffix = if self.total_seen as usize > self.total {
+            format!(", {} seen total", self.total_seen)
+        } else {
+            String::new()
+        };
         let title = if self.total > filtered_count {
             format!(
-                " Conformance Violations ({} buffered, {} shown{}) ",
-                self.total, filtered_count, filter_suffix
+                " Conformance Violations ({} buffered, {} shown{}{}) ",
+                self.total, filtered_count, seen_suffix, filter_suffix
             )
         } else {
-            format!(" Conformance Violations ({}{}) ", filtered_count, filter_suffix)
+            format!(" Conformance Violations ({}{}{}) ", filtered_count, seen_suffix, filter_suffix)
         };
 
         let table = Table::new(rows, widths)
@@ -740,13 +769,20 @@ impl ConformanceScreen {
 
         let filtered_count = indices.len();
         let filter_suffix = self.filter_label_suffix();
+        // Round-15: lifetime total so the 256-cap buffer doesn't read
+        // as the whole story (Srikanth's 656k-vs-256 question).
+        let seen_suffix = if self.unknown_total_seen as usize > self.unknown_total {
+            format!(", {} seen total", self.unknown_total_seen)
+        } else {
+            String::new()
+        };
         let title = if self.unknown_total > filtered_count {
             format!(
-                " Unknown Paths ({} buffered, {} shown{}) ",
-                self.unknown_total, filtered_count, filter_suffix
+                " Unknown Paths ({} buffered, {} shown{}{}) ",
+                self.unknown_total, filtered_count, seen_suffix, filter_suffix
             )
         } else {
-            format!(" Unknown Paths ({}{}) ", filtered_count, filter_suffix)
+            format!(" Unknown Paths ({}{}{}) ", filtered_count, seen_suffix, filter_suffix)
         };
 
         let table = Table::new(rows, widths)
@@ -775,7 +811,9 @@ impl ConformanceScreen {
                 .collect::<Vec<_>>()
                 .join("\n")
         };
-        let para = Paragraph::new(body).style(Theme::dim()).block(
+        // Issue #79 round 15 — wrap so long `METHOD /very/long/graph/path`
+        // entries don't get clipped at the panel's right edge.
+        let para = Paragraph::new(body).style(Theme::dim()).wrap(Wrap { trim: false }).block(
             Block::default()
                 .title(" Top Offending Endpoints ")
                 .title_style(Theme::title())

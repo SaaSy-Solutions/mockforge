@@ -16,6 +16,7 @@ use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 /// Issue #79 round 14 — Srikanth's shadow-mode ask. When enabled, the
 /// server returns `200` for requests that would otherwise be rejected
@@ -64,8 +65,15 @@ const DEFAULT_BUFFER_SIZE: usize = 256;
 static UNKNOWN_PATHS: Lazy<Mutex<VecDeque<UnknownPathRequest>>> =
     Lazy::new(|| Mutex::new(VecDeque::with_capacity(DEFAULT_BUFFER_SIZE)));
 
-/// Record an unmatched-path 404. FIFO when the buffer is full.
+/// Lifetime count of unknown-path requests since process start (Issue
+/// #79 round 15). The ring buffer keeps only the most recent
+/// `DEFAULT_BUFFER_SIZE`; this is the true total seen — answers "I sent
+/// hundreds of thousands of requests but the feed only shows 256".
+static TOTAL_SEEN: AtomicU64 = AtomicU64::new(0);
+
+/// Record an unmatched-path request. FIFO when the buffer is full.
 pub fn record(req: UnknownPathRequest) {
+    TOTAL_SEEN.fetch_add(1, Ordering::Relaxed);
     let mut buf = UNKNOWN_PATHS.lock();
     if buf.len() == DEFAULT_BUFFER_SIZE {
         buf.pop_front();
@@ -79,14 +87,21 @@ pub fn snapshot() -> Vec<UnknownPathRequest> {
     buf.iter().rev().cloned().collect()
 }
 
-/// Current buffer length.
+/// Current buffer length (≤ `DEFAULT_BUFFER_SIZE`).
 pub fn len() -> usize {
     UNKNOWN_PATHS.lock().len()
 }
 
-/// Clear the buffer.
+/// Lifetime total of unknown-path requests recorded since process
+/// start, including ones the ring buffer has since evicted.
+pub fn total_seen() -> u64 {
+    TOTAL_SEEN.load(Ordering::Relaxed)
+}
+
+/// Clear the buffer and reset the lifetime counter.
 pub fn clear() {
     UNKNOWN_PATHS.lock().clear();
+    TOTAL_SEEN.store(0, Ordering::Relaxed);
 }
 
 #[cfg(test)]

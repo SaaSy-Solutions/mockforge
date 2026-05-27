@@ -1334,12 +1334,15 @@ pub async fn get_conformance_violations(
 ) -> impl IntoResponse {
     let snap = mockforge_foundation::conformance_violations::snapshot();
     let total = snap.len();
+    let total_seen = mockforge_foundation::conformance_violations::total_seen();
     let limit: Option<usize> = q.get("limit").and_then(|s| s.parse().ok());
     let limited: Vec<_> = match limit {
         Some(n) => snap.into_iter().take(n).collect(),
         None => snap,
     };
-    Json(json!({"violations": limited, "total": total}))
+    // `total` = entries currently in the 256-cap ring buffer;
+    // `total_seen` = lifetime count since server start (Issue #79 r15).
+    Json(json!({"violations": limited, "total": total, "total_seen": total_seen}))
 }
 
 /// Clear the server-side conformance violation ring buffer.
@@ -1357,12 +1360,13 @@ pub async fn get_unknown_paths(
 ) -> impl IntoResponse {
     let snap = mockforge_foundation::unknown_paths::snapshot();
     let total = snap.len();
+    let total_seen = mockforge_foundation::unknown_paths::total_seen();
     let limit: Option<usize> = q.get("limit").and_then(|s| s.parse().ok());
     let limited: Vec<_> = match limit {
         Some(n) => snap.into_iter().take(n).collect(),
         None => snap,
     };
-    Json(json!({"requests": limited, "total": total}))
+    Json(json!({"requests": limited, "total": total, "total_seen": total_seen}))
 }
 
 /// Clear the unknown-paths ring buffer.
