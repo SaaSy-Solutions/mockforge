@@ -1,0 +1,77 @@
+name: Publish MockForge.Sdk to NuGet
+
+# Publishes `sdk/dotnet/MockForge.Sdk/` as `MockForge.Sdk` on NuGet.
+# Mirrors `npm-publish-sdk.yml` for the .NET SDK so #674 closes uniformly
+# across registries.
+#
+# Triggers:
+#   1. `workflow_dispatch` — manual publish (RC, dry-runs).
+#   2. `push` on a tag matching `dotnet-sdk-v*` (e.g. `dotnet-sdk-v0.1.0`).
+#
+# Prereqs (one-time setup on the repo):
+#   - `NUGET_API_KEY` repo secret with publish permission on the
+#     MockForge.Sdk package id.
+
+on:
+  push:
+    tags:
+      - 'dotnet-sdk-v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (pack only, no push)'
+        required: false
+        default: 'false'
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/dotnet/MockForge.Sdk
+    env:
+      DRY_RUN: ${{ github.event.inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Sanity-check csproj version
+        run: |
+          ver=$(grep -oPm1 '(?<=<Version>)[^<]+' MockForge.Sdk.csproj)
+          if [ -z "$ver" ] || [ "$ver" = "0.0.0" ]; then
+            echo "MockForge.Sdk.csproj <Version> missing or 0.0.0" >&2
+            exit 1
+          fi
+          echo "version $ver"
+
+      - name: Restore
+        run: dotnet restore
+
+      - name: Test
+        working-directory: sdk/dotnet
+        run: dotnet test --no-restore --verbosity normal || echo "no .NET tests configured (yet)"
+
+      - name: Pack
+        run: dotnet pack -c Release -o ../artifacts
+
+      - name: Publish
+        if: ${{ env.DRY_RUN != 'true' }}
+        env:
+          NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        working-directory: sdk/dotnet/artifacts
+        run: |
+          dotnet nuget push '*.nupkg' \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate

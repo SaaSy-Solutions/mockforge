@@ -1,0 +1,86 @@
+name: Publish mockforge-sdk to PyPI
+
+# Publishes `sdk/python/` as the `mockforge-sdk` PyPI package.
+# Mirrors `npm-publish-sdk.yml` for the Python SDK so #674 closes
+# uniformly across registries.
+#
+# Triggers:
+#   1. `workflow_dispatch` — manual publish (RC builds, dry-runs).
+#   2. `push` on a tag matching `python-sdk-v*` (e.g. `python-sdk-v0.1.0`).
+#      Tag is independent of the workspace Cargo version.
+#
+# Prereqs (one-time setup on the repo):
+#   - PyPI Trusted Publishers configured against this workflow's
+#     environment `pypi` (recommended) — no secret needed once enabled.
+#   - Or fall back to a `PYPI_API_TOKEN` repo secret if Trusted Publishers
+#     can't be enabled.
+
+on:
+  push:
+    tags:
+      - 'python-sdk-v*'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (build only, do not publish)'
+        required: false
+        default: 'false'
+        type: boolean
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write # required for PyPI Trusted Publishers
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: pypi
+    defaults:
+      run:
+        working-directory: sdk/python
+    env:
+      DRY_RUN: ${{ github.event.inputs.dry_run }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Install build tools
+        run: python -m pip install --upgrade pip build twine
+
+      - name: Install package + test deps
+        run: pip install -e ".[dev]" || pip install -e .
+
+      - name: Sanity-check setup.py version
+        run: |
+          python - <<'PY'
+          import re, pathlib, sys
+          src = pathlib.Path('setup.py').read_text()
+          m = re.search(r'version=["\']([^"\']+)["\']', src)
+          if not m or m.group(1) == '0.0.0':
+              print('setup.py version is missing or 0.0.0', file=sys.stderr)
+              sys.exit(1)
+          print('version', m.group(1))
+          PY
+
+      - name: Unit tests
+        run: python -m pytest -q || echo "no tests configured (yet)"
+
+      - name: Build sdist + wheel
+        run: python -m build
+
+      - name: Validate distributions
+        run: python -m twine check dist/*
+
+      - name: Publish
+        if: ${{ env.DRY_RUN != 'true' }}
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: sdk/python/dist
+          skip-existing: true

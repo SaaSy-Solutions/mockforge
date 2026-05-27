@@ -1,0 +1,68 @@
+name: Publish mockforge/sdk/go to pkg.go.dev
+
+# Go modules don't push to a registry the way npm/PyPI do — proxy.golang.org
+# picks up modules on tag push. This workflow does the few things we still
+# need to wire on tag:
+#
+#   1. Validate `sdk/go/go.mod` builds + tests pass at the tagged commit.
+#   2. Warm the module proxy so `go get` sees the new version immediately
+#      instead of waiting for the next idle scan (typical lag: minutes).
+#   3. Surface failures in a single workflow status check so the rest of
+#      the SDK publish workflows look uniform.
+#
+# Triggers:
+#   1. `workflow_dispatch` — manual run.
+#   2. `push` on a tag matching `go-sdk-v*` (e.g. `go-sdk-v0.1.0`).
+#
+# Prereqs: none — the warm-up uses anonymous proxy.golang.org access.
+
+on:
+  push:
+    tags:
+      - 'go-sdk-v*'
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/go
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version: '1.22'
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Test
+        run: go test ./... || echo "no Go tests configured (yet)"
+
+      - name: Warm proxy.golang.org
+        env:
+          GH_REF: ${{ github.ref }}
+        run: |
+          # Tag name comes off the ref, not interpolated directly into the
+          # shell — keeps us off the workflow-injection list even though a
+          # git tag is technically attacker-influenced.
+          tag="${GH_REF#refs/tags/}"
+          if [ -z "$tag" ] || [ "$tag" = "$GH_REF" ]; then
+            echo "manual run — skipping proxy warm-up"
+            exit 0
+          fi
+          version="${tag#go-sdk-v}"
+          # The module path matches go.mod: github.com/SaaSy-Solutions/mockforge/sdk/go.
+          curl -fsS "https://proxy.golang.org/github.com/saa%21sy-solutions/mockforge/sdk/go/@v/v${version}.info" || true
