@@ -306,9 +306,11 @@ pub struct StorageMetrics {
 
 /// In-memory storage implementation for development and testing
 pub struct InMemoryStorage {
-    chunks: Arc<RwLock<HashMap<String, DocumentChunk>>>,
-    vectors: VectorStore,
-    stats: Arc<RwLock<StorageStats>>,
+    // pub(super) so the file-backed wrapper in this module can rehydrate
+    // these from disk without going through the async trait surface.
+    pub(super) chunks: Arc<RwLock<HashMap<String, DocumentChunk>>>,
+    pub(super) vectors: VectorStore,
+    pub(super) stats: Arc<RwLock<StorageStats>>,
 }
 
 impl InMemoryStorage {
@@ -635,37 +637,237 @@ impl DocumentStorage for InMemoryStorage {
 pub struct StorageFactory;
 
 impl StorageFactory {
-    /// Create in-memory storage
+    /// Create in-memory storage. Ephemeral — chunks + vectors live only
+    /// for the process lifetime. Intended for tests and OSS quick-start.
     pub fn create_memory() -> Box<dyn DocumentStorage> {
         Box::new(InMemoryStorage::new())
     }
 
-    /// Create file-based storage
+    /// Create file-backed storage that persists chunks + vectors to a JSON
+    /// snapshot inside `path/`. Closes the "RAG forgets everything on
+    /// restart" half of #669 — embeddings survive process restarts now.
+    ///
+    /// Layout:
+    ///   `<path>/storage.json`  — single-file snapshot (atomic write via tmp)
+    ///
+    /// Tradeoff: rewrites the whole snapshot on every `store_chunks` call.
+    /// Fine for thousand-chunk-scale corpora that fit in RAM (the
+    /// embedded RAG use case); a real vector database is a better fit
+    /// for million-chunk catalogs — see `create_vector_db` below.
     pub fn create_file(path: &str) -> Result<Box<dyn DocumentStorage>> {
         if path.trim().is_empty() {
             return Err(crate::Error::generic("File storage path cannot be empty"));
         }
 
         std::fs::create_dir_all(path)?;
-        Ok(Box::new(InMemoryStorage::new_with_backend_type("file")))
+        let dir = std::path::PathBuf::from(path);
+        Ok(Box::new(PersistentFileStorage::new(dir)?))
     }
 
-    /// Create database storage
+    /// Create database storage. Not yet implemented — the connection
+    /// string would route to a sqlx-backed implementation. Returns a
+    /// labelled in-memory store for now and warns rather than failing
+    /// silently. Tracked in #669 follow-up.
     pub fn create_database(connection_string: &str) -> Result<Box<dyn DocumentStorage>> {
         if connection_string.trim().is_empty() {
             return Err(crate::Error::generic("Database connection string cannot be empty"));
         }
-
+        tracing::warn!(
+            "create_database falls back to in-memory storage; \
+             sqlx-backed backend is tracked in #669 follow-up"
+        );
         Ok(Box::new(InMemoryStorage::new_with_backend_type("database")))
     }
 
-    /// Create vector database storage
+    /// Create vector-database storage. Real vector-DB integrations
+    /// (Qdrant, LanceDB, pgvector) belong behind crate feature flags so
+    /// the heavy client/transitive deps don't land in every consumer.
+    /// Until one of those features is enabled, this returns a clear
+    /// error rather than silently falling back to ephemeral memory —
+    /// the silent fallback was exactly what the audit (#669) flagged.
     pub fn create_vector_db(config: HashMap<String, String>) -> Result<Box<dyn DocumentStorage>> {
         if config.is_empty() {
             return Err(crate::Error::generic("Vector database configuration cannot be empty"));
         }
 
-        Ok(Box::new(InMemoryStorage::new_with_backend_type("vector-db")))
+        let provider = config.get("provider").map(|s| s.as_str()).unwrap_or("<unspecified>");
+
+        Err(crate::Error::generic(format!(
+            "vector-db backend '{provider}' not compiled in. \
+             Enable the `qdrant` or `lancedb` feature on mockforge-data, \
+             or use `create_file()` for persistent local storage."
+        )))
+    }
+}
+
+/// File-backed `DocumentStorage` that snapshots an in-memory store to a
+/// JSON file on every write. Construction reads any prior snapshot back.
+///
+/// Implementation note: delegates all read paths to the wrapped
+/// `InMemoryStorage` so cosine-similarity search etc. stays identical.
+/// Only `store_chunks` / `delete_documents` / `clear_all` rewrite the
+/// snapshot — read-only ops stay zero-IO.
+pub struct PersistentFileStorage {
+    inner: InMemoryStorage,
+    snapshot_path: std::path::PathBuf,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct StorageSnapshot {
+    /// Schema version; bump if the on-disk shape changes.
+    version: u32,
+    chunks: HashMap<String, DocumentChunk>,
+    vectors: Vec<(String, Vec<f32>)>,
+}
+
+impl PersistentFileStorage {
+    /// Create a persistent file storage at `<dir>/storage.json`. Reads
+    /// any existing snapshot at construction time.
+    pub fn new(dir: std::path::PathBuf) -> Result<Self> {
+        std::fs::create_dir_all(&dir)?;
+        let snapshot_path = dir.join("storage.json");
+        let inner = InMemoryStorage::new_with_backend_type("file");
+
+        if snapshot_path.exists() {
+            let raw = std::fs::read_to_string(&snapshot_path).map_err(crate::Error::from)?;
+            let snapshot: StorageSnapshot = serde_json::from_str(&raw)
+                .map_err(|e| crate::Error::generic(format!("malformed snapshot: {e}")))?;
+
+            // We just created `inner` and haven't shared its Arcs yet, so
+            // `try_write` must succeed. Using `try_write` (not
+            // `blocking_write`) keeps construction safe to call from
+            // inside a tokio runtime — `blocking_write` panics from
+            // worker threads of the current runtime.
+            inner
+                .chunks
+                .try_write()
+                .map(|mut g| *g = snapshot.chunks)
+                .map_err(|_| crate::Error::generic("snapshot load: chunks lock contended"))?;
+            inner
+                .vectors
+                .try_write()
+                .map(|mut g| *g = snapshot.vectors)
+                .map_err(|_| crate::Error::generic("snapshot load: vectors lock contended"))?;
+            if let Ok(mut stats) = inner.stats.try_write() {
+                stats.last_updated = chrono::Utc::now();
+            }
+            tracing::info!(
+                path = %snapshot_path.display(),
+                "loaded RAG storage snapshot"
+            );
+        }
+
+        Ok(Self {
+            inner,
+            snapshot_path,
+        })
+    }
+
+    async fn persist(&self) -> Result<()> {
+        let snapshot = StorageSnapshot {
+            version: 1,
+            chunks: self.inner.chunks.read().await.clone(),
+            vectors: self.inner.vectors.read().await.clone(),
+        };
+        let json = serde_json::to_string_pretty(&snapshot)
+            .map_err(|e| crate::Error::generic(format!("serialise snapshot: {e}")))?;
+
+        // Atomic rename — a crash mid-write leaves the previous snapshot
+        // intact rather than truncating to a half-file.
+        let tmp = self.snapshot_path.with_extension("tmp");
+        std::fs::write(&tmp, json).map_err(crate::Error::from)?;
+        std::fs::rename(&tmp, &self.snapshot_path).map_err(crate::Error::from)?;
+        Ok(())
+    }
+}
+
+#[async_trait::async_trait]
+impl DocumentStorage for PersistentFileStorage {
+    async fn store_chunks(&self, chunks: Vec<DocumentChunk>) -> Result<()> {
+        self.inner.store_chunks(chunks).await?;
+        self.persist().await?;
+        Ok(())
+    }
+
+    async fn search_similar(
+        &self,
+        query_embedding: &[f32],
+        top_k: usize,
+    ) -> Result<Vec<DocumentChunk>> {
+        self.inner.search_similar(query_embedding, top_k).await
+    }
+
+    async fn search_with_params(
+        &self,
+        query_embedding: &[f32],
+        params: SearchParams,
+    ) -> Result<Vec<DocumentChunk>> {
+        self.inner.search_with_params(query_embedding, params).await
+    }
+
+    async fn get_chunk(&self, chunk_id: &str) -> Result<Option<DocumentChunk>> {
+        self.inner.get_chunk(chunk_id).await
+    }
+
+    async fn delete_chunk(&self, chunk_id: &str) -> Result<bool> {
+        let res = self.inner.delete_chunk(chunk_id).await?;
+        if res {
+            self.persist().await?;
+        }
+        Ok(res)
+    }
+
+    async fn get_chunks_by_document(&self, document_id: &str) -> Result<Vec<DocumentChunk>> {
+        self.inner.get_chunks_by_document(document_id).await
+    }
+
+    async fn delete_document(&self, document_id: &str) -> Result<usize> {
+        let n = self.inner.delete_document(document_id).await?;
+        if n > 0 {
+            self.persist().await?;
+        }
+        Ok(n)
+    }
+
+    async fn get_stats(&self) -> Result<StorageStats> {
+        let mut stats = self.inner.get_stats().await?;
+        // Override the backend label so health/admin surfaces show
+        // "file" rather than the inner store's "file" label (which we
+        // already set, but make it explicit).
+        stats.backend_type = "file".to_string();
+        Ok(stats)
+    }
+
+    async fn list_documents(&self) -> Result<Vec<String>> {
+        self.inner.list_documents().await
+    }
+
+    async fn get_total_chunks(&self) -> Result<usize> {
+        self.inner.get_total_chunks().await
+    }
+
+    async fn clear(&self) -> Result<()> {
+        self.inner.clear().await?;
+        self.persist().await?;
+        Ok(())
+    }
+
+    async fn optimize(&self) -> Result<()> {
+        self.inner.optimize().await
+    }
+
+    async fn create_backup(&self, path: &str) -> Result<()> {
+        self.inner.create_backup(path).await
+    }
+
+    async fn restore_backup(&self, path: &str) -> Result<()> {
+        self.inner.restore_backup(path).await?;
+        self.persist().await?;
+        Ok(())
+    }
+
+    async fn health_check(&self) -> Result<StorageHealth> {
+        self.inner.health_check().await
     }
 }
 
@@ -699,11 +901,108 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_vector_storage_fallback_backend_type() {
+    async fn test_create_vector_storage_errors_without_real_backend() {
+        // After #669: vector-db requested without `qdrant`/`lancedb` feature
+        // is now an error rather than a silent in-memory fallback.
         let mut cfg = HashMap::new();
         cfg.insert("provider".to_string(), "qdrant".to_string());
-        let storage = StorageFactory::create_vector_db(cfg).expect("create");
-        let stats = storage.get_stats().await.expect("stats");
-        assert_eq!(stats.backend_type, "vector-db");
+        let result = StorageFactory::create_vector_db(cfg);
+        assert!(result.is_err(), "expected error, got Ok");
+        let msg = result.err().unwrap().to_string();
+        assert!(
+            msg.contains("not compiled in") || msg.contains("qdrant"),
+            "expected helpful error mentioning compile-in or qdrant, got: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_persistent_file_storage_round_trips_across_restart() {
+        use crate::rag::engine::DocumentChunk;
+
+        let dir = std::env::temp_dir().join(format!(
+            "mockforge-rag-persist-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+
+        let path_str = dir.to_str().expect("path");
+
+        // First "process": write a chunk + embedding.
+        {
+            let storage = StorageFactory::create_file(path_str).expect("create");
+            let chunk = DocumentChunk {
+                id: "chunk-1".to_string(),
+                document_id: "doc-1".to_string(),
+                content: "hello rag".to_string(),
+                embedding: vec![0.1, 0.2, 0.3],
+                metadata: HashMap::new(),
+                position: 0,
+                length: 9,
+            };
+            storage.store_chunks(vec![chunk]).await.expect("store");
+        }
+
+        // Second "process": read the same path. Inner state should
+        // rehydrate from disk; the chunk should still be queryable.
+        {
+            let storage = StorageFactory::create_file(path_str).expect("reopen");
+            let stats = storage.get_stats().await.expect("stats");
+            assert_eq!(stats.backend_type, "file");
+            let chunk = storage.get_chunk("chunk-1").await.expect("query");
+            assert!(chunk.is_some(), "persisted chunk should survive restart");
+            let chunk = chunk.unwrap();
+            assert_eq!(chunk.content, "hello rag");
+            assert_eq!(chunk.embedding, vec![0.1, 0.2, 0.3]);
+        }
+
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn test_persistent_file_storage_search_survives_restart() {
+        use crate::rag::engine::DocumentChunk;
+
+        let dir = std::env::temp_dir().join(format!(
+            "mockforge-rag-search-{}-{}",
+            std::process::id(),
+            chrono::Utc::now().timestamp_nanos_opt().unwrap_or(0)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let path_str = dir.to_str().expect("path");
+
+        {
+            let storage = StorageFactory::create_file(path_str).expect("create");
+            let chunks = vec![
+                DocumentChunk {
+                    id: "a".to_string(),
+                    document_id: "doc".to_string(),
+                    content: "apple".to_string(),
+                    embedding: vec![1.0, 0.0, 0.0],
+                    metadata: HashMap::new(),
+                    position: 0,
+                    length: 5,
+                },
+                DocumentChunk {
+                    id: "b".to_string(),
+                    document_id: "doc".to_string(),
+                    content: "banana".to_string(),
+                    embedding: vec![0.0, 1.0, 0.0],
+                    metadata: HashMap::new(),
+                    position: 5,
+                    length: 6,
+                },
+            ];
+            storage.store_chunks(chunks).await.expect("store");
+        }
+
+        // Reopen — cosine-similarity search should still return
+        // the right chunk for a vector pointing at it.
+        let storage = StorageFactory::create_file(path_str).expect("reopen");
+        let hits = storage.search_similar(&[1.0, 0.0, 0.0], 1).await.expect("search");
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0].id, "a");
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
