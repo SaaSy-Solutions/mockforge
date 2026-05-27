@@ -22,11 +22,15 @@ Confirmed from `crates/mockforge-ui/ui/package.json` + source:
 - **Data/server state: `@tanstack/react-query` v5.** **Client/UI state: `zustand` v5.** **Validation: `zod`.** **Routing: `react-router-dom` v7.** **HTTP: `axios`.** **Markdown: `react-markdown`.** **API reference: `@scalar/api-reference-react`.**
 - **No `@tanstack/react-table`** yet — complex tables are hand-rolled. **No `react-hook-form`** — forms use local state + `zod`.
 
-### 0.A The consistency problem to fix: MUI vs Radix
-The app **also imports `@mui/material` + `@mui/icons-material`** in a chunk of screens, alongside the Radix/shadcn/Tailwind system. That is the exact "two design systems in one tree" anti-pattern. **Directive:**
-- **Build all new UI in the Tailwind + Radix + CVA (shadcn-style) system.** Do **not** add new `@mui/*` usage.
-- When you touch a screen that uses MUI, migrate that surface to the Tailwind/Radix equivalents (MUI `Button`→ CVA button, MUI `Dialog`→ Radix Dialog, MUI `Select`→ Radix Select, MUI icons→ lucide). Incremental is fine; net MUI usage should only go down.
-- This is what makes the app match the (Tailwind-based) marketing site. One system, one token set.
+### 0.A MUI is already converged via a shim — do not "migrate" it
+~22 screens still `import { ... } from '@mui/material'` / `'@mui/icons-material'`, but **real MUI is NOT installed.** `vite.config.ts` aliases those imports to in-repo shims:
+- `@mui/material` → `src/components/ui/mui-shim.tsx` (~2200 lines reimplementing the MUI API on shadcn/ui + Tailwind + the brand tokens, e.g. `sx` color keywords map to `hsl(var(--primary))`).
+- `@mui/icons-material` → `src/components/ui/mui-icons-shim.tsx`.
+
+So those screens **already render as Tailwind/shadcn with brand tokens** — the app is one system under the hood. Verified live: dashboard and shim-backed pages (e.g. Hosted Mocks) render on-brand with correct empty/error states. **Directive:**
+- **Never reinstall real `@mui/*`.** If a `@mui/*`-imported component misbehaves or looks off, **fix it in the shim** (one file, fixes every screen) — do not reach for the real package.
+- Build genuinely new UI directly against the native Tailwind/Radix/CVA components (skip the shim).
+- Migrating a screen's imports from `@mui/material` onto native components is **optional cleanup**, not a consistency fix — the shim already makes it Tailwind. Only do it when you're touching the screen anyway and it simplifies things. "Net MUI usage" is cosmetic (import paths), not a real second design system.
 
 ### 0.B Dependency verification
 Before importing a new library, check `package.json`. Prefer the libraries already present (Radix, lucide, sonner, chart.js, TanStack Query, zustand, zod). For complex tables, **add `@tanstack/react-table`** (headless, pairs with the existing system) rather than a heavyweight grid — output the install command first.
@@ -156,7 +160,7 @@ For any data-driven view, implement the full set — this is the #1 thing that s
 
 ## 11. Pre-flight check (run before shipping product UI)
 
-- [ ] Built in the **Tailwind + Radix + CVA** system; **no new `@mui/*`** added (and ideally some removed)?
+- [ ] Built in the **Tailwind + Radix + CVA** system; real **MUI never reinstalled** (any `@mui/*` imports resolve to the in-repo shim — fix issues there, §0.A)?
 - [ ] Icons are **lucide** (not Phosphor); one family in this surface?
 - [ ] **All states** present: loading (skeleton), empty (actionable, filter-aware), error (inline + toast), success/optimistic, disabled-explained?
 - [ ] **Tables:** sticky header, `divide-y` (not double borders per row), numbers right-aligned `font-mono tabular-nums`, row actions in a menu, destructive confirmed, paginated/virtualized past ~100 rows, TanStack Table for sort/filter?
