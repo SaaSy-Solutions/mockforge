@@ -31,7 +31,13 @@
 #   never runs `git clean` (which could nuke local edits).
 # - Skips worktrees whose branch has no PR (assume in-flight work).
 # - Skips worktrees whose branch has an OPEN PR.
+# - A failed `gh` lookup (transient 401 / rate-limit) is treated as
+#   "don't know" — the worktree is skipped, NOT deleted — and the run
+#   exits 3 so a partial cleanup never looks like a clean no-op.
 # - Logs everything to stderr and to /var/tmp/dev-host-cleanup.log.
+#
+# Exit codes: 0 = clean, 1 = setup error (no gh auth / unknown repo),
+# 2 = bad args, 3 = ran but ≥1 worktree unclassifiable (gh API error).
 
 set -uo pipefail
 
@@ -114,8 +120,38 @@ worktree_branch() {
   git -C "$wt_path" symbolic-ref --short HEAD 2>/dev/null || basename "$wt_path"
 }
 
+# One `gh pr list` lookup for a single head ref, with retries.
+# `gh` (and the GitHub API behind it) intermittently 401s or rate-limits
+# even when `gh auth status` reports a healthy token — bursting a call
+# per worktree is enough to trip a secondary limit. We MUST distinguish
+# "the API said this branch has no PR" (empty, safe to treat as
+# in-flight) from "the call itself failed" (don't know — must NOT treat
+# as no-PR, or a transient blip silently leaves merged target/ dirs
+# unreclaimed and the cron run looks like a clean no-op).
+#
+# Echoes the PR state ("" if genuinely no PR) on success, or the literal
+# sentinel "API_ERROR" if every attempt failed.
+gh_pr_state() {
+  local head="$1"
+  local out attempt
+  for attempt in 1 2 3; do
+    # `--jq` is processed inside gh, so this is a single command and its
+    # exit code is gh's own (0 even for an empty result, non-zero on
+    # auth/network/API failure).
+    if out=$(gh pr list --repo "$REPO_SLUG" --state all --head "$head" \
+               --limit 1 --json state --jq '.[0].state // ""' 2>/dev/null); then
+      echo "$out"
+      return 0
+    fi
+    sleep $((attempt * 2))
+  done
+  echo "API_ERROR"
+  return 1
+}
+
 # Try to find a PR whose head ref matches the worktree's branch.
-# Returns the PR state (MERGED|CLOSED|OPEN) or empty if no PR exists.
+# Returns the PR state (MERGED|CLOSED|OPEN), "" if no PR exists, or
+# "API_ERROR" if the lookup could not be completed.
 pr_state_for_branch() {
   local branch="$1"
   # Strip the EnterWorktree `worktree-` prefix when present so we
@@ -128,11 +164,12 @@ pr_state_for_branch() {
   local candidate="${stripped//+/\/}"
 
   local state
-  state=$(gh pr list --repo "$REPO_SLUG" --state all --head "$candidate" \
-            --limit 1 --json state --jq '.[0].state // ""' 2>/dev/null)
+  state=$(gh_pr_state "$candidate")
+  # Only fall through to the raw branch name on a genuine empty result,
+  # not on an API error (retrying the same failing call is pointless and
+  # we'd lose the error signal).
   if [ -z "$state" ] && [ "$candidate" != "$branch" ]; then
-    state=$(gh pr list --repo "$REPO_SLUG" --state all --head "$branch" \
-              --limit 1 --json state --jq '.[0].state // ""' 2>/dev/null)
+    state=$(gh_pr_state "$branch")
   fi
   echo "$state"
 }
@@ -142,6 +179,7 @@ checked=0
 deleted=0
 skipped_open=0
 skipped_unknown=0
+skipped_error=0
 
 for wt_target in "$REPO/.claude/worktrees"/*/target; do
   [ -d "$wt_target" ] || continue
@@ -173,6 +211,11 @@ for wt_target in "$REPO/.claude/worktrees"/*/target; do
       reason="OPEN PR — actively in use"
       skipped_open=$((skipped_open + 1))
       ;;
+    API_ERROR)
+      eligible=false
+      reason="gh API error after retries — skipping to be safe (NOT a no-PR result)"
+      skipped_error=$((skipped_error + 1))
+      ;;
     "")
       eligible=false
       reason="no PR found — assuming in-flight"
@@ -201,4 +244,13 @@ for wt_target in "$REPO/.claude/worktrees"/*/target; do
 done
 
 freed_h=$(numfmt --to=iec --suffix=B "$freed_bytes" 2>/dev/null || echo "${freed_bytes}B")
-log "done — checked=$checked deleted=$deleted skipped_open=$skipped_open skipped_unknown=$skipped_unknown freed=$freed_h"
+log "done — checked=$checked deleted=$deleted skipped_open=$skipped_open skipped_unknown=$skipped_unknown skipped_error=$skipped_error freed=$freed_h"
+
+# Exit non-zero when a transient gh failure prevented us from classifying
+# one or more worktrees. We may still have reclaimed space from the ones
+# that resolved, but a partial run under disk pressure shouldn't look
+# like a clean success in cron logs / monitoring.
+if [ "$skipped_error" -gt 0 ]; then
+  log "WARNING: $skipped_error worktree(s) could not be classified due to gh API errors; rerun once gh is healthy"
+  exit 3
+fi
