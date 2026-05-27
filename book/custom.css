@@ -1,2 +1,107 @@
-/* Custom CSS styles for MockForge documentation */
-/* Add your custom styles here */
+/* MockForge documentation theme — brand overlay on mdBook's default themes.
+   Loaded via book.toml `additional-css`. Readability first: this only
+   re-skins fonts, accent colors, and a few chrome details; it does not
+   change mdBook's layout or content. Matches mockforge.dev (Geist +
+   JetBrains Mono, burnt-orange #D35400 accent, slate-navy #2C3E50 ink). */
+
+@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+/* ---- Accent color per theme (light themes get the brand orange; dark
+   themes get a slightly lighter orange for contrast on dark surfaces) ---- */
+.light, .rust {
+  --links: #d35400;
+  --sidebar-active: #d35400;
+  --search-mark-bg: #f6c89a;
+  --inline-code-color: #b8470f;
+}
+.coal, .navy, .ayu {
+  --links: #f0884b;
+  --sidebar-active: #f0884b;
+  --search-mark-bg: #7a4a1f;
+  --inline-code-color: #f0a96b;
+}
+
+/* ---- Typography ---- */
+html, body, .menu-title {
+  font-family: 'Geist', 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+}
+code, pre, kbd, .hljs, .playground-editor {
+  font-family: 'JetBrains Mono', ui-monospace, 'Source Code Pro', Consolas, monospace;
+}
+
+/* Headings: Geist, tight tracking, brand-navy ink in light themes. */
+.content h1, .content h2, .content h3, .content h4 {
+  font-family: 'Geist', system-ui, sans-serif;
+  letter-spacing: -0.012em;
+}
+.light .content h1, .light .content h2, .light .content h3,
+.rust .content h1, .rust .content h2, .rust .content h3 {
+  color: #2c3e50;
+}
+.content h1 { font-weight: 600; }
+.content h2 {
+  font-weight: 600;
+  margin-top: 2.2rem;
+  padding-bottom: .3rem;
+  border-bottom: 1px solid var(--table-border-color, rgba(0,0,0,.08));
+}
+
+/* ---- Links ---- */
+.content a, .content a:visited { text-decoration-thickness: 1px; text-underline-offset: 2px; }
+.content a:hover { text-decoration-color: var(--links); }
+
+/* ---- Sidebar: brand the active chapter ---- */
+.chapter li.chapter-item a.active {
+  color: var(--sidebar-active);
+  font-weight: 600;
+}
+.chapter li.chapter-item a:hover { color: var(--sidebar-active); }
+
+/* ---- Inline code: subtle chip ---- */
+.content code:not(pre code) {
+  padding: .12em .38em;
+  border-radius: 6px;
+  font-size: .88em;
+  background: rgba(211, 84, 0, .08);
+}
+.coal .content code:not(pre code),
+.navy .content code:not(pre code),
+.ayu .content code:not(pre code) {
+  background: rgba(240, 136, 75, .14);
+}
+
+/* ---- Code blocks: rounded, soft border ---- */
+.content pre {
+  border-radius: 12px;
+  border: 1px solid var(--table-border-color, rgba(0,0,0,.06));
+}
+.content pre > code { padding: 1rem 1.15rem; }
+
+/* ---- Primary CTA-style buttons (e.g. "Run"/playground) keep mdBook
+   behavior; just round the playground a touch for consistency. ---- */
+.playground { border-radius: 12px; }
+
+/* ---- Blockquotes / callouts: brand left-rule ---- */
+.content blockquote {
+  border-inline-start: 4px solid var(--links);
+  background: var(--quote-bg);
+  border-radius: 0 8px 8px 0;
+}
+
+/* ---- Tables: lighter, rounded container feel ---- */
+.content table { border-radius: 10px; overflow: hidden; }
+.content table thead th { font-weight: 600; letter-spacing: .01em; }
+
+/* ---- Search hit accent ---- */
+mark { border-radius: 3px; padding: 0 .1em; }
+
+/* ---- Top menu bar: thin brand underline so docs feel of-a-piece ---- */
+#menu-bar { border-bottom: 2px solid rgba(211, 84, 0, .9); }
+.coal #menu-bar, .navy #menu-bar, .ayu #menu-bar {
+  border-bottom-color: rgba(240, 136, 75, .8);
+}
+
+/* Respect reduced motion (mdBook adds some transitions). */
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; scroll-behavior: auto !important; }
+}
