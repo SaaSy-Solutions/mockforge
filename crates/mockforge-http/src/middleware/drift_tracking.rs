@@ -188,6 +188,26 @@ pub async fn drift_tracking_middleware_with_extensions(
                     },
                 );
 
+                // #677 — when analytics is installed, fire a drift_percentage
+                // sample at the analytics sqlite. Stays a no-op when the
+                // global DB hasn't been initialised, so OSS quick-start
+                // doesn't accidentally create a sqlite file.
+                //
+                // Heuristic for total/drifting: total_changes counts the
+                // observed mismatches (the "denominator" for how many things
+                // we looked at this request), and breaking + potentially-
+                // breaking is what counts as drift. Recorded per-request so
+                // the dashboard's time-series view shows the live trend.
+                let total = i64::from(drift_result.metrics.total_changes);
+                let drifting = i64::from(drift_result.breaking_changes)
+                    + i64::from(drift_result.potentially_breaking_changes);
+                mockforge_analytics::record_drift_percentage_async(
+                    String::new(), // workspace_id — see Prometheus emission note
+                    None,
+                    total,
+                    drifting,
+                );
+
                 // Record contracts pillar usage for drift detection
                 mockforge_core::pillar_tracking::record_contracts_usage(
                     None, // workspace_id could be extracted from request if available

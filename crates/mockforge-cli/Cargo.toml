@@ -38,6 +38,7 @@ mockforge-graphql = { version = "0.3.70", path = "../mockforge-graphql", optiona
 mockforge-smtp = { version = "0.3.70", path = "../mockforge-smtp", optional = true }
 mockforge-mqtt = { version = "0.3.70", path = "../mockforge-mqtt", optional = true }
 mockforge-data = { version = "0.3.70", path = "../mockforge-data" }
+mockforge-analytics = { version = "0.3.70", path = "../mockforge-analytics" }
 mockforge-ui = { version = "0.3.70", path = "../mockforge-ui", optional = true }
 mockforge-observability = { version = "0.3.70", path = "../mockforge-observability", default-features = false, features = ["sysinfo", "log-shipper"] }
 mockforge-tracing = { version = "0.3.70", path = "../mockforge-tracing", optional = true }
