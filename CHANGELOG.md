@@ -1,3 +1,15 @@
+## [0.3.151] - 2026-05-27
+
+### Added
+
+- **[Reality]** `mockforge serve --shadow` CLI flag (#79 round 15) — Srikanth's (g) ask: a first-class flag for shadow mode instead of only `MOCKFORGE_SHADOW_MODE=true`, so it can't be silently forgotten. Sets the env var under the hood; the `👻 SHADOW MODE ON` startup banner still prints.
+- **[Contracts][DevX]** Lifetime "seen total" counters for conformance violations and unknown paths (#79 round 15) — the ring buffers cap at 256 entries, which made a 656k-request run look like "only 256". Both the admin API (`total_seen` field) and the TUI titles now show the true lifetime count alongside the buffered count (e.g. `Conformance Violations (256 buffered, 256 shown, 4821 seen total)`). Answers Srikanth's (f) question.
+
+### Changed
+
+- **[DevX]** Server-side per-violation debug log (#79 round 15) — each recorded conformance violation now emits a `tracing::debug!` line under target `mockforge::conformance` with method/path/status/category/reason. Enable precisely with `RUST_LOG=mockforge::conformance=debug` to get grep-able server-side logs of *why* each request was rejected, without turning on firehose debug logging. Srikanth's (b)/(d) ask for "why is this a violation" via logs.
+- **[DevX]** TUI Conformance tab readability (#79 round 15) — the `Enter` violation-detail view and the Top Offending Endpoints panel now wrap long lines, so big Microsoft Graph paths and validation reasons are fully visible instead of clipped at the right edge. Srikanth's (c) ask. (`Enter` for full detail, `j`/`k` to scroll.)
+
 ## [0.3.150] - 2026-05-26
 
 ### Fixed

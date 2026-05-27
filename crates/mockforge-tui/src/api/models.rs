@@ -66,6 +66,10 @@ pub struct ConformanceViolationsResponse {
     pub violations: Vec<ConformanceViolation>,
     #[serde(default)]
     pub total: usize,
+    /// Lifetime count since server start (Issue #79 round 15); the
+    /// buffer caps `total` at 256, this is the true number seen.
+    #[serde(default)]
+    pub total_seen: u64,
 }
 
 /// One unmatched-path request (Issue #79 round 13).
@@ -94,6 +98,9 @@ pub struct UnknownPathsResponse {
     pub requests: Vec<UnknownPathRequest>,
     #[serde(default)]
     pub total: usize,
+    /// Lifetime count since server start (Issue #79 round 15).
+    #[serde(default)]
+    pub total_seen: u64,
 }
 
 // ── Dashboard ────────────────────────────────────────────────────────

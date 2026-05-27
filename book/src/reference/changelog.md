@@ -1,5 +1,17 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.151] - 2026-05-27
+
+### Added
+
+- **[Reality]** `mockforge serve --shadow` CLI flag (#79 round 15) — first-class flag for shadow mode (alias for `MOCKFORGE_SHADOW_MODE=true`) so it can't be forgotten.
+- **[Contracts][DevX]** Lifetime "seen total" counters for conformance violations + unknown paths — admin API `total_seen` field and TUI titles now show the true lifetime count alongside the 256-cap buffered count.
+
+### Changed
+
+- **[DevX]** Per-violation server log under target `mockforge::conformance` (enable with `RUST_LOG=mockforge::conformance=debug`) showing method/path/status/category/reason.
+- **[DevX]** TUI Conformance detail view + Top Offending Endpoints panel now wrap long lines so big paths/reasons are fully readable.
+
 ## [0.3.150] - 2026-05-26
 
 ### Fixed

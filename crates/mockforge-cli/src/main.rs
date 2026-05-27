@@ -556,6 +556,15 @@ struct ServeCliArgs {
     #[arg(long, help_heading = "Server Configuration")]
     pub no_rate_limit: bool,
 
+    /// Shadow / report-only mode (Issue #79): return 200 for unknown
+    /// paths and spec violations instead of 404/400/422, while still
+    /// recording them to the Conformance tab + unknown-paths feed.
+    /// Lets a proxy replay flow through non-blocking with full
+    /// violation capture. Equivalent to `MOCKFORGE_SHADOW_MODE=true`,
+    /// but as a flag so it's not silently forgotten.
+    #[arg(long, help_heading = "Server Configuration")]
+    pub shadow: bool,
+
     #[command(flatten)]
     pub ports: PortArgs,
 
@@ -2389,6 +2398,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
     match cli.command {
         Commands::Serve(args) => {
+            // Issue #79 round 15 — `--shadow` is a thin alias for the
+            // env var the server reads at request time. Set it before
+            // anything boots so `shadow_mode_enabled()` sees it. A flag
+            // is harder to forget than an env var (Srikanth's (g) ask).
+            if args.shadow {
+                std::env::set_var("MOCKFORGE_SHADOW_MODE", "true");
+            }
             // Handle --list-network-profiles flag
             if args.traffic.list_network_profiles {
                 let catalog = mockforge_core::NetworkProfileCatalog::new();
