@@ -5,6 +5,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
 /// Protocol type
+///
+/// Each variant lowercases to its on-disk sqlx string; adding a new
+/// protocol is a no-migration change because the `protocol` column is
+/// stored as TEXT. The async-broker variants (#683) — Kafka, Mqtt,
+/// Amqp — let downstream brokers feed the same recorder pipeline that
+/// HTTP/gRPC/WebSocket/GraphQL already use, so traffic from every
+/// protocol surface lands in a single sqlite for replay + diff.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "TEXT")]
 #[sqlx(rename_all = "lowercase")]
@@ -17,6 +24,21 @@ pub enum Protocol {
     WebSocket,
     #[sqlx(rename = "graphql")]
     GraphQL,
+    /// Kafka — a single produce/consume exchange. `method` carries the
+    /// API kind ("produce" | "consume"); `path` carries the topic name;
+    /// optional partition/offset/key live in `query_params` as a small
+    /// JSON object so we don't need a column migration per protocol.
+    #[sqlx(rename = "kafka")]
+    Kafka,
+    /// MQTT — `method` carries "publish" or "subscribe"; `path` carries
+    /// the topic; `query_params` may carry `{"qos": 1, "retain": true}`.
+    #[sqlx(rename = "mqtt")]
+    Mqtt,
+    /// AMQP — `method` carries the basic-op ("publish" | "deliver" |
+    /// "ack" | "nack"); `path` carries `<exchange>/<routing-key>` or the
+    /// queue name for consumer-side ops.
+    #[sqlx(rename = "amqp")]
+    Amqp,
 }
 
 impl Protocol {
@@ -26,6 +48,9 @@ impl Protocol {
             Protocol::Grpc => "grpc",
             Protocol::WebSocket => "websocket",
             Protocol::GraphQL => "graphql",
+            Protocol::Kafka => "kafka",
+            Protocol::Mqtt => "mqtt",
+            Protocol::Amqp => "amqp",
         }
     }
 }
