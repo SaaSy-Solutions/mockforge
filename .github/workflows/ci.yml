@@ -28,12 +28,58 @@ env:
   ENVIRONMENT: "development"
 
 jobs:
+  # Lightweight gate: decide whether this PR touches anything other than docs
+  # (book/**, docs/**, *.md) or agent config (.claude/**). The heavy Rust + UI
+  # jobs `needs: changes` and run only when `code == 'true'`. Non-PR events
+  # (push to main, tags, dispatch) always set code=true, so main stays fully
+  # tested and release builds are never skipped. Runs on ubuntu-latest so this
+  # gate is not queued behind the busy self-hosted Rust runners. A skipped
+  # required check counts as success for branch protection, so docs-only PRs
+  # stay mergeable without burning self-hosted runner time on a full Rust build.
+  changes:
+    name: Detect change scope
+    runs-on: ubuntu-latest
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Determine whether non-docs files changed
+        id: filter
+        env:
+          # Routed through env (not interpolated into the script) per workflow
+          # injection best practice. Both are GitHub-controlled values anyway.
+          BASE_REF: ${{ github.base_ref }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "Non-PR event ($EVENT_NAME): running full CI."
+            echo "code=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
+          echo "Changed files:"; printf '%s\n' "$files"
+          code=false
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            case "$f" in
+              book/*|docs/*|.claude/*|*.md) ;;   # docs / agent config: skip heavy CI
+              *) code=true ;;                     # anything else counts as code
+            esac
+          done <<< "$files"
+          echo "Heavy CI required: code=$code"
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+
   # Only stable runs per-PR. Beta/nightly produced constant noise (rustc churn,
   # not real regressions) and each PR was spending ~3x the self-hosted queue time
   # for a signal nobody acted on. If we ever want beta/nightly visibility again,
   # add a scheduled workflow (e.g. weekly) rather than per-PR.
   test:
     name: Test
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: [self-hosted, linux, x64, rust]
     env:
       CARGO_INCREMENTAL: "0"
@@ -130,6 +176,8 @@ jobs:
 
   ui-test:
     name: UI Tests
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: [self-hosted, linux, x64, rust]
 
     steps:
@@ -188,6 +236,8 @@ jobs:
 
   warning-gate:
     name: Incremental Warning Gate
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: [self-hosted, linux, x64, rust]
     env:
       CARGO_INCREMENTAL: "0"
@@ -218,6 +268,8 @@ jobs:
 
   warning-ratchet-preview:
     name: Warning Ratchet Preview
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: [self-hosted, linux, x64, rust]
     continue-on-error: true
     env:
@@ -249,6 +301,8 @@ jobs:
 
   security-audit:
     name: Security Audit
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: [self-hosted, linux, x64, rust]
     steps:
     - name: Set per-runner CARGO_HOME
@@ -367,6 +421,8 @@ jobs:
 
   msrv:
     name: Minimum Supported Rust Version
+    needs: changes
+    if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: [self-hosted, linux, x64, rust]
     env:
       CARGO_INCREMENTAL: "0"
