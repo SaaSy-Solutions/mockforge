@@ -18,9 +18,15 @@ publish = false
 # Default build is the full multi-tenant SaaS server.
 default = ["saas"]
 
-# Bundles every SaaS-only integration. The `mockforge-registry-server` binary
-# requires this feature. OSS consumers (e.g. `mockforge-ui`) can depend on this
-# crate with `default-features = false` and opt into only what they need.
+# Bundles every SaaS-only integration. This is the ONLY supported build
+# configuration for this crate: `stripe`, `email`, `storage-s3`, and
+# `cache-redis` are referenced unconditionally across the crate, so a
+# slimmed-down build (`--no-default-features --features postgres`) does not
+# compile — a `compile_error!` in `lib.rs` enforces this with an actionable
+# message. This is intentional: `mockforge-registry-server` is the SaaS binary,
+# and the OSS-friendly registry library is `mockforge-registry-core` (consumed
+# by `mockforge-ui`). OSS consumers should depend on `mockforge-registry-core`,
+# not feature-slice this crate. Context: #644.
 saas = [
   "postgres",
   "storage-s3",

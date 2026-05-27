@@ -6,14 +6,44 @@
 //!
 //! MockForge Plugin Registry Server — library crate.
 //!
-//! This crate is being extracted into a reusable library so that both the
-//! multi-tenant SaaS binary (`mockforge-registry-server`) and the single-tenant
-//! OSS admin server (`mockforge-ui`) can share the same domain models,
-//! storage layer, handlers, and authentication middleware.
+//! This is the multi-tenant **SaaS binary** crate. The reusable, OSS-friendly
+//! pieces — domain models, the `RegistryStore` trait + SQLite/Postgres
+//! backends, auth, and TOTP/2FA helpers — live in `mockforge-registry-core`
+//! and are consumed directly by single-tenant builds such as `mockforge-ui`
+//! (`mockforge-registry-core` with `default-features = false, features =
+//! ["sqlite"]`). This crate re-exports a few of them for path stability but
+//! is *not* itself intended to be consumed as a slimmed-down library; that
+//! role belongs to `mockforge-registry-core`.
 //!
-//! Phase 0 of the extraction: expose the existing modules via `lib.rs`
-//! without behavior changes. Later phases will introduce a `RegistryStore`
-//! trait, a SQLite backend, and feature gates for SaaS-only integrations.
+//! Consequently this crate requires its full integration set. The SaaS-only
+//! integrations (`stripe`, `email`, `storage-s3`, `cache-redis`) are referenced
+//! unconditionally throughout the crate, so the only supported build is the
+//! `saas` rollup (the default). A slimmed-down build such as
+//! `--no-default-features --features postgres` is not supported — see #644.
+//! The guard below turns that into one actionable message instead of 30+
+//! "unresolved crate" errors. If OSS consumers ever need a smaller surface of
+//! *this* crate, the right move is to extend `mockforge-registry-core`, not to
+//! feature-gate the SaaS server.
+
+// This crate requires its full integration set (see the module docs above and
+// #644). Keyed on the actual load-bearing integrations rather than the `saas`
+// umbrella, so an explicit `--features postgres,stripe,email,storage-s3,
+// cache-redis` build is allowed, and the guard naturally shrinks if any of
+// these are ever properly feature-gated.
+#[cfg(not(all(
+    feature = "stripe",
+    feature = "email",
+    feature = "storage-s3",
+    feature = "cache-redis"
+)))]
+compile_error!(
+    "mockforge-registry-server is the SaaS binary and must be built with its \
+     full integration set. Use the default `saas` feature (or at minimum \
+     `--features postgres,stripe,email,storage-s3,cache-redis`). The `stripe`, \
+     `email`, `storage-s3`, and `cache-redis` integrations are referenced \
+     unconditionally, so a slimmer build does not compile. For an OSS-friendly \
+     registry library, depend on `mockforge-registry-core` instead. See #644."
+);
 
 /// JWT/password auth helpers moved to `mockforge-registry-core`.
 pub use mockforge_registry_core::auth;
