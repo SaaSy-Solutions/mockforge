@@ -1,3 +1,15 @@
+## [0.3.155] - 2026-05-29
+
+### Added
+
+- **[Contracts][DevX][Security]** Security probes in `--conformance-self-test` (#79 round 17.3) — operations whose spec declares a security requirement now get dedicated bad-credential negatives that the server should reject with 401/403. Catches the failure mode where the spec says an endpoint is protected but the validator never actually enforces auth on it.
+  - **`security:bad-bearer`** — sends `Authorization: Bearer self-test-invalid-token` (one per operation, regardless of how many Bearer schemes are declared).
+  - **`security:bad-basic`** — sends `Authorization: Basic <base64-of-self-test:invalid>`.
+  - **`security:bad-apikey:<name>`** — substitutes the declared API key (header, query, or cookie) with `self-test-invalid-key`. Deduplicated by `(location, name)` so an operation with the same key declared twice produces one probe.
+  - **`security:no-auth`** — strips Authorization + the operation's declared API-key headers/queries/cookies, sends with no credentials at all. Surfaces validators that aren't checking auth presence.
+
+  Auth stripping is case-insensitive on `Authorization` and walks the operation's own declared API-key locations so the probe's credential is the *only* thing the server sees. Operations without any declared security scheme get zero security probes (no false signal).
+
 ## [0.3.154] - 2026-05-29
 
 ### Added
@@ -12,6 +24,7 @@
 
   Labels carry the field path (e.g. `request-body:type-mismatch:user.email`) so the self-test report tells you exactly which field caught (or didn't). Bounded by `SCHEMA_MUTATION_CAP = 12` per operation (top 20 properties, top 5 required) so a 100-property body on a 22 000-operation spec doesn't produce a runaway test matrix. No-op when the body annotator couldn't resolve a schema — falls back to the existing schema-agnostic empty/wrong-type negatives unchanged.
 
+||||||| parent of f59ea5f4 (feat(bench): security probes in conformance self-test (#79 round 17.3))
 ## [0.3.153] - 2026-05-29
 
 ### Added

@@ -1,11 +1,18 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.155] - 2026-05-29
+
+### Added
+
+- **[Contracts][DevX][Security]** Security probes in `--conformance-self-test` (#79 round 17.3) — operations declaring a security requirement now get bad-credential negatives (`security:bad-bearer`, `security:bad-basic`, `security:bad-apikey:<name>`, `security:no-auth`) plus auth-stripping so the probe's credential is the only thing the server sees. Surfaces validators that don't enforce auth even when the spec says they should.
+
 ## [0.3.154] - 2026-05-29
 
 ### Added
 
 - **[Contracts][DevX]** Schema-driven request-body mutator for `--conformance-self-test` (#79 round 17.2) — when both a positive sample AND a resolved request-body schema are available, the self-test now emits per-field negatives (type mismatch, required-field removal, min/max bound breaks, pattern miss, enum out-of-range, additional-property), plus a URI-too-long parameter probe. Labels carry the field path so the report tells you exactly which field caught. Bounded by `SCHEMA_MUTATION_CAP = 12` per operation.
 
+||||||| parent of f59ea5f4 (feat(bench): security probes in conformance self-test (#79 round 17.3))
 ## [0.3.153] - 2026-05-29
 
 ### Added
