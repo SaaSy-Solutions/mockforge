@@ -179,8 +179,15 @@ async fn test_operation(
     // ── Negative cases ───────────────────────────────────────────
     let mut negatives = Vec::new();
 
-    // (a) empty body when one is required
-    if op.request_body_content_type.is_some() && op.sample_body.is_some() {
+    // (a) empty body when one is required.
+    //
+    // Round 16 — drop the `sample_body.is_some()` precondition. Operations
+    // whose body annotator couldn't synthesize a sample previously got
+    // zero negatives (so the self-test reported "all passing" even on
+    // POST /resource with a required body). The spec saying the operation
+    // *has* a request body is enough — an empty object is a valid
+    // negative regardless of whether we have a positive sample.
+    if op.request_body_content_type.is_some() {
         negatives.push(
             send_case(
                 client,
@@ -213,6 +220,58 @@ async fn test_operation(
             )
             .await,
         );
+    }
+
+    // (e) Round 16 — path-param type probe. Send the first path
+    // parameter as a literal `"self-test-invalid-id"`: a string that
+    // contains hyphens, won't parse as an integer, won't parse as a
+    // UUID, and won't match any typical regex pattern. Operations
+    // whose spec types the param as `integer` or `string` with a
+    // `format`/`pattern` will catch this (caught: server returned
+    // 4xx); operations whose spec lets path params be free-form
+    // strings will let it through (missed: server returned 2xx).
+    // Either outcome is informative: a category that's all "missed"
+    // tells the user their spec is loose on path-param types, which
+    // is itself worth knowing. Addresses Srikanth's "always all
+    // passing" report — operations with a path param now produce at
+    // least one probe instead of zero.
+    if !op.path_params.is_empty() {
+        let mut url_with_placeholder = op.path.clone();
+        if let Some((first_name, _)) = op.path_params.first() {
+            // Substitute every other path-param with its sample so the
+            // route shape stays intact and only the first param is bad.
+            for (name, value) in op.path_params.iter().skip(1) {
+                if !value.is_empty() {
+                    url_with_placeholder =
+                        url_with_placeholder.replace(&format!("{{{name}}}"), value);
+                }
+            }
+            // Substitute the first param with a guaranteed-invalid
+            // sentinel that's unlikely to match any reasonable schema:
+            // contains characters disallowed in numeric IDs *and* UUIDs.
+            url_with_placeholder =
+                url_with_placeholder.replace(&format!("{{{first_name}}}"), "self-test-invalid-id");
+            let target = config.target_url.trim_end_matches('/');
+            let bad_url = if url_with_placeholder.starts_with('/') {
+                format!("{}{}", target, url_with_placeholder)
+            } else {
+                format!("{}/{}", target, url_with_placeholder)
+            };
+            negatives.push(
+                send_case(
+                    client,
+                    config,
+                    method.clone(),
+                    &bad_url,
+                    "parameters:bad-path-param",
+                    true,
+                    op.sample_body.as_deref(),
+                    op.query_params.clone(),
+                    op.header_params.clone(),
+                )
+                .await,
+            );
+        }
     }
 
     // (c) drop the first required query param
@@ -427,6 +486,58 @@ mod tests {
         assert_eq!(report.positive_fail, 1);
         assert!(report.negative_missed.values().sum::<usize>() >= 1);
         assert!(!report.all_passed());
+    }
+
+    /// Round 16 — operations with a body OR a path-param now produce
+    /// negatives even without a sample body. Previously a POST whose
+    /// body annotator failed produced *zero* negatives, so the self-test
+    /// always reported "all passing" for that endpoint.
+    #[tokio::test]
+    async fn no_sample_body_still_produces_request_body_negatives() {
+        let cfg = SelfTestConfig {
+            target_url: "http://127.0.0.1:1".into(),
+            timeout: Duration::from_millis(200),
+            ..Default::default()
+        };
+        // POST with a body content type but no sample (annotator gap).
+        let ops = vec![op("POST", "/x", None, vec![], vec![], vec![])];
+        // No sample_body but request_body_content_type set:
+        let mut ops_fixed = ops;
+        ops_fixed[0].request_body_content_type = Some("application/json".into());
+        let report = run_self_test(&ops_fixed, &cfg).await.expect("client builds");
+        // Both request-body negatives (empty + wrong-type) should fire,
+        // landing in `negative_missed` because the unreachable target
+        // returns no 4xx. The point: count > 0.
+        assert!(
+            report.negative_missed.values().sum::<usize>() >= 2,
+            "expected ≥2 request-body negatives, got {:?}",
+            report.negative_missed
+        );
+    }
+
+    /// Round 16 — operations with a path-param now get a probe even
+    /// when there's no body / required query / required header.
+    /// Previously `/teams/{team-id}` with no other required fields
+    /// produced zero negatives → always "all passing".
+    #[tokio::test]
+    async fn path_param_only_endpoint_produces_a_probe() {
+        let cfg = SelfTestConfig {
+            target_url: "http://127.0.0.1:1".into(),
+            timeout: Duration::from_millis(200),
+            ..Default::default()
+        };
+        let ops = vec![op(
+            "GET",
+            "/teams/{team-id}",
+            None,
+            vec![],
+            vec![],
+            vec![("team-id", "1")],
+        )];
+        let report = run_self_test(&ops, &cfg).await.expect("client builds");
+        let total: usize = report.negative_caught.values().sum::<usize>()
+            + report.negative_missed.values().sum::<usize>();
+        assert!(total >= 1, "expected ≥1 path-param probe, got {:?}", report);
     }
 
     #[test]

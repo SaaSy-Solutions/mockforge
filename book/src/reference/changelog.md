@@ -1,5 +1,12 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.152] - 2026-05-28
+
+### Changed
+
+- **[Contracts][DevX]** TUI Conformance export (`e`) now deduplicates by `(method, path, category, reason)` with a `count` + `first_seen` / `last_seen` window (#79 round 16).
+- **[DevX]** `--conformance-self-test` produces negatives for two previously-zero-coverage shapes: operations with a required body but no synthesised sample, and operations whose only spec input is a path parameter (`parameters:bad-path-param` probe).
+
 ## [0.3.151] - 2026-05-27
 
 ### Added
