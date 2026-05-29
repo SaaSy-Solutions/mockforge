@@ -57,11 +57,22 @@ pub struct Config {
     /// Stripe secret key for billing
     pub stripe_secret_key: Option<String>,
 
-    /// Stripe price ID for Pro plan
+    /// Stripe price ID for Pro plan (monthly cadence)
     pub stripe_price_id_pro: Option<String>,
 
-    /// Stripe price ID for Team plan
+    /// Stripe price ID for Team plan (monthly cadence)
     pub stripe_price_id_team: Option<String>,
+
+    /// Stripe price ID for the Pro plan billed annually. The "2 months free"
+    /// discount is encoded in this Stripe price (set to 10× the monthly
+    /// amount), so there is no discount math in code. `None` means annual Pro
+    /// isn't offered and annual checkout for Pro is rejected rather than
+    /// silently charged monthly.
+    pub stripe_price_id_pro_annual: Option<String>,
+
+    /// Stripe price ID for the Team plan billed annually. Same semantics as
+    /// [`Config::stripe_price_id_pro_annual`].
+    pub stripe_price_id_team_annual: Option<String>,
 
     /// Stripe webhook secret for verifying webhook signatures
     pub stripe_webhook_secret: Option<String>,
@@ -177,6 +188,8 @@ impl Config {
             stripe_secret_key: std::env::var("STRIPE_SECRET_KEY").ok(),
             stripe_price_id_pro: std::env::var("STRIPE_PRICE_ID_PRO").ok(),
             stripe_price_id_team: std::env::var("STRIPE_PRICE_ID_TEAM").ok(),
+            stripe_price_id_pro_annual: std::env::var("STRIPE_PRICE_ID_PRO_ANNUAL").ok(),
+            stripe_price_id_team_annual: std::env::var("STRIPE_PRICE_ID_TEAM_ANNUAL").ok(),
             stripe_webhook_secret: std::env::var("STRIPE_WEBHOOK_SECRET").ok(),
             stripe_trial_period_days: std::env::var("STRIPE_TRIAL_PERIOD_DAYS")
                 .ok()

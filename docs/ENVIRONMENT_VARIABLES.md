@@ -104,8 +104,10 @@ These variables configure the MockForge Plugin Registry server.
 |----------|---------|-------------|
 | `STRIPE_SECRET_KEY` | None | Stripe API secret key |
 | `STRIPE_WEBHOOK_SECRET` | None | Stripe webhook signing secret |
-| `STRIPE_PRICE_ID_PRO` | None | Stripe price ID for Pro plan |
-| `STRIPE_PRICE_ID_TEAM` | None | Stripe price ID for Team plan |
+| `STRIPE_PRICE_ID_PRO` | None | Stripe price ID for Pro plan (monthly) |
+| `STRIPE_PRICE_ID_TEAM` | None | Stripe price ID for Team plan (monthly) |
+| `STRIPE_PRICE_ID_PRO_ANNUAL` | None | Stripe price ID for Pro billed annually. Set the Stripe price to 10× monthly to honor "2 months free". Unset = annual Pro not offered (annual checkout rejected, never charged monthly). |
+| `STRIPE_PRICE_ID_TEAM_ANNUAL` | None | Stripe price ID for Team billed annually (same semantics as the Pro annual var). |
 
 ### Deployment
 
