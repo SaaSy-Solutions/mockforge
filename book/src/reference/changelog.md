@@ -1,5 +1,11 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.154] - 2026-05-29
+
+### Added
+
+- **[Contracts][DevX]** Schema-driven request-body mutator for `--conformance-self-test` (#79 round 17.2) — when both a positive sample AND a resolved request-body schema are available, the self-test now emits per-field negatives (type mismatch, required-field removal, min/max bound breaks, pattern miss, enum out-of-range, additional-property), plus a URI-too-long parameter probe. Labels carry the field path so the report tells you exactly which field caught. Bounded by `SCHEMA_MUTATION_CAP = 12` per operation.
+
 ## [0.3.153] - 2026-05-29
 
 ### Added

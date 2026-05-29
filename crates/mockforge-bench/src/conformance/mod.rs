@@ -10,6 +10,7 @@ pub mod har_to_custom;
 pub mod report;
 pub mod request_validator;
 pub mod sarif;
+pub mod schema_mutator;
 pub mod schema_validator;
 pub mod self_test;
 pub mod spec;

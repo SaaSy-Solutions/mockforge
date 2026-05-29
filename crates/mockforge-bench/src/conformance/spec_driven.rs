@@ -176,6 +176,12 @@ pub struct AnnotatedOperation {
     pub path_params: Vec<(String, String)>,
     /// Response schema for validation (JSON string of the schema)
     pub response_schema: Option<Schema>,
+    /// Round 17.2 — the resolved request-body schema (application/json).
+    /// Used by the self-test driver to synthesise schema-aware
+    /// negative mutations (wrong type, min/max bounds, pattern, enum
+    /// out-of-range, required-field removal). Independent of
+    /// `sample_body`, which is the positive payload.
+    pub request_body_schema: Option<Schema>,
     /// Security scheme details resolved from the OpenAPI spec
     pub security_schemes: Vec<SecuritySchemeInfo>,
 }
@@ -252,6 +258,7 @@ impl SpecDrivenConformanceGenerator {
         // Detect request body features (resolves $ref)
         let mut request_body_content_type = None;
         let mut sample_body = None;
+        let mut request_body_schema: Option<Schema> = None;
 
         let resolved_body = op
             .operation
@@ -290,6 +297,10 @@ impl SpecDrivenConformanceGenerator {
                 if let Some(schema_ref) = &media.schema {
                     if let Some(schema) = ref_resolver::resolve_schema(schema_ref, spec) {
                         Self::annotate_schema(schema, spec, &mut features);
+                        // Round 17.2 — keep a clone of the resolved
+                        // body schema so the self-test driver can walk
+                        // it to synthesise schema-aware negatives.
+                        request_body_schema = Some(schema.clone());
                     }
                 }
             }
@@ -325,6 +336,7 @@ impl SpecDrivenConformanceGenerator {
             header_params,
             path_params,
             response_schema,
+            request_body_schema,
             security_schemes,
         }
     }
@@ -1379,6 +1391,7 @@ mod tests {
             header_params: vec![],
             path_params: vec![("id".to_string(), "test-value".to_string())],
             response_schema: None,
+            request_body_schema: None,
             security_schemes: vec![],
         }];
 
@@ -1424,6 +1437,7 @@ mod tests {
             header_params: vec![],
             path_params: vec![("id".to_string(), "1".to_string())],
             response_schema: None,
+            request_body_schema: None,
             security_schemes: vec![],
         }];
 
@@ -1614,6 +1628,7 @@ mod tests {
             request_body_content_type: None,
             sample_body: None,
             response_schema: None,
+            request_body_schema: None,
             security_schemes: vec![],
         };
         let config = ConformanceConfig {
@@ -1657,6 +1672,7 @@ mod tests {
             request_body_content_type: None,
             sample_body: None,
             response_schema: None,
+            request_body_schema: None,
             security_schemes: vec![],
         };
         let config = ConformanceConfig {
