@@ -1,10 +1,10 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
-## [0.3.158] - 2026-05-29
+## [0.3.162] - 2026-05-29
 
 ### Fixed
 
-- **[Contracts][DevX]** Self-contained HTML conformance report (#79 round 17.6) — `--conformance-self-test` writes `conformance-report.html` next to the JSON. Inline CSS, no external assets. Sections: headline cards, negatives by category, per-operation results, missed-negative drill-down (capped at 200 rows), and an optional spec-audit section when a round-17.4 audit JSON is present.
+- **[Contracts][DevX]** GEODB / multi-source-IP testing in `--conformance-self-test` (#79 round 18.5). `--source-ip <IP>` (repeatable) builds a pool of reqwest clients bound via `local_address()`; `--geo-source-ip <IP>` rotates fake source IPs across `X-Forwarded-For` / `True-Client-IP` / `CF-Connecting-IP` (configurable via `--geo-source-header`). Self-test only for v0; bench / k6 path lands in a follow-up.
 
 ||||||| parent of 483a9524 (feat(bench): OWASP/WAF unification in self-test (#79 round 17.5))
 ## [0.3.153] - 2026-05-29
