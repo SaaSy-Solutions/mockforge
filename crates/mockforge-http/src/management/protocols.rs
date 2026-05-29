@@ -206,7 +206,7 @@ pub struct MqttBrokerStats {
 /// MQTT management handlers
 #[cfg(feature = "mqtt")]
 pub(crate) async fn get_mqtt_stats(State(state): State<ManagementState>) -> impl IntoResponse {
-    if let Some(broker) = &state.mqtt_broker {
+    if let Some(broker) = &state.mqtt_sessions {
         let connected_clients = broker.get_connected_clients().await.len();
         let active_topics = broker.get_active_topics().await.len();
         let stats = broker.get_topic_stats().await;
@@ -226,7 +226,7 @@ pub(crate) async fn get_mqtt_stats(State(state): State<ManagementState>) -> impl
 
 #[cfg(feature = "mqtt")]
 pub(crate) async fn get_mqtt_clients(State(state): State<ManagementState>) -> impl IntoResponse {
-    if let Some(broker) = &state.mqtt_broker {
+    if let Some(broker) = &state.mqtt_sessions {
         let clients = broker.get_connected_clients().await;
         Json(serde_json::json!({
             "clients": clients
@@ -239,7 +239,7 @@ pub(crate) async fn get_mqtt_clients(State(state): State<ManagementState>) -> im
 
 #[cfg(feature = "mqtt")]
 pub(crate) async fn get_mqtt_topics(State(state): State<ManagementState>) -> impl IntoResponse {
-    if let Some(broker) = &state.mqtt_broker {
+    if let Some(broker) = &state.mqtt_sessions {
         let topics = broker.get_active_topics().await;
         Json(serde_json::json!({
             "topics": topics
@@ -255,16 +255,11 @@ pub(crate) async fn disconnect_mqtt_client(
     State(state): State<ManagementState>,
     Path(client_id): Path<String>,
 ) -> impl IntoResponse {
-    if let Some(broker) = &state.mqtt_broker {
-        match broker.disconnect_client(&client_id).await {
-            Ok(_) => {
-                (StatusCode::OK, format!("Client '{}' disconnected", client_id)).into_response()
-            }
-            Err(e) => {
-                (StatusCode::INTERNAL_SERVER_ERROR, format!("Failed to disconnect client: {}", e))
-                    .into_response()
-            }
-        }
+    if let Some(sessions) = &state.mqtt_sessions {
+        // Graceful disconnect: the operator is closing the session, so don't
+        // fire the client's Last Will.
+        sessions.disconnect(&client_id, true).await;
+        (StatusCode::OK, format!("Client '{}' disconnected", client_id)).into_response()
     } else {
         (StatusCode::SERVICE_UNAVAILABLE, "MQTT broker not available").into_response()
     }
@@ -320,7 +315,7 @@ pub(crate) async fn publish_mqtt_message_handler(
     let topic = topic.unwrap();
     let payload = payload.unwrap();
 
-    if let Some(broker) = &state.mqtt_broker {
+    if let Some(broker) = &state.mqtt_sessions {
         // Validate QoS
         if qos > 2 {
             return (
@@ -335,43 +330,33 @@ pub(crate) async fn publish_mqtt_message_handler(
         // Convert payload to bytes
         let payload_bytes = payload.as_bytes().to_vec();
         let client_id = "mockforge-management-api".to_string();
+        let qos_level = mockforge_mqtt::ProtocolQoS::try_from(qos).unwrap_or_default();
 
-        let publish_result = broker
-            .handle_publish(&client_id, &topic, payload_bytes, qos, retain)
-            .await
-            .map_err(|e| format!("{}", e));
+        // Route through the live session manager so subscribers on the
+        // running broker actually receive the message. Publishing is
+        // fire-and-forget — a topic with no subscribers still succeeds.
+        broker.publish_raw(&client_id, &topic, payload_bytes, qos_level, retain).await;
 
-        match publish_result {
-            Ok(_) => {
-                // Emit message event for real-time monitoring
-                let event = MessageEvent::Mqtt(MqttMessageEvent {
-                    topic: topic.clone(),
-                    payload: payload.clone(),
-                    qos,
-                    retain,
-                    timestamp: chrono::Utc::now().to_rfc3339(),
-                });
-                let _ = state.message_events.send(event);
+        // Emit message event for real-time monitoring
+        let event = MessageEvent::Mqtt(MqttMessageEvent {
+            topic: topic.clone(),
+            payload: payload.clone(),
+            qos,
+            retain,
+            timestamp: chrono::Utc::now().to_rfc3339(),
+        });
+        let _ = state.message_events.send(event);
 
-                (
-                    StatusCode::OK,
-                    Json(serde_json::json!({
-                        "success": true,
-                        "message": format!("Message published to topic '{}'", topic),
-                        "topic": topic,
-                        "qos": qos,
-                        "retain": retain
-                    })),
-                )
-            }
-            Err(error_msg) => (
-                StatusCode::INTERNAL_SERVER_ERROR,
-                Json(serde_json::json!({
-                    "error": "Failed to publish message",
-                    "message": error_msg
-                })),
-            ),
-        }
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "success": true,
+                "message": format!("Message published to topic '{}'", topic),
+                "topic": topic,
+                "qos": qos,
+                "retain": retain
+            })),
+        )
     } else {
         (
             StatusCode::SERVICE_UNAVAILABLE,
@@ -438,7 +423,7 @@ pub(crate) async fn publish_mqtt_batch_handler(
 
     let messages_json = messages_json.unwrap();
 
-    if let Some(broker) = &state.mqtt_broker {
+    if let Some(broker) = &state.mqtt_sessions {
         if messages_json.is_empty() {
             return (
                 StatusCode::BAD_REQUEST,
@@ -482,39 +467,27 @@ pub(crate) async fn publish_mqtt_batch_handler(
 
             // Convert payload to bytes
             let payload_bytes = payload.as_bytes().to_vec();
+            let qos_level = mockforge_mqtt::ProtocolQoS::try_from(qos).unwrap_or_default();
 
-            let publish_result = broker
-                .handle_publish(&client_id, &topic, payload_bytes, qos, retain)
-                .await
-                .map_err(|e| format!("{}", e));
+            // Route through the live session manager (fire-and-forget).
+            broker.publish_raw(&client_id, &topic, payload_bytes, qos_level, retain).await;
 
-            match publish_result {
-                Ok(_) => {
-                    // Emit message event
-                    let event = MessageEvent::Mqtt(MqttMessageEvent {
-                        topic: topic.clone(),
-                        payload: payload.clone(),
-                        qos,
-                        retain,
-                        timestamp: chrono::Utc::now().to_rfc3339(),
-                    });
-                    let _ = state.message_events.send(event);
+            // Emit message event
+            let event = MessageEvent::Mqtt(MqttMessageEvent {
+                topic: topic.clone(),
+                payload: payload.clone(),
+                qos,
+                retain,
+                timestamp: chrono::Utc::now().to_rfc3339(),
+            });
+            let _ = state.message_events.send(event);
 
-                    results.push(serde_json::json!({
-                        "index": index,
-                        "success": true,
-                        "topic": topic,
-                        "qos": qos
-                    }));
-                }
-                Err(error_msg) => {
-                    results.push(serde_json::json!({
-                        "index": index,
-                        "success": false,
-                        "error": error_msg
-                    }));
-                }
-            }
+            results.push(serde_json::json!({
+                "index": index,
+                "success": true,
+                "topic": topic,
+                "qos": qos
+            }));
 
             // Add delay between messages (except for the last one)
             if index < messages_json.len() - 1 && delay_ms > 0 {

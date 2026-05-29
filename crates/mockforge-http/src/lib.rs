@@ -2206,12 +2206,14 @@ pub async fn build_router_with_chains_and_multi_tenant(
     };
     #[cfg(feature = "mqtt")]
     let management_state = {
-        if let Some(broker) = mqtt_broker {
-            match broker.downcast::<mockforge_mqtt::MqttBroker>() {
-                Ok(broker) => management_state.with_mqtt_broker(broker),
+        // The `mqtt_broker` slot carries the live `Arc<SessionManager>` (the
+        // running listener's state), not an `MqttBroker` — see issue #730.
+        if let Some(sessions) = mqtt_broker {
+            match sessions.downcast::<mockforge_mqtt::SessionManager>() {
+                Ok(sessions) => management_state.with_mqtt_sessions(sessions),
                 Err(e) => {
                     error!(
-                        "Invalid MQTT broker passed to HTTP management state: {:?}",
+                        "Invalid MQTT session manager passed to HTTP management state: {:?}",
                         e.type_id()
                     );
                     management_state

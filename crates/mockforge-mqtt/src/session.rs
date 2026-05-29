@@ -676,6 +676,49 @@ impl SessionManager {
         active.keys().cloned().collect()
     }
 
+    /// Get all active topic names: subscription filters plus retained-message
+    /// topics, sorted and de-duplicated. Mirrors `MqttBroker::get_active_topics`
+    /// so the admin API can report the live topic set from the running broker.
+    pub async fn get_active_topics(&self) -> Vec<String> {
+        let topics = self.topics.read().await;
+        let mut all: Vec<String> = topics.get_all_topic_filters();
+        all.extend(topics.get_all_retained_topics());
+        all.sort();
+        all.dedup();
+        all
+    }
+
+    /// Snapshot of topic-tree stats (subscriptions, subscribers, retained
+    /// messages) for the admin API.
+    pub async fn get_topic_stats(&self) -> crate::topics::TopicStats {
+        let topics = self.topics.read().await;
+        topics.stats()
+    }
+
+    /// Admin-facing publish: build a `PublishPacket` from a raw payload and
+    /// route it through the live `publish` path so it reaches real connected
+    /// subscribers (and is retained if requested). `publisher_id` is a
+    /// synthetic id for the admin sender — it never matches a real client, so
+    /// the self-skip in `publish` is a no-op here.
+    pub async fn publish_raw(
+        &self,
+        publisher_id: &str,
+        topic: &str,
+        payload: Vec<u8>,
+        qos: QoS,
+        retain: bool,
+    ) {
+        let packet = PublishPacket {
+            dup: false,
+            qos,
+            retain,
+            topic: topic.to_string(),
+            packet_id: None,
+            payload,
+        };
+        self.publish(publisher_id, &packet).await;
+    }
+
     /// Get count of active connections
     pub async fn connection_count(&self) -> usize {
         let active = self.active_clients.read().await;
@@ -1056,5 +1099,38 @@ mod tests {
         assert_eq!(SubackReturnCode::success(QoS::AtMostOnce), SubackReturnCode::SuccessQoS0);
         assert_eq!(SubackReturnCode::success(QoS::AtLeastOnce), SubackReturnCode::SuccessQoS1);
         assert_eq!(SubackReturnCode::success(QoS::ExactlyOnce), SubackReturnCode::SuccessQoS2);
+    }
+
+    #[tokio::test]
+    async fn test_admin_accessors_reflect_live_state() {
+        // Exercises the accessors the admin API uses (issue #730): a live
+        // subscription shows up in get_active_topics / get_topic_stats, and
+        // publish_raw routes through the live publish path to the subscriber.
+        let manager = SessionManager::new(10, None);
+
+        let (tx, mut rx) = mpsc::channel(10);
+        manager.connect("sub".to_string(), true, 60, tx, None).await.unwrap();
+        manager
+            .subscribe("sub", vec![("demo/topic".to_string(), QoS::AtMostOnce)])
+            .await;
+
+        // Topic + stats reflect the live subscription.
+        let topics = manager.get_active_topics().await;
+        assert!(topics.contains(&"demo/topic".to_string()), "topics: {topics:?}");
+        let stats = manager.get_topic_stats().await;
+        assert!(stats.total_subscriptions >= 1);
+        assert_eq!(manager.get_connected_clients().await, vec!["sub".to_string()]);
+
+        // Admin publish reaches the subscriber.
+        manager
+            .publish_raw("admin-test-fire", "demo/topic", b"hello".to_vec(), QoS::AtMostOnce, false)
+            .await;
+        match rx.recv().await {
+            Some(Packet::Publish(p)) => {
+                assert_eq!(p.topic, "demo/topic");
+                assert_eq!(p.payload, b"hello");
+            }
+            other => panic!("expected a delivered Publish, got {other:?}"),
+        }
     }
 }

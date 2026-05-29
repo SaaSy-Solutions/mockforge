@@ -129,6 +129,24 @@ pub async fn start_mqtt_server_with_metrics(
     config: MqttConfig,
     metrics: Arc<MqttMetrics>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let session_manager =
+        Arc::new(SessionManager::new(config.max_connections, Some(metrics.clone())));
+    start_mqtt_server_with_session_manager(session_manager, metrics, config).await
+}
+
+/// Start an MQTT server using a caller-provided `SessionManager`.
+///
+/// This is the entry point used when the admin API and the listener must
+/// share one broker: the caller builds the `Arc<SessionManager>`, hands a
+/// clone to `ManagementState`, and passes another here so the admin reflects
+/// the clients/topics this listener actually serves. `start_mqtt_server*`
+/// construct their own manager and delegate here, so existing callers are
+/// unchanged.
+pub async fn start_mqtt_server_with_session_manager(
+    session_manager: Arc<SessionManager>,
+    metrics: Arc<MqttMetrics>,
+    config: MqttConfig,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let addr = format!("{}:{}", config.host, config.port);
 
     info!(
@@ -137,8 +155,6 @@ pub async fn start_mqtt_server_with_metrics(
     );
 
     let listener = TcpListener::bind(&addr).await?;
-    let session_manager =
-        Arc::new(SessionManager::new(config.max_connections, Some(metrics.clone())));
 
     info!(
         "MQTT broker listening on {}:{} (MQTT {:?})",
