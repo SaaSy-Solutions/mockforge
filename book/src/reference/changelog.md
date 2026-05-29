@@ -1,16 +1,10 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
-## [0.3.157] - 2026-05-29
+## [0.3.161] - 2026-05-29
 
-### Added
+### Changed
 
-- **[Contracts][DevX][Security]** OWASP / WAF unification into `--conformance-self-test` (#79 round 17.5) — folds one canonical payload per OWASP category (`owasp:sqli`, `owasp:xss`, `owasp:command-injection`, `owasp:path-traversal`, `owasp:ssti`, `owasp:ldap-injection`, `owasp:xxe`) into the existing self-test driver. Injects into the first query param or first string body field; skips operations with no injectable surface. 7 probes max per operation; server should return 4xx (5xx = crashed on payload).
-
-## [0.3.154] - 2026-05-29
-
-### Added
-
-- **[Contracts][DevX]** Schema-driven request-body mutator for `--conformance-self-test` (#79 round 17.2) — when both a positive sample AND a resolved request-body schema are available, the self-test now emits per-field negatives (type mismatch, required-field removal, min/max bound breaks, pattern miss, enum out-of-range, additional-property), plus a URI-too-long parameter probe. Labels carry the field path so the report tells you exactly which field caught. Bounded by `SCHEMA_MUTATION_CAP = 12` per operation.
+- **[Contracts][DevX]** OWASP coverage table now appends an "Untested OWASP categories" footer that tells you exactly which `--conformance-categories` value to add for each uncovered OWASP category (#79 round 18.4). Removes the "Not Working" confusion when a user-selected subset of categories doesn't cover the full OWASP Top 10.
 
 ||||||| parent of 483a9524 (feat(bench): OWASP/WAF unification in self-test (#79 round 17.5))
 ## [0.3.153] - 2026-05-29

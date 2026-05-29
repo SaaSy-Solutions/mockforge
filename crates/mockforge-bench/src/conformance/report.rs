@@ -710,7 +710,8 @@ impl ConformanceReport {
         println!("{}", "OWASP API Security Top 10 Coverage".bold());
         println!("{}", "=".repeat(64).bright_green());
 
-        for entry in self.owasp_coverage_data() {
+        let entries = self.owasp_coverage_data();
+        for entry in &entries {
             let (status, via) = if !entry.tested {
                 ("-".bright_black(), String::new())
             } else {
@@ -723,6 +724,31 @@ impl ConformanceReport {
             };
 
             println!("  {:<12} {:<40} {}{}", entry.id, entry.name, status, via);
+        }
+
+        // Round 18.4 — Srikanth's confusion: he saw 5 OWASP rows
+        // show "-" after `--conformance-categories
+        // "security,request-bodies,parameters"` and read it as "not
+        // working". Actually it was working perfectly — his selected
+        // categories simply don't map to the 5 untouched OWASP
+        // categories. Print a footer that explains which conformance
+        // category to add to exercise each untested OWASP category.
+        let untested: Vec<&OwaspCoverageEntry> = entries.iter().filter(|e| !e.tested).collect();
+        if !untested.is_empty() {
+            println!();
+            println!(
+                "{}",
+                "  Untested OWASP categories — add the listed --conformance-categories to exercise:".bright_black()
+            );
+            for entry in untested {
+                let suggestion = suggest_conformance_category_for_owasp(&entry.id);
+                println!(
+                    "    {} {:<40} {}",
+                    entry.id.bright_black(),
+                    entry.name.bright_black(),
+                    suggestion.bright_black()
+                );
+            }
         }
     }
 
@@ -744,9 +770,44 @@ impl ConformanceReport {
     }
 }
 
+/// Round 18.4 — pair each OWASP category with the conformance
+/// category that exercises it. Used by the report footer when a
+/// category is untested to tell the user *how* to test it.
+fn suggest_conformance_category_for_owasp(owasp_id: &str) -> &'static str {
+    match owasp_id {
+        "API1:2023" => "add `parameters` (path-param probes)",
+        "API2:2023" => "add `security` (auth probes)",
+        "API3:2023" => "add `constraints` (required/property checks)",
+        "API4:2023" => "add `request-bodies` or `constraints` (min/max/pattern/enum)",
+        "API5:2023" => "add `http-methods` (method-by-method coverage)",
+        "API6:2023" => "no single category — requires custom scenario flows",
+        "API7:2023" => "no built-in coverage — requires URL-injection custom checks",
+        "API8:2023" => "add any of `parameters` / `request-bodies` / `schema-types` / `string-formats` / `composition` / `response-codes` / `content-types` / `response-validation`",
+        "API9:2023" => "add `response-codes` or `http-methods`",
+        "API10:2023" => "add `response-validation`",
+        _ => "no mapping",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Round 18.4 — every OWASP category that the suggestion helper
+    /// is asked about should return a non-empty hint, so the footer
+    /// in the coverage table never prints an empty cell.
+    #[test]
+    fn suggest_conformance_category_returns_a_hint_for_every_owasp() {
+        for category in OwaspCategory::all() {
+            let suggestion = suggest_conformance_category_for_owasp(category.identifier());
+            assert!(
+                !suggestion.is_empty() && suggestion != "no mapping",
+                "no suggestion for {} ({})",
+                category.identifier(),
+                category.short_name()
+            );
+        }
+    }
 
     #[test]
     fn test_parse_conformance_report() {
