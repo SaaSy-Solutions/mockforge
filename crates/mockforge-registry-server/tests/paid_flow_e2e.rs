@@ -147,6 +147,12 @@ impl PaidFlowHelper {
                     "object": "subscription",
                     "customer": self.customer_id,
                     "status": status,
+                    // `async-stripe`'s `Subscription` requires these (no serde
+                    // default); real Stripe events always include them. Without
+                    // them `Webhook::construct_event` fails with "error parsing
+                    // event object" after the signature check passes.
+                    "livemode": false,
+                    "automatic_tax": { "enabled": false },
                     "current_period_start": now,
                     "current_period_end": now + 30 * 86400,
                     "cancel_at_period_end": event_type == "customer.subscription.deleted",

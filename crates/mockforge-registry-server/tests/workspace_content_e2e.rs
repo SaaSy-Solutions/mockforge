@@ -93,7 +93,10 @@ async fn register_and_setup(base_url: &str) -> E2e {
     let res = client
         .post(format!("{}/api/v1/organizations", base_url))
         .header("Authorization", format!("Bearer {}", access_token))
-        .json(&json!({ "name": format!("WS-Content Test Org {}", ts), "slug": org_slug }))
+        // These tests create multiple workspaces in one org to exercise
+        // cross-workspace isolation; the Free plan caps an org at 1 workspace
+        // (max_projects), so provision a Team org which is uncapped.
+        .json(&json!({ "name": format!("WS-Content Test Org {}", ts), "slug": org_slug, "plan": "team" }))
         .send()
         .await
         .expect("create org failed");
