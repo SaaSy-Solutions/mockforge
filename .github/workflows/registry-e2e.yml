@@ -108,11 +108,16 @@ jobs:
           env-vars: "CARGO_HOME"
 
       - name: Build registry-server
-        # Retry once under shared-runner resource pressure, same as the sibling workflow.
+        # Debug build (not --release): this is a behavioral E2E lane, not a perf
+        # benchmark, so an optimized build buys nothing but costs ~3-5x more CPU
+        # time and disk. The runner host is heavily shared; a lighter/faster build
+        # is far less likely to be starved or reclaimed mid-job (the lane
+        # historically died before the build even finished). Retry once under
+        # shared-runner resource pressure, same as the sibling workflow.
         run: |
-          cargo build -p mockforge-registry-server --release \
+          cargo build -p mockforge-registry-server \
             || (echo "::warning::first build failed, retrying once" \
-                && cargo build -p mockforge-registry-server --release)
+                && cargo build -p mockforge-registry-server)
 
       - name: Start Postgres + MinIO
         run: |
@@ -141,7 +146,7 @@ jobs:
           PORT: "58080"
           HOST: "0.0.0.0"
         run: |
-          nohup ./target/release/mockforge-registry-server \
+          nohup ./target/debug/mockforge-registry-server \
             > registry-server.log 2>&1 &
           echo $! > registry-server.pid
           echo "Waiting for registry-server on :${REGISTRY_PORT}..."
