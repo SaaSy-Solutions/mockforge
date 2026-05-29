@@ -1,510 +1,122 @@
-# Plugin Marketplace Production Hardening
+# Plugin Marketplace — Production Architecture
 
-**Date**: 2025-01-27
-**Status**: ✅ **Implemented**
+**Status**: ✅ Implemented (Rust, in `mockforge-registry-server`)
+
+> **History / correction (2026-05):** earlier revisions of this document described a
+> TypeScript/Express/Prisma backend under `plugin-marketplace/backend/src/*.ts`. **That
+> backend never existed.** The marketplace is implemented in Rust as part of the
+> multi-tenant registry server (`crates/mockforge-registry-server`). This document was
+> rewritten to describe the actual implementation. See issue #667.
 
 ## Overview
 
-The plugin marketplace has been enhanced with production-ready features including comprehensive rate limiting, CDN integration, robust versioning, and a complete review workflow system.
+The plugin / template / scenario marketplace is served by `mockforge-registry-server`
+(the SaaS registry, deployed on Fly as the `app.mockforge.dev` / registry API). It is a
+cloud capability: the publish/search/install/review endpoints live **only** on the
+registry server, not on the embedded admin server that ships with the local
+`mockforge serve --admin` binary.
 
-## Features Implemented
+The admin UI (`crates/mockforge-ui/ui`) talks to these endpoints over `/api/v1/...` when
+running in cloud mode (`VITE_MOCKFORGE_MODE=cloud`); requests carry the JWT via
+`authenticatedFetch` (`src/utils/apiClient.ts`).
 
-### 1. Production Rate Limiting
+## Endpoints
 
-**Location**: `plugin-marketplace/backend/src/middleware/rateLimit.ts`
+| Endpoint | Handler |
+|----------|---------|
+| `POST /api/v1/plugins/publish` | `handlers::plugins::publish_plugin` |
+| `GET  /api/v1/plugins/search` (and details/versions) | `handlers::plugins` |
+| `POST /api/v1/marketplace/templates/publish` | `handlers::templates::publish_template` |
+| `POST /api/v1/marketplace/templates/search` | `handlers::templates::search_templates` |
+| `POST /api/v1/marketplace/scenarios/publish` | `handlers::scenarios::publish_scenario` |
+| `POST /api/v1/marketplace/scenarios/search` | `handlers::scenarios` |
 
-**Features**:
-- Redis-backed rate limiting (with memory fallback)
-- Per-IP rate limiting
-- Endpoint-specific limits
-- Authentication-based limits
-- Burst protection
-- Rate limit headers in responses
+Routes are registered in `crates/mockforge-registry-server/src/routes.rs`.
 
-**Rate Limits**:
-- **Global**: 100 requests per 15 minutes per IP
-- **Authentication**: 5 requests per 15 minutes per IP (brute force protection)
-- **Plugin Publishing**: 10 requests per hour per user
-- **Search**: 60 requests per minute per IP
-- **Downloads**: 100 downloads per hour per IP
-- **Reviews**: 5 reviews per hour per user
-- **Admin**: 30 requests per minute per admin
+## Implemented capabilities
 
-**Configuration**:
+### 1. Publishing (`handlers/plugins.rs`, `handlers/templates.rs`, `handlers/scenarios.rs`)
+
+- **Auth + scopes**: `AuthUser` extractor + `ScopedAuth::require_scope(TokenScope::PublishPackages)`
+  for plugins; org-context resolution (`resolve_org_context`) for templates/scenarios.
+- **Input validation** (`src/validation.rs`): name, semver version, checksum format, base64
+  payload, and WASM-file validation for plugins.
+- **Integrity**: SHA-256 of the uploaded bytes is recomputed server-side and compared to the
+  client-supplied checksum; mismatch is rejected.
+- **Per-plan limits**: org `limits_json` enforces `max_templates_published`,
+  `max_scenarios_published`, and a `storage_gb` quota tracked via `UsageCounter`.
+- **Versioning**: `create_plugin_version` records each version with its download URL,
+  checksum, file size, and optional SBOM; supports update-in-place of an existing package.
+
+### 2. Binary storage (`src/storage.rs`)
+
+`PluginStorage` is S3-compatible with a local-filesystem fallback:
+
+- **S3 backend** via `aws-sdk-s3`. Honors a custom endpoint (`S3_ENDPOINT` / `AWS_ENDPOINT_URL_S3`)
+  with explicit credentials, or the default AWS credential-provider chain. Performs a
+  connectivity/health check on startup.
+- **Local fallback**: if no usable bucket is configured or the S3 health check fails, falls
+  back to a local directory (`STORAGE_PATH`, default `./data/storage`). Used for dev/test.
+- Key components are sanitized before use in S3 keys or file paths.
+
+Relevant env: `S3_BUCKET` / `BUCKET_NAME`, `S3_REGION` / `AWS_REGION`, `S3_ENDPOINT`,
+`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`.
+
+### 3. Rate limiting (`src/middleware/rate_limit.rs`, `org_rate_limit.rs`)
+
+Per-IP and per-org rate limiting middleware, with optional Redis (`REDIS_URL`) for shared
+state across instances and an in-memory fallback. Default per-minute budget is configurable
+via `RATE_LIMIT_PER_MINUTE`.
+
+### 4. Reviews & moderation (`handlers/reviews.rs`, `handlers/template_reviews.rs`, plugin moderation)
+
+- Submit / vote / respond to reviews; live star counts via the `template_stars` table.
+- Plugin moderation surface (verify / takedown / restore) used by the admin
+  `PluginModerationPage`.
+
+## Configuration (env)
+
+Required:
+
 ```bash
-# Enable Redis for rate limiting
-REDIS_URL=redis://localhost:6379
-
-# Or use memory-based (default)
-# (No REDIS_URL = memory store)
+DATABASE_URL=postgres://...        # Postgres; server auto-runs migrations on startup
+JWT_SECRET=...                     # JWT signing secret (>= 32 chars)
 ```
 
-**Usage**:
-```typescript
-import { authRateLimiter, publishRateLimiter } from './middleware/rateLimit';
+Common optional:
 
-// Apply to routes
-app.post('/api/auth/login', authRateLimiter, loginHandler);
-app.post('/api/plugins/publish', publishRateLimiter, publishHandler);
-```
-
-### 2. CDN Integration
-
-**Location**: `plugin-marketplace/backend/src/services/cdnService.ts`
-
-**Features**:
-- CDN URL generation for plugin files
-- S3-compatible storage integration
-- Cache optimization
-- Asset optimization (images, icons)
-- Cache invalidation support
-- Geographic distribution ready
-
-**Configuration**:
 ```bash
-# CDN Configuration
-CDN_URL=https://cdn.mockforge.dev
-CDN_ENABLED=true
-CDN_CACHE_TTL=31536000  # 1 year for plugin files
-CDN_METADATA_CACHE_TTL=3600  # 1 hour for metadata
-
-# S3 Configuration
-S3_BUCKET=mockforge-plugins
+PORT=8080                          # default 8080
+STORAGE_PATH=./data/storage        # local storage dir when S3 is not configured
+S3_BUCKET=mockforge-plugins        # enables S3 backend
 AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your-key
-AWS_SECRET_ACCESS_KEY=your-secret
+REDIS_URL=redis://localhost:6379   # enables Redis-backed rate limiting
+MAX_PLUGIN_SIZE=52428800           # 50 MiB
+RATE_LIMIT_PER_MINUTE=60
+PROMETHEUS_SCRAPE_TOKEN=...         # require bearer auth on /metrics (issue #647)
 ```
-
-**Usage**:
-```typescript
-import { createCDNService } from './services/cdnService';
-
-const cdn = createCDNService();
-const fileUrl = cdn.getPluginFileUrl(plugin, version);
-const iconUrl = cdn.getIconUrl(plugin);
-
-// Upload with CDN optimization
-const cdnUrl = await cdn.uploadPluginFile(plugin, version, fileBuffer);
-```
-
-**CDN Features**:
-- Automatic cache headers
-- Compression support
-- Image optimization
-- Cache invalidation
-- Fallback to S3 direct URLs
-
-### 3. Versioning System
-
-**Location**: `plugin-marketplace/backend/src/services/versioningService.ts`
-
-**Features**:
-- Semantic versioning validation
-- Version comparison and sorting
-- Dependency resolution
-- Version deprecation
-- Version yanking (unpublish)
-- Latest version detection
-- Stable vs. prerelease handling
-
-**Usage**:
-```typescript
-import { createVersioningService } from './services/versioningService';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
-const versioning = createVersioningService(prisma);
-
-// Validate version
-if (!versioning.validateVersion('1.2.3')) {
-  throw new Error('Invalid version');
-}
-
-// Check if can publish
-const { canPublish, reason } = await versioning.canPublishVersion(pluginId, '1.2.3');
-
-// Get version info
-const versionInfo = await versioning.getVersionInfo(pluginId, '1.2.3');
-console.log(versionInfo.isLatest, versionInfo.isStable);
-
-// Resolve dependencies
-const { resolved, unresolved } = await versioning.resolveDependencies(pluginId, '1.2.3');
-
-// Yank a version
-await versioning.yankVersion(pluginId, '1.2.0', 'Security vulnerability');
-
-// Deprecate a version
-await versioning.deprecateVersion(pluginId, '1.0.0', 'Use version 2.0.0 instead');
-```
-
-**Version Management**:
-- Automatic latest version detection
-- Stable vs. prerelease filtering
-- Version history tracking
-- Dependency range validation
-- Conflict detection
-
-### 4. Review Workflow
-
-**Location**: `plugin-marketplace/backend/src/services/reviewWorkflowService.ts`
-
-**Features**:
-- Review moderation workflow
-- Auto-approval for verified users
-- Spam detection
-- Quality scoring
-- Review statistics
-- Status management (pending, approved, rejected, flagged)
-
-**Configuration**:
-```typescript
-const reviewWorkflow = createReviewWorkflowService(prisma, {
-  requireModeration: false, // Auto-approve if false
-  autoApproveVerified: true, // Auto-approve verified users
-  minReviewLength: 50,
-  maxReviewLength: 5000,
-  enableSpamDetection: true,
-  enableQualityScoring: true,
-});
-```
-
-**Usage**:
-```typescript
-// Submit review (with workflow)
-const review = await reviewWorkflow.submitReview(
-  pluginId,
-  userId,
-  5, // rating
-  'Great plugin! Works perfectly...',
-  'Excellent functionality'
-);
-
-// Approve pending review
-await reviewWorkflow.approveReview(reviewId, moderatorId);
-
-// Reject review
-await reviewWorkflow.rejectReview(reviewId, moderatorId, 'Spam detected');
-
-// Flag review
-await reviewWorkflow.flagReview(reviewId, 'Suspicious content');
-
-// Get pending reviews
-const pending = await reviewWorkflow.getPendingReviews(0, 20);
-
-// Get review statistics
-const stats = await reviewWorkflow.getReviewStats(pluginId);
-```
-
-**Review Features**:
-- Automatic spam detection
-- Quality scoring (0-100)
-- Moderation queue
-- Review statistics
-- Plugin rating updates
-- User reputation tracking
-
-## Integration
-
-### Server Setup
-
-Update `backend/src/index.ts` to use the new services:
-
-```typescript
-import { initRateLimitRedis, globalRateLimiter } from './middleware/rateLimit';
-import { createCDNService } from './services/cdnService';
-import { createVersioningService } from './services/versioningService';
-import { createReviewWorkflowService } from './services/reviewWorkflowService';
-
-// Initialize services
-const cdnService = createCDNService();
-const versioningService = createVersioningService(prisma);
-const reviewWorkflowService = createReviewWorkflowService(prisma);
-```
-
-### Route Integration
-
-Apply rate limiting to routes:
-
-```typescript
-import {
-  authRateLimiter,
-  publishRateLimiter,
-  searchRateLimiter,
-  downloadRateLimiter,
-  reviewRateLimiter,
-  adminRateLimiter
-} from './middleware/rateLimit';
-
-// Auth routes
-app.post('/api/auth/login', authRateLimiter, loginHandler);
-app.post('/api/auth/register', authRateLimiter, registerHandler);
-
-// Plugin routes
-app.post('/api/plugins/publish', publishRateLimiter, publishHandler);
-app.get('/api/plugins/search', searchRateLimiter, searchHandler);
-app.post('/api/plugins/:id/download', downloadRateLimiter, downloadHandler);
-
-// Review routes
-app.post('/api/reviews', reviewRateLimiter, submitReviewHandler);
-
-// Admin routes
-app.use('/api/admin', adminRateLimiter, adminRoutes);
-```
-
-## Production Deployment
-
-### Environment Variables
-
-```bash
-# Rate Limiting
-REDIS_URL=redis://your-redis-host:6379
-
-# CDN
-CDN_URL=https://cdn.mockforge.dev
-CDN_ENABLED=true
-CDN_CACHE_TTL=31536000
-CDN_METADATA_CACHE_TTL=3600
-
-# S3
-S3_BUCKET=mockforge-plugins
-AWS_REGION=us-east-1
-AWS_ACCESS_KEY_ID=your-key
-AWS_SECRET_ACCESS_KEY=your-secret
-
-# Review Workflow
-REVIEW_REQUIRE_MODERATION=false
-REVIEW_AUTO_APPROVE_VERIFIED=true
-REVIEW_MIN_LENGTH=50
-REVIEW_MAX_LENGTH=5000
-REVIEW_ENABLE_SPAM_DETECTION=true
-REVIEW_ENABLE_QUALITY_SCORING=true
-```
-
-### Redis Setup
-
-For production, use Redis for rate limiting:
-
-```bash
-# Install Redis
-sudo apt-get install redis-server
-
-# Or use Docker
-docker run -d -p 6379:6379 redis:7-alpine
-
-# Configure
-REDIS_URL=redis://localhost:6379
-```
-
-### CDN Setup
-
-#### Option 1: CloudFront (AWS)
-
-1. Create S3 bucket for plugin files
-2. Create CloudFront distribution
-3. Configure origin and cache behaviors
-4. Set `CDN_URL` to CloudFront distribution URL
-
-#### Option 2: Other CDNs
-
-- Cloudflare: Use Cloudflare R2 (S3-compatible)
-- Fastly: Use Fastly with S3 origin
-- Custom: Implement CDN service adapter
-
-### Database Schema Updates
-
-Add to Prisma schema if not already present:
-
-```prisma
-model Version {
-  // ... existing fields
-  yanked        Boolean   @default(false)
-  yankedAt      DateTime?
-  yankReason    String?
-  deprecated    String?
-}
-
-model Review {
-  // ... existing fields
-  status        String    @default("pending") // pending, approved, rejected, flagged
-  qualityScore  Int?
-  moderatedBy   String?
-  moderatedAt   DateTime?
-  rejectionReason String?
-  flaggedReason String?
-  flaggedAt     DateTime?
-  metadata      Json?
-}
-```
-
-## Performance Optimization
-
-### Caching Strategy
-
-1. **Redis Caching**: Use Redis for rate limit state
-2. **CDN Caching**: Plugin files cached at edge
-3. **Database Caching**: Cache frequently accessed plugin metadata
-
-### CDN Optimization
-
-- **Plugin Files**: Long cache TTL (1 year)
-- **Metadata**: Short cache TTL (1 hour)
-- **Icons/Screenshots**: Medium cache TTL (1 day)
-- **Cache Invalidation**: On version updates
-
-### Rate Limit Optimization
-
-- **Redis Store**: Shared state across instances
-- **Memory Store**: Fallback for single-instance deployments
-- **IP Detection**: Proper handling of proxied requests
-
-## Security Considerations
-
-### Rate Limiting
-
-- Prevents brute force attacks on auth endpoints
-- Protects against DDoS
-- Prevents abuse of publishing endpoints
-- Limits download abuse
-
-### Review Workflow
-
-- Spam detection prevents fake reviews
-- Moderation ensures quality
-- Quality scoring identifies good reviews
-- User reputation tracking
-
-### Versioning
-
-- Prevents version conflicts
-- Validates semantic versioning
-- Dependency resolution prevents security issues
-- Yanking allows quick removal of vulnerable versions
-
-## Monitoring
-
-### Rate Limit Metrics
-
-Track:
-- Rate limit hits per endpoint
-- Top rate-limited IPs
-- Rate limit effectiveness
-
-### CDN Metrics
-
-Track:
-- CDN hit rate
-- Cache invalidation frequency
-- Download performance
-- Geographic distribution
-
-### Review Metrics
-
-Track:
-- Review approval rate
-- Average review quality score
-- Spam detection rate
-- Moderation queue length
 
 ## Testing
 
-### Rate Limiting Tests
+End-to-end coverage lives in
+`crates/mockforge-registry-server/tests/marketplace_e2e.rs` (register → create org →
+publish → search → install → review for plugins, templates, and scenarios). These tests
+are `#[ignore]`d because they require a running registry + Postgres:
 
-```typescript
-// Test rate limiting
-describe('Rate Limiting', () => {
-  it('should rate limit authentication endpoints', async () => {
-    // Make 5 requests
-    for (let i = 0; i < 5; i++) {
-      await request(app).post('/api/auth/login').send({...});
-    }
-    // 6th request should be rate limited
-    const response = await request(app).post('/api/auth/login').send({...});
-    expect(response.status).toBe(429);
-  });
-});
+```bash
+# bring up Postgres + registry-server with DATABASE_URL/JWT_SECRET, then:
+REGISTRY_URL=http://localhost:8080 \
+  cargo test -p mockforge-registry-server --test marketplace_e2e -- --ignored
 ```
 
-### Versioning Tests
+> **Known issue:** template/scenario *search* currently does not return a just-published
+> org-scoped item even though the row persists correctly — tracked separately. Plugin
+> publish/search/install/review passes end-to-end.
 
-```typescript
-// Test version validation
-describe('Versioning', () => {
-  it('should validate semantic versions', () => {
-    expect(versioning.validateVersion('1.2.3')).toBe(true);
-    expect(versioning.validateVersion('invalid')).toBe(false);
-  });
+## Local vs. cloud
 
-  it('should detect latest version', async () => {
-    const latest = await versioning.getLatestVersion(['1.0.0', '1.2.0', '2.0.0']);
-    expect(latest).toBe('2.0.0');
-  });
-});
-```
-
-### Review Workflow Tests
-
-```typescript
-// Test review submission
-describe('Review Workflow', () => {
-  it('should auto-approve verified users', async () => {
-    const review = await reviewWorkflow.submitReview(pluginId, verifiedUserId, 5, 'Great!');
-    expect(review.status).toBe('approved');
-  });
-
-  it('should detect spam', async () => {
-    const spamContent = 'BUY NOW CHEAP DISCOUNT!!!';
-    const review = await reviewWorkflow.submitReview(pluginId, userId, 5, spamContent);
-    expect(review.status).toBe('flagged');
-  });
-});
-```
-
-## Files Created/Modified
-
-1. **`plugin-marketplace/backend/src/middleware/rateLimit.ts`** (NEW)
-   - Comprehensive rate limiting with Redis support
-
-2. **`plugin-marketplace/backend/src/services/cdnService.ts`** (NEW)
-   - CDN integration for plugin distribution
-
-3. **`plugin-marketplace/backend/src/services/versioningService.ts`** (NEW)
-   - Semantic versioning and dependency resolution
-
-4. **`plugin-marketplace/backend/src/services/reviewWorkflowService.ts`** (NEW)
-   - Review moderation and quality scoring
-
-5. **`plugin-marketplace/backend/src/index.ts`** (MODIFIED)
-   - Integrated rate limiting and service initialization
-
-6. **`plugin-marketplace/backend/package.json`** (MODIFIED)
-   - Added dependencies: `rate-limit-redis`, `ioredis`, `semver`
-
-7. **`docs/PLUGIN_MARKETPLACE_PRODUCTION.md`** (NEW)
-   - Comprehensive production documentation
-
-## Next Steps
-
-Potential enhancements:
-1. **Advanced Spam Detection**: ML-based spam detection
-2. **Review Sentiment Analysis**: Analyze review sentiment
-3. **Version Changelog**: Automatic changelog generation
-4. **CDN Analytics**: Track CDN performance
-5. **Rate Limit Dashboard**: Visual rate limit monitoring
-6. **Review Moderation UI**: Admin interface for reviews
-
-## Summary
-
-The plugin marketplace is now production-ready with:
-- ✅ Comprehensive rate limiting (Redis-backed)
-- ✅ CDN integration for plugin distribution
-- ✅ Robust versioning system with semantic versioning
-- ✅ Complete review workflow with moderation
-- ✅ Spam detection and quality scoring
-- ✅ Production deployment guide
-
-All features are configurable via environment variables and ready for production deployment.
-
----
-
-**Last Updated**: 2025-01-27
-**Version**: 1.0.0
+The marketplace is a registry (cloud) feature. In local self-hosted mode
+(`mockforge serve --admin`) the embedded admin server does not host these `/api/v1/...`
+marketplace routes; the admin UI surfaces publishing only when authenticated against the
+registry. There is no local marketplace backend, by design — a single shared registry is
+the source of truth for published artifacts.
