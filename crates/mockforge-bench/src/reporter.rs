@@ -250,7 +250,17 @@ impl TerminalReporter {
 
         println!("{}: {}", "Specification".bold(), spec_file.cyan());
         println!("{}: {}", "Target".bold(), target.cyan());
-        println!("{}: {} endpoints", "Operations".bold(), num_operations.to_string().cyan());
+        // Round 18.2 — caller passes 0 before the spec is parsed
+        // (the operation count isn't known yet). Showing "Operations:
+        // 0 endpoints" was actively misleading on big specs that
+        // analysed 1000+ ops a moment later. Show a clear "TBD"
+        // marker until the parse completes; the per-spec analysis
+        // line below it carries the real count.
+        if num_operations == 0 {
+            println!("{}: {}", "Operations".bold(), "(analyzing spec…)".bright_black());
+        } else {
+            println!("{}: {} endpoints", "Operations".bold(), num_operations.to_string().cyan());
+        }
         println!("{}: {}", "Scenario".bold(), scenario.cyan());
         println!("{}: {}s", "Duration".bold(), duration_secs.to_string().cyan());
 
