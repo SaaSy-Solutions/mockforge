@@ -1,8 +1,17 @@
-## [0.3.160] - 2026-05-29
+## [0.3.158] - 2026-05-29
 
 ### Fixed
 
-- **[Contracts]** Request-body validator now resolves nested `$ref` pointers against the spec's full components map (#79 round 18.3) — Srikanth's vCenter 0.3.152 run produced 157 (of 256) violations like `Failed to create schema validator: Pointer '/components/schemas/Vcenter.VM.DiskCloneSpec' does not exist`. The schema was defined in the spec; the validator just couldn't see it because `jsonschema::options().build(&inner_schema)` was called with only the inner schema as the document — nested `$ref` strings then had no `components` map to resolve against. New `mockforge_openapi::schema_ref_resolver::build_validator(&schema, &spec)` wraps the schema document with the spec's components inlined at the root, giving JSON Pointer `#/components/schemas/X` a place to land. Wired into both `mockforge-bench`'s `request_validator` (the `--validate-requests` path that Srikanth hit) and `mockforge-openapi`'s `validation::validate_request_body` (the live-server path that powers `mockforge serve` request validation). Schema names with dots (`Vcenter.VM.DiskCloneSpec`), spaces, or other JSON-Pointer-safe characters now resolve correctly. 4 new unit tests cover the bug reproducer, naked-validator failure mode, explicit-components precedence, and no-components no-op.
+- **[Contracts][DevX]** Self-contained HTML conformance report (#79 round 17.6) — Srikanth's (17.6) ask: a human-readable artifact next to the JSON. `mockforge bench --conformance-self-test` now writes `conformance-report.html` alongside `conformance-self-test.json`. Inline CSS, no external assets, drops into any browser.
+
+  Sections:
+  - **Headline cards** — positive count, positive failures, negatives caught, negatives missed, operations audited (red/amber/green by status).
+  - **Negatives by category** — one row per category (`request-body`, `parameters`, `security`, `owasp`, …) with caught vs. missed counts and a pass/fail badge.
+  - **Per-operation results** — every operation with its positive status badge and a caught / missed roll-up.
+  - **Missed negatives** — drill-down table of every individual missed probe (capped at 200 rows; full set still in the JSON).
+  - **Spec audit** (when a round-17.4 `conformance-spec-audit.json` is in the same output directory) — findings grouped by severity, with a top-40 datatype coverage table.
+
+  All output is HTML-escaped — payloads like `<script>` render as text, not markup. Decoupled from the spec-audit module (reads the JSON dynamically) so the round-17.4 audit branch isn't a hard compile dependency for this PR.
 
 ||||||| parent of 483a9524 (feat(bench): OWASP/WAF unification in self-test (#79 round 17.5))
 ## [0.3.153] - 2026-05-29

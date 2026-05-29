@@ -1,10 +1,10 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
-## [0.3.160] - 2026-05-29
+## [0.3.158] - 2026-05-29
 
 ### Fixed
 
-- **[Contracts]** Request-body validator now resolves nested `$ref` pointers against the spec's components map (#79 round 18.3) — pre-fix specs whose component schemas had dotted names (`Vcenter.VM.DiskCloneSpec`) or were referenced from nested schemas failed with `Pointer '/components/schemas/X' does not exist`. New `schema_ref_resolver::build_validator(&schema, &spec)` inlines the components into the validator's document context.
+- **[Contracts][DevX]** Self-contained HTML conformance report (#79 round 17.6) — `--conformance-self-test` writes `conformance-report.html` next to the JSON. Inline CSS, no external assets. Sections: headline cards, negatives by category, per-operation results, missed-negative drill-down (capped at 200 rows), and an optional spec-audit section when a round-17.4 audit JSON is present.
 
 ||||||| parent of 483a9524 (feat(bench): OWASP/WAF unification in self-test (#79 round 17.5))
 ## [0.3.153] - 2026-05-29

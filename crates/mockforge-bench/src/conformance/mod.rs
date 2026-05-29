@@ -8,6 +8,7 @@ pub mod executor;
 pub mod generator;
 pub mod har_to_custom;
 pub mod report;
+pub mod report_html;
 pub mod request_validator;
 pub mod sarif;
 pub mod schema_mutator;
