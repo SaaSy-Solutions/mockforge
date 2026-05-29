@@ -176,10 +176,11 @@ This support request was submitted through the MockForge Cloud support form.
         std::env::var("SUPPORT_EMAIL").unwrap_or_else(|_| "support@mockforge.dev".to_string());
 
     let email_msg = crate::email::EmailMessage {
-        to: support_email,
+        to: vec![support_email],
         subject: format!("[{}] {}", ticket_id, request.subject),
         html_body,
         text_body,
+        ..Default::default()
     };
 
     // Send email (non-blocking)

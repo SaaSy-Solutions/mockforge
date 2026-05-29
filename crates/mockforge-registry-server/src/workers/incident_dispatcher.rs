@@ -424,15 +424,21 @@ async fn send_email(
 ) -> ChannelResult {
     use crate::email::{EmailMessage, EmailService};
 
-    let to = match channel.config.get("to").and_then(|v| v.as_str()) {
-        Some(s) if !s.trim().is_empty() => s.trim().to_string(),
-        _ => {
-            return ChannelResult::Failed {
-                error: "channel.config.to missing or empty (expected a single email address)"
-                    .into(),
-            };
-        }
-    };
+    // `to`/`cc`/`bcc` each accept a single string or an array of strings
+    // (issue #630), so a channel can fan out to several recipients while
+    // the original single-string `{ "to": "a@b.com" }` config keeps
+    // working unchanged. `reply_to` is a single optional address.
+    let to = config_address_list(&channel.config, "to");
+    if to.is_empty() {
+        return ChannelResult::Failed {
+            error: "channel.config.to missing or empty \
+                (expected an email address or an array of addresses)"
+                .into(),
+        };
+    }
+    let cc = config_address_list(&channel.config, "cc");
+    let bcc = config_address_list(&channel.config, "bcc");
+    let reply_to = config_single_address(&channel.config, "reply_to");
 
     let service = match EmailService::from_env() {
         Ok(s) => s,
@@ -527,6 +533,9 @@ async fn send_email(
 
     let message = EmailMessage {
         to,
+        cc,
+        bcc,
+        reply_to,
         subject,
         html_body,
         text_body,
@@ -542,6 +551,43 @@ async fn send_email(
             error: format!("email send failed via {}: {e}", service.provider_name()),
         },
     }
+}
+
+/// Parse a notification-channel config value that may be either a single
+/// string or an array of strings into a trimmed, blank-free address list.
+/// A missing key, a non-string/non-array value, or all-blank entries yield
+/// an empty vec — the caller decides whether empty is an error (`to`) or
+/// simply means "no such recipients" (`cc`/`bcc`).
+fn config_address_list(config: &serde_json::Value, key: &str) -> Vec<String> {
+    match config.get(key) {
+        Some(serde_json::Value::String(s)) => {
+            let trimmed = s.trim();
+            if trimmed.is_empty() {
+                Vec::new()
+            } else {
+                vec![trimmed.to_string()]
+            }
+        }
+        Some(serde_json::Value::Array(items)) => items
+            .iter()
+            .filter_map(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string)
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// Parse a single optional address from config, collapsing a missing key
+/// or a blank value to `None`. Used for `reply_to`.
+fn config_single_address(config: &serde_json::Value, key: &str) -> Option<String> {
+    config
+        .get(key)
+        .and_then(|v| v.as_str())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
 }
 
 fn html_escape(input: &str) -> String {
@@ -809,6 +855,54 @@ mod tests {
         let channel = email_channel(serde_json::json!({ "to": "   " }));
         let result = send_email(&channel, &fake_incident(), EventKind::Trigger).await;
         assert!(matches!(result, ChannelResult::Failed { .. }));
+    }
+
+    #[test]
+    fn config_address_list_accepts_string_and_array() {
+        // Single string — the backward-compatible form.
+        let single = serde_json::json!({ "to": "a@example.com" });
+        assert_eq!(config_address_list(&single, "to"), vec!["a@example.com"]);
+
+        // Array form, with trimming and blank-dropping.
+        let array = serde_json::json!({ "to": [" a@example.com ", "", "b@example.com"] });
+        assert_eq!(config_address_list(&array, "to"), vec!["a@example.com", "b@example.com"]);
+
+        // Missing key and blank string both yield empty.
+        assert!(config_address_list(&single, "cc").is_empty());
+        assert!(config_address_list(&serde_json::json!({ "to": "   " }), "to").is_empty());
+        // Non-string array entries are skipped, not errors.
+        let mixed = serde_json::json!({ "to": ["a@example.com", 42, null] });
+        assert_eq!(config_address_list(&mixed, "to"), vec!["a@example.com"]);
+    }
+
+    #[test]
+    fn config_single_address_collapses_blank_to_none() {
+        let cfg = serde_json::json!({ "reply_to": " ops@example.com " });
+        assert_eq!(config_single_address(&cfg, "reply_to"), Some("ops@example.com".to_string()));
+        assert_eq!(
+            config_single_address(&serde_json::json!({ "reply_to": "  " }), "reply_to"),
+            None
+        );
+        assert_eq!(config_single_address(&serde_json::json!({}), "reply_to"), None);
+    }
+
+    #[tokio::test]
+    async fn email_array_to_passes_recipient_validation() {
+        // An array `to` must get past the missing-recipient guard. With no
+        // EMAIL_PROVIDER configured the send is Skipped (provider not
+        // configured), NOT Failed on a missing-`to` config error — that's
+        // how we know the array was parsed into a real recipient list.
+        std::env::remove_var("EMAIL_PROVIDER");
+        let channel =
+            email_channel(serde_json::json!({ "to": ["a@example.com", "b@example.com"] }));
+        let result = send_email(&channel, &fake_incident(), EventKind::Trigger).await;
+        match result {
+            ChannelResult::Skipped { .. } => {}
+            ChannelResult::Failed { error } => {
+                assert!(!error.contains("channel.config.to"), "array `to` was rejected: {error}");
+            }
+            other => panic!("expected Skipped (provider not configured), got {other:?}"),
+        }
     }
 
     #[test]
