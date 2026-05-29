@@ -8286,6 +8286,7 @@ dependencies = [
  "jsonpath",
  "jsonwebtoken",
  "mime_guess",
+ "mockforge-amqp",
  "mockforge-analytics",
  "mockforge-bench",
  "mockforge-chaos",

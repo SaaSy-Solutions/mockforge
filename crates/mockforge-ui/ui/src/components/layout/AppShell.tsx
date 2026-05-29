@@ -68,6 +68,7 @@ import {
   Lock as LockIcon,
   Mail,
   Radio as RadioIcon,
+  Network as NetworkIcon,
   MessageCircle as MessageCircleIcon,
   LifeBuoy,
   Bell,
@@ -110,6 +111,7 @@ const navSections = [
       { id: 'smtp-mailbox', labelKey: 'tab.smtpMailbox', icon: Mail },
       { id: 'mqtt-broker', labelKey: 'tab.mqttBroker', icon: RadioIcon },
       { id: 'kafka-broker', labelKey: 'tab.kafkaBroker', icon: Database },
+      { id: 'amqp-broker', labelKey: 'tab.amqpBroker', icon: NetworkIcon },
     ]
   },
   {

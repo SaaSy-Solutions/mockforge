@@ -132,6 +132,7 @@ const AIStudioPage = lazy(() => import('../pages/AIStudioPage').then(m => ({ def
 const SmtpMailboxPage = lazy(() => import('../pages/SmtpMailboxPage').then(m => ({ default: m.SmtpMailboxPage })));
 const MqttBrokerPage = lazy(() => import('../pages/MqttBrokerPage').then(m => ({ default: m.MqttBrokerPage })));
 const KafkaBrokerPage = lazy(() => import('../pages/KafkaBrokerPage').then(m => ({ default: m.KafkaBrokerPage })));
+const AmqpBrokerPage = lazy(() => import('../pages/AmqpBrokerPage').then(m => ({ default: m.AmqpBrokerPage })));
 
 // Public / legal / marketing pages
 const TermsPage = lazy(() => import('../pages/TermsPage').then(m => ({ default: m.TermsPage })));
@@ -284,6 +285,7 @@ export const routes: RouteConfig[] = [
   { path: '/smtp-mailbox', element: <SmtpMailboxPage /> },
   { path: '/mqtt-broker', element: <MqttBrokerPage /> },
   { path: '/kafka-broker', element: <KafkaBrokerPage /> },
+  { path: '/amqp-broker', element: <AmqpBrokerPage /> },
 
   // Public / legal / marketing (render pre-auth via AuthGuard bypass)
   { path: '/terms', element: <TermsPage /> },

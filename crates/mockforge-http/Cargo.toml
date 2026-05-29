@@ -82,6 +82,7 @@ dashmap = { version = "6.2", optional = true }
 mockforge-pipelines = { version = "0.3.70", path = "../mockforge-pipelines", optional = true }
 mockforge-runtime-daemon = { version = "0.3.95", path = "../mockforge-runtime-daemon", optional = true }
 mockforge-kafka = { version = "0.3.70", path = "../mockforge-kafka", optional = true }
+mockforge-amqp = { version = "0.3.70", path = "../mockforge-amqp", optional = true }
 mockforge-bench = { version = "0.3.70", path = "../mockforge-bench", optional = true }
 
 [features]
@@ -123,6 +124,8 @@ mqtt = ["mockforge-mqtt"]
 conformance = ["mockforge-bench", "dashmap"]
 # Enable Kafka integration (requires mockforge-kafka dependency when available)
 kafka = []
+# Enable AMQP integration (broker admin API + UI live data)
+amqp = ["mockforge-amqp"]
 # Enable chaos engineering API management (mockforge-chaos is always included)
 chaos = []
 
