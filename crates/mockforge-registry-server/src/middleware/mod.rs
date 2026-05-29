@@ -96,12 +96,36 @@ where
     type Rejection = StatusCode;
 
     async fn from_request_parts(parts: &mut Parts, _state: &S) -> Result<Self, Self::Rejection> {
-        // Try to get user_id from request extensions (set by auth_middleware)
+        // Fast path: user_id already resolved by auth_middleware (for routes that
+        // run it) and stashed in request extensions.
         if let Some(user_id_str) = parts.extensions.get::<String>() {
             if let Ok(user_id) = Uuid::parse_str(user_id_str) {
                 return Ok(OptionalAuthUser(Some(user_id)));
             }
         }
+
+        // Fallback: parse and verify the bearer token ourselves. Public routes
+        // (e.g. marketplace search) carry `OptionalAuthUser` but do NOT run
+        // `auth_middleware`, so without this an authenticated request would be
+        // treated as anonymous — which previously hid the caller's own
+        // org-scoped published items from search results (issue #724).
+        if let Some(token) = parts
+            .headers
+            .get("Authorization")
+            .and_then(|h| h.to_str().ok())
+            .and_then(|h| h.strip_prefix("Bearer "))
+        {
+            // JWT_SECRET is a required env var at startup (see config.rs), so it
+            // is always present here; this mirrors auth_middleware's verification.
+            if let Ok(secret) = std::env::var("JWT_SECRET") {
+                if let Ok(claims) = verify_token(token, &secret) {
+                    if let Ok(user_id) = Uuid::parse_str(&claims.sub) {
+                        return Ok(OptionalAuthUser(Some(user_id)));
+                    }
+                }
+            }
+        }
+
         Ok(OptionalAuthUser(None))
     }
 }
