@@ -291,6 +291,7 @@ impl HttpRouterBuilder {
             self.smtp_registry,
             self.mqtt_broker,
             None, // amqp_broker — wired directly from serve.rs, not via this builder
+            None, // kafka_broker — wired directly from serve.rs, not via this builder
             self.traffic_shaper,
             self.traffic_shaping_enabled,
             self.health_manager,

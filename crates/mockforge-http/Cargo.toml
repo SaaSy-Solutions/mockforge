@@ -122,8 +122,8 @@ smtp = ["mockforge-smtp"]
 mqtt = ["mockforge-mqtt"]
 # Enable conformance testing API endpoints
 conformance = ["mockforge-bench", "dashmap"]
-# Enable Kafka integration (requires mockforge-kafka dependency when available)
-kafka = []
+# Enable Kafka integration (broker admin API + UI live data)
+kafka = ["mockforge-kafka"]
 # Enable AMQP integration (broker admin API + UI live data)
 amqp = ["mockforge-amqp"]
 # Enable chaos engineering API management (mockforge-chaos is always included)
