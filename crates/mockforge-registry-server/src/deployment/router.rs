@@ -33,6 +33,20 @@ const DEFAULT_MOCK_REQUEST_BODY_MB: i64 = 10;
 /// Same rationale as the body cap default.
 const DEFAULT_MOCK_RPS_LIMIT: i64 = 100;
 
+/// Default overage-ceiling multiplier for hosted-mock monthly request quotas.
+///
+/// `0` means **no monthly cutoff**: once an org passes its `requests_per_30d`
+/// allotment its mocks keep responding. This matches the public pricing
+/// promise — "mocks keep responding if you exceed your request limit
+/// (notification sent but no cutoff)". Usage is still metered and the
+/// 75/90/100% usage alerts still fire (the "notification sent" half), while the
+/// per-second RPS cap and request-body cap remain the always-on infra floors.
+///
+/// Operators can re-introduce a hard ceiling for abuse protection by setting
+/// `MOCKFORGE_HOSTED_OVERAGE_CEILING_MULT` to a positive integer N, which cuts
+/// off proxy traffic once monthly usage reaches `N ×` the plan limit.
+const DEFAULT_OVERAGE_CEILING_MULT: i64 = 0;
+
 /// Multitenant router that routes requests to deployed mock services
 pub struct MultitenantRouter;
 
@@ -74,9 +88,10 @@ impl MultitenantRouter {
             return Err(StatusCode::SERVICE_UNAVAILABLE);
         }
 
-        // Enforce the org's monthly `requests_per_30d` plan limit (#449).
-        // Returns 429 with the spec'd `usage_limit_exceeded` body if the
-        // deployment's owning org has already burnt through its monthly quota.
+        // Soft-enforce the org's monthly `requests_per_30d` plan limit (#449,
+        // #748). Default policy is "no cutoff" — mocks keep responding past the
+        // allotment; only an opt-in abuse ceiling
+        // (MOCKFORGE_HOSTED_OVERAGE_CEILING_MULT) produces a 429.
         if let Err(response) = enforce_monthly_quota(&state, deployment.org_id).await {
             return Ok(response);
         }
@@ -150,7 +165,8 @@ pub async fn custom_domain_fallback(
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    // Enforce the org's monthly `requests_per_30d` plan limit before forwarding.
+    // Soft-enforce the org's monthly `requests_per_30d` plan limit before
+    // forwarding (#748: no cutoff by default; opt-in abuse ceiling only).
     if let Err(response) = enforce_monthly_quota(&state, deployment.org_id).await {
         return Ok(response);
     }
@@ -314,15 +330,54 @@ fn monthly_request_limit(limits_json: &serde_json::Value) -> Option<i64> {
     }
 }
 
-/// Enforce the owning org's `requests_per_30d` plan limit on a hosted-mock
-/// proxy request. Returns a 429 `Response` carrying the spec'd
-/// `usage_limit_exceeded` body (#449 criterion 1) when the org has already
-/// exhausted its monthly allotment.
+/// Read the configured hosted-mock overage-ceiling multiplier from
+/// `MOCKFORGE_HOSTED_OVERAGE_CEILING_MULT`. Unset / unparsable / non-positive
+/// values mean "no cutoff" (the default that honors the published pricing copy).
+fn overage_ceiling_mult() -> i64 {
+    std::env::var("MOCKFORGE_HOSTED_OVERAGE_CEILING_MULT")
+        .ok()
+        .and_then(|s| s.parse::<i64>().ok())
+        .filter(|n| *n > 0)
+        .unwrap_or(DEFAULT_OVERAGE_CEILING_MULT)
+}
+
+/// Given the plan's monthly request limit and the configured overage-ceiling
+/// multiplier, return the hard cutoff threshold, or `None` for "no cutoff".
 ///
-/// Fail-open semantics on DB/Redis hiccups: a transient infra failure must
-/// not take the proxy offline. The body cap and per-second RPS check (added
-/// in #450) remain absolute safety floors regardless.
+/// A multiplier `<= 0` disables the cutoff entirely (mocks keep responding past
+/// the plan limit). A positive `mult` caps proxy traffic at `mult × limit`,
+/// saturating instead of overflowing on extreme inputs.
+fn overage_cutoff(limit: i64, ceiling_mult: i64) -> Option<i64> {
+    if ceiling_mult <= 0 {
+        None
+    } else {
+        Some(limit.saturating_mul(ceiling_mult))
+    }
+}
+
+/// Soft-enforce the owning org's `requests_per_30d` plan limit on a hosted-mock
+/// proxy request.
+///
+/// Per the public pricing promise — "mocks keep responding if you exceed your
+/// request limit (notification sent but no cutoff)" — the monthly plan quota is
+/// a **soft limit by default**: traffic is metered (so the usage dashboard and
+/// the 75/90/100% threshold alerts work) but is **not** cut off when the org
+/// passes its allotment. A hard cutoff is only applied when an operator opts in
+/// via `MOCKFORGE_HOSTED_OVERAGE_CEILING_MULT > 0`, at which point this returns
+/// a 429 `usage_limit_exceeded` response (#449 body shape) once usage reaches
+/// `mult ×` the plan limit — an abuse ceiling, not the plan limit itself.
+///
+/// Fail-open semantics on DB/Redis hiccups: a transient infra failure must not
+/// take the proxy offline. The body cap and per-second RPS check (added in
+/// #450) remain absolute safety floors regardless of this soft quota.
 async fn enforce_monthly_quota(state: &AppState, org_id: Uuid) -> Result<(), Response> {
+    // No ceiling configured → no cutoff, and no need to touch the DB on the
+    // hot path. This is the default that matches the pricing copy.
+    let mult = overage_ceiling_mult();
+    if mult <= 0 {
+        return Ok(());
+    }
+
     let org = match Organization::find_by_id(state.db.pool(), org_id).await {
         Ok(Some(org)) => org,
         Ok(None) => {
@@ -336,7 +391,11 @@ async fn enforce_monthly_quota(state: &AppState, org_id: Uuid) -> Result<(), Res
     };
 
     let Some(limit) = monthly_request_limit(&org.limits_json) else {
-        return Ok(()); // unlimited
+        return Ok(()); // unlimited plan (Team)
+    };
+
+    let Some(cutoff) = overage_cutoff(limit, mult) else {
+        return Ok(());
     };
 
     let used = match UsageCounter::get_or_create_current(state.db.pool(), org_id).await {
@@ -347,12 +406,19 @@ async fn enforce_monthly_quota(state: &AppState, org_id: Uuid) -> Result<(), Res
         }
     };
 
-    if used >= limit {
-        tracing::info!("Monthly request quota exhausted for org {}: {}/{}", org_id, used, limit);
+    if used >= cutoff {
+        tracing::warn!(
+            "Hosted-mock overage ceiling reached for org {}: {}/{} ({}× plan limit {})",
+            org_id,
+            used,
+            cutoff,
+            mult,
+            limit
+        );
         Err(ApiError::UsageLimitExceeded {
             limit_type: "requests".to_string(),
             current: used,
-            max: limit,
+            max: cutoff,
             period: current_month_period(),
         }
         .into_response())
@@ -540,6 +606,32 @@ mod tests {
             monthly_request_limit(&json!({ "requests_per_30d": "250000" })),
             Some(DEFAULT_REQUESTS_PER_30D)
         );
+    }
+
+    // ───────────────── #748 soft overage / no-cutoff ─────────────────
+
+    #[test]
+    fn overage_cutoff_disabled_by_default() {
+        // mult <= 0 → no cutoff: mocks keep responding past the plan limit,
+        // honoring the "no cutoff" pricing promise.
+        assert_eq!(overage_cutoff(10_000, DEFAULT_OVERAGE_CEILING_MULT), None);
+        assert_eq!(overage_cutoff(10_000, 0), None);
+        assert_eq!(overage_cutoff(10_000, -5), None);
+    }
+
+    #[test]
+    fn overage_cutoff_positive_multiplier_caps_at_multiple() {
+        // A positive ceiling caps at mult × plan limit — an abuse ceiling well
+        // above the plan allotment, not the allotment itself.
+        assert_eq!(overage_cutoff(10_000, 10), Some(100_000));
+        assert_eq!(overage_cutoff(250_000, 2), Some(500_000));
+        assert_eq!(overage_cutoff(1_000_000, 1), Some(1_000_000));
+    }
+
+    #[test]
+    fn overage_cutoff_saturates_on_overflow() {
+        // Hostile/extreme inputs saturate rather than wrap.
+        assert_eq!(overage_cutoff(i64::MAX, 2), Some(i64::MAX));
     }
 
     // ───────────────── #450 body cap + RPS ─────────────────

@@ -1,11 +1,15 @@
 //! Background worker that scans every org's current-month usage against its
 //! effective limits (plan + custom quota) and inserts a `usage_alerts` row the
-//! first time a 75% or 90% band is crossed. Inserts are idempotent on the
-//! unique index, so the worker is safe to re-run on any cadence.
+//! first time a 75%, 90%, or 100% band is crossed. Inserts are idempotent on
+//! the unique index, so the worker is safe to re-run on any cadence.
+//!
+//! The 100% band is the "notification sent" half of the hosted-mock overage
+//! promise (#748): request mocks keep responding past the plan allotment (no
+//! cutoff by default), but the owner is emailed the moment they enter overage.
 //!
 //! On a newly inserted alert, the worker emails the org owner (gated on
-//! `users.email_notifications`). Both bands can be inserted in a single run if
-//! usage hops past them between checks; only the highest newly-inserted band
+//! `users.email_notifications`). Multiple bands can be inserted in a single run
+//! if usage hops past them between checks; only the highest newly-inserted band
 //! per (org, metric) triggers an email so users are not double-pinged.
 
 use std::time::Duration;
@@ -21,7 +25,7 @@ use crate::{
 };
 
 const DEFAULT_INTERVAL_SECS: u64 = 30 * 60; // 30 minutes
-const BANDS: [i16; 2] = [75, 90];
+const BANDS: [i16; 3] = [75, 90, 100];
 
 /// Start the usage-threshold checker. Interval can be overridden by the
 /// `USAGE_THRESHOLD_CHECK_INTERVAL_SECS` env var; falls back to 30 minutes.
