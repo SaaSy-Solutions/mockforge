@@ -1,3 +1,17 @@
+## [0.3.154] - 2026-05-29
+
+### Added
+
+- **[Contracts][DevX]** Schema-driven request-body mutator for the `--conformance-self-test` driver (#79 round 17.2) — Srikanth's (17.2) ask: positive + negative coverage that's actually informed by the spec instead of just "send an empty body". When both a positive sample AND a resolved request-body schema are available, the self-test now produces per-field negatives that the server should reject with 4xx:
+  - **Type mismatch** per field (`string` field gets a number, `integer` gets a string, `object` gets an array) plus a top-level `$root` shape probe.
+  - **Required-field removal** — drops each required field one at a time (up to 5), so a validator that's only enforcing the root shape but not requiredness is caught.
+  - **String constraint breaks** — too-short, too-long, pattern miss, enum-out-of-range when the schema declares those bounds.
+  - **Numeric bound breaks** — `minimum`/`maximum` violations plus an "integer as float" probe for `integer` fields.
+  - **Additional-property** probe when the schema explicitly sets `additionalProperties: false`.
+  - **URI-too-long** parameter probe — appends a 9 KiB query string so deployments behind a tight reverse-proxy URI cap surface as a `parameters:uri-too-long` negative.
+
+  Labels carry the field path (e.g. `request-body:type-mismatch:user.email`) so the self-test report tells you exactly which field caught (or didn't). Bounded by `SCHEMA_MUTATION_CAP = 12` per operation (top 20 properties, top 5 required) so a 100-property body on a 22 000-operation spec doesn't produce a runaway test matrix. No-op when the body annotator couldn't resolve a schema — falls back to the existing schema-agnostic empty/wrong-type negatives unchanged.
+
 ## [0.3.153] - 2026-05-29
 
 ### Added

@@ -23,6 +23,14 @@ use reqwest::{Client, Method};
 use std::collections::BTreeMap;
 use std::time::Duration;
 
+/// Round 17.2 — cap on schema-driven negatives per operation. A spec
+/// with 100 properties per body could produce hundreds of mutations
+/// for a single operation; combined with thousands of operations
+/// that's a runaway test matrix. 12 covers the highest-signal
+/// mutations (type mismatch + required-removed + a few constraint
+/// breaks) without exploding wall time on large specs.
+const SCHEMA_MUTATION_CAP: usize = 12;
+
 /// Configuration for a self-test run.
 #[derive(Debug, Clone)]
 pub struct SelfTestConfig {
@@ -215,6 +223,66 @@ async fn test_operation(
                 "request-body:wrong-type",
                 true,
                 Some("[]"),
+                op.query_params.clone(),
+                op.header_params.clone(),
+            )
+            .await,
+        );
+
+        // Round 17.2 — schema-aware negatives.
+        //
+        // When both a positive sample AND the resolved body schema are
+        // available, mutate the sample per-field (type mismatch,
+        // min/max bounds, pattern, enum out-of-range, required-field
+        // removal) and assert each is rejected with 4xx. Capped at
+        // SCHEMA_MUTATION_CAP per operation so a 100-property body
+        // doesn't explode the test matrix.
+        if let (Some(sample_str), Some(schema)) =
+            (op.sample_body.as_deref(), op.request_body_schema.as_ref())
+        {
+            if let Ok(sample) = serde_json::from_str::<serde_json::Value>(sample_str) {
+                let mutations = super::schema_mutator::mutate_body(&sample, schema);
+                for m in mutations.into_iter().take(SCHEMA_MUTATION_CAP) {
+                    let body_str = serde_json::to_string(&m.body).unwrap_or_default();
+                    negatives.push(
+                        send_case(
+                            client,
+                            config,
+                            method.clone(),
+                            &url,
+                            &m.label,
+                            true,
+                            Some(&body_str),
+                            op.query_params.clone(),
+                            op.header_params.clone(),
+                        )
+                        .await,
+                    );
+                }
+            }
+        }
+    }
+
+    // Round 17.2 — URI-length probe. Spec-agnostic but schema-aware in
+    // spirit: most servers cap URIs at 8 KB or so. Append a 9 KB query
+    // string to the URL and expect 414 URI Too Long (or 400). Skipped
+    // for operations that already have a heavy positive query.
+    {
+        let pad = "p=".to_string() + &"x".repeat(9_000);
+        let bad_url = if url.contains('?') {
+            format!("{url}&{pad}")
+        } else {
+            format!("{url}?{pad}")
+        };
+        negatives.push(
+            send_case(
+                client,
+                config,
+                method.clone(),
+                &bad_url,
+                "parameters:uri-too-long",
+                true,
+                op.sample_body.as_deref(),
                 op.query_params.clone(),
                 op.header_params.clone(),
             )
@@ -413,6 +481,7 @@ mod tests {
             header_params: headers.into_iter().map(|(a, b)| (a.into(), b.into())).collect(),
             path_params: path_params.into_iter().map(|(a, b)| (a.into(), b.into())).collect(),
             response_schema: None,
+            request_body_schema: None,
             security_schemes: Vec::new(),
         }
     }
@@ -486,6 +555,69 @@ mod tests {
         assert_eq!(report.positive_fail, 1);
         assert!(report.negative_missed.values().sum::<usize>() >= 1);
         assert!(!report.all_passed());
+    }
+
+    /// Round 17.2 — operations with both a positive sample AND a
+    /// resolved request-body schema produce schema-driven negatives
+    /// in addition to the spec-agnostic empty/wrong-type ones. The
+    /// labels carry the field path so a per-category report can tell
+    /// you exactly which field caught.
+    #[tokio::test]
+    async fn schema_driven_negatives_fire_when_schema_present() {
+        use openapiv3::{ObjectType, ReferenceOr, Schema, SchemaData, SchemaKind, Type};
+        let cfg = SelfTestConfig {
+            target_url: "http://127.0.0.1:1".into(),
+            timeout: Duration::from_millis(200),
+            ..Default::default()
+        };
+        // Build an operation whose schema has a required `name` string
+        // and an `age` integer. The mutator should produce, at
+        // minimum: required-removed:name, required-removed:age,
+        // type-mismatch:name, type-mismatch:age, integer-as-float:age,
+        // plus the root-level type-mismatch.
+        let mut obj = ObjectType::default();
+        obj.properties.insert(
+            "name".to_string(),
+            ReferenceOr::Item(Box::new(Schema {
+                schema_data: SchemaData::default(),
+                schema_kind: SchemaKind::Type(Type::String(Default::default())),
+            })),
+        );
+        obj.properties.insert(
+            "age".to_string(),
+            ReferenceOr::Item(Box::new(Schema {
+                schema_data: SchemaData::default(),
+                schema_kind: SchemaKind::Type(Type::Integer(Default::default())),
+            })),
+        );
+        obj.required = vec!["name".into(), "age".into()];
+        let schema = Schema {
+            schema_data: SchemaData::default(),
+            schema_kind: SchemaKind::Type(Type::Object(obj)),
+        };
+
+        let mut o =
+            op("POST", "/users", Some(r#"{"name":"Ada","age":30}"#), vec![], vec![], vec![]);
+        o.request_body_schema = Some(schema);
+        let report = run_self_test(&[o], &cfg).await.expect("client builds");
+        // Bucket labels from the operation result.
+        let labels: std::collections::BTreeSet<String> = report
+            .operations
+            .iter()
+            .flat_map(|op| op.negatives.iter().map(|n| n.label.clone()))
+            .collect();
+        assert!(
+            labels.iter().any(|l| l.starts_with("request-body:type-mismatch:")),
+            "missing type-mismatch negative; got {labels:?}"
+        );
+        assert!(
+            labels.iter().any(|l| l.starts_with("request-body:required-removed:")),
+            "missing required-removed negative; got {labels:?}"
+        );
+        assert!(
+            labels.iter().any(|l| l == "parameters:uri-too-long"),
+            "missing URI-length negative; got {labels:?}"
+        );
     }
 
     /// Round 16 — operations with a body OR a path-param now produce
