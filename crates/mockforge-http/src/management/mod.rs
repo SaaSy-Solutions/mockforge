@@ -1215,7 +1215,7 @@ pub async fn dynamic_mock_fallback(
                 // not realistic response shapes.
                 (
                     StatusCode::OK,
-                    [(axum::http::header::CONTENT_TYPE, "application/json")],
+                    [(http::header::CONTENT_TYPE, "application/json")],
                     r#"{"shadow":true,"matched":false}"#,
                 )
                     .into_response()

@@ -2366,7 +2366,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     if let Ok(path) = std::env::var("MOCKFORGE_ANALYTICS_DB") {
         if !path.is_empty() {
             let cfg = mockforge_analytics::AnalyticsConfig {
-                database_path: std::path::PathBuf::from(&path),
+                database_path: PathBuf::from(&path),
                 ..Default::default()
             };
             match mockforge_analytics::init(cfg).await {

@@ -1376,6 +1376,8 @@ Admin API endpoints are namespaced under `__mockforge`:
   - `GET /__mockforge/metrics`
   - `GET /__mockforge/fixtures`
   - `POST /__mockforge/config/*`
+
+> **Prometheus & Grafana:** enable the Prometheus endpoint with `--metrics` (or `observability.prometheus` in config); it exports `mockforge_*` series including per-protocol gauges (`mockforge_{http,ws,kafka,mqtt,amqp,smtp}_*`). Ready-to-import Grafana dashboards live in [`grafana/dashboards/`](grafana/) — see [`grafana/README.md`](grafana/README.md) for the catalogue (service overview, async protocols, chaos, workspace, marketplace).
 - Embedded under a mount path (e.g., `/admin`):
   - `GET /admin/__mockforge/dashboard`
   - `GET /admin/__mockforge/health`

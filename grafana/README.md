@@ -14,6 +14,9 @@ Per the 2026-05-23 go-live readiness audit, this is one piece of observability b
 |---|---|---|
 | [Service Overview](dashboards/mockforge-service-overview.json) | `mockforge-service-overview` | Request rate, error rate, latency p50/p95/p99, in-flight requests — all by protocol and pillar. Top-10 paths by rate and latency. The default landing page for "is MockForge healthy right now?" |
 | [Marketplace](dashboards/mockforge-marketplace.json) | `mockforge-marketplace` | Publish / download / search operations on the plugin/template/scenario marketplace. Operation rates, p95 durations, errors by code, total items. Spike in `errors_total` is the canary for the kind of bugs that drove PRs #621 / #624. |
+| [Async Protocols](dashboards/mockforge-async-protocols.json) | `mockforge-async-protocols` | Kafka, MQTT, AMQP, WebSocket and SMTP brokers — connection counts, message throughput (`rate(...)`), and broker gauges (Kafka topics/partitions/consumer-groups, AMQP queues/exchanges/bindings, MQTT topics/retained). Backed by `mockforge_{kafka,amqp,mqtt,ws,smtp}_*` (#684). |
+| [Chaos & Resilience](dashboards/mockforge-chaos.json) | `mockforge-chaos` | Chaos triggers, drift budget / breaking-change tracking, error-budget burn, scenario mode. |
+| [Workspace](dashboards/mockforge-workspace.json) | `mockforge-workspace` | Per-workspace request rate, error rate, p95 latency and active routes — for per-tenant SLOs. |
 
 ## Metric sources
 

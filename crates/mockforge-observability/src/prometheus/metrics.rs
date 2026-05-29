@@ -81,6 +81,28 @@ pub struct MetricsRegistry {
     pub mqtt_retained_messages: IntGauge,
     pub mqtt_errors_total: IntCounterVec,
 
+    // Kafka specific metrics. Driven by a periodic snapshot of the broker's
+    // internal `KafkaMetrics`, so these are IntGauges set to the absolute
+    // current value each tick (the `_total` ones are monotonic in practice).
+    pub kafka_connections_active: IntGauge,
+    pub kafka_messages_produced_total: IntGauge,
+    pub kafka_messages_consumed_total: IntGauge,
+    pub kafka_topics_total: IntGauge,
+    pub kafka_partitions_total: IntGauge,
+    pub kafka_consumer_groups_total: IntGauge,
+    pub kafka_errors_total: IntGauge,
+
+    // AMQP specific metrics (periodic snapshot of the broker's `AmqpMetrics`).
+    pub amqp_connections_active: IntGauge,
+    pub amqp_channels_active: IntGauge,
+    pub amqp_messages_published_total: IntGauge,
+    pub amqp_messages_consumed_total: IntGauge,
+    pub amqp_messages_acked_total: IntGauge,
+    pub amqp_queues_total: IntGauge,
+    pub amqp_exchanges_total: IntGauge,
+    pub amqp_bindings_total: IntGauge,
+    pub amqp_errors_total: IntGauge,
+
     // System metrics
     pub memory_usage_bytes: Gauge,
     pub cpu_usage_percent: Gauge,
@@ -379,6 +401,72 @@ impl MetricsRegistry {
         )
         .expect("Failed to create mqtt_errors_total metric");
 
+        // Kafka metrics
+        let kafka_connections_active = IntGauge::new(
+            "mockforge_kafka_connections_active",
+            "Number of active Kafka client connections",
+        )
+        .expect("Failed to create kafka_connections_active metric");
+        let kafka_messages_produced_total = IntGauge::new(
+            "mockforge_kafka_messages_produced_total",
+            "Total number of Kafka messages produced",
+        )
+        .expect("Failed to create kafka_messages_produced_total metric");
+        let kafka_messages_consumed_total = IntGauge::new(
+            "mockforge_kafka_messages_consumed_total",
+            "Total number of Kafka messages consumed",
+        )
+        .expect("Failed to create kafka_messages_consumed_total metric");
+        let kafka_topics_total =
+            IntGauge::new("mockforge_kafka_topics_total", "Number of Kafka topics")
+                .expect("Failed to create kafka_topics_total metric");
+        let kafka_partitions_total =
+            IntGauge::new("mockforge_kafka_partitions_total", "Number of Kafka partitions")
+                .expect("Failed to create kafka_partitions_total metric");
+        let kafka_consumer_groups_total = IntGauge::new(
+            "mockforge_kafka_consumer_groups_total",
+            "Number of Kafka consumer groups",
+        )
+        .expect("Failed to create kafka_consumer_groups_total metric");
+        let kafka_errors_total =
+            IntGauge::new("mockforge_kafka_errors_total", "Total number of Kafka errors")
+                .expect("Failed to create kafka_errors_total metric");
+
+        // AMQP metrics
+        let amqp_connections_active =
+            IntGauge::new("mockforge_amqp_connections_active", "Number of active AMQP connections")
+                .expect("Failed to create amqp_connections_active metric");
+        let amqp_channels_active =
+            IntGauge::new("mockforge_amqp_channels_active", "Number of active AMQP channels")
+                .expect("Failed to create amqp_channels_active metric");
+        let amqp_messages_published_total = IntGauge::new(
+            "mockforge_amqp_messages_published_total",
+            "Total number of AMQP messages published",
+        )
+        .expect("Failed to create amqp_messages_published_total metric");
+        let amqp_messages_consumed_total = IntGauge::new(
+            "mockforge_amqp_messages_consumed_total",
+            "Total number of AMQP messages consumed",
+        )
+        .expect("Failed to create amqp_messages_consumed_total metric");
+        let amqp_messages_acked_total = IntGauge::new(
+            "mockforge_amqp_messages_acked_total",
+            "Total number of AMQP messages acknowledged",
+        )
+        .expect("Failed to create amqp_messages_acked_total metric");
+        let amqp_queues_total =
+            IntGauge::new("mockforge_amqp_queues_total", "Number of AMQP queues")
+                .expect("Failed to create amqp_queues_total metric");
+        let amqp_exchanges_total =
+            IntGauge::new("mockforge_amqp_exchanges_total", "Number of AMQP exchanges")
+                .expect("Failed to create amqp_exchanges_total metric");
+        let amqp_bindings_total =
+            IntGauge::new("mockforge_amqp_bindings_total", "Number of AMQP bindings")
+                .expect("Failed to create amqp_bindings_total metric");
+        let amqp_errors_total =
+            IntGauge::new("mockforge_amqp_errors_total", "Total number of AMQP errors")
+                .expect("Failed to create amqp_errors_total metric");
+
         // System metrics
         let memory_usage_bytes =
             Gauge::new("mockforge_memory_usage_bytes", "Memory usage in bytes")
@@ -669,6 +757,28 @@ impl MetricsRegistry {
         registry
             .register(Box::new(mqtt_errors_total.clone()))
             .expect("Failed to register mqtt_errors_total");
+        for m in [
+            &kafka_connections_active,
+            &kafka_messages_produced_total,
+            &kafka_messages_consumed_total,
+            &kafka_topics_total,
+            &kafka_partitions_total,
+            &kafka_consumer_groups_total,
+            &kafka_errors_total,
+            &amqp_connections_active,
+            &amqp_channels_active,
+            &amqp_messages_published_total,
+            &amqp_messages_consumed_total,
+            &amqp_messages_acked_total,
+            &amqp_queues_total,
+            &amqp_exchanges_total,
+            &amqp_bindings_total,
+            &amqp_errors_total,
+        ] {
+            registry
+                .register(Box::new(m.clone()))
+                .expect("Failed to register kafka/amqp protocol metric");
+        }
         registry
             .register(Box::new(memory_usage_bytes.clone()))
             .expect("Failed to register memory_usage_bytes");
@@ -777,6 +887,22 @@ impl MetricsRegistry {
             mqtt_subscriptions_active,
             mqtt_retained_messages,
             mqtt_errors_total,
+            kafka_connections_active,
+            kafka_messages_produced_total,
+            kafka_messages_consumed_total,
+            kafka_topics_total,
+            kafka_partitions_total,
+            kafka_consumer_groups_total,
+            kafka_errors_total,
+            amqp_connections_active,
+            amqp_channels_active,
+            amqp_messages_published_total,
+            amqp_messages_consumed_total,
+            amqp_messages_acked_total,
+            amqp_queues_total,
+            amqp_exchanges_total,
+            amqp_bindings_total,
+            amqp_errors_total,
             memory_usage_bytes,
             cpu_usage_percent,
             thread_count,
@@ -1187,12 +1313,24 @@ impl Default for MetricsRegistry {
     }
 }
 
-/// Global metrics registry instance
-static GLOBAL_REGISTRY: Lazy<MetricsRegistry> = Lazy::new(MetricsRegistry::new);
+/// Global metrics registry instance.
+///
+/// Held as an `Arc` so the same instance can be both written to (via
+/// `get_global_registry()`) AND served at `GET /metrics` (via
+/// `get_global_registry_arc()`). Previously the metrics endpoint was handed a
+/// *separate* `MetricsRegistry::new()`, so nothing that recorded metrics was
+/// ever exported (#743).
+static GLOBAL_REGISTRY: Lazy<Arc<MetricsRegistry>> = Lazy::new(|| Arc::new(MetricsRegistry::new()));
 
-/// Get the global metrics registry
+/// Get a shared reference to the global metrics registry (for recording).
 pub fn get_global_registry() -> &'static MetricsRegistry {
     &GLOBAL_REGISTRY
+}
+
+/// Get an owned `Arc` handle to the global metrics registry, e.g. to mount the
+/// Prometheus `/metrics` endpoint on the same instance everything records into.
+pub fn get_global_registry_arc() -> Arc<MetricsRegistry> {
+    Arc::clone(&GLOBAL_REGISTRY)
 }
 
 #[cfg(test)]
