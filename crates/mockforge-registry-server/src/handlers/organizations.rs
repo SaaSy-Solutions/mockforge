@@ -45,14 +45,7 @@ pub async fn create_organization(
         return Err(ApiError::InvalidRequest("Organization slug is already taken".to_string()));
     }
 
-    // Create organization (defaults to Free plan)
-    let plan = request.plan.as_deref().unwrap_or("free");
-    let plan_enum = match plan {
-        "free" => Plan::Free,
-        "pro" => Plan::Pro,
-        "team" => Plan::Team,
-        _ => Plan::Free,
-    };
+    let plan_enum = plan_for_new_organization(request.plan.as_deref())?;
 
     let org = state
         .store
@@ -526,7 +519,6 @@ pub async fn update_organization(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
     Path(org_id): Path<Uuid>,
-    headers: HeaderMap,
     Json(request): Json<UpdateOrganizationRequest>,
 ) -> ApiResult<Json<OrganizationResponse>> {
     // Get organization
@@ -540,6 +532,8 @@ pub async fn update_organization(
     if org.owner_id != user_id {
         return Err(ApiError::PermissionDenied);
     }
+
+    reject_client_plan_update(request.plan.as_deref())?;
 
     // Update name if provided
     if let Some(name) = &request.name {
@@ -572,44 +566,6 @@ pub async fn update_organization(
         }
 
         state.store.update_organization_slug(org_id, slug).await?;
-    }
-
-    // Update plan if provided
-    if let Some(plan_str) = &request.plan {
-        let new_plan = match plan_str.as_str() {
-            "free" => Plan::Free,
-            "pro" => Plan::Pro,
-            "team" => Plan::Team,
-            _ => {
-                return Err(ApiError::InvalidRequest(
-                    "Invalid plan. Must be 'free', 'pro', or 'team'".to_string(),
-                ))
-            }
-        };
-
-        state.store.update_organization_plan(org_id, new_plan).await?;
-
-        // Record audit event for plan change
-        let ip_address = headers
-            .get("x-forwarded-for")
-            .or_else(|| headers.get("x-real-ip"))
-            .and_then(|h| h.to_str().ok())
-            .map(|s| s.to_string());
-        let user_agent =
-            headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
-
-        state
-            .store
-            .record_audit_event(
-                org_id,
-                Some(user_id),
-                AuditEventType::OrgPlanChanged,
-                format!("Changed plan from {} to {}", org.plan(), new_plan),
-                None,
-                ip_address.as_deref(),
-                user_agent.as_deref(),
-            )
-            .await;
     }
 
     // Get updated organization
@@ -689,7 +645,7 @@ pub async fn delete_organization(
 pub struct CreateOrganizationRequest {
     pub name: String,
     pub slug: String,
-    pub plan: Option<String>, // Optional: defaults to "free"
+    pub plan: Option<String>, // Back-compat only: new orgs are always free.
 }
 
 #[derive(Debug, Serialize)]
@@ -729,7 +685,60 @@ pub struct UpdateMemberRoleRequest {
 pub struct UpdateOrganizationRequest {
     pub name: Option<String>,
     pub slug: Option<String>,
-    pub plan: Option<String>, // "free", "pro", or "team"
+    pub plan: Option<String>, // Rejected here; billing owns plan changes.
+}
+
+fn plan_for_new_organization(requested: Option<&str>) -> ApiResult<Plan> {
+    match requested {
+        None | Some("free") => Ok(Plan::Free),
+        Some("pro") | Some("team") => Err(ApiError::InvalidRequest(
+            "Paid organization plans must be assigned through billing".to_string(),
+        )),
+        Some(_) => Err(ApiError::InvalidRequest(
+            "Invalid plan. New organizations can only be created on the free plan".to_string(),
+        )),
+    }
+}
+
+fn reject_client_plan_update(requested: Option<&str>) -> ApiResult<()> {
+    if requested.is_some() {
+        return Err(ApiError::InvalidRequest(
+            "Organization plan changes must go through billing".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_organization_defaults_to_free_plan() {
+        assert_eq!(plan_for_new_organization(None).unwrap(), Plan::Free);
+        assert_eq!(plan_for_new_organization(Some("free")).unwrap(), Plan::Free);
+    }
+
+    #[test]
+    fn new_organization_rejects_client_paid_plan() {
+        let err = plan_for_new_organization(Some("team")).unwrap_err();
+
+        assert!(matches!(
+            err,
+            ApiError::InvalidRequest(message) if message.contains("billing")
+        ));
+    }
+
+    #[test]
+    fn update_organization_rejects_any_client_plan_change() {
+        let err = reject_client_plan_update(Some("pro")).unwrap_err();
+
+        assert!(matches!(
+            err,
+            ApiError::InvalidRequest(message) if message.contains("billing")
+        ));
+    }
 }
 
 // ---------------------------------------------------------------------------

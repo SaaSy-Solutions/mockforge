@@ -18,10 +18,13 @@
 //!
 //! Run with:
 //!   REGISTRY_URL=http://localhost:8080 \
+//!   DATABASE_URL=postgres://postgres:password@localhost:55432/mockforge_registry \
 //!   cargo test --test workspace_content_e2e -- --ignored --nocapture
 
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
+use sqlx::postgres::PgPoolOptions;
+use uuid::Uuid;
 
 /// Thin wrapper around reqwest::Client that tracks auth + org headers.
 struct E2e {
@@ -66,6 +69,12 @@ impl E2e {
 }
 
 async fn register_and_setup(base_url: &str) -> E2e {
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let pool = PgPoolOptions::new()
+        .max_connections(2)
+        .connect(&database_url)
+        .await
+        .expect("DB connect failed");
     let client = Client::new();
     let ts = chrono::Utc::now().timestamp_micros();
     let username = format!("wsct_{}", ts);
@@ -93,10 +102,7 @@ async fn register_and_setup(base_url: &str) -> E2e {
     let res = client
         .post(format!("{}/api/v1/organizations", base_url))
         .header("Authorization", format!("Bearer {}", access_token))
-        // These tests create multiple workspaces in one org to exercise
-        // cross-workspace isolation; the Free plan caps an org at 1 workspace
-        // (max_projects), so provision a Team org which is uncapped.
-        .json(&json!({ "name": format!("WS-Content Test Org {}", ts), "slug": org_slug, "plan": "team" }))
+        .json(&json!({ "name": format!("WS-Content Test Org {}", ts), "slug": org_slug }))
         .send()
         .await
         .expect("create org failed");
@@ -104,6 +110,27 @@ async fn register_and_setup(base_url: &str) -> E2e {
     let body: Value = res.json().await.expect("org not JSON");
     assert!(status.is_success(), "create org {}: {}", status, body);
     let org_id = body["id"].as_str().expect("no org id").to_string();
+
+    // These tests create multiple workspaces in one org to exercise
+    // cross-workspace isolation. Keep the public org-create API on Free and
+    // relax only the fixture limit directly in the test database.
+    let org_uuid = Uuid::parse_str(&org_id).expect("org id not UUID");
+    sqlx::query(
+        r#"
+        UPDATE organizations
+        SET limits_json = jsonb_set(
+            COALESCE(limits_json, '{}'::jsonb),
+            '{max_projects}',
+            '-1'::jsonb,
+            true
+        )
+        WHERE id = $1
+        "#,
+    )
+    .bind(org_uuid)
+    .execute(&pool)
+    .await
+    .expect("relax org workspace limit failed");
 
     E2e {
         client,
