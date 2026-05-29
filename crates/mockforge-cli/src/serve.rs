@@ -1318,7 +1318,10 @@ pub async fn handle_serve(
     let smtp_registry = None::<Arc<dyn std::any::Any + Send + Sync>>;
 
     #[cfg(feature = "mqtt")]
-    let mqtt_registry = if config.mqtt.enabled {
+    // Loaded for its fixture-validation side effects + user-facing logs. The
+    // listener now runs on the shared SessionManager (issue #730) and does not
+    // consume this registry, so it is intentionally unused after construction.
+    let _mqtt_registry = if config.mqtt.enabled {
         use mockforge_mqtt::MqttSpecRegistry;
         use std::sync::Arc;
 
@@ -1344,40 +1347,26 @@ pub async fn handle_serve(
         None
     };
 
+    // Build one MQTT SessionManager up front and share it between the
+    // protocol listener and the HTTP admin API, so the admin reflects the
+    // clients/topics the running broker actually serves (issue #730). The
+    // listener used to spin up its own SessionManager internally, leaving the
+    // admin reading a disconnected `MqttBroker`.
     #[cfg(feature = "mqtt")]
-    let mqtt_broker = if let Some(ref registry_ref) = mqtt_registry {
-        let mqtt_config = config.mqtt.clone();
-
-        // Convert core MqttConfig to mockforge_mqtt::MqttConfig
-        let broker_config = mockforge_mqtt::broker::MqttConfig {
-            port: mqtt_config.port,
-            host: mqtt_config.host.clone(),
-            max_connections: mqtt_config.max_connections,
-            max_packet_size: mqtt_config.max_packet_size,
-            keep_alive_secs: mqtt_config.keep_alive_secs,
-            version: mockforge_mqtt::broker::MqttVersion::default(),
-            // TLS defaults (not yet exposed in core config)
-            tls_enabled: false,
-            tls_port: 8883,
-            tls_cert_path: None,
-            tls_key_path: None,
-            tls_ca_path: None,
-            tls_client_auth: false,
-        };
-
-        // MQTT registry is already Some, so we can safely clone it
-        Some(Arc::new(mockforge_mqtt::MqttBroker::new(
-            broker_config.clone(),
-            registry_ref.clone(),
-        )))
+    let (mqtt_session_manager, mqtt_metrics) = if config.mqtt.enabled {
+        use mockforge_mqtt::{MqttMetrics, SessionManager};
+        let metrics = Arc::new(MqttMetrics::new());
+        let session_manager =
+            Arc::new(SessionManager::new(config.mqtt.max_connections, Some(metrics.clone())));
+        (Some(session_manager), Some(metrics))
     } else {
-        None
+        (None, None)
     };
 
     #[cfg(feature = "mqtt")]
-    let mqtt_broker_for_http = mqtt_broker
+    let mqtt_broker_for_http = mqtt_session_manager
         .as_ref()
-        .map(|broker| Arc::clone(broker) as Arc<dyn Any + Send + Sync>);
+        .map(|sm| Arc::clone(sm) as Arc<dyn Any + Send + Sync>);
     #[cfg(not(feature = "mqtt"))]
     let mqtt_broker_for_http = None::<Arc<dyn Any + Send + Sync>>;
 
@@ -2492,9 +2481,13 @@ pub async fn handle_serve(
     };
 
     #[cfg(feature = "mqtt")]
-    let _mqtt_handle = if let Some(ref _mqtt_registry) = mqtt_registry {
+    let _mqtt_handle = if let (Some(session_manager), Some(metrics)) =
+        (mqtt_session_manager.as_ref(), mqtt_metrics.as_ref())
+    {
         let mqtt_config = config.mqtt.clone();
         let mqtt_shutdown = shutdown_token.clone();
+        let session_manager = std::sync::Arc::clone(session_manager);
+        let metrics = std::sync::Arc::clone(metrics);
 
         // Convert core MqttConfig to mockforge_mqtt::MqttConfig
         let broker_config = mockforge_mqtt::broker::MqttConfig {
@@ -2514,13 +2507,14 @@ pub async fn handle_serve(
         };
 
         Some(tokio::spawn(async move {
-            use mockforge_mqtt::start_mqtt_server;
+            use mockforge_mqtt::start_mqtt_server_with_session_manager;
 
             println!("📡 MQTT broker listening on {}:{}", mqtt_config.host, mqtt_config.port);
 
-            // Start the MQTT server
+            // Start the listener on the SHARED session manager so the admin API
+            // sees the same clients/topics this listener serves.
             tokio::select! {
-                result = start_mqtt_server(broker_config) => {
+                result = start_mqtt_server_with_session_manager(session_manager, metrics, broker_config) => {
                     result.map_err(|e| format!("MQTT server error: {:?}", e))
                 }
                 _ = mqtt_shutdown.cancelled() => {

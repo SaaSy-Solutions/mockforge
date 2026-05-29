@@ -727,9 +727,11 @@ pub struct ManagementState {
     /// Optional SMTP registry for email mocking
     #[cfg(feature = "smtp")]
     pub smtp_registry: Option<Arc<mockforge_smtp::SmtpSpecRegistry>>,
-    /// Optional MQTT broker for message mocking
+    /// Optional MQTT session manager (the live listener state) for the admin
+    /// API. Shared with the running listener so the admin reflects the clients
+    /// and topics actually being served (issue #730).
     #[cfg(feature = "mqtt")]
-    pub mqtt_broker: Option<Arc<mockforge_mqtt::MqttBroker>>,
+    pub mqtt_sessions: Option<Arc<mockforge_mqtt::SessionManager>>,
     /// Optional Kafka broker for event streaming
     #[cfg(feature = "kafka")]
     pub kafka_broker: Option<Arc<mockforge_kafka::KafkaMockBroker>>,
@@ -784,7 +786,7 @@ impl ManagementState {
             #[cfg(feature = "smtp")]
             smtp_registry: None,
             #[cfg(feature = "mqtt")]
-            mqtt_broker: None,
+            mqtt_sessions: None,
             #[cfg(feature = "kafka")]
             kafka_broker: None,
             #[cfg(feature = "amqp")]
@@ -844,9 +846,12 @@ impl ManagementState {
     }
 
     #[cfg(feature = "mqtt")]
-    /// Add MQTT broker to management state
-    pub fn with_mqtt_broker(mut self, mqtt_broker: Arc<mockforge_mqtt::MqttBroker>) -> Self {
-        self.mqtt_broker = Some(mqtt_broker);
+    /// Add the MQTT session manager (live listener state) to management state
+    pub fn with_mqtt_sessions(
+        mut self,
+        mqtt_sessions: Arc<mockforge_mqtt::SessionManager>,
+    ) -> Self {
+        self.mqtt_sessions = Some(mqtt_sessions);
         self
     }
 

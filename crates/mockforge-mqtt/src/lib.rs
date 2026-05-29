@@ -59,7 +59,7 @@ pub use protocol::{
 };
 pub use server::{
     start_mqtt_dual_server, start_mqtt_server, start_mqtt_server_with_metrics,
-    start_mqtt_tls_server, MqttServer,
+    start_mqtt_server_with_session_manager, start_mqtt_tls_server, MqttServer,
 };
 pub use session::SessionManager;
 pub use spec_registry::MqttSpecRegistry;
