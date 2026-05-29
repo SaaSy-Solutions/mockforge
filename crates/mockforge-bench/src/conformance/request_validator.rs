@@ -268,16 +268,39 @@ fn validate_request_body(
 
         if let Some(media) = json_media {
             if let Some(schema_ref) = &media.schema {
-                // Resolve schema $ref
-                let schema_json = match resolve_schema_to_json(schema_ref, spec) {
-                    Some(s) => s,
-                    None => return,
+                // Resolve the immediate $ref (one level) to get the
+                // root schema, then hand both schema + spec to the
+                // ref-resolver helper so nested `$ref` strings (e.g.
+                // `#/components/schemas/Vcenter.VM.DiskCloneSpec`)
+                // resolve against the full document context.
+                //
+                // Round 18.3 — pre-fix this called
+                // `jsonschema::validator_for(&schema_json)` directly,
+                // which used the inner schema as the validator's
+                // document. Nested $refs to `#/components/schemas/X`
+                // then failed with "Pointer '...' does not exist"
+                // because the validator's document had no
+                // `components` key (Srikanth's vCenter run: 157
+                // violations).
+                let root_schema = match schema_ref {
+                    ReferenceOr::Item(s) => s.clone(),
+                    ReferenceOr::Reference { reference } => {
+                        let name =
+                            reference.strip_prefix("#/components/schemas/").unwrap_or(reference);
+                        match spec.components.as_ref().and_then(|c| c.schemas.get(name)) {
+                            Some(ReferenceOr::Item(s)) => s.clone(),
+                            _ => return,
+                        }
+                    }
                 };
 
                 // Parse body as JSON and validate against schema
                 match serde_json::from_str::<serde_json::Value>(body_str) {
                     Ok(body_value) => {
-                        match jsonschema::validator_for(&schema_json) {
+                        match mockforge_openapi::schema_ref_resolver::build_validator(
+                            &root_schema,
+                            spec,
+                        ) {
                             Ok(validator) => {
                                 let errors: Vec<_> = validator.iter_errors(&body_value).collect();
                                 for err in errors.iter().take(5) {

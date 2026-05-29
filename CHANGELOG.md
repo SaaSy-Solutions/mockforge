@@ -1,8 +1,8 @@
-## [0.3.161] - 2026-05-29
+## [0.3.160] - 2026-05-29
 
-### Changed
+### Fixed
 
-- **[Contracts][DevX]** OWASP coverage table now explains the "-" rows with actionable hints (#79 round 18.4) — Srikanth ran `--conformance-categories "security,request-bodies,parameters"` and reported "Not Working" when 5 of 10 OWASP categories showed `-`. The output was actually correct: those 3 categories map to exactly API1/API2/API4/API8, leaving API3/5/6/7/9/10 untouched. The confusing UX has been fixed by appending an "Untested OWASP categories" footer that tells the user exactly which `--conformance-categories` value to add for each uncovered OWASP category (e.g. `API3:2023 — add constraints (required/property checks)`, `API10:2023 — add response-validation`). API6 (Sensitive Business Flows) and API7 (SSRF) honestly say "no single category — requires custom scenario flows / URL-injection custom checks" rather than pretending coverage exists.
+- **[Contracts]** Request-body validator now resolves nested `$ref` pointers against the spec's full components map (#79 round 18.3) — Srikanth's vCenter 0.3.152 run produced 157 (of 256) violations like `Failed to create schema validator: Pointer '/components/schemas/Vcenter.VM.DiskCloneSpec' does not exist`. The schema was defined in the spec; the validator just couldn't see it because `jsonschema::options().build(&inner_schema)` was called with only the inner schema as the document — nested `$ref` strings then had no `components` map to resolve against. New `mockforge_openapi::schema_ref_resolver::build_validator(&schema, &spec)` wraps the schema document with the spec's components inlined at the root, giving JSON Pointer `#/components/schemas/X` a place to land. Wired into both `mockforge-bench`'s `request_validator` (the `--validate-requests` path that Srikanth hit) and `mockforge-openapi`'s `validation::validate_request_body` (the live-server path that powers `mockforge serve` request validation). Schema names with dots (`Vcenter.VM.DiskCloneSpec`), spaces, or other JSON-Pointer-safe characters now resolve correctly. 4 new unit tests cover the bug reproducer, naked-validator failure mode, explicit-components precedence, and no-components no-op.
 
 ||||||| parent of 483a9524 (feat(bench): OWASP/WAF unification in self-test (#79 round 17.5))
 ## [0.3.153] - 2026-05-29

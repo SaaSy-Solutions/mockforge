@@ -1,10 +1,10 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
-## [0.3.161] - 2026-05-29
+## [0.3.160] - 2026-05-29
 
-### Changed
+### Fixed
 
-- **[Contracts][DevX]** OWASP coverage table now appends an "Untested OWASP categories" footer that tells you exactly which `--conformance-categories` value to add for each uncovered OWASP category (#79 round 18.4). Removes the "Not Working" confusion when a user-selected subset of categories doesn't cover the full OWASP Top 10.
+- **[Contracts]** Request-body validator now resolves nested `$ref` pointers against the spec's components map (#79 round 18.3) — pre-fix specs whose component schemas had dotted names (`Vcenter.VM.DiskCloneSpec`) or were referenced from nested schemas failed with `Pointer '/components/schemas/X' does not exist`. New `schema_ref_resolver::build_validator(&schema, &spec)` inlines the components into the validator's document context.
 
 ||||||| parent of 483a9524 (feat(bench): OWASP/WAF unification in self-test (#79 round 17.5))
 ## [0.3.153] - 2026-05-29

@@ -36,6 +36,7 @@ pub mod response_rewriter;
 pub mod response_trace;
 pub mod route;
 pub mod schema;
+pub mod schema_ref_resolver;
 pub mod spec;
 pub mod spec_parser;
 pub mod swagger_convert;
