@@ -1187,12 +1187,27 @@ impl Default for MetricsRegistry {
     }
 }
 
-/// Global metrics registry instance
-static GLOBAL_REGISTRY: Lazy<MetricsRegistry> = Lazy::new(MetricsRegistry::new);
+/// Global metrics registry instance.
+///
+/// Held as an `Arc` so the same instance can be both written to (via
+/// `get_global_registry()`, used by the HTTP/drift/coverage middleware and the
+/// system-metrics collector) AND served at `GET /metrics` (via
+/// `get_global_registry_arc()`). Previously the metrics endpoint was handed a
+/// *separate* `MetricsRegistry::new()` instance, so nothing that recorded
+/// metrics was ever exported (#743).
+static GLOBAL_REGISTRY: Lazy<Arc<MetricsRegistry>> = Lazy::new(|| Arc::new(MetricsRegistry::new()));
 
-/// Get the global metrics registry
+/// Get a shared reference to the global metrics registry (for recording).
 pub fn get_global_registry() -> &'static MetricsRegistry {
     &GLOBAL_REGISTRY
+}
+
+/// Get an owned `Arc` handle to the global metrics registry.
+///
+/// Use this to mount the Prometheus `/metrics` endpoint so it serves the same
+/// instance that everything records into.
+pub fn get_global_registry_arc() -> Arc<MetricsRegistry> {
+    Arc::clone(&GLOBAL_REGISTRY)
 }
 
 #[cfg(test)]

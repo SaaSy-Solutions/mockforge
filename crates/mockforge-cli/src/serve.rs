@@ -6,7 +6,7 @@ use mockforge_chaos::api::create_chaos_api_router;
 use mockforge_chaos::config::ChaosConfig;
 use mockforge_core::encryption::init_key_store;
 use mockforge_core::ServerConfig;
-use mockforge_observability::prometheus::{prometheus_router, MetricsRegistry};
+use mockforge_observability::prometheus::prometheus_router;
 use mockforge_openapi::OpenApiSpec;
 use std::any::Any;
 use std::net::SocketAddr;
@@ -2180,8 +2180,11 @@ pub async fn handle_serve(
 
     println!("💡 Press Ctrl+C to stop");
 
-    // Create metrics registry (use global registry)
-    let metrics_registry = Arc::new(MetricsRegistry::new());
+    // Serve the GLOBAL metrics registry — the same instance the HTTP/drift/
+    // coverage middleware and the system-metrics collector record into. Using a
+    // fresh `MetricsRegistry::new()` here meant `/metrics` exported an empty
+    // registry while all real metrics went to the global one (#743).
+    let metrics_registry = mockforge_observability::get_global_registry_arc();
 
     // Start system metrics collector if Prometheus is enabled
     if config.observability.prometheus.enabled {

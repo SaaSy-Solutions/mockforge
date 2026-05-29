@@ -28,7 +28,9 @@ pub mod tracing_integration;
 
 // Re-export commonly used items
 pub use logging::{init_logging, init_logging_with_otel, LoggingConfig};
-pub use prometheus::{get_global_registry, DriftEvaluationSample, MetricsRegistry};
+pub use prometheus::{
+    get_global_registry, get_global_registry_arc, DriftEvaluationSample, MetricsRegistry,
+};
 #[cfg(feature = "sentry")]
 pub use sentry_init::init_sentry;
 pub use system_metrics::{start_system_metrics_collector, SystemMetricsConfig};
