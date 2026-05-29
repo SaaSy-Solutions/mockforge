@@ -1,4 +1,9 @@
-#[cfg(any(feature = "smtp", feature = "mqtt", feature = "kafka"))]
+#[cfg(any(
+    feature = "smtp",
+    feature = "mqtt",
+    feature = "kafka",
+    feature = "amqp"
+))]
 use axum::extract::Path;
 #[cfg(any(feature = "mqtt", feature = "kafka"))]
 use axum::extract::Query;
@@ -11,7 +16,7 @@ use axum::{
 };
 #[cfg(any(feature = "mqtt", feature = "kafka"))]
 use futures::stream::{self, Stream};
-#[cfg(any(feature = "mqtt", feature = "kafka"))]
+#[cfg(any(feature = "mqtt", feature = "kafka", feature = "amqp"))]
 use serde::{Deserialize, Serialize};
 #[cfg(any(feature = "mqtt", feature = "kafka"))]
 use std::convert::Infallible;
@@ -1178,4 +1183,410 @@ pub(crate) async fn kafka_messages_stream(
             .interval(std::time::Duration::from_secs(15))
             .text("keep-alive-text"),
     )
+}
+
+// ========== AMQP Management Handlers ==========
+//
+// These mirror the MQTT/Kafka handlers: each pulls the optional
+// `amqp_broker` from `ManagementState` and returns 503 when the broker
+// isn't wired. Responses use the lightweight DTOs below rather than
+// serializing the broker's internal structs, so `mockforge-amqp` needs
+// no Serde derives and the JSON shape stays stable.
+
+#[cfg(feature = "amqp")]
+mod amqp {
+    use super::*;
+    // Re-exported via the top-level `use amqp::*` so the handler fns
+    // (which live at module scope, not inside `amqp`) can name them.
+    pub(crate) use mockforge_amqp::bindings::Binding;
+    use mockforge_amqp::exchanges::ExchangeType;
+    use mockforge_amqp::messages::Message;
+    pub(crate) use mockforge_amqp::messages::QueuedMessage;
+
+    /// Broker-wide counters surfaced on `GET /amqp/stats`.
+    #[derive(Debug, Clone, Serialize)]
+    pub(crate) struct AmqpBrokerStats {
+        /// Live exchange count (from the exchange manager).
+        pub exchanges: usize,
+        /// Live queue count (from the queue manager).
+        pub queues: usize,
+        /// Total bindings across all exchanges.
+        pub bindings: usize,
+        /// Sum of messages currently buffered across all queues.
+        pub buffered_messages: usize,
+        pub connections_active: u64,
+        pub channels_active: u64,
+        pub messages_published_total: u64,
+        pub messages_consumed_total: u64,
+    }
+
+    #[derive(Debug, Clone, Serialize)]
+    pub(crate) struct AmqpBindingInfo {
+        pub queue: String,
+        pub routing_key: String,
+    }
+
+    #[derive(Debug, Clone, Serialize)]
+    pub(crate) struct AmqpExchangeInfo {
+        pub name: String,
+        #[serde(rename = "type")]
+        pub exchange_type: String,
+        pub durable: bool,
+        pub auto_delete: bool,
+        pub bindings: Vec<AmqpBindingInfo>,
+    }
+
+    #[derive(Debug, Clone, Serialize)]
+    pub(crate) struct AmqpQueueInfo {
+        pub name: String,
+        pub durable: bool,
+        pub exclusive: bool,
+        pub auto_delete: bool,
+        pub message_count: usize,
+        pub consumer_count: usize,
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub(crate) struct DeclareExchangeRequest {
+        pub name: String,
+        #[serde(default = "default_exchange_type")]
+        pub r#type: String,
+        #[serde(default)]
+        pub durable: bool,
+        #[serde(default)]
+        pub auto_delete: bool,
+    }
+
+    fn default_exchange_type() -> String {
+        "direct".to_string()
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub(crate) struct DeclareQueueRequest {
+        pub name: String,
+        #[serde(default)]
+        pub durable: bool,
+        #[serde(default)]
+        pub exclusive: bool,
+        #[serde(default)]
+        pub auto_delete: bool,
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub(crate) struct AddBindingRequest {
+        pub queue: String,
+        #[serde(default)]
+        pub routing_key: String,
+    }
+
+    #[derive(Debug, Deserialize)]
+    pub(crate) struct PublishRequest {
+        #[serde(default)]
+        pub exchange: String,
+        #[serde(default)]
+        pub routing_key: String,
+        #[serde(default)]
+        pub payload: String,
+    }
+
+    pub(crate) fn exchange_type_str(t: &ExchangeType) -> &'static str {
+        match t {
+            ExchangeType::Direct => "direct",
+            ExchangeType::Fanout => "fanout",
+            ExchangeType::Topic => "topic",
+            ExchangeType::Headers => "headers",
+        }
+    }
+
+    pub(crate) fn parse_exchange_type(s: &str) -> Option<ExchangeType> {
+        match s.to_ascii_lowercase().as_str() {
+            "direct" => Some(ExchangeType::Direct),
+            "fanout" => Some(ExchangeType::Fanout),
+            "topic" => Some(ExchangeType::Topic),
+            "headers" => Some(ExchangeType::Headers),
+            _ => None,
+        }
+    }
+
+    /// Build a `Message` for an admin-initiated publish.
+    pub(crate) fn build_message(routing_key: String, payload: String) -> Message {
+        Message {
+            properties: Default::default(),
+            body: payload.into_bytes(),
+            routing_key,
+        }
+    }
+}
+
+#[cfg(feature = "amqp")]
+use amqp::*;
+
+#[cfg(feature = "amqp")]
+pub(crate) async fn get_amqp_stats(State(state): State<ManagementState>) -> impl IntoResponse {
+    let Some(broker) = &state.amqp_broker else {
+        return (StatusCode::SERVICE_UNAVAILABLE, "AMQP broker not available").into_response();
+    };
+    let snap = broker.metrics.snapshot();
+    let (exchanges, bindings) = {
+        let mgr = broker.exchanges.read().await;
+        let list = mgr.list_exchanges();
+        let bindings = list.iter().map(|e| e.bindings.len()).sum();
+        (list.len(), bindings)
+    };
+    let (queues, buffered_messages) = {
+        let mgr = broker.queues.read().await;
+        let list = mgr.list_queues();
+        let buffered = list.iter().map(|q| q.messages.len()).sum();
+        (list.len(), buffered)
+    };
+    Json(AmqpBrokerStats {
+        exchanges,
+        queues,
+        bindings,
+        buffered_messages,
+        connections_active: snap.connections_active,
+        channels_active: snap.channels_active,
+        messages_published_total: snap.messages_published_total,
+        messages_consumed_total: snap.messages_consumed_total,
+    })
+    .into_response()
+}
+
+#[cfg(feature = "amqp")]
+pub(crate) async fn get_amqp_exchanges(State(state): State<ManagementState>) -> impl IntoResponse {
+    let Some(broker) = &state.amqp_broker else {
+        return (StatusCode::SERVICE_UNAVAILABLE, "AMQP broker not available").into_response();
+    };
+    let mgr = broker.exchanges.read().await;
+    let exchanges: Vec<AmqpExchangeInfo> = mgr
+        .list_exchanges()
+        .into_iter()
+        .map(|e| AmqpExchangeInfo {
+            name: e.name.clone(),
+            exchange_type: exchange_type_str(&e.exchange_type).to_string(),
+            durable: e.durable,
+            auto_delete: e.auto_delete,
+            bindings: e
+                .bindings
+                .iter()
+                .map(|b| AmqpBindingInfo {
+                    queue: b.queue.clone(),
+                    routing_key: b.routing_key.clone(),
+                })
+                .collect(),
+        })
+        .collect();
+    Json(serde_json::json!({ "exchanges": exchanges })).into_response()
+}
+
+#[cfg(feature = "amqp")]
+pub(crate) async fn declare_amqp_exchange(
+    State(state): State<ManagementState>,
+    Json(req): Json<DeclareExchangeRequest>,
+) -> impl IntoResponse {
+    let Some(broker) = &state.amqp_broker else {
+        return (StatusCode::SERVICE_UNAVAILABLE, "AMQP broker not available").into_response();
+    };
+    if req.name.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, "exchange name is required").into_response();
+    }
+    let Some(exchange_type) = parse_exchange_type(&req.r#type) else {
+        return (StatusCode::BAD_REQUEST, "type must be one of: direct, fanout, topic, headers")
+            .into_response();
+    };
+    broker.exchanges.write().await.declare_exchange(
+        req.name.clone(),
+        exchange_type,
+        req.durable,
+        req.auto_delete,
+    );
+    (StatusCode::OK, Json(serde_json::json!({ "declared": req.name }))).into_response()
+}
+
+#[cfg(feature = "amqp")]
+pub(crate) async fn delete_amqp_exchange(
+    State(state): State<ManagementState>,
+    Path(name): Path<String>,
+) -> impl IntoResponse {
+    let Some(broker) = &state.amqp_broker else {
+        return (StatusCode::SERVICE_UNAVAILABLE, "AMQP broker not available").into_response();
+    };
+    if broker.exchanges.write().await.delete_exchange(&name) {
+        (StatusCode::OK, Json(serde_json::json!({ "deleted": name }))).into_response()
+    } else {
+        (StatusCode::NOT_FOUND, format!("exchange '{}' not found", name)).into_response()
+    }
+}
+
+#[cfg(feature = "amqp")]
+pub(crate) async fn add_amqp_binding(
+    State(state): State<ManagementState>,
+    Path(name): Path<String>,
+    Json(req): Json<AddBindingRequest>,
+) -> impl IntoResponse {
+    let Some(broker) = &state.amqp_broker else {
+        return (StatusCode::SERVICE_UNAVAILABLE, "AMQP broker not available").into_response();
+    };
+    if req.queue.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, "queue is required").into_response();
+    }
+    let binding = Binding::new(name.clone(), req.queue.clone(), req.routing_key.clone());
+    if broker.exchanges.write().await.add_binding(&name, binding) {
+        (
+            StatusCode::OK,
+            Json(serde_json::json!({
+                "exchange": name,
+                "queue": req.queue,
+                "routing_key": req.routing_key,
+            })),
+        )
+            .into_response()
+    } else {
+        (StatusCode::NOT_FOUND, format!("exchange '{}' not found", name)).into_response()
+    }
+}
+
+#[cfg(feature = "amqp")]
+pub(crate) async fn get_amqp_queues(State(state): State<ManagementState>) -> impl IntoResponse {
+    let Some(broker) = &state.amqp_broker else {
+        return (StatusCode::SERVICE_UNAVAILABLE, "AMQP broker not available").into_response();
+    };
+    let mgr = broker.queues.read().await;
+    let queues: Vec<AmqpQueueInfo> = mgr
+        .list_queues()
+        .into_iter()
+        .map(|q| AmqpQueueInfo {
+            name: q.name.clone(),
+            durable: q.durable,
+            exclusive: q.exclusive,
+            auto_delete: q.auto_delete,
+            message_count: q.messages.len(),
+            consumer_count: q.consumers.len(),
+        })
+        .collect();
+    Json(serde_json::json!({ "queues": queues })).into_response()
+}
+
+#[cfg(feature = "amqp")]
+pub(crate) async fn declare_amqp_queue(
+    State(state): State<ManagementState>,
+    Json(req): Json<DeclareQueueRequest>,
+) -> impl IntoResponse {
+    let Some(broker) = &state.amqp_broker else {
+        return (StatusCode::SERVICE_UNAVAILABLE, "AMQP broker not available").into_response();
+    };
+    if req.name.trim().is_empty() {
+        return (StatusCode::BAD_REQUEST, "queue name is required").into_response();
+    }
+    broker.queues.write().await.declare_queue(
+        req.name.clone(),
+        req.durable,
+        req.exclusive,
+        req.auto_delete,
+    );
+    (StatusCode::OK, Json(serde_json::json!({ "declared": req.name }))).into_response()
+}
+
+#[cfg(feature = "amqp")]
+pub(crate) async fn publish_amqp_message(
+    State(state): State<ManagementState>,
+    Json(req): Json<PublishRequest>,
+) -> impl IntoResponse {
+    let Some(broker) = &state.amqp_broker else {
+        return (StatusCode::SERVICE_UNAVAILABLE, "AMQP broker not available").into_response();
+    };
+    let message = build_message(req.routing_key.clone(), req.payload.clone());
+
+    // Resolve target queues exactly as the connection handler does: the
+    // default ("") exchange routes straight to the queue named by the
+    // routing key; a named exchange delegates to its own routing rules.
+    let targets = {
+        let exchanges = broker.exchanges.read().await;
+        if req.exchange.is_empty() {
+            vec![req.routing_key.clone()]
+        } else if let Some(exchange) = exchanges.get_exchange(&req.exchange) {
+            exchange.route_message(&message, &req.routing_key)
+        } else {
+            return (StatusCode::NOT_FOUND, format!("exchange '{}' not found", req.exchange))
+                .into_response();
+        }
+    };
+
+    let mut delivered = Vec::new();
+    {
+        let mut queues = broker.queues.write().await;
+        for queue_name in targets {
+            let queued = QueuedMessage::new(message.clone());
+            match queues.enqueue_and_notify(&queue_name, queued) {
+                Ok(()) => delivered.push(queue_name),
+                Err(e) => {
+                    tracing::warn!(
+                        "AMQP admin publish: failed to enqueue to {}: {}",
+                        queue_name,
+                        e
+                    );
+                }
+            }
+        }
+    }
+
+    Json(serde_json::json!({
+        "success": true,
+        "exchange": req.exchange,
+        "routing_key": req.routing_key,
+        "queued_to": delivered,
+    }))
+    .into_response()
+}
+
+#[cfg(all(test, feature = "amqp"))]
+mod amqp_tests {
+    use super::amqp::{build_message, exchange_type_str, parse_exchange_type};
+    use mockforge_amqp::bindings::Binding;
+    use mockforge_amqp::exchanges::{ExchangeManager, ExchangeType};
+    use mockforge_amqp::messages::QueuedMessage;
+    use mockforge_amqp::queues::QueueManager;
+
+    #[test]
+    fn parse_and_render_exchange_types_round_trip() {
+        for (s, t) in [
+            ("direct", ExchangeType::Direct),
+            ("FANOUT", ExchangeType::Fanout),
+            ("topic", ExchangeType::Topic),
+            ("Headers", ExchangeType::Headers),
+        ] {
+            assert_eq!(parse_exchange_type(s).expect("known type"), t);
+        }
+        assert!(parse_exchange_type("bogus").is_none());
+        assert_eq!(exchange_type_str(&ExchangeType::Topic), "topic");
+        assert_eq!(exchange_type_str(&ExchangeType::Fanout), "fanout");
+    }
+
+    #[test]
+    fn publish_routes_through_direct_exchange_to_bound_queue() {
+        // Mirrors the publish handler's logic against the public managers:
+        // declare → bind → route → enqueue.
+        let mut exchanges = ExchangeManager::new();
+        exchanges.declare_exchange("orders".into(), ExchangeType::Direct, false, false);
+        assert!(exchanges.add_binding(
+            "orders",
+            Binding::new("orders".into(), "q.orders".into(), "order.created".into()),
+        ));
+
+        let msg = build_message("order.created".into(), "{\"id\":1}".into());
+        let targets =
+            exchanges.get_exchange("orders").unwrap().route_message(&msg, "order.created");
+        assert_eq!(targets, vec!["q.orders".to_string()]);
+
+        let mut queues = QueueManager::new();
+        queues.declare_queue("q.orders".into(), false, false, false);
+        queues.enqueue_and_notify("q.orders", QueuedMessage::new(msg)).expect("enqueue");
+        assert_eq!(queues.get_queue("q.orders").unwrap().messages.len(), 1);
+    }
+
+    #[test]
+    fn unknown_exchange_type_is_rejected() {
+        assert!(parse_exchange_type("").is_none());
+        assert!(parse_exchange_type("fan-out").is_none());
+    }
 }

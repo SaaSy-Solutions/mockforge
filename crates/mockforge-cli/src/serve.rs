@@ -1381,6 +1381,31 @@ pub async fn handle_serve(
     #[cfg(not(feature = "mqtt"))]
     let mqtt_broker_for_http = None::<Arc<dyn Any + Send + Sync>>;
 
+    // Build the AMQP broker once, up front, so the same instance backs both
+    // the protocol listener (spawned later) and the HTTP admin API. Unlike the
+    // MQTT path — where the listener runs its own broker — this keeps the
+    // admin UI showing the live exchanges/queues clients actually hit.
+    #[cfg(feature = "amqp")]
+    let amqp_broker = if config.amqp.enabled {
+        use mockforge_amqp::{AmqpBroker, AmqpSpecRegistry};
+        let amqp_config = config.amqp.clone();
+        match AmqpSpecRegistry::new(amqp_config.clone()).await {
+            Ok(registry) => Some(Arc::new(AmqpBroker::new(amqp_config, Arc::new(registry)))),
+            Err(e) => {
+                tracing::error!("Failed to create AMQP spec registry: {:?}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+    #[cfg(feature = "amqp")]
+    let amqp_broker_for_http = amqp_broker
+        .as_ref()
+        .map(|broker| Arc::clone(broker) as Arc<dyn Any + Send + Sync>);
+    #[cfg(not(feature = "amqp"))]
+    let amqp_broker_for_http = None::<Arc<dyn Any + Send + Sync>>;
+
     // Create health manager for Kubernetes-native health checks
     use mockforge_http::HealthManager;
     use std::sync::Arc;
@@ -1755,6 +1780,7 @@ pub async fn handle_serve(
         None, // ai_generator
         smtp_registry.as_ref().cloned(),
         mqtt_broker_for_http,
+        amqp_broker_for_http,
         traffic_shaper,                        // traffic_shaper
         traffic_shaping_enabled,               // traffic_shaping_enabled
         Some(health_manager_for_router),       // health_manager
@@ -2650,24 +2676,16 @@ pub async fn handle_serve(
     #[cfg(not(feature = "kafka"))]
     let _kafka_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
-    // Start AMQP broker (if enabled)
+    // Start AMQP broker (if enabled). Reuses the `amqp_broker` Arc built
+    // earlier so the listener and the HTTP admin API share one broker.
     #[cfg(feature = "amqp")]
-    let _amqp_handle = if config.amqp.enabled {
+    let _amqp_handle = if let Some(ref broker) = amqp_broker {
         let amqp_config = config.amqp.clone();
         let amqp_shutdown = shutdown_token.clone();
+        let broker = Arc::clone(broker);
 
         Some(tokio::spawn(async move {
-            use mockforge_amqp::{AmqpBroker, AmqpSpecRegistry};
-            use std::sync::Arc;
-
             println!("🐰 AMQP broker listening on {}:{}", amqp_config.host, amqp_config.port);
-
-            // Create spec registry
-            let spec_registry = Arc::new(
-                AmqpSpecRegistry::new(amqp_config.clone())
-                    .await
-                    .map_err(|e| format!("Failed to create AMQP spec registry: {:?}", e))?,
-            );
 
             // Load fixtures if configured
             if let Some(ref fixtures_dir) = amqp_config.fixtures_dir {
@@ -2676,8 +2694,6 @@ pub async fn handle_serve(
                 }
             }
 
-            // Create and start the AMQP broker
-            let broker = AmqpBroker::new(amqp_config.clone(), spec_registry);
             tokio::select! {
                 result = broker.start() => {
                     result.map_err(|e| format!("AMQP broker error: {:?}", e))

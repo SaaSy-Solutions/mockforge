@@ -733,6 +733,9 @@ pub struct ManagementState {
     /// Optional Kafka broker for event streaming
     #[cfg(feature = "kafka")]
     pub kafka_broker: Option<Arc<mockforge_kafka::KafkaMockBroker>>,
+    /// Optional AMQP broker for exchange/queue mocking
+    #[cfg(feature = "amqp")]
+    pub amqp_broker: Option<Arc<mockforge_amqp::AmqpBroker>>,
     /// Broadcast channel for message events (MQTT & Kafka)
     #[cfg(any(feature = "mqtt", feature = "kafka"))]
     pub message_events: Arc<broadcast::Sender<MessageEvent>>,
@@ -784,6 +787,8 @@ impl ManagementState {
             mqtt_broker: None,
             #[cfg(feature = "kafka")]
             kafka_broker: None,
+            #[cfg(feature = "amqp")]
+            amqp_broker: None,
             #[cfg(any(feature = "mqtt", feature = "kafka"))]
             message_events: {
                 let capacity = get_message_broadcast_capacity();
@@ -852,6 +857,13 @@ impl ManagementState {
         kafka_broker: Arc<mockforge_kafka::KafkaMockBroker>,
     ) -> Self {
         self.kafka_broker = Some(kafka_broker);
+        self
+    }
+
+    #[cfg(feature = "amqp")]
+    /// Add AMQP broker to management state
+    pub fn with_amqp_broker(mut self, amqp_broker: Arc<mockforge_amqp::AmqpBroker>) -> Self {
+        self.amqp_broker = Some(amqp_broker);
         self
     }
 
@@ -939,6 +951,21 @@ pub fn management_router(state: ManagementState) -> Router {
         .route("/kafka/messages/stream", get(protocols::kafka_messages_stream));
 
     #[cfg(not(feature = "kafka"))]
+    let router = router;
+
+    // AMQP routes
+    #[cfg(feature = "amqp")]
+    let router = router
+        .route("/amqp/stats", get(protocols::get_amqp_stats))
+        .route("/amqp/exchanges", get(protocols::get_amqp_exchanges))
+        .route("/amqp/exchanges", post(protocols::declare_amqp_exchange))
+        .route("/amqp/exchanges/{name}", delete(protocols::delete_amqp_exchange))
+        .route("/amqp/exchanges/{name}/bindings", post(protocols::add_amqp_binding))
+        .route("/amqp/queues", get(protocols::get_amqp_queues))
+        .route("/amqp/queues", post(protocols::declare_amqp_queue))
+        .route("/amqp/publish", post(protocols::publish_amqp_message));
+
+    #[cfg(not(feature = "amqp"))]
     let router = router;
 
     // Migration pipeline routes

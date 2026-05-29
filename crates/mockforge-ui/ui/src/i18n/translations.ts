@@ -53,6 +53,7 @@ const en: Dictionary = {
   'tab.smtpMailbox': 'SMTP Mailbox',
   'tab.mqttBroker': 'MQTT Broker',
   'tab.kafkaBroker': 'Kafka Broker',
+  'tab.amqpBroker': 'AMQP Broker',
   'tab.faq': 'FAQ',
   'tab.support': 'Support',
   'tab.chains': 'Chains',
