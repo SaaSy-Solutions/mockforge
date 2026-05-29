@@ -1362,9 +1362,7 @@ pub async fn clear_conformance_violations() -> impl IntoResponse {
 /// Issue #79 round 13 — feed of requests for paths the loaded OpenAPI
 /// spec doesn't know about. Surfaces server/client spec drift (Srikanth's
 /// (a) ask). Backed by `mockforge_foundation::unknown_paths`.
-pub async fn get_unknown_paths(
-    axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>,
-) -> impl IntoResponse {
+pub async fn get_unknown_paths(Query(q): Query<HashMap<String, String>>) -> impl IntoResponse {
     let snap = mockforge_foundation::unknown_paths::snapshot();
     let total = snap.len();
     let total_seen = mockforge_foundation::unknown_paths::total_seen();
