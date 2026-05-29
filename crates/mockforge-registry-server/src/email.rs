@@ -48,13 +48,56 @@ impl EmailProvider {
     }
 }
 
-/// Email message
-#[derive(Debug, Clone)]
+/// Email message.
+///
+/// `to`/`cc`/`bcc` are vectors so a single message can fan out to
+/// multiple recipients (issue #630). The transactional emails the
+/// registry sends (welcome, verification, password reset, …) are
+/// single-recipient and build a one-element `to`; the incident
+/// dispatcher's notification channel can carry several. `cc`/`bcc`
+/// default to empty and `reply_to` to `None`, so `..Default::default()`
+/// keeps the single-recipient construction sites terse.
+#[derive(Debug, Clone, Default)]
 pub struct EmailMessage {
-    pub to: String,
+    /// Primary recipients. A real send needs at least one.
+    pub to: Vec<String>,
+    /// Carbon-copy recipients (visible to everyone on the message).
+    pub cc: Vec<String>,
+    /// Blind-carbon-copy recipients (hidden from other recipients).
+    pub bcc: Vec<String>,
+    /// Optional `Reply-To` address; replies go here instead of `From`.
+    pub reply_to: Option<String>,
     pub subject: String,
     pub html_body: String,
     pub text_body: String,
+}
+
+/// Trim each address and drop blanks. Used for `cc`/`bcc` where an empty
+/// result is fine (the field is simply omitted from the provider call).
+fn clean_addresses(addrs: &[String]) -> Vec<String> {
+    addrs
+        .iter()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+/// Trim a single optional address, collapsing a blank/whitespace value to
+/// `None`. Used for `reply_to`.
+fn clean_optional(addr: Option<&str>) -> Option<String> {
+    addr.map(str::trim).filter(|s| !s.is_empty()).map(str::to_string)
+}
+
+/// Normalize the `to` list and require at least one usable recipient.
+/// A message with no recipient is a caller bug, not something to send
+/// silently — every provider rejects an empty `To` anyway.
+fn require_recipients(to: &[String]) -> Result<Vec<String>> {
+    let cleaned = clean_addresses(to);
+    if cleaned.is_empty() {
+        anyhow::bail!("email message has no recipient (`to` is empty)");
+    }
+    Ok(cleaned)
 }
 
 /// Email service
@@ -128,7 +171,11 @@ impl EmailService {
             EmailProvider::Brevo => self.send_via_brevo(message).await,
             EmailProvider::Smtp => self.send_via_smtp(message).await,
             EmailProvider::Disabled => {
-                tracing::info!("Email disabled, would send: {} to {}", message.subject, message.to);
+                tracing::info!(
+                    "Email disabled, would send: {} to {}",
+                    message.subject,
+                    message.to.join(", ")
+                );
                 Ok(())
             }
         }
@@ -138,11 +185,25 @@ impl EmailService {
     async fn send_via_postmark(&self, message: EmailMessage) -> Result<()> {
         let api_key = self.config.api_key.as_ref().context("Postmark requires EMAIL_API_KEY")?;
 
+        let to = require_recipients(&message.to)?;
+        let cc = clean_addresses(&message.cc);
+        let bcc = clean_addresses(&message.bcc);
+        let reply_to = clean_optional(message.reply_to.as_deref());
+
+        // Postmark takes To/Cc/Bcc as comma-separated address lists and
+        // a single ReplyTo. Empty fields are omitted so we don't send
+        // `"Cc": ""` (which Postmark rejects as an invalid address).
         #[derive(Serialize)]
         #[allow(non_snake_case)]
         struct PostmarkRequest {
             From: String,
             To: String,
+            #[serde(skip_serializing_if = "String::is_empty")]
+            Cc: String,
+            #[serde(skip_serializing_if = "String::is_empty")]
+            Bcc: String,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            ReplyTo: Option<String>,
             Subject: String,
             HtmlBody: String,
             TextBody: String,
@@ -150,7 +211,10 @@ impl EmailService {
 
         let request = PostmarkRequest {
             From: format!("{} <{}>", self.config.from_name, self.config.from_email),
-            To: message.to,
+            To: to.join(", "),
+            Cc: cc.join(", "),
+            Bcc: bcc.join(", "),
+            ReplyTo: reply_to,
             Subject: message.subject,
             HtmlBody: message.html_body,
             TextBody: message.text_body,
@@ -178,6 +242,11 @@ impl EmailService {
     async fn send_via_brevo(&self, message: EmailMessage) -> Result<()> {
         let api_key = self.config.api_key.as_ref().context("Brevo requires EMAIL_API_KEY")?;
 
+        let to = require_recipients(&message.to)?;
+        let cc = clean_addresses(&message.cc);
+        let bcc = clean_addresses(&message.bcc);
+        let reply_to = clean_optional(message.reply_to.as_deref());
+
         #[derive(Serialize)]
         struct BrevoSender {
             name: String,
@@ -185,26 +254,39 @@ impl EmailService {
         }
 
         #[derive(Serialize)]
-        struct BrevoTo {
+        struct BrevoContact {
             email: String,
         }
 
+        // Brevo wants to/cc/bcc as arrays of `{ "email": ... }` and a
+        // single `replyTo` contact. Empty arrays / a missing replyTo are
+        // omitted rather than sent empty.
         #[derive(Serialize)]
         #[allow(non_snake_case)]
         struct BrevoRequest {
             sender: BrevoSender,
-            to: Vec<BrevoTo>,
+            to: Vec<BrevoContact>,
+            #[serde(skip_serializing_if = "Vec::is_empty")]
+            cc: Vec<BrevoContact>,
+            #[serde(skip_serializing_if = "Vec::is_empty")]
+            bcc: Vec<BrevoContact>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            replyTo: Option<BrevoContact>,
             subject: String,
             htmlContent: String,
             textContent: String,
         }
 
+        let to_contact = |email: String| BrevoContact { email };
         let request = BrevoRequest {
             sender: BrevoSender {
                 name: self.config.from_name.clone(),
                 email: self.config.from_email.clone(),
             },
-            to: vec![BrevoTo { email: message.to }],
+            to: to.into_iter().map(to_contact).collect(),
+            cc: cc.into_iter().map(to_contact).collect(),
+            bcc: bcc.into_iter().map(to_contact).collect(),
+            replyTo: reply_to.map(to_contact),
             subject: message.subject,
             htmlContent: message.html_body,
             textContent: message.text_body,
@@ -240,17 +322,38 @@ impl EmailService {
                 .parse()
                 .context("Invalid from email address")?;
 
-        // Parse to address
-        let to_mailbox: Mailbox = message.to.parse().context("Invalid recipient email address")?;
+        let to = require_recipients(&message.to)?;
+        let cc = clean_addresses(&message.cc);
+        let bcc = clean_addresses(&message.bcc);
+        let reply_to = clean_optional(message.reply_to.as_deref());
 
-        // Store for logging after the message is consumed
-        let log_to = message.to.clone();
+        // Store for logging before the message is consumed.
+        let log_to = to.join(", ");
         let log_subject = message.subject.clone();
 
+        // Attach every recipient. lettre's builder methods are additive,
+        // so we fold over each list; a single bad address fails the whole
+        // send rather than silently dropping a recipient.
+        let mut builder = Message::builder().from(from_mailbox);
+        for addr in &to {
+            let mbox: Mailbox = addr.parse().context("Invalid recipient (to) email address")?;
+            builder = builder.to(mbox);
+        }
+        for addr in &cc {
+            let mbox: Mailbox = addr.parse().context("Invalid cc email address")?;
+            builder = builder.cc(mbox);
+        }
+        for addr in &bcc {
+            let mbox: Mailbox = addr.parse().context("Invalid bcc email address")?;
+            builder = builder.bcc(mbox);
+        }
+        if let Some(addr) = &reply_to {
+            let mbox: Mailbox = addr.parse().context("Invalid reply-to email address")?;
+            builder = builder.reply_to(mbox);
+        }
+
         // Build the email message with both HTML and plain text parts
-        let email = Message::builder()
-            .from(from_mailbox)
-            .to(to_mailbox)
+        let email = builder
             .subject(message.subject)
             .multipart(
                 MultiPart::alternative()
@@ -382,10 +485,11 @@ Privacy: https://mockforge.dev/privacy
         );
 
         EmailMessage {
-            to: email.to_string(),
+            to: vec![email.to_string()],
             subject: "Welcome to MockForge Cloud! 🎉".to_string(),
             html_body,
             text_body,
+            ..Default::default()
         }
     }
 
@@ -431,10 +535,11 @@ Privacy: https://mockforge.dev/privacy
         );
 
         EmailMessage {
-            to: email.to_string(),
+            to: vec![email.to_string()],
             subject: format!("[MockForge] {}", headline),
             html_body,
             text_body,
+            ..Default::default()
         }
     }
 
@@ -536,10 +641,11 @@ Privacy: https://mockforge.dev/privacy
         );
 
         EmailMessage {
-            to: email.to_string(),
+            to: vec![email.to_string()],
             subject: format!("Subscription Confirmed - MockForge Cloud {}", plan),
             html_body,
             text_body,
+            ..Default::default()
         }
     }
 
@@ -640,10 +746,11 @@ Privacy: https://mockforge.dev/privacy
         );
 
         EmailMessage {
-            to: email.to_string(),
+            to: vec![email.to_string()],
             subject: "Payment Failed - Action Required".to_string(),
             html_body,
             text_body,
+            ..Default::default()
         }
     }
 
@@ -739,10 +846,11 @@ Privacy: https://mockforge.dev/privacy
         );
 
         EmailMessage {
-            to: email.to_string(),
+            to: vec![email.to_string()],
             subject: "Subscription Canceled".to_string(),
             html_body,
             text_body,
+            ..Default::default()
         }
     }
 
@@ -838,13 +946,14 @@ The MockForge Team
         );
 
         EmailMessage {
-            to: email.to_string(),
+            to: vec![email.to_string()],
             subject: format!(
                 "MockForge: {}% of {} used on {} plan",
                 threshold_pct, metric_label, plan
             ),
             html_body,
             text_body,
+            ..Default::default()
         }
     }
 
@@ -929,10 +1038,11 @@ Privacy: https://mockforge.dev/privacy
         );
 
         EmailMessage {
-            to: email.to_string(),
+            to: vec![email.to_string()],
             subject: format!("Support Request Received - {}", ticket_id),
             html_body,
             text_body,
+            ..Default::default()
         }
     }
 
@@ -1021,10 +1131,11 @@ Privacy: https://mockforge.dev/privacy
         );
 
         EmailMessage {
-            to: email.to_string(),
+            to: vec![email.to_string()],
             subject: "Verify Your Email Address - MockForge Cloud".to_string(),
             html_body,
             text_body,
+            ..Default::default()
         }
     }
 
@@ -1113,10 +1224,11 @@ Privacy: https://mockforge.dev/privacy
         );
 
         EmailMessage {
-            to: email.to_string(),
+            to: vec![email.to_string()],
             subject: format!("Action Required: Rotate Your API Token '{}'", token_name),
             html_body,
             text_body,
+            ..Default::default()
         }
     }
 
@@ -1208,10 +1320,11 @@ Privacy: https://mockforge.dev/privacy
         );
 
         EmailMessage {
-            to: email.to_string(),
+            to: vec![email.to_string()],
             subject: "Reset Your Password - MockForge Cloud".to_string(),
             html_body,
             text_body,
+            ..Default::default()
         }
     }
 
@@ -1333,10 +1446,11 @@ Privacy: https://mockforge.dev/privacy
         );
 
         EmailMessage {
-            to: email.to_string(),
+            to: vec![email.to_string()],
             subject: format!("{} - Deployment '{}' is {}", status_icon, deployment_name, status),
             html_body,
             text_body,
+            ..Default::default()
         }
     }
 }
@@ -1344,6 +1458,95 @@ Privacy: https://mockforge.dev/privacy
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn email_message_default_is_empty() {
+        let msg = EmailMessage::default();
+        assert!(msg.to.is_empty());
+        assert!(msg.cc.is_empty());
+        assert!(msg.bcc.is_empty());
+        assert!(msg.reply_to.is_none());
+    }
+
+    #[test]
+    fn clean_addresses_trims_and_drops_blanks() {
+        let input = vec![
+            "  a@example.com ".to_string(),
+            "".to_string(),
+            "   ".to_string(),
+            "b@example.com".to_string(),
+        ];
+        assert_eq!(clean_addresses(&input), vec!["a@example.com", "b@example.com"]);
+    }
+
+    #[test]
+    fn clean_optional_collapses_blank_to_none() {
+        assert_eq!(
+            clean_optional(Some(" reply@example.com ")),
+            Some("reply@example.com".to_string())
+        );
+        assert_eq!(clean_optional(Some("   ")), None);
+        assert_eq!(clean_optional(None), None);
+    }
+
+    #[test]
+    fn require_recipients_errors_on_empty() {
+        assert!(require_recipients(&[]).is_err());
+        assert!(require_recipients(&["   ".to_string()]).is_err());
+        let ok = require_recipients(&[" x@example.com ".to_string()]).unwrap();
+        assert_eq!(ok, vec!["x@example.com"]);
+    }
+
+    #[tokio::test]
+    async fn disabled_provider_accepts_multi_recipient_message() {
+        // The Disabled provider no-ops, but it must still handle a
+        // multi-recipient / cc / bcc / reply-to message without panicking
+        // on the new vector fields.
+        let config = EmailConfig {
+            provider: EmailProvider::Disabled,
+            from_email: "test@example.com".to_string(),
+            from_name: "Test".to_string(),
+            api_key: None,
+            smtp_host: None,
+            smtp_port: None,
+            smtp_username: None,
+            smtp_password: None,
+        };
+        let service = EmailService::new(config).expect("create service");
+        let message = EmailMessage {
+            to: vec!["a@example.com".to_string(), "b@example.com".to_string()],
+            cc: vec!["c@example.com".to_string()],
+            bcc: vec!["d@example.com".to_string()],
+            reply_to: Some("reply@example.com".to_string()),
+            subject: "Test".to_string(),
+            html_body: "<p>Test</p>".to_string(),
+            text_body: "Test".to_string(),
+        };
+        assert!(service.send(message).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn smtp_empty_recipients_is_error() {
+        // A message with no `to` must fail fast rather than attempting a
+        // send with an empty recipient list.
+        let config = EmailConfig {
+            provider: EmailProvider::Smtp,
+            from_email: "test@example.com".to_string(),
+            from_name: "Test".to_string(),
+            api_key: None,
+            smtp_host: Some("localhost".to_string()),
+            smtp_port: Some(2525),
+            smtp_username: None,
+            smtp_password: None,
+        };
+        let service = EmailService::new(config).expect("create service");
+        let message = EmailMessage {
+            subject: "x".to_string(),
+            ..Default::default()
+        };
+        let err = service.send(message).await.unwrap_err().to_string();
+        assert!(err.contains("no recipient"), "unexpected error: {err}");
+    }
 
     #[test]
     fn test_email_provider_from_str() {
@@ -1390,10 +1593,11 @@ mod tests {
 
         let service = EmailService::new(config).expect("Failed to create email service");
         let message = EmailMessage {
-            to: "recipient@example.com".to_string(),
+            to: vec!["recipient@example.com".to_string()],
             subject: "Test".to_string(),
             html_body: "<p>Test</p>".to_string(),
             text_body: "Test".to_string(),
+            ..Default::default()
         };
 
         // Should succeed without error when disabled
@@ -1416,10 +1620,11 @@ mod tests {
 
         let service = EmailService::new(config).expect("Failed to create email service");
         let message = EmailMessage {
-            to: "recipient@example.com".to_string(),
+            to: vec!["recipient@example.com".to_string()],
             subject: "Test".to_string(),
             html_body: "<p>Test</p>".to_string(),
             text_body: "Test".to_string(),
+            ..Default::default()
         };
 
         // Should fail due to missing SMTP host
@@ -1444,10 +1649,11 @@ mod tests {
 
         let service = EmailService::new(config).expect("Failed to create email service");
         let message = EmailMessage {
-            to: "recipient@example.com".to_string(),
+            to: vec!["recipient@example.com".to_string()],
             subject: "Test".to_string(),
             html_body: "<p>Test</p>".to_string(),
             text_body: "Test".to_string(),
+            ..Default::default()
         };
 
         // Should fail due to connection error (no SMTP server running)
@@ -1477,10 +1683,11 @@ mod tests {
 
         let service = EmailService::new(config).expect("Failed to create email service");
         let message = EmailMessage {
-            to: "recipient@example.com".to_string(),
+            to: vec!["recipient@example.com".to_string()],
             subject: "Test".to_string(),
             html_body: "<p>Test</p>".to_string(),
             text_body: "Test".to_string(),
+            ..Default::default()
         };
 
         // Should fail due to missing API key
@@ -1504,10 +1711,11 @@ mod tests {
 
         let service = EmailService::new(config).expect("Failed to create email service");
         let message = EmailMessage {
-            to: "recipient@example.com".to_string(),
+            to: vec!["recipient@example.com".to_string()],
             subject: "Test".to_string(),
             html_body: "<p>Test</p>".to_string(),
             text_body: "Test".to_string(),
+            ..Default::default()
         };
 
         // Should fail due to missing API key
@@ -1520,7 +1728,7 @@ mod tests {
     fn test_generate_welcome_email() {
         let email = EmailService::generate_welcome_email("testuser", "test@example.com");
 
-        assert_eq!(email.to, "test@example.com");
+        assert_eq!(email.to, vec!["test@example.com".to_string()]);
         assert!(email.subject.contains("Welcome to MockForge Cloud"));
         assert!(email.html_body.contains("testuser"));
         assert!(email.html_body.contains("Welcome to MockForge Cloud"));
@@ -1545,7 +1753,7 @@ mod tests {
             Some(period_end),
         );
 
-        assert_eq!(email.to, "test@example.com");
+        assert_eq!(email.to, vec!["test@example.com".to_string()]);
         assert!(email.subject.contains("Subscription Confirmed"));
         assert!(email.subject.contains("Pro"));
         assert!(email.html_body.contains("testuser"));
@@ -1567,7 +1775,7 @@ mod tests {
             None,
         );
 
-        assert_eq!(email.to, "test@example.com");
+        assert_eq!(email.to, vec!["test@example.com".to_string()]);
         assert!(email.subject.contains("Subscription Confirmed"));
         assert!(email.html_body.contains("testuser"));
         assert!(email.html_body.contains("Free"));
@@ -1586,7 +1794,7 @@ mod tests {
             Some(retry_date),
         );
 
-        assert_eq!(email.to, "test@example.com");
+        assert_eq!(email.to, vec!["test@example.com".to_string()]);
         assert_eq!(email.subject, "Payment Failed - Action Required");
         assert!(email.html_body.contains("testuser"));
         assert!(email.html_body.contains("Pro"));
@@ -1606,7 +1814,7 @@ mod tests {
             None,
         );
 
-        assert_eq!(email.to, "test@example.com");
+        assert_eq!(email.to, vec!["test@example.com".to_string()]);
         assert!(email.html_body.contains("testuser"));
         assert!(email.html_body.contains("$29.99"));
         assert!(email.html_body.contains("update your payment method"));
@@ -1622,7 +1830,7 @@ mod tests {
             Some(access_until),
         );
 
-        assert_eq!(email.to, "test@example.com");
+        assert_eq!(email.to, vec!["test@example.com".to_string()]);
         assert_eq!(email.subject, "Subscription Canceled");
         assert!(email.html_body.contains("testuser"));
         assert!(email.html_body.contains("Pro"));
@@ -1640,7 +1848,7 @@ mod tests {
             None,
         );
 
-        assert_eq!(email.to, "test@example.com");
+        assert_eq!(email.to, vec!["test@example.com".to_string()]);
         assert!(email.html_body.contains("testuser"));
         assert!(email.html_body.contains("Pro"));
         assert!(email.html_body.contains("canceled"));
@@ -1655,7 +1863,7 @@ mod tests {
             "Help with API integration",
         );
 
-        assert_eq!(email.to, "test@example.com");
+        assert_eq!(email.to, vec!["test@example.com".to_string()]);
         assert!(email.subject.contains("Support Request Received"));
         assert!(email.subject.contains("TICKET-12345"));
         assert!(email.html_body.contains("testuser"));
@@ -1676,7 +1884,7 @@ mod tests {
             "abc123token",
         );
 
-        assert_eq!(email.to, "test@example.com");
+        assert_eq!(email.to, vec!["test@example.com".to_string()]);
         assert!(email.subject.contains("Verify Your Email Address"));
         assert!(email.html_body.contains("testuser"));
         assert!(email
@@ -1716,7 +1924,7 @@ mod tests {
             "https://app.mockforge.dev/tokens/rotate/123",
         );
 
-        assert_eq!(email.to, "test@example.com");
+        assert_eq!(email.to, vec!["test@example.com".to_string()]);
         assert!(email.subject.contains("Action Required"));
         assert!(email.subject.contains("Production API Key"));
         assert!(email.html_body.contains("testuser"));
@@ -1737,7 +1945,7 @@ mod tests {
             "reset123token",
         );
 
-        assert_eq!(email.to, "test@example.com");
+        assert_eq!(email.to, vec!["test@example.com".to_string()]);
         assert!(email.subject.contains("Reset Your Password"));
         assert!(email.html_body.contains("testuser"));
         assert!(email
@@ -1763,7 +1971,7 @@ mod tests {
             None,
         );
 
-        assert_eq!(email.to, "test@example.com");
+        assert_eq!(email.to, vec!["test@example.com".to_string()]);
         assert!(email.subject.contains("✅"));
         assert!(email.subject.contains("my-api-mock"));
         assert!(email.subject.contains("active"));
@@ -1785,7 +1993,7 @@ mod tests {
             Some("Build failed: missing dependency"),
         );
 
-        assert_eq!(email.to, "test@example.com");
+        assert_eq!(email.to, vec!["test@example.com".to_string()]);
         assert!(email.subject.contains("❌"));
         assert!(email.subject.contains("my-api-mock"));
         assert!(email.subject.contains("failed"));
@@ -1817,10 +2025,11 @@ mod tests {
     #[test]
     fn test_email_message_clone() {
         let message = EmailMessage {
-            to: "test@example.com".to_string(),
+            to: vec!["test@example.com".to_string()],
             subject: "Test".to_string(),
             html_body: "<p>Test</p>".to_string(),
             text_body: "Test".to_string(),
+            ..Default::default()
         };
 
         let cloned = message.clone();
