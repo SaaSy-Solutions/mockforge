@@ -1,3 +1,10 @@
+## [0.3.153] - 2026-05-29
+
+### Added
+
+- **[Contracts][DevX]** TUI Conformance detail view gains a **`c`** keystroke to copy the selected violation to the system clipboard as pretty-printed JSON (#79 round 17.1) — Srikanth's (c-i) ask. Uses `arboard` with default features so it works on X11, Wayland, macOS NSPasteboard, and Win32 without per-platform setup. On a clipboard-less TTY the failure surfaces in the flash strip instead of silently no-op'ing.
+- **[Contracts]** New `total_ok` lifetime counter on the conformance violations API (#79 round 17.1) — Srikanth's (f) follow-up. Each request that *passes* the validator bumps the counter; the admin API returns `total_ok` alongside `total_seen`, and the TUI title now reads e.g. `Conformance Violations (256 buffered, 256 shown, 517498/522830 validated failed)`. Gives the real pass/fail ratio under sustained traffic instead of just the violation count.
+
 ## [0.3.152] - 2026-05-28
 
 ### Changed

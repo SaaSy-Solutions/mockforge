@@ -149,6 +149,9 @@ pub struct ConformanceScreen {
     /// Round-15: lifetime count of violations seen server-side (the
     /// buffer caps `total` at 256; this is the true total).
     total_seen: u64,
+    /// Round-17.1: lifetime count of requests that passed the validator.
+    /// With `total_seen` this gives the actual pass/fail ratio.
+    total_ok: u64,
     /// Round-13: unmatched-path requests captured by the HTTP fallback.
     unknown_paths: Vec<UnknownPathRequest>,
     unknown_total: usize,
@@ -183,6 +186,7 @@ impl ConformanceScreen {
             violations: Vec::new(),
             total: 0,
             total_seen: 0,
+            total_ok: 0,
             unknown_paths: Vec::new(),
             unknown_total: 0,
             unknown_total_seen: 0,
@@ -248,6 +252,40 @@ impl ConformanceScreen {
             if v.category.is_empty() { "(uncategorised)" } else { v.category.as_str() },
             v.reason,
         ))
+    }
+
+    /// Round 17.1 — `c` in the detail view: copy the selected
+    /// violation as pretty-printed JSON to the system clipboard via
+    /// `arboard`. Useful for pasting into bug reports / proxy logs /
+    /// Slack. Surfaces success and failure through the same `flash`
+    /// strip the export action uses.
+    ///
+    /// Failure modes worth knowing about:
+    /// - No clipboard daemon (pure-SSH terminal with no `xclip` /
+    ///   `wl-clipboard` / Pasteboard available) → arboard returns an
+    ///   error; we report it so the user knows the keystroke didn't
+    ///   silently no-op.
+    /// - The `arboard::Clipboard` handle is created per-press rather
+    ///   than cached, so the TUI doesn't hold any clipboard server
+    ///   connection while idle.
+    fn copy_selected_to_clipboard(&mut self) {
+        let Some(v) = self.selected_violation() else {
+            self.flash = Some(("no violation selected".to_string(), Instant::now()));
+            return;
+        };
+        let payload =
+            serde_json::to_string_pretty(v).unwrap_or_else(|_| "(serialise failed)".to_string());
+        match arboard::Clipboard::new().and_then(|mut cb| cb.set_text(payload)) {
+            Ok(()) => {
+                self.flash = Some((
+                    format!("copied violation ({} {}) to clipboard", v.method, v.path),
+                    Instant::now(),
+                ));
+            }
+            Err(e) => {
+                self.flash = Some((format!("clipboard unavailable: {e}"), Instant::now()));
+            }
+        }
     }
 
     /// Cycle the category filter through every distinct category in the
@@ -435,6 +473,15 @@ impl Screen for ConformanceScreen {
                     self.detail_scroll = self.detail_scroll.saturating_sub(1);
                     return true;
                 }
+                KeyCode::Char('c') => {
+                    // Round 17.1 — Srikanth's (c-i) ask: copy the
+                    // current violation to system clipboard. arboard
+                    // handles X11/Wayland/macOS/Win32 in default
+                    // features; on a TTY with no clipboard backend it
+                    // returns an error we surface via the flash strip.
+                    self.copy_selected_to_clipboard();
+                    return true;
+                }
                 _ => return true,
             }
         }
@@ -525,7 +572,7 @@ impl Screen for ConformanceScreen {
                 .scroll((self.detail_scroll, 0))
                 .block(
                     Block::default()
-                        .title(" Violation Detail (Esc to close, j/k scroll) ")
+                        .title(" Violation Detail (Esc:close  j/k:scroll  c:copy) ")
                         .title_style(Theme::title())
                         .borders(Borders::ALL)
                         .border_style(Theme::dim())
@@ -605,6 +652,7 @@ impl Screen for ConformanceScreen {
                         "violations": resp.violations,
                         "total": resp.total,
                         "total_seen": resp.total_seen,
+                        "total_ok": resp.total_ok,
                     })) {
                         let _ = tx_v.send(Event::Data {
                             screen: "conformance",
@@ -678,6 +726,8 @@ impl Screen for ConformanceScreen {
             #[serde(default)]
             total_seen: u64,
             #[serde(default)]
+            total_ok: u64,
+            #[serde(default)]
             cleared: Option<usize>,
         }
         match serde_json::from_str::<Wire>(payload) {
@@ -685,6 +735,7 @@ impl Screen for ConformanceScreen {
                 self.violations = parsed.violations;
                 self.total = parsed.total;
                 self.total_seen = parsed.total_seen;
+                self.total_ok = parsed.total_ok;
                 if matches!(self.view_mode, ViewMode::Violations) {
                     self.table.set_total(self.current_row_count());
                 }
@@ -717,7 +768,7 @@ impl Screen for ConformanceScreen {
 
     fn status_hint(&self) -> &str {
         if self.detail_open {
-            "Esc:close  j/k:scroll"
+            "Esc:close  j/k:scroll  c:copy-to-clipboard"
         } else if self.paused {
             "[paused]  p:resume  m/s/c:filter  e:export  D:clear  Enter:detail"
         } else {
@@ -779,10 +830,14 @@ impl ConformanceScreen {
 
         let filtered_count = indices.len();
         let filter_suffix = self.filter_label_suffix();
-        // Round-15: show lifetime `total_seen` alongside the buffered
-        // count so a 656k-request run doesn't look like "only 256".
-        let seen_suffix = if self.total_seen as usize > self.total {
-            format!(", {} seen total", self.total_seen)
+        // Round-15: lifetime `total_seen` alongside the buffered count
+        // so a 656k-request run doesn't look like "only 256".
+        // Round-17.1: also surface `total_ok` (conformant requests) so
+        // the user sees the real pass/fail ratio. Format chosen to
+        // stay short — N violations / M ok = N+M total validated.
+        let seen_suffix = if self.total_seen as usize > self.total || self.total_ok > 0 {
+            let validated = self.total_seen + self.total_ok;
+            format!(", {}/{} validated failed", self.total_seen, validated)
         } else {
             String::new()
         };

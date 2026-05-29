@@ -56,6 +56,24 @@ static VIOLATIONS: Lazy<Mutex<VecDeque<ServerConformanceViolation>>> =
 /// true total seen.
 static TOTAL_SEEN: AtomicU64 = AtomicU64::new(0);
 
+/// Lifetime count of requests that *passed* the spec validator (round
+/// 17.1). Bumped on the `Ok(())` branch of
+/// `run_validation_with_recording`. Lets the TUI display
+/// "X conformant / Y violations" instead of just one side.
+static TOTAL_OK: AtomicU64 = AtomicU64::new(0);
+
+/// Bump the conformant-request counter. Called from the validator's
+/// success path. Bench code can call it directly when wiring its own
+/// counters too.
+pub fn record_ok() {
+    TOTAL_OK.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Lifetime total of requests that passed the spec validator.
+pub fn total_ok() -> u64 {
+    TOTAL_OK.load(Ordering::Relaxed)
+}
+
 /// Record a violation. Old entries are dropped when the buffer is full
 /// (FIFO). Cheap enough to call from the hot path — uses a parking_lot
 /// Mutex which is uncontended in steady state.
@@ -85,11 +103,12 @@ pub fn total_seen() -> u64 {
     TOTAL_SEEN.load(Ordering::Relaxed)
 }
 
-/// Clear the buffer and reset the lifetime counter. Primarily for tests
-/// and TUI "reset" actions.
+/// Clear the buffer and reset both lifetime counters. Primarily for
+/// tests and TUI "reset" actions.
 pub fn clear() {
     VIOLATIONS.lock().clear();
     TOTAL_SEEN.store(0, Ordering::Relaxed);
+    TOTAL_OK.store(0, Ordering::Relaxed);
 }
 
 #[cfg(test)]

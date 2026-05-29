@@ -1055,7 +1055,13 @@ impl OpenApiRouteRegistry {
             cookie_map,
             body,
         ) {
-            Ok(()) => return Ok(()),
+            Ok(()) => {
+                // Round 17.1 — track conformant requests alongside
+                // violations so the TUI can show the real pass/fail
+                // ratio (Srikanth's (f) follow-up).
+                mockforge_foundation::conformance_violations::record_ok();
+                return Ok(());
+            }
             Err(e) => e,
         };
 

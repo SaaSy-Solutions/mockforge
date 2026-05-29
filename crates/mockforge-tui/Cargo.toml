@@ -38,6 +38,9 @@ tracing-appender = "0.2"
 clap = { version = "4", features = ["derive"] }
 toml = { workspace = true }
 unicode-width = "0.2"
+# Round 17.1 — clipboard for the Conformance detail-view `c` keystroke.
+# Default features cover X11 + Wayland + macOS NSPasteboard + Win32.
+arboard = "3"
 
 [lints]
 workspace = true
