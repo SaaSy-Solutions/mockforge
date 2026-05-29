@@ -336,15 +336,16 @@ async fn test_template_marketplace_workflow() {
     // `TemplateSearchQuery` lives under `/marketplace/templates/search` and uses
     // snake_case fields; `tags` is required (no `#[serde(default)]`).
     //
-    // The publish step stored the template with `org_id = $X-Org-Id`, so the
-    // search must replay both the auth header and X-Org-Id — without them,
-    // `resolve_org_context` short-circuits and the WHERE clause narrows to
-    // `org_id IS NULL`, which excludes the row we just published.
+    // The publish step stored the template with the caller's org_id, so the
+    // search must replay the auth header: `OptionalAuthUser` resolves the
+    // authenticated user from the bearer token and `search_templates` includes
+    // that user's org-scoped rows. Without auth the WHERE clause narrows to
+    // `org_id IS NULL` (public only) and excludes the row we just published
+    // (regression guarded — see issue #724).
     let search_response = helper
         .client
         .post(format!("{}/api/v1/marketplace/templates/search", helper.base_url))
         .header("Authorization", helper.auth_header().unwrap())
-        .header("X-Org-Id", helper.org_id.unwrap().to_string())
         .json(&json!({
             "query": template_name.clone(),
             "tags": json!([]),
@@ -362,17 +363,28 @@ async fn test_template_marketplace_workflow() {
     );
     let search_body: serde_json::Value =
         search_response.json().await.expect("Failed to parse response");
-    assert!(!search_body["templates"].as_array().unwrap().is_empty());
+    assert!(
+        !search_body["templates"].as_array().unwrap().is_empty(),
+        "published template missing from search results (issue #724)"
+    );
 
-    // Step 5: Get template details
+    // Step 5: Get template details. Templates are addressed by name + version
+    // under the marketplace prefix.
     let get_response = helper
         .client
-        .get(format!("{}/api/v1/templates/{}", helper.base_url, template_name))
+        .get(format!(
+            "{}/api/v1/marketplace/templates/{}/1.0.0",
+            helper.base_url, template_name
+        ))
         .send()
         .await
         .expect("Failed to get template");
 
-    assert!(get_response.status().is_success());
+    assert!(
+        get_response.status().is_success(),
+        "Get template failed: {:?}",
+        get_response.text().await
+    );
 }
 
 /// Test scenario marketplace workflow
@@ -437,15 +449,15 @@ async fn test_scenario_marketplace_workflow() {
     // `ScenarioSearchQuery` uses snake_case; `tags` is required (no
     // `#[serde(default)]`).
     //
-    // The publish step stored the scenario with `org_id = $X-Org-Id`. The
-    // search must replay both headers, otherwise `resolve_org_context` falls
-    // through and the WHERE clause narrows to `org_id IS NULL`, hiding the
-    // row we just published.
+    // The publish step stored the scenario with the caller's org_id. The search
+    // replays the auth header so `OptionalAuthUser` resolves the user from the
+    // bearer token and `search_scenarios` includes that user's org-scoped rows.
+    // Without auth the WHERE clause narrows to `org_id IS NULL`, hiding the row
+    // we just published (regression guarded — see issue #724).
     let search_response = helper
         .client
         .post(format!("{}/api/v1/marketplace/scenarios/search", helper.base_url))
         .header("Authorization", helper.auth_header().unwrap())
-        .header("X-Org-Id", helper.org_id.unwrap().to_string())
         .json(&json!({
             "query": scenario_name.clone(),
             "tags": json!([]),
@@ -463,22 +475,32 @@ async fn test_scenario_marketplace_workflow() {
     );
     let search_body: serde_json::Value =
         search_response.json().await.expect("Failed to parse response");
-    assert!(!search_body["scenarios"].as_array().unwrap().is_empty());
+    assert!(
+        !search_body["scenarios"].as_array().unwrap().is_empty(),
+        "published scenario missing from search results (issue #724)"
+    );
 
-    // Step 5: Get scenario details
+    // Step 5: Get scenario details (by name, under the marketplace prefix).
     let get_response = helper
         .client
-        .get(format!("{}/api/v1/scenarios/{}", helper.base_url, scenario_name))
+        .get(format!("{}/api/v1/marketplace/scenarios/{}", helper.base_url, scenario_name))
         .send()
         .await
         .expect("Failed to get scenario");
 
-    assert!(get_response.status().is_success());
+    assert!(
+        get_response.status().is_success(),
+        "Get scenario failed: {:?}",
+        get_response.text().await
+    );
 
-    // Step 6: Submit a review
+    // Step 6: Submit a review (under the marketplace prefix).
     let review_response = helper
         .client
-        .post(format!("{}/api/v1/scenarios/{}/reviews", helper.base_url, scenario_name))
+        .post(format!(
+            "{}/api/v1/marketplace/scenarios/{}/reviews",
+            helper.base_url, scenario_name
+        ))
         .header("Authorization", helper.auth_header().unwrap())
         .json(&json!({
             "rating": 5,
@@ -489,7 +511,11 @@ async fn test_scenario_marketplace_workflow() {
         .await
         .expect("Failed to submit review");
 
-    assert!(review_response.status().is_success());
+    assert!(
+        review_response.status().is_success(),
+        "Submit scenario review failed: {:?}",
+        review_response.text().await
+    );
 }
 
 /// Test validation errors
