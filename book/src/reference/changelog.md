@@ -1,5 +1,12 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.153] - 2026-05-29
+
+### Added
+
+- **[Contracts][DevX]** TUI Conformance detail view: **`c`** copies the selected violation to the system clipboard as JSON (#79 round 17.1, Srikanth's (c-i)).
+- **[Contracts]** `total_ok` lifetime counter alongside `total_seen` — admin API and TUI title now show the real pass/fail ratio (#79 round 17.1, Srikanth's (f) follow-up).
+
 ## [0.3.152] - 2026-05-28
 
 ### Changed

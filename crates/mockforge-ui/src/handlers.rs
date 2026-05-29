@@ -1335,14 +1335,21 @@ pub async fn get_conformance_violations(
     let snap = mockforge_foundation::conformance_violations::snapshot();
     let total = snap.len();
     let total_seen = mockforge_foundation::conformance_violations::total_seen();
+    let total_ok = mockforge_foundation::conformance_violations::total_ok();
     let limit: Option<usize> = q.get("limit").and_then(|s| s.parse().ok());
     let limited: Vec<_> = match limit {
         Some(n) => snap.into_iter().take(n).collect(),
         None => snap,
     };
     // `total` = entries currently in the 256-cap ring buffer;
-    // `total_seen` = lifetime count since server start (Issue #79 r15).
-    Json(json!({"violations": limited, "total": total, "total_seen": total_seen}))
+    // `total_seen` = lifetime count of violations (Issue #79 r15);
+    // `total_ok` = lifetime count of conformant requests (round 17.1).
+    Json(json!({
+        "violations": limited,
+        "total": total,
+        "total_seen": total_seen,
+        "total_ok": total_ok,
+    }))
 }
 
 /// Clear the server-side conformance violation ring buffer.

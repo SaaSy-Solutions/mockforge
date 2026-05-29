@@ -276,6 +276,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "arboard"
+version = "3.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0348a1c054491f4bfe6ab86a7b6ab1e44e45d899005de92f58b3df180b36ddaf"
+dependencies = [
+ "clipboard-win",
+ "image 0.25.9",
+ "log",
+ "objc2",
+ "objc2-app-kit",
+ "objc2-core-foundation",
+ "objc2-core-graphics",
+ "objc2-foundation",
+ "parking_lot",
+ "percent-encoding",
+ "windows-sys 0.60.2",
+ "x11rb",
+]
+
+[[package]]
 name = "arc-swap"
 version = "1.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2490,6 +2510,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3a822ea5bc7590f9d40f1ba12c0dc3c2760f3482c6984db1573ad11031420831"
 
 [[package]]
+name = "clipboard-win"
+version = "5.4.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bde03770d3df201d4fb868f2c9c59e66a3e4e2bd06692a0fe701e7103c7e84d4"
+dependencies = [
+ "error-code",
+]
+
+[[package]]
 name = "cmake"
 version = "0.1.57"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4256,6 +4285,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "error-code"
+version = "3.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dea2df4cf52843e0452895c455a1a2cfbb842a1e7329671acf418fdc53ed4c59"
+
+[[package]]
 name = "etcetera"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4358,6 +4393,12 @@ name = "fastrand"
 version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9f1f227452a390804cdb637b74a86990f2a7d7ba4b7d5693aac9b4dd6defd8d6"
+
+[[package]]
+name = "fax"
+version = "0.2.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "caf1079563223d5d59d83c85886a56e586cfd5c1a26292e971a0fa266531ac5a"
 
 [[package]]
 name = "fd-lock"
@@ -6341,6 +6382,8 @@ dependencies = [
  "byteorder-lite",
  "moxcms",
  "num-traits",
+ "png 0.18.1",
+ "tiff",
 ]
 
 [[package]]
@@ -7671,7 +7714,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-amqp"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7694,7 +7737,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-analytics"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "chrono",
@@ -7716,7 +7759,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-bench"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -7753,7 +7796,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-chaos"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7794,7 +7837,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-chaos-proxy"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "axum 0.8.9",
  "mockforge-bench",
@@ -7810,7 +7853,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-cli"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -7891,7 +7934,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-collab"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "argon2",
@@ -7936,7 +7979,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-config"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "schemars 0.8.22",
  "serde",
@@ -7946,7 +7989,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-contracts"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "async-trait",
  "bytes",
@@ -7971,7 +8014,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-core"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -8044,7 +8087,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-data"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8077,7 +8120,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-desktop"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -8110,7 +8153,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-federation"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8133,7 +8176,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-foundation"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "async-trait",
  "chrono",
@@ -8157,7 +8200,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ftp"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8183,7 +8226,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-graphql"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-graphql",
@@ -8221,7 +8264,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-grpc"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -8264,7 +8307,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-http"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8345,7 +8388,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-import"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "axum 0.8.9",
  "base64 0.22.1",
@@ -8363,7 +8406,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-integration-tests"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -8392,7 +8435,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-intelligence"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8427,7 +8470,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-k8s-operator"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8449,7 +8492,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-kafka"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8476,7 +8519,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-mqtt"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8501,7 +8544,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-observability"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -8524,7 +8567,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-openapi"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -8550,7 +8593,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-performance"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8566,7 +8609,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-pipelines"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8596,7 +8639,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-platform-signing"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "async-trait",
  "aws-config",
@@ -8615,7 +8658,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-cli"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "base64 0.21.7",
@@ -8645,7 +8688,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-core"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8674,7 +8717,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-egress"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "ipnet",
@@ -8689,7 +8732,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-host"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -8713,7 +8756,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-loader"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8753,7 +8796,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-registry"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "chrono",
  "dirs 5.0.1",
@@ -8771,7 +8814,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-response-graphql"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8790,7 +8833,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-sdk"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8815,7 +8858,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-proxy"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "axum 0.8.9",
  "http 1.4.0",
@@ -8833,7 +8876,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-recorder"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8867,7 +8910,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-registry-core"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8905,7 +8948,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-registry-server"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-nats",
@@ -8982,7 +9025,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-reporting"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "chrono",
@@ -9002,7 +9045,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-route-chaos"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -9015,7 +9058,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-runtime-daemon"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -9037,7 +9080,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-scenarios"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9074,7 +9117,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-sdk"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -9102,7 +9145,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-security-core"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -9132,7 +9175,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-smtp"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9159,7 +9202,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tcp"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9182,14 +9225,14 @@ dependencies = [
 
 [[package]]
 name = "mockforge-template-expansion"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "mockforge-test"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -9216,7 +9259,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-test-integration-examples"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "mockforge-test",
  "tokio",
@@ -9227,7 +9270,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-test-runner"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9249,7 +9292,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tracing"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "axum 0.8.9",
  "http 1.4.0",
@@ -9267,9 +9310,10 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tui"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
+ "arboard",
  "chrono",
  "clap",
  "crossterm",
@@ -9290,7 +9334,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tunnel"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9321,7 +9365,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ui"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9373,7 +9417,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-vbr"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9408,7 +9452,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-workspace"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "globwalk",
  "mockforge-core",
@@ -9419,7 +9463,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-world-state"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9436,7 +9480,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ws"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -10091,6 +10135,7 @@ dependencies = [
  "block2",
  "objc2",
  "objc2-core-foundation",
+ "objc2-core-graphics",
  "objc2-foundation",
 ]
 
@@ -11953,6 +11998,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a1d01941d82fa2ab50be1e79e6714289dd7cde78eba4c074bc5a4374f650dfe0"
 
 [[package]]
+name = "quick-error"
+version = "2.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3"
+
+[[package]]
 name = "quick-xml"
 version = "0.31.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -13155,7 +13206,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cc6bf79ff24e648f6da1f8d1f011e9cac26491b619e6b9280f2b47f1774e6ee2"
 dependencies = [
  "fnv",
- "quick-error",
+ "quick-error 1.2.3",
  "tempfile",
  "wait-timeout",
 ]
@@ -15267,7 +15318,7 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
 name = "test-openapi"
-version = "0.3.152"
+version = "0.3.153"
 dependencies = [
  "mockforge-core",
  "serde_json",
@@ -15343,6 +15394,20 @@ dependencies = [
  "log",
  "ordered-float 2.10.1",
  "threadpool",
+]
+
+[[package]]
+name = "tiff"
+version = "0.10.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af9605de7fee8d9551863fd692cce7637f548dbd9db9180fcc07ccc6d26c336f"
+dependencies = [
+ "fax",
+ "flate2",
+ "half",
+ "quick-error 2.0.1",
+ "weezl",
+ "zune-jpeg",
 ]
 
 [[package]]
@@ -18955,6 +19020,21 @@ checksum = "91e19ebc2adc8f83e43039e79776e3fda8ca919132d68a1fed6a5faca2683748"
 dependencies = [
  "cc",
  "pkg-config",
+]
+
+[[package]]
+name = "zune-core"
+version = "0.4.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3f423a2c17029964870cfaabb1f13dfab7d092a62a29a89264f4d36990ca414a"
+
+[[package]]
+name = "zune-jpeg"
+version = "0.4.21"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "29ce2c8a9384ad323cf564b67da86e21d3cfdff87908bc1223ed5c99bc792713"
+dependencies = [
+ "zune-core",
 ]
 
 [[package]]

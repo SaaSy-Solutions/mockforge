@@ -70,6 +70,11 @@ pub struct ConformanceViolationsResponse {
     /// buffer caps `total` at 256, this is the true number seen.
     #[serde(default)]
     pub total_seen: u64,
+    /// Lifetime count of requests that *passed* the validator (Issue
+    /// #79 round 17.1). With `total_seen` this gives the real pass/fail
+    /// ratio under sustained traffic.
+    #[serde(default)]
+    pub total_ok: u64,
 }
 
 /// One unmatched-path request (Issue #79 round 13).
