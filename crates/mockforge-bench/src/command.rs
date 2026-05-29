@@ -2122,9 +2122,13 @@ impl BenchCommand {
 
         // Branch: spec-driven mode vs reference mode
         // Annotate operations if spec is provided (used by both native and k6 paths)
+        // Round 17.4 — also produce a spec-level audit report alongside,
+        // surfaced by `--conformance-self-test` below.
+        let mut spec_audit_report: Option<crate::conformance::spec_audit::SpecAuditReport> = None;
         let annotated_ops = if !self.spec.is_empty() {
             TerminalReporter::print_progress("Spec-driven conformance mode: analyzing spec...");
             let parser = SpecParser::from_file(&self.spec[0]).await?;
+            spec_audit_report = Some(crate::conformance::spec_audit::audit_spec(parser.spec()));
 
             // Issue #79 round 12 — Srikanth ran `--conformance --operations "GET,POST"`
             // and saw DELETE/PATCH exercised anyway. Conformance silently ignored
@@ -2219,6 +2223,28 @@ impl BenchCommand {
                 TerminalReporter::print_success(
                     "Self-test passed — all positive cases accepted and all negative cases rejected",
                 );
+            }
+            // Round 17.4 — emit spec audit findings alongside the
+            // request-level self-test report. Useful even when the
+            // server is unreachable, because the audit is a pure
+            // function of the spec.
+            if let Some(audit) = &spec_audit_report {
+                TerminalReporter::print_progress(&audit.render_summary());
+                let audit_path = self.output.join("conformance-spec-audit.json");
+                if let Ok(json) = serde_json::to_string_pretty(audit) {
+                    let _ = std::fs::write(&audit_path, json);
+                    TerminalReporter::print_progress(&format!(
+                        "Spec audit report written to {}",
+                        audit_path.display()
+                    ));
+                }
+                let (_, warn, err) = audit.counts_by_severity();
+                if err > 0 || warn > 0 {
+                    TerminalReporter::print_warning(&format!(
+                        "Spec audit produced {err} error(s) and {warn} warning(s) — review {} for details",
+                        audit_path.display()
+                    ));
+                }
             }
             return Ok(());
         }

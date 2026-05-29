@@ -14,6 +14,7 @@ pub mod schema_mutator;
 pub mod schema_validator;
 pub mod self_test;
 pub mod spec;
+pub mod spec_audit;
 pub mod spec_driven;
 
 pub use custom::CustomConformanceConfig;
