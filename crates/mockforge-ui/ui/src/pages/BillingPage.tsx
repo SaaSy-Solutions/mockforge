@@ -32,6 +32,7 @@ interface Subscription {
     | 'unpaid'
     | 'incomplete'
     | 'incomplete_expired';
+  billing_interval?: 'month' | 'year';
   cancel_at_period_end?: boolean;
   current_period_start?: string;
   current_period_end?: string;
@@ -62,14 +63,37 @@ interface UsageStats {
   ai_tokens_limit: number;
 }
 
+type BillingInterval = 'month' | 'year';
+
 interface CreateCheckoutRequest {
   plan: 'pro' | 'team';
+  billing_interval?: BillingInterval;
   success_url?: string;
   cancel_url?: string;
 }
 
 interface CreateCheckoutResponse {
   checkout_url: string;
+}
+
+// Public billing config — `annual_billing_available` gates the monthly/annual
+// toggle so we never offer annual when the operator hasn't configured the
+// annual Stripe prices (backend would reject that checkout anyway).
+interface BillingConfig {
+  trial_period_days: number;
+  annual_billing_available: boolean;
+}
+
+// Plan list prices in whole dollars. Annual = 10x monthly (i.e. "2 months
+// free"), matching the configured Stripe annual prices and the pricing page.
+const PLAN_PRICING: Record<'pro' | 'team', Record<BillingInterval, number>> = {
+  pro: { month: 29, year: 290 },
+  team: { month: 99, year: 990 },
+};
+
+/** Per-month-equivalent dollars for an annual plan, rounded for display. */
+function annualMonthlyEquivalent(plan: 'pro' | 'team'): number {
+  return Math.round(PLAN_PRICING[plan].year / 12);
 }
 
 interface CreatePortalResponse {
@@ -145,6 +169,14 @@ async function fetchInvoices(): Promise<ListInvoicesResponse> {
   return response.json();
 }
 
+async function fetchBillingConfig(): Promise<BillingConfig> {
+  const response = await fetch(`${API_BASE}/billing/config`);
+  if (!response.ok) {
+    throw new Error(await extractErrorMessage(response, 'Failed to fetch billing config'));
+  }
+  return response.json();
+}
+
 async function createPortalSession(): Promise<CreatePortalResponse> {
   const response = await authenticatedFetch(`${API_BASE}/billing/portal`, {
     method: 'POST',
@@ -163,6 +195,23 @@ export function BillingPage() {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const [selectedPlan, setSelectedPlan] = useState<'pro' | 'team' | null>(null);
+  // Preselect the cadence from `?interval=year` so a choice made on the
+  // (pre-auth) pricing page carries through the login → billing redirect.
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>(() =>
+    new URLSearchParams(window.location.search).get('interval') === 'year' ? 'year' : 'month'
+  );
+
+  // Annual availability gates the toggle. Soft-fail to monthly-only if the
+  // endpoint is unreachable rather than blocking the page.
+  const { data: billingConfig } = useQuery({
+    queryKey: ['billing-config'],
+    queryFn: fetchBillingConfig,
+    staleTime: 5 * 60_000,
+    retry: 1,
+  });
+  const annualAvailable = billingConfig?.annual_billing_available ?? false;
+  // Don't leave the user on an annual selection we can't fulfill.
+  const effectiveInterval: BillingInterval = annualAvailable ? billingInterval : 'month';
 
   // Fetch subscription
   const {
@@ -219,6 +268,7 @@ export function BillingPage() {
     setSelectedPlan(plan);
     checkoutMutation.mutate({
       plan,
+      billing_interval: effectiveInterval,
       success_url: `${window.location.origin}/billing?success=true`,
       cancel_url: `${window.location.origin}/billing?canceled=true`,
     });
@@ -374,6 +424,11 @@ export function BillingPage() {
                     <div className="text-sm text-muted-foreground mt-1">
                       {subscription.cancel_at_period_end ? 'Ends on ' : 'Renews on '}
                       {new Date(subscription.current_period_end).toLocaleDateString()}
+                    </div>
+                  )}
+                  {subscription.plan !== 'free' && subscription.billing_interval && (
+                    <div className="text-sm text-muted-foreground mt-1">
+                      Billed {subscription.billing_interval === 'year' ? 'annually' : 'monthly'}
                     </div>
                   )}
                 </div>
@@ -693,6 +748,45 @@ export function BillingPage() {
 
         {/* Plans Tab */}
         <TabsContent value="plans" className="space-y-4">
+          {annualAvailable && (
+            <div className="flex justify-center">
+              <div
+                role="radiogroup"
+                aria-label="Billing interval"
+                className="inline-flex items-center rounded-full border bg-muted/50 p-1 text-sm"
+              >
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={effectiveInterval === 'month'}
+                  onClick={() => setBillingInterval('month')}
+                  className={`rounded-full px-4 py-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
+                    effectiveInterval === 'month'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Monthly
+                </button>
+                <button
+                  type="button"
+                  role="radio"
+                  aria-checked={effectiveInterval === 'year'}
+                  onClick={() => setBillingInterval('year')}
+                  className={`flex items-center rounded-full px-4 py-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
+                    effectiveInterval === 'year'
+                      ? 'bg-background text-foreground shadow-sm'
+                      : 'text-muted-foreground hover:text-foreground'
+                  }`}
+                >
+                  Annual
+                  <span className="ml-1.5 rounded-full bg-success-500/15 px-1.5 py-0.5 text-xs font-semibold text-success-600 dark:text-success-400">
+                    2 months free
+                  </span>
+                </button>
+              </div>
+            </div>
+          )}
           <div className="grid gap-4 md:grid-cols-3">
             {/* Free Plan */}
             <Card className={subscription.plan === 'free' ? 'border-primary' : ''}>
@@ -744,8 +838,7 @@ export function BillingPage() {
             <Card className={subscription.plan === 'pro' ? 'border-primary' : ''}>
               <CardHeader>
                 <CardTitle>Pro</CardTitle>
-                <div className="text-3xl font-bold">$29</div>
-                <CardDescription>per month</CardDescription>
+                <PlanPrice plan="pro" interval={effectiveInterval} />
               </CardHeader>
               <CardContent className="space-y-4">
                 <ul className="space-y-2 text-sm">
@@ -794,8 +887,7 @@ export function BillingPage() {
             <Card className={subscription.plan === 'team' ? 'border-primary' : ''}>
               <CardHeader>
                 <CardTitle>Team</CardTitle>
-                <div className="text-3xl font-bold">$99</div>
-                <CardDescription>per month</CardDescription>
+                <PlanPrice plan="team" interval={effectiveInterval} />
               </CardHeader>
               <CardContent className="space-y-4">
                 <ul className="space-y-2 text-sm">
@@ -843,6 +935,31 @@ export function BillingPage() {
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+/** Interval-aware price block for a paid plan card (Plans tab). */
+function PlanPrice({ plan, interval }: { plan: 'pro' | 'team'; interval: BillingInterval }) {
+  const price = PLAN_PRICING[plan][interval];
+  if (interval === 'year') {
+    return (
+      <>
+        <div className="text-3xl font-bold">${price}</div>
+        <CardDescription>
+          per year ·{' '}
+          <span className="font-medium text-success-600 dark:text-success-400">2 months free</span>
+        </CardDescription>
+        <div className="mt-0.5 text-xs text-muted-foreground">
+          ≈ ${annualMonthlyEquivalent(plan)}/mo, billed annually
+        </div>
+      </>
+    );
+  }
+  return (
+    <>
+      <div className="text-3xl font-bold">${price}</div>
+      <CardDescription>per month</CardDescription>
+    </>
   );
 }
 
