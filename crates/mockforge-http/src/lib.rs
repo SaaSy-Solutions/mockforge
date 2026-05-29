@@ -1698,6 +1698,7 @@ pub async fn build_router_with_chains(
         None, // smtp_registry
         None, // mqtt_broker
         None, // amqp_broker
+        None, // kafka_broker
         None, // traffic_shaper
         false,
         None, // health_manager
@@ -1760,6 +1761,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     smtp_registry: Option<Arc<dyn std::any::Any + Send + Sync>>,
     mqtt_broker: Option<Arc<dyn std::any::Any + Send + Sync>>,
     amqp_broker: Option<Arc<dyn std::any::Any + Send + Sync>>,
+    kafka_broker: Option<Arc<dyn std::any::Any + Send + Sync>>,
     traffic_shaper: Option<mockforge_core::traffic_shaping::TrafficShaper>,
     traffic_shaping_enabled: bool,
     health_manager: Option<Arc<HealthManager>>,
@@ -2244,6 +2246,28 @@ pub async fn build_router_with_chains_and_multi_tenant(
     #[cfg(not(feature = "amqp"))]
     let management_state = {
         let _ = amqp_broker;
+        management_state
+    };
+    #[cfg(feature = "kafka")]
+    let management_state = {
+        if let Some(broker) = kafka_broker {
+            match broker.downcast::<mockforge_kafka::KafkaMockBroker>() {
+                Ok(broker) => management_state.with_kafka_broker(broker),
+                Err(e) => {
+                    error!(
+                        "Invalid Kafka broker passed to HTTP management state: {:?}",
+                        e.type_id()
+                    );
+                    management_state
+                }
+            }
+        } else {
+            management_state
+        }
+    };
+    #[cfg(not(feature = "kafka"))]
+    let management_state = {
+        let _ = kafka_broker;
         management_state
     };
     let management_state_for_fallback = management_state.clone();

@@ -1406,6 +1406,29 @@ pub async fn handle_serve(
     #[cfg(not(feature = "amqp"))]
     let amqp_broker_for_http = None::<Arc<dyn Any + Send + Sync>>;
 
+    // Same shared-broker pattern for Kafka: one `Arc<KafkaMockBroker>` backs
+    // both the protocol listener and the HTTP admin API, so the admin page
+    // reflects the topics/consumer-groups clients actually produce to.
+    #[cfg(feature = "kafka")]
+    let kafka_broker = if config.kafka.enabled {
+        use mockforge_kafka::KafkaMockBroker;
+        match KafkaMockBroker::new(config.kafka.clone()).await {
+            Ok(broker) => Some(Arc::new(broker)),
+            Err(e) => {
+                tracing::error!("Failed to initialize Kafka broker: {:?}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+    #[cfg(feature = "kafka")]
+    let kafka_broker_for_http = kafka_broker
+        .as_ref()
+        .map(|broker| Arc::clone(broker) as Arc<dyn Any + Send + Sync>);
+    #[cfg(not(feature = "kafka"))]
+    let kafka_broker_for_http = None::<Arc<dyn Any + Send + Sync>>;
+
     // Create health manager for Kubernetes-native health checks
     use mockforge_http::HealthManager;
     use std::sync::Arc;
@@ -1781,6 +1804,7 @@ pub async fn handle_serve(
         smtp_registry.as_ref().cloned(),
         mqtt_broker_for_http,
         amqp_broker_for_http,
+        kafka_broker_for_http,
         traffic_shaper,                        // traffic_shaper
         traffic_shaping_enabled,               // traffic_shaping_enabled
         Some(health_manager_for_router),       // health_manager
@@ -2634,35 +2658,27 @@ pub async fn handle_serve(
         None
     };
 
-    // Start Kafka broker (if enabled)
+    // Start Kafka broker (if enabled). Reuses the `kafka_broker` Arc built
+    // earlier so the listener and the HTTP admin API share one broker.
     #[cfg(feature = "kafka")]
-    let _kafka_handle = if config.kafka.enabled {
+    let _kafka_handle = if let Some(ref broker) = kafka_broker {
         let kafka_config = config.kafka.clone();
         let kafka_shutdown = shutdown_token.clone();
+        let broker = Arc::clone(broker);
 
         Some(tokio::spawn(async move {
-            use mockforge_kafka::KafkaMockBroker;
-
             println!("📨 Kafka broker listening on {}:{}", kafka_config.host, kafka_config.port);
 
-            // Create and start the Kafka broker. The returned JoinHandle is
-            // never awaited, so silent Err would vanish — surface failures
-            // through tracing before returning them (otherwise a bad
-            // fixtures_dir etc. leaves the port unbound with no log at all).
-            let result: Result<(), String> = match KafkaMockBroker::new(kafka_config.clone()).await
-            {
-                Ok(broker) => {
-                    tokio::select! {
-                        result = broker.start() => {
-                            result.map_err(|e| format!("Kafka broker error: {:?}", e))
-                        }
-                        _ = kafka_shutdown.cancelled() => {
-                            println!("🛑 Shutting down Kafka broker...");
-                            Ok(())
-                        }
-                    }
+            // The returned JoinHandle is never awaited, so a silent Err would
+            // vanish — surface failures through tracing before returning them.
+            let result: Result<(), String> = tokio::select! {
+                result = broker.start() => {
+                    result.map_err(|e| format!("Kafka broker error: {:?}", e))
                 }
-                Err(e) => Err(format!("Failed to initialize Kafka broker: {:?}", e)),
+                _ = kafka_shutdown.cancelled() => {
+                    println!("🛑 Shutting down Kafka broker...");
+                    Ok(())
+                }
             };
 
             if let Err(msg) = &result {
