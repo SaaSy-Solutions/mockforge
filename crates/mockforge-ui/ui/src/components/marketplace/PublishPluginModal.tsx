@@ -6,6 +6,8 @@
 
 import React, { useState } from 'react';
 import { apiErrorMessage } from '@/utils/errorHandling';
+import { authenticatedFetch } from '@/utils/apiClient';
+import { useAuthStore } from '@/stores/useAuthStore';
 import {
   Dialog,
   DialogTitle,
@@ -67,6 +69,7 @@ export const PublishPluginModal: React.FC<PublishPluginModalProps> = ({
   onClose,
   onSuccess,
 }) => {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const [formData, setFormData] = useState({
     name: '',
     version: '1.0.0',
@@ -159,19 +162,14 @@ export const PublishPluginModal: React.FC<PublishPluginModalProps> = ({
         min_mockforge_version: formData.min_mockforge_version || null,
       };
 
-      // Get auth token
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
+      if (!isAuthenticated) {
         throw new Error('Not authenticated. Please log in.');
       }
 
-      // Submit to API
-      const response = await fetch('/api/v1/plugins/publish', {
+      // Submit to API (authenticatedFetch attaches the JWT and refreshes on 401)
+      const response = await authenticatedFetch('/api/v1/plugins/publish', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(request),
       });
 
@@ -180,7 +178,7 @@ export const PublishPluginModal: React.FC<PublishPluginModalProps> = ({
         throw new Error(apiErrorMessage(response, errorData, `Failed to publish: ${response.statusText}`));
       }
 
-      const result = await response.json();
+      await response.json().catch(() => ({}));
 
       // Success
       if (onSuccess) {
