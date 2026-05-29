@@ -1,26 +1,17 @@
-## [0.3.156] - 2026-05-29
+## [0.3.157] - 2026-05-29
 
 ### Added
 
-- **[Contracts][DevX]** Spec-level audit alongside `--conformance-self-test` (#79 round 17.4) — Srikanth's (17.4) ask: in addition to driving the server with positive + negative *requests*, also audit the OpenAPI document itself for things that silently degrade validator quality. The audit ships as `conformance-spec-audit.json` next to `conformance-self-test.json` and emits a one-line summary in the terminal report. Categories:
-  - **`servers`** — empty `servers` list, all-localhost servers, or all-relative-URL servers each produce a `Warning`. Tells you when a spec can't actually be pointed at production.
-  - **`callbacks`** — operations declaring `callbacks` whose callback operation has no `security` requirement produce a `Warning` per callback. Webhook deliveries should never be unauthenticated.
-  - **`polymorphism`** — `oneOf` / `anyOf` schemas anywhere in components or inline that lack a `discriminator` produce a `Warning`. Without a discriminator, validators degrade to "first-match" or "always-pass".
-  - **`datatypes`** — coverage map of every `(type, format)` combination that appears in the spec. Lets you see at a glance "your spec uses `string:uuid` 412 times but `string:email` never" — i.e. which validator rules need attention.
+- **[Contracts][DevX][Security]** OWASP / WAF unification into the conformance self-test (#79 round 17.5) — Srikanth's (17.5) ask: instead of running the OWASP injection battery as a separate pipeline, fold one canonical payload per category into the existing `--conformance-self-test` driver so the report has a single `owasp` bucket alongside `request-body` / `parameters` / `security`. Each operation with an injection target (query param or string body field) gets one probe per OWASP category:
+  - `owasp:sqli` — SQL injection (`' OR '1'='1`)
+  - `owasp:xss` — cross-site scripting (`<script>alert('XSS')</script>`)
+  - `owasp:command-injection` — shell metacharacter injection
+  - `owasp:path-traversal` — `../../etc/passwd`-style probes
+  - `owasp:ssti` — server-side template injection
+  - `owasp:ldap-injection`
+  - `owasp:xxe` — XML external entity
 
-  Audit runs whenever `--conformance-self-test` is set, but is pure (no network I/O) so it still produces a useful report even if the target server is unreachable.
-
-## [0.3.155] - 2026-05-29
-
-### Added
-
-- **[Contracts][DevX][Security]** Security probes in `--conformance-self-test` (#79 round 17.3) — operations whose spec declares a security requirement now get dedicated bad-credential negatives that the server should reject with 401/403. Catches the failure mode where the spec says an endpoint is protected but the validator never actually enforces auth on it.
-  - **`security:bad-bearer`** — sends `Authorization: Bearer self-test-invalid-token` (one per operation, regardless of how many Bearer schemes are declared).
-  - **`security:bad-basic`** — sends `Authorization: Basic <base64-of-self-test:invalid>`.
-  - **`security:bad-apikey:<name>`** — substitutes the declared API key (header, query, or cookie) with `self-test-invalid-key`. Deduplicated by `(location, name)` so an operation with the same key declared twice produces one probe.
-  - **`security:no-auth`** — strips Authorization + the operation's declared API-key headers/queries/cookies, sends with no credentials at all. Surfaces validators that aren't checking auth presence.
-
-  Auth stripping is case-insensitive on `Authorization` and walks the operation's own declared API-key locations so the probe's credential is the *only* thing the server sees. Operations without any declared security scheme get zero security probes (no false signal).
+  Injection target is picked once per operation in priority order: first query param > first string field of the positive JSON body > skip. Operations with no injectable surface (e.g. `GET /healthz`) get zero OWASP probes — no false signal. Bounded at 7 probes per operation (one per category). Server-side: expected 4xx (input rejected). A 5xx is a hard finding (server crashed on the payload); a 2xx is a soft finding (input passed through unfiltered).
 
 ## [0.3.154] - 2026-05-29
 
@@ -36,6 +27,7 @@
 
   Labels carry the field path (e.g. `request-body:type-mismatch:user.email`) so the self-test report tells you exactly which field caught (or didn't). Bounded by `SCHEMA_MUTATION_CAP = 12` per operation (top 20 properties, top 5 required) so a 100-property body on a 22 000-operation spec doesn't produce a runaway test matrix. No-op when the body annotator couldn't resolve a schema — falls back to the existing schema-agnostic empty/wrong-type negatives unchanged.
 
+||||||| parent of 483a9524 (feat(bench): OWASP/WAF unification in self-test (#79 round 17.5))
 ## [0.3.153] - 2026-05-29
 
 ### Added
@@ -43,6 +35,7 @@
 - **[Contracts][DevX]** TUI Conformance detail view gains a **`c`** keystroke to copy the selected violation to the system clipboard as pretty-printed JSON (#79 round 17.1) — Srikanth's (c-i) ask. Uses `arboard` with default features so it works on X11, Wayland, macOS NSPasteboard, and Win32 without per-platform setup. On a clipboard-less TTY the failure surfaces in the flash strip instead of silently no-op'ing.
 - **[Contracts]** New `total_ok` lifetime counter on the conformance violations API (#79 round 17.1) — Srikanth's (f) follow-up. Each request that *passes* the validator bumps the counter; the admin API returns `total_ok` alongside `total_seen`, and the TUI title now reads e.g. `Conformance Violations (256 buffered, 256 shown, 517498/522830 validated failed)`. Gives the real pass/fail ratio under sustained traffic instead of just the violation count.
 
+||||||| parent of f41e0530 (feat(bench): OWASP/WAF unification in self-test (#79 round 17.5))
 ## [0.3.152] - 2026-05-28
 
 ### Changed
