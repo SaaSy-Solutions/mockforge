@@ -201,6 +201,23 @@ pub async fn get_organization_members(
     Ok(Json(member_responses))
 }
 
+/// RBAC entitlement gate (#749): assigning the `Admin` role is a Team-plan
+/// feature — it's marketed as "SSO / RBAC" on the Team tier, so it must not be
+/// grantable on Free/Pro. `Owner` and `Member` remain available on every plan.
+///
+/// This blocks *new* Admin grants only; members who already hold Admin on a
+/// lower plan are grandfathered (no forced downgrade).
+fn require_role_allowed_on_plan(role: OrgRole, plan: Plan) -> ApiResult<()> {
+    if matches!(role, OrgRole::Admin) && plan != Plan::Team {
+        return Err(ApiError::InvalidRequest(
+            "The Admin role requires the Team plan. Upgrade to delegate \
+             administration, or assign the 'member' role."
+                .to_string(),
+        ));
+    }
+    Ok(())
+}
+
 /// Add a member to an organization
 pub async fn add_organization_member(
     State(state): State<AppState>,
@@ -293,6 +310,9 @@ pub async fn add_organization_member(
             ))
         }
     };
+
+    // RBAC entitlement: Admin role is Team-only (#749).
+    require_role_allowed_on_plan(role, org.plan())?;
 
     // Add member
     let member = state.store.create_org_member(org_id, target_user.id, role).await?;
@@ -465,6 +485,9 @@ pub async fn update_organization_member_role(
             ))
         }
     };
+
+    // RBAC entitlement: promoting to Admin is Team-only (#749).
+    require_role_allowed_on_plan(new_role, org.plan())?;
 
     // Update role
     state.store.update_org_member_role(org_id, member_user_id, new_role).await?;
@@ -837,6 +860,11 @@ pub async fn create_invitation(
         .ok_or(ApiError::OrganizationNotFound)?;
 
     require_org_admin(&state, &org, user_id).await?;
+
+    // RBAC entitlement: don't let lower plans mint Admin invitations (#749).
+    if role == "admin" {
+        require_role_allowed_on_plan(OrgRole::Admin, org.plan())?;
+    }
 
     use base64::Engine;
     use rand::RngCore;
@@ -1225,4 +1253,25 @@ pub async fn mark_user_verified_admin(
         "email": user.email,
         "is_verified": user.is_verified,
     })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn admin_role_requires_team_plan() {
+        // Admin is gated to Team across every lower plan.
+        assert!(require_role_allowed_on_plan(OrgRole::Admin, Plan::Free).is_err());
+        assert!(require_role_allowed_on_plan(OrgRole::Admin, Plan::Pro).is_err());
+        assert!(require_role_allowed_on_plan(OrgRole::Admin, Plan::Team).is_ok());
+    }
+
+    #[test]
+    fn owner_and_member_roles_allowed_on_every_plan() {
+        for plan in [Plan::Free, Plan::Pro, Plan::Team] {
+            assert!(require_role_allowed_on_plan(OrgRole::Member, plan).is_ok());
+            assert!(require_role_allowed_on_plan(OrgRole::Owner, plan).is_ok());
+        }
+    }
 }
