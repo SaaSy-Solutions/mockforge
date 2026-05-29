@@ -120,6 +120,27 @@ enum ViewMode {
     UnknownPaths,
 }
 
+/// Group key for export dedup — same (method, path, category, reason)
+/// rolls up. Aliased so clippy doesn't flag the inner HashMap value.
+type DedupKey = (String, String, String, String);
+
+/// Round 16 — JSON shape written by the export action (`e`). Same
+/// fields as `ConformanceViolation` minus `client_ip` (which is always
+/// `"unknown"` for now and just adds noise to the file), plus a `count`
+/// and a `first_seen` / `last_seen` window. Same-shape lines are
+/// collapsed by `export_filtered`.
+#[derive(Debug, serde::Serialize)]
+struct DedupedViolation {
+    method: String,
+    path: String,
+    category: String,
+    reason: String,
+    status: u16,
+    count: u32,
+    first_seen: chrono::DateTime<chrono::Utc>,
+    last_seen: chrono::DateTime<chrono::Utc>,
+}
+
 pub struct ConformanceScreen {
     loaded: bool,
     /// Full snapshot from the server, newest-first.
@@ -258,17 +279,82 @@ impl ConformanceScreen {
     /// Export the current filtered snapshot to a JSON file in CWD so
     /// the user can drop it next to their proxy logs and grep across
     /// both sides. Returns the path or an error message via `flash`.
+    ///
+    /// Round 16 — exports are **deduplicated** by
+    /// `(method, path, category, reason)`, sorted by occurrence count
+    /// descending, so a 500k-request run no longer produces a 256-entry
+    /// JSON of mostly-identical rows. Each group keeps the *first* and
+    /// *last* timestamps so you can still see the time window. The TUI
+    /// keeps showing each occurrence — only the export collapses.
     fn export_filtered(&mut self) {
         let now = chrono::Utc::now().format("%Y%m%dT%H%M%SZ");
         let path = PathBuf::from(format!("conformance-violations-{}.json", now));
         let indices = self.filtered_indices();
-        let snapshot: Vec<&ConformanceViolation> =
-            indices.iter().filter_map(|&i| self.violations.get(i)).collect();
-        match serde_json::to_string_pretty(&snapshot) {
+
+        // Group by (method, path, category, reason). Insertion order
+        // doesn't matter — we sort by count at the end.
+        let mut groups: HashMap<DedupKey, (DedupedViolation, u32, chrono::DateTime<chrono::Utc>)> =
+            HashMap::new();
+        for &i in &indices {
+            let Some(v) = self.violations.get(i) else {
+                continue;
+            };
+            let key = (v.method.clone(), v.path.clone(), v.category.clone(), v.reason.clone());
+            match groups.get_mut(&key) {
+                Some(slot) => {
+                    slot.1 += 1;
+                    if v.timestamp < slot.0.first_seen {
+                        slot.0.first_seen = v.timestamp;
+                    }
+                    if v.timestamp > slot.2 {
+                        slot.2 = v.timestamp;
+                        slot.0.last_seen = v.timestamp;
+                    }
+                }
+                None => {
+                    groups.insert(
+                        key,
+                        (
+                            DedupedViolation {
+                                method: v.method.clone(),
+                                path: v.path.clone(),
+                                category: v.category.clone(),
+                                reason: v.reason.clone(),
+                                status: v.status,
+                                count: 1,
+                                first_seen: v.timestamp,
+                                last_seen: v.timestamp,
+                            },
+                            1,
+                            v.timestamp,
+                        ),
+                    );
+                }
+            }
+        }
+
+        let mut deduped: Vec<DedupedViolation> = groups
+            .into_iter()
+            .map(|(_, (mut d, n, _))| {
+                d.count = n;
+                d
+            })
+            .collect();
+        deduped.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.path.cmp(&b.path)));
+
+        let total_occurrences: u32 = deduped.iter().map(|d| d.count).sum();
+        let unique_groups = deduped.len();
+
+        match serde_json::to_string_pretty(&deduped) {
             Ok(json) => match std::fs::write(&path, json) {
                 Ok(()) => {
                     self.flash = Some((
-                        format!("exported {} violation(s) to {}", snapshot.len(), path.display()),
+                        format!(
+                            "exported {} unique violation(s) ({} occurrences) to {}",
+                            unique_groups,
+                            total_occurrences,
+                            path.display()
+                        ),
                         Instant::now(),
                     ));
                 }

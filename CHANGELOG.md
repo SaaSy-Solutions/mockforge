@@ -1,3 +1,12 @@
+## [0.3.152] - 2026-05-28
+
+### Changed
+
+- **[Contracts][DevX]** TUI Conformance export (`e`) now deduplicates by `(method, path, category, reason)` and sorts by occurrence count descending (#79 round 16) — Srikanth's (c-ii) ask: under sustained traffic the export was 256 mostly-identical rows. Each group now carries a `count` and `first_seen` / `last_seen` window so the time range is preserved while the file collapses from "256 rows of mostly the same thing" to a ranked unique-violation list. The TUI table itself still shows each occurrence (unchanged). The flash message now reads `exported N unique violation(s) (M occurrences) to …`.
+- **[DevX]** `mockforge bench --conformance --conformance-self-test` now produces negatives for two previously-zero-coverage shapes (#79 round 16 (h)) — addresses Srikanth's "always all passing" report on operations that fell through the gaps:
+  1. **Operations with a required body but no synthesised sample** — the `request-body:empty` and `request-body:wrong-type` negatives now fire whenever the spec declares a request body content type, regardless of whether the body annotator could produce a positive sample.
+  2. **Operations with a path-param and no required body / query / header** — emits a new `parameters:bad-path-param` probe that substitutes the first path parameter with `"self-test-invalid-id"`. Operations whose spec types the param as integer / UUID / regex-patterned will catch this (4xx); operations that allow free-form strings will let it through. Either outcome is informative — a category that's all-`missed` is the spec telling you path-param types are loose.
+
 ## [0.3.151] - 2026-05-27
 
 ### Added
