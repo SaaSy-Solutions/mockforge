@@ -865,6 +865,43 @@ Privacy: https://mockforge.dev/privacy
         limit_pretty: &str,
         threshold_pct: u16,
     ) -> EmailMessage {
+        // At/over 100% the org has entered overage. For request mocks there is
+        // no hard cutoff (#748) — the message must inform, not warn of an
+        // impending limit that's already been reached.
+        let is_over = threshold_pct >= 100;
+        let headline = if is_over {
+            "Usage Limit Reached"
+        } else {
+            "Usage Approaching Limit"
+        };
+        let crossed_html = if is_over {
+            format!(
+                "Your MockForge Cloud organization has reached <strong>{threshold_pct}%</strong> of its <strong>{metric_label}</strong> allotment for the current billing period."
+            )
+        } else {
+            format!(
+                "Your MockForge Cloud organization has crossed <strong>{threshold_pct}%</strong> of its <strong>{metric_label}</strong> limit on the current billing period."
+            )
+        };
+        let crossed_text = if is_over {
+            format!(
+                "Your MockForge Cloud organization has reached {threshold_pct}% of its {metric_label} allotment for the current billing period."
+            )
+        } else {
+            format!(
+                "Your MockForge Cloud organization has crossed {threshold_pct}% of its {metric_label} limit on the current billing period."
+            )
+        };
+        let guidance = if is_over {
+            "You've used your full allotment for this period. Upgrade for a higher limit, or contact us if you expect a temporary spike."
+        } else {
+            "If you continue at the current rate, you may hit your plan limit before the end of the period. Consider upgrading or contacting us if you expect a temporary spike."
+        };
+        let subject = if is_over {
+            format!("MockForge: {} limit reached on {} plan", metric_label, plan)
+        } else {
+            format!("MockForge: {}% of {} used on {} plan", threshold_pct, metric_label, plan)
+        };
         let html_body = format!(
             r#"
 <!DOCTYPE html>
@@ -882,17 +919,17 @@ Privacy: https://mockforge.dev/privacy
 </head>
 <body>
     <div class="header">
-        <h1>Usage Approaching Limit</h1>
+        <h1>{headline}</h1>
     </div>
     <div class="content">
         <p>Hi {username},</p>
-        <p>Your MockForge Cloud organization has crossed <strong>{threshold_pct}%</strong> of its <strong>{metric_label}</strong> limit on the current billing period.</p>
+        <p>{crossed_html}</p>
         <div class="info-box">
             <p><strong>Metric:</strong> {metric_label}</p>
             <p><strong>Plan:</strong> {plan}</p>
             <p><strong>Used:</strong> {used_pretty} of {limit_pretty}</p>
         </div>
-        <p>If you continue at the current rate, you may hit your plan limit before the end of the period. Consider upgrading or contacting us if you expect a temporary spike.</p>
+        <p>{guidance}</p>
         <p style="text-align: center;">
             <a href="https://app.mockforge.dev/usage" class="button">View Usage</a>
         </p>
@@ -906,28 +943,30 @@ Privacy: https://mockforge.dev/privacy
 </body>
 </html>
 "#,
+            headline = headline,
             username = username,
+            crossed_html = crossed_html,
             plan = plan,
             metric_label = metric_label,
             used_pretty = used_pretty,
             limit_pretty = limit_pretty,
-            threshold_pct = threshold_pct,
+            guidance = guidance,
             year = chrono::Utc::now().year()
         );
 
         let text_body = format!(
             r#"
-Usage Approaching Limit
+{headline}
 
 Hi {username},
 
-Your MockForge Cloud organization has crossed {threshold_pct}% of its {metric_label} limit on the current billing period.
+{crossed_text}
 
 Metric: {metric_label}
 Plan: {plan}
 Used: {used_pretty} of {limit_pretty}
 
-If you continue at the current rate, you may hit your plan limit before the end of the period. Consider upgrading or contact us if you expect a temporary spike.
+{guidance}
 
 View usage: https://app.mockforge.dev/usage
 
@@ -936,21 +975,20 @@ The MockForge Team
 
 © {year} MockForge. All rights reserved.
 "#,
+            headline = headline,
             username = username,
+            crossed_text = crossed_text,
             plan = plan,
             metric_label = metric_label,
             used_pretty = used_pretty,
             limit_pretty = limit_pretty,
-            threshold_pct = threshold_pct,
+            guidance = guidance,
             year = chrono::Utc::now().year()
         );
 
         EmailMessage {
             to: vec![email.to_string()],
-            subject: format!(
-                "MockForge: {}% of {} used on {} plan",
-                threshold_pct, metric_label, plan
-            ),
+            subject,
             html_body,
             text_body,
             ..Default::default()
