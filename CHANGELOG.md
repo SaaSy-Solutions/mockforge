@@ -24,7 +24,6 @@
 
   Labels carry the field path (e.g. `request-body:type-mismatch:user.email`) so the self-test report tells you exactly which field caught (or didn't). Bounded by `SCHEMA_MUTATION_CAP = 12` per operation (top 20 properties, top 5 required) so a 100-property body on a 22 000-operation spec doesn't produce a runaway test matrix. No-op when the body annotator couldn't resolve a schema — falls back to the existing schema-agnostic empty/wrong-type negatives unchanged.
 
-||||||| parent of f59ea5f4 (feat(bench): security probes in conformance self-test (#79 round 17.3))
 ## [0.3.153] - 2026-05-29
 
 ### Added
