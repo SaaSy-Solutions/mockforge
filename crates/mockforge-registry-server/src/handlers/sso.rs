@@ -38,6 +38,10 @@ pub struct CreateSSOConfigRequest {
     pub require_signed_assertions: Option<bool>,
     pub require_signed_responses: Option<bool>,
     pub allow_unsolicited_responses: Option<bool>,
+    pub oidc_issuer_url: Option<String>,
+    pub oidc_client_id: Option<String>,
+    pub oidc_client_secret: Option<String>,
+    pub email_domain: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -54,6 +58,10 @@ pub struct SSOConfigResponse {
     pub require_signed_assertions: bool,
     pub require_signed_responses: bool,
     pub allow_unsolicited_responses: bool,
+    pub oidc_issuer_url: Option<String>,
+    pub oidc_client_id: Option<String>,
+    // oidc_client_secret is intentionally NOT returned — never echo secrets
+    pub email_domain: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -117,6 +125,17 @@ pub async fn create_sso_config(
         ));
     }
 
+    // Validate OIDC fields if provider is OIDC
+    if provider == SSOProvider::Oidc
+        && (request.oidc_issuer_url.is_none()
+            || request.oidc_client_id.is_none()
+            || request.oidc_client_secret.is_none())
+    {
+        return Err(ApiError::InvalidRequest(
+            "OIDC configuration requires issuer_url, client_id, and client_secret".to_string(),
+        ));
+    }
+
     // Create or update SSO configuration
     let config = state
         .store
@@ -132,6 +151,10 @@ pub async fn create_sso_config(
             request.require_signed_assertions.unwrap_or(true),
             request.require_signed_responses.unwrap_or(true),
             request.allow_unsolicited_responses.unwrap_or(false),
+            request.oidc_issuer_url.as_deref(),
+            request.oidc_client_id.as_deref(),
+            request.oidc_client_secret.as_deref(),
+            request.email_domain.as_deref(),
         )
         .await?;
 
@@ -172,6 +195,10 @@ pub async fn create_sso_config(
         require_signed_assertions: config.require_signed_assertions,
         require_signed_responses: config.require_signed_responses,
         allow_unsolicited_responses: config.allow_unsolicited_responses,
+        oidc_issuer_url: config.oidc_issuer_url,
+        oidc_client_id: config.oidc_client_id,
+        // oidc_client_secret intentionally omitted — never echo secrets
+        email_domain: config.email_domain,
         created_at: config.created_at.to_rfc3339(),
         updated_at: config.updated_at.to_rfc3339(),
     }))
@@ -220,6 +247,10 @@ pub async fn get_sso_config(
             require_signed_assertions: config.require_signed_assertions,
             require_signed_responses: config.require_signed_responses,
             allow_unsolicited_responses: config.allow_unsolicited_responses,
+            oidc_issuer_url: config.oidc_issuer_url,
+            oidc_client_id: config.oidc_client_id,
+            // oidc_client_secret intentionally omitted — never echo secrets
+            email_domain: config.email_domain,
             created_at: config.created_at.to_rfc3339(),
             updated_at: config.updated_at.to_rfc3339(),
         })))

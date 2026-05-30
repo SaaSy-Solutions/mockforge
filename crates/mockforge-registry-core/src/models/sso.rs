@@ -112,6 +112,10 @@ impl SSOConfiguration {
         require_signed_assertions: bool,
         require_signed_responses: bool,
         allow_unsolicited_responses: bool,
+        oidc_issuer_url: Option<&str>,
+        oidc_client_id: Option<&str>,
+        oidc_client_secret: Option<&str>,
+        email_domain: Option<&str>,
     ) -> sqlx::Result<Self> {
         let attribute_mapping = attribute_mapping.unwrap_or_else(|| serde_json::json!({}));
 
@@ -121,9 +125,9 @@ impl SSOConfiguration {
                 org_id, provider, saml_entity_id, saml_sso_url, saml_slo_url,
                 saml_x509_cert, saml_name_id_format, attribute_mapping,
                 require_signed_assertions, require_signed_responses, allow_unsolicited_responses,
-                email_domain
+                oidc_issuer_url, oidc_client_id, oidc_client_secret, email_domain
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NULL)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             ON CONFLICT (org_id) DO UPDATE SET
                 provider = EXCLUDED.provider,
                 saml_entity_id = EXCLUDED.saml_entity_id,
@@ -135,6 +139,10 @@ impl SSOConfiguration {
                 require_signed_assertions = EXCLUDED.require_signed_assertions,
                 require_signed_responses = EXCLUDED.require_signed_responses,
                 allow_unsolicited_responses = EXCLUDED.allow_unsolicited_responses,
+                oidc_issuer_url = EXCLUDED.oidc_issuer_url,
+                oidc_client_id = EXCLUDED.oidc_client_id,
+                oidc_client_secret = EXCLUDED.oidc_client_secret,
+                email_domain = EXCLUDED.email_domain,
                 updated_at = NOW()
             RETURNING *
             "#,
@@ -150,6 +158,10 @@ impl SSOConfiguration {
         .bind(require_signed_assertions)
         .bind(require_signed_responses)
         .bind(allow_unsolicited_responses)
+        .bind(oidc_issuer_url)
+        .bind(oidc_client_id)
+        .bind(oidc_client_secret)
+        .bind(email_domain)
         .fetch_one(pool)
         .await
     }
