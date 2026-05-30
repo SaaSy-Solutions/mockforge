@@ -6,7 +6,7 @@ use mockforge_chaos::api::create_chaos_api_router;
 use mockforge_chaos::config::ChaosConfig;
 use mockforge_core::encryption::init_key_store;
 use mockforge_core::ServerConfig;
-use mockforge_observability::prometheus::{prometheus_router, MetricsRegistry};
+use mockforge_observability::prometheus::prometheus_router;
 use mockforge_openapi::OpenApiSpec;
 use std::any::Any;
 use std::net::SocketAddr;
@@ -2193,8 +2193,12 @@ pub async fn handle_serve(
 
     println!("💡 Press Ctrl+C to stop");
 
-    // Create metrics registry (use global registry)
-    let metrics_registry = Arc::new(MetricsRegistry::new());
+    // Serve the GLOBAL metrics registry — the same instance the HTTP/drift/
+    // coverage middleware, the system-metrics collector, and the protocol
+    // updaters below all record into. A fresh `MetricsRegistry::new()` here
+    // would export an empty registry while real metrics went to the global
+    // one (#743).
+    let metrics_registry = mockforge_observability::get_global_registry_arc();
 
     // Start system metrics collector if Prometheus is enabled
     if config.observability.prometheus.enabled {
@@ -2208,6 +2212,69 @@ pub async fn handle_serve(
             system_metrics_config,
         );
         println!("📈 System metrics collector started (interval: 15s)");
+
+        // Export async-protocol broker metrics to Prometheus by periodically
+        // snapshotting each running broker's internal counters into the global
+        // registry's gauges (#684). Each broker exposes Arc-internal atomics, so
+        // a 5s snapshot is cheap and lock-light.
+        #[cfg(feature = "kafka")]
+        if let Some(broker) = kafka_broker.as_ref() {
+            let m = Arc::clone(broker.metrics());
+            tokio::spawn(async move {
+                let reg = get_global_registry();
+                let mut ticker = tokio::time::interval(Duration::from_secs(5));
+                loop {
+                    ticker.tick().await;
+                    let s = m.snapshot();
+                    reg.kafka_connections_active.set(s.connections_active as i64);
+                    reg.kafka_messages_produced_total.set(s.messages_produced_total as i64);
+                    reg.kafka_messages_consumed_total.set(s.messages_consumed_total as i64);
+                    reg.kafka_topics_total
+                        .set(s.topics_created_total.saturating_sub(s.topics_deleted_total) as i64);
+                    reg.kafka_partitions_total.set(s.partitions_total as i64);
+                    reg.kafka_consumer_groups_total.set(s.consumer_groups_total as i64);
+                    reg.kafka_errors_total.set(s.errors_total as i64);
+                }
+            });
+        }
+
+        #[cfg(feature = "amqp")]
+        if let Some(broker) = amqp_broker.as_ref() {
+            let m = broker.metrics();
+            tokio::spawn(async move {
+                let reg = get_global_registry();
+                let mut ticker = tokio::time::interval(Duration::from_secs(5));
+                loop {
+                    ticker.tick().await;
+                    let s = m.snapshot();
+                    reg.amqp_connections_active.set(s.connections_active as i64);
+                    reg.amqp_channels_active.set(s.channels_active as i64);
+                    reg.amqp_messages_published_total.set(s.messages_published_total as i64);
+                    reg.amqp_messages_consumed_total.set(s.messages_consumed_total as i64);
+                    reg.amqp_messages_acked_total.set(s.messages_acked_total as i64);
+                    reg.amqp_queues_total.set(s.queues_total as i64);
+                    reg.amqp_exchanges_total.set(s.exchanges_total as i64);
+                    reg.amqp_bindings_total.set(s.bindings_total as i64);
+                    reg.amqp_errors_total.set(s.errors_total as i64);
+                }
+            });
+        }
+
+        #[cfg(feature = "mqtt")]
+        if let Some(m) = mqtt_metrics.clone() {
+            tokio::spawn(async move {
+                let reg = get_global_registry();
+                let mut ticker = tokio::time::interval(Duration::from_secs(5));
+                loop {
+                    ticker.tick().await;
+                    let s = m.snapshot();
+                    reg.mqtt_connections_active.set(s.connections_active as i64);
+                    reg.mqtt_topics_active.set(s.topics_total as i64);
+                    reg.mqtt_subscriptions_active.set(s.subscriptions_active as i64);
+                    reg.mqtt_retained_messages.set(s.retained_messages_total as i64);
+                }
+            });
+        }
     }
 
     // Create a cancellation token for graceful shutdown
@@ -2510,8 +2577,8 @@ pub async fn handle_serve(
     {
         let mqtt_config = config.mqtt.clone();
         let mqtt_shutdown = shutdown_token.clone();
-        let session_manager = std::sync::Arc::clone(session_manager);
-        let metrics = std::sync::Arc::clone(metrics);
+        let session_manager = Arc::clone(session_manager);
+        let metrics = Arc::clone(metrics);
 
         // Convert core MqttConfig to mockforge_mqtt::MqttConfig
         let broker_config = mockforge_mqtt::broker::MqttConfig {

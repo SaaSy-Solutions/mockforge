@@ -11,7 +11,9 @@ mod exporter;
 mod metrics;
 
 pub use exporter::{metrics_handler, prometheus_router};
-pub use metrics::{get_global_registry, DriftEvaluationSample, MetricsRegistry};
+pub use metrics::{
+    get_global_registry, get_global_registry_arc, DriftEvaluationSample, MetricsRegistry,
+};
 
 // Re-export prometheus types for users who need to access metrics directly
 pub use prometheus;

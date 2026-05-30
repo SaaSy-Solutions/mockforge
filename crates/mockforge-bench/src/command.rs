@@ -2196,10 +2196,9 @@ impl BenchCommand {
                 "Self-test mode: driving {} operations with positive + per-category negative cases",
                 ops.len()
             ));
-            let report =
-                crate::conformance::self_test::run_self_test(&ops, &cfg).await.map_err(|e| {
-                    crate::error::BenchError::Other(format!("self-test client error: {e}"))
-                })?;
+            let report = crate::conformance::self_test::run_self_test(&ops, &cfg)
+                .await
+                .map_err(|e| BenchError::Other(format!("self-test client error: {e}")))?;
             TerminalReporter::print_progress(&report.render_summary());
             // Persist the JSON report alongside the regular conformance
             // report so it's grep-able next to the buffer dump from the
