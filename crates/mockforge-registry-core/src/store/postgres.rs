@@ -1127,6 +1127,8 @@ impl RegistryStore for PgRegistryStore {
         oidc_client_id: Option<&str>,
         oidc_client_secret: Option<&str>,
         email_domain: Option<&str>,
+        domain_verified: bool,
+        domain_verification_token: Option<&str>,
     ) -> StoreResult<SSOConfiguration> {
         SSOConfiguration::upsert(
             &self.pool,
@@ -1145,9 +1147,17 @@ impl RegistryStore for PgRegistryStore {
             oidc_client_id,
             oidc_client_secret,
             email_domain,
+            domain_verified,
+            domain_verification_token,
         )
         .await
         .map_err(Into::into)
+    }
+
+    async fn mark_sso_domain_verified(&self, org_id: Uuid) -> StoreResult<()> {
+        SSOConfiguration::mark_domain_verified(&self.pool, org_id)
+            .await
+            .map_err(Into::into)
     }
 
     async fn enable_sso_config(&self, org_id: Uuid) -> StoreResult<()> {

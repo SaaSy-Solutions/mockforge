@@ -1905,7 +1905,14 @@ impl RegistryStore for SqliteRegistryStore {
         oidc_client_id: Option<&str>,
         oidc_client_secret: Option<&str>,
         email_domain: Option<&str>,
+        domain_verified: bool,
+        domain_verification_token: Option<&str>,
     ) -> StoreResult<SSOConfiguration> {
+        Err(StoreError::NotFound)
+    }
+
+    #[allow(unused_variables)]
+    async fn mark_sso_domain_verified(&self, org_id: Uuid) -> StoreResult<()> {
         Err(StoreError::NotFound)
     }
 

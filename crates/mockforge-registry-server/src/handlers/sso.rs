@@ -62,6 +62,11 @@ pub struct SSOConfigResponse {
     pub oidc_client_id: Option<String>,
     // oidc_client_secret is intentionally NOT returned — never echo secrets
     pub email_domain: Option<String>,
+    /// Whether the email domain has been proven via a DNS TXT record.
+    pub domain_verified: bool,
+    /// The token the org admin publishes as a DNS TXT record on their domain.
+    /// Safe to return — it is what they must add to prove ownership.
+    pub domain_verification_token: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -136,6 +141,30 @@ pub async fn create_sso_config(
         ));
     }
 
+    // Determine domain-verification state. When an email domain is supplied we
+    // must (re)issue a fresh DNS-TXT verification token whenever the domain is
+    // new or changed, but preserve the existing verification status on an
+    // unrelated config edit so a verified domain isn't silently reset.
+    let existing = state.store.find_sso_config_by_org(org_ctx.org_id).await?;
+    let (domain_verified, domain_verification_token): (bool, Option<String>) =
+        match request.email_domain.as_deref() {
+            Some(requested) => {
+                let unchanged = existing
+                    .as_ref()
+                    .and_then(|c| c.email_domain.as_deref())
+                    .is_some_and(|existing_domain| existing_domain.eq_ignore_ascii_case(requested));
+                if unchanged {
+                    // Same domain — keep prior verification + token untouched.
+                    let prev = existing.as_ref().expect("unchanged implies existing");
+                    (prev.domain_verified, prev.domain_verification_token.clone())
+                } else {
+                    // New or changed domain — issue a fresh token, unverified.
+                    (false, Some(format!("mockforge-verify={}", uuid::Uuid::new_v4())))
+                }
+            }
+            None => (false, None),
+        };
+
     // Create or update SSO configuration
     let config = state
         .store
@@ -155,6 +184,8 @@ pub async fn create_sso_config(
             request.oidc_client_id.as_deref(),
             request.oidc_client_secret.as_deref(),
             request.email_domain.as_deref(),
+            domain_verified,
+            domain_verification_token.as_deref(),
         )
         .await?;
 
@@ -199,6 +230,8 @@ pub async fn create_sso_config(
         oidc_client_id: config.oidc_client_id,
         // oidc_client_secret intentionally omitted — never echo secrets
         email_domain: config.email_domain,
+        domain_verified: config.domain_verified,
+        domain_verification_token: config.domain_verification_token,
         created_at: config.created_at.to_rfc3339(),
         updated_at: config.updated_at.to_rfc3339(),
     }))
@@ -251,11 +284,164 @@ pub async fn get_sso_config(
             oidc_client_id: config.oidc_client_id,
             // oidc_client_secret intentionally omitted — never echo secrets
             email_domain: config.email_domain,
+            domain_verified: config.domain_verified,
+            domain_verification_token: config.domain_verification_token,
             created_at: config.created_at.to_rfc3339(),
             updated_at: config.updated_at.to_rfc3339(),
         })))
     } else {
         Ok(Json(None))
+    }
+}
+
+/// Resolve TXT records for `name` using the system DNS resolver (falling back
+/// to Cloudflare 1.1.1.1 if `/etc/resolv.conf` is unreadable). Each returned
+/// String is one TXT record's data, joined across the chunked-string segments
+/// DNS uses internally so the value matches what the admin published.
+async fn lookup_txt_records(name: &str) -> Result<Vec<String>, String> {
+    use hickory_resolver::config::{ResolverConfig, CLOUDFLARE};
+    use hickory_resolver::net::runtime::TokioRuntimeProvider;
+    use hickory_resolver::proto::rr::{RData, RecordType};
+    use hickory_resolver::TokioResolver;
+
+    let builder = match TokioResolver::builder_tokio() {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::debug!(error = %e, "system resolv.conf unreadable; falling back to Cloudflare");
+            TokioResolver::builder_with_config(
+                ResolverConfig::udp_and_tcp(&CLOUDFLARE),
+                TokioRuntimeProvider::default(),
+            )
+        }
+    };
+    let resolver = builder.build().map_err(|e| format!("resolver build failed: {e}"))?;
+
+    let response = resolver.lookup(name, RecordType::TXT).await.map_err(|e| format!("{e}"))?;
+    let mut out = Vec::new();
+    for record in response.answers() {
+        let RData::TXT(ref txt) = record.data else {
+            continue;
+        };
+        let mut joined = String::new();
+        for chunk in txt.txt_data.iter() {
+            match std::str::from_utf8(chunk) {
+                Ok(s) => joined.push_str(s),
+                Err(_) => continue, // non-UTF8 TXT — skip silently
+            }
+        }
+        if !joined.is_empty() {
+            out.push(joined);
+        }
+    }
+    Ok(out)
+}
+
+/// Verify domain ownership for SSO via a DNS TXT record (Team plan, org admin).
+///
+/// Looks up TXT records on the configured `email_domain` and, if any record
+/// matches the stored `domain_verification_token`, marks the domain verified.
+/// Returns 200 in all non-permission cases — a missing/mismatched record is a
+/// normal "not yet" outcome the UI re-prompts on, not an error.
+pub async fn verify_sso_domain(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+) -> ApiResult<Json<serde_json::Value>> {
+    // Resolve organization context
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization context required".to_string()))?;
+
+    // Check if user is org admin (owner or admin member)
+    use crate::models::OrgRole;
+    let is_admin = org_ctx.org.owner_id == user_id || {
+        if let Ok(Some(member)) = state.store.find_org_member(org_ctx.org_id, user_id).await {
+            let role = member.role();
+            matches!(role, OrgRole::Admin | OrgRole::Owner)
+        } else {
+            false
+        }
+    };
+
+    if !is_admin {
+        return Err(ApiError::PermissionDenied);
+    }
+
+    // Require Team plan
+    let org = state
+        .store
+        .find_organization_by_id(org_ctx.org_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
+    if org.plan() != Plan::Team {
+        return Err(ApiError::InvalidRequest("SSO is only available for Team plans".to_string()));
+    }
+
+    // Load SSO config; require an email domain + verification token
+    let config = state
+        .store
+        .find_sso_config_by_org(org_ctx.org_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Set an email domain first".to_string()))?;
+    let email_domain = config
+        .email_domain
+        .as_deref()
+        .filter(|d| !d.trim().is_empty())
+        .ok_or_else(|| ApiError::InvalidRequest("Set an email domain first".to_string()))?;
+    let token = config
+        .domain_verification_token
+        .as_deref()
+        .ok_or_else(|| ApiError::InvalidRequest("Set an email domain first".to_string()))?;
+
+    // DNS TXT lookup
+    let records = match lookup_txt_records(email_domain).await {
+        Ok(records) => records,
+        Err(err) => {
+            tracing::warn!(domain = %email_domain, error = %err, "SSO domain TXT lookup failed");
+            return Ok(Json(serde_json::json!({
+                "verified": false,
+                "error": "dns_lookup_failed",
+                "expected_token": token,
+            })));
+        }
+    };
+
+    // A TXT record may arrive wrapped in quotes; compare trimmed + de-quoted.
+    let matched = records.iter().any(|raw| {
+        let value = raw.trim().trim_matches('"').trim();
+        value == token
+    });
+
+    if matched {
+        state.store.mark_sso_domain_verified(org_ctx.org_id).await?;
+
+        let ip_address = headers
+            .get("X-Forwarded-For")
+            .or_else(|| headers.get("X-Real-IP"))
+            .and_then(|h| h.to_str().ok())
+            .map(|s| s.split(',').next().unwrap_or(s).trim().to_string());
+        let user_agent =
+            headers.get("User-Agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
+
+        state
+            .store
+            .record_audit_event(
+                org_ctx.org_id,
+                Some(user_id),
+                AuditEventType::SettingsUpdated,
+                "SSO email domain verified via DNS TXT".to_string(),
+                Some(serde_json::json!({ "email_domain": email_domain })),
+                ip_address.as_deref(),
+                user_agent.as_deref(),
+            )
+            .await;
+
+        Ok(Json(serde_json::json!({ "verified": true })))
+    } else {
+        Ok(Json(serde_json::json!({
+            "verified": false,
+            "expected_token": token,
+        })))
     }
 }
 
