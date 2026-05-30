@@ -135,8 +135,7 @@ jobs:
       # `--skip protocols::` excludes the e2e protocol tests from THIS
       # step — they spawn real mockforge processes that race on ports
       # under parallel test execution (find_available_port TOCTOU).
-      # The dedicated `e2e-tests` job below runs them with
-      # --test-threads=1.
+      # The E2E phase later in this job runs them with --test-threads=1.
       - name: Run integration tests (non-ignored)
         run: |
           cargo test --package mockforge-integration-tests --test '*' -- --nocapture --skip 'protocols::'
@@ -151,62 +150,20 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-  e2e-tests:
-    name: E2E Tests
-    runs-on: [self-hosted, linux, x64, rust]
-    # Serialize after integration-tests. Both jobs build the workspace
-    # in release mode and share the self-hosted runner's target/ and
-    # ~/.cargo dirs. When they ran in parallel the rustc process could
-    # vanish mid-compile (one job's cache restore / cargo-cache action
-    # stepping on the other's toolchain), producing "No such file or
-    # directory" on an rlib rustc had just launched. `needs:` forces a
-    # happens-before ordering and also lets E2E reuse what Integration
-    # Tests just built.
-    needs: integration-tests
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
-
-    steps:
-      - name: Set per-runner CARGO_HOME
-        # `runner.name` is unavailable in workflow- or job-level `env:` blocks
-        # (GH Actions context: `runner.*` is step-scoped). Writing to
-        # `$GITHUB_ENV` here exports it to every subsequent step in this job,
-        # including the rust-toolchain composite action and rust-cache.
-        run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
-
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Install Rust
-        uses: ./.github/actions/rust-toolchain
-
-      # See integration-tests job: heal any stale rustup default pin
-      # left by another repo's workflow on this shared runner.
-      - name: Ensure rustup default = stable
-        run: rustup default stable
-
-      - name: Install protoc (protobuf compiler)
-        run: 'dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev > /dev/null 2>&1 || { echo "::error::Required system deps missing on self-hosted runner. Run on the runner host: sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev"; exit 1; }'
-
-      # No cache step here: e2e-tests runs `needs: integration-tests` on
-      # the same self-hosted runner, so target/ and ~/.cargo are already
-      # warm from that job. `actions/cache@v4` would serialize a ~20GB
-      # target/ to/from the cache API on every run — wasted bytes, and
-      # the wholesale overwrite is what let the prior run push the disk
-      # to 100%.
-      - name: Build MockForge
-        # Should be a cache hit from integration-tests; re-run is cheap.
-        # Same retry guard as the integration-tests build step.
-        run: |
-          cargo build --release --bin mockforge --features all-protocols \
-            || (echo "::warning::first build failed, retrying once" \
-                && cargo build --release --bin mockforge --features all-protocols)
-
-      # See note on the integration-tests job: env: PATH doesn't expand
-      # $PATH. GITHUB_PATH is the supported way to prepend to PATH.
-      - name: Prepend target/release to PATH
-        run: echo "${{ github.workspace }}/target/release" >> "$GITHUB_PATH"
-
+      # --- E2E phase (formerly a separate `e2e-tests` job) -------------------
+      # Merged into this job so the release binary built above is reused
+      # directly — the old split paid a second queue slot on the saturated
+      # single-slot self-hosted runner plus duplicate checkout/toolchain/protoc
+      # setup, and relied on the second job landing on the SAME physical runner
+      # to find target/ warm. As steps in one job this is strictly serial (the
+      # original reason for the split was to avoid parallel rustc on a shared
+      # runner — `needs:` ordering, now subsumed) and the binary is guaranteed
+      # warm: no rebuild step at all.
+      #
+      # E2E runs only on PRs and main (the former job's `if:` gate) — skipped
+      # on develop pushes and manual dispatch.
       - name: Run E2E tests
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
         # Target the `e2e` integration-test binary (tests/tests/e2e.rs) and
         # filter to each protocol module. The prior form
         # `... -- e2e::protocols::<foo>` ran against every test binary and
@@ -222,9 +179,9 @@ jobs:
           cargo test --package mockforge-integration-tests --release --test e2e -- --test-threads=1 protocols::websocket_e2e_tests
           cargo test --package mockforge-integration-tests --release --test e2e -- --test-threads=1 protocols::grpc_e2e_tests
 
-      - name: Upload test results
+      - name: Upload E2E test results
+        if: failure() && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
         uses: actions/upload-artifact@v7
-        if: failure()
         with:
           name: e2e-test-results
           path: target/test-results/

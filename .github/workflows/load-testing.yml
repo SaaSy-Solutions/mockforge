@@ -1,20 +1,20 @@
 name: Load Testing & Performance Regression
 
-# Cron disabled — runner queue contention; manual workflow_dispatch still works.
+# Load tests run on main-push + manual dispatch only — NOT per-PR. Load testing
+# and perf benchmarks as PR merge-gates burned a full release build + k6 run on
+# every code PR against a single self-hosted runner, for a signal we don't gate
+# merges on (none of these jobs are required checks). The regression we actually
+# act on is "did this regress after landing on main", so they run post-merge.
+# Nightly cron stays disabled (runner queue contention); use workflow_dispatch
+# for on-demand runs.
 on:
-  pull_request:
-    branches: [main, develop]
-    paths:
-      - 'crates/**'
-      - 'tests/load/**'
-      - 'Cargo.toml'
-      - '.github/workflows/load-testing.yml'
   push:
     branches: [main]
     paths:
       - 'crates/**'
       - 'tests/load/**'
       - 'Cargo.toml'
+      - '.github/workflows/load-testing.yml'
   workflow_dispatch:
     inputs:
       test_type:
@@ -27,18 +27,18 @@ on:
           - extended
           - stress
 
-# Push-on-main retained — Extended Load Test + Performance Benchmarks gate on
-# refs/heads/main. Concurrency keys are GitHub-internal context, safe to interpolate.
+# All load/perf jobs run on refs/heads/main (post-merge) or manual dispatch.
+# Concurrency keys are GitHub-internal context, safe to interpolate.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: false
 
 jobs:
   standard-load-test:
     name: Standard Load Test
     runs-on: [self-hosted, linux, x64, rust]
     if: |
-      github.event_name == 'pull_request' ||
+      github.ref == 'refs/heads/main' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.test_type == 'standard')
 
     steps:
@@ -138,7 +138,6 @@ jobs:
     name: Performance Benchmarks
     runs-on: [self-hosted, linux, x64, rust]
     if: |
-      github.event_name == 'pull_request' ||
       github.ref == 'refs/heads/main' ||
       github.event_name == 'workflow_dispatch'
 

@@ -457,15 +457,11 @@ jobs:
 
   typos:
     name: Spell Check
-    runs-on: [self-hosted, linux, x64, rust]
+    # GitHub-hosted: a pure text check needs no Rust toolchain, and the repo is
+    # public so standard runners are free. Keeps the contended self-hosted Rust
+    # slot for jobs that actually compile. (No per-runner CARGO_HOME needed.)
+    runs-on: ubuntu-latest
     steps:
-    - name: Set per-runner CARGO_HOME
-      # `runner.name` is unavailable in workflow- or job-level `env:` blocks
-      # (GH Actions context: `runner.*` is step-scoped). Writing to
-      # `$GITHUB_ENV` here exports it to every subsequent step in this job,
-      # including the rust-toolchain composite action and rust-cache.
-      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
-
     - name: Checkout repository
       uses: actions/checkout@v6
 
@@ -474,25 +470,24 @@ jobs:
 
   changelog-validation:
     name: Changelog Validation
-    runs-on: [self-hosted, linux, x64, rust]
+    # GitHub-hosted: a git-diff + shell check needs no Rust toolchain; public
+    # repo → free standard runner, and it frees the self-hosted Rust slot.
+    runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     steps:
-    - name: Set per-runner CARGO_HOME
-      # `runner.name` is unavailable in workflow- or job-level `env:` blocks
-      # (GH Actions context: `runner.*` is step-scoped). Writing to
-      # `$GITHUB_ENV` here exports it to every subsequent step in this job,
-      # including the rust-toolchain composite action and rust-cache.
-      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
-
     - name: Checkout repository
       uses: actions/checkout@v6
       with:
         fetch-depth: 0
 
     - name: Validate changelog pillar tags
+      # base_ref is the PR target branch name; route it through env rather than
+      # interpolating into the shell to avoid any expression-injection surface.
+      env:
+        BASE_REF: ${{ github.base_ref }}
       run: |
         # Check if CHANGELOG.md was modified in this PR
-        if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q "CHANGELOG.md"; then
+        if git diff --name-only "origin/${BASE_REF}...HEAD" | grep -q "CHANGELOG.md"; then
           echo "CHANGELOG.md modified, validating pillar tags..."
           # Make script executable
           chmod +x scripts/check-changelog.sh
