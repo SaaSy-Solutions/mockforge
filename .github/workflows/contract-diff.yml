@@ -1,11 +1,21 @@
 name: Contract Diff Verification
 
 on:
+  # Narrowed from repo-wide **/*.{json,yaml,yml}. This job does a full
+  # `--release --features all-protocols` CLI build BEFORE it detects whether any
+  # OpenAPI spec changed, so the old globs paid that build on every incidental
+  # JSON/YAML edit (tsconfig, package.json, Cargo configs, CI yaml, test
+  # fixtures) only to self-skip. OpenAPI specs in this repo live under
+  # examples/ and specs/; the job's own find-step still scans the whole tree, so
+  # no committed spec escapes analysis once the workflow is triggered.
   pull_request:
     paths:
-      - '**/*.yaml'
-      - '**/*.yml'
-      - '**/*.json'
+      - 'examples/**/*.json'
+      - 'examples/**/*.yaml'
+      - 'examples/**/*.yml'
+      - 'specs/**'
+      - 'openapi.yaml'
+      - 'openapi.json'
       - 'crates/mockforge-core/src/ai_contract_diff/**'
       - 'crates/mockforge-cli/src/contract_diff_commands.rs'
       - '.github/workflows/contract-diff.yml'
