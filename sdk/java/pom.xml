@@ -4,7 +4,10 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.mockforge</groupId>
+    <!-- groupId io.github.saasy-solutions: Sonatype Central auto-verifies the
+         io.github.<org> namespace via ownership of the GitHub org SaaSy-Solutions,
+         so no DNS/domain verification is required. -->
+    <groupId>io.github.saasy-solutions</groupId>
     <artifactId>mockforge-sdk</artifactId>
     <version>0.1.0</version>
     <packaging>jar</packaging>
@@ -23,8 +26,18 @@
     <developers>
         <developer>
             <name>MockForge Contributors</name>
+            <organization>SaaSy Solutions</organization>
+            <organizationUrl>https://github.com/SaaSy-Solutions</organizationUrl>
         </developer>
     </developers>
+
+    <!-- SCM block is required by Maven Central. -->
+    <scm>
+        <connection>scm:git:https://github.com/SaaSy-Solutions/mockforge.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/SaaSy-Solutions/mockforge.git</developerConnection>
+        <url>https://github.com/SaaSy-Solutions/mockforge</url>
+        <tag>HEAD</tag>
+    </scm>
 
     <properties>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
@@ -81,4 +94,86 @@
             </plugin>
         </plugins>
     </build>
+
+    <!--
+        The `release` profile carries everything Maven Central requires that a
+        normal build does not: a sources jar, a javadoc jar, GPG signatures on
+        every artifact, and upload via the Sonatype Central Portal.
+
+        It is profile-gated so day-to-day `mvn verify` stays fast and needs no
+        GPG key. The publish workflow activates it with `-P release deploy`.
+
+        Central Portal (central.sonatype.com) is the current publishing path —
+        the legacy OSSRH / s01.oss.sonatype.org / nexus-staging flow no longer
+        accepts new namespaces, so this uses central-publishing-maven-plugin.
+
+        Prereqks the workflow supplies (see maven-publish-sdk.yml):
+          - Central Portal user token -> server id `central`
+          - ascii-armored GPG key + passphrase for signing
+    -->
+    <profiles>
+        <profile>
+            <id>release</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                        <version>3.3.1</version>
+                        <executions>
+                            <execution>
+                                <id>attach-sources</id>
+                                <goals>
+                                    <goal>jar-no-fork</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <version>3.6.3</version>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                        <version>3.2.4</version>
+                        <executions>
+                            <execution>
+                                <id>sign-artifacts</id>
+                                <phase>verify</phase>
+                                <goals>
+                                    <goal>sign</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <version>0.7.0</version>
+                        <extensions>true</extensions>
+                        <configuration>
+                            <!-- Matches the `server-id: central` set up by
+                                 setup-java in the publish workflow. -->
+                            <publishingServerId>central</publishingServerId>
+                            <!-- Auto-release once Central's validation passes,
+                                 so a tag push fully publishes with no manual
+                                 "release" click in the portal UI. -->
+                            <autoPublish>true</autoPublish>
+                            <waitUntil>published</waitUntil>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
