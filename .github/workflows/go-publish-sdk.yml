@@ -12,14 +12,21 @@ name: Publish mockforge/sdk/go to pkg.go.dev
 #
 # Triggers:
 #   1. `workflow_dispatch` — manual run.
-#   2. `push` on a tag matching `go-sdk-v*` (e.g. `go-sdk-v0.1.0`).
+#   2. `push` on a tag matching `sdk/go/v*` (e.g. `sdk/go/v0.1.0`).
+#
+# IMPORTANT — tag scheme: this module lives in a subdirectory
+# (github.com/SaaSy-Solutions/mockforge/sdk/go), so Go's module-versioning
+# rules require the version tag to be the subdir path + semver, i.e.
+# `sdk/go/v0.1.0`. The previous `go-sdk-v*` scheme could NEVER make the module
+# installable — `go get .../sdk/go@v0.1.0` only resolves a `sdk/go/v0.1.0` tag.
+# That is why the module had never published despite this workflow existing.
 #
 # Prereqs: none — the warm-up uses anonymous proxy.golang.org access.
 
 on:
   push:
     tags:
-      - 'go-sdk-v*'
+      - 'sdk/go/v*'
   workflow_dispatch:
 
 concurrency:
@@ -46,10 +53,19 @@ jobs:
         run: go build ./...
 
       - name: Vet
-        run: go vet ./...
+        # `-unsafeptr=false` disables ONLY the unsafeptr analyzer. The WASM
+        # plugin sub-package (mockforge/plugin.go) reads guest WASM linear
+        # memory via the canonical `unsafe.Slice((*byte)(unsafe.Pointer(
+        # uintptr(ptr))), n)` ABI pattern — `ptr` is a memory offset, not a Go
+        # heap pointer, so the unsafeptr warning is a false positive that can't
+        # be fixed without breaking the ABI. Every other analyzer stays on
+        # (one of them is what caught a misplaced //go:build directive here).
+        run: go vet -unsafeptr=false ./...
 
       - name: Test
-        run: go test ./... || echo "no Go tests configured (yet)"
+        # Real gate now (no failure-swallowing): the unit suite compiles and
+        # passes on default tags; integration tests are behind `-tags=integration`.
+        run: go test ./...
 
       - name: Warm proxy.golang.org
         env:
@@ -63,6 +79,11 @@ jobs:
             echo "manual run — skipping proxy warm-up"
             exit 0
           fi
-          version="${tag#go-sdk-v}"
-          # The module path matches go.mod: github.com/SaaSy-Solutions/mockforge/sdk/go.
-          curl -fsS "https://proxy.golang.org/github.com/saa%21sy-solutions/mockforge/sdk/go/@v/v${version}.info" || true
+          # Tag is `sdk/go/v0.1.0`; the proxy version query is the semver part.
+          vtag="${tag#sdk/go/}"   # -> v0.1.0
+          # Module-path escaping for the proxy: each uppercase letter becomes
+          # `!<lower>`, so github.com/SaaSy-Solutions/... escapes to
+          # github.com/!saa!sy-!solutions/... (NOT %21 percent-encoding, and
+          # not lower-casing — the canonical path must match go.mod's casing).
+          curl -fsS "https://proxy.golang.org/github.com/!saa!sy-!solutions/mockforge/sdk/go/@v/${vtag}.info" \
+            || echo "::warning::proxy warm-up failed; module will still index on next proxy scan"

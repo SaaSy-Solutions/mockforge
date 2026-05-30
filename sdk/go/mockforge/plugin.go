@@ -116,7 +116,7 @@ type DataQuery struct {
 
 // DataResult contains the result of a data query
 type DataResult struct {
-	Columns []ColumnInfo      `json:"columns"`
+	Columns []ColumnInfo             `json:"columns"`
 	Rows    []map[string]interface{} `json:"rows"`
 }
 
