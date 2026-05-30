@@ -715,6 +715,16 @@ pub async fn initiate_saml_login(
         ));
     }
 
+    // SECURITY (#746): fail early (better UX) — SSO login is only safe once the
+    // org has proven ownership of its email_domain. Without a verified domain the
+    // ACS callback would reject every assertion anyway, so refuse before the IdP
+    // round-trip.
+    if config.email_domain.is_none() || !config.domain_verified {
+        return Err(ApiError::InvalidRequest(
+            "SSO domain not verified. Verify your email domain in organization settings before enabling SSO login.".to_string(),
+        ));
+    }
+
     // Get SAML SSO URL
     let sso_url = config
         .saml_sso_url
@@ -830,6 +840,14 @@ pub async fn saml_acs(
         .email
         .as_deref()
         .ok_or_else(|| ApiError::InvalidRequest("Email not found in SAML assertion".to_string()))?;
+
+    // SECURITY (#746): the IdP can assert ANY email. Refuse to provision/log in
+    // an identity whose domain isn't the org's *verified* email_domain — this is
+    // the cross-tenant takeover guard. Must run BEFORE find_or_create_sso_user.
+    assert_email_in_verified_domain(email, &config).inspect_err(|e| {
+        tracing::warn!("SAML domain-trust check failed for org_id={}: {:?}", org.id, e);
+    })?;
+
     let user = find_or_create_sso_user(&state, email, user_info.username.as_deref(), &org).await?;
 
     // Audit the successful SSO login (provider: saml).
@@ -1395,6 +1413,28 @@ fn generate_saml_logout_response(slo_url: &str) -> String {
     )
 }
 
+/// SECURITY (#746): an org's IdP may assert any email. Only trust an asserted
+/// email whose domain matches the org's *verified* email_domain. Prevents one
+/// org's IdP from asserting identities in another org's namespace.
+pub(crate) fn assert_email_in_verified_domain(
+    email: &str,
+    config: &SSOConfiguration,
+) -> Result<(), ApiError> {
+    let asserted = crate::models::normalize_email_domain(email)
+        .ok_or_else(|| ApiError::InvalidRequest("no_email".into()))?;
+    let configured = config
+        .email_domain
+        .as_deref()
+        .ok_or_else(|| ApiError::InvalidRequest("sso_domain_not_configured".into()))?;
+    if !config.domain_verified {
+        return Err(ApiError::InvalidRequest("sso_domain_not_verified".into()));
+    }
+    if !asserted.eq_ignore_ascii_case(configured) {
+        return Err(ApiError::InvalidRequest("domain_mismatch".into()));
+    }
+    Ok(())
+}
+
 /// Find or create a user via SSO JIT provisioning (protocol-agnostic).
 ///
 /// Used by both SAML ACS and OIDC callback handlers.  `email` is required;
@@ -1582,5 +1622,86 @@ mod tests {
         };
         assert_eq!(resp.org_slug, "acme");
         assert_eq!(resp.provider, "saml");
+    }
+
+    /// Build a minimal SSOConfiguration for domain-trust tests.
+    fn cfg(email_domain: Option<&str>, domain_verified: bool) -> SSOConfiguration {
+        SSOConfiguration {
+            id: uuid::Uuid::new_v4(),
+            org_id: uuid::Uuid::new_v4(),
+            provider: "oidc".to_string(),
+            enabled: true,
+            saml_entity_id: None,
+            saml_sso_url: None,
+            saml_slo_url: None,
+            saml_x509_cert: None,
+            saml_name_id_format: None,
+            oidc_issuer_url: None,
+            oidc_client_id: None,
+            oidc_client_secret: None,
+            email_domain: email_domain.map(|s| s.to_string()),
+            domain_verified,
+            domain_verification_token: None,
+            attribute_mapping: serde_json::json!({}),
+            require_signed_assertions: true,
+            require_signed_responses: true,
+            allow_unsolicited_responses: false,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn err_msg(r: Result<(), ApiError>) -> String {
+        match r {
+            Err(ApiError::InvalidRequest(m)) => m,
+            other => panic!("expected InvalidRequest, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn domain_trust_verified_match_ok() {
+        let config = cfg(Some("acme.com"), true);
+        assert!(assert_email_in_verified_domain("jane@acme.com", &config).is_ok());
+    }
+
+    #[test]
+    fn domain_trust_match_is_case_insensitive() {
+        let config = cfg(Some("ACME.com"), true);
+        assert!(assert_email_in_verified_domain("jane@acme.COM", &config).is_ok());
+    }
+
+    #[test]
+    fn domain_trust_unverified_domain_rejected() {
+        let config = cfg(Some("acme.com"), false);
+        assert_eq!(
+            err_msg(assert_email_in_verified_domain("jane@acme.com", &config)),
+            "sso_domain_not_verified"
+        );
+    }
+
+    #[test]
+    fn domain_trust_mismatch_rejected() {
+        // The takeover case: org's verified domain is acme.com but the IdP
+        // asserts a victim in another org's namespace.
+        let config = cfg(Some("acme.com"), true);
+        assert_eq!(
+            err_msg(assert_email_in_verified_domain("victim@evil.com", &config)),
+            "domain_mismatch"
+        );
+    }
+
+    #[test]
+    fn domain_trust_no_email_domain_rejected() {
+        let config = cfg(None, true);
+        assert_eq!(
+            err_msg(assert_email_in_verified_domain("jane@acme.com", &config)),
+            "sso_domain_not_configured"
+        );
+    }
+
+    #[test]
+    fn domain_trust_bad_email_rejected() {
+        let config = cfg(Some("acme.com"), true);
+        assert_eq!(err_msg(assert_email_in_verified_domain("not-an-email", &config)), "no_email");
     }
 }
