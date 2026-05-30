@@ -1107,6 +1107,8 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/sso/saml/login/{org_slug}", get(handlers::sso::initiate_saml_login))
         .route("/api/v1/sso/saml/acs/{org_slug}", post(handlers::sso::saml_acs))
         .route("/api/v1/sso/saml/slo/{org_slug}", post(handlers::sso::saml_slo))
+        .route("/api/v1/sso/oidc/login/{org_slug}", get(handlers::oidc::oidc_login))
+        .route("/api/v1/sso/oidc/callback/{org_slug}", get(handlers::oidc::oidc_callback))
         .route_layer(middleware::from_fn(rate_limit_middleware));
 
     // Public OAuth routes (no auth required - these handle OAuth redirects)

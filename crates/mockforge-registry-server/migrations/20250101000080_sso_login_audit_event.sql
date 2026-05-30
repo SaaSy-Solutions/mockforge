@@ -1,0 +1,11 @@
+-- Successful SSO login audit event (Issue #746).
+--
+-- Written by both the SAML ACS handler and the OIDC callback handler in
+-- `mockforge-registry-server/src/handlers/{sso,oidc}.rs` after JIT
+-- provisioning succeeds. The `metadata` payload carries `provider`
+-- ("saml" | "oidc").
+--
+-- The Rust mirror is `AuditEventType::SsoLogin` in
+-- `crates/mockforge-registry-core/src/models/audit_log.rs`; the round-trip
+-- test in that file guarantees the snake_case literal below matches.
+ALTER TYPE audit_event_type ADD VALUE IF NOT EXISTS 'sso_login';

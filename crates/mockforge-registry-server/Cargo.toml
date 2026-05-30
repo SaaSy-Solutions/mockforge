@@ -67,8 +67,8 @@ email = ["dep:lettre"]
 # OAuth 2.0 social login (Google, GitHub, etc.).
 oauth = ["dep:oauth2"]
 
-# SAML 2.0 SSO for enterprise customers.
-saml = ["dep:quick-xml", "dep:x509-parser", "dep:rustls-pemfile"]
+# SAML 2.0 SSO + OIDC SSO for enterprise customers.
+saml = ["dep:quick-xml", "dep:x509-parser", "dep:rustls-pemfile", "dep:openidconnect"]
 
 # Redis cache for sessions, rate limiting, and hot data.
 cache-redis = ["dep:redis"]
@@ -204,6 +204,11 @@ lettre = { version = "0.11", features = ["tokio1-native-tls", "builder", "smtp-t
 
 # OAuth 2.0 (feature: `oauth`)
 oauth2 = { version = "4.4", features = ["reqwest"], optional = true }
+
+# OIDC / OpenID Connect (feature: `saml`) — discovery, ID-token validation
+# (signature via JWKS, iss/aud/exp/nonce checks). Sourced from the workspace
+# so it locks onto the same oauth2 4.x line as the dep above.
+openidconnect = { workspace = true, optional = true }
 
 # Stripe payments (feature: `stripe`)
 async-stripe = { version = "0.41", default-features = false, features = ["runtime-tokio-hyper", "checkout", "webhook-events", "billing", "connect"], optional = true }

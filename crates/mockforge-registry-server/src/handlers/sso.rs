@@ -537,6 +537,7 @@ pub struct SAMLResponseForm {
 pub async fn saml_acs(
     State(state): State<AppState>,
     Path(org_slug): Path<String>,
+    headers: HeaderMap,
     Form(form): Form<SAMLResponseForm>,
 ) -> Result<Response, ApiError> {
     let pool = state.db.pool();
@@ -613,6 +614,9 @@ pub async fn saml_acs(
         .as_deref()
         .ok_or_else(|| ApiError::InvalidRequest("Email not found in SAML assertion".to_string()))?;
     let user = find_or_create_sso_user(&state, email, user_info.username.as_deref(), &org).await?;
+
+    // Audit the successful SSO login (provider: saml).
+    record_sso_login_audit(&state, &org, &user, "saml", &headers).await;
 
     // Record assertion ID to prevent replay attacks
     if let Some(assertion_id) = &user_info.assertion_id {
@@ -1178,7 +1182,7 @@ fn generate_saml_logout_response(slo_url: &str) -> String {
 ///
 /// Used by both SAML ACS and OIDC callback handlers.  `email` is required;
 /// `username` is optional — when absent the email local-part is used.
-async fn find_or_create_sso_user(
+pub(crate) async fn find_or_create_sso_user(
     state: &AppState,
     email: &str,
     username: Option<&str>,
@@ -1218,6 +1222,40 @@ async fn find_or_create_sso_user(
     };
 
     Ok(user)
+}
+
+/// Record a successful SSO login in the audit log (protocol-agnostic).
+///
+/// Shared by the SAML ACS and OIDC callback handlers. `provider` is "saml"
+/// or "oidc" and is also stored in the event `metadata`. Best-effort: a
+/// failure to write the audit row must never block the login redirect, so
+/// `record_audit_event` itself swallows DB errors (returns `()`).
+pub(crate) async fn record_sso_login_audit(
+    state: &AppState,
+    org: &Organization,
+    user: &User,
+    provider: &str,
+    headers: &HeaderMap,
+) {
+    let ip_address = headers
+        .get("X-Forwarded-For")
+        .or_else(|| headers.get("X-Real-IP"))
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.split(',').next().unwrap_or(s).trim().to_string());
+    let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
+
+    state
+        .store
+        .record_audit_event(
+            org.id,
+            Some(user.id),
+            AuditEventType::SsoLogin,
+            format!("SSO login via {}", provider),
+            Some(serde_json::json!({ "provider": provider })),
+            ip_address.as_deref(),
+            user_agent.as_deref(),
+        )
+        .await;
 }
 
 /// Validate SAML assertion timestamps (NotBefore/NotOnOrAfter)
