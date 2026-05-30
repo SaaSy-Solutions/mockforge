@@ -867,7 +867,9 @@ mod tests {
     #[tokio::test]
     async fn frame_reader_accepts_normal_size() {
         // type=Body, channel=1, size=3, payload "abc", frame-end 0xCE.
-        let bytes = [3u8, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, b'a', b'b', b'c', 0xCE];
+        let bytes = [
+            3u8, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, b'a', b'b', b'c', 0xCE,
+        ];
         let mut cursor: &[u8] = &bytes;
         let frame = Frame::read_from_stream(&mut cursor).await.expect("valid frame");
         assert_eq!(frame.channel, 1);
