@@ -100,7 +100,7 @@ pub use scenario_promotion::{PromotionStatus, ScenarioEnvironmentVersion, Scenar
 pub use settings::{BYOKConfig, OrgAiSettings, OrgSetting};
 pub use showcase::ShowcaseEntry;
 pub use snapshot::Snapshot;
-pub use sso::{SSOConfiguration, SSOSession};
+pub use sso::{normalize_email_domain, SSOConfiguration, SSOSession};
 pub use subscription::{Subscription, SubscriptionStatus, UsageAlert, UsageCounter};
 pub use user::User;
 

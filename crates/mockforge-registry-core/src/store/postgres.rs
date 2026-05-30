@@ -1154,6 +1154,15 @@ impl RegistryStore for PgRegistryStore {
         SSOConfiguration::delete(&self.pool, org_id).await.map_err(Into::into)
     }
 
+    async fn find_org_slug_by_email_domain(
+        &self,
+        domain: &str,
+    ) -> StoreResult<Option<(String, String)>> {
+        SSOConfiguration::find_org_slug_by_email_domain(&self.pool, domain)
+            .await
+            .map_err(Into::into)
+    }
+
     async fn is_saml_assertion_used(&self, assertion_id: &str, org_id: Uuid) -> StoreResult<bool> {
         SAMLAssertionId::is_used(&self.pool, assertion_id, org_id)
             .await

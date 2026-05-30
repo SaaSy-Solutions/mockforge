@@ -1921,6 +1921,14 @@ impl RegistryStore for SqliteRegistryStore {
     }
 
     #[allow(unused_variables)]
+    async fn find_org_slug_by_email_domain(
+        &self,
+        domain: &str,
+    ) -> StoreResult<Option<(String, String)>> {
+        Ok(None)
+    }
+
+    #[allow(unused_variables)]
     async fn is_saml_assertion_used(&self, assertion_id: &str, org_id: Uuid) -> StoreResult<bool> {
         Ok(false)
     }

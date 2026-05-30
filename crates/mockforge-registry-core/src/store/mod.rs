@@ -1403,6 +1403,10 @@ pub trait RegistryStore: Send + Sync + 'static {
     async fn enable_sso_config(&self, org_id: Uuid) -> StoreResult<()>;
     async fn disable_sso_config(&self, org_id: Uuid) -> StoreResult<()>;
     async fn delete_sso_config(&self, org_id: Uuid) -> StoreResult<()>;
+    async fn find_org_slug_by_email_domain(
+        &self,
+        domain: &str,
+    ) -> StoreResult<Option<(String, String)>>;
 
     // ---------------------------------------------------------------------
     // SAML replay prevention
