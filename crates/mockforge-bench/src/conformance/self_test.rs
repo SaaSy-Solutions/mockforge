@@ -18,7 +18,7 @@
 //! params, and wrong-type path params. Doesn't try to mutate every
 //! field of a JSON-Schema-validated body; that's a follow-up.
 
-use super::spec_driven::AnnotatedOperation;
+use super::spec_driven::{AnnotatedOperation, ApiKeyLocation, SecuritySchemeInfo};
 use reqwest::{Client, Method};
 use std::collections::BTreeMap;
 use std::time::Duration;
@@ -362,6 +362,55 @@ async fn test_operation(
         );
     }
 
+    // (s) Round 17.3 — security probes.
+    //
+    // Operations whose spec declares a security requirement get a
+    // dedicated set of negatives. The point isn't to test whether the
+    // server's *real* auth works (the positive case already does that
+    // via `extra_headers`) — it's to check whether deliberately-bad
+    // credentials are still rejected, which is exactly the failure
+    // mode that lets an attacker through a half-wired validator.
+    //
+    // Each probe replaces or omits the relevant auth credential and
+    // expects 401 / 403. A 2xx here is a hard finding: "spec says
+    // this endpoint is protected, server let unauthenticated /
+    // wrong-credential traffic through".
+    //
+    // Bounded: at most one probe per declared scheme kind, so an
+    // operation with 3 security requirements doesn't 4× the request
+    // volume. Skips entirely when `op.security_schemes` is empty.
+    for probe in build_security_probes(&op.security_schemes) {
+        // Strip any pre-existing Authorization or known API-key
+        // header from extra_headers + header_params so the probe
+        // value is the *only* credential the server sees.
+        let stripped_extra = strip_auth(&config.extra_headers, &op.security_schemes);
+        let stripped_headers = strip_auth(&op.header_params, &op.security_schemes);
+        let stripped_query = strip_auth_query(&op.query_params, &op.security_schemes);
+        let mut req_headers = stripped_headers;
+        for (k, v) in &probe.headers {
+            req_headers.push((k.clone(), v.clone()));
+        }
+        let mut req_query = stripped_query;
+        for (k, v) in &probe.query {
+            req_query.push((k.clone(), v.clone()));
+        }
+        negatives.push(
+            send_case_with_extra(
+                client,
+                config,
+                method.clone(),
+                &url,
+                &probe.label,
+                true,
+                op.sample_body.as_deref(),
+                req_query,
+                req_headers,
+                stripped_extra,
+            )
+            .await,
+        );
+    }
+
     // (d) drop the first required header
     if !op.header_params.is_empty() {
         let mut h = op.header_params.clone();
@@ -387,6 +436,204 @@ async fn test_operation(
         path: op.path.clone(),
         positive: Some(positive),
         negatives,
+    }
+}
+
+/// Round 17.3 — one synthesised bad credential to send.
+#[derive(Debug, Clone)]
+struct SecurityProbe {
+    /// Self-test label, e.g. `security:bad-bearer`.
+    label: String,
+    /// Headers to attach to the probe request.
+    headers: Vec<(String, String)>,
+    /// Query parameters to attach (API key in query case).
+    query: Vec<(String, String)>,
+}
+
+/// For each declared security scheme, produce one bad-credential
+/// probe plus a single "no auth at all" probe that exercises the
+/// missing-credential code path. Deduplicates by scheme kind so an
+/// operation declaring `[bearer, bearer]` only yields one Bearer
+/// probe.
+fn build_security_probes(schemes: &[SecuritySchemeInfo]) -> Vec<SecurityProbe> {
+    if schemes.is_empty() {
+        return Vec::new();
+    }
+    let mut probes: Vec<SecurityProbe> = Vec::new();
+    let mut seen_bearer = false;
+    let mut seen_basic = false;
+    // `(loc_tag, name)` — ApiKeyLocation doesn't implement Ord, so
+    // we tag it with a short discriminant string for dedup.
+    let mut seen_apikey: std::collections::BTreeSet<(&'static str, String)> = Default::default();
+    for s in schemes {
+        match s {
+            SecuritySchemeInfo::Bearer if !seen_bearer => {
+                seen_bearer = true;
+                probes.push(SecurityProbe {
+                    label: "security:bad-bearer".into(),
+                    headers: vec![(
+                        "Authorization".into(),
+                        "Bearer self-test-invalid-token".into(),
+                    )],
+                    query: Vec::new(),
+                });
+            }
+            SecuritySchemeInfo::Basic if !seen_basic => {
+                seen_basic = true;
+                // base64("self-test:invalid") — valid base64, wrong creds.
+                probes.push(SecurityProbe {
+                    label: "security:bad-basic".into(),
+                    headers: vec![(
+                        "Authorization".into(),
+                        "Basic c2VsZi10ZXN0OmludmFsaWQ=".into(),
+                    )],
+                    query: Vec::new(),
+                });
+            }
+            SecuritySchemeInfo::ApiKey { location, name } => {
+                let loc_tag = match location {
+                    ApiKeyLocation::Header => "header",
+                    ApiKeyLocation::Query => "query",
+                    ApiKeyLocation::Cookie => "cookie",
+                };
+                if seen_apikey.contains(&(loc_tag, name.clone())) {
+                    continue;
+                }
+                seen_apikey.insert((loc_tag, name.clone()));
+                let label = format!("security:bad-apikey:{}", name);
+                let bad = "self-test-invalid-key".to_string();
+                match location {
+                    ApiKeyLocation::Header => probes.push(SecurityProbe {
+                        label,
+                        headers: vec![(name.clone(), bad)],
+                        query: Vec::new(),
+                    }),
+                    ApiKeyLocation::Query => probes.push(SecurityProbe {
+                        label,
+                        headers: Vec::new(),
+                        query: vec![(name.clone(), bad)],
+                    }),
+                    ApiKeyLocation::Cookie => probes.push(SecurityProbe {
+                        label,
+                        headers: vec![("Cookie".into(), format!("{}={}", name, bad))],
+                        query: Vec::new(),
+                    }),
+                }
+            }
+            _ => {}
+        }
+    }
+    // Always add a "no auth at all" probe when *any* security scheme
+    // is declared — useful even if all schemes failed to resolve to a
+    // testable kind, because it surfaces validators that aren't
+    // checking auth presence at all.
+    probes.push(SecurityProbe {
+        label: "security:no-auth".into(),
+        headers: Vec::new(),
+        query: Vec::new(),
+    });
+    probes
+}
+
+/// Remove Authorization and any API-key headers declared by the
+/// operation's security schemes from `headers`, so a security probe
+/// can supply its own credential (or none) cleanly.
+fn strip_auth(
+    headers: &[(String, String)],
+    schemes: &[SecuritySchemeInfo],
+) -> Vec<(String, String)> {
+    let mut apikey_headers: std::collections::BTreeSet<String> = Default::default();
+    for s in schemes {
+        if let SecuritySchemeInfo::ApiKey {
+            location: ApiKeyLocation::Header,
+            name,
+        } = s
+        {
+            apikey_headers.insert(name.to_lowercase());
+        }
+        if let SecuritySchemeInfo::ApiKey {
+            location: ApiKeyLocation::Cookie,
+            ..
+        } = s
+        {
+            apikey_headers.insert("cookie".into());
+        }
+    }
+    headers
+        .iter()
+        .filter(|(k, _)| {
+            let lk = k.to_lowercase();
+            lk != "authorization" && !apikey_headers.contains(&lk)
+        })
+        .cloned()
+        .collect()
+}
+
+/// Remove API-key query parameters declared by the operation's
+/// security schemes from `query`, so a probe can supply its own.
+fn strip_auth_query(
+    query: &[(String, String)],
+    schemes: &[SecuritySchemeInfo],
+) -> Vec<(String, String)> {
+    let mut apikey_query: std::collections::BTreeSet<String> = Default::default();
+    for s in schemes {
+        if let SecuritySchemeInfo::ApiKey {
+            location: ApiKeyLocation::Query,
+            name,
+        } = s
+        {
+            apikey_query.insert(name.clone());
+        }
+    }
+    query.iter().filter(|(k, _)| !apikey_query.contains(k)).cloned().collect()
+}
+
+/// Variant of `send_case` that takes an explicit `extra_headers`
+/// (rather than reading them from `config`). Used by security probes
+/// to substitute or strip the configured Authorization header.
+#[allow(clippy::too_many_arguments)]
+async fn send_case_with_extra(
+    client: &Client,
+    config: &SelfTestConfig,
+    method: Method,
+    url: &str,
+    label: &str,
+    expected_4xx: bool,
+    body: Option<&str>,
+    query: Vec<(String, String)>,
+    headers: Vec<(String, String)>,
+    extra_headers: Vec<(String, String)>,
+) -> CaseOutcome {
+    let _ = config; // signature parity; timeout already on `client`.
+    let mut req = client.request(method, url);
+    for (k, v) in &query {
+        req = req.query(&[(k.as_str(), v.as_str())]);
+    }
+    for (k, v) in &headers {
+        req = req.header(k, v);
+    }
+    for (k, v) in &extra_headers {
+        req = req.header(k, v);
+    }
+    if let Some(b) = body {
+        req = req
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(b.to_string());
+    }
+    let actual_status = match req.send().await {
+        Ok(resp) => resp.status().as_u16(),
+        Err(_) => 0,
+    };
+    let passed = if expected_4xx {
+        (400..500).contains(&actual_status)
+    } else {
+        (200..400).contains(&actual_status)
+    };
+    CaseOutcome {
+        label: label.to_string(),
+        expected_4xx,
+        actual_status,
+        passed,
     }
 }
 
@@ -670,6 +917,95 @@ mod tests {
         let total: usize = report.negative_caught.values().sum::<usize>()
             + report.negative_missed.values().sum::<usize>();
         assert!(total >= 1, "expected ≥1 path-param probe, got {:?}", report);
+    }
+
+    /// Round 17.3 — operations declaring a Bearer + ApiKey-header
+    /// scheme should produce one bad-bearer + one bad-apikey + one
+    /// no-auth probe (three negatives, no duplicates).
+    #[test]
+    fn build_security_probes_one_per_scheme_kind() {
+        let probes = build_security_probes(&[
+            SecuritySchemeInfo::Bearer,
+            SecuritySchemeInfo::Bearer, // duplicate kind, should dedup
+            SecuritySchemeInfo::ApiKey {
+                location: ApiKeyLocation::Header,
+                name: "X-API-Key".into(),
+            },
+        ]);
+        let labels: Vec<&str> = probes.iter().map(|p| p.label.as_str()).collect();
+        assert!(labels.contains(&"security:bad-bearer"));
+        assert!(labels.contains(&"security:bad-apikey:X-API-Key"));
+        assert!(labels.contains(&"security:no-auth"));
+        assert_eq!(probes.len(), 3);
+    }
+
+    #[test]
+    fn build_security_probes_empty_when_no_schemes() {
+        assert!(build_security_probes(&[]).is_empty());
+    }
+
+    #[test]
+    fn strip_auth_removes_authorization_case_insensitive() {
+        let h = strip_auth(
+            &[
+                ("authorization".into(), "Bearer real".into()),
+                ("Accept".into(), "application/json".into()),
+            ],
+            &[SecuritySchemeInfo::Bearer],
+        );
+        let keys: Vec<&str> = h.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(keys, vec!["Accept"]);
+    }
+
+    #[test]
+    fn strip_auth_removes_apikey_header_and_cookie() {
+        let h = strip_auth(
+            &[
+                ("X-API-Key".into(), "real".into()),
+                ("Cookie".into(), "session=abc".into()),
+                ("Accept".into(), "json".into()),
+            ],
+            &[
+                SecuritySchemeInfo::ApiKey {
+                    location: ApiKeyLocation::Header,
+                    name: "X-API-Key".into(),
+                },
+                SecuritySchemeInfo::ApiKey {
+                    location: ApiKeyLocation::Cookie,
+                    name: "session".into(),
+                },
+            ],
+        );
+        let keys: Vec<&str> = h.iter().map(|(k, _)| k.as_str()).collect();
+        assert_eq!(keys, vec!["Accept"]);
+    }
+
+    /// Round 17.3 — an operation with a declared Bearer scheme should
+    /// produce at least the `security:bad-bearer` + `security:no-auth`
+    /// negatives. Unreachable target → these land in `negative_missed`.
+    #[tokio::test]
+    async fn security_probes_fire_when_schemes_declared() {
+        let cfg = SelfTestConfig {
+            target_url: "http://127.0.0.1:1".into(),
+            timeout: Duration::from_millis(200),
+            ..Default::default()
+        };
+        let mut o = op("GET", "/me", None, vec![], vec![], vec![]);
+        o.security_schemes = vec![SecuritySchemeInfo::Bearer];
+        let report = run_self_test(&[o], &cfg).await.expect("client builds");
+        let labels: std::collections::BTreeSet<String> = report
+            .operations
+            .iter()
+            .flat_map(|op| op.negatives.iter().map(|n| n.label.clone()))
+            .collect();
+        assert!(
+            labels.iter().any(|l| l == "security:bad-bearer"),
+            "missing bad-bearer probe; got {labels:?}"
+        );
+        assert!(
+            labels.iter().any(|l| l == "security:no-auth"),
+            "missing no-auth probe; got {labels:?}"
+        );
     }
 
     #[test]
