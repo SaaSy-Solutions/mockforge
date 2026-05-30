@@ -3,7 +3,7 @@
 //! Handles SAML 2.0 SSO setup and authentication for Team plan organizations
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
     response::{IntoResponse, Redirect, Response},
     Form, Json,
@@ -1272,4 +1272,60 @@ fn validate_saml_timestamps(user_info: &SAMLUserInfo) -> Result<(), ApiError> {
 
     tracing::debug!("SAML timestamp validation passed");
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// SSO discovery endpoint
+// ---------------------------------------------------------------------------
+
+/// Query parameters for `GET /api/v1/sso/discover`.
+#[derive(Debug, Deserialize)]
+pub struct SsoDiscoverQuery {
+    pub email: String,
+}
+
+/// Response body for a successful SSO discovery lookup.
+#[derive(Debug, Serialize)]
+pub struct SsoDiscoverResponse {
+    pub org_slug: String,
+    pub provider: String,
+}
+
+/// `GET /api/v1/sso/discover?email=<email>` — public, no auth required.
+///
+/// Maps a work email address to the organisation's configured IdP so the
+/// login page can redirect directly to the correct SSO flow.
+///
+/// Returns 404 with a **generic** message on any non-match (missing domain,
+/// no enabled config, or unparsable email) to prevent email-domain
+/// enumeration by unauthenticated callers.
+pub async fn discover_sso(
+    State(state): State<AppState>,
+    Query(params): Query<SsoDiscoverQuery>,
+) -> ApiResult<Json<SsoDiscoverResponse>> {
+    let domain = crate::models::normalize_email_domain(&params.email)
+        .ok_or_else(|| ApiError::OrganizationNotFound)?;
+
+    let (org_slug, provider) = state
+        .store
+        .find_org_slug_by_email_domain(&domain)
+        .await?
+        .ok_or(ApiError::OrganizationNotFound)?;
+
+    Ok(Json(SsoDiscoverResponse { org_slug, provider }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sso_discover_response_fields() {
+        let resp = SsoDiscoverResponse {
+            org_slug: "acme".to_string(),
+            provider: "saml".to_string(),
+        };
+        assert_eq!(resp.org_slug, "acme");
+        assert_eq!(resp.provider, "saml");
+    }
 }

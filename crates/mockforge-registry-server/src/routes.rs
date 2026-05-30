@@ -1101,8 +1101,9 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
         .route_layer(middleware::from_fn(rate_limit_middleware));
 
-    // Public SSO routes (no auth required - these handle SAML redirects)
+    // Public SSO routes (no auth required - these handle SAML redirects and discovery)
     let sso_public_routes = Router::new()
+        .route("/api/v1/sso/discover", get(handlers::sso::discover_sso))
         .route("/api/v1/sso/saml/login/{org_slug}", get(handlers::sso::initiate_saml_login))
         .route("/api/v1/sso/saml/acs/{org_slug}", post(handlers::sso::saml_acs))
         .route("/api/v1/sso/saml/slo/{org_slug}", post(handlers::sso::saml_slo))
