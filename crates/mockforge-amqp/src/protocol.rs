@@ -145,6 +145,19 @@ impl Frame {
         let channel = u16::from_be_bytes([header[1], header[2]]);
         let size = u32::from_be_bytes([header[3], header[4], header[5], header[6]]) as usize;
 
+        // Cap the declared frame size before allocating. The 4-byte size field
+        // lets an unauthenticated client request up to ~4 GiB per frame, so a
+        // single frame header would OOM the process (`vec![0u8; size]` commits
+        // the pages). 16 MiB is far above any sane AMQP frame — RabbitMQ's
+        // default negotiated `frame_max` is 128 KiB. (#751)
+        const MAX_FRAME_SIZE: usize = 16 * 1024 * 1024;
+        if size > MAX_FRAME_SIZE {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "AMQP frame size exceeds maximum allowed",
+            ));
+        }
+
         let mut payload = vec![0u8; size];
         stream.read_exact(&mut payload).await?;
 
@@ -836,6 +849,32 @@ impl ConnectionHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ==================== Frame size guard (#751) ====================
+
+    #[tokio::test]
+    async fn frame_reader_rejects_oversized_size_without_allocating() {
+        // A Body frame header declaring a ~4 GiB payload size. The reader must
+        // reject it on the header alone rather than `vec![0u8; 4 GiB]` (OOM).
+        let header = [3u8, 0x00, 0x00, 0xFF, 0xFF, 0xFF, 0xFF];
+        let mut cursor: &[u8] = &header;
+        let err = Frame::read_from_stream(&mut cursor)
+            .await
+            .expect_err("oversized frame should be rejected");
+        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+    }
+
+    #[tokio::test]
+    async fn frame_reader_accepts_normal_size() {
+        // type=Body, channel=1, size=3, payload "abc", frame-end 0xCE.
+        let bytes = [
+            3u8, 0x00, 0x01, 0x00, 0x00, 0x00, 0x03, b'a', b'b', b'c', 0xCE,
+        ];
+        let mut cursor: &[u8] = &bytes;
+        let frame = Frame::read_from_stream(&mut cursor).await.expect("valid frame");
+        assert_eq!(frame.channel, 1);
+        assert_eq!(frame.payload, b"abc");
+    }
 
     // ==================== Class ID Tests ====================
 
