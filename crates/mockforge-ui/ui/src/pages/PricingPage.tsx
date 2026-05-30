@@ -1,13 +1,22 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/button';
 import { CheckCircle2, XCircle, ArrowRight } from 'lucide-react';
 
 // Public billing-config endpoint. Returns trial length so the pricing
-// CTA copy can stay in sync with the operator-set
-// STRIPE_TRIAL_PERIOD_DAYS env var without redeploying the UI.
-type BillingConfig = { trial_period_days: number };
+// CTA copy can stay in sync with the operator-set STRIPE_TRIAL_PERIOD_DAYS
+// env var, plus whether annual billing is offered (gates the toggle).
+type BillingConfig = { trial_period_days: number; annual_billing_available: boolean };
+
+type BillingInterval = 'month' | 'year';
+
+// Annual = 10× monthly ("2 months free"), matching the configured Stripe
+// annual prices and the BillingPage display.
+const PLAN_PRICING: Record<'pro' | 'team', Record<BillingInterval, number>> = {
+  pro: { month: 29, year: 290 },
+  team: { month: 99, year: 990 },
+};
 
 async function fetchBillingConfig(): Promise<BillingConfig> {
   const res = await fetch('/api/v1/billing/config');
@@ -32,15 +41,20 @@ export function PricingPage() {
   const trialSubtitle = hasTrial ? `${trialDays}-day free trial · no commitment` : null;
   const paidCtaLabel = hasTrial ? 'Start free trial' : 'Upgrade';
 
+  const annualAvailable = billingConfig?.annual_billing_available ?? false;
+  const [billingInterval, setBillingInterval] = useState<BillingInterval>('month');
+  const interval: BillingInterval = annualAvailable ? billingInterval : 'month';
+
   const handleGetStarted = () => {
     // Navigate to sign up or login
     window.location.href = '/signup';
   };
 
-  const handleUpgrade = (plan: 'pro' | 'team') => {
-    // Navigate to billing page (requires auth)
-    // If not authenticated, redirect to login first
-    window.location.href = '/login?redirect=/billing';
+  const handleUpgrade = (_plan: 'pro' | 'team') => {
+    // Checkout requires auth, so route through login → billing. Carry the
+    // chosen cadence so BillingPage can preselect it.
+    const dest = interval === 'year' ? '/billing?interval=year' : '/billing';
+    window.location.href = `/login?redirect=${encodeURIComponent(dest)}`;
   };
 
   return (
@@ -51,6 +65,45 @@ export function PricingPage() {
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
           Choose the plan that's right for you. Start free, upgrade when you need more.
         </p>
+        {annualAvailable && (
+          <div className="mt-6 flex justify-center">
+            <div
+              role="radiogroup"
+              aria-label="Billing interval"
+              className="inline-flex items-center rounded-full border bg-muted/50 p-1 text-sm"
+            >
+              <button
+                type="button"
+                role="radio"
+                aria-checked={interval === 'month'}
+                onClick={() => setBillingInterval('month')}
+                className={`rounded-full px-4 py-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
+                  interval === 'month'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Monthly
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={interval === 'year'}
+                onClick={() => setBillingInterval('year')}
+                className={`flex items-center rounded-full px-4 py-1.5 font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50 ${
+                  interval === 'year'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                Annual
+                <span className="ml-1.5 rounded-full bg-success-500/15 px-1.5 py-0.5 text-xs font-semibold text-success-600 dark:text-success-400">
+                  2 months free
+                </span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Pricing Cards */}
@@ -113,10 +166,7 @@ export function PricingPage() {
           </div>
           <CardHeader>
             <CardTitle className="text-2xl">Pro</CardTitle>
-            <div className="mt-4">
-              <span className="text-4xl font-bold">$29</span>
-              <span className="text-muted-foreground">/month</span>
-            </div>
+            <PriceBlock plan="pro" interval={interval} />
             {trialSubtitle && (
               <p className="text-sm text-success-600 font-medium mt-1">{trialSubtitle}</p>
             )}
@@ -168,10 +218,7 @@ export function PricingPage() {
         <Card className="relative">
           <CardHeader>
             <CardTitle className="text-2xl">Team</CardTitle>
-            <div className="mt-4">
-              <span className="text-4xl font-bold">$99</span>
-              <span className="text-muted-foreground">/month</span>
-            </div>
+            <PriceBlock plan="team" interval={interval} />
             {trialSubtitle && (
               <p className="text-sm text-success-600 font-medium mt-1">{trialSubtitle}</p>
             )}
@@ -348,6 +395,27 @@ export function PricingPage() {
           <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
       </div>
+    </div>
+  );
+}
+
+/** Interval-aware price for a paid plan card. */
+function PriceBlock({ plan, interval }: { plan: 'pro' | 'team'; interval: BillingInterval }) {
+  const price = PLAN_PRICING[plan][interval];
+  if (interval === 'year') {
+    const perMo = Math.round(PLAN_PRICING[plan].year / 12);
+    return (
+      <div className="mt-4">
+        <span className="text-4xl font-bold">${price}</span>
+        <span className="text-muted-foreground">/year</span>
+        <p className="text-sm text-muted-foreground mt-1">≈ ${perMo}/mo, billed annually</p>
+      </div>
+    );
+  }
+  return (
+    <div className="mt-4">
+      <span className="text-4xl font-bold">${price}</span>
+      <span className="text-muted-foreground">/month</span>
     </div>
   );
 }

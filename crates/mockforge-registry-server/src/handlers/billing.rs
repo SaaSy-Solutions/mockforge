@@ -28,6 +28,10 @@ pub struct BillingConfigResponse {
     /// trials are disabled and checkout charges immediately — UI should
     /// hide trial-related copy in that case.
     pub trial_period_days: u32,
+    /// Whether annual billing is offered (i.e. at least one annual Stripe
+    /// price ID is configured). The pricing/billing UI uses this to decide
+    /// whether to render the monthly/annual toggle.
+    pub annual_billing_available: bool,
 }
 
 /// Public billing config (no auth required).
@@ -41,6 +45,8 @@ pub async fn get_billing_config(
 ) -> ApiResult<Json<BillingConfigResponse>> {
     Ok(Json(BillingConfigResponse {
         trial_period_days: state.config.stripe_trial_period_days,
+        annual_billing_available: state.config.stripe_price_id_pro_annual.is_some()
+            || state.config.stripe_price_id_team_annual.is_some(),
     }))
 }
 
@@ -77,6 +83,19 @@ pub async fn get_subscription(
             .as_ref()
             .map(|s| s.status().to_string())
             .unwrap_or_else(|| "free".to_string()),
+        // Derived from the stored Stripe price ID (no dedicated column) — annual
+        // subs are recognised by matching the configured annual price IDs.
+        billing_interval: subscription
+            .as_ref()
+            .map(|s| {
+                interval_label_from_price_id(
+                    &s.price_id,
+                    state.config.stripe_price_id_pro_annual.as_deref(),
+                    state.config.stripe_price_id_team_annual.as_deref(),
+                )
+                .to_string()
+            })
+            .unwrap_or_else(|| BillingInterval::Monthly.as_str().to_string()),
         cancel_at_period_end: subscription
             .as_ref()
             .map(|s| s.cancel_at_period_end)
@@ -117,6 +136,9 @@ pub struct SubscriptionResponse {
     pub org_id: Uuid,
     pub plan: String,
     pub status: String,
+    /// Billing cadence of the active subscription: "month" or "year".
+    /// Defaults to "month" for free orgs / when no subscription exists.
+    pub billing_interval: String,
     pub cancel_at_period_end: bool,
     pub current_period_start: Option<chrono::DateTime<chrono::Utc>>,
     pub current_period_end: Option<chrono::DateTime<chrono::Utc>>,
@@ -136,11 +158,57 @@ pub struct UsageStats {
     pub ai_tokens_limit: i64,
 }
 
+/// Billing cadence requested at checkout. The annual price carries the
+/// "2 months free" discount (encoded in the Stripe annual price = 10× monthly),
+/// so nothing in code computes a discount — we only route to the right price.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum BillingInterval {
+    Monthly,
+    Annual,
+}
+
+impl BillingInterval {
+    /// Parse the optional `billing_interval` request field. Absent → Monthly
+    /// (keeps existing clients working). Returns `None` for unrecognised
+    /// values so the caller can 400 rather than guess.
+    fn parse(s: Option<&str>) -> Option<Self> {
+        match s {
+            None | Some("month") | Some("monthly") => Some(Self::Monthly),
+            Some("year") | Some("annual") | Some("yearly") => Some(Self::Annual),
+            _ => None,
+        }
+    }
+
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Monthly => "month",
+            Self::Annual => "year",
+        }
+    }
+}
+
+/// Pick the Stripe price ID for the requested cadence from a plan's
+/// (monthly, annual) pair. Returns `None` when the requested cadence isn't
+/// configured — the caller turns that into a clear error so an annual checkout
+/// never silently falls back to (and charges) the monthly price.
+fn select_price_id<'a>(
+    interval: BillingInterval,
+    monthly: Option<&'a str>,
+    annual: Option<&'a str>,
+) -> Option<&'a str> {
+    match interval {
+        BillingInterval::Monthly => monthly,
+        BillingInterval::Annual => annual,
+    }
+}
+
 /// Create Stripe checkout session
 /// This would typically redirect to Stripe Checkout
 #[derive(Debug, Deserialize)]
 pub struct CreateCheckoutRequest {
     pub plan: String, // "pro" or "team"
+    /// Billing cadence: "month" (default) or "year". Absent = monthly.
+    pub billing_interval: Option<String>,
     pub success_url: Option<String>,
     pub cancel_url: Option<String>,
 }
@@ -181,20 +249,42 @@ pub async fn create_checkout(
         .ok_or_else(|| ApiError::InvalidRequest("Stripe not configured".to_string()))?;
     let client = Client::new(stripe_secret);
 
-    // Get price ID for the plan
-    let price_id = match plan {
-        Plan::Pro => state.config.stripe_price_id_pro.as_ref().ok_or_else(|| {
-            ApiError::InvalidRequest("Stripe Pro price ID not configured".to_string())
-        })?,
-        Plan::Team => state.config.stripe_price_id_team.as_ref().ok_or_else(|| {
-            ApiError::InvalidRequest("Stripe Team price ID not configured".to_string())
-        })?,
+    // Resolve the requested billing cadence (monthly default).
+    let interval =
+        BillingInterval::parse(request.billing_interval.as_deref()).ok_or_else(|| {
+            ApiError::InvalidRequest(
+                "Invalid billing_interval. Must be 'month' or 'year'".to_string(),
+            )
+        })?;
+
+    // Get the (monthly, annual) price-ID pair for the plan, then pick by cadence.
+    let (monthly, annual) = match plan {
+        Plan::Pro => (
+            state.config.stripe_price_id_pro.as_deref(),
+            state.config.stripe_price_id_pro_annual.as_deref(),
+        ),
+        Plan::Team => (
+            state.config.stripe_price_id_team.as_deref(),
+            state.config.stripe_price_id_team_annual.as_deref(),
+        ),
         Plan::Free => {
             return Err(ApiError::InvalidRequest(
                 "Cannot create checkout for free plan".to_string(),
             ))
         }
     };
+    // `None` here means the requested cadence isn't configured. Erroring (rather
+    // than falling back to the other cadence) guarantees we never charge a
+    // customer monthly when they asked for annual, or vice versa.
+    let price_id = select_price_id(interval, monthly, annual)
+        .ok_or_else(|| {
+            ApiError::InvalidRequest(format!(
+                "{} billing is not configured for the {} plan",
+                interval.as_str(),
+                plan
+            ))
+        })?
+        .to_string();
 
     // Build success and cancel URLs
     let success_url = request.success_url.unwrap_or_else(|| {
@@ -221,6 +311,7 @@ pub async fn create_checkout(
     checkout_params.metadata = Some(std::collections::HashMap::from([
         ("org_id".to_string(), org_id_str.clone()),
         ("plan".to_string(), plan_str.clone()),
+        ("billing_interval".to_string(), interval.as_str().to_string()),
     ]));
 
     // Add line item with price
@@ -261,9 +352,10 @@ pub async fn create_checkout(
             org_ctx.org_id,
             Some(user_id),
             AuditEventType::BillingCheckout,
-            format!("Checkout session created for {} plan", request.plan),
+            format!("Checkout session created for {} plan ({})", request.plan, interval.as_str()),
             Some(serde_json::json!({
                 "plan": request.plan,
+                "billing_interval": interval.as_str(),
                 "session_id": session.id.to_string(),
             })),
             ip_address,
@@ -933,6 +1025,18 @@ fn determine_plan_from_price_id(price_id: &str, config: &crate::config::Config) 
         }
     }
 
+    // Annual price IDs map to the same plan as their monthly counterpart.
+    if let Some(pro_annual) = &config.stripe_price_id_pro_annual {
+        if price_id == pro_annual {
+            return Plan::Pro;
+        }
+    }
+    if let Some(team_annual) = &config.stripe_price_id_team_annual {
+        if price_id == team_annual {
+            return Plan::Team;
+        }
+    }
+
     // Fallback: heuristic matching (for development/testing)
     if price_id.contains("pro") || price_id.contains("Pro") {
         tracing::warn!("Using heuristic matching for price_id: {} (Pro)", price_id);
@@ -947,4 +1051,77 @@ fn determine_plan_from_price_id(price_id: &str, config: &crate::config::Config) 
     // Default to Free if unknown
     tracing::warn!("Unknown price_id: {}, defaulting to Free", price_id);
     Plan::Free
+}
+
+/// Derive the billing cadence label ("month" / "year") of an active
+/// subscription from its stored Stripe price ID. Annual subscriptions are
+/// identified by matching the configured annual price IDs; everything else
+/// (including unknown / legacy IDs) is treated as monthly. This avoids
+/// persisting a redundant column — the stored `price_id` is the source of truth.
+fn interval_label_from_price_id(
+    price_id: &str,
+    pro_annual: Option<&str>,
+    team_annual: Option<&str>,
+) -> &'static str {
+    if Some(price_id) == pro_annual || Some(price_id) == team_annual {
+        BillingInterval::Annual.as_str()
+    } else {
+        BillingInterval::Monthly.as_str()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn billing_interval_parses_aliases_and_defaults_to_monthly() {
+        assert_eq!(BillingInterval::parse(None), Some(BillingInterval::Monthly));
+        assert_eq!(BillingInterval::parse(Some("month")), Some(BillingInterval::Monthly));
+        assert_eq!(BillingInterval::parse(Some("monthly")), Some(BillingInterval::Monthly));
+        assert_eq!(BillingInterval::parse(Some("year")), Some(BillingInterval::Annual));
+        assert_eq!(BillingInterval::parse(Some("annual")), Some(BillingInterval::Annual));
+        assert_eq!(BillingInterval::parse(Some("yearly")), Some(BillingInterval::Annual));
+        // Unrecognised values are rejected (caller 400s) rather than guessed.
+        assert_eq!(BillingInterval::parse(Some("biennial")), None);
+        assert_eq!(BillingInterval::parse(Some("")), None);
+    }
+
+    #[test]
+    fn select_price_id_routes_by_cadence() {
+        let monthly = Some("price_monthly");
+        let annual = Some("price_annual");
+        assert_eq!(
+            select_price_id(BillingInterval::Monthly, monthly, annual),
+            Some("price_monthly")
+        );
+        assert_eq!(select_price_id(BillingInterval::Annual, monthly, annual), Some("price_annual"));
+    }
+
+    #[test]
+    fn select_price_id_annual_unconfigured_returns_none_not_monthly() {
+        // The critical safety property: requesting annual when it isn't
+        // configured must NOT silently fall back to the monthly price.
+        let monthly = Some("price_monthly");
+        assert_eq!(select_price_id(BillingInterval::Annual, monthly, None), None);
+        // ...and vice versa.
+        assert_eq!(select_price_id(BillingInterval::Monthly, None, Some("price_annual")), None);
+    }
+
+    #[test]
+    fn interval_label_recognises_annual_price_ids() {
+        let pro_annual = Some("price_pro_year");
+        let team_annual = Some("price_team_year");
+        assert_eq!(interval_label_from_price_id("price_pro_year", pro_annual, team_annual), "year");
+        assert_eq!(
+            interval_label_from_price_id("price_team_year", pro_annual, team_annual),
+            "year"
+        );
+        // Monthly / unknown / legacy IDs → monthly.
+        assert_eq!(
+            interval_label_from_price_id("price_pro_month", pro_annual, team_annual),
+            "month"
+        );
+        assert_eq!(interval_label_from_price_id("price_legacy", None, None), "month");
+    }
 }
