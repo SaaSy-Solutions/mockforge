@@ -8,13 +8,13 @@ on:
       - 'crates/mockforge-registry-core/**'
       - 'docker-compose.e2e.yml'
       - '.github/workflows/registry-e2e.yml'
+  # No `paths:` filter on pull_request — the workflow runs on EVERY PR so the
+  # required "Registry E2E (Postgres + MinIO)" check always reports a status.
+  # The `changes` job below gates the heavy work: non-registry PRs get a fast
+  # skipped job (which branch protection counts as success) instead of a
+  # never-reported check that would block the merge. Mirrors ci.yml's pattern.
   pull_request:
     branches: [main, develop]
-    paths:
-      - 'crates/mockforge-registry-server/**'
-      - 'crates/mockforge-registry-core/**'
-      - 'docker-compose.e2e.yml'
-      - '.github/workflows/registry-e2e.yml'
   workflow_dispatch:
 
 env:
@@ -32,8 +32,49 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Cheap scope gate on ubuntu-latest (not the busy self-hosted Rust runners).
+  # Lets the heavy registry-e2e job below be skipped (= success for branch
+  # protection) on PRs that don't touch the registry, so this can be a required
+  # check without blocking unrelated PRs. Non-PR events always run the suite.
+  changes:
+    name: Detect registry scope
+    runs-on: ubuntu-latest
+    outputs:
+      registry: ${{ steps.filter.outputs.registry }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: Determine whether registry files changed
+        id: filter
+        env:
+          # Routed through env (not interpolated into the script) per workflow
+          # injection best practice. Both are GitHub-controlled values anyway.
+          BASE_REF: ${{ github.base_ref }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" != "pull_request" ]; then
+            echo "Non-PR event ($EVENT_NAME): running registry E2E."
+            echo "registry=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          files="$(git diff --name-only "origin/${BASE_REF}...HEAD")"
+          echo "Changed files:"; printf '%s\n' "$files"
+          registry=false
+          while IFS= read -r f; do
+            [ -z "$f" ] && continue
+            case "$f" in
+              crates/mockforge-registry-server/*|crates/mockforge-registry-core/*|docker-compose.e2e.yml|.github/workflows/registry-e2e.yml) registry=true ;;
+            esac
+          done <<< "$files"
+          echo "Registry E2E required: registry=$registry"
+          echo "registry=$registry" >> "$GITHUB_OUTPUT"
+
   registry-e2e:
     name: Registry E2E (Postgres + MinIO)
+    needs: changes
+    if: ${{ needs.changes.outputs.registry == 'true' }}
     runs-on: [self-hosted, linux, x64, rust]
     timeout-minutes: 45
 
