@@ -569,34 +569,45 @@ impl OpenApiRoute {
             .any(|(status, _)| matches!(status, openapiv3::StatusCode::Code(c) if *c == code))
     }
 
-    /// Find the first available status code from the OpenAPI operation responses
+    /// Pick the status code to respond with for the success path.
+    ///
+    /// OpenAPI does not require responses to be listed in any order, and it's
+    /// common to declare error responses (e.g. `400`, `404`) before `200`.
+    /// Returning the *first listed* code therefore made a normal valid request
+    /// answer with an error status (#756). Prefer, in order: the lowest
+    /// explicit `2xx` code, then a `2XX` range, then the lowest other explicit
+    /// code, then `default`, then `200`.
     pub fn find_first_available_status_code(&self) -> u16 {
-        // Look for the first available status code in the responses
+        let mut lowest_2xx: Option<u16> = None;
+        let mut has_2xx_range = false;
+        let mut lowest_other: Option<u16> = None;
+
         for (status, _) in &self.operation.responses.responses {
             match status {
                 openapiv3::StatusCode::Code(code) => {
-                    return *code;
-                }
-                openapiv3::StatusCode::Range(range) => {
-                    // For ranges, use the appropriate status code
-                    match range {
-                        2 => return 200, // 2XX range
-                        3 => return 300, // 3XX range
-                        4 => return 400, // 4XX range
-                        5 => return 500, // 5XX range
-                        _ => continue,   // Skip unknown ranges
+                    if (200..300).contains(code) {
+                        lowest_2xx = Some(lowest_2xx.map_or(*code, |c| c.min(*code)));
+                    } else {
+                        lowest_other = Some(lowest_other.map_or(*code, |c| c.min(*code)));
                     }
                 }
+                openapiv3::StatusCode::Range(2) => has_2xx_range = true,
+                openapiv3::StatusCode::Range(_) => {}
             }
         }
 
-        // If no specific status codes found, check for default
-        if self.operation.responses.default.is_some() {
-            return 200; // Default to 200 for default responses
+        if let Some(code) = lowest_2xx {
+            return code;
         }
-
-        // Fallback to 200 if nothing else is available
-        200
+        if has_2xx_range {
+            return 200;
+        }
+        // No success response declared. A `default` response models success
+        // here too, so prefer 200 before falling back to a declared error code.
+        if self.operation.responses.default.is_some() {
+            return 200;
+        }
+        lowest_other.unwrap_or(200)
     }
 }
 
@@ -721,5 +732,68 @@ impl RouteGenerator {
         }
 
         Ok(routes)
+    }
+}
+
+#[cfg(test)]
+mod status_code_selection_tests {
+    use super::OpenApiRoute;
+    use crate::spec::OpenApiSpec;
+    use serde_json::json;
+    use std::sync::Arc;
+
+    fn route_from_responses(responses: serde_json::Value) -> OpenApiRoute {
+        let operation: openapiv3::Operation =
+            serde_json::from_value(json!({ "responses": responses })).expect("valid operation");
+        let spec = OpenApiSpec::from_json(json!({
+            "openapi": "3.0.0",
+            "info": {"title": "t", "version": "1.0.0"},
+            "paths": {}
+        }))
+        .expect("valid spec");
+        OpenApiRoute::new("GET".to_string(), "/x".to_string(), operation, Arc::new(spec))
+    }
+
+    #[test]
+    fn prefers_2xx_over_earlier_listed_error_codes() {
+        // Error responses declared before the success response — must still
+        // return 200, not the first-listed 400 (#756).
+        let r = route_from_responses(json!({
+            "400": {"description": "bad"},
+            "404": {"description": "missing"},
+            "200": {"description": "ok"},
+        }));
+        assert_eq!(r.find_first_available_status_code(), 200);
+    }
+
+    #[test]
+    fn prefers_lowest_2xx() {
+        let r = route_from_responses(json!({
+            "204": {"description": "no content"},
+            "201": {"description": "created"},
+        }));
+        assert_eq!(r.find_first_available_status_code(), 201);
+    }
+
+    #[test]
+    fn uses_2xx_range_when_no_explicit_2xx() {
+        let r = route_from_responses(json!({ "2XX": {"description": "ok-ish"} }));
+        assert_eq!(r.find_first_available_status_code(), 200);
+    }
+
+    #[test]
+    fn default_only_returns_200() {
+        let r = route_from_responses(json!({ "default": {"description": "any"} }));
+        assert_eq!(r.find_first_available_status_code(), 200);
+    }
+
+    #[test]
+    fn error_only_returns_lowest_error() {
+        // No success path declared at all → fall back to the lowest declared code.
+        let r = route_from_responses(json!({
+            "500": {"description": "err"},
+            "404": {"description": "err"},
+        }));
+        assert_eq!(r.find_first_available_status_code(), 404);
     }
 }
