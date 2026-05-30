@@ -607,8 +607,12 @@ pub async fn saml_acs(
         }
     }
 
-    // Find or create user
-    let user = find_or_create_user_from_saml(&state, &user_info, &org).await?;
+    // Find or create user (JIT provisioning)
+    let email = user_info
+        .email
+        .as_deref()
+        .ok_or_else(|| ApiError::InvalidRequest("Email not found in SAML assertion".to_string()))?;
+    let user = find_or_create_sso_user(&state, email, user_info.username.as_deref(), &org).await?;
 
     // Record assertion ID to prevent replay attacks
     if let Some(assertion_id) = &user_info.assertion_id {
@@ -1170,51 +1174,44 @@ fn generate_saml_logout_response(slo_url: &str) -> String {
     )
 }
 
-/// Find or create user from SAML attributes
-async fn find_or_create_user_from_saml(
+/// Find or create a user via SSO JIT provisioning (protocol-agnostic).
+///
+/// Used by both SAML ACS and OIDC callback handlers.  `email` is required;
+/// `username` is optional — when absent the email local-part is used.
+async fn find_or_create_sso_user(
     state: &AppState,
-    user_info: &SAMLUserInfo,
+    email: &str,
+    username: Option<&str>,
     org: &Organization,
 ) -> Result<User, ApiError> {
-    // Try to find user by email
-    let user = if let Some(email) = &user_info.email {
-        state.store.find_user_by_email(email).await?
-    } else {
-        None
-    };
+    use crate::models::organization::OrgRole;
 
-    let user = if let Some(user) = user {
+    // Try to find existing user by email
+    let existing = state.store.find_user_by_email(email).await?;
+
+    let user = if let Some(user) = existing {
         // User exists - ensure they're a member of the organization
-        use crate::models::organization::OrgRole;
-
         if state.store.find_org_member(org.id, user.id).await?.is_none() {
             state.store.create_org_member(org.id, user.id, OrgRole::Member).await?;
         }
-
         user
     } else {
-        // Create new user from SAML attributes
-        let email = user_info.email.as_ref().ok_or_else(|| {
-            ApiError::InvalidRequest("Email not found in SAML assertion".to_string())
-        })?;
+        // Derive username from the caller-supplied value or the email local-part
+        let derived_username = username
+            .map(|u| u.to_string())
+            .unwrap_or_else(|| email.split('@').next().unwrap_or("user").to_string());
 
-        let username = user_info.username.as_ref().cloned().unwrap_or_else(|| {
-            // Generate username from email
-            email.split('@').next().unwrap_or("user").to_string()
-        });
-
-        // Generate a random password (user won't need it for SSO login)
+        // Generate a random password (SSO users never use password login)
         let password_hash = crate::auth::hash_password(&uuid::Uuid::new_v4().to_string())
             .map_err(ApiError::Internal)?;
 
         // Create user
-        let user = state.store.create_user(&username, email, &password_hash).await?;
+        let user = state.store.create_user(&derived_username, email, &password_hash).await?;
 
         // Mark user as verified (SSO users are pre-verified)
         state.store.mark_user_verified(user.id).await?;
 
         // Add user to organization as member
-        use crate::models::organization::OrgRole;
         state.store.create_org_member(org.id, user.id, OrgRole::Member).await?;
 
         user
