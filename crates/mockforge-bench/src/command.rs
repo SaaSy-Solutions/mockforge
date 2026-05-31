@@ -2224,27 +2224,23 @@ impl BenchCommand {
                     "Self-test passed — all positive cases accepted and all negative cases rejected",
                 );
             }
-            // Round 17.4 — emit spec audit findings alongside the
-            // request-level self-test report. Useful even when the
-            // server is unreachable, because the audit is a pure
-            // function of the spec.
-            if let Some(audit) = &spec_audit_report {
-                TerminalReporter::print_progress(&audit.render_summary());
-                let audit_path = self.output.join("conformance-spec-audit.json");
-                if let Ok(json) = serde_json::to_string_pretty(audit) {
-                    let _ = std::fs::write(&audit_path, json);
-                    TerminalReporter::print_progress(&format!(
-                        "Spec audit report written to {}",
-                        audit_path.display()
-                    ));
-                }
-                let (_, warn, err) = audit.counts_by_severity();
-                if err > 0 || warn > 0 {
-                    TerminalReporter::print_warning(&format!(
-                        "Spec audit produced {err} error(s) and {warn} warning(s) — review {} for details",
-                        audit_path.display()
-                    ));
-                }
+            // Round 17.6 — emit a self-contained HTML report alongside
+            // the JSON. Groups by category and surfaces the missed-
+            // negative list directly so a user doesn't need to grep
+            // through the JSON to find which routes failed which
+            // checks. Optionally folds in a round-17.4 spec audit
+            // report if one exists in the same output directory.
+            let html_path = self.output.join("conformance-report.html");
+            let audit_path = self.output.join("conformance-spec-audit.json");
+            let audit_value = std::fs::read_to_string(&audit_path)
+                .ok()
+                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok());
+            let html = crate::conformance::report_html::render_html(&report, audit_value.as_ref());
+            if std::fs::write(&html_path, html).is_ok() {
+                TerminalReporter::print_progress(&format!(
+                    "HTML report written to {}",
+                    html_path.display()
+                ));
             }
             return Ok(());
         }
