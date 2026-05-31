@@ -162,6 +162,15 @@ jobs:
 
       - name: Start Postgres + MinIO
         run: |
+          # Claim a clean slate before `up`. A prior job that was killed/crashed
+          # (or never ran `down`) can leave the postgres/minio containers running
+          # on the shared self-hosted runner, holding the fixed host ports
+          # (:55432, :59000) — `up` then fails with `failed to bind host port …
+          # address already in use`. Same #782 leftover-state disease as the
+          # registry-server :58080 zombie, one layer down. Best-effort teardown
+          # (|| true) so a clean runner isn't affected.
+          docker compose -f docker-compose.e2e.yml down --remove-orphans --volumes 2>/dev/null || true
+          docker ps -aq --filter "name=mockforge-e2e" | xargs -r docker rm -f 2>/dev/null || true
           docker compose -f docker-compose.e2e.yml up -d
           echo "Waiting for Postgres to be healthy..."
           for i in {1..60}; do
