@@ -186,7 +186,19 @@ jobs:
           # Make sure the server binds to the same port the tests expect.
           PORT: "58080"
           HOST: "0.0.0.0"
+          # Pin local artifact storage to a fresh, writable, per-job dir.
+          # Without this the server falls back to a RELATIVE ./data/storage
+          # (storage.rs:101) inside the persistent self-hosted _work checkout.
+          # A prior run can leave ./data/storage owned by another user, so
+          # startup create_dir_all(./data/storage) is a no-op success (dir
+          # exists) but per-artifact create_dir_all(./data/storage/<kind>/<id>)
+          # then fails on permissions — surfacing as marketplace_e2e "Failed to
+          # create directory" 500s that block every registry PR. `runner.temp`
+          # is cleaned each job. (Must live in this STEP env, not the job-level
+          # env block — the `runner` context isn't available there.)
+          STORAGE_PATH: "${{ runner.temp }}/mf-e2e-storage"
         run: |
+          mkdir -p "$STORAGE_PATH"
           nohup ./target/debug/mockforge-registry-server \
             > registry-server.log 2>&1 &
           echo $! > registry-server.pid
