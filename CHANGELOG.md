@@ -1,31 +1,8 @@
-## [0.3.157] - 2026-05-29
+## [0.3.161] - 2026-05-29
 
-### Added
+### Changed
 
-- **[Contracts][DevX][Security]** OWASP / WAF unification into the conformance self-test (#79 round 17.5) — Srikanth's (17.5) ask: instead of running the OWASP injection battery as a separate pipeline, fold one canonical payload per category into the existing `--conformance-self-test` driver so the report has a single `owasp` bucket alongside `request-body` / `parameters` / `security`. Each operation with an injection target (query param or string body field) gets one probe per OWASP category:
-  - `owasp:sqli` — SQL injection (`' OR '1'='1`)
-  - `owasp:xss` — cross-site scripting (`<script>alert('XSS')</script>`)
-  - `owasp:command-injection` — shell metacharacter injection
-  - `owasp:path-traversal` — `../../etc/passwd`-style probes
-  - `owasp:ssti` — server-side template injection
-  - `owasp:ldap-injection`
-  - `owasp:xxe` — XML external entity
-
-  Injection target is picked once per operation in priority order: first query param > first string field of the positive JSON body > skip. Operations with no injectable surface (e.g. `GET /healthz`) get zero OWASP probes — no false signal. Bounded at 7 probes per operation (one per category). Server-side: expected 4xx (input rejected). A 5xx is a hard finding (server crashed on the payload); a 2xx is a soft finding (input passed through unfiltered).
-
-## [0.3.154] - 2026-05-29
-
-### Added
-
-- **[Contracts][DevX]** Schema-driven request-body mutator for the `--conformance-self-test` driver (#79 round 17.2) — Srikanth's (17.2) ask: positive + negative coverage that's actually informed by the spec instead of just "send an empty body". When both a positive sample AND a resolved request-body schema are available, the self-test now produces per-field negatives that the server should reject with 4xx:
-  - **Type mismatch** per field (`string` field gets a number, `integer` gets a string, `object` gets an array) plus a top-level `$root` shape probe.
-  - **Required-field removal** — drops each required field one at a time (up to 5), so a validator that's only enforcing the root shape but not requiredness is caught.
-  - **String constraint breaks** — too-short, too-long, pattern miss, enum-out-of-range when the schema declares those bounds.
-  - **Numeric bound breaks** — `minimum`/`maximum` violations plus an "integer as float" probe for `integer` fields.
-  - **Additional-property** probe when the schema explicitly sets `additionalProperties: false`.
-  - **URI-too-long** parameter probe — appends a 9 KiB query string so deployments behind a tight reverse-proxy URI cap surface as a `parameters:uri-too-long` negative.
-
-  Labels carry the field path (e.g. `request-body:type-mismatch:user.email`) so the self-test report tells you exactly which field caught (or didn't). Bounded by `SCHEMA_MUTATION_CAP = 12` per operation (top 20 properties, top 5 required) so a 100-property body on a 22 000-operation spec doesn't produce a runaway test matrix. No-op when the body annotator couldn't resolve a schema — falls back to the existing schema-agnostic empty/wrong-type negatives unchanged.
+- **[Contracts][DevX]** OWASP coverage table now explains the "-" rows with actionable hints (#79 round 18.4) — Srikanth ran `--conformance-categories "security,request-bodies,parameters"` and reported "Not Working" when 5 of 10 OWASP categories showed `-`. The output was actually correct: those 3 categories map to exactly API1/API2/API4/API8, leaving API3/5/6/7/9/10 untouched. The confusing UX has been fixed by appending an "Untested OWASP categories" footer that tells the user exactly which `--conformance-categories` value to add for each uncovered OWASP category (e.g. `API3:2023 — add constraints (required/property checks)`, `API10:2023 — add response-validation`). API6 (Sensitive Business Flows) and API7 (SSRF) honestly say "no single category — requires custom scenario flows / URL-injection custom checks" rather than pretending coverage exists.
 
 ||||||| parent of 483a9524 (feat(bench): OWASP/WAF unification in self-test (#79 round 17.5))
 ## [0.3.153] - 2026-05-29
