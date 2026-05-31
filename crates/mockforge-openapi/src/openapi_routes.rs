@@ -1435,16 +1435,34 @@ impl OpenApiRouteRegistry {
 
     /// Extract path parameters from a request path by matching against known routes
     pub fn extract_path_parameters(&self, path: &str, method: &str) -> HashMap<String, String> {
+        // Among all routes that match, prefer the most *specific* — the one with
+        // the most static (non-parameter) segments — so an exact literal route
+        // wins over a same-arity `{param}` route regardless of declaration order
+        // (e.g. `/users/me` matches `/users/me`, not `/users/{id}`). Returning
+        // the first match meant spec order silently decided this (#757).
+        let mut best: Option<(usize, HashMap<String, String>)> = None;
         for route in &self.routes {
             if route.method != method {
                 continue;
             }
 
             if let Some(params) = self.match_path_to_route(path, &route.path) {
-                return params;
+                let static_segments = route
+                    .path
+                    .trim_start_matches('/')
+                    .split('/')
+                    .filter(|s| !(s.starts_with('{') && s.ends_with('}')))
+                    .count();
+                let is_more_specific = match &best {
+                    None => true,
+                    Some((score, _)) => static_segments > *score,
+                };
+                if is_more_specific {
+                    best = Some((static_segments, params));
+                }
             }
         }
-        HashMap::new()
+        best.map(|(_, params)| params).unwrap_or_default()
     }
 
     /// Match a request path against a route pattern and extract parameters
@@ -1466,7 +1484,13 @@ impl OpenApiRouteRegistry {
 
         for (req_seg, pat_seg) in request_segments.iter().zip(pattern_segments.iter()) {
             if pat_seg.starts_with('{') && pat_seg.ends_with('}') {
-                // This is a parameter
+                // This is a parameter. Reject an *empty* captured segment (e.g.
+                // a trailing slash: `/users/` would otherwise match
+                // `/users/{id}` with id=""), which downstream treats as a real
+                // value (#757).
+                if req_seg.is_empty() {
+                    return None;
+                }
                 let param_name = &pat_seg[1..pat_seg.len() - 1];
                 params.insert(param_name.to_string(), req_seg.to_string());
             } else if req_seg != pat_seg {
@@ -3956,6 +3980,37 @@ mod tests {
         // Should return empty map for non-matching path
         let empty_params = registry.extract_path_parameters("/users", "GET");
         assert!(empty_params.is_empty());
+    }
+
+    #[test]
+    fn extract_path_parameters_prefers_static_route_and_rejects_empty() {
+        // #757: a literal route must win over a same-arity `{param}` route, and
+        // a `{param}` must not capture an empty (trailing-slash) segment.
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/users/{id}": { "get": { "responses": {"200": {"description": "OK"}} } },
+                "/users/me":   { "get": { "responses": {"200": {"description": "OK"}} } }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Literal `/users/me` wins over `/users/{id}` → no `id` captured.
+        let me = registry.extract_path_parameters("/users/me", "GET");
+        assert!(me.get("id").is_none(), "literal route should win, got {me:?}");
+
+        // A real id still matches the parameter route.
+        let by_id = registry.extract_path_parameters("/users/123", "GET");
+        assert_eq!(by_id.get("id"), Some(&"123".to_string()));
+
+        // Trailing slash must NOT bind `{id}` to an empty value.
+        let trailing = registry.extract_path_parameters("/users/", "GET");
+        assert!(
+            trailing.is_empty(),
+            "empty trailing segment should not bind id, got {trailing:?}"
+        );
     }
 
     #[test]
