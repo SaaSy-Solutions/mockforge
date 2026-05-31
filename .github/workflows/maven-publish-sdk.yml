@@ -1,21 +1,22 @@
 name: Publish mockforge-sdk to Maven Central
 
-# Publishes `sdk/java/` as `com.mockforge:mockforge-sdk` on Maven Central.
-# Mirrors `npm-publish-sdk.yml` for the Java SDK so #674 closes uniformly
-# across registries.
+# Publishes `sdk/java/` as `io.github.saasy-solutions:mockforge-sdk` on Maven
+# Central via the Sonatype Central Portal. Mirrors `npm-publish-sdk.yml` for the
+# Java SDK so #674 closes uniformly across registries.
 #
 # Triggers:
 #   1. `workflow_dispatch` — manual publish (RC, dry-runs).
 #   2. `push` on a tag matching `java-sdk-v*` (e.g. `java-sdk-v0.1.0`).
 #
-# Prereqs (one-time setup on the repo):
-#   - `OSSRH_USERNAME` + `OSSRH_TOKEN` repo secrets (Sonatype Central
-#     portal user-token credentials).
+# Prereqs (one-time setup on the repo — NOT yet done as of this commit):
+#   - Register the `io.github.saasy-solutions` namespace at
+#     central.sonatype.com (auto-verified via the SaaSy-Solutions GitHub org).
+#   - `CENTRAL_USERNAME` + `CENTRAL_PASSWORD` repo secrets — a Central Portal
+#     *user token* (generated under your Central account), NOT legacy OSSRH.
 #   - `MAVEN_GPG_PRIVATE_KEY` + `MAVEN_GPG_PASSPHRASE` repo secrets
 #     (ascii-armored signing key for Central's GPG requirement).
-#   - `pom.xml` must include the standard Central metadata
-#     (developers, scm, distributionManagement); the SDK pom.xml ships
-#     the essentials.
+# The pom's `release` profile (added alongside this change) supplies the
+# sources/javadoc jars, GPG signing, and central-publishing-maven-plugin upload.
 
 on:
   push:
@@ -52,7 +53,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-          server-id: ossrh
+          # `central` matches <publishingServerId>central</publishingServerId>
+          # in the pom's release profile. setup-java writes a settings.xml
+          # <server id="central"> whose credentials come from the env vars named
+          # below, populated in the Publish step.
+          server-id: central
           server-username: MAVEN_USERNAME
           server-password: MAVEN_PASSWORD
           gpg-private-key: ${{ secrets.MAVEN_GPG_PRIVATE_KEY }}
@@ -73,10 +78,11 @@ jobs:
       - name: Publish to Maven Central
         if: ${{ env.DRY_RUN != 'true' }}
         env:
-          MAVEN_USERNAME: ${{ secrets.OSSRH_USERNAME }}
-          MAVEN_PASSWORD: ${{ secrets.OSSRH_TOKEN }}
+          MAVEN_USERNAME: ${{ secrets.CENTRAL_USERNAME }}
+          MAVEN_PASSWORD: ${{ secrets.CENTRAL_PASSWORD }}
           MAVEN_GPG_PASSPHRASE: ${{ secrets.MAVEN_GPG_PASSPHRASE }}
-        # -P release activates the gpg + nexus-staging plugins. If the
-        # SDK's pom doesn't have a `release` profile yet, this step
-        # fails loudly — the fix is a pom change, not a workflow bug.
+        # -P release activates source/javadoc jars, GPG signing, and the
+        # central-publishing-maven-plugin (autoPublish) defined in the pom's
+        # release profile. The plugin uploads to the Central Portal using the
+        # `central` server credentials wired by setup-java above.
         run: mvn -B -P release deploy
