@@ -1,10 +1,12 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
-## [0.3.162] - 2026-05-29
+## [0.3.159] - 2026-05-29
 
 ### Fixed
 
-- **[Contracts][DevX]** GEODB / multi-source-IP testing in `--conformance-self-test` (#79 round 18.5). `--source-ip <IP>` (repeatable) builds a pool of reqwest clients bound via `local_address()`; `--geo-source-ip <IP>` rotates fake source IPs across `X-Forwarded-For` / `True-Client-IP` / `CF-Connecting-IP` (configurable via `--geo-source-header`). Self-test only for v0; bench / k6 path lands in a follow-up.
+- **[Contracts][DevX]** `--conformance-self-test` now honours `--base-path` (#79 round 18.1) — pre-fix every positive 404'd on deployments served behind a path prefix.
+- **[Contracts][DevX]** Self-test now emits a hard warning when every positive case fails with the same status code, instead of silently treating 404s as "negatives caught".
+- **[DevX]** Bench header no longer prints `Operations: 0 endpoints` before the spec is parsed (#79 round 18.2). Shows `(analyzing spec…)` until the count is known.
 
 ||||||| parent of 483a9524 (feat(bench): OWASP/WAF unification in self-test (#79 round 17.5))
 ## [0.3.153] - 2026-05-29

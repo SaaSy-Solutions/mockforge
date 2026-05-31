@@ -43,26 +43,13 @@ pub struct SelfTestConfig {
     pub extra_headers: Vec<(String, String)>,
     /// Delay between requests to avoid hammering the server.
     pub delay_between_requests: Duration,
-    /// Round 18.5 — local source IPs to bind outgoing requests to,
-    /// for testing how a multi-homed bench host or a GEODB server
-    /// reacts when traffic arrives from multiple TCP source
-    /// addresses. Each IP must be assigned to an interface on the
-    /// box (sub-interface, aliased address, etc.) — reqwest refuses
-    /// to bind to an address the OS doesn't know.
-    ///
-    /// When non-empty, a *pool* of reqwest clients is built (one
-    /// per IP) and operations round-robin through them.
-    pub source_ips: Vec<IpAddr>,
-    /// Round 18.5 — fake source IPs to advertise via forwarded-IP
-    /// headers (default `X-Forwarded-For`, `True-Client-IP`,
-    /// `CF-Connecting-IP`). Used to exercise GEODB lookup at the
-    /// destination without actually emitting packets from those
-    /// addresses (which requires raw sockets + root).
-    pub geo_source_ips: Vec<IpAddr>,
-    /// Which headers to populate with the geo source IP. Defaults
-    /// cover the three most common forwarding conventions when
-    /// non-empty; leave empty to disable header injection.
-    pub geo_source_headers: Vec<String>,
+    /// Round 18.1 — base path to prepend to every spec path. When the
+    /// spec declares `/users` and the deployed API is served under
+    /// `/api`, `--base-path /api` should make the self-test hit
+    /// `https://target/api/users` instead of `https://target/users`.
+    /// Pre-fix this was ignored entirely and every operation 404'd
+    /// (Srikanth's vCenter run on 0.3.152: 1275 positives, 1275 4xx).
+    pub base_path: Option<String>,
 }
 
 impl Default for SelfTestConfig {
@@ -73,9 +60,7 @@ impl Default for SelfTestConfig {
             timeout: Duration::from_secs(15),
             extra_headers: Vec::new(),
             delay_between_requests: Duration::from_millis(0),
-            source_ips: Vec::new(),
-            geo_source_ips: Vec::new(),
-            geo_source_headers: default_geo_source_headers(),
+            base_path: None,
         }
     }
 }
@@ -133,6 +118,35 @@ impl SelfTestReport {
     /// negative case got 4xx.
     pub fn all_passed(&self) -> bool {
         self.positive_fail == 0 && self.negative_missed.values().sum::<usize>() == 0
+    }
+
+    /// Round 18.1 — detect the "self-test target is misconfigured"
+    /// case where every positive failed with the *same* status code.
+    /// The classic example: `--base-path /api` was forgotten so every
+    /// request hits a path the server doesn't know and returns 404.
+    /// Pre-warning, the user saw all-green negative buckets (because
+    /// "missing route" 404s look like "validator rejected") and no
+    /// indication that the run was meaningless. Returns Some(status)
+    /// when ≥10 positives all failed with the same status, else None.
+    pub fn detect_target_misconfiguration(&self) -> Option<u16> {
+        if self.positive_pass > 0 || self.positive_fail < 10 {
+            return None;
+        }
+        let mut seen: Option<u16> = None;
+        for op in &self.operations {
+            let Some(p) = &op.positive else {
+                continue;
+            };
+            if p.passed {
+                return None;
+            }
+            match seen {
+                None => seen = Some(p.actual_status),
+                Some(s) if s != p.actual_status => return None,
+                _ => {}
+            }
+        }
+        seen
     }
 
     /// Human-readable summary string. One line for positives, one per
@@ -270,7 +284,12 @@ async fn test_operation(
     op: &AnnotatedOperation,
     geo_ip: Option<IpAddr>,
 ) -> OperationResult {
-    let url = build_url(&config.target_url, &op.path, &op.path_params);
+    let url = build_url_with_base(
+        &config.target_url,
+        config.base_path.as_deref(),
+        &op.path,
+        &op.path_params,
+    );
     let method = Method::from_bytes(op.method.to_uppercase().as_bytes()).unwrap_or(Method::GET);
 
     // Round 18.5 — pre-compute the operation's effective headers
@@ -428,12 +447,15 @@ async fn test_operation(
             // contains characters disallowed in numeric IDs *and* UUIDs.
             url_with_placeholder =
                 url_with_placeholder.replace(&format!("{{{first_name}}}"), "self-test-invalid-id");
-            let target = config.target_url.trim_end_matches('/');
-            let bad_url = if url_with_placeholder.starts_with('/') {
-                format!("{}{}", target, url_with_placeholder)
-            } else {
-                format!("{}/{}", target, url_with_placeholder)
-            };
+            // Round 18.1 — honour `base_path` here too, otherwise the
+            // probe URL differs from the positive case and the
+            // resulting 404 is misattributed to "bad path param".
+            let bad_url = build_url_with_base(
+                &config.target_url,
+                config.base_path.as_deref(),
+                &url_with_placeholder,
+                &[],
+            );
             negatives.push(
                 send_case(
                     client,
@@ -732,6 +754,20 @@ async fn send_case(
 /// the template — useful when `path_params` is empty and we want to
 /// hit the same route the spec defines.
 fn build_url(target: &str, path_template: &str, path_params: &[(String, String)]) -> String {
+    build_url_with_base(target, None, path_template, path_params)
+}
+
+/// Round 18.1 — variant of `build_url` that takes a `base_path`
+/// (e.g. `Some("/api")`). When set, prepends it to the spec path so a
+/// spec declaring `/users` against a target served behind `/api`
+/// resolves to `<target>/api/users`. `base_path` is normalised: leading
+/// `/` is auto-added, trailing `/` is stripped.
+fn build_url_with_base(
+    target: &str,
+    base_path: Option<&str>,
+    path_template: &str,
+    path_params: &[(String, String)],
+) -> String {
     let mut url = path_template.to_string();
     for (name, value) in path_params {
         let placeholder = format!("{{{}}}", name);
@@ -740,11 +776,23 @@ fn build_url(target: &str, path_template: &str, path_params: &[(String, String)]
         }
     }
     let target = target.trim_end_matches('/');
-    if url.starts_with('/') {
-        format!("{}{}", target, url)
+    let prefix = match base_path {
+        Some(bp) if !bp.is_empty() => {
+            let trimmed = bp.trim_end_matches('/');
+            if trimmed.starts_with('/') {
+                trimmed.to_string()
+            } else {
+                format!("/{}", trimmed)
+            }
+        }
+        _ => String::new(),
+    };
+    let path = if url.starts_with('/') {
+        url
     } else {
-        format!("{}/{}", target, url)
-    }
+        format!("/{url}")
+    };
+    format!("{target}{prefix}{path}")
 }
 
 #[cfg(test)]
@@ -782,6 +830,85 @@ mod tests {
             &[("id".into(), "42".into()), ("pid".into(), "7".into())],
         );
         assert_eq!(url, "https://api.test/users/42/posts/7");
+    }
+
+    /// Round 18.1 — a run where every positive 404s should be flagged
+    /// as a likely target misconfiguration, not silently treated as a
+    /// successful conformance run.
+    #[test]
+    fn detect_target_misconfiguration_when_all_positives_share_status() {
+        let mut report = SelfTestReport {
+            positive_pass: 0,
+            positive_fail: 50,
+            ..Default::default()
+        };
+        for i in 0..50 {
+            report.operations.push(OperationResult {
+                method: "GET".into(),
+                path: format!("/r/{i}"),
+                positive: Some(CaseOutcome {
+                    label: "positive".into(),
+                    expected_4xx: false,
+                    actual_status: 404,
+                    passed: false,
+                }),
+                negatives: Vec::new(),
+            });
+        }
+        assert_eq!(report.detect_target_misconfiguration(), Some(404));
+    }
+
+    #[test]
+    fn detect_target_misconfiguration_returns_none_when_some_pass() {
+        let mut report = SelfTestReport {
+            positive_pass: 5,
+            positive_fail: 50,
+            ..Default::default()
+        };
+        for i in 0..55 {
+            report.operations.push(OperationResult {
+                method: "GET".into(),
+                path: format!("/r/{i}"),
+                positive: Some(CaseOutcome {
+                    label: "positive".into(),
+                    expected_4xx: false,
+                    actual_status: if i < 5 { 200 } else { 404 },
+                    passed: i < 5,
+                }),
+                negatives: Vec::new(),
+            });
+        }
+        assert_eq!(report.detect_target_misconfiguration(), None);
+    }
+
+    /// Round 18.1 — `--base-path /api` should prepend `/api` to
+    /// every spec path. Pre-fix, the self-test ignored base_path and
+    /// 404'd every positive when the deployed API was behind a path
+    /// prefix.
+    #[test]
+    fn build_url_applies_base_path_when_present() {
+        let url = build_url_with_base(
+            "https://api.example.com",
+            Some("/api"),
+            "/users/{id}",
+            &[("id".into(), "42".into())],
+        );
+        assert_eq!(url, "https://api.example.com/api/users/42");
+    }
+
+    /// Round 18.1 — base_path is normalised: missing leading slash
+    /// gets one added, trailing slash is stripped, empty string is
+    /// the same as None.
+    #[test]
+    fn build_url_normalises_base_path() {
+        let no_slash = build_url_with_base("https://t", Some("api"), "/x", &[]);
+        assert_eq!(no_slash, "https://t/api/x");
+        let trailing = build_url_with_base("https://t", Some("/api/"), "/x", &[]);
+        assert_eq!(trailing, "https://t/api/x");
+        let empty = build_url_with_base("https://t", Some(""), "/x", &[]);
+        assert_eq!(empty, "https://t/x");
+        let none = build_url_with_base("https://t", None, "/x", &[]);
+        assert_eq!(none, "https://t/x");
     }
 
     #[test]

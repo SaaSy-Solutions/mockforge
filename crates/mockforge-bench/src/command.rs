@@ -2164,13 +2164,16 @@ impl BenchCommand {
 
         // Branch: spec-driven mode vs reference mode
         // Annotate operations if spec is provided (used by both native and k6 paths)
-        // Round 17.4 — also produce a spec-level audit report alongside,
-        // surfaced by `--conformance-self-test` below.
-        let mut spec_audit_report: Option<crate::conformance::spec_audit::SpecAuditReport> = None;
+        // Round 18.1 — resolve the spec's base path so the self-test
+        // path can prepend it to every URL. Pre-fix, self-test
+        // ignored `--base-path /api` and hit the bare spec path,
+        // returning 404 for every request on specs whose server is
+        // proxied behind a base prefix.
+        let mut resolved_base_path: Option<String> = None;
         let annotated_ops = if !self.spec.is_empty() {
             TerminalReporter::print_progress("Spec-driven conformance mode: analyzing spec...");
             let parser = SpecParser::from_file(&self.spec[0]).await?;
-            spec_audit_report = Some(crate::conformance::spec_audit::audit_spec(parser.spec()));
+            resolved_base_path = self.resolve_base_path(&parser);
 
             // Issue #79 round 12 — Srikanth ran `--conformance --operations "GET,POST"`
             // and saw DELETE/PATCH exercised anyway. Conformance silently ignored
@@ -2237,17 +2240,10 @@ impl BenchCommand {
                     })
                     .collect(),
                 delay_between_requests: std::time::Duration::from_millis(self.conformance_delay_ms),
-                // Round 18.5 — parse `--source-ip` / `--geo-source-ip`
-                // strings to IpAddr; malformed entries are logged and
-                // dropped. Empty lists keep the pre-18.5 behaviour
-                // (one default client, no geo headers).
-                source_ips: parse_ip_list(&self.source_ips, "source-ip"),
-                geo_source_ips: parse_ip_list(&self.geo_source_ips, "geo-source-ip"),
-                geo_source_headers: if self.geo_source_headers.is_empty() {
-                    crate::conformance::self_test::default_geo_source_headers()
-                } else {
-                    self.geo_source_headers.clone()
-                },
+                // Round 18.1 — honour `--base-path` (or the spec's
+                // own first server prefix) so a deployment served
+                // under a path-prefix doesn't 404 every positive.
+                base_path: resolved_base_path.clone(),
             };
             TerminalReporter::print_progress(&format!(
                 "Self-test mode: driving {} operations with positive + per-category negative cases",
@@ -2268,7 +2264,24 @@ impl BenchCommand {
                     json_path.display()
                 ));
             }
-            if !report.all_passed() {
+            // Round 18.1 — surface the "every positive failed with
+            // the same status" case loudly. Without this, a user
+            // who forgot `--base-path /api` saw 404 for every
+            // request, but the per-category negative rollup looked
+            // all-green (because 404 is in the 4xx range the
+            // negatives expect). Now the run is correctly called
+            // out as misconfigured before showing the (meaningless)
+            // negative results.
+            if let Some(status) = report.detect_target_misconfiguration() {
+                let hint = match status {
+                    404 => " Likely cause: spec paths don't match deployed routes — check --base-path and the spec's `servers` block.",
+                    401 | 403 => " Likely cause: authentication header is missing or invalid — check --conformance-header.",
+                    _ => "",
+                };
+                TerminalReporter::print_warning(&format!(
+                    "Self-test misconfiguration: every positive case returned {status}.{hint} Negative results below are meaningless under this condition."
+                ));
+            } else if !report.all_passed() {
                 TerminalReporter::print_warning(
                     "Self-test detected gaps — server let through at least one request that should have been a 4xx",
                 );

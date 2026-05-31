@@ -1,13 +1,10 @@
-## [0.3.162] - 2026-05-29
+## [0.3.159] - 2026-05-29
 
 ### Fixed
 
-- **[Contracts][DevX]** GEODB / multi-source-IP testing in `--conformance-self-test` (#79 round 18.5) — Srikanth's (j) ask. Two new flag pairs lets a single bench host test how a destination reacts to traffic from many IPs:
-  - **`--source-ip <IP>`** (repeatable, comma-friendly) — local source IPs the OS already has assigned to an interface (sub-interface, aliased address, etc.). Builds a pool of reqwest clients each bound via `local_address()`; operations round-robin through the pool. Useful when the destination reads the IP straight from the TCP socket (direct-to-server GEODB, no CDN/WAF in front).
-  - **`--geo-source-ip <IP>`** (repeatable, comma-friendly) — fake source IPs to advertise via forwarded-IP headers. Used when the destination GEODB reads the IP from a header (the common Cloudflare / Akamai / generic-proxy case). The IP rotates per operation across the default header set (`X-Forwarded-For`, `True-Client-IP`, `CF-Connecting-IP`); override the header list with `--geo-source-header <NAME>` (repeatable). No raw-socket / root requirement — works on any host, any OS.
-  - Operations that already declare one of the geo headers (rare but legal — some specs hard-code them) keep their spec-declared value; we don't clobber. Malformed CLI IPs log a warning and are dropped; the run continues with whatever resolved.
-
-  Self-test only for round 18.5; the k6 / bench path lands in a follow-up. Five new unit tests cover header injection, spec-declared-header precedence, no-op when geo IP unset, client pool construction, and end-to-end round-robin through the pool.
+- **[Contracts][DevX]** `--conformance-self-test` now honours `--base-path` (#79 round 18.1) — Srikanth's 0.3.152 vCenter run on a deployment served behind `/api` saw every one of 1275 positives return 404, because the self-test built URLs straight from the spec's `path` ignoring the resolved base path. Now passes `base_path` through `SelfTestConfig` into `build_url_with_base`, so a spec declaring `/users` against `--base-path /api` correctly hits `<target>/api/users`. The path-param probe (`parameters:bad-path-param`) also applies the prefix so its 404 doesn't get misattributed to "bad path param".
+- **[Contracts][DevX]** Self-test now surfaces "target misconfiguration" loudly (#79 round 18.1) — when every positive case fails with the same status code (e.g. all 404), the report previously showed all-green negative buckets because 404 falls in the 4xx range that negatives expect. `SelfTestReport::detect_target_misconfiguration()` catches this pattern and the CLI prints a hard warning before the negative rollup: `Self-test misconfiguration: every positive case returned 404. Likely cause: spec paths don't match deployed routes — check --base-path and the spec's `servers` block.`
+- **[DevX]** Bench header no longer prints "Operations: 0 endpoints" before the spec is parsed (#79 round 18.2) — Srikanth's run displayed `Operations: 0 endpoints` in the banner immediately followed by `Analyzed 1275 operations` from the parse log. The header now shows `Operations: (analyzing spec…)` until the parse completes; the analysis line below carries the real count.
 
 ||||||| parent of 483a9524 (feat(bench): OWASP/WAF unification in self-test (#79 round 17.5))
 ## [0.3.153] - 2026-05-29
