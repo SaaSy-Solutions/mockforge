@@ -1,3 +1,15 @@
+## [0.3.156] - 2026-05-29
+
+### Added
+
+- **[Contracts][DevX]** Spec-level audit alongside `--conformance-self-test` (#79 round 17.4) — Srikanth's (17.4) ask: in addition to driving the server with positive + negative *requests*, also audit the OpenAPI document itself for things that silently degrade validator quality. The audit ships as `conformance-spec-audit.json` next to `conformance-self-test.json` and emits a one-line summary in the terminal report. Categories:
+  - **`servers`** — empty `servers` list, all-localhost servers, or all-relative-URL servers each produce a `Warning`. Tells you when a spec can't actually be pointed at production.
+  - **`callbacks`** — operations declaring `callbacks` whose callback operation has no `security` requirement produce a `Warning` per callback. Webhook deliveries should never be unauthenticated.
+  - **`polymorphism`** — `oneOf` / `anyOf` schemas anywhere in components or inline that lack a `discriminator` produce a `Warning`. Without a discriminator, validators degrade to "first-match" or "always-pass".
+  - **`datatypes`** — coverage map of every `(type, format)` combination that appears in the spec. Lets you see at a glance "your spec uses `string:uuid` 412 times but `string:email` never" — i.e. which validator rules need attention.
+
+  Audit runs whenever `--conformance-self-test` is set, but is pure (no network I/O) so it still produces a useful report even if the target server is unreachable.
+
 ## [0.3.155] - 2026-05-29
 
 ### Added
