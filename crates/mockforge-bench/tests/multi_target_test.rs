@@ -191,6 +191,9 @@ async fn test_bench_command_parse_headers() {
         export_requests: false,
         validate_requests: false,
         conformance_self_test: false,
+        source_ips: Vec::new(),
+        geo_source_ips: Vec::new(),
+        geo_source_headers: Vec::new(),
     };
 
     let headers = cmd.parse_headers().unwrap();
@@ -272,6 +275,9 @@ async fn test_bench_command_parse_headers_invalid_format() {
         export_requests: false,
         validate_requests: false,
         conformance_self_test: false,
+        source_ips: Vec::new(),
+        geo_source_ips: Vec::new(),
+        geo_source_headers: Vec::new(),
     };
 
     let result = cmd.parse_headers();

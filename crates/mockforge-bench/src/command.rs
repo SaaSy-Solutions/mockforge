@@ -208,6 +208,20 @@ pub struct BenchCommand {
     /// effect against the user's spec.
     pub conformance_self_test: bool,
 
+    /// Round 18.5 — local source IPs to bind self-test requests to.
+    /// Each entry must be a valid `IpAddr` and already assigned to
+    /// an interface on the host. Operations round-robin through the
+    /// pool. Empty → one default client.
+    pub source_ips: Vec<String>,
+    /// Round 18.5 — fake source IPs to advertise via forwarded-IP
+    /// headers (rotated per operation). Used for GEODB testing
+    /// where the destination reads the IP from a header.
+    pub geo_source_ips: Vec<String>,
+    /// Round 18.5 — which forwarded-IP header(s) to populate when
+    /// `geo_source_ips` is non-empty. Empty → default 3-header set
+    /// (X-Forwarded-For, True-Client-IP, CF-Connecting-IP).
+    pub geo_source_headers: Vec<String>,
+
     // === OWASP API Security Top 10 Testing ===
     /// Enable OWASP API Security Top 10 testing mode
     pub owasp_api_top10: bool,
@@ -227,6 +241,31 @@ pub struct BenchCommand {
     pub owasp_report_format: String,
     /// Number of iterations per VU for OWASP tests (default: 1)
     pub owasp_iterations: u32,
+}
+
+/// Round 18.5 — parse a list of CLI IP strings (each entry may be a
+/// single IP or a comma-separated list — the CLI flag is repeatable
+/// AND comma-friendly so `--source-ip 10.0.0.1,10.0.0.2` and
+/// `--source-ip 10.0.0.1 --source-ip 10.0.0.2` are equivalent).
+/// Malformed entries log a warning and are dropped; the bench
+/// continues with whatever resolved cleanly.
+fn parse_ip_list(raw: &[String], flag_name: &str) -> Vec<std::net::IpAddr> {
+    let mut out = Vec::new();
+    for entry in raw {
+        for piece in entry.split(',') {
+            let s = piece.trim();
+            if s.is_empty() {
+                continue;
+            }
+            match s.parse::<std::net::IpAddr>() {
+                Ok(ip) => out.push(ip),
+                Err(e) => {
+                    tracing::warn!(target: "mockforge::bench", "ignoring malformed --{flag_name} value '{s}': {e}");
+                }
+            }
+        }
+    }
+    out
 }
 
 impl BenchCommand {
@@ -714,6 +753,9 @@ impl BenchCommand {
                 export_requests: false,
                 validate_requests: false,
                 conformance_self_test: false,
+                source_ips: Vec::new(),
+                geo_source_ips: Vec::new(),
+                geo_source_headers: Vec::new(),
             },
             targets,
             max_concurrency,
@@ -2195,6 +2237,17 @@ impl BenchCommand {
                     })
                     .collect(),
                 delay_between_requests: std::time::Duration::from_millis(self.conformance_delay_ms),
+                // Round 18.5 — parse `--source-ip` / `--geo-source-ip`
+                // strings to IpAddr; malformed entries are logged and
+                // dropped. Empty lists keep the pre-18.5 behaviour
+                // (one default client, no geo headers).
+                source_ips: parse_ip_list(&self.source_ips, "source-ip"),
+                geo_source_ips: parse_ip_list(&self.geo_source_ips, "geo-source-ip"),
+                geo_source_headers: if self.geo_source_headers.is_empty() {
+                    crate::conformance::self_test::default_geo_source_headers()
+                } else {
+                    self.geo_source_headers.clone()
+                },
             };
             TerminalReporter::print_progress(&format!(
                 "Self-test mode: driving {} operations with positive + per-category negative cases",
@@ -3041,6 +3094,9 @@ mod tests {
             export_requests: false,
             validate_requests: false,
             conformance_self_test: false,
+            source_ips: Vec::new(),
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let headers = cmd.parse_headers().unwrap();
@@ -3120,6 +3176,9 @@ mod tests {
             export_requests: false,
             validate_requests: false,
             conformance_self_test: false,
+            source_ips: Vec::new(),
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         assert_eq!(cmd.get_spec_display_name(), "test.yaml");
@@ -3195,6 +3254,9 @@ mod tests {
             export_requests: false,
             validate_requests: false,
             conformance_self_test: false,
+            source_ips: Vec::new(),
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         assert_eq!(cmd_multi.get_spec_display_name(), "2 spec files");

@@ -1,17 +1,13 @@
-## [0.3.158] - 2026-05-29
+## [0.3.162] - 2026-05-29
 
 ### Fixed
 
-- **[Contracts][DevX]** Self-contained HTML conformance report (#79 round 17.6) — Srikanth's (17.6) ask: a human-readable artifact next to the JSON. `mockforge bench --conformance-self-test` now writes `conformance-report.html` alongside `conformance-self-test.json`. Inline CSS, no external assets, drops into any browser.
+- **[Contracts][DevX]** GEODB / multi-source-IP testing in `--conformance-self-test` (#79 round 18.5) — Srikanth's (j) ask. Two new flag pairs lets a single bench host test how a destination reacts to traffic from many IPs:
+  - **`--source-ip <IP>`** (repeatable, comma-friendly) — local source IPs the OS already has assigned to an interface (sub-interface, aliased address, etc.). Builds a pool of reqwest clients each bound via `local_address()`; operations round-robin through the pool. Useful when the destination reads the IP straight from the TCP socket (direct-to-server GEODB, no CDN/WAF in front).
+  - **`--geo-source-ip <IP>`** (repeatable, comma-friendly) — fake source IPs to advertise via forwarded-IP headers. Used when the destination GEODB reads the IP from a header (the common Cloudflare / Akamai / generic-proxy case). The IP rotates per operation across the default header set (`X-Forwarded-For`, `True-Client-IP`, `CF-Connecting-IP`); override the header list with `--geo-source-header <NAME>` (repeatable). No raw-socket / root requirement — works on any host, any OS.
+  - Operations that already declare one of the geo headers (rare but legal — some specs hard-code them) keep their spec-declared value; we don't clobber. Malformed CLI IPs log a warning and are dropped; the run continues with whatever resolved.
 
-  Sections:
-  - **Headline cards** — positive count, positive failures, negatives caught, negatives missed, operations audited (red/amber/green by status).
-  - **Negatives by category** — one row per category (`request-body`, `parameters`, `security`, `owasp`, …) with caught vs. missed counts and a pass/fail badge.
-  - **Per-operation results** — every operation with its positive status badge and a caught / missed roll-up.
-  - **Missed negatives** — drill-down table of every individual missed probe (capped at 200 rows; full set still in the JSON).
-  - **Spec audit** (when a round-17.4 `conformance-spec-audit.json` is in the same output directory) — findings grouped by severity, with a top-40 datatype coverage table.
-
-  All output is HTML-escaped — payloads like `<script>` render as text, not markup. Decoupled from the spec-audit module (reads the JSON dynamically) so the round-17.4 audit branch isn't a hard compile dependency for this PR.
+  Self-test only for round 18.5; the k6 / bench path lands in a follow-up. Five new unit tests cover header injection, spec-declared-header precedence, no-op when geo IP unset, client pool construction, and end-to-end round-robin through the pool.
 
 ||||||| parent of 483a9524 (feat(bench): OWASP/WAF unification in self-test (#79 round 17.5))
 ## [0.3.153] - 2026-05-29

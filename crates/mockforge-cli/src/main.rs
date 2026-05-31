@@ -2131,6 +2131,41 @@ enum Commands {
         /// directory alongside the regular report.
         #[arg(long)]
         conformance_self_test: bool,
+
+        /// Issue #79 round 18.5 — local source IPs to bind self-test
+        /// requests to. Each IP must already be assigned to an
+        /// interface on this host (sub-interface, aliased address,
+        /// etc.) — the OS refuses to bind unknown addresses.
+        ///
+        /// Operations round-robin through the pool — useful for
+        /// testing how a multi-homed bench host or a GEODB server
+        /// reacts when traffic arrives from multiple TCP source
+        /// addresses. Repeatable.
+        ///
+        /// Example: --source-ip 10.0.0.5 --source-ip 10.0.0.6
+        #[arg(long = "source-ip", value_name = "IP")]
+        source_ips: Vec<String>,
+
+        /// Issue #79 round 18.5 — fake source IPs to advertise via
+        /// forwarded-IP headers. Used to exercise GEODB lookup at
+        /// the destination without actually emitting packets from
+        /// those addresses (which would require raw sockets + root).
+        ///
+        /// The IP rotates per operation across the default header
+        /// set (X-Forwarded-For, True-Client-IP, CF-Connecting-IP)
+        /// or the headers listed via --geo-source-header. Repeatable.
+        ///
+        /// Example: --geo-source-ip 203.0.113.42 --geo-source-ip 198.51.100.7
+        #[arg(long = "geo-source-ip", value_name = "IP")]
+        geo_source_ips: Vec<String>,
+
+        /// Issue #79 round 18.5 — which forwarded-IP header to use
+        /// for `--geo-source-ip`. Defaults to a 3-header set covering
+        /// Cloudflare (`CF-Connecting-IP`), Akamai/CloudFront
+        /// (`True-Client-IP`), and the de-facto `X-Forwarded-For`.
+        /// Override to test a specific stack. Repeatable.
+        #[arg(long = "geo-source-header", value_name = "HEADER")]
+        geo_source_headers: Vec<String>,
     },
 
     /// Native Rust chunked-encoding traffic generator.
@@ -3030,6 +3065,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             export_requests,
             validate_requests,
             conformance_self_test,
+            source_ips,
+            geo_source_ips,
+            geo_source_headers,
         } => {
             // Validate that either --target or --targets-file is provided, but not both
             match (&target, &targets_file) {
@@ -3123,6 +3161,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 export_requests,
                 validate_requests,
                 conformance_self_test,
+                source_ips,
+                geo_source_ips,
+                geo_source_headers,
             };
 
             if let Err(e) = bench_cmd.execute().await {
