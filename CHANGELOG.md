@@ -1,20 +1,35 @@
-## [0.3.159] - 2026-05-29
+## [0.3.162] - 2026-05-31
+
+Issue #79 rounds 17.1 through 18.5 — TUI clipboard + non-violating counter, schema-driven negatives, security probes, spec-level audits, OWASP/WAF unification, HTML report, base-path bug, schema-`$ref` resolution, OWASP coverage hints, GEODB multi-source-IP testing. Squash-merged from PRs #729 / #731 / #732 / #736 / #737 / #738 / #740 / #741 / #742 / #744. Version chain compressed from incremental 0.3.153–0.3.161 into a single 0.3.162 release; the intermediate version numbers were never published to crates.io.
+
+### Added — TUI / Admin
+
+- **[Contracts][DevX]** TUI Conformance detail view gains a **`c`** keystroke to copy the selected violation to the system clipboard as pretty-printed JSON (round 17.1) — Srikanth's (c-i) ask. Uses `arboard` with default features so it works on X11, Wayland, macOS NSPasteboard, and Win32 without per-platform setup. On a clipboard-less TTY the failure surfaces in the flash strip instead of silently no-op'ing.
+- **[Contracts]** New `total_ok` lifetime counter on the conformance violations API (round 17.1) — Srikanth's (f) follow-up. Each request that *passes* the validator bumps the counter; the admin API returns `total_ok` alongside `total_seen`, and the TUI title now reads e.g. `Conformance Violations (256 buffered, 256 shown, 517498/522830 validated failed)`. Gives the real pass/fail ratio under sustained traffic instead of just the violation count.
+
+### Added — Self-test
+
+- **[Contracts][DevX]** Schema-driven request-body mutator for `--conformance-self-test` (round 17.2) — when both a positive sample AND a resolved request-body schema are available, the self-test now emits per-field negatives (type mismatch, required-field removal, min/max bound breaks, pattern miss, enum out-of-range, additional-property), plus a URI-too-long parameter probe. Labels carry the field path (e.g. `request-body:type-mismatch:user.email`). Bounded by `SCHEMA_MUTATION_CAP = 12` per operation (top 20 properties, top 5 required) so a 100-property body on a 22 000-operation spec doesn't produce a runaway test matrix.
+- **[Contracts][DevX][Security]** Security probes (round 17.3) — operations declaring a security requirement now get bad-credential negatives (`security:bad-bearer`, `security:bad-basic`, `security:bad-apikey:<name>`, `security:no-auth`) plus auth-stripping so the probe's credential is the only thing the server sees. Surfaces validators that don't enforce auth even when the spec says they should.
+- **[Contracts][DevX]** Spec-level audit alongside `--conformance-self-test` (round 17.4) — pure audit of the OpenAPI document (no network I/O) covering `servers` (missing/localhost-only/relative-only), `callbacks` (unsecured webhook ops), `polymorphism` (`oneOf` / `anyOf` without `discriminator`), and a datatype coverage map. Writes `conformance-spec-audit.json` next to the self-test JSON.
+- **[Contracts][DevX][Security]** OWASP / WAF unification into `--conformance-self-test` (round 17.5) — folds one canonical payload per OWASP category (`owasp:sqli`, `owasp:xss`, `owasp:command-injection`, `owasp:path-traversal`, `owasp:ssti`, `owasp:ldap-injection`, `owasp:xxe`) into the existing self-test driver. Injects into the first query param or first string body field; skips operations with no injectable surface. 7 probes max per operation; server should return 4xx (5xx = crashed on payload).
+- **[Contracts][DevX]** Self-contained HTML conformance report (round 17.6) — `--conformance-self-test` writes `conformance-report.html` next to the JSON. Inline CSS, no external assets. Sections: headline cards, negatives by category, per-operation results, missed-negative drill-down (capped at 200 rows), and an optional spec-audit section when a round-17.4 audit JSON is present.
+
+### Added — GEODB multi-source-IP
+
+- **[Contracts][DevX]** GEODB / multi-source-IP testing in `--conformance-self-test` (round 18.5). `--source-ip <IP>` (repeatable) builds a pool of reqwest clients bound via `local_address()`; `--geo-source-ip <IP>` rotates fake source IPs across `X-Forwarded-For` / `True-Client-IP` / `CF-Connecting-IP` (configurable via `--geo-source-header`). Self-test only for v0; bench / k6 path lands in a follow-up.
+
+### Changed
+
+- **[Contracts][DevX]** OWASP coverage table now appends an "Untested OWASP categories" footer that tells you exactly which `--conformance-categories` value to add for each uncovered OWASP category (round 18.4). Removes the "Not Working" confusion when a user-selected subset of categories doesn't cover the full OWASP Top 10.
 
 ### Fixed
 
-- **[Contracts][DevX]** `--conformance-self-test` now honours `--base-path` (#79 round 18.1) — Srikanth's 0.3.152 vCenter run on a deployment served behind `/api` saw every one of 1275 positives return 404, because the self-test built URLs straight from the spec's `path` ignoring the resolved base path. Now passes `base_path` through `SelfTestConfig` into `build_url_with_base`, so a spec declaring `/users` against `--base-path /api` correctly hits `<target>/api/users`. The path-param probe (`parameters:bad-path-param`) also applies the prefix so its 404 doesn't get misattributed to "bad path param".
-- **[Contracts][DevX]** Self-test now surfaces "target misconfiguration" loudly (#79 round 18.1) — when every positive case fails with the same status code (e.g. all 404), the report previously showed all-green negative buckets because 404 falls in the 4xx range that negatives expect. `SelfTestReport::detect_target_misconfiguration()` catches this pattern and the CLI prints a hard warning before the negative rollup: `Self-test misconfiguration: every positive case returned 404. Likely cause: spec paths don't match deployed routes — check --base-path and the spec's `servers` block.`
-- **[DevX]** Bench header no longer prints "Operations: 0 endpoints" before the spec is parsed (#79 round 18.2) — Srikanth's run displayed `Operations: 0 endpoints` in the banner immediately followed by `Analyzed 1275 operations` from the parse log. The header now shows `Operations: (analyzing spec…)` until the parse completes; the analysis line below carries the real count.
+- **[Contracts][DevX]** `--conformance-self-test` now honours `--base-path` (round 18.1) — pre-fix every positive 404'd on deployments served behind a path prefix.
+- **[Contracts][DevX]** Self-test now emits a hard warning when every positive case fails with the same status code, instead of silently treating 404s as "negatives caught" (round 18.1).
+- **[DevX]** Bench header no longer prints `Operations: 0 endpoints` before the spec is parsed (round 18.2). Shows `(analyzing spec…)` until the count is known.
+- **[Contracts]** Request-body validator now resolves nested `$ref` pointers against the spec's components map (round 18.3) — pre-fix specs whose component schemas had dotted names (`Vcenter.VM.DiskCloneSpec`) or were referenced from nested schemas failed with `Pointer '/components/schemas/X' does not exist`. New `schema_ref_resolver::build_validator(&schema, &spec)` inlines the components into the validator's document context.
 
-||||||| parent of 483a9524 (feat(bench): OWASP/WAF unification in self-test (#79 round 17.5))
-## [0.3.153] - 2026-05-29
-
-### Added
-
-- **[Contracts][DevX]** TUI Conformance detail view gains a **`c`** keystroke to copy the selected violation to the system clipboard as pretty-printed JSON (#79 round 17.1) — Srikanth's (c-i) ask. Uses `arboard` with default features so it works on X11, Wayland, macOS NSPasteboard, and Win32 without per-platform setup. On a clipboard-less TTY the failure surfaces in the flash strip instead of silently no-op'ing.
-- **[Contracts]** New `total_ok` lifetime counter on the conformance violations API (#79 round 17.1) — Srikanth's (f) follow-up. Each request that *passes* the validator bumps the counter; the admin API returns `total_ok` alongside `total_seen`, and the TUI title now reads e.g. `Conformance Violations (256 buffered, 256 shown, 517498/522830 validated failed)`. Gives the real pass/fail ratio under sustained traffic instead of just the violation count.
-
-||||||| parent of f41e0530 (feat(bench): OWASP/WAF unification in self-test (#79 round 17.5))
 ## [0.3.152] - 2026-05-28
 
 ### Changed

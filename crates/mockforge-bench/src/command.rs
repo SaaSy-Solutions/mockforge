@@ -2244,6 +2244,16 @@ impl BenchCommand {
                 // own first server prefix) so a deployment served
                 // under a path-prefix doesn't 404 every positive.
                 base_path: resolved_base_path.clone(),
+                // Round 18.5 — GEODB multi-source-IP. Parse CLI IP
+                // lists (malformed entries log a warning and are
+                // dropped). Empty lists keep pre-18.5 behaviour.
+                source_ips: parse_ip_list(&self.source_ips, "source-ip"),
+                geo_source_ips: parse_ip_list(&self.geo_source_ips, "geo-source-ip"),
+                geo_source_headers: if self.geo_source_headers.is_empty() {
+                    crate::conformance::self_test::default_geo_source_headers()
+                } else {
+                    self.geo_source_headers.clone()
+                },
             };
             TerminalReporter::print_progress(&format!(
                 "Self-test mode: driving {} operations with positive + per-category negative cases",

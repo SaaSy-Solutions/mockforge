@@ -50,6 +50,18 @@ pub struct SelfTestConfig {
     /// Pre-fix this was ignored entirely and every operation 404'd
     /// (Srikanth's vCenter run on 0.3.152: 1275 positives, 1275 4xx).
     pub base_path: Option<String>,
+    /// Round 18.5 — local source IPs to bind outgoing requests to.
+    /// Each IP must already be assigned to an interface on the host.
+    /// Operations round-robin through the resulting client pool.
+    pub source_ips: Vec<IpAddr>,
+    /// Round 18.5 — fake source IPs to advertise via forwarded-IP
+    /// headers (used to exercise GEODB lookup at the destination).
+    /// Rotated per operation.
+    pub geo_source_ips: Vec<IpAddr>,
+    /// Which forwarded-IP header(s) to populate when `geo_source_ips`
+    /// is non-empty. Empty → no-op; default below sets the standard
+    /// three-header set.
+    pub geo_source_headers: Vec<String>,
 }
 
 impl Default for SelfTestConfig {
@@ -61,6 +73,9 @@ impl Default for SelfTestConfig {
             extra_headers: Vec::new(),
             delay_between_requests: Duration::from_millis(0),
             base_path: None,
+            source_ips: Vec::new(),
+            geo_source_ips: Vec::new(),
+            geo_source_headers: default_geo_source_headers(),
         }
     }
 }
@@ -701,6 +716,204 @@ fn inject_into_body_field(body: Option<&str>, field: &str, payload: &str) -> Opt
 }
 
 #[allow(clippy::too_many_arguments)]
+/// Round 17.3 — one synthesised bad credential to send.
+#[derive(Debug, Clone)]
+struct SecurityProbe {
+    /// Self-test label, e.g. `security:bad-bearer`.
+    label: String,
+    /// Headers to attach to the probe request.
+    headers: Vec<(String, String)>,
+    /// Query parameters to attach (API key in query case).
+    query: Vec<(String, String)>,
+}
+
+/// For each declared security scheme, produce one bad-credential
+/// probe plus a single "no auth at all" probe that exercises the
+/// missing-credential code path. Deduplicates by scheme kind so an
+/// operation declaring `[bearer, bearer]` only yields one Bearer
+/// probe.
+fn build_security_probes(schemes: &[SecuritySchemeInfo]) -> Vec<SecurityProbe> {
+    if schemes.is_empty() {
+        return Vec::new();
+    }
+    let mut probes: Vec<SecurityProbe> = Vec::new();
+    let mut seen_bearer = false;
+    let mut seen_basic = false;
+    // `(loc_tag, name)` — ApiKeyLocation doesn't implement Ord, so
+    // we tag it with a short discriminant string for dedup.
+    let mut seen_apikey: std::collections::BTreeSet<(&'static str, String)> = Default::default();
+    for s in schemes {
+        match s {
+            SecuritySchemeInfo::Bearer if !seen_bearer => {
+                seen_bearer = true;
+                probes.push(SecurityProbe {
+                    label: "security:bad-bearer".into(),
+                    headers: vec![(
+                        "Authorization".into(),
+                        "Bearer self-test-invalid-token".into(),
+                    )],
+                    query: Vec::new(),
+                });
+            }
+            SecuritySchemeInfo::Basic if !seen_basic => {
+                seen_basic = true;
+                // base64("self-test:invalid") — valid base64, wrong creds.
+                probes.push(SecurityProbe {
+                    label: "security:bad-basic".into(),
+                    headers: vec![(
+                        "Authorization".into(),
+                        "Basic c2VsZi10ZXN0OmludmFsaWQ=".into(),
+                    )],
+                    query: Vec::new(),
+                });
+            }
+            SecuritySchemeInfo::ApiKey { location, name } => {
+                let loc_tag = match location {
+                    ApiKeyLocation::Header => "header",
+                    ApiKeyLocation::Query => "query",
+                    ApiKeyLocation::Cookie => "cookie",
+                };
+                if seen_apikey.contains(&(loc_tag, name.clone())) {
+                    continue;
+                }
+                seen_apikey.insert((loc_tag, name.clone()));
+                let label = format!("security:bad-apikey:{}", name);
+                let bad = "self-test-invalid-key".to_string();
+                match location {
+                    ApiKeyLocation::Header => probes.push(SecurityProbe {
+                        label,
+                        headers: vec![(name.clone(), bad)],
+                        query: Vec::new(),
+                    }),
+                    ApiKeyLocation::Query => probes.push(SecurityProbe {
+                        label,
+                        headers: Vec::new(),
+                        query: vec![(name.clone(), bad)],
+                    }),
+                    ApiKeyLocation::Cookie => probes.push(SecurityProbe {
+                        label,
+                        headers: vec![("Cookie".into(), format!("{}={}", name, bad))],
+                        query: Vec::new(),
+                    }),
+                }
+            }
+            _ => {}
+        }
+    }
+    // Always add a "no auth at all" probe when *any* security scheme
+    // is declared — useful even if all schemes failed to resolve to a
+    // testable kind, because it surfaces validators that aren't
+    // checking auth presence at all.
+    probes.push(SecurityProbe {
+        label: "security:no-auth".into(),
+        headers: Vec::new(),
+        query: Vec::new(),
+    });
+    probes
+}
+
+/// Remove Authorization and any API-key headers declared by the
+/// operation's security schemes from `headers`, so a security probe
+/// can supply its own credential (or none) cleanly.
+fn strip_auth(
+    headers: &[(String, String)],
+    schemes: &[SecuritySchemeInfo],
+) -> Vec<(String, String)> {
+    let mut apikey_headers: std::collections::BTreeSet<String> = Default::default();
+    for s in schemes {
+        if let SecuritySchemeInfo::ApiKey {
+            location: ApiKeyLocation::Header,
+            name,
+        } = s
+        {
+            apikey_headers.insert(name.to_lowercase());
+        }
+        if let SecuritySchemeInfo::ApiKey {
+            location: ApiKeyLocation::Cookie,
+            ..
+        } = s
+        {
+            apikey_headers.insert("cookie".into());
+        }
+    }
+    headers
+        .iter()
+        .filter(|(k, _)| {
+            let lk = k.to_lowercase();
+            lk != "authorization" && !apikey_headers.contains(&lk)
+        })
+        .cloned()
+        .collect()
+}
+
+/// Remove API-key query parameters declared by the operation's
+/// security schemes from `query`, so a probe can supply its own.
+fn strip_auth_query(
+    query: &[(String, String)],
+    schemes: &[SecuritySchemeInfo],
+) -> Vec<(String, String)> {
+    let mut apikey_query: std::collections::BTreeSet<String> = Default::default();
+    for s in schemes {
+        if let SecuritySchemeInfo::ApiKey {
+            location: ApiKeyLocation::Query,
+            name,
+        } = s
+        {
+            apikey_query.insert(name.clone());
+        }
+    }
+    query.iter().filter(|(k, _)| !apikey_query.contains(k)).cloned().collect()
+}
+
+/// Variant of `send_case` that takes an explicit `extra_headers`
+/// (rather than reading them from `config`). Used by security probes
+/// to substitute or strip the configured Authorization header.
+#[allow(clippy::too_many_arguments)]
+async fn send_case_with_extra(
+    client: &Client,
+    config: &SelfTestConfig,
+    method: Method,
+    url: &str,
+    label: &str,
+    expected_4xx: bool,
+    body: Option<&str>,
+    query: Vec<(String, String)>,
+    headers: Vec<(String, String)>,
+    extra_headers: Vec<(String, String)>,
+) -> CaseOutcome {
+    let _ = config; // signature parity; timeout already on `client`.
+    let mut req = client.request(method, url);
+    for (k, v) in &query {
+        req = req.query(&[(k.as_str(), v.as_str())]);
+    }
+    for (k, v) in &headers {
+        req = req.header(k, v);
+    }
+    for (k, v) in &extra_headers {
+        req = req.header(k, v);
+    }
+    if let Some(b) = body {
+        req = req
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(b.to_string());
+    }
+    let actual_status = match req.send().await {
+        Ok(resp) => resp.status().as_u16(),
+        Err(_) => 0,
+    };
+    let passed = if expected_4xx {
+        (400..500).contains(&actual_status)
+    } else {
+        (200..400).contains(&actual_status)
+    };
+    CaseOutcome {
+        label: label.to_string(),
+        expected_4xx,
+        actual_status,
+        passed,
+    }
+}
+
 async fn send_case(
     client: &Client,
     config: &SelfTestConfig,
