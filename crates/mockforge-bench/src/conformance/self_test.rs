@@ -431,6 +431,42 @@ async fn test_operation(
         );
     }
 
+    // (w) Round 17.5 — OWASP/WAF unification.
+    //
+    // Pull one canonical payload per OWASP category from the existing
+    // `SecurityPayloads` library and emit an injection probe per
+    // category. Targets in priority order: (1) substitute the first
+    // query param's value, (2) substitute the first string field of
+    // the positive JSON body, (3) skip if neither is available.
+    //
+    // Label format `owasp:<category>`, so the existing
+    // `negative_caught` / `negative_missed` rollup groups all OWASP
+    // findings under one `owasp` bucket. Expected 4xx (server should
+    // reject malicious input). A 5xx is a hard finding (server
+    // crashed on the payload); a 2xx is a soft finding (input passed
+    // through unfiltered — may or may not be a real vuln).
+    //
+    // Bounded: at most one probe per category (7 categories total).
+    // Skips the operation entirely if no injection target is
+    // available — open GET endpoints with no params get zero OWASP
+    // probes, no false signal.
+    for probe in build_owasp_probes(op) {
+        negatives.push(
+            send_case(
+                client,
+                config,
+                method.clone(),
+                &url,
+                &probe.label,
+                true,
+                probe.body.as_deref(),
+                probe.query,
+                op.header_params.clone(),
+            )
+            .await,
+        );
+    }
+
     OperationResult {
         method: op.method.clone(),
         path: op.path.clone(),
@@ -439,202 +475,98 @@ async fn test_operation(
     }
 }
 
-/// Round 17.3 — one synthesised bad credential to send.
+/// Round 17.5 — one OWASP injection probe to send.
 #[derive(Debug, Clone)]
-struct SecurityProbe {
-    /// Self-test label, e.g. `security:bad-bearer`.
+struct OwaspProbe {
     label: String,
-    /// Headers to attach to the probe request.
-    headers: Vec<(String, String)>,
-    /// Query parameters to attach (API key in query case).
+    body: Option<String>,
     query: Vec<(String, String)>,
 }
 
-/// For each declared security scheme, produce one bad-credential
-/// probe plus a single "no auth at all" probe that exercises the
-/// missing-credential code path. Deduplicates by scheme kind so an
-/// operation declaring `[bearer, bearer]` only yields one Bearer
-/// probe.
-fn build_security_probes(schemes: &[SecuritySchemeInfo]) -> Vec<SecurityProbe> {
-    if schemes.is_empty() {
+/// Build one OWASP probe per `SecurityCategory` for `op`. Targets the
+/// first query param if any, else the first string field of the
+/// positive JSON body. Returns empty if neither target is available.
+fn build_owasp_probes(op: &AnnotatedOperation) -> Vec<OwaspProbe> {
+    use crate::security_payloads::{SecurityCategory, SecurityPayloads};
+
+    let categories = [
+        SecurityCategory::SqlInjection,
+        SecurityCategory::Xss,
+        SecurityCategory::CommandInjection,
+        SecurityCategory::PathTraversal,
+        SecurityCategory::Ssti,
+        SecurityCategory::LdapInjection,
+        SecurityCategory::Xxe,
+    ];
+
+    // Pick an injection target ONCE per operation; reuse it across
+    // categories. (A single op gets up to 7 probes — one per category
+    // — all attacking the same field.)
+    let injection_target = pick_injection_target(op);
+    let Some(target) = injection_target else {
         return Vec::new();
-    }
-    let mut probes: Vec<SecurityProbe> = Vec::new();
-    let mut seen_bearer = false;
-    let mut seen_basic = false;
-    // `(loc_tag, name)` — ApiKeyLocation doesn't implement Ord, so
-    // we tag it with a short discriminant string for dedup.
-    let mut seen_apikey: std::collections::BTreeSet<(&'static str, String)> = Default::default();
-    for s in schemes {
-        match s {
-            SecuritySchemeInfo::Bearer if !seen_bearer => {
-                seen_bearer = true;
-                probes.push(SecurityProbe {
-                    label: "security:bad-bearer".into(),
-                    headers: vec![(
-                        "Authorization".into(),
-                        "Bearer self-test-invalid-token".into(),
-                    )],
-                    query: Vec::new(),
-                });
-            }
-            SecuritySchemeInfo::Basic if !seen_basic => {
-                seen_basic = true;
-                // base64("self-test:invalid") — valid base64, wrong creds.
-                probes.push(SecurityProbe {
-                    label: "security:bad-basic".into(),
-                    headers: vec![(
-                        "Authorization".into(),
-                        "Basic c2VsZi10ZXN0OmludmFsaWQ=".into(),
-                    )],
-                    query: Vec::new(),
-                });
-            }
-            SecuritySchemeInfo::ApiKey { location, name } => {
-                let loc_tag = match location {
-                    ApiKeyLocation::Header => "header",
-                    ApiKeyLocation::Query => "query",
-                    ApiKeyLocation::Cookie => "cookie",
-                };
-                if seen_apikey.contains(&(loc_tag, name.clone())) {
-                    continue;
-                }
-                seen_apikey.insert((loc_tag, name.clone()));
-                let label = format!("security:bad-apikey:{}", name);
-                let bad = "self-test-invalid-key".to_string();
-                match location {
-                    ApiKeyLocation::Header => probes.push(SecurityProbe {
-                        label,
-                        headers: vec![(name.clone(), bad)],
-                        query: Vec::new(),
-                    }),
-                    ApiKeyLocation::Query => probes.push(SecurityProbe {
-                        label,
-                        headers: Vec::new(),
-                        query: vec![(name.clone(), bad)],
-                    }),
-                    ApiKeyLocation::Cookie => probes.push(SecurityProbe {
-                        label,
-                        headers: vec![("Cookie".into(), format!("{}={}", name, bad))],
-                        query: Vec::new(),
-                    }),
+    };
+
+    let mut probes = Vec::new();
+    for cat in categories {
+        // Take the *first* payload from each category. The
+        // collection's first entry is the canonical low-risk
+        // representative; later entries include time-based / blind
+        // probes that aren't useful as a one-shot rejection test.
+        let Some(payload) = SecurityPayloads::get_by_category(cat).into_iter().next() else {
+            continue;
+        };
+        let mut query = op.query_params.clone();
+        let mut body = op.sample_body.clone();
+        match &target {
+            InjectionTarget::Query(idx) => {
+                if let Some(slot) = query.get_mut(*idx) {
+                    slot.1 = payload.payload.clone();
                 }
             }
-            _ => {}
+            InjectionTarget::BodyStringField(field) => {
+                body = inject_into_body_field(body.as_deref(), field, &payload.payload);
+            }
         }
+        probes.push(OwaspProbe {
+            label: format!("owasp:{}", cat),
+            body,
+            query,
+        });
     }
-    // Always add a "no auth at all" probe when *any* security scheme
-    // is declared — useful even if all schemes failed to resolve to a
-    // testable kind, because it surfaces validators that aren't
-    // checking auth presence at all.
-    probes.push(SecurityProbe {
-        label: "security:no-auth".into(),
-        headers: Vec::new(),
-        query: Vec::new(),
-    });
     probes
 }
 
-/// Remove Authorization and any API-key headers declared by the
-/// operation's security schemes from `headers`, so a security probe
-/// can supply its own credential (or none) cleanly.
-fn strip_auth(
-    headers: &[(String, String)],
-    schemes: &[SecuritySchemeInfo],
-) -> Vec<(String, String)> {
-    let mut apikey_headers: std::collections::BTreeSet<String> = Default::default();
-    for s in schemes {
-        if let SecuritySchemeInfo::ApiKey {
-            location: ApiKeyLocation::Header,
-            name,
-        } = s
-        {
-            apikey_headers.insert(name.to_lowercase());
-        }
-        if let SecuritySchemeInfo::ApiKey {
-            location: ApiKeyLocation::Cookie,
-            ..
-        } = s
-        {
-            apikey_headers.insert("cookie".into());
-        }
-    }
-    headers
-        .iter()
-        .filter(|(k, _)| {
-            let lk = k.to_lowercase();
-            lk != "authorization" && !apikey_headers.contains(&lk)
-        })
-        .cloned()
-        .collect()
+#[derive(Debug, Clone)]
+enum InjectionTarget {
+    Query(usize),
+    BodyStringField(String),
 }
 
-/// Remove API-key query parameters declared by the operation's
-/// security schemes from `query`, so a probe can supply its own.
-fn strip_auth_query(
-    query: &[(String, String)],
-    schemes: &[SecuritySchemeInfo],
-) -> Vec<(String, String)> {
-    let mut apikey_query: std::collections::BTreeSet<String> = Default::default();
-    for s in schemes {
-        if let SecuritySchemeInfo::ApiKey {
-            location: ApiKeyLocation::Query,
-            name,
-        } = s
-        {
-            apikey_query.insert(name.clone());
+fn pick_injection_target(op: &AnnotatedOperation) -> Option<InjectionTarget> {
+    if !op.query_params.is_empty() {
+        return Some(InjectionTarget::Query(0));
+    }
+    let sample = op.sample_body.as_deref()?;
+    let parsed: serde_json::Value = serde_json::from_str(sample).ok()?;
+    let obj = parsed.as_object()?;
+    for (k, v) in obj {
+        if v.is_string() {
+            return Some(InjectionTarget::BodyStringField(k.clone()));
         }
     }
-    query.iter().filter(|(k, _)| !apikey_query.contains(k)).cloned().collect()
+    None
 }
 
-/// Variant of `send_case` that takes an explicit `extra_headers`
-/// (rather than reading them from `config`). Used by security probes
-/// to substitute or strip the configured Authorization header.
-#[allow(clippy::too_many_arguments)]
-async fn send_case_with_extra(
-    client: &Client,
-    config: &SelfTestConfig,
-    method: Method,
-    url: &str,
-    label: &str,
-    expected_4xx: bool,
-    body: Option<&str>,
-    query: Vec<(String, String)>,
-    headers: Vec<(String, String)>,
-    extra_headers: Vec<(String, String)>,
-) -> CaseOutcome {
-    let _ = config; // signature parity; timeout already on `client`.
-    let mut req = client.request(method, url);
-    for (k, v) in &query {
-        req = req.query(&[(k.as_str(), v.as_str())]);
-    }
-    for (k, v) in &headers {
-        req = req.header(k, v);
-    }
-    for (k, v) in &extra_headers {
-        req = req.header(k, v);
-    }
-    if let Some(b) = body {
-        req = req
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .body(b.to_string());
-    }
-    let actual_status = match req.send().await {
-        Ok(resp) => resp.status().as_u16(),
-        Err(_) => 0,
-    };
-    let passed = if expected_4xx {
-        (400..500).contains(&actual_status)
-    } else {
-        (200..400).contains(&actual_status)
-    };
-    CaseOutcome {
-        label: label.to_string(),
-        expected_4xx,
-        actual_status,
-        passed,
-    }
+/// Replace the value of `field` in a JSON-object body with `payload`.
+/// Returns the mutated body as a JSON string. Returns `None` if the
+/// body doesn't parse as a JSON object.
+fn inject_into_body_field(body: Option<&str>, field: &str, payload: &str) -> Option<String> {
+    let raw = body?;
+    let mut parsed: serde_json::Value = serde_json::from_str(raw).ok()?;
+    let obj = parsed.as_object_mut()?;
+    obj.insert(field.to_string(), serde_json::json!(payload));
+    serde_json::to_string(&parsed).ok()
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -919,92 +851,94 @@ mod tests {
         assert!(total >= 1, "expected ≥1 path-param probe, got {:?}", report);
     }
 
-    /// Round 17.3 — operations declaring a Bearer + ApiKey-header
-    /// scheme should produce one bad-bearer + one bad-apikey + one
-    /// no-auth probe (three negatives, no duplicates).
+    /// Round 17.5 — an operation with a query param should produce
+    /// one OWASP probe per category (7 total), each substituting the
+    /// payload into the first query param's value.
     #[test]
-    fn build_security_probes_one_per_scheme_kind() {
-        let probes = build_security_probes(&[
-            SecuritySchemeInfo::Bearer,
-            SecuritySchemeInfo::Bearer, // duplicate kind, should dedup
-            SecuritySchemeInfo::ApiKey {
-                location: ApiKeyLocation::Header,
-                name: "X-API-Key".into(),
-            },
-        ]);
+    fn build_owasp_probes_substitutes_first_query_param() {
+        let o = op("GET", "/search", None, vec![("q", "default")], vec![], vec![]);
+        let probes = build_owasp_probes(&o);
+        assert_eq!(probes.len(), 7, "expected one probe per category");
+        // Every probe rewrites query[0]'s value to a payload.
+        for p in &probes {
+            assert_eq!(p.query.len(), 1);
+            assert_eq!(p.query[0].0, "q");
+            assert_ne!(p.query[0].1, "default");
+        }
         let labels: Vec<&str> = probes.iter().map(|p| p.label.as_str()).collect();
-        assert!(labels.contains(&"security:bad-bearer"));
-        assert!(labels.contains(&"security:bad-apikey:X-API-Key"));
-        assert!(labels.contains(&"security:no-auth"));
-        assert_eq!(probes.len(), 3);
+        assert!(labels.contains(&"owasp:sqli"));
+        assert!(labels.contains(&"owasp:xss"));
+        assert!(labels.contains(&"owasp:xxe"));
+    }
+
+    /// Round 17.5 — an operation with no query param but a positive
+    /// body containing a string field gets OWASP payloads injected
+    /// into that field instead.
+    #[test]
+    fn build_owasp_probes_falls_back_to_body_string_field() {
+        let o = op("POST", "/users", Some(r#"{"name":"Ada","age":30}"#), vec![], vec![], vec![]);
+        let probes = build_owasp_probes(&o);
+        assert_eq!(probes.len(), 7);
+        for p in &probes {
+            let parsed: serde_json::Value =
+                serde_json::from_str(p.body.as_ref().expect("body present")).unwrap();
+            // age should be untouched, name should carry the payload.
+            assert_eq!(parsed["age"], serde_json::json!(30));
+            assert_ne!(parsed["name"], serde_json::json!("Ada"));
+        }
+    }
+
+    /// Round 17.5 — an operation with no query param and no body
+    /// (e.g., `GET /healthz`) gets zero OWASP probes — no false signal.
+    #[test]
+    fn build_owasp_probes_empty_when_no_target_available() {
+        let o = op("GET", "/healthz", None, vec![], vec![], vec![]);
+        let probes = build_owasp_probes(&o);
+        assert!(probes.is_empty());
     }
 
     #[test]
-    fn build_security_probes_empty_when_no_schemes() {
-        assert!(build_security_probes(&[]).is_empty());
-    }
-
-    #[test]
-    fn strip_auth_removes_authorization_case_insensitive() {
-        let h = strip_auth(
-            &[
-                ("authorization".into(), "Bearer real".into()),
-                ("Accept".into(), "application/json".into()),
-            ],
-            &[SecuritySchemeInfo::Bearer],
+    fn inject_into_body_field_replaces_existing() {
+        let out = inject_into_body_field(
+            Some(r#"{"name":"a","age":3}"#),
+            "name",
+            "<script>alert(1)</script>",
         );
-        let keys: Vec<&str> = h.iter().map(|(k, _)| k.as_str()).collect();
-        assert_eq!(keys, vec!["Accept"]);
+        let parsed: serde_json::Value = serde_json::from_str(&out.unwrap()).unwrap();
+        assert_eq!(parsed["name"], serde_json::json!("<script>alert(1)</script>"));
+        assert_eq!(parsed["age"], serde_json::json!(3));
     }
 
-    #[test]
-    fn strip_auth_removes_apikey_header_and_cookie() {
-        let h = strip_auth(
-            &[
-                ("X-API-Key".into(), "real".into()),
-                ("Cookie".into(), "session=abc".into()),
-                ("Accept".into(), "json".into()),
-            ],
-            &[
-                SecuritySchemeInfo::ApiKey {
-                    location: ApiKeyLocation::Header,
-                    name: "X-API-Key".into(),
-                },
-                SecuritySchemeInfo::ApiKey {
-                    location: ApiKeyLocation::Cookie,
-                    name: "session".into(),
-                },
-            ],
-        );
-        let keys: Vec<&str> = h.iter().map(|(k, _)| k.as_str()).collect();
-        assert_eq!(keys, vec!["Accept"]);
-    }
-
-    /// Round 17.3 — an operation with a declared Bearer scheme should
-    /// produce at least the `security:bad-bearer` + `security:no-auth`
-    /// negatives. Unreachable target → these land in `negative_missed`.
+    /// Round 17.5 — wired end-to-end: an operation that gets OWASP
+    /// probes should see `owasp:*` labels propagate through the
+    /// `SelfTestReport`.
     #[tokio::test]
-    async fn security_probes_fire_when_schemes_declared() {
+    async fn owasp_probes_surface_in_report() {
         let cfg = SelfTestConfig {
             target_url: "http://127.0.0.1:1".into(),
             timeout: Duration::from_millis(200),
             ..Default::default()
         };
-        let mut o = op("GET", "/me", None, vec![], vec![], vec![]);
-        o.security_schemes = vec![SecuritySchemeInfo::Bearer];
-        let report = run_self_test(&[o], &cfg).await.expect("client builds");
+        let ops = vec![op(
+            "GET",
+            "/search",
+            None,
+            vec![("q", "default")],
+            vec![],
+            vec![],
+        )];
+        let report = run_self_test(&ops, &cfg).await.expect("client builds");
         let labels: std::collections::BTreeSet<String> = report
             .operations
             .iter()
             .flat_map(|op| op.negatives.iter().map(|n| n.label.clone()))
             .collect();
+        assert!(labels.iter().any(|l| l == "owasp:sqli"), "missing owasp:sqli; got {labels:?}");
+        // Bucket category should be "owasp" (everything after the first `:`).
         assert!(
-            labels.iter().any(|l| l == "security:bad-bearer"),
-            "missing bad-bearer probe; got {labels:?}"
-        );
-        assert!(
-            labels.iter().any(|l| l == "security:no-auth"),
-            "missing no-auth probe; got {labels:?}"
+            report.negative_missed.contains_key("owasp"),
+            "owasp bucket missing; got {:?}",
+            report.negative_missed
         );
     }
 
