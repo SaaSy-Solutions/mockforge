@@ -18,6 +18,7 @@ use crate::{
     AppState,
 };
 use mockforge_analytics::{Pillar, PillarUsageEvent, PillarUsageMetrics};
+use mockforge_registry_core::models::CloudWorkspace;
 
 /// Get pillar usage metrics for a workspace
 ///
@@ -29,10 +30,19 @@ pub async fn get_workspace_pillar_metrics(
     Path(workspace_id): Path<Uuid>,
     Query(params): Query<PillarMetricsQuery>,
 ) -> ApiResult<Json<PillarMetricsResponse>> {
-    // Resolve org context and verify access
-    let _org_ctx = resolve_org_context(&state, user_id, &headers, None)
+    // Resolve org context and verify the requested workspace belongs to it —
+    // otherwise any authenticated user could read another org's analytics by
+    // supplying its workspace UUID. Return "not found" to avoid an existence
+    // oracle.
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::AuthRequired)?;
+    let workspace = CloudWorkspace::find_by_id(state.db.pool(), workspace_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
+    if org_ctx.org_id != workspace.org_id {
+        return Err(ApiError::InvalidRequest("Workspace not found".into()));
+    }
 
     // Parse duration (default to 7 days)
     let time_range_str = params.time_range.unwrap_or_else(|| "7d".to_string());

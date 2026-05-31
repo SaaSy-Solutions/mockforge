@@ -23,11 +23,12 @@ use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    middleware::AuthUser,
+    middleware::{resolve_org_context, AuthUser},
     models::TestSuite,
     AppState,
 };
 use mockforge_registry_core::models::test_execution::CreateTestSuite;
+use mockforge_registry_core::models::CloudWorkspace;
 
 #[derive(Debug, Deserialize)]
 pub struct ListSuitesQuery {
@@ -39,12 +40,14 @@ pub struct ListSuitesQuery {
 /// `GET /api/v1/workspaces/{workspace_id}/test-suites`
 pub async fn list_suites(
     State(state): State<AppState>,
-    AuthUser(_user_id): AuthUser,
+    AuthUser(user_id): AuthUser,
     Path(workspace_id): Path<Uuid>,
+    headers: HeaderMap,
     Query(query): Query<ListSuitesQuery>,
 ) -> ApiResult<Json<Vec<TestSuite>>> {
-    // Workspace-scoped reads rely on the existing workspace permission
-    // middleware to gate access; here we just hit the table.
+    // Verify the workspace belongs to the caller's org before listing — there
+    // is no route-level workspace permission layer, so authz is per-handler.
+    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
     let suites = TestSuite::list_by_workspace(state.db.pool(), workspace_id, query.kind.as_deref())
         .await
         .map_err(ApiError::Database)?;
@@ -67,8 +70,11 @@ pub async fn create_suite(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
     Path(workspace_id): Path<Uuid>,
+    headers: HeaderMap,
     Json(request): Json<CreateSuiteRequest>,
 ) -> ApiResult<Json<TestSuite>> {
+    // Reject creating a suite inside a workspace the caller's org doesn't own.
+    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
     if request.name.trim().is_empty() {
         return Err(ApiError::InvalidRequest("name must not be empty".into()));
     }
@@ -97,14 +103,11 @@ pub async fn create_suite(
 /// `GET /api/v1/test-suites/{id}`
 pub async fn get_suite(
     State(state): State<AppState>,
-    AuthUser(_user_id): AuthUser,
+    AuthUser(user_id): AuthUser,
     Path(id): Path<Uuid>,
-    _headers: HeaderMap,
+    headers: HeaderMap,
 ) -> ApiResult<Json<TestSuite>> {
-    let suite = TestSuite::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Test suite not found".into()))?;
+    let suite = load_authorized_suite(&state, user_id, &headers, id).await?;
     Ok(Json(suite))
 }
 
@@ -125,10 +128,13 @@ pub struct UpdateSuiteRequest {
 /// `PATCH /api/v1/test-suites/{id}`
 pub async fn update_suite(
     State(state): State<AppState>,
-    AuthUser(_user_id): AuthUser,
+    AuthUser(user_id): AuthUser,
     Path(id): Path<Uuid>,
+    headers: HeaderMap,
     Json(request): Json<UpdateSuiteRequest>,
 ) -> ApiResult<Json<TestSuite>> {
+    // Confirm the suite belongs to the caller's org before mutating it.
+    load_authorized_suite(&state, user_id, &headers, id).await?;
     let updated = TestSuite::update(
         state.db.pool(),
         id,
@@ -146,14 +152,62 @@ pub async fn update_suite(
 /// `DELETE /api/v1/test-suites/{id}`
 pub async fn delete_suite(
     State(state): State<AppState>,
-    AuthUser(_user_id): AuthUser,
+    AuthUser(user_id): AuthUser,
     Path(id): Path<Uuid>,
+    headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
+    // Confirm ownership before deleting.
+    load_authorized_suite(&state, user_id, &headers, id).await?;
     let deleted = TestSuite::delete(state.db.pool(), id).await.map_err(ApiError::Database)?;
     if !deleted {
         return Err(ApiError::InvalidRequest("Test suite not found".into()));
     }
     Ok(Json(serde_json::json!({ "deleted": true })))
+}
+
+/// Load a test suite only if it belongs to the caller's org; otherwise return
+/// the same "not found" as a missing suite (no cross-tenant existence oracle).
+/// Mirrors `test_schedules::load_authorized_suite`.
+async fn load_authorized_suite(
+    state: &AppState,
+    user_id: Uuid,
+    headers: &HeaderMap,
+    suite_id: Uuid,
+) -> ApiResult<TestSuite> {
+    let suite = TestSuite::find_by_id(state.db.pool(), suite_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Test suite not found".into()))?;
+    let workspace = CloudWorkspace::find_by_id(state.db.pool(), suite.workspace_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Test suite not found".into()))?;
+    let ctx = resolve_org_context(state, user_id, headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    if ctx.org_id != workspace.org_id {
+        return Err(ApiError::InvalidRequest("Test suite not found".into()));
+    }
+    Ok(suite)
+}
+
+/// Verify `workspace_id` belongs to the caller's org for workspace-scoped
+/// routes. Mirrors the `authorize_workspace` helper used across the handlers.
+async fn authorize_workspace(
+    state: &AppState,
+    user_id: Uuid,
+    headers: &HeaderMap,
+    workspace_id: Uuid,
+) -> ApiResult<CloudWorkspace> {
+    let workspace = CloudWorkspace::find_by_id(state.db.pool(), workspace_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
+    let ctx = resolve_org_context(state, user_id, headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    if ctx.org_id != workspace.org_id {
+        return Err(ApiError::InvalidRequest("Workspace not found".into()));
+    }
+    Ok(workspace)
 }
 
 /// Distinguish "field omitted" vs "field explicitly set to null" during JSON

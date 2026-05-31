@@ -19,7 +19,7 @@ use axum::{
     Json,
 };
 use mockforge_registry_core::models::{
-    mockai_rule_explanation::UpsertMockaiRuleExplanation, MockaiRuleExplanation,
+    mockai_rule_explanation::UpsertMockaiRuleExplanation, CloudWorkspace, MockaiRuleExplanation,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -27,9 +27,30 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     handlers::ai_studio::{extract_json_payload, run_completion, PromptInputs, UsageMeta},
-    middleware::AuthUser,
+    middleware::{resolve_org_context, AuthUser},
     AppState,
 };
+
+/// Verify `workspace_id` belongs to the caller's org. These rule-explanation
+/// routes (read AND write) are otherwise cross-tenant: any authenticated user
+/// could read/poison another org's workspace by supplying its UUID.
+async fn authorize_workspace(
+    state: &AppState,
+    user_id: Uuid,
+    headers: &HeaderMap,
+    workspace_id: Uuid,
+) -> ApiResult<()> {
+    let workspace = CloudWorkspace::find_by_id(state.db.pool(), workspace_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
+    let ctx = resolve_org_context(state, user_id, headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    if ctx.org_id != workspace.org_id {
+        return Err(ApiError::InvalidRequest("Workspace not found".into()));
+    }
+    Ok(())
+}
 
 // --- list / get -------------------------------------------------------------
 
@@ -50,10 +71,12 @@ pub struct ListExplanationsResponse {
 /// `GET /api/v1/workspaces/{workspace_id}/mockai/rule-explanations`
 pub async fn list_rule_explanations(
     State(state): State<AppState>,
-    AuthUser(_user_id): AuthUser,
+    AuthUser(user_id): AuthUser,
     Path(workspace_id): Path<Uuid>,
+    headers: HeaderMap,
     Query(query): Query<ListExplanationsQuery>,
 ) -> ApiResult<Json<ListExplanationsResponse>> {
+    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
     let rows = MockaiRuleExplanation::list_by_workspace(
         state.db.pool(),
         workspace_id,
@@ -77,9 +100,11 @@ pub struct GetExplanationResponse {
 /// `GET /api/v1/workspaces/{workspace_id}/mockai/rule-explanations/{rule_id}`
 pub async fn get_rule_explanation(
     State(state): State<AppState>,
-    AuthUser(_user_id): AuthUser,
+    AuthUser(user_id): AuthUser,
     Path((workspace_id, rule_id)): Path<(Uuid, String)>,
+    headers: HeaderMap,
 ) -> ApiResult<Json<GetExplanationResponse>> {
+    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
     let row = MockaiRuleExplanation::get_by_rule_id(state.db.pool(), workspace_id, &rule_id)
         .await
         .map_err(ApiError::Database)?
@@ -170,6 +195,9 @@ pub async fn learn_from_examples(
     headers: HeaderMap,
     Json(request): Json<LearnRequest>,
 ) -> ApiResult<Json<LearnResponse>> {
+    // Cross-tenant write guard: don't let a caller poison rule explanations
+    // into a workspace their org doesn't own.
+    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
     if request.examples.is_empty() {
         return Err(ApiError::InvalidRequest("examples must not be empty".into()));
     }
