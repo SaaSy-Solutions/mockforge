@@ -464,97 +464,44 @@ fn validate_request_body(
     spec: &crate::spec::OpenApiSpec,
 ) -> Option<Vec<String>> {
     // For now, only validate JSON content
-    if let Some(media_type) = content.get("application/json") {
-        if let Some(schema_ref) = &media_type.schema {
-            match body {
-                Some(body_value) => {
-                    // Implement proper schema validation
-                    match schema_ref {
-                        ReferenceOr::Item(schema) => {
-                            // Convert OpenAPI schema to JSON Schema
-                            match serde_json::to_value(schema) {
-                                Ok(schema_json) => {
-                                    // Create JSON Schema validator
-                                    match jsonschema::options()
-                                        .with_draft(Draft::Draft7)
-                                        .build(&schema_json)
-                                    {
-                                        Ok(validator) => {
-                                            // Validate the body against the schema
-                                            let mut errors = Vec::new();
-                                            for error in validator.iter_errors(body_value) {
-                                                errors.push(error.to_string());
-                                            }
-                                            if errors.is_empty() {
-                                                None
-                                            } else {
-                                                Some(errors)
-                                            }
-                                        }
-                                        Err(e) => Some(vec![format!(
-                                            "Failed to create schema validator: {}",
-                                            e
-                                        )]),
-                                    }
-                                }
-                                Err(e) => Some(vec![format!(
-                                    "Failed to convert OpenAPI schema to JSON: {}",
-                                    e
-                                )]),
-                            }
-                        }
-                        ReferenceOr::Reference { reference } => {
-                            // Resolve schema reference
-                            if let Some(resolved_schema) = spec.get_schema(reference) {
-                                // Convert OpenAPI schema to JSON Schema
-                                match serde_json::to_value(&resolved_schema.schema) {
-                                    Ok(schema_json) => {
-                                        // Create JSON Schema validator
-                                        match jsonschema::options()
-                                            .with_draft(Draft::Draft7)
-                                            .build(&schema_json)
-                                        {
-                                            Ok(validator) => {
-                                                // Validate the body against the schema
-                                                let mut errors = Vec::new();
-                                                for error in validator.iter_errors(body_value) {
-                                                    errors.push(error.to_string());
-                                                }
-                                                if errors.is_empty() {
-                                                    None
-                                                } else {
-                                                    Some(errors)
-                                                }
-                                            }
-                                            Err(e) => Some(vec![format!(
-                                                "Failed to create schema validator: {}",
-                                                e
-                                            )]),
-                                        }
-                                    }
-                                    Err(e) => Some(vec![format!(
-                                        "Failed to convert OpenAPI schema to JSON: {}",
-                                        e
-                                    )]),
-                                }
-                            } else {
-                                Some(vec![format!(
-                                    "Failed to resolve schema reference: {}",
-                                    reference
-                                )])
-                            }
-                        }
-                    }
-                }
-                None => Some(vec!["Request body is required but not provided".to_string()]),
+    let media_type = content.get("application/json")?;
+    let schema_ref = media_type.schema.as_ref()?;
+    let body_value = match body {
+        Some(b) => b,
+        None => return Some(vec!["Request body is required but not provided".to_string()]),
+    };
+
+    // Round 18.3 — resolve the immediate $ref (one level), then hand
+    // the root schema + full spec to the ref-resolver helper so
+    // nested `$ref` strings (e.g.
+    // `#/components/schemas/Vcenter.VM.DiskCloneSpec`) resolve
+    // against the document context. Pre-fix this called
+    // `jsonschema::options().build(&schema_json)` with only the
+    // inner schema; nested $refs then failed with `Pointer ... does
+    // not exist` because the validator's document had no
+    // `components` map. Srikanth's vCenter run hit this 157× across
+    // 256 violations on 0.3.152.
+    let root_schema = match schema_ref {
+        ReferenceOr::Item(s) => s.clone(),
+        ReferenceOr::Reference { reference } => match spec.get_schema(reference) {
+            Some(s) => s.schema.clone(),
+            None => {
+                return Some(vec![format!("Failed to resolve schema reference: {reference}")]);
             }
-        } else {
-            // No schema defined, body is optional
-            None
+        },
+    };
+
+    match crate::schema_ref_resolver::build_validator(&root_schema, &spec.spec) {
+        Ok(validator) => {
+            let errors: Vec<String> =
+                validator.iter_errors(body_value).map(|e| e.to_string()).collect();
+            if errors.is_empty() {
+                None
+            } else {
+                Some(errors)
+            }
         }
-    } else {
-        // No JSON content type defined, skip validation
-        None
+        Err(e) => Some(vec![e]),
     }
 }
 
