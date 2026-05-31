@@ -1,22 +1,21 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
-## [0.3.159] - 2026-05-29
+## [0.3.162] - 2026-05-31
 
-### Fixed
-
-- **[Contracts][DevX]** `--conformance-self-test` now honours `--base-path` (#79 round 18.1) — pre-fix every positive 404'd on deployments served behind a path prefix.
-- **[Contracts][DevX]** Self-test now emits a hard warning when every positive case fails with the same status code, instead of silently treating 404s as "negatives caught".
-- **[DevX]** Bench header no longer prints `Operations: 0 endpoints` before the spec is parsed (#79 round 18.2). Shows `(analyzing spec…)` until the count is known.
-
-||||||| parent of 483a9524 (feat(bench): OWASP/WAF unification in self-test (#79 round 17.5))
-## [0.3.153] - 2026-05-29
+Issue #79 rounds 17.1–18.5 consolidated into a single release. Intermediate version numbers (0.3.153–0.3.161) were never published.
 
 ### Added
+- TUI Conformance: **`c`** copies the selected violation to clipboard (round 17.1); `total_ok` counter alongside `total_seen` for accurate pass/fail ratio (round 17.1).
+- `--conformance-self-test` schema-driven body mutator (round 17.2), security probes (round 17.3), spec-level audit (round 17.4), OWASP/WAF unification (round 17.5), self-contained HTML report (round 17.6).
+- GEODB multi-source-IP testing (round 18.5): `--source-ip` (real bind) + `--geo-source-ip` (forwarded-IP headers).
 
-- **[Contracts][DevX]** TUI Conformance detail view: **`c`** copies the selected violation to the system clipboard as JSON (#79 round 17.1, Srikanth's (c-i)).
-- **[Contracts]** `total_ok` lifetime counter alongside `total_seen` — admin API and TUI title now show the real pass/fail ratio (#79 round 17.1, Srikanth's (f) follow-up).
+### Changed
+- OWASP coverage table now explains the "-" rows with actionable category hints (round 18.4).
 
-||||||| parent of f41e0530 (feat(bench): OWASP/WAF unification in self-test (#79 round 17.5))
+### Fixed
+- `--conformance-self-test` honours `--base-path` (round 18.1); hard warning when every positive returns the same status (round 18.1); accurate bench header before spec parse (round 18.2).
+- Request-body validator resolves nested `$ref` pointers against the spec's components map (round 18.3) — fixes the `Vcenter.VM.DiskCloneSpec` "Pointer does not exist" class of failures.
+
 ## [0.3.152] - 2026-05-28
 
 ### Changed
