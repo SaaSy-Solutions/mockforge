@@ -199,20 +199,46 @@ jobs:
           STORAGE_PATH: "${{ runner.temp }}/mf-e2e-storage"
         run: |
           mkdir -p "$STORAGE_PATH"
+
+          # Free REGISTRY_PORT from any leftover registry-server bound by a
+          # PRIOR job on this shared self-hosted runner. This is the #782 root
+          # cause: without it the new server fails to bind with EADDRINUSE
+          # (`Address already in use (os error 98)`), the health check below
+          # then FALSE-PASSES against the stale server, and the E2E tests hit
+          # that stale server — which was started without STORAGE_PATH so it
+          # writes to ./data/storage and 500s on every marketplace publish.
+          # Both calls are best-effort (|| true) so a missing tool never fails.
+          fuser -k "${REGISTRY_PORT}/tcp" 2>/dev/null || true
+          pkill -f 'target/debug/mockforge-registry-server' 2>/dev/null || true
+          sleep 2
+
           nohup ./target/debug/mockforge-registry-server \
             > registry-server.log 2>&1 &
-          echo $! > registry-server.pid
-          echo "Waiting for registry-server on :${REGISTRY_PORT}..."
-          for i in {1..60}; do
+          SERVER_PID=$!
+          echo "$SERVER_PID" > registry-server.pid
+          echo "Waiting for registry-server (pid $SERVER_PID) on :${REGISTRY_PORT}..."
+          for _ in {1..60}; do
+            # If OUR process died (e.g. lost a bind race to a stale server),
+            # stop immediately — never let the loop "pass" against someone
+            # else's server.
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              echo "::error::registry-server (pid $SERVER_PID) exited during startup — likely failed to bind :${REGISTRY_PORT} (stale server on the runner?)."
+              tail -200 registry-server.log || true
+              exit 1
+            fi
             if curl -sfS "http://localhost:${REGISTRY_PORT}/health" >/dev/null 2>&1; then
               echo "registry-server healthy"
               break
             fi
             sleep 1
           done
-          if ! curl -sfS "http://localhost:${REGISTRY_PORT}/health" >/dev/null 2>&1; then
-            echo "::error::registry-server never became healthy"
-            tail -100 registry-server.log || true
+          # Final guard: OUR process must still be alive AND the port healthy.
+          # The kill -0 check is what distinguishes "our server is serving" from
+          # "a stale server answered our curl" (#782).
+          if ! kill -0 "$SERVER_PID" 2>/dev/null \
+             || ! curl -sfS "http://localhost:${REGISTRY_PORT}/health" >/dev/null 2>&1; then
+            echo "::error::registry-server never became healthy (our pid alive: $(kill -0 "$SERVER_PID" 2>/dev/null && echo yes || echo no))"
+            tail -200 registry-server.log || true
             exit 1
           fi
 
@@ -243,6 +269,11 @@ jobs:
           if [ -f registry-server.pid ]; then
             kill "$(cat registry-server.pid)" 2>/dev/null || true
           fi
+          # Belt-and-suspenders: also free the port by name/port in case the
+          # recorded pid wasn't the process actually bound (a stale leftover).
+          # Leaving a server bound here is what poisons the NEXT job (#782).
+          fuser -k "${REGISTRY_PORT}/tcp" 2>/dev/null || true
+          pkill -f 'target/debug/mockforge-registry-server' 2>/dev/null || true
 
       - name: Tear down Postgres + MinIO
         if: always()
