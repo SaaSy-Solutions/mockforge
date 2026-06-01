@@ -1,3 +1,15 @@
+## [0.3.165] - 2026-06-01
+
+### Added
+
+- **[DevX]** `--report-missed-cap N` flag on `mockforge bench --conformance-self-test` (#79 round 21.1) — controls the HTML conformance report's "Missed negatives" drill-down. Defaults to 200 rows (preserves prior behaviour); pass `0` for no cap to dump every missed probe into the HTML. The JSON report always carries the full set regardless; this flag only sizes the HTML drill-down so a 50 000-violation run does not produce a multi-megabyte browser-choking file by default.
+- **[DevX]** HTML missed-negative table now carries an **Expected** column (#79 round 21.1) — each row tells you the expected status range (`2xx-3xx (accept)` for positives, `4xx (reject)` for negatives) alongside the Actual status, so the report self-explains without the reader having to remember which probes are 4xx-expecting. Addresses Srikanth's (a1) ask from round 18.
+- **[DevX]** New book page **Conformance Self-Test Probes** (`reference/conformance-self-test-probes.md`, #79 round 21.2) — canonical reference for every probe label the self-test driver can emit. Covers request-body, parameters, security, OWASP, plus how `passed` is decided, bucket totals interpretation, and the HTML drill-down cap. Surfaced under Reference in `SUMMARY.md`.
+
+### Notes
+
+- Response-body shape validation alongside the response-code check (Srikanth's a2 / a3 follow-up) is deferred to a separate release. It needs a non-trivial design pass (multi-status response schema map, body-size cap to avoid OOM on large responses) and was held back to keep this release focused on the HTML UX and docs.
+
 ## [0.3.164] - 2026-06-01
 
 ### Fixed

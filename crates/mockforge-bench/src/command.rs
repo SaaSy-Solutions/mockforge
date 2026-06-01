@@ -222,6 +222,14 @@ pub struct BenchCommand {
     /// (X-Forwarded-For, True-Client-IP, CF-Connecting-IP).
     pub geo_source_headers: Vec<String>,
 
+    /// Round 21.1 — cap the HTML conformance report's missed-negative
+    /// drill-down at N rows. `Some(0)` means no cap; `None` keeps the
+    /// default of 200. The JSON report always carries the full set
+    /// regardless of this knob — it only controls what the HTML drill
+    /// view shows so a 50 000-violation run doesn't produce a 5 MB
+    /// browser-choking HTML file by default.
+    pub report_missed_cap: Option<u32>,
+
     // === OWASP API Security Top 10 Testing ===
     /// Enable OWASP API Security Top 10 testing mode
     pub owasp_api_top10: bool,
@@ -850,6 +858,7 @@ impl BenchCommand {
                 source_ips: Vec::new(),
                 geo_source_ips: Vec::new(),
                 geo_source_headers: Vec::new(),
+                report_missed_cap: None,
             },
             targets,
             max_concurrency,
@@ -2405,7 +2414,22 @@ impl BenchCommand {
             let audit_value = std::fs::read_to_string(&audit_path)
                 .ok()
                 .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok());
-            let html = crate::conformance::report_html::render_html(&report, audit_value.as_ref());
+            // Round 21.1 — `--report-missed-cap N` lets the user
+            // override the default 200-row HTML drill-down cap.
+            // `--report-missed-cap 0` maps to `None` (no cap; show
+            // everything). The JSON report always has the full set.
+            let render_opts = crate::conformance::report_html::RenderOptions {
+                missed_cap: match self.report_missed_cap {
+                    Some(0) => None,
+                    Some(n) => Some(n as usize),
+                    None => Some(200),
+                },
+            };
+            let html = crate::conformance::report_html::render_html_with_options(
+                &report,
+                audit_value.as_ref(),
+                &render_opts,
+            );
             if std::fs::write(&html_path, html).is_ok() {
                 TerminalReporter::print_progress(&format!(
                     "HTML report written to {}",
@@ -3282,6 +3306,7 @@ mod tests {
             source_ips: Vec::new(),
             geo_source_ips: Vec::new(),
             geo_source_headers: Vec::new(),
+            report_missed_cap: None,
         };
 
         let headers = cmd.parse_headers().unwrap();
@@ -3364,6 +3389,7 @@ mod tests {
             source_ips: Vec::new(),
             geo_source_ips: Vec::new(),
             geo_source_headers: Vec::new(),
+            report_missed_cap: None,
         };
 
         assert_eq!(cmd.get_spec_display_name(), "test.yaml");
@@ -3442,6 +3468,7 @@ mod tests {
             source_ips: Vec::new(),
             geo_source_ips: Vec::new(),
             geo_source_headers: Vec::new(),
+            report_missed_cap: None,
         };
 
         assert_eq!(cmd_multi.get_spec_display_name(), "2 spec files");
