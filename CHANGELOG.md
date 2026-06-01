@@ -1,3 +1,9 @@
+## [0.3.164] - 2026-06-01
+
+### Fixed
+
+- **[Reality][Contracts]** Shadow mode now gates its `200` response on the configured `--base-path` (#79 round 20). Pre-round-20, `mockforge serve --shadow --base-path /api` returned `200 {"shadow":true,"matched":false}` for *any* unmatched path, including ones outside the configured prefix (Srikanth's report: client used `/api123/...` against a server configured for `/api` and saw `200` instead of `404`). Now `dynamic_mock_fallback` calls `path_in_base()` which checks at the segment boundary (`/api123` is NOT under `/api`), and only returns the shadow `200` when the path is actually under the configured surface. Outside the surface still 404s in shadow mode, matching pre-shadow semantics. The CLI's `--base-path` flag propagates to the management layer via a new `MOCKFORGE_API_BASE_PATH` env var; `ManagementState::new()` reads it and `ManagementState::with_base_path()` is exposed for callers that want to set it programmatically. Empty or `/` paths normalise to "no prefix gate" (the pre-round-20 behaviour, useful when neither client nor server has a base path).
+
 ## [0.3.163] - 2026-06-01
 
 ### Fixed

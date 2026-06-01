@@ -686,6 +686,21 @@ pub async fn handle_serve(
         std::env::set_var("MOCKFORGE_RATE_LIMIT_ENABLED", "false");
     }
 
+    // Issue #79 round 20 — propagate `--base-path` so the management
+    // layer can gate shadow-mode 200 responses on path prefix. Pre-
+    // round-20, shadow returned 200 for every unmatched path, even
+    // ones outside the configured `--base-path` (Srikanth: client used
+    // /api123 against a server configured for /api and saw 200 instead
+    // of 404). Setting the env var here keeps `mockforge-http` (which
+    // doesn't take a base_path argument on its public router entry
+    // points) library-clean while letting the lib read the value at
+    // ManagementState construction time.
+    if let Some(bp) = serve_args.base_path.as_deref() {
+        if !bp.is_empty() {
+            std::env::set_var("MOCKFORGE_API_BASE_PATH", bp);
+        }
+    }
+
     // Opt-in federation scenario poller. If the four env vars
     // (MOCKFORGE_FEDERATION_POLL_URL / WORKSPACE_ID / POLL_TOKEN /
     // POLL_INTERVAL_SECS) aren't set this is a no-op; otherwise a tokio
@@ -1315,7 +1330,7 @@ pub async fn handle_serve(
         None
     };
     #[cfg(not(feature = "smtp"))]
-    let smtp_registry = None::<Arc<dyn std::any::Any + Send + Sync>>;
+    let smtp_registry = None::<Arc<dyn Any + Send + Sync>>;
 
     #[cfg(feature = "mqtt")]
     // Loaded for its fixture-validation side effects + user-facing logs. The

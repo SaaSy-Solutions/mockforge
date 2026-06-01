@@ -762,6 +762,14 @@ pub struct ManagementState {
     pub chaos_api_state: Option<Arc<mockforge_chaos::api::ChaosApiState>>,
     /// Optional server configuration for profile application
     pub server_config: Option<Arc<RwLock<mockforge_core::config::ServerConfig>>>,
+    /// Issue #79 round 20 — the API base path the server was started with
+    /// (e.g. `/api`). When `MOCKFORGE_SHADOW_MODE=true`, the dynamic-mock
+    /// fallback returns 200 only for requests whose path is under this
+    /// prefix, and 404 otherwise. Pre-round-20, shadow returned 200 for
+    /// every unmatched path, including paths outside the configured
+    /// surface (e.g. `/api123/...` when the server is `/api`). Empty or
+    /// `None` means no prefix gate.
+    pub base_path: Option<String>,
     /// Conformance testing state
     #[cfg(feature = "conformance")]
     pub conformance_state: crate::handlers::conformance::ConformanceState,
@@ -806,9 +814,35 @@ impl ManagementState {
             #[cfg(feature = "chaos")]
             chaos_api_state: None,
             server_config: None,
+            // Round 20 — read the API base path from the env var the
+            // CLI sets for `--base-path`. Empty / `/` normalises to
+            // None (no prefix gate, pre-round-20 behaviour).
+            base_path: std::env::var("MOCKFORGE_API_BASE_PATH").ok().and_then(|p| {
+                let trimmed = p.trim_end_matches('/').to_string();
+                if trimmed.is_empty() || trimmed == "/" {
+                    None
+                } else {
+                    Some(trimmed)
+                }
+            }),
             #[cfg(feature = "conformance")]
             conformance_state: crate::handlers::conformance::ConformanceState::new(),
         }
+    }
+
+    /// Set the API base path (e.g. `/api`). Required for shadow-mode's
+    /// base-path gate (#79 round 20). Normalises by trimming trailing
+    /// `/`, and treats empty / `/` as None.
+    pub fn with_base_path(mut self, base_path: Option<String>) -> Self {
+        self.base_path = base_path.and_then(|p| {
+            let trimmed = p.trim_end_matches('/').to_string();
+            if trimmed.is_empty() || trimmed == "/" {
+                None
+            } else {
+                Some(trimmed)
+            }
+        });
+        self
     }
 
     /// Add lifecycle hook registry to management state
@@ -1191,9 +1225,22 @@ pub async fn dynamic_mock_fallback(
         None => {
             // Issue #79 round 14 — shadow mode returns 200 for unknown
             // paths (instead of 404) while still recording them, so a
-            // proxy replay flows through non-blocking. The recorded
-            // `status` reflects what the client actually saw.
-            let shadow = mockforge_foundation::unknown_paths::shadow_mode_enabled();
+            // proxy replay flows through non-blocking.
+            //
+            // Issue #79 round 20 — but only when the path is INSIDE
+            // the configured `--base-path` prefix. Pre-round-20, shadow
+            // returned 200 for every unmatched path, including paths
+            // outside the configured surface (e.g. `/api123/...` when
+            // the server is started with `--base-path /api`). Srikanth
+            // hit this when his client config drifted from the server's
+            // base path: every request looked "shadow" instead of "404
+            // because that prefix isn't ours".
+            let shadow_enabled = mockforge_foundation::unknown_paths::shadow_mode_enabled();
+            let in_base_path = match state.base_path.as_deref() {
+                Some(bp) => path_in_base(&path, bp),
+                None => true, // no base path configured — shadow applies to everything
+            };
+            let shadow = shadow_enabled && in_base_path;
             let status = if shadow {
                 StatusCode::OK
             } else {
@@ -1226,9 +1273,66 @@ pub async fn dynamic_mock_fallback(
     }
 }
 
+/// Round 20 — is `path` under `base_path` for shadow-mode purposes?
+///
+/// Matches at the **segment** boundary, so `/api123/foo` does not match
+/// `--base-path /api`. The check is `path == bp || path.starts_with(bp+'/')`,
+/// which also accepts the exact base path itself (a request to `/api`
+/// when configured for `/api` is in-prefix).
+pub(crate) fn path_in_base(path: &str, base_path: &str) -> bool {
+    let bp = base_path.trim_end_matches('/');
+    if bp.is_empty() {
+        return true;
+    }
+    if path == bp {
+        return true;
+    }
+    // Must end at a segment boundary: bp followed by `/` or end-of-string.
+    path.starts_with(bp) && path.as_bytes().get(bp.len()).copied() == Some(b'/')
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Round 20 — `path_in_base` accepts the base path itself plus
+    /// anything under a `/`-delimited segment boundary, and rejects
+    /// paths that merely share a string prefix (e.g. `/api123` is not
+    /// under `/api`).
+    #[test]
+    fn path_in_base_segment_boundary() {
+        // Exact match.
+        assert!(path_in_base("/api", "/api"));
+        // Under prefix.
+        assert!(path_in_base("/api/users", "/api"));
+        assert!(path_in_base("/api/v1/items/42", "/api"));
+        // The Srikanth bug: same string prefix but different segment.
+        assert!(!path_in_base("/api123", "/api"));
+        assert!(!path_in_base("/api123/foo", "/api"));
+        // Sibling prefix is not in-base.
+        assert!(!path_in_base("/", "/api"));
+        assert!(!path_in_base("/admin", "/api"));
+        // Trailing slash on base normalises.
+        assert!(path_in_base("/api/users", "/api/"));
+        // Empty base = no gate.
+        assert!(path_in_base("/anything", ""));
+    }
+
+    /// Round 20 — `ManagementState::with_base_path` normalises
+    /// trailing slash and treats empty / `/` as no-prefix.
+    #[test]
+    fn with_base_path_normalises() {
+        let s = ManagementState::new(None, None, 3000).with_base_path(Some("/api".to_string()));
+        assert_eq!(s.base_path.as_deref(), Some("/api"));
+        let s = ManagementState::new(None, None, 3000).with_base_path(Some("/api/".to_string()));
+        assert_eq!(s.base_path.as_deref(), Some("/api"));
+        let s = ManagementState::new(None, None, 3000).with_base_path(Some("".to_string()));
+        assert_eq!(s.base_path.as_deref(), None);
+        let s = ManagementState::new(None, None, 3000).with_base_path(Some("/".to_string()));
+        assert_eq!(s.base_path.as_deref(), None);
+        let s = ManagementState::new(None, None, 3000).with_base_path(None);
+        assert_eq!(s.base_path.as_deref(), None);
+    }
 
     #[tokio::test]
     async fn test_create_and_get_mock() {
