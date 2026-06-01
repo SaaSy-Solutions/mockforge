@@ -243,13 +243,22 @@ pub struct BenchCommand {
     pub owasp_iterations: u32,
 }
 
-/// Round 18.5 — parse a list of CLI IP strings (each entry may be a
-/// single IP or a comma-separated list — the CLI flag is repeatable
-/// AND comma-friendly so `--source-ip 10.0.0.1,10.0.0.2` and
-/// `--source-ip 10.0.0.1 --source-ip 10.0.0.2` are equivalent).
+/// Round 18.5 / 19 — parse a list of CLI IP strings. Each entry may be:
+/// - a single IPv4/IPv6 (`10.0.0.5` / `2001:db8::1`)
+/// - a comma-separated list (`10.0.0.5,10.0.0.6,2001:db8::1`)
+/// - a CIDR range (`10.0.0.0/29` expands to 8 hosts;
+///   `2001:db8::/126` expands to 4 IPv6 hosts)
+///
+/// CIDR ranges are capped at `MAX_CIDR_EXPANSION` (256) host
+/// addresses to avoid OOM'ing on `/8` typos. The cap is generous
+/// for GEODB testing (you want 20–100 IPs, not 10M) and the warning
+/// names the cap so it's debuggable.
+///
 /// Malformed entries log a warning and are dropped; the bench
 /// continues with whatever resolved cleanly.
 fn parse_ip_list(raw: &[String], flag_name: &str) -> Vec<std::net::IpAddr> {
+    use std::net::IpAddr;
+    const MAX_CIDR_EXPANSION: usize = 256;
     let mut out = Vec::new();
     for entry in raw {
         for piece in entry.split(',') {
@@ -257,7 +266,27 @@ fn parse_ip_list(raw: &[String], flag_name: &str) -> Vec<std::net::IpAddr> {
             if s.is_empty() {
                 continue;
             }
-            match s.parse::<std::net::IpAddr>() {
+            // CIDR form: `ip/prefix`
+            if let Some((addr_part, prefix_part)) = s.split_once('/') {
+                let prefix: u32 = match prefix_part.parse() {
+                    Ok(p) => p,
+                    Err(e) => {
+                        tracing::warn!(target: "mockforge::bench", "ignoring --{flag_name} '{s}': bad CIDR prefix: {e}");
+                        continue;
+                    }
+                };
+                let net_addr: IpAddr = match addr_part.parse() {
+                    Ok(a) => a,
+                    Err(e) => {
+                        tracing::warn!(target: "mockforge::bench", "ignoring --{flag_name} '{s}': bad CIDR address: {e}");
+                        continue;
+                    }
+                };
+                expand_cidr(net_addr, prefix, MAX_CIDR_EXPANSION, flag_name, s, &mut out);
+                continue;
+            }
+            // Plain IP form
+            match s.parse::<IpAddr>() {
                 Ok(ip) => out.push(ip),
                 Err(e) => {
                     tracing::warn!(target: "mockforge::bench", "ignoring malformed --{flag_name} value '{s}': {e}");
@@ -266,6 +295,71 @@ fn parse_ip_list(raw: &[String], flag_name: &str) -> Vec<std::net::IpAddr> {
         }
     }
     out
+}
+
+/// Expand a CIDR (IPv4 or IPv6) into individual host IPs, appending
+/// to `out`. Capped at `cap` to prevent runaway expansion on a `/8`
+/// typo. When the cap kicks in we log a warning and skip the rest.
+fn expand_cidr(
+    net: std::net::IpAddr,
+    prefix: u32,
+    cap: usize,
+    flag_name: &str,
+    raw: &str,
+    out: &mut Vec<std::net::IpAddr>,
+) {
+    use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+    match net {
+        IpAddr::V4(ipv4) => {
+            if prefix > 32 {
+                tracing::warn!(target: "mockforge::bench", "ignoring --{flag_name} '{raw}': IPv4 prefix must be <= 32");
+                return;
+            }
+            let total: u64 = 1u64 << (32 - prefix);
+            let take = total.min(cap as u64) as u32;
+            if total > cap as u64 {
+                tracing::warn!(target: "mockforge::bench", "--{flag_name} '{raw}': CIDR has {total} addresses, capping at {cap}");
+            }
+            let mask: u32 = if prefix == 0 {
+                0
+            } else {
+                !0u32 << (32 - prefix)
+            };
+            let net_u32 = u32::from(ipv4) & mask;
+            for i in 0..take {
+                out.push(IpAddr::V4(Ipv4Addr::from(net_u32.wrapping_add(i))));
+            }
+        }
+        IpAddr::V6(ipv6) => {
+            if prefix > 128 {
+                tracing::warn!(target: "mockforge::bench", "ignoring --{flag_name} '{raw}': IPv6 prefix must be <= 128");
+                return;
+            }
+            // Total addresses = 2^(128-prefix). Cap at u128::MAX
+            // conceptually but since `cap` is small (256) we just
+            // iterate up to cap.
+            let mask: u128 = if prefix == 0 {
+                0
+            } else {
+                !0u128 << (128 - prefix)
+            };
+            let net_u128 = u128::from(ipv6) & mask;
+            let remaining_bits = 128 - prefix;
+            // Compute total carefully — for prefix=0 this is 2^128
+            // which overflows; we just clamp via take.
+            let total_capped = if remaining_bits >= 64 {
+                cap as u128
+            } else {
+                (1u128 << remaining_bits).min(cap as u128)
+            };
+            if remaining_bits < 128 && (1u128 << remaining_bits) > cap as u128 {
+                tracing::warn!(target: "mockforge::bench", "--{flag_name} '{raw}': IPv6 CIDR exceeds {cap} addresses, capping");
+            }
+            for i in 0..total_capped {
+                out.push(IpAddr::V6(Ipv6Addr::from(net_u128.wrapping_add(i))));
+            }
+        }
+    }
 }
 
 impl BenchCommand {
@@ -3037,6 +3131,74 @@ mod tests {
         assert_eq!(BenchCommand::parse_duration("5m").unwrap(), 300);
         assert_eq!(BenchCommand::parse_duration("1h").unwrap(), 3600);
         assert_eq!(BenchCommand::parse_duration("60").unwrap(), 60);
+    }
+
+    /// Round 19 — single IPs and comma-separated lists already
+    /// worked in 18.5; this regression-locks the parse paths.
+    #[test]
+    fn parse_ip_list_plain_and_comma() {
+        let v = parse_ip_list(&["10.0.0.5".into(), "10.0.0.6,10.0.0.7".into()], "source-ip");
+        assert_eq!(v.len(), 3);
+        assert_eq!(v[0].to_string(), "10.0.0.5");
+        assert_eq!(v[2].to_string(), "10.0.0.7");
+    }
+
+    /// Round 19 — IPv4 CIDR expands to host count up to the cap.
+    /// `/29` = 8 hosts (well under cap), all 8 enumerated.
+    #[test]
+    fn parse_ip_list_ipv4_cidr_29_expands_to_8() {
+        let v = parse_ip_list(&["10.0.0.0/29".into()], "source-ip");
+        assert_eq!(v.len(), 8);
+        assert_eq!(v[0].to_string(), "10.0.0.0");
+        assert_eq!(v[7].to_string(), "10.0.0.7");
+    }
+
+    /// Round 19 — IPv4 CIDR larger than the cap is truncated, not
+    /// rejected. Cap is 256; `/8` would be 16M without the guard.
+    #[test]
+    fn parse_ip_list_ipv4_cidr_8_capped_at_256() {
+        let v = parse_ip_list(&["10.0.0.0/8".into()], "source-ip");
+        assert_eq!(v.len(), 256);
+        assert_eq!(v[0].to_string(), "10.0.0.0");
+        assert_eq!(v[255].to_string(), "10.0.0.255");
+    }
+
+    /// Round 19 — IPv6 CIDR also expands. `/126` = 4 hosts.
+    #[test]
+    fn parse_ip_list_ipv6_cidr_126_expands_to_4() {
+        let v = parse_ip_list(&["2001:db8::/126".into()], "geo-source-ip");
+        assert_eq!(v.len(), 4);
+        assert!(v[0].is_ipv6());
+        assert_eq!(v[0].to_string(), "2001:db8::");
+        assert_eq!(v[3].to_string(), "2001:db8::3");
+    }
+
+    /// Round 19 — mixed IPv4 + IPv6 + CIDR in one call works.
+    #[test]
+    fn parse_ip_list_mixed_v4_v6_cidr() {
+        let v = parse_ip_list(&["10.0.0.0/30,2001:db8::1,203.0.113.42".into()], "geo-source-ip");
+        assert_eq!(v.len(), 6); // 4 from /30 + 1 + 1
+        assert!(v.iter().any(|ip| ip.to_string() == "2001:db8::1"));
+        assert!(v.iter().any(|ip| ip.to_string() == "203.0.113.42"));
+    }
+
+    /// Round 19 — malformed entries log and skip; the run continues
+    /// with whatever resolved.
+    #[test]
+    fn parse_ip_list_skips_malformed() {
+        let v = parse_ip_list(
+            &[
+                "10.0.0.5".into(),
+                "not-an-ip".into(),
+                "10.0.0.6".into(),
+                "/24".into(),
+                "1.2.3.4/200".into(),
+            ],
+            "source-ip",
+        );
+        assert_eq!(v.len(), 2);
+        assert_eq!(v[0].to_string(), "10.0.0.5");
+        assert_eq!(v[1].to_string(), "10.0.0.6");
     }
 
     #[test]
