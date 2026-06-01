@@ -1,5 +1,10 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.164] - 2026-06-01
+
+### Fixed
+- Shadow mode now gates `200` on the configured `--base-path` (#79 round 20). Paths outside the configured prefix (e.g. `/api123/...` when server is `/api`) return `404` even with `--shadow` enabled, matching pre-shadow semantics. `path_in_base` checks at the segment boundary, so `/api123` is not under `/api`.
+
 ## [0.3.163] - 2026-06-01
 
 ### Fixed
