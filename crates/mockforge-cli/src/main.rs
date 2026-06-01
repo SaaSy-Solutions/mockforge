@@ -2166,6 +2166,15 @@ enum Commands {
         /// Override to test a specific stack. Repeatable.
         #[arg(long = "geo-source-header", value_name = "HEADER")]
         geo_source_headers: Vec<String>,
+
+        /// Issue #79 round 21 — cap the HTML conformance report's
+        /// missed-negative drill-down at N rows. Default 200, pass
+        /// `0` for no cap (show everything). The JSON report always
+        /// has the full set; this knob only controls the HTML view
+        /// so a 50 000-violation run doesn't produce a multi-MB
+        /// browser-choking file by default.
+        #[arg(long = "report-missed-cap", value_name = "N")]
+        report_missed_cap: Option<u32>,
     },
 
     /// Native Rust chunked-encoding traffic generator.
@@ -3068,6 +3077,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             source_ips,
             geo_source_ips,
             geo_source_headers,
+            report_missed_cap,
         } => {
             // Validate that either --target or --targets-file is provided, but not both
             match (&target, &targets_file) {
@@ -3164,6 +3174,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 source_ips,
                 geo_source_ips,
                 geo_source_headers,
+                report_missed_cap,
             };
 
             if let Err(e) = bench_cmd.execute().await {

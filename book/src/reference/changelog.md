@@ -1,5 +1,15 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.165] - 2026-06-01
+
+### Added
+- `--report-missed-cap N` flag for the HTML drill-down (#79 round 21.1). Default 200; `0` = no cap.
+- HTML missed-negative table gains an **Expected** column (#79 round 21.1). Addresses Srikanth's (a1).
+- New book page: [Conformance Self-Test Probes](conformance-self-test-probes.md) (#79 round 21.2). Canonical reference for every probe label.
+
+### Notes
+- Response-body shape validation alongside the response-code check (a2 / a3) is queued for a separate release.
+
 ## [0.3.164] - 2026-06-01
 
 ### Fixed

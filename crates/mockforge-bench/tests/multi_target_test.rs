@@ -194,6 +194,7 @@ async fn test_bench_command_parse_headers() {
         source_ips: Vec::new(),
         geo_source_ips: Vec::new(),
         geo_source_headers: Vec::new(),
+        report_missed_cap: None,
     };
 
     let headers = cmd.parse_headers().unwrap();
@@ -278,6 +279,7 @@ async fn test_bench_command_parse_headers_invalid_format() {
         source_ips: Vec::new(),
         geo_source_ips: Vec::new(),
         geo_source_headers: Vec::new(),
+        report_missed_cap: None,
     };
 
     let result = cmd.parse_headers();

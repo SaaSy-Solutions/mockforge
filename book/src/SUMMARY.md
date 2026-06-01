@@ -157,6 +157,7 @@
 - [Templating Reference](reference/templating.md)
 - [Request Chaining](reference/chaining.md)
 - [Fixtures and Smoke Testing](reference/fixtures.md)
+- [Conformance Self-Test Probes](reference/conformance-self-test-probes.md)
 - [Troubleshooting](reference/troubleshooting.md)
 - [Common Issues & Solutions](reference/common-issues.md)
 - [FAQ](reference/faq.md)
