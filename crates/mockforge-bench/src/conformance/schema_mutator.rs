@@ -292,7 +292,7 @@ mod tests {
     }
 
     fn string_field(min: Option<usize>, max: Option<usize>, pattern: Option<&str>) -> Schema {
-        let s = openapiv3::StringType {
+        let s = StringType {
             min_length: min,
             max_length: max,
             pattern: pattern.map(|p| p.to_string()),

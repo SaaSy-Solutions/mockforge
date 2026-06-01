@@ -1242,49 +1242,54 @@ impl OpenApiRouteRegistry {
                     if let Some(rb) = request_body {
                         if let Some(content) = rb.content.get("application/json") {
                             if let Some(schema_ref) = &content.schema {
-                                // Resolve schema reference and validate
-                                match schema_ref {
-                                    openapiv3::ReferenceOr::Item(schema) => {
-                                        // Direct schema - validate immediately
-                                        if let Err(validation_error) =
-                                            OpenApiSchema::new(schema.clone()).validate(value)
-                                        {
-                                            let error_msg = validation_error.to_string();
-                                            errors.push(format!(
-                                                "body validation failed: {}",
-                                                error_msg
-                                            ));
-                                            if aggregate {
-                                                details.push(serde_json::json!({"path":"body","code":"schema_validation","message":error_msg}));
-                                            }
+                                // Issue #79 round 19 — every body validator on
+                                // this path used `OpenApiSchema::new(...).validate()`
+                                // which builds a naked jsonschema validator with
+                                // no `components` context. Nested `$ref` strings
+                                // to `#/components/schemas/X` (especially
+                                // dotted vCenter names) then fail with
+                                // "Pointer does not exist". Round 18.3 fixed
+                                // the bench-side + the `validate_request_body`
+                                // sibling; this is the live-server route
+                                // handler, the third path. Switch to
+                                // `schema_ref_resolver::build_validator` which
+                                // inlines the spec's components.
+                                let root_schema = match schema_ref {
+                                    openapiv3::ReferenceOr::Item(s) => Some((*s).clone()),
+                                    openapiv3::ReferenceOr::Reference { reference } => {
+                                        self.spec.get_schema(reference).map(|s| s.schema.clone())
+                                    }
+                                };
+                                if let Some(root_schema) = root_schema {
+                                    let result = crate::schema_ref_resolver::build_validator(
+                                        &root_schema,
+                                        &self.spec.spec,
+                                    )
+                                    .and_then(|validator| {
+                                        let errs: Vec<String> = validator
+                                            .iter_errors(value)
+                                            .map(|e| e.to_string())
+                                            .collect();
+                                        if errs.is_empty() {
+                                            Ok(())
+                                        } else {
+                                            Err(errs.join("; "))
+                                        }
+                                    });
+                                    if let Err(error_msg) = result {
+                                        errors
+                                            .push(format!("body validation failed: {}", error_msg));
+                                        if aggregate {
+                                            details.push(serde_json::json!({"path":"body","code":"schema_validation","message":error_msg}));
                                         }
                                     }
-                                    openapiv3::ReferenceOr::Reference { reference } => {
-                                        // Referenced schema - resolve and validate
-                                        if let Some(resolved_schema_ref) =
-                                            self.spec.get_schema(reference)
-                                        {
-                                            if let Err(validation_error) = OpenApiSchema::new(
-                                                resolved_schema_ref.schema.clone(),
-                                            )
-                                            .validate(value)
-                                            {
-                                                let error_msg = validation_error.to_string();
-                                                errors.push(format!(
-                                                    "body validation failed: {}",
-                                                    error_msg
-                                                ));
-                                                if aggregate {
-                                                    details.push(serde_json::json!({"path":"body","code":"schema_validation","message":error_msg}));
-                                                }
-                                            }
-                                        } else {
-                                            // Schema reference couldn't be resolved
-                                            errors.push(format!("body validation failed: could not resolve schema reference {}", reference));
-                                            if aggregate {
-                                                details.push(serde_json::json!({"path":"body","code":"reference_error","message":"Could not resolve schema reference"}));
-                                            }
-                                        }
+                                } else if let openapiv3::ReferenceOr::Reference { reference } =
+                                    schema_ref
+                                {
+                                    // Schema reference couldn't be resolved
+                                    errors.push(format!("body validation failed: could not resolve schema reference {}", reference));
+                                    if aggregate {
+                                        details.push(serde_json::json!({"path":"body","code":"reference_error","message":"Could not resolve schema reference"}));
                                     }
                                 }
                             }
@@ -3079,6 +3084,65 @@ mod tests {
         assert!(registry
             .validate_request_with("/composite", "POST", &Map::new(), &Map::new(), Some(&bad_allof))
             .is_err());
+    }
+
+    /// Round 19 — regression for Srikanth's vCenter spec which has
+    /// component schemas with dotted names like
+    /// `Esx.Settings.Inventory.EntitySpec`. The route-handler's body
+    /// validator used to build a naked `jsonschema` validator with no
+    /// `components` context, so nested `$ref` strings to
+    /// `#/components/schemas/X` failed with "Pointer does not exist".
+    /// Round 18.3 fixed the bench + `validate_request_body` paths;
+    /// round 19 fixes this third path in `openapi_routes`.
+    #[tokio::test]
+    async fn dotted_schema_ref_resolves_in_route_validator() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Dotted", "version": "1.0.0" },
+            "paths": {
+                "/x": {
+                    "post": {
+                        "requestBody": {
+                            "required": true,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "$ref": "#/components/schemas/Esx.Settings.Inventory.EntitySpec"
+                                    }
+                                }
+                            }
+                        },
+                        "responses": {"200": {"description": "ok"}}
+                    }
+                }
+            },
+            "components": {
+                "schemas": {
+                    "Esx.Settings.Inventory.EntitySpec": {
+                        "type": "object",
+                        "required": ["type"],
+                        "properties": {"type": {"type": "string"}}
+                    }
+                }
+            }
+        });
+        let registry = create_registry_from_json(spec_json).unwrap();
+        // Pre-fix: this errored with `Pointer '/components/schemas/Esx.Settings.Inventory.EntitySpec' does not exist`.
+        // Post-fix: the dotted ref resolves and the body validates.
+        let good = json!({"type": "HOST"});
+        let res =
+            registry.validate_request_with("/x", "POST", &Map::new(), &Map::new(), Some(&good));
+        assert!(res.is_ok(), "valid body should pass; got {res:?}");
+        // And a bad body should still error from inside the resolved schema, not from a build failure.
+        let bad = json!({"unrelated": 1});
+        let err = registry
+            .validate_request_with("/x", "POST", &Map::new(), &Map::new(), Some(&bad))
+            .unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            !msg.contains("Pointer") || !msg.contains("does not exist"),
+            "should not be a pointer-resolution failure; got: {msg}"
+        );
     }
 
     #[tokio::test]

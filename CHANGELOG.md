@@ -1,3 +1,13 @@
+## [0.3.163] - 2026-06-01
+
+### Fixed
+
+- **[Contracts]** Live-server request-body validator now resolves nested `$ref` pointers against the spec's components map (#79 round 19) — Srikanth's vCenter 0.3.162 run still produced 120 `"Failed to create schema validator: Pointer '/components/schemas/Esx.Settings.Inventory.EntitySpec' does not exist"` violations against schemas that DO exist in the spec. Round 18.3 fixed the bench-side + the `validation::validate_request_body` helper, but missed a third call site in `openapi_routes.rs::validate_request_with_all` (line 1250 + 1267) that used `OpenApiSchema::new(...).validate()` with a naked validator. Switched both branches to `schema_ref_resolver::build_validator(&schema, &spec)` which inlines the components. Dotted-name schemas (`Esx.Settings.Inventory.EntitySpec`, `Vapi.Std.DynamicID`, etc.) now resolve correctly.
+
+### Added
+
+- **[Contracts][DevX]** `--source-ip` and `--geo-source-ip` now accept CIDR ranges (#79 round 19 — Srikanth's follow-up on round 18.5 (j)). Pass `--source-ip 10.0.0.0/28` to bind 16 hosts, `--geo-source-ip 2001:db8::/126` for 4 IPv6 hosts, or mix all three forms in one CLI value: `--geo-source-ip 10.0.0.0/30,2001:db8::1,203.0.113.42`. CIDR expansion is capped at 256 hosts per range to guard against `/8` typos blowing up the bench client; the cap is logged when triggered. IPv4 and IPv6 supported.
+
 ## [0.3.162] - 2026-05-31
 
 Issue #79 rounds 17.1 through 18.5 — TUI clipboard + non-violating counter, schema-driven negatives, security probes, spec-level audits, OWASP/WAF unification, HTML report, base-path bug, schema-`$ref` resolution, OWASP coverage hints, GEODB multi-source-IP testing. Squash-merged from PRs #729 / #731 / #732 / #736 / #737 / #738 / #740 / #741 / #742 / #744. Version chain compressed from incremental 0.3.153–0.3.161 into a single 0.3.162 release; the intermediate version numbers were never published to crates.io.

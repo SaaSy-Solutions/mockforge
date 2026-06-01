@@ -1,5 +1,13 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.163] - 2026-06-01
+
+### Fixed
+- Live-server route handler now resolves nested `$ref` pointers against the spec's components (#79 round 19) — third schema-validator call site, missed by round 18.3. Dotted-name vCenter schemas resolve.
+
+### Added
+- `--source-ip` and `--geo-source-ip` accept CIDR ranges (`10.0.0.0/28`, `2001:db8::/126`) capped at 256 hosts per range. IPv4 + IPv6 supported (#79 round 19).
+
 ## [0.3.162] - 2026-05-31
 
 Issue #79 rounds 17.1–18.5 consolidated into a single release. Intermediate version numbers (0.3.153–0.3.161) were never published.
