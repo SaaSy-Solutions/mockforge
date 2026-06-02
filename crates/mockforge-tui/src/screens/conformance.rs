@@ -240,7 +240,29 @@ impl ConformanceScreen {
         self.violations.get(idx)
     }
 
+    /// Round 22.1 — symmetric accessor for the unknown-paths view.
+    /// Indexes through `filtered_unknown_indices()` so the table
+    /// selection cursor maps to the right row regardless of which
+    /// filters are active.
+    fn selected_unknown(&self) -> Option<&UnknownPathRequest> {
+        let idx = *self.filtered_unknown_indices().get(self.table.selected)?;
+        self.unknown_paths.get(idx)
+    }
+
+    /// View-aware detail text. Pre-round-22.1, this always returned
+    /// the violation detail, so pressing Enter while toggled to the
+    /// Unknown view (`u`) opened the violations modal anyway: a
+    /// confusing screen-content swap that Srikanth flagged.
+    /// Now dispatches on `view_mode`: Violations → violation detail,
+    /// UnknownPaths → unknown-request detail.
     fn selected_detail(&self) -> Option<String> {
+        match self.view_mode {
+            ViewMode::Violations => self.selected_violation_detail(),
+            ViewMode::UnknownPaths => self.selected_unknown_detail(),
+        }
+    }
+
+    fn selected_violation_detail(&self) -> Option<String> {
         let v = self.selected_violation()?;
         Some(format!(
             "Timestamp:  {}\nMethod:     {}\nPath:       {}\nClient IP:  {}\nStatus:     {}\nCategory:   {}\n\nReason:\n{}\n",
@@ -251,6 +273,22 @@ impl ConformanceScreen {
             v.status,
             if v.category.is_empty() { "(uncategorised)" } else { v.category.as_str() },
             v.reason,
+        ))
+    }
+
+    /// Round 22.1 — unknown-path Enter detail. No `reason` /
+    /// `category` (the spec didn't know the path at all), but the
+    /// query string is useful for diagnosing proxy-replay mismatches.
+    fn selected_unknown_detail(&self) -> Option<String> {
+        let r = self.selected_unknown()?;
+        Some(format!(
+            "Timestamp:  {}\nMethod:     {}\nPath:       {}\nQuery:      {}\nClient IP:  {}\nStatus:     {}\n\n(No spec entry matched this path. In shadow mode the server returned 200; otherwise 404.)\n",
+            r.timestamp.format("%Y-%m-%d %H:%M:%S UTC"),
+            r.method,
+            r.path,
+            if r.query.is_empty() { "(none)" } else { r.query.as_str() },
+            r.client_ip,
+            r.status,
         ))
     }
 
@@ -488,7 +526,17 @@ impl Screen for ConformanceScreen {
 
         match key.code {
             KeyCode::Enter => {
-                if !self.violations.is_empty() {
+                // Round 22.1 — gate on the right collection for the
+                // active view. Pre-round-22.1, Enter opened the
+                // violation modal even when `u` had toggled to
+                // unknown-paths, because we checked `violations`
+                // unconditionally. Now the modal opens iff the
+                // current view has at least one row.
+                let has_rows = match self.view_mode {
+                    ViewMode::Violations => !self.violations.is_empty(),
+                    ViewMode::UnknownPaths => !self.unknown_paths.is_empty(),
+                };
+                if has_rows {
                     self.detail_open = true;
                     self.detail_scroll = 0;
                 }
@@ -561,18 +609,26 @@ impl Screen for ConformanceScreen {
         }
 
         if self.detail_open {
-            let detail =
-                self.selected_detail().unwrap_or_else(|| "(no violation selected)".to_string());
+            let detail = self.selected_detail().unwrap_or_else(|| "(no row selected)".to_string());
             // Issue #79 round 15 — wrap long lines so big Microsoft
             // Graph paths and validation reasons are fully readable
             // (Srikanth couldn't see the full path/reason). j/k still
             // scroll vertically through the wrapped detail.
+            //
+            // Round 22.1 — title now reflects the active view, so
+            // pressing Enter while toggled to Unknown surfaces as
+            // "Unknown Path Detail" instead of the (wrong)
+            // "Violation Detail".
+            let title = match self.view_mode {
+                ViewMode::Violations => " Violation Detail (Esc:close  j/k:scroll  c:copy) ",
+                ViewMode::UnknownPaths => " Unknown Path Detail (Esc:close  j/k:scroll) ",
+            };
             let para = Paragraph::new(detail)
                 .wrap(Wrap { trim: false })
                 .scroll((self.detail_scroll, 0))
                 .block(
                     Block::default()
-                        .title(" Violation Detail (Esc:close  j/k:scroll  c:copy) ")
+                        .title(title)
                         .title_style(Theme::title())
                         .borders(Borders::ALL)
                         .border_style(Theme::dim())

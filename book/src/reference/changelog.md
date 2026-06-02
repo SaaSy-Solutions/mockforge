@@ -1,5 +1,16 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.166] - 2026-06-02
+
+### Fixed
+- TUI Conformance: Enter in the Unknown view (`u`) opens Unknown Path Detail instead of the (wrong) Violation Detail (#79 round 22.1).
+- `--source-ip` / `--geo-source-ip` emit a warning when used with `--use-k6` since k6 can't bind a VU to a source IP (#79 round 22.2).
+
+### Added
+- `--geo-source-ip` headers wired into the k6 template; the rendered script rotates X-Forwarded-For / True-Client-IP / CF-Connecting-IP per iteration (#79 round 22.3).
+- `--source-ip` / `--geo-source-ip` accept `start-end` IPv4 ranges (e.g. `10.0.0.5-10.0.0.27`) alongside CIDR and comma-separated lists (#79 round 22.4).
+- HTML report header links to the probe-label reference; "gaps" badge wording clarified to "rejection gaps" (#79 round 22.6).
+
 ## [0.3.165] - 2026-06-01
 
 ### Added

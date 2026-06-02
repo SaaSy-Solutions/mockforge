@@ -44,6 +44,8 @@ mod tests {
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let generator = K6ScriptGenerator::new(config, templates);

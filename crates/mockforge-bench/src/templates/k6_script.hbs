@@ -116,15 +116,40 @@ function recordMockForgeChaosHeaders(res) {
 
 const BASE_URL = '{{base_url}}';
 
+{{#if has_geo_source}}
+// Issue #79 round 22.3 — GEODB / forwarded-IP source rotation. Each
+// iteration picks the next IP from `GEO_SOURCE_IPS` (round-robin via
+// `__ITER`) and assigns it to every header in `GEO_SOURCE_HEADERS`.
+// These headers are merged into every request's header map below.
+// Configured via `--geo-source-ip` and `--geo-source-header`.
+const GEO_SOURCE_IPS = {{{geo_source_ips_json}}};
+const GEO_SOURCE_HEADERS = {{{geo_source_headers_json}}};
+
+function buildGeoSourceHeaders() {
+  const iter = typeof __ITER === 'number' ? __ITER : 0;
+  const ip = GEO_SOURCE_IPS[iter % GEO_SOURCE_IPS.length];
+  const out = {};
+  for (const name of GEO_SOURCE_HEADERS) {
+    out[name] = ip;
+  }
+  return out;
+}
+{{/if}}
+
 export default function () {
+  {{#if has_geo_source}}
+  const __geoHeaders = buildGeoSourceHeaders();
+  {{/if}}
   {{#each operations}}
   // Operation {{@index}}: {{this.display_name}}
   {
     {{#if @root.security_testing_enabled}}
     // Get a grouped security payload for each operation (array of related payloads)
     const secPayloadGroup = typeof getNextSecurityPayload === 'function' ? getNextSecurityPayload() : [];
-    // Copy headers and build request URL, applying all payloads from the group
-    const requestHeaders = { ...{{{this.headers}}} };
+    // Copy headers and build request URL, applying all payloads from the group.
+    // Round 22.3 — merge in the rotating GEODB header set so the
+    // destination's geo-lookup pipeline sees the synthesised source IP.
+    const requestHeaders = { ...{{{this.headers}}}{{#if @root.has_geo_source}}, ...__geoHeaders{{/if}} };
     {{#if this.path_is_dynamic}}
     const __path = {{{this.path}}};
     let requestUrl = `${BASE_URL}${__path}`;
@@ -153,7 +178,10 @@ export default function () {
     // Skip CookieJar when security payload sets Cookie header (jar overrides manual Cookie headers)
     const secRequestOpts = hasSecCookie ? { headers: requestHeaders } : { headers: requestHeaders, jar: new http.CookieJar() };
     {{else}}
-    const requestHeaders = {{{this.headers}}};
+    // Round 22.3 — merge GEODB rotating header set into the per-op
+    // headers so it applies in plain bench mode too (not just
+    // self-test). No-op when `--geo-source-ip` wasn't passed.
+    const requestHeaders = { ...{{{this.headers}}}{{#if @root.has_geo_source}}, ...__geoHeaders{{/if}} };
     {{/if}}
 
     {{#if this.has_body}}
