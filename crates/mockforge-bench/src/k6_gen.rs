@@ -68,6 +68,31 @@ pub struct K6ScriptTemplateData {
     /// linearly ramp from 0 → 5 across the whole window. Setting startVUs
     /// to the target for `Constant` collapses that ramp.
     pub start_vus: u32,
+    /// Issue #79 round 22.3 — fake source IPs to rotate across the
+    /// forwarded-IP headers. Pre-round-22.3, `--geo-source-ip` only
+    /// applied to the self-test driver; the k6 bench path silently
+    /// ignored it. When non-empty, the rendered script picks a
+    /// rotating IP per iteration and adds it to every header in
+    /// `geo_source_headers` on every request. Empty = no header
+    /// injection (preserves prior behaviour).
+    pub geo_source_ips: Vec<String>,
+    /// Headers to populate with the rotating geo source IP. Default
+    /// (when CLI doesn't override) is `X-Forwarded-For`,
+    /// `True-Client-IP`, `CF-Connecting-IP`. Empty means no headers
+    /// even if `geo_source_ips` is non-empty.
+    pub geo_source_headers: Vec<String>,
+    /// True iff both `geo_source_ips` and `geo_source_headers` are
+    /// non-empty. Pre-computed so the template can use a single
+    /// `{{#if has_geo_source}}` guard instead of duplicating the
+    /// emptiness check on both lists.
+    pub has_geo_source: bool,
+    /// JSON-array string of `geo_source_ips` ready for embedding in
+    /// the rendered k6 script via `{{{geo_source_ips_json}}}`.
+    /// Pre-serialised so Handlebars doesn't have to walk the Vec at
+    /// render time.
+    pub geo_source_ips_json: String,
+    /// JSON-array string of `geo_source_headers` ready for embedding.
+    pub geo_source_headers_json: String,
 }
 
 /// Typed template data for `k6_crud_flow.hbs`.
@@ -146,6 +171,14 @@ pub struct K6Config {
     /// When true, set `noConnectionReuse: true` on every request so each one
     /// opens a fresh TCP/TLS connection (drives high CPS).
     pub no_keep_alive: bool,
+    /// Round 22.3 — fake source IPs to advertise via forwarded-IP
+    /// headers in the rendered k6 script. Empty = no header
+    /// injection (preserves pre-22.3 behaviour).
+    pub geo_source_ips: Vec<String>,
+    /// Which forwarded-IP header(s) to populate when
+    /// `geo_source_ips` is non-empty. Empty = no headers even if
+    /// `geo_source_ips` is non-empty.
+    pub geo_source_headers: Vec<String>,
 }
 
 /// Generate k6 load test script
@@ -384,6 +417,21 @@ impl K6ScriptGenerator {
                 LoadScenario::Constant => self.config.max_vus,
                 _ => 0,
             },
+            // Round 22.3 — forward the rotating-geo-IP config from
+            // K6Config into template data. `has_geo_source` is the
+            // and-gate the template uses to skip the header
+            // assignment entirely when either list is empty. The
+            // `_json` siblings pre-serialise for `{{{ }}}` triple-
+            // brace embedding (raw, no escape) so the script can
+            // declare `const GEO_SOURCE_IPS = [...]` directly.
+            geo_source_ips: self.config.geo_source_ips.clone(),
+            geo_source_headers: self.config.geo_source_headers.clone(),
+            has_geo_source: !self.config.geo_source_ips.is_empty()
+                && !self.config.geo_source_headers.is_empty(),
+            geo_source_ips_json: serde_json::to_string(&self.config.geo_source_ips)
+                .unwrap_or_else(|_| "[]".to_string()),
+            geo_source_headers_json: serde_json::to_string(&self.config.geo_source_headers)
+                .unwrap_or_else(|_| "[]".to_string()),
         })
     }
 
@@ -548,6 +596,8 @@ mod tests {
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         assert_eq!(config.duration_secs, 60);
@@ -572,6 +622,8 @@ mod tests {
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let templates = vec![];
@@ -710,6 +762,8 @@ mod tests {
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
         let generator = K6ScriptGenerator::new(config, vec![template]);
         let script = generator.generate().expect("script generates");
@@ -758,6 +812,8 @@ mod tests {
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -849,6 +905,8 @@ mod tests {
             chunked_request_bodies: false,
             target_rps: Some(100),
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -931,6 +989,8 @@ mod tests {
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: true,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
         let script = K6ScriptGenerator::new(config, vec![template]).generate().unwrap();
         assert!(
@@ -986,6 +1046,8 @@ mod tests {
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
         let script = K6ScriptGenerator::new(config, vec![template]).generate().unwrap();
         assert!(
@@ -1010,6 +1072,8 @@ mod tests {
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
         let ramp_template = RequestTemplate {
             operation: ApiOperation {
@@ -1074,6 +1138,8 @@ mod tests {
             chunked_request_bodies: false,
             target_rps: Some(50),
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
         let script = K6ScriptGenerator::new(config, vec![template]).generate().unwrap();
         assert!(
@@ -1232,6 +1298,8 @@ export default function() {{}}
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1281,6 +1349,8 @@ export default function() {{}}
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1330,6 +1400,8 @@ export default function() {{}}
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1395,6 +1467,8 @@ export default function() {{}}
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template1, template2]);
@@ -1459,6 +1533,8 @@ export default function() {{}}
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1523,6 +1599,8 @@ export default function() {{}}
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1582,6 +1660,8 @@ export default function() {{}}
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1641,6 +1721,8 @@ export default function() {{}}
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1702,6 +1784,8 @@ export default function() {{}}
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1801,6 +1885,8 @@ export default function() {{}}
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -1885,6 +1971,8 @@ export default function() {{}}
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -2005,6 +2093,8 @@ export default function() {{}}
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -2078,6 +2168,8 @@ export default function() {{}}
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -2140,6 +2232,8 @@ export default function() {{}}
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);
@@ -2197,6 +2291,8 @@ export default function() {{}}
             chunked_request_bodies: false,
             target_rps: None,
             no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         let generator = K6ScriptGenerator::new(config, vec![template]);

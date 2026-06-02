@@ -73,6 +73,8 @@ async fn test_billing_subscriptions_spec_generation() {
         chunked_request_bodies: false,
         target_rps: None,
         no_keep_alive: false,
+        geo_source_ips: Vec::new(),
+        geo_source_headers: Vec::new(),
     };
 
     // Generate the k6 script
@@ -282,6 +284,8 @@ async fn test_insecure_skip_tls_verify_in_global_options() {
         chunked_request_bodies: false,
         target_rps: None,
         no_keep_alive: false,
+        geo_source_ips: Vec::new(),
+        geo_source_headers: Vec::new(),
     };
 
     let generator = K6ScriptGenerator::new(config, templates);

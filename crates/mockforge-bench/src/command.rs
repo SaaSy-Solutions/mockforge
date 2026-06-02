@@ -293,6 +293,38 @@ fn parse_ip_list(raw: &[String], flag_name: &str) -> Vec<std::net::IpAddr> {
                 expand_cidr(net_addr, prefix, MAX_CIDR_EXPANSION, flag_name, s, &mut out);
                 continue;
             }
+            // Round 22.4 — range form: `start-end` (Srikanth (h)).
+            // Lets users specify non-power-of-2 ranges without
+            // finding a clean prefix. IPv4 only for now (the most
+            // common case); IPv6 ranges with `:` collide with the
+            // address literal so they'd need a different separator.
+            if let Some((start_str, end_str)) = s.split_once('-') {
+                let start_s = start_str.trim();
+                let end_s = end_str.trim();
+                // Reject ambiguous IPv6 ranges (contain `:`) so we
+                // don't accidentally parse `2001:db8::1-2001:db8::5`
+                // as a half address.
+                if start_s.contains(':') || end_s.contains(':') {
+                    tracing::warn!(target: "mockforge::bench", "--{flag_name} '{s}': IPv6 range syntax not supported (use CIDR like 2001:db8::/126 instead)");
+                    continue;
+                }
+                let start: IpAddr = match start_s.parse() {
+                    Ok(a) => a,
+                    Err(e) => {
+                        tracing::warn!(target: "mockforge::bench", "ignoring --{flag_name} '{s}': bad range start: {e}");
+                        continue;
+                    }
+                };
+                let end: IpAddr = match end_s.parse() {
+                    Ok(a) => a,
+                    Err(e) => {
+                        tracing::warn!(target: "mockforge::bench", "ignoring --{flag_name} '{s}': bad range end: {e}");
+                        continue;
+                    }
+                };
+                expand_range(start, end, MAX_CIDR_EXPANSION, flag_name, s, &mut out);
+                continue;
+            }
             // Plain IP form
             match s.parse::<IpAddr>() {
                 Ok(ip) => out.push(ip),
@@ -303,6 +335,41 @@ fn parse_ip_list(raw: &[String], flag_name: &str) -> Vec<std::net::IpAddr> {
         }
     }
     out
+}
+
+/// Round 22.4 — expand an inclusive `start-end` IPv4 range to host
+/// addresses, capped at `cap`. Returns silently on a backwards or
+/// mixed-family range with a warning.
+fn expand_range(
+    start: std::net::IpAddr,
+    end: std::net::IpAddr,
+    cap: usize,
+    flag_name: &str,
+    raw: &str,
+    out: &mut Vec<std::net::IpAddr>,
+) {
+    use std::net::{IpAddr, Ipv4Addr};
+    let (start_v4, end_v4) = match (start, end) {
+        (IpAddr::V4(a), IpAddr::V4(b)) => (a, b),
+        _ => {
+            tracing::warn!(target: "mockforge::bench", "--{flag_name} '{raw}': range start/end must both be IPv4");
+            return;
+        }
+    };
+    let start_u32 = u32::from(start_v4);
+    let end_u32 = u32::from(end_v4);
+    if end_u32 < start_u32 {
+        tracing::warn!(target: "mockforge::bench", "--{flag_name} '{raw}': range end {end_v4} is before start {start_v4}");
+        return;
+    }
+    let total = (end_u32 - start_u32).saturating_add(1) as usize;
+    let take = total.min(cap);
+    if total > cap {
+        tracing::warn!(target: "mockforge::bench", "--{flag_name} '{raw}': range has {total} addresses, capping at {cap}");
+    }
+    for i in 0..take as u32 {
+        out.push(IpAddr::V4(Ipv4Addr::from(start_u32 + i)));
+    }
 }
 
 /// Expand a CIDR (IPv4 or IPv6) into individual host IPs, appending
@@ -429,6 +496,28 @@ impl BenchCommand {
 
     /// Execute the bench command
     pub async fn execute(&self) -> Result<()> {
+        // Round 22.2 — warn loudly when `--source-ip` is set alongside
+        // a k6-driven path. k6 has no equivalent to reqwest's
+        // `local_address`; the script-side cannot bind a VU to a
+        // specific source IP. So `--source-ip` only takes effect when
+        // the native self-test driver runs (`--conformance-self-test`).
+        // Pre-warning, Srikanth's `mockforge bench --source-ip ... --use-k6`
+        // silently took only the first IP and never rotated; the
+        // warning replaces that silent partial behaviour with an
+        // explicit explanation.
+        if !self.source_ips.is_empty()
+            && (self.use_k6 || (self.conformance && !self.conformance_self_test))
+        {
+            TerminalReporter::print_warning(
+                "--source-ip has no effect with --use-k6 (or non-self-test --conformance). k6 cannot bind a VU to a source IP from the script side; the bench will run on the default outbound interface. Use --conformance-self-test (native driver) to exercise the source-IP pool, or set up multiple bound interfaces and run separate bench processes.",
+            );
+        }
+        if !self.geo_source_ips.is_empty() && self.use_k6 && !self.conformance_self_test {
+            TerminalReporter::print_warning(
+                "--geo-source-ip has no effect with --use-k6 in non-self-test runs yet (round 22.3 wires it into the k6 template; until then, use --conformance-self-test to exercise the geo-IP rotation, or wait for v0.3.166).",
+            );
+        }
+
         // Check if we're in multi-target mode
         if let Some(targets_file) = &self.targets_file {
             if self.conformance {
@@ -665,6 +754,22 @@ impl BenchCommand {
             chunked_request_bodies: self.chunked_request_bodies,
             target_rps: self.target_rps,
             no_keep_alive: self.no_keep_alive,
+            // Round 22.3 — wire `--geo-source-ip` / `--geo-source-header`
+            // through to the k6 generator so the rendered script
+            // rotates the forwarded-IP headers per iteration. Pre-fix
+            // these were Vec::new() and the script never set the
+            // headers in bench mode.
+            geo_source_ips: parse_ip_list(&self.geo_source_ips, "geo-source-ip")
+                .into_iter()
+                .map(|ip| ip.to_string())
+                .collect(),
+            geo_source_headers: if self.geo_source_headers.is_empty()
+                && !self.geo_source_ips.is_empty()
+            {
+                crate::conformance::self_test::default_geo_source_headers()
+            } else {
+                self.geo_source_headers.clone()
+            },
         };
 
         let generator = K6ScriptGenerator::new(k6_config, templates);
@@ -1823,6 +1928,18 @@ impl BenchCommand {
             chunked_request_bodies: self.chunked_request_bodies,
             target_rps: self.target_rps,
             no_keep_alive: self.no_keep_alive,
+            // Round 22.3 — see other K6Config site above.
+            geo_source_ips: parse_ip_list(&self.geo_source_ips, "geo-source-ip")
+                .into_iter()
+                .map(|ip| ip.to_string())
+                .collect(),
+            geo_source_headers: if self.geo_source_headers.is_empty()
+                && !self.geo_source_ips.is_empty()
+            {
+                crate::conformance::self_test::default_geo_source_headers()
+            } else {
+                self.geo_source_headers.clone()
+            },
         };
 
         let generator = K6ScriptGenerator::new(k6_config, templates);
@@ -3155,6 +3272,42 @@ mod tests {
         assert_eq!(BenchCommand::parse_duration("5m").unwrap(), 300);
         assert_eq!(BenchCommand::parse_duration("1h").unwrap(), 3600);
         assert_eq!(BenchCommand::parse_duration("60").unwrap(), 60);
+    }
+
+    /// Round 22.4 — `start-end` IPv4 range syntax for non-power-of-2
+    /// ranges. Srikanth (h): `--source-ip 10.0.0.5-10.0.0.27` for 23
+    /// hosts without finding a clean prefix.
+    #[test]
+    fn parse_ip_list_ipv4_range_inclusive() {
+        let v = parse_ip_list(&["10.0.0.5-10.0.0.27".into()], "source-ip");
+        assert_eq!(v.len(), 23);
+        assert_eq!(v.first().unwrap().to_string(), "10.0.0.5");
+        assert_eq!(v.last().unwrap().to_string(), "10.0.0.27");
+    }
+
+    /// Round 22.4 — range with start > end is rejected with a warning
+    /// (returns nothing for that entry rather than wrapping around).
+    #[test]
+    fn parse_ip_list_range_rejects_backwards() {
+        let v = parse_ip_list(&["10.0.0.10-10.0.0.5".into()], "source-ip");
+        assert!(v.is_empty(), "backwards range should produce no IPs; got {v:?}");
+    }
+
+    /// Round 22.4 — IPv6 ranges are intentionally rejected because
+    /// `2001:db8::1-2001:db8::5` would ambiguously parse against the
+    /// address literal's `:` separators. Users use CIDR for IPv6.
+    #[test]
+    fn parse_ip_list_rejects_ipv6_range_syntax() {
+        let v = parse_ip_list(&["2001:db8::1-2001:db8::5".into()], "geo-source-ip");
+        assert!(v.is_empty(), "IPv6 range should be rejected; got {v:?}");
+    }
+
+    /// Round 22.4 — range cap is the same 256 host limit as CIDR.
+    #[test]
+    fn parse_ip_list_range_capped_at_256() {
+        let v = parse_ip_list(&["10.0.0.0-10.0.5.0".into()], "source-ip");
+        assert_eq!(v.len(), 256);
+        assert_eq!(v.first().unwrap().to_string(), "10.0.0.0");
     }
 
     /// Round 19 — single IPs and comma-separated lists already

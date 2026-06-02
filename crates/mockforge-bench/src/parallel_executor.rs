@@ -573,6 +573,8 @@ impl ParallelExecutor {
             chunked_request_bodies,
             target_rps,
             no_keep_alive,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
         };
 
         // Generate k6 script

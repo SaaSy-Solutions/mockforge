@@ -1,3 +1,20 @@
+## [0.3.166] - 2026-06-02
+
+### Fixed
+
+- **[Contracts]** TUI Conformance tab: pressing **Enter** while toggled to the Unknown view (`u`) now opens the **Unknown Path Detail** modal instead of the (wrong) Violation Detail (#79 round 22.1 / Srikanth (f)). The 'u' toggle switched the underlying data buffer but the Enter handler routed unconditionally to the violation modal; now both the handler's "has rows" check and the modal title and body are view-aware. `selected_unknown()` and `selected_unknown_detail()` are the new symmetric accessors.
+- **[Contracts][DevX]** `--source-ip` and `--geo-source-ip` now emit a hard warning when set alongside `--use-k6` or the default `--conformance` k6 path (#79 round 22.2 / Srikanth (g1)). k6 cannot bind a VU to a source IP from the script side, so `--source-ip` silently took only the first IP and never rotated. The warning replaces the silent partial behaviour with an explicit explanation and points users at `--conformance-self-test` (the native driver) which honours the source-IP pool. A separate warning fires for `--geo-source-ip` until round 22.3 lands (now in the same release).
+
+### Added
+
+- **[Contracts][DevX]** `--geo-source-ip` headers are now rotated through the k6 template too (#79 round 22.3 / Srikanth (g2)). Pre-round-22.3, the geo-IP rotation only applied to the self-test driver; the k6 bench path silently ignored it. The rendered k6 script now declares `GEO_SOURCE_IPS` + `GEO_SOURCE_HEADERS` constants and merges a rotating `__geoHeaders` object into every request's `requestHeaders` via spread. `K6Config` gains `geo_source_ips` and `geo_source_headers` fields; `K6ScriptTemplateData` gains `has_geo_source` + JSON-serialised siblings for the template's triple-brace embedding. Default header set (when only `--geo-source-ip` is passed) is the standard three: `X-Forwarded-For`, `True-Client-IP`, `CF-Connecting-IP`.
+- **[Contracts][DevX]** `--source-ip` and `--geo-source-ip` now accept `start-end` IPv4 range syntax alongside CIDR and comma-separated lists (#79 round 22.4 / Srikanth (h)). Pass `--source-ip 10.0.0.5-10.0.0.27` for 23 hosts without finding a clean prefix. Same 256-host cap as CIDR; backwards ranges (`end < start`) are rejected with a warning. IPv6 ranges are intentionally rejected because the `:` separator would collide with the address literal; use CIDR for IPv6.
+- **[DevX]** HTML conformance report header now links to the probe-label reference page in the docs (#79 round 22.6 first slice). The "rejection gaps" wording replaces the vaguer "gaps" label on the category status badge, so the badge names what it actually measures.
+
+### Notes
+
+- The fuller HTML usability sweep (clickable links from missed counts to drill-down anchors, per-category column in the Per-operation table, category-family grouping view) is queued for round 23 / v0.3.167 alongside response-body shape validation (carried over from round 21.3).
+
 ## [0.3.165] - 2026-06-01
 
 ### Added
