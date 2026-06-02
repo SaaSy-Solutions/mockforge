@@ -36,7 +36,7 @@ rand.workspace = true
 chrono.workspace = true
 
 # HTTP types
-http = "1.0"
+http = "1.4"
 
 # Async traits
 async-trait = "0.1"

@@ -16,7 +16,7 @@ missing_docs = "deny"
 
 [dependencies]
 axum = { workspace = true }
-http = "1.3"
+http = "1.4"
 hyper = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
