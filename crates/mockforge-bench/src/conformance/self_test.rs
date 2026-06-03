@@ -23,7 +23,15 @@ use reqwest::{Client, Method};
 use std::collections::BTreeMap;
 use std::net::IpAddr;
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
+
+/// Round 23 (c-iii) — per-direction body cap when capturing
+/// request/response payloads to `conformance-self-test-requests.jsonl`.
+/// 16 KiB keeps a 1000-case run under ~32 MB even if every payload
+/// fills the cap, while still preserving enough of a typical JSON body
+/// (or a stack-trace error response) to debug from.
+const CAPTURE_BODY_CAP_BYTES: usize = 16 * 1024;
 
 /// Round 17.2 — cap on schema-driven negatives per operation. A spec
 /// with 100 properties per body could produce hundreds of mutations
@@ -62,6 +70,33 @@ pub struct SelfTestConfig {
     /// is non-empty. Empty → no-op; default below sets the standard
     /// three-header set.
     pub geo_source_headers: Vec<String>,
+    /// Round 23 (c-iii) — when `Some`, every probe captures method, URL,
+    /// request headers/body and response status/headers/body into this
+    /// sink. Caller drains it after `run_self_test` and writes
+    /// `conformance-self-test-requests.jsonl`. None → no capture (zero
+    /// extra allocations on the hot path).
+    pub capture: Option<Arc<Mutex<Vec<CaseCapture>>>>,
+}
+
+/// Round 23 (c-iii) — one captured request/response pair, one per
+/// probe (positive or negative). Serialised as a JSON line in
+/// `conformance-self-test-requests.jsonl`. Headers are kept as
+/// `BTreeMap` for stable ordering. Bodies are truncated to
+/// `CAPTURE_BODY_CAP_BYTES`; `*_truncated` flags whether more was
+/// dropped.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct CaseCapture {
+    pub label: String,
+    pub method: String,
+    pub url: String,
+    pub request_headers: BTreeMap<String, String>,
+    pub request_body: Option<String>,
+    pub request_body_truncated: bool,
+    pub response_status: u16,
+    pub response_headers: BTreeMap<String, String>,
+    pub response_body: Option<String>,
+    pub response_body_truncated: bool,
+    pub error: Option<String>,
 }
 
 impl Default for SelfTestConfig {
@@ -76,8 +111,23 @@ impl Default for SelfTestConfig {
             source_ips: Vec::new(),
             geo_source_ips: Vec::new(),
             geo_source_headers: default_geo_source_headers(),
+            capture: None,
         }
     }
+}
+
+/// Truncate `body` to `CAPTURE_BODY_CAP_BYTES` on a UTF-8 boundary,
+/// returning the trimmed string and whether truncation occurred. Used
+/// for both request and response bodies in the capture sink.
+fn truncate_body_for_capture(body: &str) -> (String, bool) {
+    if body.len() <= CAPTURE_BODY_CAP_BYTES {
+        return (body.to_string(), false);
+    }
+    let mut end = CAPTURE_BODY_CAP_BYTES;
+    while end > 0 && !body.is_char_boundary(end) {
+        end -= 1;
+    }
+    (body[..end].to_string(), true)
 }
 
 /// Default forwarded-IP header set. Covers the three conventions a
@@ -881,31 +931,84 @@ async fn send_case_with_extra(
     headers: Vec<(String, String)>,
     extra_headers: Vec<(String, String)>,
 ) -> CaseOutcome {
-    let _ = config; // signature parity; timeout already on `client`.
-    let mut req = client.request(method, url);
+    let mut req = client.request(method.clone(), url);
+    let mut capture_headers: BTreeMap<String, String> = BTreeMap::new();
     for (k, v) in &query {
         req = req.query(&[(k.as_str(), v.as_str())]);
     }
     for (k, v) in &headers {
         req = req.header(k, v);
+        capture_headers.insert(k.clone(), v.clone());
     }
     for (k, v) in &extra_headers {
         req = req.header(k, v);
+        capture_headers.insert(k.clone(), v.clone());
     }
     if let Some(b) = body {
         req = req
             .header(reqwest::header::CONTENT_TYPE, "application/json")
             .body(b.to_string());
+        capture_headers.insert("Content-Type".to_string(), "application/json".to_string());
     }
-    let actual_status = match req.send().await {
-        Ok(resp) => resp.status().as_u16(),
-        Err(_) => 0,
+    let (actual_status, response_capture) = match req.send().await {
+        Ok(resp) => {
+            let status = resp.status().as_u16();
+            if let Some(sink) = &config.capture {
+                let resp_headers: BTreeMap<String, String> = resp
+                    .headers()
+                    .iter()
+                    .map(|(k, v)| (k.as_str().to_string(), v.to_str().unwrap_or("").to_string()))
+                    .collect();
+                let text = resp.text().await.unwrap_or_default();
+                let (rb, truncated) = truncate_body_for_capture(&text);
+                (status, Some((Some((rb, truncated)), resp_headers, None, sink.clone())))
+            } else {
+                (status, None)
+            }
+        }
+        Err(e) => {
+            let err_str = e.to_string();
+            if let Some(sink) = &config.capture {
+                (0, Some((None, BTreeMap::new(), Some(err_str), sink.clone())))
+            } else {
+                (0, None)
+            }
+        }
     };
     let passed = if expected_4xx {
         (400..500).contains(&actual_status)
     } else {
         (200..400).contains(&actual_status)
     };
+    if let Some((resp_body, resp_headers, error, sink)) = response_capture {
+        let (request_body, request_body_truncated) = match body {
+            Some(b) => {
+                let (rb, t) = truncate_body_for_capture(b);
+                (Some(rb), t)
+            }
+            None => (None, false),
+        };
+        let (response_body, response_body_truncated) = match resp_body {
+            Some((rb, t)) => (Some(rb), t),
+            None => (None, false),
+        };
+        let entry = CaseCapture {
+            label: label.to_string(),
+            method: method.to_string(),
+            url: build_query_url(url, &query),
+            request_headers: capture_headers,
+            request_body,
+            request_body_truncated,
+            response_status: actual_status,
+            response_headers: resp_headers,
+            response_body,
+            response_body_truncated,
+            error,
+        };
+        if let Ok(mut guard) = sink.lock() {
+            guard.push(entry);
+        }
+    }
     CaseOutcome {
         label: label.to_string(),
         expected_4xx,
@@ -914,6 +1017,12 @@ async fn send_case_with_extra(
     }
 }
 
+// HTTP request shape needs all of these: client, config (for capture
+// sink + extra headers), method, url, label (probe id), expected_4xx
+// (pass/fail decision), body, query, headers. A struct wrapper would
+// just move the arity from positional to field access without making
+// the call sites clearer.
+#[allow(clippy::too_many_arguments)]
 async fn send_case(
     client: &Client,
     config: &SelfTestConfig,
@@ -925,39 +1034,42 @@ async fn send_case(
     query: Vec<(String, String)>,
     headers: Vec<(String, String)>,
 ) -> CaseOutcome {
-    let mut req = client.request(method, url);
-    for (k, v) in &query {
-        req = req.query(&[(k.as_str(), v.as_str())]);
-    }
-    for (k, v) in &headers {
-        req = req.header(k, v);
-    }
-    for (k, v) in &config.extra_headers {
-        req = req.header(k, v);
-    }
-    if let Some(b) = body {
-        req = req
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .body(b.to_string());
-    }
-
-    let actual_status = match req.send().await {
-        Ok(resp) => resp.status().as_u16(),
-        Err(e) if e.is_timeout() => 0,
-        Err(_) => 0,
-    };
-
-    let passed = if expected_4xx {
-        (400..500).contains(&actual_status)
-    } else {
-        (200..400).contains(&actual_status)
-    };
-
-    CaseOutcome {
-        label: label.to_string(),
+    // Forwarding to `send_case_with_extra` keeps the capture logic in
+    // one place so request/response tracing can't drift between the
+    // two entrypoints.
+    send_case_with_extra(
+        client,
+        config,
+        method,
+        url,
+        label,
         expected_4xx,
-        actual_status,
-        passed,
+        body,
+        query,
+        headers,
+        config.extra_headers.clone(),
+    )
+    .await
+}
+
+/// Round 23 (c-iii) — rebuild the query-stringified URL for capture so
+/// the JSONL trace shows the URL that actually went over the wire
+/// (reqwest applies `.query(..)` after the request URL string is
+/// rendered, so capturing the raw `url` argument alone loses the
+/// query params).
+fn build_query_url(base: &str, query: &[(String, String)]) -> String {
+    if query.is_empty() {
+        return base.to_string();
+    }
+    let qs: String = query
+        .iter()
+        .map(|(k, v)| format!("{}={}", urlencoding::encode(k), urlencoding::encode(v)))
+        .collect::<Vec<_>>()
+        .join("&");
+    if base.contains('?') {
+        format!("{base}&{qs}")
+    } else {
+        format!("{base}?{qs}")
     }
 }
 
@@ -966,6 +1078,11 @@ async fn send_case(
 /// values are kept as `{param}` so an upstream router still matches
 /// the template — useful when `path_params` is empty and we want to
 /// hit the same route the spec defines.
+///
+/// All current call sites went through `build_url_with_base` after
+/// round 18.1, so this no-base-path helper is unused; keep it as the
+/// documented shim for future external callers (one-arg simplification).
+#[allow(dead_code)]
 fn build_url(target: &str, path_template: &str, path_params: &[(String, String)]) -> String {
     build_url_with_base(target, None, path_template, path_params)
 }

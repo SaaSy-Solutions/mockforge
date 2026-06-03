@@ -53,6 +53,12 @@ fn extract_failure_json(line: &str) -> Option<String> {
 /// k6 executor
 pub struct K6Executor {
     k6_path: String,
+    /// Comma-joined IPs/ranges/CIDRs forwarded to `k6 run --local-ips`.
+    /// Empty → flag omitted. Populated by callers that pass through the
+    /// CLI's `--source-ip`; lets a VU make requests from one of several
+    /// bound interfaces (k6 supports this natively, contrary to my
+    /// round-22 warning).
+    local_ips: String,
 }
 
 impl K6Executor {
@@ -63,7 +69,18 @@ impl K6Executor {
             .to_string_lossy()
             .to_string();
 
-        Ok(Self { k6_path })
+        Ok(Self {
+            k6_path,
+            local_ips: String::new(),
+        })
+    }
+
+    /// Set the `--local-ips` value for subsequent k6 invocations.
+    /// Accepts a comma-joined list of IPs, ranges (`10.0.0.1-10.0.0.5`),
+    /// and/or CIDRs (`192.168.0.0/24`) - same syntax k6 expects.
+    pub fn with_local_ips(mut self, local_ips: impl Into<String>) -> Self {
+        self.local_ips = local_ips.into();
+        self
     }
 
     /// Check if k6 is installed
@@ -118,6 +135,14 @@ impl K6Executor {
         // to avoid "bind: address already in use" on the default port 6565.
         if let Some(port) = api_port {
             cmd.arg("--address").arg(format!("localhost:{}", port));
+        }
+
+        // `--local-ips` rotates each VU through a pool of source IPs that
+        // must already be bound on the host (CIDRs/ranges accepted). This
+        // gives the k6 path the same source-IP coverage as the native
+        // self-test driver's `--source-ip`.
+        if !self.local_ips.is_empty() {
+            cmd.arg("--local-ips").arg(&self.local_ips);
         }
 
         // summary.json is written by the k6 script's handleSummary() function

@@ -38,9 +38,10 @@ line-numbers = true
 # exclude = [".*github\\.com.*"]
 # cache-timeout = 3600
 
-[preprocessor.toc]
-command = "mdbook-toc"
-renderer = ["html"]
+# [preprocessor.toc] disabled: no page uses the <!-- toc --> marker, and
+# mdbook-toc 0.15.x fails to parse mdbook 0.4.40+ preprocessor input,
+# which broke docs deploys from Nov 2025 onward. Re-enable with a pinned
+# version (0.14.2 worked) if a page actually needs a TOC marker.
 
 # [preprocessor.links]
 # command = "mdbook-linkcheck"
