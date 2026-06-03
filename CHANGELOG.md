@@ -1,3 +1,20 @@
+## [0.3.167] - 2026-06-03
+
+### Fixed
+
+- **[Contracts][DevX]** `--source-ip` now actually works with the k6 path (#79 round 23 / Srikanth correction on round-22 g1). The round-22 warning that said "k6 cannot bind a VU to a source IP from the script side" was wrong: k6 supports `--local-ips` natively (CIDR, ranges, and comma-separated single IPs). The k6 executor now forwards the CLI's `--source-ip` straight to `k6 run --local-ips`, and the misleading warning is removed. Only the `--conformance-self-test --use-k6` combo still fires a warning, because self-test returns before k6 launches and `--use-k6` is a no-op there.
+- **[DevX]** Docs site is rebuilding again (`docs.mockforge.dev` had been stuck since the 2025-11-10 build because mdbook-toc 0.15.x stopped parsing mdbook's preprocessor input). The TOC preprocessor was disabled (no page uses the `<!-- toc -->` marker anyway) and its `cargo install` step was removed from the deploy workflow, so the round-21 probe-label reference page resolves at `https://docs.mockforge.dev/reference/conformance-self-test-probes.html`.
+
+### Added
+
+- **[Contracts][DevX]** `--conformance-self-test-capture` flag (#79 round 23 / Srikanth c-iii deferred from round 22.5). When set alongside `--conformance-self-test`, every probe records method, URL, request headers/body and response status/headers/body to `conformance-self-test-requests.jsonl` (one JSON object per line) next to the JSON/HTML report. Bodies cap at 16 KiB per direction with `request_body_truncated` / `response_body_truncated` flags. Confirms geo-source-ip headers actually shipped and explains why a negative probe came back 200 instead of 4xx, without re-running under `RUST_LOG=trace`.
+- **[DevX]** HTML conformance report: count-cells in the "Negatives by category" and "Per-operation results" tables are now clickable links into the drill-down table below (#79 round 23 / Srikanth d). `#miss-cat-<category>` jumps to the first row of that category; `#miss-op-<method>_<path-slug>` jumps to the first row for that operation.
+- **[DevX]** HTML conformance report wording: "missed/caught" renamed to "Mismatched (non-4xx) / Matched (4xx)" across the cards, category table, per-operation table, and drill-down heading; the category status badge is now a plain `PASS`/`FAIL` (replacing "all caught" / "rejection gaps") since the count column already conveys magnitude (#79 round 23 / Srikanth d wording).
+
+### Notes
+
+- Response-body shape validation (round 21.3 / Srikanth a2 / a3) and the per-category column / category-family grouping view in the Per-operation table remain queued for a future round; this release prioritises the regressions and unblockers in Srikanth's round-22 review.
+
 ## [0.3.166] - 2026-06-02
 
 ### Fixed

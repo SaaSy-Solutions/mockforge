@@ -4063,7 +4063,7 @@ mod tests {
 
         // Literal `/users/me` wins over `/users/{id}` → no `id` captured.
         let me = registry.extract_path_parameters("/users/me", "GET");
-        assert!(me.get("id").is_none(), "literal route should win, got {me:?}");
+        assert!(!me.contains_key("id"), "literal route should win, got {me:?}");
 
         // A real id still matches the parameter route.
         let by_id = registry.extract_path_parameters("/users/123", "GET");

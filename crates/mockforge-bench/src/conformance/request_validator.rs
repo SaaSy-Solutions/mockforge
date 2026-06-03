@@ -427,7 +427,10 @@ fn resolve_parameter<'a>(
     }
 }
 
-/// Resolve a schema reference to a serde_json::Value for validation
+/// Resolve a schema reference to a serde_json::Value for validation.
+/// Reserved for round 21.3 (response-body shape validation against the
+/// spec's response schema). Not yet wired into a call site.
+#[allow(dead_code)]
 fn resolve_schema_to_json(
     schema_ref: &ReferenceOr<openapiv3::Schema>,
     spec: &OpenAPI,

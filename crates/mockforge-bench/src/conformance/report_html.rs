@@ -135,8 +135,8 @@ fn push_summary_cards(out: &mut String, report: &SelfTestReport) {
     out.push_str("<div class=\"cards\">\n");
     push_card(out, "Positive cases", positives, pos_class);
     push_card(out, "Positive failures", report.positive_fail, pos_class);
-    push_card(out, "Negatives caught", neg_caught, "ok");
-    push_card(out, "Negatives missed", neg_missed, miss_class);
+    push_card(out, "Negatives matched (4xx)", neg_caught, "ok");
+    push_card(out, "Negatives mismatched (non-4xx)", neg_missed, miss_class);
     push_card(out, "Operations", report.operations.len(), "");
     out.push_str("</div>\n");
 }
@@ -164,26 +164,35 @@ fn push_category_table(out: &mut String, report: &SelfTestReport) {
         out.push_str("<p class=\"small\">No negative probes ran — typically means no operations had any injectable surface.</p>\n");
         return;
     }
-    out.push_str("<table>\n<thead><tr><th>Category</th><th>Caught (4xx)</th><th>Missed (non-4xx)</th><th>Status</th></tr></thead>\n<tbody>\n");
+    out.push_str("<table>\n<thead><tr><th>Category</th><th>Matched (4xx)</th><th>Mismatched (non-4xx)</th><th>Status</th></tr></thead>\n<tbody>\n");
     for cat in keys {
         let caught = report.negative_caught.get(cat).copied().unwrap_or(0);
         let missed = report.negative_missed.get(cat).copied().unwrap_or(0);
-        // Round 22.6 — "gaps" was too vague; users had to guess
-        // whether it meant a spec gap, a server bug, or a validator
-        // miss. The replacement names what the badge actually
-        // measures: server returned a non-4xx to a probe that
-        // expected 4xx, so something between the spec and the
-        // server let it through.
+        // Round 23 (d) — Srikanth: "rejection gaps" was still too soft,
+        // and missed/caught wasn't intuitive. Switch the column headers
+        // to Matched/Mismatched (server's 4xx response matched the
+        // probe's expectation, or didn't) and reduce the status badge
+        // to a plain PASS/FAIL since the count column already conveys
+        // the magnitude.
         let (badge_class, badge_text) = if missed == 0 {
-            ("pass", "all caught")
+            ("pass", "PASS")
         } else {
-            ("fail", "rejection gaps")
+            ("fail", "FAIL")
+        };
+        // Round 23 (d) — clickable count: link the Mismatched count to
+        // the per-row anchor in the drill-down table below, so a reader
+        // can jump from "this category has 3 fails" → "here are the 3
+        // probes". Empty → no link.
+        let missed_cell = if missed > 0 {
+            format!("<a href=\"#miss-cat-{}\">{}</a>", html_escape(cat), missed)
+        } else {
+            missed.to_string()
         };
         out.push_str(&format!(
             "<tr><td><code>{}</code></td><td>{}</td><td>{}</td><td><span class=\"badge {}\">{}</span></td></tr>\n",
             html_escape(cat),
             caught,
-            missed,
+            missed_cell,
             badge_class,
             badge_text
         ));
@@ -197,7 +206,7 @@ fn push_operations_table(out: &mut String, report: &SelfTestReport, opts: &Rende
         out.push_str("<p class=\"small\">No operations.</p>\n");
         return;
     }
-    out.push_str("<table>\n<thead><tr><th>Method</th><th>Path</th><th>Positive</th><th>Negatives caught / missed</th></tr></thead>\n<tbody>\n");
+    out.push_str("<table>\n<thead><tr><th>Method</th><th>Path</th><th>Positive</th><th>Matched / Mismatched</th></tr></thead>\n<tbody>\n");
     for op in &report.operations {
         let pos_badge = match &op.positive {
             Some(p) if p.passed => "<span class=\"badge pass\">2xx ✓</span>".to_string(),
@@ -205,17 +214,38 @@ fn push_operations_table(out: &mut String, report: &SelfTestReport, opts: &Rende
             None => "<span class=\"badge info\">none</span>".into(),
         };
         let (caught, missed) = op.negatives.iter().partition::<Vec<&CaseOutcome>, _>(|n| n.passed);
+        // Round 23 (d) — clickable count: link the Mismatched count to
+        // the operation's anchor in the drill-down table below.
+        let op_slug = op_anchor_slug(&op.method, &op.path);
+        let missed_cell = if missed.is_empty() {
+            "0".to_string()
+        } else {
+            format!("<a href=\"#miss-op-{}\">{}</a>", op_slug, missed.len())
+        };
         out.push_str(&format!(
-            "<tr><td><code>{}</code></td><td><code>{}</code></td><td>{}</td><td>{} caught / {} missed</td></tr>\n",
+            "<tr><td><code>{}</code></td><td><code>{}</code></td><td>{}</td><td>{} / {}</td></tr>\n",
             html_escape(&op.method),
             html_escape(&op.path),
             pos_badge,
             caught.len(),
-            missed.len()
+            missed_cell
         ));
     }
     out.push_str("</tbody></table>\n");
     push_missed_detail(out, report, opts);
+}
+
+/// Round 23 (d) — stable slug for the per-operation anchor in the
+/// missed-negative drill-down table. Lowercase, [a-z0-9_] only so the
+/// resulting `id` is HTML-valid and the `#miss-op-...` link from the
+/// Per-operation table resolves predictably. Collisions across very
+/// similar paths are acceptable: clicking lands on the first matching
+/// row and the table is short enough to scan from there.
+fn op_anchor_slug(method: &str, path: &str) -> String {
+    let mut s = format!("{method}_{path}");
+    s = s.to_ascii_lowercase();
+    s = s.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect();
+    s
 }
 
 /// Round 21.1 — human-readable expected status range derived from the
@@ -245,24 +275,50 @@ fn push_missed_detail(out: &mut String, report: &SelfTestReport, opts: &RenderOp
     if missed.is_empty() {
         return;
     }
-    out.push_str("<h2>Missed negatives (validator gaps)</h2>\n");
+    out.push_str(
+        "<h2>Mismatched negatives (server returned non-4xx to a probe expecting 4xx)</h2>\n",
+    );
     // Cap message: surface the cap explicitly so the user knows
     // whether the table is truncated or complete.
     let total = missed.len();
     let cap_msg = match opts.missed_cap {
         Some(cap) if total > cap => format!(
-            "{} missed negative(s). Showing first {} (raise with <code>--report-missed-cap N</code>, or <code>0</code> for no cap); full set in <code>conformance-self-test.json</code>.",
+            "{} mismatched negative(s). Showing first {} (raise with <code>--report-missed-cap N</code>, or <code>0</code> for no cap); full set in <code>conformance-self-test.json</code>.",
             total, cap
         ),
-        Some(_) => format!("{} missed negative(s). All shown.", total),
-        None => format!("{} missed negative(s). All shown (no cap).", total),
+        Some(_) => format!("{} mismatched negative(s). All shown.", total),
+        None => format!("{} mismatched negative(s). All shown (no cap).", total),
     };
     out.push_str(&format!("<p class=\"small\">{cap_msg}</p>\n"));
     out.push_str("<table>\n<thead><tr><th>Method</th><th>Path</th><th>Label</th><th>Expected</th><th>Actual</th></tr></thead>\n<tbody>\n");
     let take = opts.missed_cap.unwrap_or(usize::MAX);
+    // Round 23 (d) — emit anchor ids so the count-cells in the
+    // Negatives-by-category and Per-operation tables can link straight
+    // to the first matching drill-down row:
+    //   `miss-cat-<category>` on the <tr>
+    //   `miss-op-<slug>`      on a zero-size <span> in the first cell
+    // (a <tr> can only carry one `id`, so the per-op anchor rides on
+    // the span; HTML treats both as valid jump targets). First-seen
+    // wins to avoid duplicate IDs across the truncated table.
+    let mut seen_cat: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut seen_op: std::collections::HashSet<String> = std::collections::HashSet::new();
     for (op, neg) in missed.iter().take(take) {
+        let cat = neg.label.split(':').next().unwrap_or("other").to_string();
+        let op_slug = op_anchor_slug(&op.method, &op.path);
+        let tr_id = if seen_cat.insert(cat.clone()) {
+            format!(" id=\"miss-cat-{}\"", html_escape(&cat))
+        } else {
+            String::new()
+        };
+        let op_anchor = if seen_op.insert(op_slug.clone()) {
+            format!("<span id=\"miss-op-{op_slug}\"></span>")
+        } else {
+            String::new()
+        };
         out.push_str(&format!(
-            "<tr><td><code>{}</code></td><td><code>{}</code></td><td><code>{}</code></td><td><span class=\"badge info\">{}</span></td><td>{}</td></tr>\n",
+            "<tr{}><td>{}<code>{}</code></td><td><code>{}</code></td><td><code>{}</code></td><td><span class=\"badge info\">{}</span></td><td>{}</td></tr>\n",
+            tr_id,
+            op_anchor,
             html_escape(&op.method),
             html_escape(&op.path),
             html_escape(&neg.label),
@@ -387,7 +443,8 @@ mod tests {
         assert!(html.contains("Positive cases"));
         assert!(html.contains("Negatives by category"));
         assert!(html.contains("Per-operation results"));
-        assert!(html.contains("Missed negatives"));
+        // Round 23 wording polish: "Missed negatives" → "Mismatched negatives".
+        assert!(html.contains("Mismatched negatives"));
         // Specific data points from the sample report:
         assert!(html.contains("request-body"));
         assert!(html.contains("owasp:sqli"));
@@ -449,8 +506,8 @@ mod tests {
         }
         report.negative_missed.insert("parameters".into(), 250);
         let html = render_html(&report, None);
-        // Cap message visible and references the new flag:
-        assert!(html.contains("250 missed negative"));
+        // Cap message visible and references the new flag (round 23: "missed" → "mismatched"):
+        assert!(html.contains("250 mismatched negative"));
         assert!(html.contains("Showing first 200"));
         assert!(html.contains("--report-missed-cap"));
     }
@@ -476,7 +533,7 @@ mod tests {
         }
         let opts = RenderOptions { missed_cap: None };
         let html = render_html_with_options(&report, None, &opts);
-        assert!(html.contains("50 missed negative"));
+        assert!(html.contains("50 mismatched negative"));
         assert!(html.contains("All shown (no cap)"));
         assert!(!html.contains("Showing first"));
     }

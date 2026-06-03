@@ -2132,6 +2132,21 @@ enum Commands {
         #[arg(long)]
         conformance_self_test: bool,
 
+        /// Issue #79 round 23 (c-iii): when set, the self-test driver
+        /// records every probe's method, URL, request headers/body and
+        /// response status/headers/body to
+        /// `conformance-self-test-requests.jsonl` (one JSON object per
+        /// line) next to the JSON/HTML report. Bodies cap at 16 KiB per
+        /// direction; `*_truncated` flags whether more was dropped.
+        ///
+        /// Lets you confirm geo-source-ip headers actually shipped, or
+        /// inspect why a negative probe came back 200 instead of 4xx,
+        /// without re-running under `RUST_LOG=trace`.
+        ///
+        /// No effect without `--conformance-self-test`.
+        #[arg(long)]
+        conformance_self_test_capture: bool,
+
         /// Issue #79 round 18.5 — local source IPs to bind self-test
         /// requests to. Each IP must already be assigned to an
         /// interface on this host (sub-interface, aliased address,
@@ -3074,6 +3089,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             export_requests,
             validate_requests,
             conformance_self_test,
+            conformance_self_test_capture,
             source_ips,
             geo_source_ips,
             geo_source_headers,
@@ -3171,6 +3187,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 export_requests,
                 validate_requests,
                 conformance_self_test,
+                conformance_self_test_capture,
                 source_ips,
                 geo_source_ips,
                 geo_source_headers,

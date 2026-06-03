@@ -207,6 +207,10 @@ pub struct BenchCommand {
     /// Useful to confirm the round-13 (3) validator-bypass fix took
     /// effect against the user's spec.
     pub conformance_self_test: bool,
+    /// Round 23 (c-iii) — when true, capture every self-test probe's
+    /// full request/response to `conformance-self-test-requests.jsonl`.
+    /// No effect outside `--conformance-self-test`.
+    pub conformance_self_test_capture: bool,
 
     /// Round 18.5 — local source IPs to bind self-test requests to.
     /// Each entry must be a valid `IpAddr` and already assigned to
@@ -496,25 +500,15 @@ impl BenchCommand {
 
     /// Execute the bench command
     pub async fn execute(&self) -> Result<()> {
-        // Round 22.2 — warn loudly when `--source-ip` is set alongside
-        // a k6-driven path. k6 has no equivalent to reqwest's
-        // `local_address`; the script-side cannot bind a VU to a
-        // specific source IP. So `--source-ip` only takes effect when
-        // the native self-test driver runs (`--conformance-self-test`).
-        // Pre-warning, Srikanth's `mockforge bench --source-ip ... --use-k6`
-        // silently took only the first IP and never rotated; the
-        // warning replaces that silent partial behaviour with an
-        // explicit explanation.
-        if !self.source_ips.is_empty()
-            && (self.use_k6 || (self.conformance && !self.conformance_self_test))
-        {
+        // Round 23 — Srikanth flagged that k6 _does_ support per-VU source
+        // IPs via `--local-ips` (the round-22 warning that said otherwise
+        // was wrong). The k6 path now forwards `--source-ip` straight to
+        // `k6 run --local-ips`, so the only case worth flagging is the
+        // self-test+k6 combo: self-test returns before k6 ever launches,
+        // so `--use-k6` on that command is a no-op.
+        if self.conformance_self_test && self.use_k6 {
             TerminalReporter::print_warning(
-                "--source-ip has no effect with --use-k6 (or non-self-test --conformance). k6 cannot bind a VU to a source IP from the script side; the bench will run on the default outbound interface. Use --conformance-self-test (native driver) to exercise the source-IP pool, or set up multiple bound interfaces and run separate bench processes.",
-            );
-        }
-        if !self.geo_source_ips.is_empty() && self.use_k6 && !self.conformance_self_test {
-            TerminalReporter::print_warning(
-                "--geo-source-ip has no effect with --use-k6 in non-self-test runs yet (round 22.3 wires it into the k6 template; until then, use --conformance-self-test to exercise the geo-IP rotation, or wait for v0.3.166).",
+                "--use-k6 has no effect with --conformance-self-test: the self-test driver runs and returns before k6 is invoked. Drop one or the other depending on whether you want the spec-driven self-test or a k6 bench run.",
             );
         }
 
@@ -843,7 +837,7 @@ impl BenchCommand {
 
         // Execute k6
         TerminalReporter::print_progress("Executing load test...");
-        let executor = K6Executor::new()?;
+        let executor = K6Executor::new()?.with_local_ips(self.source_ips.join(","));
 
         std::fs::create_dir_all(&self.output)?;
 
@@ -960,6 +954,7 @@ impl BenchCommand {
                 export_requests: false,
                 validate_requests: false,
                 conformance_self_test: false,
+                conformance_self_test_capture: false,
                 source_ips: Vec::new(),
                 geo_source_ips: Vec::new(),
                 geo_source_headers: Vec::new(),
@@ -1854,7 +1849,7 @@ impl BenchCommand {
         std::fs::write(&script_path, &script)?;
 
         if !self.generate_only {
-            let executor = K6Executor::new()?;
+            let executor = K6Executor::new()?.with_local_ips(self.source_ips.join(","));
             std::fs::create_dir_all(&output_dir)?;
 
             executor.execute(&script_path, Some(&output_dir), self.verbose).await?;
@@ -1963,7 +1958,7 @@ impl BenchCommand {
         std::fs::write(&script_path, &script)?;
 
         if !self.generate_only {
-            let executor = K6Executor::new()?;
+            let executor = K6Executor::new()?.with_local_ips(self.source_ips.join(","));
             let output_dir = self.output.join(format!("{}_results", spec_name.replace('.', "_")));
             std::fs::create_dir_all(&output_dir)?;
 
@@ -2289,7 +2284,7 @@ impl BenchCommand {
 
         // Execute k6
         TerminalReporter::print_progress("Executing CRUD flow test...");
-        let executor = K6Executor::new()?;
+        let executor = K6Executor::new()?.with_local_ips(self.source_ips.join(","));
         std::fs::create_dir_all(&self.output)?;
 
         let results = executor.execute(&script_path, Some(&self.output), self.verbose).await?;
@@ -2474,7 +2469,16 @@ impl BenchCommand {
                 } else {
                     self.geo_source_headers.clone()
                 },
+                // Round 23 (c-iii) — opt-in request/response capture.
+                // Constructed here so the sink Arc outlives the run and
+                // we can drain it for the JSONL write below.
+                capture: if self.conformance_self_test_capture {
+                    Some(std::sync::Arc::new(std::sync::Mutex::new(Vec::new())))
+                } else {
+                    None
+                },
             };
+            let capture_sink = cfg.capture.clone();
             TerminalReporter::print_progress(&format!(
                 "Self-test mode: driving {} operations with positive + per-category negative cases",
                 ops.len()
@@ -2482,6 +2486,27 @@ impl BenchCommand {
             let report = crate::conformance::self_test::run_self_test(&ops, &cfg)
                 .await
                 .map_err(|e| BenchError::Other(format!("self-test client error: {e}")))?;
+            // Round 23 (c-iii) — drain the capture sink into a JSONL
+            // file next to the JSON/HTML report. One CaseCapture per
+            // line so the file is grep-able / streamable.
+            if let Some(sink) = capture_sink {
+                if let Ok(guard) = sink.lock() {
+                    let jsonl_path = self.output.join("conformance-self-test-requests.jsonl");
+                    let mut lines = String::with_capacity(guard.len() * 256);
+                    for entry in guard.iter() {
+                        if let Ok(line) = serde_json::to_string(entry) {
+                            lines.push_str(&line);
+                            lines.push('\n');
+                        }
+                    }
+                    let _ = std::fs::write(&jsonl_path, lines);
+                    TerminalReporter::print_progress(&format!(
+                        "Self-test request/response capture written to {} ({} entries)",
+                        jsonl_path.display(),
+                        guard.len(),
+                    ));
+                }
+            }
             TerminalReporter::print_progress(&report.render_summary());
             // Persist the JSON report alongside the regular conformance
             // report so it's grep-able next to the buffer dump from the
@@ -2620,7 +2645,7 @@ impl BenchCommand {
             }
 
             TerminalReporter::print_progress("Running conformance tests via k6...");
-            let executor = K6Executor::new()?;
+            let executor = K6Executor::new()?.with_local_ips(self.source_ips.join(","));
             executor.execute(&script_path, Some(&self.output), self.verbose).await?;
 
             let report_path = self.output.join("conformance-report.json");
@@ -2906,7 +2931,7 @@ impl BenchCommand {
                     "Running conformance tests via k6 against {}...",
                     target.url
                 ));
-                let k6 = K6Executor::new()?;
+                let k6 = K6Executor::new()?.with_local_ips(self.source_ips.join(","));
                 // Unique k6 API port per target to avoid collisions.
                 let api_port = 6565u16.saturating_add(idx as u16);
                 k6.execute_with_port(&script_path, Some(&target_dir), self.verbose, Some(api_port))
@@ -3247,7 +3272,7 @@ impl BenchCommand {
 
         // Execute k6
         TerminalReporter::print_progress("Executing OWASP security tests...");
-        let executor = K6Executor::new()?;
+        let executor = K6Executor::new()?.with_local_ips(self.source_ips.join(","));
         std::fs::create_dir_all(&self.output)?;
 
         let results = executor.execute(&script_path, Some(&self.output), self.verbose).await?;
@@ -3456,6 +3481,7 @@ mod tests {
             export_requests: false,
             validate_requests: false,
             conformance_self_test: false,
+            conformance_self_test_capture: false,
             source_ips: Vec::new(),
             geo_source_ips: Vec::new(),
             geo_source_headers: Vec::new(),
@@ -3539,6 +3565,7 @@ mod tests {
             export_requests: false,
             validate_requests: false,
             conformance_self_test: false,
+            conformance_self_test_capture: false,
             source_ips: Vec::new(),
             geo_source_ips: Vec::new(),
             geo_source_headers: Vec::new(),
@@ -3618,6 +3645,7 @@ mod tests {
             export_requests: false,
             validate_requests: false,
             conformance_self_test: false,
+            conformance_self_test_capture: false,
             source_ips: Vec::new(),
             geo_source_ips: Vec::new(),
             geo_source_headers: Vec::new(),

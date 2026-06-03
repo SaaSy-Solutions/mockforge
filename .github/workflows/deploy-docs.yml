@@ -38,23 +38,6 @@ jobs:
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
 
-    - name: Cache mdBook plugins
-      uses: actions/cache@v5
-      with:
-        path: ~/.cargo/bin
-        key: mdbook-plugins-${{ runner.os }}
-        restore-keys: mdbook-plugins-${{ runner.os }}
-
-    - name: Install mdBook plugins
-      run: |
-        # Only install if not already cached
-        if [ ! -f ~/.cargo/bin/mdbook-toc ]; then
-          cargo install mdbook-toc
-        fi
-        if [ ! -f ~/.cargo/bin/mdbook-mermaid ]; then
-          cargo install mdbook-mermaid
-        fi
-
     - name: Build book
       run: |
         cd book
