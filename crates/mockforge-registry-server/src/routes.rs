@@ -282,6 +282,7 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/sso/config", get(handlers::sso::get_sso_config))
         .route("/api/v1/sso/config", post(handlers::sso::create_sso_config))
         .route("/api/v1/sso/config", delete(handlers::sso::delete_sso_config))
+        .route("/api/v1/sso/domain/verify", post(handlers::sso::verify_sso_domain))
         .route("/api/v1/sso/enable", post(handlers::sso::enable_sso))
         .route("/api/v1/sso/disable", post(handlers::sso::disable_sso))
         .route("/api/v1/sso/saml/metadata/{org_slug}", get(handlers::sso::get_saml_metadata))
@@ -1101,11 +1102,14 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
         .route_layer(middleware::from_fn(rate_limit_middleware));
 
-    // Public SSO routes (no auth required - these handle SAML redirects)
+    // Public SSO routes (no auth required - these handle SAML redirects and discovery)
     let sso_public_routes = Router::new()
+        .route("/api/v1/sso/discover", get(handlers::sso::discover_sso))
         .route("/api/v1/sso/saml/login/{org_slug}", get(handlers::sso::initiate_saml_login))
         .route("/api/v1/sso/saml/acs/{org_slug}", post(handlers::sso::saml_acs))
         .route("/api/v1/sso/saml/slo/{org_slug}", post(handlers::sso::saml_slo))
+        .route("/api/v1/sso/oidc/login/{org_slug}", get(handlers::oidc::oidc_login))
+        .route("/api/v1/sso/oidc/callback/{org_slug}", get(handlers::oidc::oidc_callback))
         .route_layer(middleware::from_fn(rate_limit_middleware));
 
     // Public OAuth routes (no auth required - these handle OAuth redirects)
@@ -1200,6 +1204,7 @@ mod tests {
         // Verify SSO route paths are correctly defined
         let routes = vec![
             "/api/v1/sso/config",
+            "/api/v1/sso/domain/verify",
             "/api/v1/sso/enable",
             "/api/v1/sso/disable",
             "/api/v1/sso/saml/metadata/{org_slug}",

@@ -3,7 +3,7 @@
 //! Handles SAML 2.0 SSO setup and authentication for Team plan organizations
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
     response::{IntoResponse, Redirect, Response},
     Form, Json,
@@ -38,6 +38,10 @@ pub struct CreateSSOConfigRequest {
     pub require_signed_assertions: Option<bool>,
     pub require_signed_responses: Option<bool>,
     pub allow_unsolicited_responses: Option<bool>,
+    pub oidc_issuer_url: Option<String>,
+    pub oidc_client_id: Option<String>,
+    pub oidc_client_secret: Option<String>,
+    pub email_domain: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -54,6 +58,15 @@ pub struct SSOConfigResponse {
     pub require_signed_assertions: bool,
     pub require_signed_responses: bool,
     pub allow_unsolicited_responses: bool,
+    pub oidc_issuer_url: Option<String>,
+    pub oidc_client_id: Option<String>,
+    // oidc_client_secret is intentionally NOT returned — never echo secrets
+    pub email_domain: Option<String>,
+    /// Whether the email domain has been proven via a DNS TXT record.
+    pub domain_verified: bool,
+    /// The token the org admin publishes as a DNS TXT record on their domain.
+    /// Safe to return — it is what they must add to prove ownership.
+    pub domain_verification_token: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -117,6 +130,41 @@ pub async fn create_sso_config(
         ));
     }
 
+    // Validate OIDC fields if provider is OIDC
+    if provider == SSOProvider::Oidc
+        && (request.oidc_issuer_url.is_none()
+            || request.oidc_client_id.is_none()
+            || request.oidc_client_secret.is_none())
+    {
+        return Err(ApiError::InvalidRequest(
+            "OIDC configuration requires issuer_url, client_id, and client_secret".to_string(),
+        ));
+    }
+
+    // Determine domain-verification state. When an email domain is supplied we
+    // must (re)issue a fresh DNS-TXT verification token whenever the domain is
+    // new or changed, but preserve the existing verification status on an
+    // unrelated config edit so a verified domain isn't silently reset.
+    let existing = state.store.find_sso_config_by_org(org_ctx.org_id).await?;
+    let (domain_verified, domain_verification_token): (bool, Option<String>) =
+        match request.email_domain.as_deref() {
+            Some(requested) => {
+                let unchanged = existing
+                    .as_ref()
+                    .and_then(|c| c.email_domain.as_deref())
+                    .is_some_and(|existing_domain| existing_domain.eq_ignore_ascii_case(requested));
+                if unchanged {
+                    // Same domain — keep prior verification + token untouched.
+                    let prev = existing.as_ref().expect("unchanged implies existing");
+                    (prev.domain_verified, prev.domain_verification_token.clone())
+                } else {
+                    // New or changed domain — issue a fresh token, unverified.
+                    (false, Some(format!("mockforge-verify={}", uuid::Uuid::new_v4())))
+                }
+            }
+            None => (false, None),
+        };
+
     // Create or update SSO configuration
     let config = state
         .store
@@ -132,6 +180,12 @@ pub async fn create_sso_config(
             request.require_signed_assertions.unwrap_or(true),
             request.require_signed_responses.unwrap_or(true),
             request.allow_unsolicited_responses.unwrap_or(false),
+            request.oidc_issuer_url.as_deref(),
+            request.oidc_client_id.as_deref(),
+            request.oidc_client_secret.as_deref(),
+            request.email_domain.as_deref(),
+            domain_verified,
+            domain_verification_token.as_deref(),
         )
         .await?;
 
@@ -172,6 +226,12 @@ pub async fn create_sso_config(
         require_signed_assertions: config.require_signed_assertions,
         require_signed_responses: config.require_signed_responses,
         allow_unsolicited_responses: config.allow_unsolicited_responses,
+        oidc_issuer_url: config.oidc_issuer_url,
+        oidc_client_id: config.oidc_client_id,
+        // oidc_client_secret intentionally omitted — never echo secrets
+        email_domain: config.email_domain,
+        domain_verified: config.domain_verified,
+        domain_verification_token: config.domain_verification_token,
         created_at: config.created_at.to_rfc3339(),
         updated_at: config.updated_at.to_rfc3339(),
     }))
@@ -220,11 +280,168 @@ pub async fn get_sso_config(
             require_signed_assertions: config.require_signed_assertions,
             require_signed_responses: config.require_signed_responses,
             allow_unsolicited_responses: config.allow_unsolicited_responses,
+            oidc_issuer_url: config.oidc_issuer_url,
+            oidc_client_id: config.oidc_client_id,
+            // oidc_client_secret intentionally omitted — never echo secrets
+            email_domain: config.email_domain,
+            domain_verified: config.domain_verified,
+            domain_verification_token: config.domain_verification_token,
             created_at: config.created_at.to_rfc3339(),
             updated_at: config.updated_at.to_rfc3339(),
         })))
     } else {
         Ok(Json(None))
+    }
+}
+
+/// Resolve TXT records for `name` using the system DNS resolver (falling back
+/// to Cloudflare 1.1.1.1 if `/etc/resolv.conf` is unreadable). Each returned
+/// String is one TXT record's data, joined across the chunked-string segments
+/// DNS uses internally so the value matches what the admin published.
+async fn lookup_txt_records(name: &str) -> Result<Vec<String>, String> {
+    use hickory_resolver::config::{ResolverConfig, CLOUDFLARE};
+    use hickory_resolver::net::runtime::TokioRuntimeProvider;
+    use hickory_resolver::proto::rr::{RData, RecordType};
+    use hickory_resolver::TokioResolver;
+
+    let builder = match TokioResolver::builder_tokio() {
+        Ok(b) => b,
+        Err(e) => {
+            tracing::debug!(error = %e, "system resolv.conf unreadable; falling back to Cloudflare");
+            TokioResolver::builder_with_config(
+                ResolverConfig::udp_and_tcp(&CLOUDFLARE),
+                TokioRuntimeProvider::default(),
+            )
+        }
+    };
+    let resolver = builder.build().map_err(|e| format!("resolver build failed: {e}"))?;
+
+    let response = resolver.lookup(name, RecordType::TXT).await.map_err(|e| format!("{e}"))?;
+    let mut out = Vec::new();
+    for record in response.answers() {
+        let RData::TXT(ref txt) = record.data else {
+            continue;
+        };
+        let mut joined = String::new();
+        for chunk in txt.txt_data.iter() {
+            match std::str::from_utf8(chunk) {
+                Ok(s) => joined.push_str(s),
+                Err(_) => continue, // non-UTF8 TXT — skip silently
+            }
+        }
+        if !joined.is_empty() {
+            out.push(joined);
+        }
+    }
+    Ok(out)
+}
+
+/// Verify domain ownership for SSO via a DNS TXT record (Team plan, org admin).
+///
+/// Looks up TXT records on the configured `email_domain` and, if any record
+/// matches the stored `domain_verification_token`, marks the domain verified.
+/// Returns 200 in all non-permission cases — a missing/mismatched record is a
+/// normal "not yet" outcome the UI re-prompts on, not an error.
+pub async fn verify_sso_domain(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+) -> ApiResult<Json<serde_json::Value>> {
+    // Resolve organization context
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization context required".to_string()))?;
+
+    // Check if user is org admin (owner or admin member)
+    use crate::models::OrgRole;
+    let is_admin = org_ctx.org.owner_id == user_id || {
+        if let Ok(Some(member)) = state.store.find_org_member(org_ctx.org_id, user_id).await {
+            let role = member.role();
+            matches!(role, OrgRole::Admin | OrgRole::Owner)
+        } else {
+            false
+        }
+    };
+
+    if !is_admin {
+        return Err(ApiError::PermissionDenied);
+    }
+
+    // Require Team plan
+    let org = state
+        .store
+        .find_organization_by_id(org_ctx.org_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
+    if org.plan() != Plan::Team {
+        return Err(ApiError::InvalidRequest("SSO is only available for Team plans".to_string()));
+    }
+
+    // Load SSO config; require an email domain + verification token
+    let config = state
+        .store
+        .find_sso_config_by_org(org_ctx.org_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Set an email domain first".to_string()))?;
+    let email_domain = config
+        .email_domain
+        .as_deref()
+        .filter(|d| !d.trim().is_empty())
+        .ok_or_else(|| ApiError::InvalidRequest("Set an email domain first".to_string()))?;
+    let token = config
+        .domain_verification_token
+        .as_deref()
+        .ok_or_else(|| ApiError::InvalidRequest("Set an email domain first".to_string()))?;
+
+    // DNS TXT lookup
+    let records = match lookup_txt_records(email_domain).await {
+        Ok(records) => records,
+        Err(err) => {
+            tracing::warn!(domain = %email_domain, error = %err, "SSO domain TXT lookup failed");
+            return Ok(Json(serde_json::json!({
+                "verified": false,
+                "error": "dns_lookup_failed",
+                "expected_token": token,
+            })));
+        }
+    };
+
+    // A TXT record may arrive wrapped in quotes; compare trimmed + de-quoted.
+    let matched = records.iter().any(|raw| {
+        let value = raw.trim().trim_matches('"').trim();
+        value == token
+    });
+
+    if matched {
+        state.store.mark_sso_domain_verified(org_ctx.org_id).await?;
+
+        let ip_address = headers
+            .get("X-Forwarded-For")
+            .or_else(|| headers.get("X-Real-IP"))
+            .and_then(|h| h.to_str().ok())
+            .map(|s| s.split(',').next().unwrap_or(s).trim().to_string());
+        let user_agent =
+            headers.get("User-Agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
+
+        state
+            .store
+            .record_audit_event(
+                org_ctx.org_id,
+                Some(user_id),
+                AuditEventType::SettingsUpdated,
+                "SSO email domain verified via DNS TXT".to_string(),
+                Some(serde_json::json!({ "email_domain": email_domain })),
+                ip_address.as_deref(),
+                user_agent.as_deref(),
+            )
+            .await;
+
+        Ok(Json(serde_json::json!({ "verified": true })))
+    } else {
+        Ok(Json(serde_json::json!({
+            "verified": false,
+            "expected_token": token,
+        })))
     }
 }
 
@@ -498,6 +715,16 @@ pub async fn initiate_saml_login(
         ));
     }
 
+    // SECURITY (#746): fail early (better UX) — SSO login is only safe once the
+    // org has proven ownership of its email_domain. Without a verified domain the
+    // ACS callback would reject every assertion anyway, so refuse before the IdP
+    // round-trip.
+    if config.email_domain.is_none() || !config.domain_verified {
+        return Err(ApiError::InvalidRequest(
+            "SSO domain not verified. Verify your email domain in organization settings before enabling SSO login.".to_string(),
+        ));
+    }
+
     // Get SAML SSO URL
     let sso_url = config
         .saml_sso_url
@@ -537,6 +764,7 @@ pub struct SAMLResponseForm {
 pub async fn saml_acs(
     State(state): State<AppState>,
     Path(org_slug): Path<String>,
+    headers: HeaderMap,
     Form(form): Form<SAMLResponseForm>,
 ) -> Result<Response, ApiError> {
     let pool = state.db.pool();
@@ -607,8 +835,23 @@ pub async fn saml_acs(
         }
     }
 
-    // Find or create user
-    let user = find_or_create_user_from_saml(&state, &user_info, &org).await?;
+    // Find or create user (JIT provisioning)
+    let email = user_info
+        .email
+        .as_deref()
+        .ok_or_else(|| ApiError::InvalidRequest("Email not found in SAML assertion".to_string()))?;
+
+    // SECURITY (#746): the IdP can assert ANY email. Refuse to provision/log in
+    // an identity whose domain isn't the org's *verified* email_domain — this is
+    // the cross-tenant takeover guard. Must run BEFORE find_or_create_sso_user.
+    assert_email_in_verified_domain(email, &config).inspect_err(|e| {
+        tracing::warn!("SAML domain-trust check failed for org_id={}: {:?}", org.id, e);
+    })?;
+
+    let user = find_or_create_sso_user(&state, email, user_info.username.as_deref(), &org).await?;
+
+    // Audit the successful SSO login (provider: saml).
+    record_sso_login_audit(&state, &org, &user, "saml", &headers).await;
 
     // Record assertion ID to prevent replay attacks
     if let Some(assertion_id) = &user_info.assertion_id {
@@ -1170,57 +1413,106 @@ fn generate_saml_logout_response(slo_url: &str) -> String {
     )
 }
 
-/// Find or create user from SAML attributes
-async fn find_or_create_user_from_saml(
+/// SECURITY (#746): an org's IdP may assert any email. Only trust an asserted
+/// email whose domain matches the org's *verified* email_domain. Prevents one
+/// org's IdP from asserting identities in another org's namespace.
+pub(crate) fn assert_email_in_verified_domain(
+    email: &str,
+    config: &SSOConfiguration,
+) -> Result<(), ApiError> {
+    let asserted = crate::models::normalize_email_domain(email)
+        .ok_or_else(|| ApiError::InvalidRequest("no_email".into()))?;
+    let configured = config
+        .email_domain
+        .as_deref()
+        .ok_or_else(|| ApiError::InvalidRequest("sso_domain_not_configured".into()))?;
+    if !config.domain_verified {
+        return Err(ApiError::InvalidRequest("sso_domain_not_verified".into()));
+    }
+    if !asserted.eq_ignore_ascii_case(configured) {
+        return Err(ApiError::InvalidRequest("domain_mismatch".into()));
+    }
+    Ok(())
+}
+
+/// Find or create a user via SSO JIT provisioning (protocol-agnostic).
+///
+/// Used by both SAML ACS and OIDC callback handlers.  `email` is required;
+/// `username` is optional — when absent the email local-part is used.
+pub(crate) async fn find_or_create_sso_user(
     state: &AppState,
-    user_info: &SAMLUserInfo,
+    email: &str,
+    username: Option<&str>,
     org: &Organization,
 ) -> Result<User, ApiError> {
-    // Try to find user by email
-    let user = if let Some(email) = &user_info.email {
-        state.store.find_user_by_email(email).await?
-    } else {
-        None
-    };
+    use crate::models::organization::OrgRole;
 
-    let user = if let Some(user) = user {
+    // Try to find existing user by email
+    let existing = state.store.find_user_by_email(email).await?;
+
+    let user = if let Some(user) = existing {
         // User exists - ensure they're a member of the organization
-        use crate::models::organization::OrgRole;
-
         if state.store.find_org_member(org.id, user.id).await?.is_none() {
             state.store.create_org_member(org.id, user.id, OrgRole::Member).await?;
         }
-
         user
     } else {
-        // Create new user from SAML attributes
-        let email = user_info.email.as_ref().ok_or_else(|| {
-            ApiError::InvalidRequest("Email not found in SAML assertion".to_string())
-        })?;
+        // Derive username from the caller-supplied value or the email local-part
+        let derived_username = username
+            .map(|u| u.to_string())
+            .unwrap_or_else(|| email.split('@').next().unwrap_or("user").to_string());
 
-        let username = user_info.username.as_ref().cloned().unwrap_or_else(|| {
-            // Generate username from email
-            email.split('@').next().unwrap_or("user").to_string()
-        });
-
-        // Generate a random password (user won't need it for SSO login)
+        // Generate a random password (SSO users never use password login)
         let password_hash = crate::auth::hash_password(&uuid::Uuid::new_v4().to_string())
             .map_err(ApiError::Internal)?;
 
         // Create user
-        let user = state.store.create_user(&username, email, &password_hash).await?;
+        let user = state.store.create_user(&derived_username, email, &password_hash).await?;
 
         // Mark user as verified (SSO users are pre-verified)
         state.store.mark_user_verified(user.id).await?;
 
         // Add user to organization as member
-        use crate::models::organization::OrgRole;
         state.store.create_org_member(org.id, user.id, OrgRole::Member).await?;
 
         user
     };
 
     Ok(user)
+}
+
+/// Record a successful SSO login in the audit log (protocol-agnostic).
+///
+/// Shared by the SAML ACS and OIDC callback handlers. `provider` is "saml"
+/// or "oidc" and is also stored in the event `metadata`. Best-effort: a
+/// failure to write the audit row must never block the login redirect, so
+/// `record_audit_event` itself swallows DB errors (returns `()`).
+pub(crate) async fn record_sso_login_audit(
+    state: &AppState,
+    org: &Organization,
+    user: &User,
+    provider: &str,
+    headers: &HeaderMap,
+) {
+    let ip_address = headers
+        .get("X-Forwarded-For")
+        .or_else(|| headers.get("X-Real-IP"))
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.split(',').next().unwrap_or(s).trim().to_string());
+    let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
+
+    state
+        .store
+        .record_audit_event(
+            org.id,
+            Some(user.id),
+            AuditEventType::SsoLogin,
+            format!("SSO login via {}", provider),
+            Some(serde_json::json!({ "provider": provider })),
+            ip_address.as_deref(),
+            user_agent.as_deref(),
+        )
+        .await;
 }
 
 /// Validate SAML assertion timestamps (NotBefore/NotOnOrAfter)
@@ -1275,4 +1567,141 @@ fn validate_saml_timestamps(user_info: &SAMLUserInfo) -> Result<(), ApiError> {
 
     tracing::debug!("SAML timestamp validation passed");
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// SSO discovery endpoint
+// ---------------------------------------------------------------------------
+
+/// Query parameters for `GET /api/v1/sso/discover`.
+#[derive(Debug, Deserialize)]
+pub struct SsoDiscoverQuery {
+    pub email: String,
+}
+
+/// Response body for a successful SSO discovery lookup.
+#[derive(Debug, Serialize)]
+pub struct SsoDiscoverResponse {
+    pub org_slug: String,
+    pub provider: String,
+}
+
+/// `GET /api/v1/sso/discover?email=<email>` — public, no auth required.
+///
+/// Maps a work email address to the organisation's configured IdP so the
+/// login page can redirect directly to the correct SSO flow.
+///
+/// Returns 404 with a **generic** message on any non-match (missing domain,
+/// no enabled config, or unparsable email) to prevent email-domain
+/// enumeration by unauthenticated callers.
+pub async fn discover_sso(
+    State(state): State<AppState>,
+    Query(params): Query<SsoDiscoverQuery>,
+) -> ApiResult<Json<SsoDiscoverResponse>> {
+    let domain = crate::models::normalize_email_domain(&params.email)
+        .ok_or_else(|| ApiError::OrganizationNotFound)?;
+
+    let (org_slug, provider) = state
+        .store
+        .find_org_slug_by_email_domain(&domain)
+        .await?
+        .ok_or(ApiError::OrganizationNotFound)?;
+
+    Ok(Json(SsoDiscoverResponse { org_slug, provider }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_sso_discover_response_fields() {
+        let resp = SsoDiscoverResponse {
+            org_slug: "acme".to_string(),
+            provider: "saml".to_string(),
+        };
+        assert_eq!(resp.org_slug, "acme");
+        assert_eq!(resp.provider, "saml");
+    }
+
+    /// Build a minimal SSOConfiguration for domain-trust tests.
+    fn cfg(email_domain: Option<&str>, domain_verified: bool) -> SSOConfiguration {
+        SSOConfiguration {
+            id: uuid::Uuid::new_v4(),
+            org_id: uuid::Uuid::new_v4(),
+            provider: "oidc".to_string(),
+            enabled: true,
+            saml_entity_id: None,
+            saml_sso_url: None,
+            saml_slo_url: None,
+            saml_x509_cert: None,
+            saml_name_id_format: None,
+            oidc_issuer_url: None,
+            oidc_client_id: None,
+            oidc_client_secret: None,
+            email_domain: email_domain.map(|s| s.to_string()),
+            domain_verified,
+            domain_verification_token: None,
+            attribute_mapping: serde_json::json!({}),
+            require_signed_assertions: true,
+            require_signed_responses: true,
+            allow_unsolicited_responses: false,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    fn err_msg(r: Result<(), ApiError>) -> String {
+        match r {
+            Err(ApiError::InvalidRequest(m)) => m,
+            other => panic!("expected InvalidRequest, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn domain_trust_verified_match_ok() {
+        let config = cfg(Some("acme.com"), true);
+        assert!(assert_email_in_verified_domain("jane@acme.com", &config).is_ok());
+    }
+
+    #[test]
+    fn domain_trust_match_is_case_insensitive() {
+        let config = cfg(Some("ACME.com"), true);
+        assert!(assert_email_in_verified_domain("jane@acme.COM", &config).is_ok());
+    }
+
+    #[test]
+    fn domain_trust_unverified_domain_rejected() {
+        let config = cfg(Some("acme.com"), false);
+        assert_eq!(
+            err_msg(assert_email_in_verified_domain("jane@acme.com", &config)),
+            "sso_domain_not_verified"
+        );
+    }
+
+    #[test]
+    fn domain_trust_mismatch_rejected() {
+        // The takeover case: org's verified domain is acme.com but the IdP
+        // asserts a victim in another org's namespace.
+        let config = cfg(Some("acme.com"), true);
+        assert_eq!(
+            err_msg(assert_email_in_verified_domain("victim@evil.com", &config)),
+            "domain_mismatch"
+        );
+    }
+
+    #[test]
+    fn domain_trust_no_email_domain_rejected() {
+        let config = cfg(None, true);
+        assert_eq!(
+            err_msg(assert_email_in_verified_domain("jane@acme.com", &config)),
+            "sso_domain_not_configured"
+        );
+    }
+
+    #[test]
+    fn domain_trust_bad_email_rejected() {
+        let config = cfg(Some("acme.com"), true);
+        assert_eq!(err_msg(assert_email_in_verified_domain("not-an-email", &config)), "no_email");
+    }
 }

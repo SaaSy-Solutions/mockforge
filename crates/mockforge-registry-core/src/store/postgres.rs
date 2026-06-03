@@ -1123,6 +1123,12 @@ impl RegistryStore for PgRegistryStore {
         require_signed_assertions: bool,
         require_signed_responses: bool,
         allow_unsolicited_responses: bool,
+        oidc_issuer_url: Option<&str>,
+        oidc_client_id: Option<&str>,
+        oidc_client_secret: Option<&str>,
+        email_domain: Option<&str>,
+        domain_verified: bool,
+        domain_verification_token: Option<&str>,
     ) -> StoreResult<SSOConfiguration> {
         SSOConfiguration::upsert(
             &self.pool,
@@ -1137,9 +1143,21 @@ impl RegistryStore for PgRegistryStore {
             require_signed_assertions,
             require_signed_responses,
             allow_unsolicited_responses,
+            oidc_issuer_url,
+            oidc_client_id,
+            oidc_client_secret,
+            email_domain,
+            domain_verified,
+            domain_verification_token,
         )
         .await
         .map_err(Into::into)
+    }
+
+    async fn mark_sso_domain_verified(&self, org_id: Uuid) -> StoreResult<()> {
+        SSOConfiguration::mark_domain_verified(&self.pool, org_id)
+            .await
+            .map_err(Into::into)
     }
 
     async fn enable_sso_config(&self, org_id: Uuid) -> StoreResult<()> {
@@ -1152,6 +1170,15 @@ impl RegistryStore for PgRegistryStore {
 
     async fn delete_sso_config(&self, org_id: Uuid) -> StoreResult<()> {
         SSOConfiguration::delete(&self.pool, org_id).await.map_err(Into::into)
+    }
+
+    async fn find_org_slug_by_email_domain(
+        &self,
+        domain: &str,
+    ) -> StoreResult<Option<(String, String)>> {
+        SSOConfiguration::find_org_slug_by_email_domain(&self.pool, domain)
+            .await
+            .map_err(Into::into)
     }
 
     async fn is_saml_assertion_used(&self, assertion_id: &str, org_id: Uuid) -> StoreResult<bool> {

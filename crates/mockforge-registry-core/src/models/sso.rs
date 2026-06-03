@@ -55,6 +55,15 @@ pub struct SSOConfiguration {
     pub oidc_client_id: Option<String>,
     pub oidc_client_secret: Option<String>,
 
+    // Email-domain discovery
+    pub email_domain: Option<String>,
+
+    // Domain-ownership verification (DNS TXT). `domain_verified` gates whether
+    // `email_domain` may be trusted for SSO login routing; the token is the
+    // value the org admin publishes in a DNS TXT record.
+    pub domain_verified: bool,
+    pub domain_verification_token: Option<String>,
+
     // Attribute mapping
     pub attribute_mapping: serde_json::Value,
 
@@ -109,6 +118,12 @@ impl SSOConfiguration {
         require_signed_assertions: bool,
         require_signed_responses: bool,
         allow_unsolicited_responses: bool,
+        oidc_issuer_url: Option<&str>,
+        oidc_client_id: Option<&str>,
+        oidc_client_secret: Option<&str>,
+        email_domain: Option<&str>,
+        domain_verified: bool,
+        domain_verification_token: Option<&str>,
     ) -> sqlx::Result<Self> {
         let attribute_mapping = attribute_mapping.unwrap_or_else(|| serde_json::json!({}));
 
@@ -117,9 +132,14 @@ impl SSOConfiguration {
             INSERT INTO sso_configurations (
                 org_id, provider, saml_entity_id, saml_sso_url, saml_slo_url,
                 saml_x509_cert, saml_name_id_format, attribute_mapping,
-                require_signed_assertions, require_signed_responses, allow_unsolicited_responses
+                require_signed_assertions, require_signed_responses, allow_unsolicited_responses,
+                oidc_issuer_url, oidc_client_id, oidc_client_secret, email_domain,
+                domain_verified, domain_verification_token
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+            VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+                $16, $17
+            )
             ON CONFLICT (org_id) DO UPDATE SET
                 provider = EXCLUDED.provider,
                 saml_entity_id = EXCLUDED.saml_entity_id,
@@ -131,6 +151,12 @@ impl SSOConfiguration {
                 require_signed_assertions = EXCLUDED.require_signed_assertions,
                 require_signed_responses = EXCLUDED.require_signed_responses,
                 allow_unsolicited_responses = EXCLUDED.allow_unsolicited_responses,
+                oidc_issuer_url = EXCLUDED.oidc_issuer_url,
+                oidc_client_id = EXCLUDED.oidc_client_id,
+                oidc_client_secret = EXCLUDED.oidc_client_secret,
+                email_domain = EXCLUDED.email_domain,
+                domain_verified = EXCLUDED.domain_verified,
+                domain_verification_token = EXCLUDED.domain_verification_token,
                 updated_at = NOW()
             RETURNING *
             "#,
@@ -146,8 +172,49 @@ impl SSOConfiguration {
         .bind(require_signed_assertions)
         .bind(require_signed_responses)
         .bind(allow_unsolicited_responses)
+        .bind(oidc_issuer_url)
+        .bind(oidc_client_id)
+        .bind(oidc_client_secret)
+        .bind(email_domain)
+        .bind(domain_verified)
+        .bind(domain_verification_token)
         .fetch_one(pool)
         .await
+    }
+
+    /// Mark the organization's SSO email domain as verified.
+    pub async fn mark_domain_verified(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<()> {
+        sqlx::query(
+            "UPDATE sso_configurations SET domain_verified = TRUE, updated_at = NOW() WHERE org_id = $1",
+        )
+        .bind(org_id)
+        .execute(pool)
+        .await?;
+        Ok(())
+    }
+
+    /// Look up (org_slug, provider) by email domain for SSO discovery.
+    ///
+    /// Matches `lower(email_domain) = lower($1)` and `enabled = true` so
+    /// only active configurations are returned.
+    pub async fn find_org_slug_by_email_domain(
+        pool: &sqlx::PgPool,
+        domain: &str,
+    ) -> sqlx::Result<Option<(String, String)>> {
+        let row: Option<(String, String)> = sqlx::query_as(
+            r#"
+            SELECT o.slug, sc.provider
+            FROM sso_configurations sc
+            JOIN organizations o ON o.id = sc.org_id
+            WHERE lower(sc.email_domain) = lower($1)
+              AND sc.enabled = TRUE
+            LIMIT 1
+            "#,
+        )
+        .bind(domain)
+        .fetch_optional(pool)
+        .await?;
+        Ok(row)
     }
 
     /// Enable SSO for an organization
@@ -179,6 +246,17 @@ impl SSOConfiguration {
             .execute(pool)
             .await?;
         Ok(())
+    }
+}
+
+/// Extract the lowercased domain from an email address, or None if malformed.
+pub fn normalize_email_domain(email: &str) -> Option<String> {
+    let (_, domain) = email.split_once('@')?;
+    let domain = domain.trim().to_lowercase();
+    if domain.is_empty() {
+        None
+    } else {
+        Some(domain)
     }
 }
 
@@ -244,5 +322,17 @@ impl SSOSession {
             .execute(pool)
             .await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_email_domain;
+
+    #[test]
+    fn email_domain_normalization() {
+        assert_eq!(normalize_email_domain("Jo@Acme.com"), Some("acme.com".to_string()));
+        assert_eq!(normalize_email_domain("no-at-sign"), None);
+        assert_eq!(normalize_email_domain("a@"), None);
     }
 }

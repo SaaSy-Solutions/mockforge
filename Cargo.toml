@@ -205,7 +205,14 @@ parking_lot = "0.12"
 # Authentication libraries
 jsonwebtoken = "9.0"
 oauth2 = "4.4"
+# OIDC (OpenID Connect) for SSO ID-token validation. 3.x depends on oauth2 4.x
+# (compatible with the dep above). rustls-tls keeps us off native-tls to match
+# the workspace's reqwest config.
+openidconnect = { version = "3.5", default-features = false, features = ["reqwest", "rustls-tls"] }
 ring = "0.17"
+# Async DNS resolver (tokio runtime). Used by the registry server for SSO
+# domain-ownership verification (TXT lookups) and tunnel DNS checks.
+hickory-resolver = { version = "0.26", default-features = false, features = ["tokio", "system-config"] }
 
 # Encryption libraries
 aes-gcm = "0.10"

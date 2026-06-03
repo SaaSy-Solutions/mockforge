@@ -1901,7 +1901,18 @@ impl RegistryStore for SqliteRegistryStore {
         require_signed_assertions: bool,
         require_signed_responses: bool,
         allow_unsolicited_responses: bool,
+        oidc_issuer_url: Option<&str>,
+        oidc_client_id: Option<&str>,
+        oidc_client_secret: Option<&str>,
+        email_domain: Option<&str>,
+        domain_verified: bool,
+        domain_verification_token: Option<&str>,
     ) -> StoreResult<SSOConfiguration> {
+        Err(StoreError::NotFound)
+    }
+
+    #[allow(unused_variables)]
+    async fn mark_sso_domain_verified(&self, org_id: Uuid) -> StoreResult<()> {
         Err(StoreError::NotFound)
     }
 
@@ -1918,6 +1929,14 @@ impl RegistryStore for SqliteRegistryStore {
     #[allow(unused_variables)]
     async fn delete_sso_config(&self, org_id: Uuid) -> StoreResult<()> {
         Ok(())
+    }
+
+    #[allow(unused_variables)]
+    async fn find_org_slug_by_email_domain(
+        &self,
+        domain: &str,
+    ) -> StoreResult<Option<(String, String)>> {
+        Ok(None)
     }
 
     #[allow(unused_variables)]

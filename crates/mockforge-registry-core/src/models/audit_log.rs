@@ -92,6 +92,11 @@ pub enum AuditEventType {
     PlatformSigningKeyRevoked,
     // Admin actions
     AdminImpersonation,
+    // Authentication
+    // Successful SSO login (SAML ACS or OIDC callback). `metadata` carries
+    // the `provider` ("saml" | "oidc"). Mirror migration:
+    // 20250101000080_sso_login_audit_event.sql.
+    SsoLogin,
 }
 
 impl AuditEventType {
@@ -162,6 +167,7 @@ impl AuditEventType {
             "platform_signing_key_retired" => Some(Self::PlatformSigningKeyRetired),
             "platform_signing_key_revoked" => Some(Self::PlatformSigningKeyRevoked),
             "admin_impersonation" => Some(Self::AdminImpersonation),
+            "sso_login" => Some(Self::SsoLogin),
             _ => None,
         }
     }
@@ -233,6 +239,7 @@ impl AuditEventType {
             Self::PlatformSigningKeyRetired => "platform_signing_key_retired",
             Self::PlatformSigningKeyRevoked => "platform_signing_key_revoked",
             Self::AdminImpersonation => "admin_impersonation",
+            Self::SsoLogin => "sso_login",
         }
     }
 }

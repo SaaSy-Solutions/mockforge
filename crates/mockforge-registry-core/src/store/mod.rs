@@ -1398,11 +1398,24 @@ pub trait RegistryStore: Send + Sync + 'static {
         require_signed_assertions: bool,
         require_signed_responses: bool,
         allow_unsolicited_responses: bool,
+        oidc_issuer_url: Option<&str>,
+        oidc_client_id: Option<&str>,
+        oidc_client_secret: Option<&str>,
+        email_domain: Option<&str>,
+        domain_verified: bool,
+        domain_verification_token: Option<&str>,
     ) -> StoreResult<SSOConfiguration>;
+
+    /// Mark the organization's SSO email domain as verified (DNS TXT proof).
+    async fn mark_sso_domain_verified(&self, org_id: Uuid) -> StoreResult<()>;
 
     async fn enable_sso_config(&self, org_id: Uuid) -> StoreResult<()>;
     async fn disable_sso_config(&self, org_id: Uuid) -> StoreResult<()>;
     async fn delete_sso_config(&self, org_id: Uuid) -> StoreResult<()>;
+    async fn find_org_slug_by_email_domain(
+        &self,
+        domain: &str,
+    ) -> StoreResult<Option<(String, String)>>;
 
     // ---------------------------------------------------------------------
     // SAML replay prevention

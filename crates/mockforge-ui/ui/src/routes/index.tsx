@@ -144,6 +144,9 @@ const PricingPage = lazy(() => import('../pages/PricingPage').then(m => ({ defau
 const EmailVerificationPage = lazy(() => import('../pages/EmailVerificationPage').then(m => ({ default: m.EmailVerificationPage })));
 const WaitlistPage = lazy(() => import('../pages/WaitlistPage').then(m => ({ default: m.WaitlistPage })));
 
+// SSO callback — must be a public route (user is not yet authenticated on arrival)
+const SsoCallbackPage = lazy(() => import('../pages/SsoCallbackPage').then(m => ({ default: m.SsoCallbackPage })));
+
 /**
  * ApiExplorerWrapper handles the special logic that was previously in the
  * switch statement: it checks for window.__mockforge_explorer_deployment
@@ -296,4 +299,8 @@ export const routes: RouteConfig[] = [
   { path: '/pricing', element: <PricingPage /> },
   { path: '/verify-email', element: <EmailVerificationPage /> },
   { path: '/waitlist', element: <WaitlistPage /> },
+
+  // SSO OAuth/SAML callback — public; user is unauthenticated on arrival.
+  // AuthGuard bypasses auth checks for /auth/sso/callback via PUBLIC_PREFIXES.
+  { path: '/auth/sso/callback', element: <SsoCallbackPage /> },
 ];
