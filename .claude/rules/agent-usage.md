@@ -9,6 +9,9 @@
 | `template-checker` | haiku | Mechanical template variable cross-referencing |
 | `security-auditor` | haiku | Pattern-matching for unsafe, secrets, unwrap |
 | `code-explorer` | sonnet | Tracing execution paths across crate boundaries |
+| `release-guardian` | haiku | Pre-publish GO/NO-GO gate (CRATES drift, versions, smoke-test) |
+| `protocol-parity` | haiku | Cross-references TUI/admin/broker/metrics lockstep on protocol changes |
+| `auth-sentinel` | sonnet | Deep auth/registry control-flow review (verified-domain gate, SSRF, IDOR) |
 
 ## When to Use Agents
 
@@ -37,6 +40,22 @@
 - Tracing a trait implementation through the workspace
 - Planning changes that span multiple crates
 
+### Use `release-guardian` (haiku) when:
+- About to run `scripts/publish-crates.sh` or cut a release / tag
+- A new `crates/mockforge-*/` directory was added (CRATES-list drift risk)
+- The `/ship-release` skill needs its pre-publish gate
+- Invoke it as the LAST step before publishing — a NO-GO means do not publish
+
+### Use `protocol-parity` (haiku) when:
+- Any `mockforge-{http,ws,grpc,graphql,kafka,mqtt,amqp,smtp,ftp,tcp}` admin/TUI surface changes
+- A new screen, tab, or admin page is added (ScreenId ↔ screens vec drift risk)
+- The `/protocol-wire` skill runs
+
+### Use `auth-sentinel` (sonnet) when:
+- Changes touch `mockforge-registry-server/**`, `handlers/sso.rs`, SAML/OIDC/JWT/session/RBAC, or tenant scoping
+- ALWAYS pair with `security-auditor` on auth PRs (broad+deep)
+- Treat a BLOCK as merge-blocking — it guards the #746/#778 cross-tenant takeover
+
 ## Parallel Launch Patterns
 
 Launch independent agents in parallel to save time:
@@ -44,6 +63,12 @@ Launch independent agents in parallel to save time:
 **Code review workflow**: Launch `code-reviewer` + `security-auditor` + `template-checker` simultaneously when reviewing bench-related changes.
 
 **Post-implementation**: Launch `test-runner` (for affected crates) + `template-checker` (if bench code changed) simultaneously.
+
+**Auth/registry PR**: Launch `auth-sentinel` (sonnet, deep) + `security-auditor` (haiku, broad) simultaneously — they cover reachability and grep-able issues respectively.
+
+**Protocol/admin PR**: Launch `protocol-parity` (haiku) + `test-runner` (for the protocol crate + `mockforge-tui`) simultaneously.
+
+**Pre-release**: Launch `release-guardian` (haiku) on its own as the final gate before `publish-crates.sh`; act on its GO/NO-GO.
 
 ## Token Efficiency
 

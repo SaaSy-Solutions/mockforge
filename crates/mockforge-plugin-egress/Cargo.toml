@@ -1,5 +1,8 @@
 [package]
 name = "mockforge-plugin-egress"
+# Not published to crates.io: internal MockForge cloud infrastructure, must not ship to crates.io.
+# Flip to true + add to scripts/publish-crates.sh CRATES when it gains a published consumer.
+publish = false
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
