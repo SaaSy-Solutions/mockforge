@@ -2488,7 +2488,10 @@ impl BenchCommand {
                 .map_err(|e| BenchError::Other(format!("self-test client error: {e}")))?;
             // Round 23 (c-iii) — drain the capture sink into a JSONL
             // file next to the JSON/HTML report. One CaseCapture per
-            // line so the file is grep-able / streamable.
+            // line so the file is grep-able / streamable. Round 24
+            // (d) — also emit a self-contained HTML viewer at
+            // `conformance-self-test-requests.html` for users who
+            // want to browse the capture without piping through `jq`.
             if let Some(sink) = capture_sink {
                 if let Ok(guard) = sink.lock() {
                     let jsonl_path = self.output.join("conformance-self-test-requests.jsonl");
@@ -2500,10 +2503,15 @@ impl BenchCommand {
                         }
                     }
                     let _ = std::fs::write(&jsonl_path, lines);
+                    let html_path = self.output.join("conformance-self-test-requests.html");
+                    let html =
+                        crate::conformance::capture_html::render_capture_html(guard.as_slice());
+                    let _ = std::fs::write(&html_path, html);
                     TerminalReporter::print_progress(&format!(
-                        "Self-test request/response capture written to {} ({} entries)",
+                        "Self-test request/response capture written to {} ({} entries) + {}",
                         jsonl_path.display(),
                         guard.len(),
+                        html_path.display(),
                     ));
                 }
             }

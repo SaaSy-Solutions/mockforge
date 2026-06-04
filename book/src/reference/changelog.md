@@ -1,5 +1,16 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.168] - 2026-06-04
+
+### Fixed
+
+- **[Contracts]** Geo-source-IP headers now ride on every self-test probe, not just the positive case (#79 round 24 / Srikanth f). Four negative-probe call sites and the security-probe path were dropping the geo IP. Regression test (`geo_headers_present_on_every_probe_with_capture`) added.
+- **[DevX]** Clickable count cells in the HTML report no longer dead-end when `--report-missed-cap` crops the drill-down (#79 round 24 / Srikanth e). Counts only link when their target row actually survives the truncation.
+
+### Added
+
+- **[DevX]** `--conformance-self-test-capture` now also emits a browser-viewable `conformance-self-test-requests.html` alongside the JSONL (#79 round 24 / Srikanth d). Self-contained, includes a filter toolbar and expandable per-probe cards.
+
 ## [0.3.167] - 2026-06-03
 
 ### Fixed

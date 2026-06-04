@@ -3,6 +3,7 @@
 //! Generates k6 scripts that exercise all OpenAPI 3.0.0 features against a target,
 //! then reports per-feature pass/fail results.
 
+pub mod capture_html;
 pub mod custom;
 pub mod executor;
 pub mod generator;

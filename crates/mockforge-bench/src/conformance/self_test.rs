@@ -447,7 +447,13 @@ async fn test_operation(
                             true,
                             Some(&body_str),
                             op.query_params.clone(),
-                            op.header_params.clone(),
+                            // Round 24 (f) — was `op.header_params`, which
+                            // skipped the geo-IP header. Use `op_headers`
+                            // so the geo IP rides with the negative probe
+                            // too (positive vs negative coverage must be
+                            // symmetric, otherwise a GEODB front-end sees
+                            // the rotating IP only on positives).
+                            op_headers.clone(),
                         )
                         .await,
                     );
@@ -477,7 +483,10 @@ async fn test_operation(
                 true,
                 op.sample_body.as_deref(),
                 op.query_params.clone(),
-                op.header_params.clone(),
+                // Round 24 (f) — see schema-mutation note above. Use
+                // `op_headers` (carries geo IP) instead of bare
+                // `op.header_params`.
+                op_headers.clone(),
             )
             .await,
         );
@@ -586,6 +595,20 @@ async fn test_operation(
         for (k, v) in &probe.headers {
             req_headers.push((k.clone(), v.clone()));
         }
+        // Round 24 (f) — security probes build req_headers from
+        // `op.header_params` directly (we need the stripped-auth
+        // variant), so the geo-IP header doesn't ride along
+        // automatically. Append it here so a GEODB / WAF in front
+        // of the auth layer still sees the rotating source IP.
+        if let Some(ip) = geo_ip {
+            let ip_str = ip.to_string();
+            for h in &config.geo_source_headers {
+                let already = req_headers.iter().any(|(k, _)| k.eq_ignore_ascii_case(h));
+                if !already {
+                    req_headers.push((h.clone(), ip_str.clone()));
+                }
+            }
+        }
         let mut req_query = stripped_query;
         for (k, v) in &probe.query {
             req_query.push((k.clone(), v.clone()));
@@ -609,8 +632,15 @@ async fn test_operation(
 
     // (d) drop the first required header
     if !op.header_params.is_empty() {
-        let mut h = op.header_params.clone();
-        h.remove(0);
+        // Round 24 (f) — start from `op_headers` (so the geo IP rides
+        // along) and only strip the first OPERATION-declared header.
+        // Slicing past `op.header_params.len()` would otherwise risk
+        // dropping the geo header itself; `op_headers` is built as
+        // `op.header_params ++ geo` so index 0 is always operational.
+        let mut h = op_headers.clone();
+        if !h.is_empty() {
+            h.remove(0);
+        }
         negatives.push(
             send_case(
                 client,
@@ -657,7 +687,11 @@ async fn test_operation(
                 true,
                 probe.body.as_deref(),
                 probe.query,
-                op.header_params.clone(),
+                // Round 24 (f) — OWASP injection probes must also
+                // carry the geo IP, otherwise a WAF / GEODB rule
+                // tuned to a specific source IP would silently let
+                // them through.
+                op_headers.clone(),
             )
             .await,
         );
@@ -1515,6 +1549,57 @@ mod tests {
         ];
         let report = run_self_test(&ops, &cfg).await.expect("client builds");
         assert_eq!(report.operations.len(), 3);
+    }
+
+    /// Round 24 (f) — Srikanth saw the geo header on positive probes
+    /// only; the four negative-probe call sites were passing
+    /// `op.header_params` directly instead of `op_headers`, so the
+    /// geo IP got dropped. This test runs a self-test that includes
+    /// negative probes (uri-too-long, missing-query, etc.) under
+    /// `--conformance-self-test-capture`, then asserts that EVERY
+    /// captured probe (positive AND negative) carries one of the
+    /// configured forwarded-IP headers.
+    #[tokio::test]
+    async fn geo_headers_present_on_every_probe_with_capture() {
+        let sink: Arc<Mutex<Vec<CaseCapture>>> = Arc::new(Mutex::new(Vec::new()));
+        let cfg = SelfTestConfig {
+            target_url: "http://127.0.0.1:1".into(),
+            timeout: Duration::from_millis(50),
+            geo_source_ips: vec!["203.0.113.5".parse().unwrap()],
+            capture: Some(sink.clone()),
+            ..Default::default()
+        };
+        // An operation rich enough to trip several negative-probe
+        // branches: header param (→ missing-header), query param
+        // (→ missing-query), and a sample body (→ schema mutations
+        // wouldn't fire without a schema, but uri-too-long always
+        // does).
+        let ops = vec![op(
+            "GET",
+            "/items",
+            Some("{}"),
+            vec![("id", "1")],
+            vec![("X-Trace", "x")],
+            vec![],
+        )];
+        let _ = run_self_test(&ops, &cfg).await.expect("client builds");
+        let captures = sink.lock().unwrap();
+        assert!(!captures.is_empty(), "self-test should record probes");
+        // For every captured probe, at least one of the default geo
+        // headers must be present and equal to the configured IP.
+        let geo_headers: std::collections::HashSet<&str> =
+            ["X-Forwarded-For", "True-Client-IP", "CF-Connecting-IP"].into_iter().collect();
+        for c in captures.iter() {
+            let has_geo = c
+                .request_headers
+                .iter()
+                .any(|(k, v)| geo_headers.contains(k.as_str()) && v == "203.0.113.5");
+            assert!(
+                has_geo,
+                "probe `{}` is missing the geo IP header; got headers: {:?}",
+                c.label, c.request_headers
+            );
+        }
     }
 
     #[test]
