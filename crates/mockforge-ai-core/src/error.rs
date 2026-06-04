@@ -23,8 +23,13 @@ pub enum Error {
 }
 
 impl Error {
-    /// Create a generic error
-    pub fn generic<S: Into<String>>(message: S) -> Self {
+    /// Create an internal error.
+    ///
+    /// Constructs the [`Error::Generic`] variant. Named `internal` to match the
+    /// 2026-04-01 `Error::generic` -> `Error::internal` rename that swept the
+    /// call sites across the workspace; this constructor was missed because the
+    /// crate was not yet a workspace member (see #796).
+    pub fn internal<S: Into<String>>(message: S) -> Self {
         Self::Generic {
             message: message.into(),
         }
