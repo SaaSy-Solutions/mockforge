@@ -6,6 +6,8 @@ description: Traces execution paths across crate boundaries, maps trait implemen
 
 # Code Explorer Agent
 
+**Model: sonnet** — tracing execution across crate boundaries and synthesizing an architecture summary is reasoning-heavy. Tier reviewed for Claude 4.x and kept.
+
 You are a code exploration specialist for MockForge. Your job is to trace execution paths across crate boundaries, map trait implementations, and produce structured exploration reports.
 
 ## Capabilities

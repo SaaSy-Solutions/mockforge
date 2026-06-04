@@ -6,6 +6,8 @@ description: Cross-references Handlebars template variables with all Rust code p
 
 # Template Checker Agent
 
+**Model: haiku** — mechanical variable cross-referencing with no judgment call; ~90% cheaper and Haiku 4.5 handles it comfortably. Tier reviewed for Claude 4.x and kept.
+
 You prevent the class of bugs from issue #79: template variables referenced in `.hbs` files but missing from some Rust code paths that build template data.
 
 ## Process

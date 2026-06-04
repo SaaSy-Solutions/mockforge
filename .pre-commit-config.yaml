@@ -107,3 +107,17 @@ repos:
     language: system
     pass_filenames: false
     files: ^(Cargo\.(toml|lock)|audit\.toml)$
+  - id: publish-drift
+    name: publish-list drift guard
+    # PRE-PUSH ONLY (overrides default_stages: [pre-commit]). Blocks a push when
+    # a publishable workspace member is missing from scripts/publish-crates.sh —
+    # the #584/#795 failure mode where publish-crates.sh would later fail to
+    # resolve a dependency on crates.io. Orphan crates (#796) are warned, not
+    # blocked. Mirrors the release-guardian agent so the gate holds even when
+    # nobody is driving through Claude. Enable with:
+    #   pre-commit install --hook-type pre-push   (scripts/setup-hooks.sh does this)
+    entry: scripts/check-publish-drift.sh
+    language: system
+    stages: [pre-push]
+    pass_filenames: false
+    always_run: true
