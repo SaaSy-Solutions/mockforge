@@ -161,12 +161,18 @@ Install pre-commit hooks to ensure code quality:
 # Install pre-commit if not already installed
 pip install pre-commit
 
-# Install hooks
-pre-commit install
+# Install all hook types (pre-commit + commit-msg + pre-push) in one step
+./scripts/setup-hooks.sh
 
 # Run on all files
 pre-commit run --all-files
 ```
+
+The `pre-push` hook runs the publish-list drift guard
+(`scripts/check-publish-drift.sh`): it blocks a push when a publishable
+workspace member is missing from `scripts/publish-crates.sh`, the failure mode
+that breaks a release when `publish-crates.sh` later can't resolve the missing
+dependency on crates.io.
 
 ## Project Structure
 
