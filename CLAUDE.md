@@ -236,8 +236,23 @@ This project uses:
 | `/code-review [target]` | Launch parallel review agents |
 | `/bench-review [spec]` | Validate benchmark scripts |
 | `/crate-explore <crate>` | Deep-dive into a crate's structure |
+| `/ship-release [level]` | Cut a release end-to-end (bump, CHANGELOG, gate, publish, tag, verify) |
+| `/release-check` | Pre-publish GO/NO-GO gate (no publish) via `release-guardian` |
+| `/issue-fix <#>` | Issue workflow: worktree, fix, real-binary verify, ship before replying |
+| `/protocol-wire <proto>` | Wire a protocol admin/TUI surface across all lockstep mirror sites |
+| `/sqlx-sync` | Regenerate the SQLx offline cache after `mockforge-collab` query changes |
 | `/commit` | Smart commit with auto-generated message |
 | `/commit-push-pr` | Full branch + commit + push + PR workflow |
 | `/hookify <description>` | Create hook rules from plain English |
 | `/hookify:list` | List all hookify rules |
 | `/hookify:configure` | Enable/disable/delete hookify rules |
+
+### Specialist Agents (tiered models)
+| Agent | Model | Veto / Job |
+|-------|-------|------------|
+| `release-guardian` | haiku | Pre-publish gate: CRATES-list drift, version/caret consistency, smoke-test, CHANGELOG |
+| `protocol-parity` | haiku | Protocol lockstep: TUI ScreenId ↔ screens vec, admin route, live broker wiring, metrics |
+| `auth-sentinel` | sonnet | Auth control-flow: verified-domain gate + SSRF guard reachable on every SSO path |
+| `template-checker` | haiku | Handlebars variable consistency across all render paths (#79) |
+| `security-auditor` | haiku | Broad mechanical scan: unsafe, secrets, unwrap |
+| `code-reviewer` / `test-runner` / `code-explorer` | sonnet | Review / test diagnosis / cross-crate tracing |
