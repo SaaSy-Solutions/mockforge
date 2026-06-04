@@ -1,3 +1,18 @@
+## [0.3.168] - 2026-06-04
+
+### Fixed
+
+- **[Contracts]** Geo-source-IP headers now ride on every self-test probe, not just the positive case (#79 round 24 / Srikanth f). Four negative-probe call sites (schema mutation, uri-too-long, missing-header, OWASP injection) and the security-probe path were passing `op.header_params` directly, so the `effective_op_headers` geo-IP append got dropped. Confirmed via Srikanth's round-23 capture: positive probes carried `X-Forwarded-For: 203.0.113.0`, negatives showed `geo={}`. A new regression test (`geo_headers_present_on_every_probe_with_capture`) asserts that every captured probe carries one of the configured forwarded-IP headers.
+- **[DevX]** Clickable count cells in the HTML report no longer dead-end when `--report-missed-cap` crops the drill-down (#79 round 24 / Srikanth e). The category and per-operation tables now consult a pre-computed anchor set: counts are linked only when their target `#miss-cat-*` / `#miss-op-*` row actually survives the truncation, otherwise the count renders as plain text.
+
+### Added
+
+- **[DevX]** Browser-viewable HTML alongside the JSONL capture (#79 round 24 / Srikanth d). `--conformance-self-test-capture` now emits both `conformance-self-test-requests.jsonl` (existing, grep-able / streamable) AND `conformance-self-test-requests.html` (new, self-contained: open in a browser, no external CSS/JS, includes a toolbar with full-text filter and PASS / FAIL / error checkboxes, one expandable card per probe showing request headers + body, response headers + body, and any transport error). Closes Srikanth's "Currently json line is plain text, not easy to parse" follow-up.
+
+### Notes
+
+- Response-body shape validation (round 21.3 / a2 / a3) and the per-category column / category-family grouping view in the Per-operation table remain queued. The (k) content-type swap probes are explicitly queued now with URL-encoded added to the swap set (Srikanth's g follow-up).
+
 ## [0.3.167] - 2026-06-03
 
 ### Fixed

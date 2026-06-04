@@ -60,13 +60,53 @@ pub fn render_html_with_options(
     html.push_str(HEAD);
     push_header(&mut html, report);
     push_summary_cards(&mut html, report);
-    push_category_table(&mut html, report);
-    push_operations_table(&mut html, report, opts);
+    // Round 24 (e) — pre-compute the set of categories and operation
+    // slugs that will actually appear in the truncated drill-down
+    // table, so the count-cells in the upper tables only link when
+    // the target anchor exists. Without this, a count linking to a
+    // row that got cropped by `--report-missed-cap` dead-ends.
+    let anchors = compute_anchor_set(report, opts);
+    push_category_table(&mut html, report, &anchors);
+    push_operations_table(&mut html, report, opts, &anchors);
     if let Some(a) = audit {
         push_spec_audit(&mut html, a);
     }
     html.push_str(FOOT);
     html
+}
+
+/// Round 24 (e) — for each (category, op_slug) that gets at least one
+/// row in the drill-down table under the current cap, record it here.
+/// The category and per-operation tables consult this set so a count
+/// only becomes a clickable link when the target row is actually
+/// rendered. Without this, capping at 200 rows on a 1000-violation
+/// run left every link past row 200 pointing into the void.
+fn compute_anchor_set(report: &SelfTestReport, opts: &RenderOptions) -> AnchorSet {
+    let mut missed: Vec<(&OperationResult, &CaseOutcome)> = Vec::new();
+    for op in &report.operations {
+        for neg in &op.negatives {
+            if !neg.passed {
+                missed.push((op, neg));
+            }
+        }
+    }
+    let take = opts.missed_cap.unwrap_or(usize::MAX);
+    let mut cats: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut ops: std::collections::HashSet<String> = std::collections::HashSet::new();
+    for (op, neg) in missed.iter().take(take) {
+        let cat = neg.label.split(':').next().unwrap_or("other").to_string();
+        cats.insert(cat);
+        ops.insert(op_anchor_slug(&op.method, &op.path));
+    }
+    AnchorSet { cats, ops }
+}
+
+/// Round 24 (e) — set of category names and operation slugs that have
+/// at least one anchored row in the drill-down table after the cap.
+#[derive(Default)]
+struct AnchorSet {
+    cats: std::collections::HashSet<String>,
+    ops: std::collections::HashSet<String>,
 }
 
 /// Inline-CSS opening — no external assets, prints fine.
@@ -154,7 +194,7 @@ fn push_card(out: &mut String, label: &str, value: usize, class: &str) {
     ));
 }
 
-fn push_category_table(out: &mut String, report: &SelfTestReport) {
+fn push_category_table(out: &mut String, report: &SelfTestReport, anchors: &AnchorSet) {
     out.push_str("<h2>Negatives by category</h2>\n");
     let mut keys: Vec<&String> =
         report.negative_caught.keys().chain(report.negative_missed.keys()).collect();
@@ -182,8 +222,10 @@ fn push_category_table(out: &mut String, report: &SelfTestReport) {
         // Round 23 (d) — clickable count: link the Mismatched count to
         // the per-row anchor in the drill-down table below, so a reader
         // can jump from "this category has 3 fails" → "here are the 3
-        // probes". Empty → no link.
-        let missed_cell = if missed > 0 {
+        // probes". Empty → no link. Round 24 (e) — also skip the link
+        // when the category was cropped by `--report-missed-cap`, so a
+        // link never points at a row that doesn't exist.
+        let missed_cell = if missed > 0 && anchors.cats.contains(cat) {
             format!("<a href=\"#miss-cat-{}\">{}</a>", html_escape(cat), missed)
         } else {
             missed.to_string()
@@ -200,7 +242,12 @@ fn push_category_table(out: &mut String, report: &SelfTestReport) {
     out.push_str("</tbody></table>\n");
 }
 
-fn push_operations_table(out: &mut String, report: &SelfTestReport, opts: &RenderOptions) {
+fn push_operations_table(
+    out: &mut String,
+    report: &SelfTestReport,
+    opts: &RenderOptions,
+    anchors: &AnchorSet,
+) {
     out.push_str("<h2>Per-operation results</h2>\n");
     if report.operations.is_empty() {
         out.push_str("<p class=\"small\">No operations.</p>\n");
@@ -216,11 +263,16 @@ fn push_operations_table(out: &mut String, report: &SelfTestReport, opts: &Rende
         let (caught, missed) = op.negatives.iter().partition::<Vec<&CaseOutcome>, _>(|n| n.passed);
         // Round 23 (d) — clickable count: link the Mismatched count to
         // the operation's anchor in the drill-down table below.
+        // Round 24 (e) — only link when the operation's first
+        // mismatched row survived the cap, otherwise the link is a
+        // dead anchor.
         let op_slug = op_anchor_slug(&op.method, &op.path);
         let missed_cell = if missed.is_empty() {
             "0".to_string()
-        } else {
+        } else if anchors.ops.contains(&op_slug) {
             format!("<a href=\"#miss-op-{}\">{}</a>", op_slug, missed.len())
+        } else {
+            missed.len().to_string()
         };
         out.push_str(&format!(
             "<tr><td><code>{}</code></td><td><code>{}</code></td><td>{}</td><td>{} / {}</td></tr>\n",
@@ -557,5 +609,51 @@ mod tests {
             html.contains("4xx (reject)"),
             "expected-status badge for negative probe missing"
         );
+    }
+
+    /// Round 24 (e) — when `--report-missed-cap` truncates the drill-
+    /// down to N rows, the count-cells in the upper tables must only
+    /// link to a `#miss-cat-*` or `#miss-op-*` anchor that's actually
+    /// rendered. Srikanth's report: clicking a count past the cap
+    /// dead-ended because the anchor was cropped out.
+    #[test]
+    fn html_count_links_only_emit_for_visible_anchors() {
+        let mut report = SelfTestReport::default();
+        // 4 operations, each contributes one mismatched negative.
+        // Categories alternate `cat-a` and `cat-b` so we have two
+        // distinct categories. With cap=1 only the first row survives
+        // the truncation, so its category/operation should be the
+        // only ones linked from the upper tables.
+        let cats = ["cat-a", "cat-b", "cat-a", "cat-b"];
+        for (i, c) in cats.iter().enumerate() {
+            report.operations.push(OperationResult {
+                method: "GET".into(),
+                path: format!("/r/{i}"),
+                positive: None,
+                negatives: vec![CaseOutcome {
+                    label: format!("{c}:fail-{i}"),
+                    expected_4xx: true,
+                    actual_status: 200,
+                    passed: false,
+                }],
+            });
+            *report.negative_missed.entry((*c).to_string()).or_insert(0) += 1;
+        }
+        let opts = RenderOptions {
+            missed_cap: Some(1),
+        };
+        let html = render_html_with_options(&report, None, &opts);
+        // The drill-down only renders one row; its category is
+        // `cat-a` and its operation slug is `get__r_0`.
+        assert!(html.contains("id=\"miss-cat-cat-a\""));
+        assert!(!html.contains("id=\"miss-cat-cat-b\""));
+        // cat-a's count cell is a link; cat-b's count cell is just
+        // the number with no `<a href="#miss-cat-cat-b">`.
+        assert!(html.contains("<a href=\"#miss-cat-cat-a\">"));
+        assert!(!html.contains("<a href=\"#miss-cat-cat-b\">"));
+        // Per-op: only `/r/0` has an anchor in the drill-down, so
+        // only its count is a link.
+        assert!(html.contains("<a href=\"#miss-op-get__r_0\">"));
+        assert!(!html.contains("<a href=\"#miss-op-get__r_2\">"));
     }
 }
