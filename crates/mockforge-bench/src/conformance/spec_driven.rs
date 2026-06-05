@@ -176,6 +176,14 @@ pub struct AnnotatedOperation {
     pub path_params: Vec<(String, String)>,
     /// Response schema for validation (JSON string of the schema)
     pub response_schema: Option<Schema>,
+    /// Round 25 — per-status response schemas (JSON values, pre-resolved
+    /// via $ref). Keyed by HTTP status code, populated for every
+    /// status declared in the spec that has an `application/json`
+    /// body. The self-test driver looks up the schema for each probe's
+    /// actual status and validates the response body against it
+    /// (closing round 21.3 / Srikanth's a2 / a3 ask). Empty when the
+    /// spec declares no JSON response bodies.
+    pub response_schemas: std::collections::BTreeMap<u16, serde_json::Value>,
     /// Round 17.2 — the resolved request-body schema (application/json).
     /// Used by the self-test driver to synthesise schema-aware
     /// negative mutations (wrong type, min/max bounds, pattern, enum
@@ -314,6 +322,8 @@ impl SpecDrivenConformanceGenerator {
         if response_schema.is_some() {
             features.push(ConformanceFeature::ResponseValidation);
         }
+        // Round 25 — per-status response schema map (closes round 21.3).
+        let response_schemas = Self::extract_response_schemas_per_status(&op.operation, spec);
 
         // Detect content negotiation (response with multiple content types)
         Self::annotate_content_negotiation(&op.operation, spec, &mut features);
@@ -336,6 +346,7 @@ impl SpecDrivenConformanceGenerator {
             header_params,
             path_params,
             response_schema,
+            response_schemas,
             request_body_schema,
             security_schemes,
         }
@@ -547,6 +558,41 @@ impl SpecDrivenConformanceGenerator {
                 }
             }
         }
+    }
+
+    /// Round 25 — extract every declared response schema, keyed by the
+    /// numeric HTTP status. Only `application/json` content types are
+    /// included (the only body shape the self-test validates against).
+    /// Used by the self-test driver to validate response bodies against
+    /// the schema for the ACTUAL status returned, not just 200.
+    fn extract_response_schemas_per_status(
+        operation: &Operation,
+        spec: &OpenAPI,
+    ) -> std::collections::BTreeMap<u16, serde_json::Value> {
+        let mut out = std::collections::BTreeMap::new();
+        for (code, resp_ref) in &operation.responses.responses {
+            let openapiv3::StatusCode::Code(n) = code else {
+                continue; // skip "default" / range responses for now
+            };
+            let Some(response) = ref_resolver::resolve_response(resp_ref, spec) else {
+                continue;
+            };
+            let Some(media) = response.content.get("application/json") else {
+                continue;
+            };
+            let Some(schema_ref) = &media.schema else {
+                continue;
+            };
+            let Some(schema) = ref_resolver::resolve_schema(schema_ref, spec) else {
+                continue;
+            };
+            // Convert openapiv3::Schema → serde_json::Value so the
+            // validation step can hand it straight to jsonschema.
+            if let Ok(value) = serde_json::to_value(schema) {
+                out.insert(*n, value);
+            }
+        }
+        out
     }
 
     /// Extract the response schema for the primary success response (200 or 201)
@@ -1391,6 +1437,7 @@ mod tests {
             header_params: vec![],
             path_params: vec![("id".to_string(), "test-value".to_string())],
             response_schema: None,
+            response_schemas: std::collections::BTreeMap::new(),
             request_body_schema: None,
             security_schemes: vec![],
         }];
@@ -1437,6 +1484,7 @@ mod tests {
             header_params: vec![],
             path_params: vec![("id".to_string(), "1".to_string())],
             response_schema: None,
+            response_schemas: std::collections::BTreeMap::new(),
             request_body_schema: None,
             security_schemes: vec![],
         }];
@@ -1628,6 +1676,7 @@ mod tests {
             request_body_content_type: None,
             sample_body: None,
             response_schema: None,
+            response_schemas: std::collections::BTreeMap::new(),
             request_body_schema: None,
             security_schemes: vec![],
         };
@@ -1672,6 +1721,7 @@ mod tests {
             request_body_content_type: None,
             sample_body: None,
             response_schema: None,
+            response_schemas: std::collections::BTreeMap::new(),
             request_body_schema: None,
             security_schemes: vec![],
         };

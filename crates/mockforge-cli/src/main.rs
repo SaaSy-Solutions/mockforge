@@ -2147,6 +2147,17 @@ enum Commands {
         #[arg(long)]
         conformance_self_test_capture: bool,
 
+        /// Issue #79 round 25 (a2 / a3): validate every probe's response
+        /// body against the spec's response schema for the actual
+        /// status returned. The mismatch is recorded in the JSONL /
+        /// HTML capture viewer under `response_schema_error`. Requires
+        /// `--conformance-self-test --conformance-self-test-capture`
+        /// (the validator needs the body, which only the capture path
+        /// reads). Off by default because validating large response
+        /// bodies adds wall-clock time on big specs.
+        #[arg(long)]
+        validate_response_schemas: bool,
+
         /// Issue #79 round 18.5 — local source IPs to bind self-test
         /// requests to. Each IP must already be assigned to an
         /// interface on this host (sub-interface, aliased address,
@@ -3090,6 +3101,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             validate_requests,
             conformance_self_test,
             conformance_self_test_capture,
+            validate_response_schemas,
             source_ips,
             geo_source_ips,
             geo_source_headers,
@@ -3188,6 +3200,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 validate_requests,
                 conformance_self_test,
                 conformance_self_test_capture,
+                validate_response_schemas,
                 source_ips,
                 geo_source_ips,
                 geo_source_headers,

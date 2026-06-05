@@ -41,6 +41,22 @@ const CAPTURE_BODY_CAP_BYTES: usize = 16 * 1024;
 /// breaks) without exploding wall time on large specs.
 const SCHEMA_MUTATION_CAP: usize = 12;
 
+/// Round 25 (k) — content-type swap probes. For operations declaring a
+/// JSON request body, each entry below produces one probe that lies
+/// about Content-Type while keeping the JSON payload. A spec-compliant
+/// server should respond 415 (or 400). Order matches the order
+/// Srikanth listed in his round-23 reply: XML, YAML, multipart, and
+/// the URL-encoded variant he added in round 24.
+const CONTENT_TYPE_SWAP_VARIANTS: &[(&str, &str)] = &[
+    ("application/xml", "request-body:content-type-mismatch:xml"),
+    ("application/yaml", "request-body:content-type-mismatch:yaml"),
+    ("multipart/form-data", "request-body:content-type-mismatch:multipart"),
+    (
+        "application/x-www-form-urlencoded",
+        "request-body:content-type-mismatch:urlencoded",
+    ),
+];
+
 /// Configuration for a self-test run.
 #[derive(Debug, Clone)]
 pub struct SelfTestConfig {
@@ -76,6 +92,14 @@ pub struct SelfTestConfig {
     /// `conformance-self-test-requests.jsonl`. None → no capture (zero
     /// extra allocations on the hot path).
     pub capture: Option<Arc<Mutex<Vec<CaseCapture>>>>,
+    /// Round 25 — when true, validate every probe's response body
+    /// against the spec's response schema for the actual status
+    /// returned (closes round 21.3 / Srikanth's a2 / a3 ask). The
+    /// validation result lands in `CaseCapture::response_schema_error`
+    /// (None → matched, or no schema for that status). Default false:
+    /// JSON-Schema validation of large response bodies adds wall-clock
+    /// time and the user has to opt in.
+    pub validate_response_schemas: bool,
 }
 
 /// Round 23 (c-iii) — one captured request/response pair, one per
@@ -97,6 +121,13 @@ pub struct CaseCapture {
     pub response_body: Option<String>,
     pub response_body_truncated: bool,
     pub error: Option<String>,
+    /// Round 25 — when `validate_response_schemas` is on and the spec
+    /// declares a schema for `response_status`, this carries the
+    /// validation message (or None when the body matched, or no schema
+    /// was declared for that status). Serialised verbatim in the JSONL
+    /// and rendered in the HTML viewer.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub response_schema_error: Option<String>,
 }
 
 impl Default for SelfTestConfig {
@@ -112,6 +143,7 @@ impl Default for SelfTestConfig {
             geo_source_ips: Vec::new(),
             geo_source_headers: default_geo_source_headers(),
             capture: None,
+            validate_response_schemas: false,
         }
     }
 }
@@ -349,6 +381,13 @@ async fn test_operation(
     op: &AnnotatedOperation,
     geo_ip: Option<IpAddr>,
 ) -> OperationResult {
+    // Round 25 — track the sink length BEFORE we run any probes for
+    // this operation, so that after the probes finish we can mutate
+    // exactly the entries that belong to this op (the capture sink is
+    // shared but `run_self_test` iterates operations sequentially).
+    // Used by the response-schema validation pass below.
+    let sink_start = config.capture.as_ref().and_then(|s| s.lock().ok().map(|g| g.len()));
+
     let url = build_url_with_base(
         &config.target_url,
         config.base_path.as_deref(),
@@ -421,6 +460,65 @@ async fn test_operation(
             )
             .await,
         );
+
+        // Round 25 (k) — content-type swap probes.
+        //
+        // For operations declaring `application/json` request bodies, send
+        // the SAME json payload (or a synthesised one) under four other
+        // content types: `application/xml`, `application/yaml`,
+        // `multipart/form-data`, `application/x-www-form-urlencoded`.
+        // The spec says the endpoint accepts only JSON, so a strict server
+        // should respond 415 Unsupported Media Type (or 400 if it tries
+        // to parse and fails). A 2xx means the server is accepting
+        // payloads outside its declared content negotiation, which is the
+        // failure mode behind a lot of "we crashed on a malformed XML
+        // upload" incidents.
+        //
+        // Variant (a) of Srikanth's round-23 g ask: lie about the
+        // Content-Type header. The body shape is honest JSON; only the
+        // header is swapped. Variant (b) (JSON envelope with embedded
+        // non-JSON field values) is deferred to round 26 because it
+        // requires a schema-aware field walker.
+        if op
+            .request_body_content_type
+            .as_deref()
+            .map(|ct| ct.contains("json"))
+            .unwrap_or(false)
+        {
+            let payload = op.sample_body.as_deref().unwrap_or("{}");
+            for (ct, label) in CONTENT_TYPE_SWAP_VARIANTS {
+                negatives.push(
+                    send_case_with_extra(
+                        client,
+                        config,
+                        method.clone(),
+                        &url,
+                        label,
+                        true,
+                        Some(payload),
+                        op.query_params.clone(),
+                        // Strip any Content-Type already on the operation
+                        // headers (the spec's positive value) so the
+                        // probe's value is the only one the server sees.
+                        op_headers
+                            .iter()
+                            .filter(|(k, _)| !k.eq_ignore_ascii_case("content-type"))
+                            .cloned()
+                            .collect(),
+                        // The wrong Content-Type rides on `extra_headers`
+                        // so it lands AFTER `send_case_with_extra`'s
+                        // unconditional `application/json` insertion in
+                        // request-body mode. Actually `send_case_with_extra`
+                        // only sets Content-Type when a body is present
+                        // AND there's no manual override; passing the
+                        // override here wins because reqwest preserves
+                        // the last-set header value.
+                        vec![("Content-Type".to_string(), (*ct).to_string())],
+                    )
+                    .await,
+                );
+            }
+        }
 
         // Round 17.2 — schema-aware negatives.
         //
@@ -697,12 +795,63 @@ async fn test_operation(
         );
     }
 
+    // Round 25 — response-body shape validation pass. For each capture
+    // this op pushed onto the sink, look up the spec's schema for the
+    // actual response status and validate. Result lands in
+    // `response_schema_error` (Some(message) on failure, None on
+    // pass or no-schema-for-this-status). Runs only when the user
+    // opted in AND capture is on (we need the body).
+    if config.validate_response_schemas {
+        if let (Some(sink), Some(start)) = (config.capture.as_ref(), sink_start) {
+            if !op.response_schemas.is_empty() {
+                if let Ok(mut guard) = sink.lock() {
+                    let end = guard.len();
+                    for i in start..end {
+                        let Some(entry) = guard.get_mut(i) else {
+                            continue;
+                        };
+                        let Some(body) = entry.response_body.as_deref() else {
+                            continue;
+                        };
+                        let Some(schema) = op.response_schemas.get(&entry.response_status) else {
+                            continue;
+                        };
+                        entry.response_schema_error = validate_body_against_schema(body, schema);
+                    }
+                }
+            }
+        }
+    }
+
     OperationResult {
         method: op.method.clone(),
         path: op.path.clone(),
         positive: Some(positive),
         negatives,
     }
+}
+
+/// Round 25 — validate a JSON body string against an OpenAPI response
+/// schema (already converted to a `serde_json::Value`). Returns
+/// `Some(message)` describing the first violation, or `None` on a
+/// clean pass / non-JSON body / schema-build failure (in which case
+/// the absence of an error means "we didn't have anything to compare
+/// against", not "passed"; the caller-side semantics treat absence as
+/// success because that's what the user sees as silence).
+fn validate_body_against_schema(body: &str, schema: &serde_json::Value) -> Option<String> {
+    let parsed: serde_json::Value = serde_json::from_str(body).ok()?;
+    let validator = jsonschema::validator_for(schema).ok()?;
+    let mut errors = validator.iter_errors(&parsed);
+    let first = errors.next()?;
+    // Build a short, line-bounded message: "at /path: kind". Long
+    // schema_path / instance_path render fine but adding both keeps
+    // the message under ~120 chars even for deep schemas.
+    let path = first.instance_path.to_string();
+    let path = if path.is_empty() { "/" } else { path.as_str() };
+    Some(format!(
+        "at {path}: {}",
+        format!("{:?}", first.kind).split('(').next().unwrap_or("unknown")
+    ))
 }
 
 /// Round 17.5 — one OWASP injection probe to send.
@@ -970,6 +1119,17 @@ async fn send_case_with_extra(
     for (k, v) in &query {
         req = req.query(&[(k.as_str(), v.as_str())]);
     }
+    // Attach the body FIRST with a default Content-Type. Subsequent
+    // header passes (the operation's headers, then extra_headers) can
+    // overwrite the Content-Type — that's what makes the round-25 (k)
+    // content-type-swap probes work: they pass a wrong Content-Type
+    // via extra_headers and reqwest's last-write-wins keeps it.
+    if let Some(b) = body {
+        req = req
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .body(b.to_string());
+        capture_headers.insert("Content-Type".to_string(), "application/json".to_string());
+    }
     for (k, v) in &headers {
         req = req.header(k, v);
         capture_headers.insert(k.clone(), v.clone());
@@ -977,12 +1137,6 @@ async fn send_case_with_extra(
     for (k, v) in &extra_headers {
         req = req.header(k, v);
         capture_headers.insert(k.clone(), v.clone());
-    }
-    if let Some(b) = body {
-        req = req
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .body(b.to_string());
-        capture_headers.insert("Content-Type".to_string(), "application/json".to_string());
     }
     let (actual_status, response_capture) = match req.send().await {
         Ok(resp) => {
@@ -1038,6 +1192,10 @@ async fn send_case_with_extra(
             response_body,
             response_body_truncated,
             error,
+            // Filled in by the per-operation validation pass after
+            // every probe finishes; the capture itself is unaware of
+            // the schema map.
+            response_schema_error: None,
         };
         if let Ok(mut guard) = sink.lock() {
             guard.push(entry);
@@ -1181,6 +1339,7 @@ mod tests {
             header_params: headers.into_iter().map(|(a, b)| (a.into(), b.into())).collect(),
             path_params: path_params.into_iter().map(|(a, b)| (a.into(), b.into())).collect(),
             response_schema: None,
+            response_schemas: std::collections::BTreeMap::new(),
             request_body_schema: None,
             security_schemes: Vec::new(),
         }
@@ -1600,6 +1759,85 @@ mod tests {
                 c.label, c.request_headers
             );
         }
+    }
+
+    /// Round 25 (k) — operations with a JSON request body now get four
+    /// content-type-swap probes (xml / yaml / multipart / urlencoded).
+    /// Verify they:
+    ///   1. fire only when the operation declares a JSON body
+    ///   2. carry the wrong Content-Type the probe is testing for
+    ///   3. don't fire on body-less operations
+    #[tokio::test]
+    async fn content_type_swap_probes_fire_for_json_bodies() {
+        let sink: Arc<Mutex<Vec<CaseCapture>>> = Arc::new(Mutex::new(Vec::new()));
+        let cfg = SelfTestConfig {
+            target_url: "http://127.0.0.1:1".into(),
+            timeout: Duration::from_millis(50),
+            capture: Some(sink.clone()),
+            ..Default::default()
+        };
+        let ops = vec![
+            op("POST", "/users", Some("{\"name\":\"a\"}"), vec![], vec![], vec![]),
+            op("GET", "/ping", None, vec![], vec![], vec![]),
+        ];
+        let _ = run_self_test(&ops, &cfg).await.expect("client builds");
+        let captures = sink.lock().unwrap();
+
+        let swap_labels: Vec<&str> = captures
+            .iter()
+            .filter(|c| c.label.starts_with("request-body:content-type-mismatch:"))
+            .map(|c| c.label.as_str())
+            .collect();
+        assert_eq!(
+            swap_labels.len(),
+            4,
+            "expected 4 content-type-swap probes (one per variant), got: {swap_labels:?}"
+        );
+        let expected_labels = [
+            "request-body:content-type-mismatch:xml",
+            "request-body:content-type-mismatch:yaml",
+            "request-body:content-type-mismatch:multipart",
+            "request-body:content-type-mismatch:urlencoded",
+        ];
+        for want in expected_labels {
+            assert!(swap_labels.contains(&want), "missing swap probe `{want}`");
+        }
+
+        // Each swap probe must carry the wrong Content-Type it's
+        // testing for — that's the whole point.
+        for c in captures.iter() {
+            let Some(suffix) = c.label.strip_prefix("request-body:content-type-mismatch:") else {
+                continue;
+            };
+            let want_ct = match suffix {
+                "xml" => "application/xml",
+                "yaml" => "application/yaml",
+                "multipart" => "multipart/form-data",
+                "urlencoded" => "application/x-www-form-urlencoded",
+                _ => continue,
+            };
+            let got_ct = c
+                .request_headers
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+                .map(|(_, v)| v.as_str())
+                .unwrap_or("");
+            assert_eq!(got_ct, want_ct, "swap probe `{}` sent wrong CT", c.label);
+        }
+
+        // The body-less operation must NOT produce content-type-swap
+        // probes (no body → no content type to lie about).
+        let body_less_swaps = captures
+            .iter()
+            .filter(|c| {
+                c.label.starts_with("request-body:content-type-mismatch:")
+                    && c.url.ends_with("/ping")
+            })
+            .count();
+        assert_eq!(
+            body_less_swaps, 0,
+            "GET /ping has no request body; should not produce content-type-swap probes"
+        );
     }
 
     #[test]

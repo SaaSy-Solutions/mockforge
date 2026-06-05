@@ -67,6 +67,7 @@ pub fn render_html_with_options(
     // row that got cropped by `--report-missed-cap` dead-ends.
     let anchors = compute_anchor_set(report, opts);
     push_category_table(&mut html, report, &anchors);
+    push_family_table(&mut html, report);
     push_operations_table(&mut html, report, opts, &anchors);
     if let Some(a) = audit {
         push_spec_audit(&mut html, a);
@@ -253,7 +254,11 @@ fn push_operations_table(
         out.push_str("<p class=\"small\">No operations.</p>\n");
         return;
     }
-    out.push_str("<table>\n<thead><tr><th>Method</th><th>Path</th><th>Positive</th><th>Matched / Mismatched</th></tr></thead>\n<tbody>\n");
+    // Round 25 — added a `By category` column showing which categories
+    // each operation's mismatches came from. Comma-joined `cat:N` pairs
+    // make it scannable from the upper table without expanding the
+    // drill-down. Empty cell when the operation has zero mismatches.
+    out.push_str("<table>\n<thead><tr><th>Method</th><th>Path</th><th>Positive</th><th>Matched / Mismatched</th><th>By category</th></tr></thead>\n<tbody>\n");
     for op in &report.operations {
         let pos_badge = match &op.positive {
             Some(p) if p.passed => "<span class=\"badge pass\">2xx ✓</span>".to_string(),
@@ -274,17 +279,104 @@ fn push_operations_table(
         } else {
             missed.len().to_string()
         };
+        // Round 25 — per-operation category breakdown: count
+        // mismatches grouped by their label's first segment. Sorted
+        // alphabetically for stable rendering.
+        let mut by_cat: BTreeMap<&str, usize> = BTreeMap::new();
+        for m in &missed {
+            let cat = m.label.split(':').next().unwrap_or("other");
+            *by_cat.entry(cat).or_insert(0) += 1;
+        }
+        let by_cat_cell = if by_cat.is_empty() {
+            String::new()
+        } else {
+            by_cat
+                .iter()
+                .map(|(cat, n)| format!("<code>{}:{}</code>", html_escape(cat), n))
+                .collect::<Vec<_>>()
+                .join(" ")
+        };
         out.push_str(&format!(
-            "<tr><td><code>{}</code></td><td><code>{}</code></td><td>{}</td><td>{} / {}</td></tr>\n",
+            "<tr><td><code>{}</code></td><td><code>{}</code></td><td>{}</td><td>{} / {}</td><td>{}</td></tr>\n",
             html_escape(&op.method),
             html_escape(&op.path),
             pos_badge,
             caught.len(),
-            missed_cell
+            missed_cell,
+            by_cat_cell
         ));
     }
     out.push_str("</tbody></table>\n");
     push_missed_detail(out, report, opts);
+}
+
+/// Round 25 — category-family rollup. Srikanth's round-22 (d) ask was
+/// an OPTIONAL grouped view on top of the granular per-category table,
+/// not a replacement (he was worried about losing resolution between
+/// e.g. `security:bad-bearer` and `owasp:xss`). The detailed
+/// `push_category_table` still renders above; this table just sums
+/// matched/mismatched across each member category so a reader can
+/// see "Security family: 3 categories, X total mismatched" at a glance.
+///
+/// Family membership is hard-coded to keep the rollup deterministic
+/// across MockForge releases. A category that doesn't fall in any
+/// family is omitted (rather than auto-grouped under "Other"), so
+/// adding a new probe family won't surprise users with a relabelled
+/// row until we update this map.
+fn push_family_table(out: &mut String, report: &SelfTestReport) {
+    let families: &[(&str, &[&str])] = &[
+        ("Request body", &["request-body"]),
+        ("Parameters", &["parameters"]),
+        ("Security family", &["security", "owasp"]),
+    ];
+    // Skip the section entirely when there are no negatives at all.
+    if report.negative_caught.is_empty() && report.negative_missed.is_empty() {
+        return;
+    }
+    out.push_str("<h2>Negatives by category family</h2>\n");
+    out.push_str("<p class=\"small\">Rollup of related categories. The per-category breakdown above keeps the full resolution.</p>\n");
+    out.push_str("<table>\n<thead><tr><th>Family</th><th>Categories</th><th>Matched (4xx)</th><th>Mismatched (non-4xx)</th><th>Status</th></tr></thead>\n<tbody>\n");
+    for (family_name, members) in families {
+        let mut caught = 0;
+        let mut missed = 0;
+        let mut present: Vec<&str> = Vec::new();
+        for member in *members {
+            let m = (*member).to_string();
+            if let Some(c) = report.negative_caught.get(&m) {
+                caught += c;
+                present.push(*member);
+            }
+            if let Some(c) = report.negative_missed.get(&m) {
+                missed += c;
+                if !present.contains(member) {
+                    present.push(*member);
+                }
+            }
+        }
+        if present.is_empty() {
+            continue;
+        }
+        let (badge_class, badge_text) = if missed == 0 {
+            ("pass", "PASS")
+        } else {
+            ("fail", "FAIL")
+        };
+        let member_codes = present
+            .iter()
+            .map(|m| format!("<code>{}</code>", html_escape(m)))
+            .collect::<Vec<_>>()
+            .join(" ");
+        out.push_str(&format!(
+            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td><span class=\"badge {}\">{}</span></td></tr>\n",
+            html_escape(family_name),
+            member_codes,
+            caught,
+            missed,
+            badge_class,
+            badge_text
+        ));
+    }
+    out.push_str("</tbody></table>\n");
 }
 
 /// Round 23 (d) — stable slug for the per-operation anchor in the
