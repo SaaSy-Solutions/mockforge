@@ -211,6 +211,12 @@ pub struct BenchCommand {
     /// full request/response to `conformance-self-test-requests.jsonl`.
     /// No effect outside `--conformance-self-test`.
     pub conformance_self_test_capture: bool,
+    /// Round 25 (21.3 / a2 / a3) — when true, validate every probe's
+    /// response body against the spec's response schema for the actual
+    /// status returned. Requires `--conformance-self-test-capture`
+    /// because validation reads the captured body. No effect outside
+    /// `--conformance-self-test`.
+    pub validate_response_schemas: bool,
 
     /// Round 18.5 — local source IPs to bind self-test requests to.
     /// Each entry must be a valid `IpAddr` and already assigned to
@@ -955,6 +961,7 @@ impl BenchCommand {
                 validate_requests: false,
                 conformance_self_test: false,
                 conformance_self_test_capture: false,
+                validate_response_schemas: false,
                 source_ips: Vec::new(),
                 geo_source_ips: Vec::new(),
                 geo_source_headers: Vec::new(),
@@ -2472,11 +2479,17 @@ impl BenchCommand {
                 // Round 23 (c-iii) — opt-in request/response capture.
                 // Constructed here so the sink Arc outlives the run and
                 // we can drain it for the JSONL write below.
-                capture: if self.conformance_self_test_capture {
+                capture: if self.conformance_self_test_capture || self.validate_response_schemas {
+                    // Schema validation reads the captured response
+                    // body, so opt the user into capture implicitly
+                    // when they ask for validation. The on-disk
+                    // JSONL/HTML files only get written if the user
+                    // also passed `--conformance-self-test-capture`.
                     Some(std::sync::Arc::new(std::sync::Mutex::new(Vec::new())))
                 } else {
                     None
                 },
+                validate_response_schemas: self.validate_response_schemas,
             };
             let capture_sink = cfg.capture.clone();
             TerminalReporter::print_progress(&format!(
@@ -3490,6 +3503,7 @@ mod tests {
             validate_requests: false,
             conformance_self_test: false,
             conformance_self_test_capture: false,
+            validate_response_schemas: false,
             source_ips: Vec::new(),
             geo_source_ips: Vec::new(),
             geo_source_headers: Vec::new(),
@@ -3574,6 +3588,7 @@ mod tests {
             validate_requests: false,
             conformance_self_test: false,
             conformance_self_test_capture: false,
+            validate_response_schemas: false,
             source_ips: Vec::new(),
             geo_source_ips: Vec::new(),
             geo_source_headers: Vec::new(),
@@ -3654,6 +3669,7 @@ mod tests {
             validate_requests: false,
             conformance_self_test: false,
             conformance_self_test_capture: false,
+            validate_response_schemas: false,
             source_ips: Vec::new(),
             geo_source_ips: Vec::new(),
             geo_source_headers: Vec::new(),

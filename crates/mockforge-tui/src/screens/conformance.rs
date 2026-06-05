@@ -76,6 +76,34 @@ impl MethodFilter {
     }
 }
 
+/// Round 25 — identity key for re-anchoring the selected violation
+/// after a refresh. Server-side violations get a microsecond-resolution
+/// timestamp plus method+path+status; that tuple is enough to find the
+/// same record after the refresh replaces `self.violations`. Tuple is
+/// `(timestamp_secs, timestamp_nanos, method, path, status)` to avoid
+/// pulling in `DateTime`'s Hash/Ord trickiness as keys.
+fn violation_key(v: &ConformanceViolation) -> (i64, u32, String, String, u16) {
+    (
+        v.timestamp.timestamp(),
+        v.timestamp.timestamp_subsec_nanos(),
+        v.method.clone(),
+        v.path.clone(),
+        v.status,
+    )
+}
+
+/// Round 25 — identity key for unknown-path entries; symmetric with
+/// `violation_key`. Status is omitted because UnknownPathRequest
+/// doesn't carry one.
+fn unknown_key(r: &UnknownPathRequest) -> (i64, u32, String, String) {
+    (
+        r.timestamp.timestamp(),
+        r.timestamp.timestamp_subsec_nanos(),
+        r.method.clone(),
+        r.path.clone(),
+    )
+}
+
 /// Status-filter cycle: all → 4xx → 422 → 5xx → all.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum StatusFilter {
@@ -763,11 +791,27 @@ impl Screen for ConformanceScreen {
             unknown_total_seen: u64,
         }
         if let Ok(parsed) = serde_json::from_str::<UnknownWire>(payload) {
+            // Round 25 (Srikanth follow-up after r24) — preserve the
+            // selected row's identity across refresh. Without this, a
+            // 5-second tick that prepends new entries silently scrolls
+            // the user's investigation cursor to a different request.
+            let prev_key = if matches!(self.view_mode, ViewMode::UnknownPaths) {
+                self.selected_unknown().map(unknown_key)
+            } else {
+                None
+            };
             self.unknown_paths = parsed.unknown_requests;
             self.unknown_total = parsed.unknown_total;
             self.unknown_total_seen = parsed.unknown_total_seen;
             if matches!(self.view_mode, ViewMode::UnknownPaths) {
                 self.table.set_total(self.current_row_count());
+                if let Some(key) = prev_key {
+                    if let Some(new_pos) = self.filtered_unknown_indices().iter().position(|&i| {
+                        self.unknown_paths.get(i).map(unknown_key) == Some(key.clone())
+                    }) {
+                        self.table.selected = new_pos;
+                    }
+                }
             }
             self.loaded = true;
             self.error = None;
@@ -788,12 +832,29 @@ impl Screen for ConformanceScreen {
         }
         match serde_json::from_str::<Wire>(payload) {
             Ok(parsed) => {
+                // Round 25 (Srikanth follow-up after r24) — same
+                // identity-preserving refresh as the unknown-paths
+                // branch above. Without this, the 5s refresh tick
+                // scrolls the user's selection to a different
+                // violation row whenever new traffic arrives.
+                let prev_key = if matches!(self.view_mode, ViewMode::Violations) {
+                    self.selected_violation().map(violation_key)
+                } else {
+                    None
+                };
                 self.violations = parsed.violations;
                 self.total = parsed.total;
                 self.total_seen = parsed.total_seen;
                 self.total_ok = parsed.total_ok;
                 if matches!(self.view_mode, ViewMode::Violations) {
                     self.table.set_total(self.current_row_count());
+                    if let Some(key) = prev_key {
+                        if let Some(new_pos) = self.filtered_indices().iter().position(|&i| {
+                            self.violations.get(i).map(violation_key) == Some(key.clone())
+                        }) {
+                            self.table.selected = new_pos;
+                        }
+                    }
                 }
                 self.loaded = true;
                 self.error = None;

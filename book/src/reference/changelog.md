@@ -1,5 +1,18 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.169] - 2026-06-05
+
+### Fixed
+
+- **[Contracts]** TUI Conformance tab: selecting a row no longer jumps to a different request when new traffic arrives on the next refresh tick (#79 round 25 / Srikanth follow-up).
+- **[DevX]** Capture HTML viewer no longer hangs the browser at 9000+ probes: `content-visibility: auto` per card, 200 ms debounced filter, hard cap at 1000 rendered cards with `Showing N of M` banner (#79 round 25 / Srikanth d follow-up).
+
+### Added
+
+- **[Contracts]** Content-type swap probe family `request-body:content-type-mismatch:<variant>` (#79 round 25 / Srikanth k). Four probes per JSON operation: xml / yaml / multipart / urlencoded.
+- **[Contracts]** `--validate-response-schemas` flag (#79 round 25 / closes round 21.3 / Srikanth a2 + a3). Validates every probe's response body against the spec's response schema for the actual status returned. Mismatches surface as `response_schema_error` in the JSONL and a red "Response schema mismatch" section in the per-probe HTML viewer card. Opt-in.
+- **[DevX]** HTML report: `Negatives by category family` rollup (Request body / Parameters / Security family) and a per-operation `By category` column showing mismatch breakdown (#79 round 25 / Srikanth d remainder).
+
 ## [0.3.168] - 2026-06-04
 
 ### Fixed
