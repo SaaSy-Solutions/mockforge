@@ -97,8 +97,14 @@ temp/
 # Python
 __pycache__/
 
-# Claude Code hookify personal rules
+# Claude Code hookify personal rules (ad-hoc per-developer rules stay local)
 .claude/hookify.*.local.md
+# ...except these curated team rules, which are shared/version-controlled.
+# (The hookify loader only globs `hookify.*.local.md`, so shared rules keep that
+# suffix and are un-ignored individually rather than renamed.)
+!.claude/hookify.reply-lint.local.md
+!.claude/hookify.protect-templates.local.md
+!.claude/hookify.protect-cargo-toml.local.md
 *.py[cod]
 *$py.class
 *.so

@@ -69,6 +69,11 @@ pre-commit install
 echo "🔧 Installing commit-msg hook..."
 pre-commit install --hook-type commit-msg
 
+# Install the pre-push hook (publish-list drift guard — see .pre-commit-config.yaml
+# id: publish-drift, and scripts/check-publish-drift.sh).
+echo "🔧 Installing pre-push hook..."
+pre-commit install --hook-type pre-push
+
 # Check for custom PyPI configuration that might cause issues
 if pip config list | grep -q "index-url"; then
     echo "⚠️  Custom PyPI configuration detected. This may cause issues with pre-commit."

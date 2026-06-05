@@ -1,4 +1,29 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(cargo metadata:*)",
+      "Bash(cargo tree:*)",
+      "Bash(cargo fmt --all --check)",
+      "Bash(cargo clippy:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git fetch:*)",
+      "Bash(git branch:*)",
+      "Bash(git show:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git worktree list)",
+      "Bash(gh pr view:*)",
+      "Bash(gh pr list:*)",
+      "Bash(gh pr checks:*)",
+      "Bash(gh issue view:*)",
+      "Bash(gh issue list:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(rg:*)",
+      "Bash(ls:*)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
@@ -23,6 +48,16 @@
       }
     ],
     "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash -c 'bash \"$(git rev-parse --show-toplevel)/.claude/hooks/auto-fmt.sh\"'",
+            "timeout": 15000
+          }
+        ]
+      },
       {
         "matcher": "Edit|MultiEdit|Write|Bash",
         "hooks": [

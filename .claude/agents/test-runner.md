@@ -6,6 +6,8 @@ description: Runs tests for affected crates, diagnoses failures, applies fixes
 
 # Test Runner Agent
 
+**Model: sonnet** — running tests is mechanical, but diagnosing *why* one failed and applying a correct fix needs reasoning about the code under test. Tier reviewed for Claude 4.x and kept.
+
 You are a test runner for MockForge. Your job is to determine which crates are affected by recent changes, run their tests, diagnose any failures, and optionally fix them.
 
 ## Process

@@ -225,7 +225,9 @@ This project uses:
 - **Agents** (`.claude/agents/`): Specialized subagents for code review, testing, etc.
 - **Skills** (`.claude/skills/`): Invocable commands (`/verify`, `/template-check`, etc.)
 - **Commands** (`.claude/commands/`): Git workflow commands (`/commit`, `/commit-push-pr`)
-- **Hooks** (`.claude/hooks/`): Hookify rule engine for warnings/blocks
+- **Hooks** (`.claude/hooks/`): Hookify rule engine for warnings/blocks, plus `auto-fmt.sh` (PostToolUse: `rustfmt` on every `.rs` write, so qualifier-shortening can't break CI's `cargo fmt --check`). Shared hookify rules (`reply-lint`, `protect-templates`, `protect-cargo-toml`) are version-controlled; ad-hoc `hookify.*.local.md` rules stay per-developer (gitignored).
+- **Settings** (`.claude/settings.json`): hook wiring + a read-only `permissions.allow` list (cargo/git/gh introspection) to cut prompt friction.
+- **Git hooks**: pre-commit (clippy/fmt/typos/...) + a `pre-push` publish-list drift guard (`scripts/check-publish-drift.sh`); install via `scripts/setup-hooks.sh`.
 - **MCP** (`.mcp.json`): Playwright browser automation for UI verification
 
 ### Key Skills
@@ -241,6 +243,7 @@ This project uses:
 | `/issue-fix <#>` | Issue workflow: worktree, fix, real-binary verify, ship before replying |
 | `/protocol-wire <proto>` | Wire a protocol admin/TUI surface across all lockstep mirror sites |
 | `/sqlx-sync` | Regenerate the SQLx offline cache after `mockforge-collab` query changes |
+| `/round-table` | Convene the relevant specialist agents on a hard decision and synthesize options |
 | `/commit` | Smart commit with auto-generated message |
 | `/commit-push-pr` | Full branch + commit + push + PR workflow |
 | `/hookify <description>` | Create hook rules from plain English |

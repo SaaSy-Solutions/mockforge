@@ -67,7 +67,12 @@ cargo install typos-cli
 
 # Install pre-commit hooks
 pip install pre-commit
-pre-commit install
+
+# Install all hook types (pre-commit + commit-msg + pre-push) in one step.
+# The pre-push hook runs the publish-list drift guard
+# (scripts/check-publish-drift.sh) so a publishable crate can't be left out of
+# scripts/publish-crates.sh.
+./scripts/setup-hooks.sh
 ```
 
 ### Build the Project
