@@ -7713,6 +7713,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "mockforge-ai-core"
+version = "0.3.168"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "rand 0.9.4",
+ "reqwest 0.12.28",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
 name = "mockforge-amqp"
 version = "0.3.168"
 dependencies = [
@@ -7755,6 +7772,19 @@ dependencies = [
  "tracing",
  "urlencoding",
  "woothee",
+]
+
+[[package]]
+name = "mockforge-behavioral-cloning"
+version = "0.3.168"
+dependencies = [
+ "async-trait",
+ "chrono",
+ "rand 0.9.4",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tracing",
 ]
 
 [[package]]
@@ -7831,6 +7861,44 @@ dependencies = [
  "tokio",
  "tokio-tungstenite 0.28.0",
  "tower 0.5.3",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "mockforge-chaos-ml"
+version = "0.3.168"
+dependencies = [
+ "anyhow",
+ "chrono",
+ "mockforge-chaos-orchestration",
+ "parking_lot",
+ "rand 0.9.4",
+ "serde",
+ "serde_json",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
+name = "mockforge-chaos-orchestration"
+version = "0.3.168"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "chrono",
+ "cron",
+ "mockforge-recorder",
+ "mockforge-tracing",
+ "parking_lot",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
  "tracing",
  "uuid",
 ]

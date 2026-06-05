@@ -1,5 +1,9 @@
 [package]
 name = "mockforge-ai-core"
+# Wired into the workspace (#796) but not yet consumed by any published
+# crate, so it does not ship to crates.io. Flip to true + add to
+# scripts/publish-crates.sh CRATES when it gains a published consumer.
+publish = false
 version.workspace = true
 edition.workspace = true
 authors.workspace = true
