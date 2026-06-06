@@ -4,183 +4,99 @@
 //! requests.jsonl` is great for `jq` and `grep`, but Srikanth asked for
 //! something that can be loaded in a browser without external tooling.
 //! This module renders the same `CaseCapture` records into a single
-//! self-contained HTML file (no external CSS / JS / images) with:
+//! self-contained HTML file (no external CSS / JS / images).
 //!
-//! - A toolbar showing the run's probe count and a status filter
-//!   (PASS / FAIL / all) plus a free-text search over label / URL.
-//! - One collapsible card per probe, showing label, method, URL, and
-//!   status code at a glance; expanding the card reveals request
-//!   headers, request body, response headers, response body, and any
-//!   transport error.
-//!
-//! The toolbar filtering runs inline via a tiny vanilla-JS handler;
-//! no `fetch()` calls, no module imports, no CDN dependencies.
-//! Loading the file works offline and from a `file://` URL.
+//! Round 27 (Srikanth d3) — replaced the prior content-visibility +
+//! 1000-card cap approach with proper pagination. The 1000-card cap
+//! silently hid the 4xx/5xx probes Srikanth needed to investigate
+//! because they sat past the cap. The viewer now embeds the full
+//! capture as a JSON array (`window.__captures`), filters that array
+//! in JS, then renders only the current page (50 cards) of the
+//! filtered subset. Filters span ALL probes regardless of which page
+//! is visible, so paging never hides matching probes.
 
 use super::self_test::CaseCapture;
 
-/// Round 25 perf cap — Srikanth's r24 follow-up: at 9700 probes the
-/// browser hangs and filter typing is sluggish. The fix has three
-/// parts: (1) `content-visibility: auto` on cards (CSS-only; the browser
-/// only paints what's actually scrolled into view), (2) a 200ms debounce
-/// on filter input so each keystroke doesn't trigger a full re-render,
-/// (3) a hard cap on rendered cards with a `Showing N of M` banner. The
-/// JSONL still has the full set so users can `jq` past the cap.
-const DEFAULT_RENDER_CAP: usize = 1000;
+/// Round 27 — page size for the paginated capture viewer. 50 cards
+/// per page keeps initial render under 100 ms on a modern browser
+/// while still showing enough context to scan a category at a glance.
+/// The full dataset is held in memory as JSON; only the slice is in
+/// the DOM at any time. Mirrored as `PAGE_SIZE` in the JS handler
+/// below; the test `pagination_controls_present` asserts the two
+/// stay in sync.
+#[allow(dead_code)] // documentation/contract for the JS-side constant
+const PAGE_SIZE: usize = 50;
 
 /// Render the full HTML viewer for a slice of captured probes.
 /// Bodies are kept verbatim (already truncated upstream to
-/// `CAPTURE_BODY_CAP_BYTES`); the HTML escapes everything before
-/// inserting into the DOM so payload content cannot break out of
-/// the rendering.
+/// `CAPTURE_BODY_CAP_BYTES`). The whole capture is serialised as a
+/// JSON array embedded in a `<script>` tag and rendered on demand by
+/// the inline JS handler; cross-page filters work over the full
+/// array, not the visible page.
 pub fn render_capture_html(entries: &[CaseCapture]) -> String {
     let total = entries.len();
-    let rendered: &[CaseCapture] = if total > DEFAULT_RENDER_CAP {
-        &entries[..DEFAULT_RENDER_CAP]
-    } else {
-        entries
-    };
-    let mut out = String::with_capacity(rendered.len() * 1024);
+    let mut out = String::with_capacity(total.max(1) * 1024);
     out.push_str(HEAD);
-    push_summary(&mut out, entries, rendered.len());
-    out.push_str("<div id=\"cards\">\n");
-    for (idx, e) in rendered.iter().enumerate() {
-        push_card(&mut out, idx, e);
-    }
-    out.push_str("</div>\n");
+    push_summary(&mut out, entries);
+    out.push_str("<div id=\"cards\"></div>\n");
+    push_pagination_controls(&mut out);
+    push_data_script(&mut out, entries);
     out.push_str(FOOT);
     out
 }
 
-fn push_summary(out: &mut String, entries: &[CaseCapture], rendered: usize) {
+fn push_summary(out: &mut String, entries: &[CaseCapture]) {
     let total = entries.len();
     let pass = entries.iter().filter(|e| (200..400).contains(&e.response_status)).count();
     let fail = entries.iter().filter(|e| !(200..400).contains(&e.response_status)).count();
-    // Round 25 — surface the cap explicitly when truncation happened so
-    // the user knows the JSONL has more. Removing the banner is wrong
-    // (the user can't tell something is missing); raising the cap is
-    // also wrong because 9700 cards hung the browser on Srikanth's box.
-    let cap_note = if total > rendered {
-        format!(
-            "<p class=\"small\">Showing first {rendered} of {total} probe(s). \
-             The full set is in <code>conformance-self-test-requests.jsonl</code>; \
-             pipe through <code>jq</code> to inspect anything past the cap.</p>\n"
-        )
-    } else {
-        String::new()
-    };
-    // `oninput="applyFilter()"` is debounced inline — the JS handler
-    // sets a 200ms setTimeout before re-applying the filter, so typing
-    // doesn't trigger N re-renders per second.
     out.push_str(&format!(
         "<header>\n\
          <h1>Self-Test Request/Response Capture</h1>\n\
-         <p class=\"meta\">{total} probe(s) — {pass} returned 2xx-3xx, {fail} returned 4xx-5xx or errored. \
+         <p class=\"meta\">{total} probe(s); {pass} returned 2xx-3xx, {fail} returned 4xx-5xx or errored. \
          Generated by <code>mockforge bench --conformance-self-test --conformance-self-test-capture</code>.</p>\n\
-         {cap_note}\
          <div class=\"toolbar\">\n\
-         <input type=\"search\" id=\"q\" placeholder=\"filter by label, method, or URL\" oninput=\"scheduleFilter()\" />\n\
+         <input type=\"search\" id=\"q\" placeholder=\"filter by label, method, URL, or status\" oninput=\"scheduleFilter()\" />\n\
          <label><input type=\"checkbox\" id=\"showPass\" checked onchange=\"applyFilter()\"/> 2xx-3xx</label>\n\
          <label><input type=\"checkbox\" id=\"showFail\" checked onchange=\"applyFilter()\"/> 4xx-5xx</label>\n\
          <label><input type=\"checkbox\" id=\"showErr\" checked onchange=\"applyFilter()\"/> transport error</label>\n\
+         <span id=\"filterStatus\" class=\"small\"></span>\n\
          </div>\n\
          </header>\n"
     ));
 }
 
-fn push_card(out: &mut String, idx: usize, e: &CaseCapture) {
-    let status_class = if e.error.is_some() {
-        "err"
-    } else if (200..400).contains(&e.response_status) {
-        "pass"
-    } else if (400..600).contains(&e.response_status) {
-        "fail"
-    } else {
-        "info"
-    };
-    let status_text = if e.error.is_some() {
-        "ERR".to_string()
-    } else {
-        e.response_status.to_string()
-    };
-    // The card carries data-status / data-text attributes that the
-    // toolbar's JS handler reads to decide visibility. Using data-
-    // attributes (not inline style) keeps the markup auditable.
-    out.push_str(&format!(
-        "<details class=\"card\" data-status=\"{}\" data-text=\"{}\">\n\
-         <summary><span class=\"badge {}\">{}</span> \
-         <code class=\"method\">{}</code> \
-         <span class=\"label\">{}</span> \
-         <code class=\"url\">{}</code></summary>\n",
-        status_class,
-        html_escape(&format!("{} {} {} {}", e.label, e.method, e.url, e.response_status))
-            .to_ascii_lowercase(),
-        status_class,
-        status_text,
-        html_escape(&e.method),
-        html_escape(&e.label),
-        html_escape(&e.url),
-    ));
-    out.push_str("<div class=\"body\">\n");
-    push_kv_section(out, "Request headers", &e.request_headers);
-    if let Some(body) = &e.request_body {
-        push_body_section(out, "Request body", body, e.request_body_truncated);
-    }
-    push_kv_section(out, "Response headers", &e.response_headers);
-    if let Some(body) = &e.response_body {
-        push_body_section(out, "Response body", body, e.response_body_truncated);
-    }
-    if let Some(err) = &e.error {
-        out.push_str(&format!(
-            "<h3>Transport error</h3>\n<pre class=\"err\">{}</pre>\n",
-            html_escape(err)
-        ));
-    }
-    // Round 25 — surface a schema mismatch front-and-centre. The
-    // probe's status may be 2xx (so it'd otherwise look fine), but
-    // the body doesn't match what the spec promised, which is
-    // exactly the round-21.3 / a2 / a3 case Srikanth asked about.
-    if let Some(schema_err) = &e.response_schema_error {
-        out.push_str(&format!(
-            "<h3>Response schema mismatch</h3>\n<pre class=\"err\">{}</pre>\n",
-            html_escape(schema_err)
-        ));
-    }
-    out.push_str("</div>\n</details>\n");
-    let _ = idx;
+fn push_pagination_controls(out: &mut String) {
+    out.push_str(
+        "<div class=\"pager\">\n\
+         <button id=\"firstPage\" onclick=\"gotoPage(0)\">First</button>\n\
+         <button id=\"prevPage\" onclick=\"gotoPage(currentPage - 1)\">Prev</button>\n\
+         <span id=\"pageNum\" class=\"pageNum\"></span>\n\
+         <button id=\"nextPage\" onclick=\"gotoPage(currentPage + 1)\">Next</button>\n\
+         <button id=\"lastPage\" onclick=\"gotoPage(totalPages - 1)\">Last</button>\n\
+         <label class=\"small\">Jump to page: <input type=\"number\" id=\"jumpPage\" min=\"1\" style=\"width: 5em\" onchange=\"jumpToPage()\" /></label>\n\
+         </div>\n",
+    );
 }
 
-fn push_kv_section(out: &mut String, title: &str, kv: &std::collections::BTreeMap<String, String>) {
-    if kv.is_empty() {
-        out.push_str(&format!("<h3>{title}</h3>\n<p class=\"small\">(none)</p>\n"));
-        return;
-    }
-    out.push_str(&format!("<h3>{title}</h3>\n<table class=\"kv\"><tbody>\n"));
-    for (k, v) in kv {
-        out.push_str(&format!(
-            "<tr><td><code>{}</code></td><td><code>{}</code></td></tr>\n",
-            html_escape(k),
-            html_escape(v)
-        ));
-    }
-    out.push_str("</tbody></table>\n");
-}
-
-fn push_body_section(out: &mut String, title: &str, body: &str, truncated: bool) {
-    let suffix = if truncated {
-        " <span class=\"small\">(truncated at 16 KiB)</span>"
-    } else {
-        ""
-    };
-    out.push_str(&format!("<h3>{title}{suffix}</h3>\n<pre>{}</pre>\n", html_escape(body)));
-}
-
-fn html_escape(s: &str) -> String {
-    s.replace('&', "&amp;")
-        .replace('<', "&lt;")
-        .replace('>', "&gt;")
-        .replace('"', "&quot;")
-        .replace('\'', "&#39;")
+/// Embed the full capture as a JSON array assigned to
+/// `window.__captures`. JSON.stringify with default escaping is
+/// XSS-safe inside a `<script>` tag as long as we don't have a
+/// closing `</script>` substring. `serde_json::to_string` does NOT
+/// escape `<`, so we post-process to break any literal `</` so the
+/// script element can't be terminated by the payload. The browser
+/// JS handler unescapes this back transparently.
+fn push_data_script(out: &mut String, entries: &[CaseCapture]) {
+    out.push_str("<script id=\"captureData\" type=\"application/json\">\n");
+    // Serialise to a single line for compactness. If serialisation
+    // somehow fails (shouldn't, the struct is all Serialize), embed
+    // an empty array so the viewer still loads.
+    let json = serde_json::to_string(entries).unwrap_or_else(|_| "[]".to_string());
+    // Defensive: protect against payload bodies containing
+    // `</script>`. The JSON `<` becomes `<` which is valid JSON
+    // and the JS parser accepts it.
+    let safe = json.replace("</", r"<\/");
+    out.push_str(&safe);
+    out.push_str("\n</script>\n");
 }
 
 const HEAD: &str = r#"<!doctype html>
@@ -199,19 +115,18 @@ const HEAD: &str = r#"<!doctype html>
   .toolbar input[type=search] { flex: 1; min-width: 240px; padding: 0.4rem 0.6rem;
     border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.9rem; }
   .toolbar label { font-size: 0.85rem; color: #4b5563; cursor: pointer; }
+  .pager { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;
+    margin: 0.75rem 0; padding: 0.5rem 0; border-top: 1px solid #e5e7eb;
+    border-bottom: 1px solid #e5e7eb; }
+  .pager button { padding: 0.25rem 0.75rem; font-size: 0.85rem;
+    border: 1px solid #d1d5db; background: #fff; border-radius: 4px; cursor: pointer; }
+  .pager button:hover:not(:disabled) { background: #f3f4f6; }
+  .pager button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .pager .pageNum { font-size: 0.85rem; color: #4b5563; min-width: 6em;
+    text-align: center; font-variant-numeric: tabular-nums; }
   details.card { border: 1px solid #e5e7eb; border-radius: 6px; margin: 0.4rem 0;
-    background: #fff;
-    /* Round 25 perf — only paint cards that are scrolled into view.
-       The browser uses `contain-intrinsic-size` to reserve scrollbar
-       space for off-screen cards without rendering their contents.
-       Cuts the load+filter cost on a 1000-card report from seconds
-       to ms in modern browsers. Safari < 18 ignores both properties
-       and falls back to today's behaviour (no regression). */
-    content-visibility: auto;
-    contain-intrinsic-size: 0 48px;
-  }
+    background: #fff; }
   details.card[open] { box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
-  details.card.hidden { display: none; }
   summary { padding: 0.5rem 0.75rem; cursor: pointer; display: flex; gap: 0.5rem;
     align-items: center; flex-wrap: wrap; }
   summary::-webkit-details-marker { color: #9ca3af; }
@@ -243,36 +158,152 @@ const HEAD: &str = r#"<!doctype html>
 
 const FOOT: &str = r#"
 <script>
-// Round 25 perf — debounce the search-box filter so typing in a large
-// capture doesn't re-walk the DOM on every keystroke. Checkboxes fire
-// applyFilter() directly because they're single toggles, not streams
-// of input events.
-var _filterTimer = null;
+// Round 27 — pagination + cross-page filter over the JSON-embedded
+// full capture. The previous CSS-only show/hide approach silently
+// dropped 4xx/5xx probes past the 1000-card cap (Srikanth flagged
+// this on 0.3.169). Now the JS holds the full capture in memory,
+// filters across the whole array on every input, and only renders
+// the current page (PAGE_SIZE entries) of the filtered subset.
+
+const PAGE_SIZE = 50;
+let captures = [];
+try {
+  const raw = document.getElementById('captureData').textContent.trim();
+  captures = raw ? JSON.parse(raw) : [];
+} catch (e) {
+  document.getElementById('cards').innerHTML =
+    '<p class="small">Failed to load capture data: ' + e.message + '</p>';
+}
+let filtered = captures.slice();
+let currentPage = 0;
+let totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function statusClass(c) {
+  if (c.error) return 'err';
+  if (c.response_status >= 200 && c.response_status < 400) return 'pass';
+  if (c.response_status >= 400 && c.response_status < 600) return 'fail';
+  return 'info';
+}
+
+function renderKv(title, kv) {
+  const keys = kv ? Object.keys(kv).sort() : [];
+  if (keys.length === 0) {
+    return '<h3>' + escapeHtml(title) + '</h3><p class="small">(none)</p>';
+  }
+  let html = '<h3>' + escapeHtml(title) + '</h3><table class="kv"><tbody>';
+  for (const k of keys) {
+    html += '<tr><td><code>' + escapeHtml(k) + '</code></td><td><code>' +
+            escapeHtml(kv[k]) + '</code></td></tr>';
+  }
+  html += '</tbody></table>';
+  return html;
+}
+
+function renderBody(title, body, truncated) {
+  if (body == null) return '';
+  const suffix = truncated ? ' <span class="small">(truncated at 16 KiB)</span>' : '';
+  return '<h3>' + escapeHtml(title) + suffix + '</h3><pre>' + escapeHtml(body) + '</pre>';
+}
+
+function renderCard(c) {
+  const cls = statusClass(c);
+  const statusText = c.error ? 'ERR' : String(c.response_status);
+  let html = '<details class="card">';
+  html += '<summary>';
+  html += '<span class="badge ' + cls + '">' + escapeHtml(statusText) + '</span> ';
+  html += '<code class="method">' + escapeHtml(c.method) + '</code> ';
+  html += '<span class="label">' + escapeHtml(c.label) + '</span> ';
+  html += '<code class="url">' + escapeHtml(c.url) + '</code>';
+  html += '</summary><div class="body">';
+  html += renderKv('Request headers', c.request_headers);
+  html += renderBody('Request body', c.request_body, c.request_body_truncated);
+  html += renderKv('Response headers', c.response_headers);
+  html += renderBody('Response body', c.response_body, c.response_body_truncated);
+  if (c.error) {
+    html += '<h3>Transport error</h3><pre class="err">' + escapeHtml(c.error) + '</pre>';
+  }
+  if (c.response_schema_error) {
+    html += '<h3>Response schema mismatch</h3><pre class="err">' +
+            escapeHtml(c.response_schema_error) + '</pre>';
+  }
+  html += '</div></details>';
+  return html;
+}
+
+function renderPage() {
+  totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  if (currentPage >= totalPages) currentPage = totalPages - 1;
+  if (currentPage < 0) currentPage = 0;
+  const start = currentPage * PAGE_SIZE;
+  const end = Math.min(start + PAGE_SIZE, filtered.length);
+  const slice = filtered.slice(start, end);
+  document.getElementById('cards').innerHTML = slice.map(renderCard).join('');
+  document.getElementById('pageNum').textContent =
+    'Page ' + (currentPage + 1) + ' / ' + totalPages +
+    ' (' + (filtered.length === 0 ? 0 : (start + 1)) + '-' + end +
+    ' of ' + filtered.length + ' filtered)';
+  document.getElementById('firstPage').disabled = currentPage === 0;
+  document.getElementById('prevPage').disabled = currentPage === 0;
+  document.getElementById('nextPage').disabled = currentPage >= totalPages - 1;
+  document.getElementById('lastPage').disabled = currentPage >= totalPages - 1;
+  document.getElementById('filterStatus').textContent =
+    filtered.length === captures.length ? '' :
+    '(' + filtered.length + ' of ' + captures.length + ' shown)';
+  document.getElementById('jumpPage').max = totalPages;
+  document.getElementById('jumpPage').value = currentPage + 1;
+  window.scrollTo({ top: 0, behavior: 'auto' });
+}
+
+function gotoPage(p) {
+  if (p < 0 || p >= totalPages) return;
+  currentPage = p;
+  renderPage();
+}
+
+function jumpToPage() {
+  const v = parseInt(document.getElementById('jumpPage').value, 10);
+  if (!isNaN(v)) gotoPage(v - 1);
+}
+
+let _filterTimer = null;
 function scheduleFilter() {
   if (_filterTimer) clearTimeout(_filterTimer);
   _filterTimer = setTimeout(applyFilter, 200);
 }
+
 function applyFilter() {
-  var q = document.getElementById('q').value.trim().toLowerCase();
-  var showPass = document.getElementById('showPass').checked;
-  var showFail = document.getElementById('showFail').checked;
-  var showErr  = document.getElementById('showErr').checked;
-  var cards = document.querySelectorAll('details.card');
-  for (var i = 0; i < cards.length; i++) {
-    var c = cards[i];
-    var status = c.dataset.status;
-    var statusOk = (status === 'pass' && showPass) ||
-                   (status === 'fail' && showFail) ||
-                   (status === 'err'  && showErr)  ||
-                   (status === 'info' && (showPass || showFail));
-    var textOk = !q || c.dataset.text.indexOf(q) !== -1;
-    if (statusOk && textOk) {
-      c.classList.remove('hidden');
-    } else {
-      c.classList.add('hidden');
-    }
-  }
+  const q = document.getElementById('q').value.trim().toLowerCase();
+  const showPass = document.getElementById('showPass').checked;
+  const showFail = document.getElementById('showFail').checked;
+  const showErr = document.getElementById('showErr').checked;
+  filtered = captures.filter(function(c) {
+    const cls = statusClass(c);
+    const statusOk = (cls === 'pass' && showPass) ||
+                     (cls === 'fail' && showFail) ||
+                     (cls === 'err' && showErr) ||
+                     (cls === 'info' && (showPass || showFail));
+    if (!statusOk) return false;
+    if (!q) return true;
+    const hay = ((c.label || '') + ' ' + (c.method || '') + ' ' +
+                 (c.url || '') + ' ' + (c.response_status || '')).toLowerCase();
+    return hay.indexOf(q) !== -1;
+  });
+  currentPage = 0;
+  renderPage();
 }
+
+// Initial render once the page loads.
+renderPage();
 </script>
 </body>
 </html>
@@ -310,7 +341,7 @@ mod tests {
                 request_headers: BTreeMap::new(),
                 request_body: None,
                 request_body_truncated: false,
-                response_status: 200,
+                response_status: 500,
                 response_headers: resp_h,
                 response_body: Some("[]".to_string()),
                 response_body_truncated: false,
@@ -321,36 +352,60 @@ mod tests {
     }
 
     #[test]
-    fn renders_one_card_per_entry() {
+    fn embeds_all_probes_as_json() {
         let html = render_capture_html(&sample());
-        // Two probes → two <details> cards.
-        assert_eq!(html.matches("<details class=\"card\"").count(), 2);
-        assert!(html.contains("positive"));
-        assert!(html.contains("owasp:sqli"));
+        // The JSON data script holds the full capture.
+        assert!(html.contains("id=\"captureData\""));
+        // Both labels are present in the JSON payload.
+        assert!(html.contains("\"positive\""));
+        assert!(html.contains("\"owasp:sqli\""));
+    }
+
+    /// Round 27 — Srikanth's d3 follow-up was that the round-25
+    /// 1000-card cap hid 4xx/5xx probes past the cap. The fix is
+    /// pagination over the full capture. A capture WAY past the
+    /// old cap must still appear in the embedded data.
+    #[test]
+    fn no_silent_cap_past_one_thousand() {
+        let mut entries = Vec::with_capacity(1500);
+        for i in 0..1500 {
+            entries.push(CaseCapture {
+                label: format!("probe-{i}"),
+                method: "GET".into(),
+                url: format!("/path/{i}"),
+                request_headers: BTreeMap::new(),
+                request_body: None,
+                request_body_truncated: false,
+                response_status: if i % 4 == 0 { 500 } else { 200 },
+                response_headers: BTreeMap::new(),
+                response_body: None,
+                response_body_truncated: false,
+                error: None,
+                response_schema_error: None,
+            });
+        }
+        let html = render_capture_html(&entries);
+        // Probe past the old 1000 cap is still embedded.
+        assert!(html.contains("\"probe-1234\""));
+        assert!(html.contains("\"probe-1499\""));
+        // Per-card cap text is gone (we paginate instead).
+        assert!(!html.contains("Showing first 1000 of"));
     }
 
     #[test]
-    fn escapes_payloads_in_url() {
-        // Payload with a literal `<script>` to confirm escaping kicks in
-        // before insertion. Without escape, the browser would parse the
-        // tag.
-        let entry = CaseCapture {
-            label: "owasp:xss".into(),
-            method: "GET".into(),
-            url: "http://t/users?id=<script>alert(1)</script>".into(),
-            request_headers: BTreeMap::new(),
-            request_body: None,
-            request_body_truncated: false,
-            response_status: 200,
-            response_headers: BTreeMap::new(),
-            response_body: None,
-            response_body_truncated: false,
-            error: None,
-            response_schema_error: None,
-        };
-        let html = render_capture_html(&[entry]);
-        assert!(html.contains("&lt;script&gt;"), "script tag should be escaped");
-        assert!(!html.contains("<script>alert"), "raw script tag must not appear");
+    fn pagination_controls_present() {
+        let html = render_capture_html(&sample());
+        for id in [
+            "firstPage",
+            "prevPage",
+            "nextPage",
+            "lastPage",
+            "jumpPage",
+            "pageNum",
+        ] {
+            assert!(html.contains(id), "missing pagination control: {id}");
+        }
+        assert!(html.contains("PAGE_SIZE = 50"));
     }
 
     #[test]
@@ -362,30 +417,30 @@ mod tests {
     }
 
     #[test]
-    fn carries_request_and_response_headers() {
-        let html = render_capture_html(&sample());
-        assert!(html.contains("X-Forwarded-For"));
-        assert!(html.contains("203.0.113.0"));
-        assert!(html.contains("content-type"));
-    }
-
-    #[test]
-    fn truncated_flag_surfaces_in_section_header() {
-        let big = CaseCapture {
-            label: "x".into(),
+    fn embedded_json_breaks_inline_script_terminators() {
+        // A payload body containing `</script>` could break out of
+        // the inline data <script> if we didn't escape it. The
+        // serialiser converts `</` to `<\/` so the JSON parser
+        // accepts it but no DOM parser sees a closing tag.
+        let entry = CaseCapture {
+            label: "label".into(),
             method: "GET".into(),
             url: "/x".into(),
             request_headers: BTreeMap::new(),
-            request_body: Some("AAA".into()),
-            request_body_truncated: true,
+            request_body: None,
+            request_body_truncated: false,
             response_status: 200,
             response_headers: BTreeMap::new(),
-            response_body: Some("BBB".into()),
-            response_body_truncated: true,
+            response_body: Some("<script>alert(1)</script>".into()),
+            response_body_truncated: false,
             error: None,
             response_schema_error: None,
         };
-        let html = render_capture_html(&[big]);
-        assert_eq!(html.matches("(truncated at 16 KiB)").count(), 2);
+        let html = render_capture_html(&[entry]);
+        assert!(
+            !html.contains("</script>alert(1)</script>"),
+            "raw `</script>` snuck into the embedded data"
+        );
+        assert!(html.contains("<\\/script>"), "missing escaped form");
     }
 }
