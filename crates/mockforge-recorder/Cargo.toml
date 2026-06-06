@@ -30,7 +30,7 @@ serde_yaml = "0.9"
 chrono = { workspace = true }
 
 # HTTP types
-http = "1.0"
+http = "1.4"
 http-body-util = "0.1"
 axum = { workspace = true }
 
