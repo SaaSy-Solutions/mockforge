@@ -843,15 +843,57 @@ fn validate_body_against_schema(body: &str, schema: &serde_json::Value) -> Optio
     let validator = jsonschema::validator_for(schema).ok()?;
     let mut errors = validator.iter_errors(&parsed);
     let first = errors.next()?;
-    // Build a short, line-bounded message: "at /path: kind". Long
-    // schema_path / instance_path render fine but adding both keeps
-    // the message under ~120 chars even for deep schemas.
+    // Round 26 — Srikanth on 0.3.169: the prior `format!("{:?}", first.kind)
+    // .split('(').next()` produced "Type { kind: Single" (broken Rust
+    // syntax, mismatched braces). Switch to the human-readable mapping
+    // already used in executor.rs: handle the common kinds (Type,
+    // Required, AdditionalProperties, Enum, MinLength, MaxLength,
+    // Minimum, Maximum, Pattern) explicitly; fall back to the
+    // jsonschema crate's Display impl on the error (which produces
+    // something like "{...} is not of type \"string\"") for the long
+    // tail. Combined with `at <instance-path>` for the field location.
     let path = first.instance_path.to_string();
     let path = if path.is_empty() { "/" } else { path.as_str() };
-    Some(format!(
-        "at {path}: {}",
-        format!("{:?}", first.kind).split('(').next().unwrap_or("unknown")
-    ))
+    let kind_msg: String = match &first.kind {
+        jsonschema::error::ValidationErrorKind::Type { kind } => {
+            // `kind` is `TypeKind::Single(JsonType)` or
+            // `TypeKind::Multiple(JsonTypeSet)`. `JsonType` has its
+            // own `Display` impl ("string", "object", etc.).
+            match kind {
+                jsonschema::error::TypeKind::Single(t) => format!("expected type {t}"),
+                jsonschema::error::TypeKind::Multiple(_) => "expected one of multiple types".into(),
+            }
+        }
+        jsonschema::error::ValidationErrorKind::Required { property } => {
+            format!("required field missing: {property}")
+        }
+        jsonschema::error::ValidationErrorKind::AdditionalProperties { unexpected } => {
+            format!("unexpected additional properties: {unexpected:?}")
+        }
+        jsonschema::error::ValidationErrorKind::Enum { options } => {
+            format!("value not in allowed enum: {options}")
+        }
+        jsonschema::error::ValidationErrorKind::MinLength { limit } => {
+            format!("string shorter than min length ({limit})")
+        }
+        jsonschema::error::ValidationErrorKind::MaxLength { limit } => {
+            format!("string longer than max length ({limit})")
+        }
+        jsonschema::error::ValidationErrorKind::Minimum { limit } => {
+            format!("value below minimum ({limit})")
+        }
+        jsonschema::error::ValidationErrorKind::Maximum { limit } => {
+            format!("value above maximum ({limit})")
+        }
+        jsonschema::error::ValidationErrorKind::Pattern { pattern } => {
+            format!("value did not match pattern {pattern}")
+        }
+        // Long tail: lean on jsonschema's Display impl, which is the
+        // built-in human-readable error message ("X is not of type Y").
+        // Strip trailing newlines so the JSONL line stays one line.
+        _ => first.to_string().trim().to_string(),
+    };
+    Some(format!("at {path}: {kind_msg}"))
 }
 
 /// Round 17.5 — one OWASP injection probe to send.
@@ -1838,6 +1880,45 @@ mod tests {
             body_less_swaps, 0,
             "GET /ping has no request body; should not produce content-type-swap probes"
         );
+    }
+
+    /// Round 26 — Srikanth saw `at /: Type { kind: Single` in his
+    /// 0.3.169 capture for the vCenter `infraprofile/configs` 202
+    /// response (spec promised `type: string`, server returned a
+    /// JSON object). The output was a broken-syntax debug string.
+    /// This test reproduces his exact spec+body and asserts the
+    /// message is readable.
+    #[test]
+    fn response_schema_error_message_is_readable() {
+        let schema = serde_json::json!({"type": "string"});
+        let body = r#"{"data":{},"id":"generated_id","status":"created"}"#;
+        let err = validate_body_against_schema(body, &schema).expect("type-mismatch fires");
+        // The message must NOT contain Rust debug syntax leftovers
+        // ("Type { kind:", trailing "{" or "(" tokens). It SHOULD say
+        // what type was expected and at which location.
+        assert!(!err.contains("Type { kind"), "stale debug output: {err}");
+        assert!(!err.contains("{ kind:"), "stale debug output: {err}");
+        assert!(err.contains("string"), "should name expected type: {err}");
+        assert!(err.contains("at /"), "should include instance path: {err}");
+    }
+
+    #[test]
+    fn response_schema_error_required_field_is_readable() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "required": ["id"],
+            "properties": {"id": {"type": "integer"}}
+        });
+        let body = r#"{"other": 1}"#;
+        let err = validate_body_against_schema(body, &schema).expect("required-missing fires");
+        assert!(err.contains("required field missing"), "{err}");
+        assert!(err.contains("id"), "{err}");
+    }
+
+    #[test]
+    fn response_schema_error_none_on_match() {
+        let schema = serde_json::json!({"type": "string"});
+        assert_eq!(validate_body_against_schema("\"hello\"", &schema), None);
     }
 
     #[test]

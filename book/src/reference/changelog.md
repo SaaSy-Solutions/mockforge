@@ -1,5 +1,13 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.170] - 2026-06-06
+
+### Fixed
+
+- **[Contracts]** TUI Conformance tab: detail modal now snapshots the violation's text at Enter time (#79 round 26 / Srikanth re-test of 0.3.169). The round-25 identity-key re-anchor only worked when the clicked violation survived the 256-cap buffer; under heavy traffic it got evicted and `selected` stayed at a stale index. Snapshot + Esc-clear fixes it; regression tests cover both the index-shift and the on_data refresh path.
+- **[DevX]** `response_schema_error` is now human-readable ("`at /: expected type string`") instead of broken Rust debug syntax (#79 round 26 / Srikanth). Falls back to `jsonschema`'s `Display` impl for the long-tail kinds.
+- **[DevX]** HTML report `Negatives by category` is now a single grouped table with a Family column prepended (#79 round 26 / Srikanth d2). The standalone family rollup section is gone; one table carries both axes.
+
 ## [0.3.169] - 2026-06-05
 
 ### Fixed
