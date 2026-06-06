@@ -1,3 +1,11 @@
+## [0.3.170] - 2026-06-06
+
+### Fixed
+
+- **[Contracts]** TUI Conformance tab: detail modal now snapshots the violation's text at Enter time and renders from the snapshot, not from a live `selected_violation()` lookup (#79 round 26 / Srikanth on 0.3.169 "still see same behavior"). My round-25 identity-key re-anchor only worked when the user's clicked violation was still in the new buffer; under heavy traffic the 256-cap evicted it, leaving `TableState.selected` at the same numeric index pointing at a different request. The snapshot captures the detail string when Enter fires (`detail_snapshot: Option<String>`) so the modal text is frozen at that moment; Esc drops the snapshot for the next Enter. Two regression tests cover the index-shift scenario AND the on_data refresh path.
+- **[DevX]** `response_schema_error` no longer renders Rust debug syntax. The round-25 formatter did `format!("{:?}", first.kind).split('(').next()` on `Type { kind: Single(JsonType::String) }`, which produced "`at /: Type { kind: Single`" (mismatched brace, cryptic). Now it switches on the `ValidationErrorKind` variant and emits human-readable messages: "`at /: expected type string`", "`at /name: required field missing: id`", etc. Falls back to `jsonschema`'s `Display` impl for the long-tail kinds. Three new unit tests cover the common scenarios.
+- **[DevX]** HTML report removes the duplicate `Negatives by category` section (#79 round 26 / Srikanth d2). The standalone family rollup is gone; a single `Negatives by category` table now carries a Family column prepended, with per-row PASS/FAIL badges and clickable mismatch counts (`#miss-cat-<cat>` anchors). One table, both family + category resolution, no redundancy.
+
 ## [0.3.169] - 2026-06-05
 
 ### Fixed

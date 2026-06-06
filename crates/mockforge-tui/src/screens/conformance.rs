@@ -192,6 +192,16 @@ pub struct ConformanceScreen {
     last_fetch: Option<Instant>,
     detail_open: bool,
     detail_scroll: u16,
+    /// Round 26 — snapshot of the violation / unknown-path that was
+    /// selected when Enter opened the modal. The modal renders from
+    /// this cached text instead of recomputing from
+    /// `selected_violation()` every frame, so when the 5 s refresh
+    /// tick prepends new rows or evicts the user's clicked entry from
+    /// the 256-cap buffer, the modal keeps showing what they clicked.
+    /// Reset to None on Esc / view-toggle. The plain `String` form
+    /// avoids holding a reference to a violation that the next refresh
+    /// might evict.
+    detail_snapshot: Option<String>,
     /// Filter state (Issue #79 round 12 extras).
     method_filter: MethodFilter,
     status_filter: StatusFilter,
@@ -224,6 +234,7 @@ impl ConformanceScreen {
             last_fetch: None,
             detail_open: false,
             detail_scroll: 0,
+            detail_snapshot: None,
             method_filter: MethodFilter::All,
             status_filter: StatusFilter::All,
             category_filter: None,
@@ -529,6 +540,9 @@ impl Screen for ConformanceScreen {
                 KeyCode::Esc => {
                     self.detail_open = false;
                     self.detail_scroll = 0;
+                    // Round 26 — drop the snapshot so the next Enter
+                    // re-captures from the current selected row.
+                    self.detail_snapshot = None;
                     return true;
                 }
                 KeyCode::Char('j') | KeyCode::Down => {
@@ -567,6 +581,14 @@ impl Screen for ConformanceScreen {
                 if has_rows {
                     self.detail_open = true;
                     self.detail_scroll = 0;
+                    // Round 26 — snapshot the currently-selected row's
+                    // detail text NOW, before the next refresh tick has
+                    // a chance to replace `self.violations`. The modal
+                    // renders from this snapshot, so the user keeps
+                    // reading what they clicked even if the underlying
+                    // entry is later evicted by the 256-cap buffer or
+                    // shifted by new prepended traffic.
+                    self.detail_snapshot = self.selected_detail();
                 }
                 true
             }
@@ -637,7 +659,17 @@ impl Screen for ConformanceScreen {
         }
 
         if self.detail_open {
-            let detail = self.selected_detail().unwrap_or_else(|| "(no row selected)".to_string());
+            // Round 26 — render the cached snapshot captured at Enter
+            // time, NOT the live `selected_detail()`. Without this the
+            // modal text changes under the user whenever the 5 s tick
+            // refreshes the buffer and shifts/evicts what's at the
+            // selected index. Snapshot is None only if the screen is
+            // somehow opened without a row selected (defensive).
+            let detail = self
+                .detail_snapshot
+                .clone()
+                .or_else(|| self.selected_detail())
+                .unwrap_or_else(|| "(no row selected)".to_string());
             // Issue #79 round 15 — wrap long lines so big Microsoft
             // Graph paths and validation reasons are fully readable
             // (Srikanth couldn't see the full path/reason). j/k still
@@ -1165,5 +1197,127 @@ impl ConformanceScreen {
         } else {
             format!(", filter: {}", parts.join(" / "))
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{TimeZone, Utc};
+    use crossterm::event::KeyCode;
+
+    fn violation(secs: i64, nanos: u32, path: &str, reason: &str) -> ConformanceViolation {
+        ConformanceViolation {
+            timestamp: Utc.timestamp_opt(secs, nanos).unwrap(),
+            method: "POST".into(),
+            path: path.into(),
+            client_ip: "1.2.3.4".into(),
+            status: 400,
+            reason: reason.into(),
+            category: "request-body".into(),
+        }
+    }
+
+    fn key(code: KeyCode) -> KeyEvent {
+        KeyEvent::new(code, crossterm::event::KeyModifiers::NONE)
+    }
+
+    /// Round 26 — Srikanth's reply on 0.3.169: opening the detail
+    /// modal with Enter and then waiting for the 5 s tick still
+    /// showed a different request, because the modal re-fetched
+    /// from `self.violations[selected]` every frame. The r26 fix
+    /// snapshots the detail string at Enter time and renders from
+    /// the snapshot. This test simulates: 3 violations → Enter on
+    /// row 1 (the middle one) → refresh replaces violations so the
+    /// originally-clicked row's content is no longer at the same
+    /// index AND has been evicted. The snapshot must still hold the
+    /// original violation's detail.
+    #[test]
+    fn detail_modal_snapshots_at_enter_time() {
+        let mut screen = ConformanceScreen::new();
+        screen.view_mode = ViewMode::Violations;
+        screen.violations = vec![
+            violation(1_700_000_000, 0, "/a", "reason-a"),
+            violation(1_700_000_001, 0, "/b", "reason-b"),
+            violation(1_700_000_002, 0, "/c", "reason-c"),
+        ];
+        screen.table.set_total(screen.current_row_count());
+        screen.table.selected = 1;
+        // Sanity check: clicked-row detail mentions `/b`.
+        let live_before = screen.selected_detail().expect("live detail before Enter");
+        assert!(
+            live_before.contains("/b"),
+            "pre-Enter live detail must reference /b: {live_before}"
+        );
+
+        // Simulate Enter: opens detail modal AND captures snapshot.
+        assert!(screen.handle_key(key(KeyCode::Enter)));
+        assert!(screen.detail_open);
+        let snap = screen.detail_snapshot.as_deref().expect("snapshot captured");
+        assert!(snap.contains("/b"), "snapshot should contain /b: {snap}");
+
+        // 5 s tick replaces the violations vec — the originally
+        // clicked /b has been evicted by the 256-cap buffer in the
+        // real server; we simulate by simply dropping it.
+        screen.violations = vec![
+            violation(1_700_000_010, 0, "/x", "reason-x"),
+            violation(1_700_000_011, 0, "/y", "reason-y"),
+            violation(1_700_000_012, 0, "/z", "reason-z"),
+        ];
+        screen.table.set_total(screen.current_row_count());
+        // selected is still 1 → live detail now points at /y, but
+        // the snapshot must still show /b.
+        let live_after = screen.selected_detail().expect("live detail after refresh");
+        assert!(
+            live_after.contains("/y"),
+            "live detail post-refresh is /y (the new row at index 1): {live_after}"
+        );
+        let snap_after = screen.detail_snapshot.as_deref().expect("snapshot retained");
+        assert!(
+            snap_after.contains("/b"),
+            "snapshot must still hold pre-refresh /b: {snap_after}"
+        );
+        assert!(
+            !snap_after.contains("/y"),
+            "snapshot must NOT leak post-refresh /y: {snap_after}"
+        );
+
+        // Esc clears the snapshot so the next Enter re-captures fresh.
+        assert!(screen.handle_key(key(KeyCode::Esc)));
+        assert!(!screen.detail_open);
+        assert!(screen.detail_snapshot.is_none());
+    }
+
+    /// Round 26 — same behaviour, but driven through the public
+    /// `on_data` payload path that the live refresh tick actually
+    /// uses. Exercises the JSON deserialiser + the identity-key
+    /// re-anchor + the snapshot, end to end.
+    #[test]
+    fn detail_snapshot_survives_on_data_payload() {
+        let mut screen = ConformanceScreen::new();
+        screen.view_mode = ViewMode::Violations;
+        let initial = r#"{"violations":[
+            {"timestamp":"2026-06-06T13:20:00Z","method":"POST","path":"/a","client_ip":"1.2.3.4","status":400,"reason":"reason-a","category":"request-body"},
+            {"timestamp":"2026-06-06T13:20:01Z","method":"POST","path":"/b","client_ip":"1.2.3.4","status":400,"reason":"reason-b","category":"request-body"}
+        ],"total":2,"total_seen":2,"total_ok":0}"#;
+        screen.on_data(initial);
+        assert_eq!(screen.violations.len(), 2);
+        screen.table.selected = 1;
+        screen.handle_key(key(KeyCode::Enter));
+        let snap = screen.detail_snapshot.clone().unwrap();
+        assert!(snap.contains("/b"));
+
+        // Now a fresh payload arrives where /b has been evicted.
+        let refresh = r#"{"violations":[
+            {"timestamp":"2026-06-06T13:20:10Z","method":"POST","path":"/x","client_ip":"1.2.3.4","status":400,"reason":"reason-x","category":"request-body"},
+            {"timestamp":"2026-06-06T13:20:11Z","method":"POST","path":"/y","client_ip":"1.2.3.4","status":400,"reason":"reason-y","category":"request-body"}
+        ],"total":2,"total_seen":4,"total_ok":0}"#;
+        screen.on_data(refresh);
+        // Live detail at index 1 would be /y; snapshot still /b.
+        let snap_after = screen.detail_snapshot.clone().unwrap();
+        assert!(
+            snap_after.contains("/b"),
+            "snapshot should be unchanged across on_data: {snap_after}"
+        );
     }
 }

@@ -66,8 +66,12 @@ pub fn render_html_with_options(
     // the target anchor exists. Without this, a count linking to a
     // row that got cropped by `--report-missed-cap` dead-ends.
     let anchors = compute_anchor_set(report, opts);
-    push_category_table(&mut html, report, &anchors);
-    push_family_table(&mut html, report);
+    // Round 26 — Srikanth on 0.3.169: the standalone `Negatives by
+    // category` table duplicated what the family table already shows.
+    // Now there's a single `Negatives by category` table with a Family
+    // column prepended; one row per category, grouped under its family.
+    // No separate family rollup section.
+    push_grouped_category_table(&mut html, report, &anchors);
     push_operations_table(&mut html, report, opts, &anchors);
     if let Some(a) = audit {
         push_spec_audit(&mut html, a);
@@ -195,7 +199,16 @@ fn push_card(out: &mut String, label: &str, value: usize, class: &str) {
     ));
 }
 
-fn push_category_table(out: &mut String, report: &SelfTestReport, anchors: &AnchorSet) {
+/// Round 26 — single category table with a Family column prepended.
+/// Each row is still one category with its own Matched/Mismatched
+/// counts, PASS/FAIL badge, and clickable mismatch count anchor; the
+/// new Family column groups categories under a family name so the
+/// reader sees both the per-category resolution Srikanth wanted to
+/// keep AND the family rollup in one glance. Categories with no
+/// family fall back to `<code>other</code>` in the Family column.
+/// Rows are sorted by family first then category, so all members of a
+/// family render contiguously.
+fn push_grouped_category_table(out: &mut String, report: &SelfTestReport, anchors: &AnchorSet) {
     out.push_str("<h2>Negatives by category</h2>\n");
     let mut keys: Vec<&String> =
         report.negative_caught.keys().chain(report.negative_missed.keys()).collect();
@@ -205,34 +218,28 @@ fn push_category_table(out: &mut String, report: &SelfTestReport, anchors: &Anch
         out.push_str("<p class=\"small\">No negative probes ran — typically means no operations had any injectable surface.</p>\n");
         return;
     }
-    out.push_str("<table>\n<thead><tr><th>Category</th><th>Matched (4xx)</th><th>Mismatched (non-4xx)</th><th>Status</th></tr></thead>\n<tbody>\n");
-    for cat in keys {
+    // (family, category) tuples so we can sort by family first.
+    let mut rows: Vec<(&'static str, &String)> =
+        keys.into_iter().map(|c| (family_for_category(c), c)).collect();
+    rows.sort_by(|a, b| a.0.cmp(b.0).then_with(|| a.1.cmp(b.1)));
+    out.push_str("<table>\n<thead><tr><th>Family</th><th>Category</th><th>Matched (4xx)</th><th>Mismatched (non-4xx)</th><th>Status</th></tr></thead>\n<tbody>\n");
+    for (family, cat) in rows {
         let caught = report.negative_caught.get(cat).copied().unwrap_or(0);
         let missed = report.negative_missed.get(cat).copied().unwrap_or(0);
-        // Round 23 (d) — Srikanth: "rejection gaps" was still too soft,
-        // and missed/caught wasn't intuitive. Switch the column headers
-        // to Matched/Mismatched (server's 4xx response matched the
-        // probe's expectation, or didn't) and reduce the status badge
-        // to a plain PASS/FAIL since the count column already conveys
-        // the magnitude.
         let (badge_class, badge_text) = if missed == 0 {
             ("pass", "PASS")
         } else {
             ("fail", "FAIL")
         };
-        // Round 23 (d) — clickable count: link the Mismatched count to
-        // the per-row anchor in the drill-down table below, so a reader
-        // can jump from "this category has 3 fails" → "here are the 3
-        // probes". Empty → no link. Round 24 (e) — also skip the link
-        // when the category was cropped by `--report-missed-cap`, so a
-        // link never points at a row that doesn't exist.
+        // Same clickable-count + cap-aware logic as rounds 23/24.
         let missed_cell = if missed > 0 && anchors.cats.contains(cat) {
             format!("<a href=\"#miss-cat-{}\">{}</a>", html_escape(cat), missed)
         } else {
             missed.to_string()
         };
         out.push_str(&format!(
-            "<tr><td><code>{}</code></td><td>{}</td><td>{}</td><td><span class=\"badge {}\">{}</span></td></tr>\n",
+            "<tr><td>{}</td><td><code>{}</code></td><td>{}</td><td>{}</td><td><span class=\"badge {}\">{}</span></td></tr>\n",
+            html_escape(family),
             html_escape(cat),
             caught,
             missed_cell,
@@ -241,6 +248,19 @@ fn push_category_table(out: &mut String, report: &SelfTestReport, anchors: &Anch
         ));
     }
     out.push_str("</tbody></table>\n");
+}
+
+/// Round 26 — map a category label prefix to its display family name.
+/// Mirrors the membership in the deleted `push_family_table`. Keeping
+/// the map in one place so future probes (e.g. round-25's
+/// content-type-mismatch) are easy to slot into the right family.
+fn family_for_category(cat: &str) -> &'static str {
+    match cat {
+        "request-body" => "Request body",
+        "parameters" => "Parameters",
+        "security" | "owasp" => "Security",
+        _ => "other",
+    }
 }
 
 fn push_operations_table(
@@ -308,75 +328,6 @@ fn push_operations_table(
     }
     out.push_str("</tbody></table>\n");
     push_missed_detail(out, report, opts);
-}
-
-/// Round 25 — category-family rollup. Srikanth's round-22 (d) ask was
-/// an OPTIONAL grouped view on top of the granular per-category table,
-/// not a replacement (he was worried about losing resolution between
-/// e.g. `security:bad-bearer` and `owasp:xss`). The detailed
-/// `push_category_table` still renders above; this table just sums
-/// matched/mismatched across each member category so a reader can
-/// see "Security family: 3 categories, X total mismatched" at a glance.
-///
-/// Family membership is hard-coded to keep the rollup deterministic
-/// across MockForge releases. A category that doesn't fall in any
-/// family is omitted (rather than auto-grouped under "Other"), so
-/// adding a new probe family won't surprise users with a relabelled
-/// row until we update this map.
-fn push_family_table(out: &mut String, report: &SelfTestReport) {
-    let families: &[(&str, &[&str])] = &[
-        ("Request body", &["request-body"]),
-        ("Parameters", &["parameters"]),
-        ("Security family", &["security", "owasp"]),
-    ];
-    // Skip the section entirely when there are no negatives at all.
-    if report.negative_caught.is_empty() && report.negative_missed.is_empty() {
-        return;
-    }
-    out.push_str("<h2>Negatives by category family</h2>\n");
-    out.push_str("<p class=\"small\">Rollup of related categories. The per-category breakdown above keeps the full resolution.</p>\n");
-    out.push_str("<table>\n<thead><tr><th>Family</th><th>Categories</th><th>Matched (4xx)</th><th>Mismatched (non-4xx)</th><th>Status</th></tr></thead>\n<tbody>\n");
-    for (family_name, members) in families {
-        let mut caught = 0;
-        let mut missed = 0;
-        let mut present: Vec<&str> = Vec::new();
-        for member in *members {
-            let m = (*member).to_string();
-            if let Some(c) = report.negative_caught.get(&m) {
-                caught += c;
-                present.push(*member);
-            }
-            if let Some(c) = report.negative_missed.get(&m) {
-                missed += c;
-                if !present.contains(member) {
-                    present.push(*member);
-                }
-            }
-        }
-        if present.is_empty() {
-            continue;
-        }
-        let (badge_class, badge_text) = if missed == 0 {
-            ("pass", "PASS")
-        } else {
-            ("fail", "FAIL")
-        };
-        let member_codes = present
-            .iter()
-            .map(|m| format!("<code>{}</code>", html_escape(m)))
-            .collect::<Vec<_>>()
-            .join(" ");
-        out.push_str(&format!(
-            "<tr><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td><span class=\"badge {}\">{}</span></td></tr>\n",
-            html_escape(family_name),
-            member_codes,
-            caught,
-            missed,
-            badge_class,
-            badge_text
-        ));
-    }
-    out.push_str("</tbody></table>\n");
 }
 
 /// Round 23 (d) — stable slug for the per-operation anchor in the
@@ -593,6 +544,30 @@ mod tests {
         assert!(html.contains("request-body"));
         assert!(html.contains("owasp:sqli"));
         assert!(html.contains("/users"));
+        // Round 26 — single grouped category table, no separate family
+        // section, but a Family column inside the per-category table.
+        assert!(!html.contains("Negatives by category family"));
+        assert!(html.contains("<th>Family</th>"));
+    }
+
+    /// Round 26 — every probe category in the report shows up under
+    /// its mapped family in the per-category table. Catches the case
+    /// where a new probe family (e.g. round 25's content-type-mismatch)
+    /// silently slips through with "other" instead of "Request body".
+    #[test]
+    fn html_category_table_assigns_each_category_to_a_family() {
+        let mut report = SelfTestReport::default();
+        report.negative_caught.insert("request-body".into(), 3);
+        report.negative_missed.insert("parameters".into(), 1);
+        report.negative_missed.insert("security".into(), 2);
+        report.negative_caught.insert("owasp".into(), 4);
+        let html = render_html(&report, None);
+        assert!(html.contains(">Request body</td>"));
+        assert!(html.contains(">Parameters</td>"));
+        // Both `security` and `owasp` get the same family label.
+        assert_eq!(html.matches(">Security</td>").count(), 2);
+        // No category should fall through to the "other" bucket here.
+        assert!(!html.contains(">other</td>"));
     }
 
     #[test]
