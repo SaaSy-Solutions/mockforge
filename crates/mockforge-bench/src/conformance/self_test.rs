@@ -57,6 +57,22 @@ const CONTENT_TYPE_SWAP_VARIANTS: &[(&str, &str)] = &[
     ),
 ];
 
+/// Round 27 (k variant b) — embedded content payloads. Content-Type
+/// stays `application/json` and the envelope IS valid JSON; we just
+/// stuff a non-JSON snippet into a string field's value. The test
+/// surfaces servers that try to parse string field contents (e.g.
+/// XML-EE expanders, YAML loaders, urlencoded parsers) and crash on
+/// the payload — a 5xx here is the finding. Label, payload pairs:
+const EMBEDDED_CONTENT_VARIANTS: &[(&str, &str)] = &[
+    ("request-body:embedded-content:xml", "<root><cmd>execute()</cmd></root>"),
+    ("request-body:embedded-content:yaml", "key: value\n- item1\n- item2"),
+    (
+        "request-body:embedded-content:multipart",
+        "--boundary\r\nContent-Disposition: form-data; name=\"x\"\r\n\r\nval\r\n--boundary--",
+    ),
+    ("request-body:embedded-content:urlencoded", "a=1&b=2&c=hello%20world"),
+];
+
 /// Configuration for a self-test run.
 #[derive(Debug, Clone)]
 pub struct SelfTestConfig {
@@ -518,6 +534,39 @@ async fn test_operation(
                     .await,
                 );
             }
+
+            // Round 27 (k variant b) — embedded non-JSON content
+            // inside a valid JSON envelope. Content-Type stays
+            // application/json (honest) and the body parses as JSON;
+            // only the string-valued payload changes. We expect 2xx-3xx
+            // because the envelope is spec-shape, so the probe surfaces
+            // servers that crash (5xx) trying to parse the embedded
+            // snippet as XML/YAML/etc. A 4xx is also a finding because
+            // it usually means the server's pattern/format validator
+            // tripped on the payload contents, but the user can decide
+            // from the JSONL whether that's a bug or correct narrow-
+            // string-field behaviour.
+            for (label, snippet) in EMBEDDED_CONTENT_VARIANTS {
+                let payload = op.sample_body.as_deref().unwrap_or("{}");
+                let body = embed_payload_in_first_string_field(payload, snippet);
+                negatives.push(
+                    send_case(
+                        client,
+                        config,
+                        method.clone(),
+                        &url,
+                        label,
+                        // expected_4xx=false: any non-2xx is a probe
+                        // failure. 5xx in particular is "server panicked
+                        // on the embedded content".
+                        false,
+                        Some(&body),
+                        op.query_params.clone(),
+                        op_headers.clone(),
+                    )
+                    .await,
+                );
+            }
         }
 
         // Round 17.2 — schema-aware negatives.
@@ -838,6 +887,65 @@ async fn test_operation(
 /// the absence of an error means "we didn't have anything to compare
 /// against", not "passed"; the caller-side semantics treat absence as
 /// success because that's what the user sees as silence).
+/// Round 27 (k variant b) — return a JSON body string identical to
+/// `sample` except that the first string-valued leaf has been
+/// replaced with `snippet`. Walks objects depth-first and stops at
+/// the first string. If `sample` is not parseable JSON, or has no
+/// string fields, falls back to wrapping the snippet under a `data`
+/// key so the probe still has a body to send: `{"data": <snippet>}`.
+/// The result is always valid JSON ready for `application/json`.
+fn embed_payload_in_first_string_field(sample: &str, snippet: &str) -> String {
+    let mut parsed: serde_json::Value = match serde_json::from_str(sample) {
+        Ok(v) => v,
+        Err(_) => return format!(r#"{{"data":{}}}"#, json_quote(snippet)),
+    };
+    if !replace_first_string(&mut parsed, snippet) {
+        return format!(r#"{{"data":{}}}"#, json_quote(snippet));
+    }
+    serde_json::to_string(&parsed)
+        .unwrap_or_else(|_| format!(r#"{{"data":{}}}"#, json_quote(snippet)))
+}
+
+/// Helper for `embed_payload_in_first_string_field`: recursively
+/// walk the value and replace the FIRST string leaf encountered.
+/// Returns true when a replacement happened. Honors document order
+/// for objects (BTreeMap-backed `serde_json::Map` iterates in
+/// insertion order) so the choice of which field to mutate is
+/// stable across runs.
+fn replace_first_string(v: &mut serde_json::Value, snippet: &str) -> bool {
+    match v {
+        serde_json::Value::String(s) => {
+            *s = snippet.to_string();
+            true
+        }
+        serde_json::Value::Object(map) => {
+            for (_k, child) in map.iter_mut() {
+                if replace_first_string(child, snippet) {
+                    return true;
+                }
+            }
+            false
+        }
+        serde_json::Value::Array(arr) => {
+            for child in arr.iter_mut() {
+                if replace_first_string(child, snippet) {
+                    return true;
+                }
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
+/// Helper for `embed_payload_in_first_string_field`'s fallback: take
+/// an arbitrary string and quote it for embedding inside a JSON
+/// literal. `serde_json::to_string(&value)` handles escaping
+/// correctly for unicode + control chars + quotes.
+fn json_quote(s: &str) -> String {
+    serde_json::to_string(s).unwrap_or_else(|_| "\"\"".to_string())
+}
+
 fn validate_body_against_schema(body: &str, schema: &serde_json::Value) -> Option<String> {
     let parsed: serde_json::Value = serde_json::from_str(body).ok()?;
     let validator = jsonschema::validator_for(schema).ok()?;
@@ -1880,6 +1988,103 @@ mod tests {
             body_less_swaps, 0,
             "GET /ping has no request body; should not produce content-type-swap probes"
         );
+    }
+
+    /// Round 27 (k variant b) — Srikanth's round-23 follow-up on (k):
+    /// JSON envelope with embedded non-JSON field values. For each
+    /// JSON-body operation, four extra probes fire that send valid
+    /// JSON with an XML/YAML/multipart/urlencoded snippet stuffed
+    /// into a string field. Content-Type stays `application/json`;
+    /// expected is 2xx-3xx (the body parses); a 5xx flags a server
+    /// that crashed on the embedded content.
+    #[tokio::test]
+    async fn embedded_content_probes_fire_with_honest_content_type() {
+        let sink: Arc<Mutex<Vec<CaseCapture>>> = Arc::new(Mutex::new(Vec::new()));
+        let cfg = SelfTestConfig {
+            target_url: "http://127.0.0.1:1".into(),
+            timeout: Duration::from_millis(50),
+            capture: Some(sink.clone()),
+            ..Default::default()
+        };
+        let ops = vec![op(
+            "POST",
+            "/users",
+            Some("{\"name\":\"alice\",\"age\":30}"),
+            vec![],
+            vec![],
+            vec![],
+        )];
+        let _ = run_self_test(&ops, &cfg).await.expect("client builds");
+        let captures = sink.lock().unwrap();
+        let embedded: Vec<&CaseCapture> = captures
+            .iter()
+            .filter(|c| c.label.starts_with("request-body:embedded-content:"))
+            .collect();
+        assert_eq!(
+            embedded.len(),
+            4,
+            "expected 4 embedded-content probes, got: {:?}",
+            embedded.iter().map(|c| &c.label).collect::<Vec<_>>()
+        );
+        // Every embedded probe must carry the honest application/json
+        // Content-Type (NOT lie like the variant-a content-type-swap
+        // probes do) and a request body that still parses as JSON.
+        for c in &embedded {
+            let ct = c
+                .request_headers
+                .iter()
+                .find(|(k, _)| k.eq_ignore_ascii_case("content-type"))
+                .map(|(_, v)| v.as_str())
+                .unwrap_or("");
+            assert!(
+                ct.contains("application/json"),
+                "embedded probe `{}` should keep Content-Type honest, got {ct}",
+                c.label
+            );
+            let body = c.request_body.as_deref().unwrap_or("");
+            assert!(
+                serde_json::from_str::<serde_json::Value>(body).is_ok(),
+                "embedded probe `{}` body should still be valid JSON, got: {body}",
+                c.label
+            );
+        }
+    }
+
+    /// `embed_payload_in_first_string_field` walks objects depth-first
+    /// and replaces only the FIRST string-valued leaf, leaving the
+    /// surrounding structure intact.
+    #[test]
+    fn embed_payload_replaces_first_string_only() {
+        let sample = r#"{"name":"alice","age":30,"tags":["admin","user"]}"#;
+        let mutated = embed_payload_in_first_string_field(sample, "<x/>");
+        let v: serde_json::Value = serde_json::from_str(&mutated).unwrap();
+        assert_eq!(v["name"], serde_json::json!("<x/>"));
+        // age stays an integer (not stringified by the mutation).
+        assert_eq!(v["age"], serde_json::json!(30));
+        // tags array's strings stay untouched (we only replace the
+        // first encountered string leaf, depth-first).
+        assert_eq!(v["tags"][0], serde_json::json!("admin"));
+        assert_eq!(v["tags"][1], serde_json::json!("user"));
+    }
+
+    /// When the sample has NO string field, the helper falls back to
+    /// `{"data": "<snippet>"}` so the probe still has something to
+    /// POST. The fallback must produce valid JSON regardless of what
+    /// characters the snippet contains.
+    #[test]
+    fn embed_payload_falls_back_when_no_string_field() {
+        let no_strings = r#"{"a":1,"b":[2,3]}"#;
+        let mutated = embed_payload_in_first_string_field(no_strings, "<x><y></y></x>");
+        let v: serde_json::Value = serde_json::from_str(&mutated).unwrap();
+        assert_eq!(v["data"], serde_json::json!("<x><y></y></x>"));
+    }
+
+    #[test]
+    fn embed_payload_handles_invalid_json_sample() {
+        let not_json = "garbage";
+        let mutated = embed_payload_in_first_string_field(not_json, "a=1&b=2");
+        let v: serde_json::Value = serde_json::from_str(&mutated).unwrap();
+        assert_eq!(v["data"], serde_json::json!("a=1&b=2"));
     }
 
     /// Round 26 — Srikanth saw `at /: Type { kind: Single` in his

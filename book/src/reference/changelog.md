@@ -1,5 +1,15 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.171] - 2026-06-06
+
+### Fixed
+
+- **[DevX]** Capture HTML viewer paginates with cross-page filters; the round-25 + round-26 1000-card cap that hid 4xx/5xx probes is gone (#79 round 27 / Srikanth d3).
+
+### Added
+
+- **[Contracts]** Content-type swap variant (b): four `request-body:embedded-content:*` probes per JSON operation send a valid JSON envelope with an XML/YAML/multipart/urlencoded snippet stuffed into a string field. Flags servers that crash on the embedded content (#79 round 27 / Srikanth k variant b).
+
 ## [0.3.170] - 2026-06-06
 
 ### Fixed

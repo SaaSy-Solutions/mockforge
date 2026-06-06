@@ -1,3 +1,13 @@
+## [0.3.171] - 2026-06-06
+
+### Fixed
+
+- **[DevX]** Capture HTML viewer now paginates with cross-page filters (#79 round 27 / Srikanth d3). The round-25 + round-26 1000-card cap silently hid 4xx/5xx probes past the cap; he had to fall back to `jq` to find errors. The viewer now embeds the full capture as a JSON array in a `<script id="captureData">` element, filters in JS over the whole array, and renders only the current page (50 cards) of the filtered subset. First/Prev/Next/Last buttons plus a "Jump to page" input. "(N of M shown)" banner appears when filters narrow the set. The 1000-card cap is gone; the JSONL still has the full set for grep / jq workflows.
+
+### Added
+
+- **[Contracts]** Content-type swap variant (b) probes (#79 round 27 / Srikanth k variant b). Companion to the round-25 variant-a probes. Where variant (a) lies about Content-Type (sends XML/YAML/multipart/urlencoded body as `Content-Type: application/json`), variant (b) keeps Content-Type honest as `application/json` and the body parses as valid JSON, but a string field's value carries an XML / YAML / multipart / urlencoded snippet. Labels: `request-body:embedded-content:xml/yaml/multipart/urlencoded`. Expected status is 2xx-3xx because the envelope IS spec-shape; a 5xx flags a server that crashed trying to parse the embedded snippet (a real bug), while a 4xx flags a narrower-than-expected string field validator (often correct server behaviour). Helper `embed_payload_in_first_string_field` walks the sample body depth-first, replaces the first string leaf with the snippet, and falls back to `{"data": "<snippet>"}` when no string field exists.
+
 ## [0.3.170] - 2026-06-06
 
 ### Fixed
