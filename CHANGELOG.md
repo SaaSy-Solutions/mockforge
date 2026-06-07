@@ -1,3 +1,17 @@
+## [0.3.172] - 2026-06-07
+
+### Fixed
+
+- **[Contracts]** Content-type-swap probes now actually send only the wrong Content-Type (#79 round 28). My round-25 fix relied on reqwest's `.header(k, v)` being last-write-wins, but it actually APPENDS — so each content-type-swap probe was sending BOTH `Content-Type: application/json` (from the body block) AND `Content-Type: application/xml` (from `extra_headers`). Axum's `Json<>` extractor picked the JSON one and accepted, server returned 204, the spec violation Srikanth was investigating never showed up in the conformance buffer. Now `send_case_with_extra` builds a `HeaderMap` ourselves, where `.insert()` replaces, so the override actually replaces. Smoke-confirmed: the same 4 content-type-mismatch probes that returned 204 on 0.3.171 now return 415 on this build.
+- **[Contracts]** Server-side `OpenApiRouteRegistry::check_request_content_type` flags Content-Type mismatches against the spec's declared `requestBody.content` keys (#79 round 28 / Srikanth's main r27 ask). Called from the live-server route handler before the body schema validator; on mismatch records a `content-types` category violation in the conformance buffer with the configured validation status (defaults to 415). Stripping the `; charset=...` suffix so the comparison is type/subtype only; case-insensitive matching.
+- **[DevX]** `response_schema_error` now embeds the expected schema in the message (#79 round 28 / Srikanth: "what does at /: mean? would be good to put as `expected schema {...}`"). Format: `at <path>: <kind>; expected schema <compact JSON>`. Schemas are truncated to 300 chars to keep JSONL lines bounded.
+
+### Added
+
+- **[Contracts]** `expected_status_range` field on every `CaseCapture` (#79 round 28 / Srikanth: "Is it possible to put expected response code status in both jsonl and jsonl report"). Values: `"2xx-3xx"` for positive probes, `"4xx"` for negatives. Persisted in the JSONL so `jq` can filter mismatches, and rendered as a small `exp 4xx`/`exp 2xx-3xx` badge on every card in the HTML viewer.
+- **[DevX]** HTML capture viewer: new "only show mismatches" checkbox in the toolbar (#79 round 28 / Srikanth: "Also a filter or checkbox to get the request whose response code is not matching"). Filters across the whole capture (cross-page), composes with the status checkboxes and search box, recomputes pagination immediately.
+- **[DevX]** HTML report: per-category counts in the per-operation `By category` column are now clickable links (#79 round 28 / Srikanth: "Is it possible to give link to the count for By category column also"). Each `cat:N` jumps to `#miss-cat-<cat>` in the drill-down table. Cap-aware: only emits links when the category has a surviving row in the truncated drill-down.
+
 ## [0.3.171] - 2026-06-06
 
 ### Fixed

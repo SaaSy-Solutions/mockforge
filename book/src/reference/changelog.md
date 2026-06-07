@@ -1,5 +1,18 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.172] - 2026-06-07
+
+### Fixed
+
+- **[Contracts]** Content-type-swap probes now send only ONE Content-Type (the reqwest header-append bug let axum's JSON extractor accept). Smoke test: same 4 probes that returned 204 on 0.3.171 now return 415 (#79 round 28).
+- **[Contracts]** Server-side `check_request_content_type` flags Content-Type mismatches against `requestBody.content` keys; records a `content-types` category violation. (#79 round 28)
+- **[DevX]** `response_schema_error` embeds the expected schema JSON: `at /: expected type string; expected schema {"type":"string"}`. (#79 round 28)
+
+### Added
+
+- **[Contracts]** `expected_status_range` field on every `CaseCapture`; `exp 4xx`/`exp 2xx-3xx` badge on every card. (#79 round 28)
+- **[DevX]** "Only show mismatches" checkbox + per-cat clickable counts in the per-op `By category` column. (#79 round 28)
+
 ## [0.3.171] - 2026-06-06
 
 ### Fixed

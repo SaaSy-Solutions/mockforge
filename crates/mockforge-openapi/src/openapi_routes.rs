@@ -691,6 +691,61 @@ impl OpenApiRouteRegistry {
                         };
                     }
 
+                    // Round 28 — content-type-mismatch check before the
+                    // body schema validator. Srikanth's
+                    // 0.3.171 trace: bench sent `Content-Type:
+                    // application/xml` against a JSON-only endpoint,
+                    // server happily 204'd (because the body still
+                    // parsed as JSON) and the conformance buffer never
+                    // saw a violation. Now the validator surfaces the
+                    // mismatch explicitly so the TUI Conformance tab
+                    // shows it and the server returns the configured
+                    // validation status. The body block below still
+                    // runs for cases where Content-Type matched but
+                    // the body shape doesn't.
+                    let actual_ct =
+                        headers.get(axum::http::header::CONTENT_TYPE).and_then(|v| v.to_str().ok());
+                    if let Err(ct_err) =
+                        validator.check_request_content_type(&path_template, &method, actual_ct)
+                    {
+                        let status_code =
+                            validator.options.validation_status.unwrap_or_else(|| {
+                                std::env::var("MOCKFORGE_VALIDATION_STATUS")
+                                    .ok()
+                                    .and_then(|s| s.parse::<u16>().ok())
+                                    .unwrap_or(415)
+                            });
+                        mockforge_foundation::conformance_violations::record(
+                            mockforge_foundation::conformance_violations::ServerConformanceViolation {
+                                timestamp: Utc::now(),
+                                method: method.to_string(),
+                                path: path_template.clone(),
+                                client_ip: "unknown".to_string(),
+                                status: status_code,
+                                reason: ct_err.clone(),
+                                category: "content-types".to_string(),
+                            },
+                        );
+                        let status = axum::http::StatusCode::from_u16(status_code)
+                            .unwrap_or(axum::http::StatusCode::UNSUPPORTED_MEDIA_TYPE);
+                        let payload = serde_json::json!({
+                            "error": "content_type_not_allowed",
+                            "message": ct_err,
+                        });
+                        let body_bytes = serde_json::to_vec(&payload)
+                            .unwrap_or_else(|_| br#"{"error":"Serialization failed"}"#.to_vec());
+                        return axum::response::Response::builder()
+                            .status(status)
+                            .header("content-type", "application/json")
+                            .body(axum::body::Body::from(body_bytes))
+                            .unwrap_or_else(|_| {
+                                axum::response::Response::builder()
+                                    .status(axum::http::StatusCode::INTERNAL_SERVER_ERROR)
+                                    .body(axum::body::Body::empty())
+                                    .unwrap()
+                            });
+                    }
+
                     if let Err(e) = validator.validate_request_with_all(
                         &path_template,
                         &method,
@@ -1001,6 +1056,78 @@ impl OpenApiRouteRegistry {
     /// Validate request against OpenAPI spec (legacy body-only)
     pub fn validate_request(&self, path: &str, method: &str, body: Option<&Value>) -> Result<()> {
         self.validate_request_with(path, method, &Map::new(), &Map::new(), body)
+    }
+
+    /// Round 28 — Srikanth's content-type-mismatch finding on 0.3.171:
+    /// the bench-side probe was correctly sending `Content-Type:
+    /// application/xml` against a JSON-only endpoint, but mockforge's
+    /// server-side conformance validator was accepting it because the
+    /// existing path checked the BODY against the JSON schema directly
+    /// (ignoring the actual Content-Type header). This method gives
+    /// the route handler a way to flag Content-Type mismatches before
+    /// the body validation runs.
+    ///
+    /// Returns `Err(message)` when the operation's request body
+    /// declares one or more `content` keys AND the actual
+    /// Content-Type doesn't match any of them; `Ok(())` otherwise
+    /// (no requestBody declared, no Content-Type sent, or a match
+    /// found). The comparison is type/subtype only (parameters like
+    /// `; charset=...` and `; boundary=...` are stripped).
+    pub fn check_request_content_type(
+        &self,
+        path: &str,
+        method: &str,
+        actual_content_type: Option<&str>,
+    ) -> std::result::Result<(), String> {
+        let Some(route) = self.get_route(path, method) else {
+            return Ok(());
+        };
+        let Some(rb_ref) = &route.operation.request_body else {
+            return Ok(());
+        };
+        let request_body = match rb_ref {
+            openapiv3::ReferenceOr::Item(rb) => rb,
+            openapiv3::ReferenceOr::Reference { reference } => {
+                let resolved = self
+                    .spec
+                    .spec
+                    .components
+                    .as_ref()
+                    .and_then(|components| {
+                        components
+                            .request_bodies
+                            .get(reference.trim_start_matches("#/components/requestBodies/"))
+                    })
+                    .and_then(|rb_ref| rb_ref.as_item());
+                let Some(rb) = resolved else { return Ok(()) };
+                rb
+            }
+        };
+        if request_body.content.is_empty() {
+            return Ok(());
+        }
+        let actual = actual_content_type
+            .and_then(|s| s.split(';').next())
+            .map(|s| s.trim().to_ascii_lowercase());
+        let Some(actual) = actual else {
+            // No Content-Type sent at all. If a body is required and
+            // content is declared, the body validator catches it via
+            // a different path; we don't flag here so that
+            // bodyless-but-required cases don't double-report.
+            return Ok(());
+        };
+        let allowed: Vec<String> = request_body
+            .content
+            .keys()
+            .map(|k| k.split(';').next().unwrap_or(k).trim().to_ascii_lowercase())
+            .collect();
+        if allowed.iter().any(|a| a == &actual) {
+            return Ok(());
+        }
+        Err(format!(
+            "Content-Type '{actual}' not allowed; spec declares: [{}]",
+            allowed.join(", ")
+        ))
     }
 
     /// Validate request against OpenAPI spec with path/query params
@@ -2795,6 +2922,80 @@ mod tests {
         // Test path parameter conversion
         let user_by_id_route = registry.get_route("/users/{id}", "GET").unwrap();
         assert_eq!(user_by_id_route.axum_path(), "/users/{id}");
+    }
+
+    /// Round 28 — Srikanth's 0.3.171 trace showed mockforge silently
+    /// accepting `Content-Type: application/xml` against a JSON-only
+    /// endpoint. The new `check_request_content_type` should flag
+    /// that as a mismatch; matching types and missing-Content-Type
+    /// (let the body validator handle it) should still pass.
+    #[tokio::test]
+    async fn check_request_content_type_flags_mismatch() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "T", "version": "1" },
+            "paths": {
+                "/api/appliance/access/consolecli": {
+                    "put": {
+                        "requestBody": {
+                            "required": true,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["enabled"],
+                                        "properties": {"enabled": {"type": "boolean"}}
+                                    }
+                                }
+                            }
+                        },
+                        "responses": { "204": { "description": "ok" } }
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Mismatched Content-Type → flagged.
+        let r = registry.check_request_content_type(
+            "/api/appliance/access/consolecli",
+            "PUT",
+            Some("application/xml"),
+        );
+        assert!(r.is_err(), "should flag application/xml: {:?}", r);
+        let msg = r.unwrap_err();
+        assert!(msg.contains("application/xml"), "{msg}");
+        assert!(msg.contains("application/json"), "{msg}");
+
+        // Matching Content-Type → pass.
+        let r = registry.check_request_content_type(
+            "/api/appliance/access/consolecli",
+            "PUT",
+            Some("application/json"),
+        );
+        assert!(r.is_ok(), "should accept application/json: {:?}", r);
+
+        // Charset suffix on the matching type → still pass.
+        let r = registry.check_request_content_type(
+            "/api/appliance/access/consolecli",
+            "PUT",
+            Some("application/json; charset=utf-8"),
+        );
+        assert!(r.is_ok(), "should strip charset: {:?}", r);
+
+        // No requestBody on this method → noop pass.
+        let r = registry.check_request_content_type(
+            "/api/appliance/access/consolecli",
+            "GET",
+            Some("application/xml"),
+        );
+        assert!(r.is_ok(), "GET has no requestBody on this op: {:?}", r);
+
+        // No Content-Type sent → noop pass (body validator's job).
+        let r =
+            registry.check_request_content_type("/api/appliance/access/consolecli", "PUT", None);
+        assert!(r.is_ok(), "no Content-Type → don't double-report: {:?}", r);
     }
 
     #[tokio::test]
