@@ -22,7 +22,7 @@ axum = { workspace = true }
 # rather than through axum's re-export so the qualified path keeps
 # working post-move.
 tokio = { workspace = true, features = ["sync", "macros", "rt-multi-thread", "time"] }
-http = "1.3"
+http = "1.4"
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
