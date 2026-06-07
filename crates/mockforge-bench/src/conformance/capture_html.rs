@@ -59,6 +59,7 @@ fn push_summary(out: &mut String, entries: &[CaseCapture]) {
          <label><input type=\"checkbox\" id=\"showPass\" checked onchange=\"applyFilter()\"/> 2xx-3xx</label>\n\
          <label><input type=\"checkbox\" id=\"showFail\" checked onchange=\"applyFilter()\"/> 4xx-5xx</label>\n\
          <label><input type=\"checkbox\" id=\"showErr\" checked onchange=\"applyFilter()\"/> transport error</label>\n\
+         <label><input type=\"checkbox\" id=\"onlyMismatches\" onchange=\"applyFilter()\"/> only show mismatches</label>\n\
          <span id=\"filterStatus\" class=\"small\"></span>\n\
          </div>\n\
          </header>\n"
@@ -215,12 +216,32 @@ function renderBody(title, body, truncated) {
   return '<h3>' + escapeHtml(title) + suffix + '</h3><pre>' + escapeHtml(body) + '</pre>';
 }
 
+// Round 28 (Srikanth) — true when the probe's actual status didn't
+// match its expected range. Used by the "only show mismatches" filter
+// AND by the summary badge so users can spot misses at a glance.
+function isMismatch(c) {
+  const expected = c.expected_status_range || '';
+  const s = c.response_status;
+  if (c.error) return true;
+  if (expected === '4xx') return !(s >= 400 && s < 500);
+  if (expected === '2xx-3xx') return !(s >= 200 && s < 400);
+  return false;
+}
+
 function renderCard(c) {
   const cls = statusClass(c);
   const statusText = c.error ? 'ERR' : String(c.response_status);
   let html = '<details class="card">';
   html += '<summary>';
   html += '<span class="badge ' + cls + '">' + escapeHtml(statusText) + '</span> ';
+  // Round 28 — show the expected range alongside the actual status so
+  // a reader knows what the probe wanted to see without expanding the
+  // card.
+  if (c.expected_status_range) {
+    const matchCls = isMismatch(c) ? 'fail' : 'pass';
+    html += '<span class="badge ' + matchCls + '" title="expected status range">exp ' +
+            escapeHtml(c.expected_status_range) + '</span> ';
+  }
   html += '<code class="method">' + escapeHtml(c.method) + '</code> ';
   html += '<span class="label">' + escapeHtml(c.label) + '</span> ';
   html += '<code class="url">' + escapeHtml(c.url) + '</code>';
@@ -286,7 +307,12 @@ function applyFilter() {
   const showPass = document.getElementById('showPass').checked;
   const showFail = document.getElementById('showFail').checked;
   const showErr = document.getElementById('showErr').checked;
+  const onlyMismatches = document.getElementById('onlyMismatches').checked;
   filtered = captures.filter(function(c) {
+    // Round 28 — the mismatch filter runs FIRST so it composes
+    // naturally with the status checkboxes (e.g. "mismatches that
+    // are 4xx-5xx").
+    if (onlyMismatches && !isMismatch(c)) return false;
     const cls = statusClass(c);
     const statusOk = (cls === 'pass' && showPass) ||
                      (cls === 'fail' && showFail) ||
@@ -333,6 +359,7 @@ mod tests {
                 response_body_truncated: false,
                 error: None,
                 response_schema_error: None,
+                expected_status_range: "2xx-3xx".to_string(),
             },
             CaseCapture {
                 label: "owasp:sqli".to_string(),
@@ -347,6 +374,7 @@ mod tests {
                 response_body_truncated: false,
                 error: None,
                 response_schema_error: None,
+                expected_status_range: "2xx-3xx".to_string(),
             },
         ]
     }
@@ -382,6 +410,7 @@ mod tests {
                 response_body_truncated: false,
                 error: None,
                 response_schema_error: None,
+                expected_status_range: "2xx-3xx".to_string(),
             });
         }
         let html = render_capture_html(&entries);
@@ -435,6 +464,7 @@ mod tests {
             response_body_truncated: false,
             error: None,
             response_schema_error: None,
+            expected_status_range: "2xx-3xx".to_string(),
         };
         let html = render_capture_html(&[entry]);
         assert!(

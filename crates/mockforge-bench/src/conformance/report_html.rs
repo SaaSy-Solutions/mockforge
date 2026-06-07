@@ -307,12 +307,29 @@ fn push_operations_table(
             let cat = m.label.split(':').next().unwrap_or("other");
             *by_cat.entry(cat).or_insert(0) += 1;
         }
+        // Round 28 — Srikanth's 0.3.171 ask: each `cat:N` here should
+        // be clickable like the upper Mismatched count, so the reader
+        // can jump straight to the category's drill-down rows. Same
+        // cap-aware rule as the per-row links above: only emit `<a>`
+        // when the category has at least one anchored row in the
+        // drill-down table.
         let by_cat_cell = if by_cat.is_empty() {
             String::new()
         } else {
             by_cat
                 .iter()
-                .map(|(cat, n)| format!("<code>{}:{}</code>", html_escape(cat), n))
+                .map(|(cat, n)| {
+                    if anchors.cats.contains(*cat) {
+                        format!(
+                            "<code><a href=\"#miss-cat-{}\">{}:{}</a></code>",
+                            html_escape(cat),
+                            html_escape(cat),
+                            n
+                        )
+                    } else {
+                        format!("<code>{}:{}</code>", html_escape(cat), n)
+                    }
+                })
                 .collect::<Vec<_>>()
                 .join(" ")
         };

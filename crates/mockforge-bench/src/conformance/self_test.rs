@@ -144,6 +144,15 @@ pub struct CaseCapture {
     /// and rendered in the HTML viewer.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub response_schema_error: Option<String>,
+    /// Round 28 — Srikanth's "Is it possible to put expected response
+    /// code status in both jsonl and jsonl report" ask. Human-readable
+    /// expected status range: `"2xx-3xx"` for positive probes,
+    /// `"4xx"` for negatives. Lets users `jq` for misses
+    /// (`.response_status as $s | .expected_status_range == "4xx"
+    /// and ($s < 400 or $s >= 500)`) and powers the HTML viewer's
+    /// "show mismatches only" filter.
+    #[serde(default)]
+    pub expected_status_range: String,
 }
 
 impl Default for SelfTestConfig {
@@ -951,6 +960,11 @@ fn validate_body_against_schema(body: &str, schema: &serde_json::Value) -> Optio
     let validator = jsonschema::validator_for(schema).ok()?;
     let mut errors = validator.iter_errors(&parsed);
     let first = errors.next()?;
+    // Round 28 — Srikanth on 0.3.170 wanted the message to show the
+    // actual expected schema alongside the kind label so it reads as
+    // "expected schema {...} but got <kind>". We emit a compact JSON
+    // serialisation of the schema as a suffix; the kind label still
+    // names what went wrong in plain English for quick scanning.
     // Round 26 — Srikanth on 0.3.169: the prior `format!("{:?}", first.kind)
     // .split('(').next()` produced "Type { kind: Single" (broken Rust
     // syntax, mismatched braces). Switch to the human-readable mapping
@@ -1001,7 +1015,13 @@ fn validate_body_against_schema(body: &str, schema: &serde_json::Value) -> Optio
         // Strip trailing newlines so the JSONL line stays one line.
         _ => first.to_string().trim().to_string(),
     };
-    Some(format!("at {path}: {kind_msg}"))
+    let schema_str = serde_json::to_string(schema).unwrap_or_else(|_| "<schema>".into());
+    let schema_str = if schema_str.len() > 300 {
+        format!("{}...", &schema_str[..300])
+    } else {
+        schema_str
+    };
+    Some(format!("at {path}: {kind_msg}; expected schema {schema_str}"))
 }
 
 /// Round 17.5 — one OWASP injection probe to send.
@@ -1269,25 +1289,44 @@ async fn send_case_with_extra(
     for (k, v) in &query {
         req = req.query(&[(k.as_str(), v.as_str())]);
     }
-    // Attach the body FIRST with a default Content-Type. Subsequent
-    // header passes (the operation's headers, then extra_headers) can
-    // overwrite the Content-Type — that's what makes the round-25 (k)
-    // content-type-swap probes work: they pass a wrong Content-Type
-    // via extra_headers and reqwest's last-write-wins keeps it.
-    if let Some(b) = body {
-        req = req
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .body(b.to_string());
+    // Round 28 — reqwest's `.header(k, v)` APPENDS rather than replaces
+    // (.headers().insert() would replace but isn't on the builder).
+    // The previous round-25 fix relied on "last-write-wins" semantics
+    // that don't exist; for content-type-swap probes the request went
+    // out with BOTH `Content-Type: application/json` AND `Content-Type:
+    // application/xml`, and axum's `Json<>` extractor picked the JSON
+    // one and accepted, so the server-side validator never saw the
+    // mismatch. Build a `HeaderMap` ourselves so the override
+    // replaces the body-block default exactly once.
+    let mut final_headers: reqwest::header::HeaderMap = reqwest::header::HeaderMap::new();
+    if let Some(_b) = body {
+        if let Ok(v) = reqwest::header::HeaderValue::from_str("application/json") {
+            final_headers.insert(reqwest::header::CONTENT_TYPE, v);
+        }
         capture_headers.insert("Content-Type".to_string(), "application/json".to_string());
     }
     for (k, v) in &headers {
-        req = req.header(k, v);
+        if let (Ok(hn), Ok(hv)) = (
+            reqwest::header::HeaderName::from_bytes(k.as_bytes()),
+            reqwest::header::HeaderValue::from_str(v),
+        ) {
+            final_headers.insert(hn, hv);
+        }
         capture_headers.insert(k.clone(), v.clone());
     }
     for (k, v) in &extra_headers {
-        req = req.header(k, v);
+        if let (Ok(hn), Ok(hv)) = (
+            reqwest::header::HeaderName::from_bytes(k.as_bytes()),
+            reqwest::header::HeaderValue::from_str(v),
+        ) {
+            final_headers.insert(hn, hv);
+        }
         capture_headers.insert(k.clone(), v.clone());
     }
+    if let Some(b) = body {
+        req = req.body(b.to_string());
+    }
+    req = req.headers(final_headers);
     let (actual_status, response_capture) = match req.send().await {
         Ok(resp) => {
             let status = resp.status().as_u16();
@@ -1346,6 +1385,14 @@ async fn send_case_with_extra(
             // every probe finishes; the capture itself is unaware of
             // the schema map.
             response_schema_error: None,
+            // Round 28 — derive the expected range from the probe's
+            // `expected_4xx` flag so the JSONL line and HTML viewer
+            // can show mismatches without re-deriving on the read side.
+            expected_status_range: if expected_4xx {
+                "4xx".into()
+            } else {
+                "2xx-3xx".into()
+            },
         };
         if let Ok(mut guard) = sink.lock() {
             guard.push(entry);
@@ -2105,6 +2152,12 @@ mod tests {
         assert!(!err.contains("{ kind:"), "stale debug output: {err}");
         assert!(err.contains("string"), "should name expected type: {err}");
         assert!(err.contains("at /"), "should include instance path: {err}");
+        // Round 28 — Srikanth wanted the expected schema embedded
+        // in the message so it reads as 'expected schema {"type":"string"}'.
+        assert!(
+            err.contains("expected schema") && err.contains("\"type\":\"string\""),
+            "should include expected schema JSON: {err}"
+        );
     }
 
     #[test]
