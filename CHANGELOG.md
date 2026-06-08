@@ -1,3 +1,15 @@
+## [0.3.173] - 2026-06-08
+
+### Fixed
+
+- **[DevX]** `response_schema_error` message now explicitly names the response body as the location (#79 round 29 / Srikanth on 0.3.172). The prior `at /: expected type string; expected schema {...}` read as a URL path to readers unfamiliar with JSON Pointer syntax; Srikanth couldn't tell whether `/` referred to the URL root or the response body root. New format: `response body root: ...` for top-level and `response body at /name: ...` for nested fields. Two new tests cover the root and nested cases.
+
+### Added
+
+- **[Contracts]** `MOCKFORGE_CONFORMANCE_BUFFER_SIZE` env var raises the server-side conformance violation ring buffer cap above the default 256 (#79 round 29 / Srikanth: TUI shows 10,145 violations seen but export only had 114 unique entries). Capped at 64k entries to keep peak memory bounded. Empty / zero / unparsable values fall back to the default. Includes an ignored-by-default unit test (`effective_buffer_size_respects_env_var`) that exercises the parser — run with `cargo test -p mockforge-foundation -- --ignored --test-threads=1` because it touches process-wide env.
+- **[Contracts]** Capacity advisory printed at bench start when `targets × VUs ≥ 150` (#79 round 29 / Srikanth's "5 VUs against 50 targets hung my 15 GB VM"). Prints `targets`, `VUs`, estimated `RPS-total`, estimated CPU cores and RAM GB, and points to the new sizing doc. Heuristic, errs on the warning side; doesn't block the run.
+- **[DevX]** New book page `reference/bench-capacity-sizing.md` with a sizing table (1 → 100 targets, 10 → 500 RPS each), the per-VU / per-target RAM and CPU formulas, symptoms of under-provisioning, and a `jq`-based sharding recipe for >50 targets. Surfaced in `SUMMARY.md` next to the probe-label reference.
+
 ## [0.3.172] - 2026-06-07
 
 ### Fixed
