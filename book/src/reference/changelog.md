@@ -1,5 +1,17 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.173] - 2026-06-08
+
+### Fixed
+
+- **[DevX]** `response_schema_error` message reads `response body root: ...` / `response body at /<path>: ...` instead of the ambiguous `at /: ...` (#79 round 29 / Srikanth).
+
+### Added
+
+- **[Contracts]** `MOCKFORGE_CONFORMANCE_BUFFER_SIZE` env var raises the server-side violation ring buffer above the default 256, capped at 64k (#79 round 29 / Srikanth).
+- **[Contracts]** Bench capacity advisory at run start when `targets × VUs ≥ 150`; estimates RAM / CPU and links to the new sizing doc.
+- **[DevX]** New book page `reference/bench-capacity-sizing.md` with sizing table, formulas, and sharding guide.
+
 ## [0.3.172] - 2026-06-07
 
 ### Fixed

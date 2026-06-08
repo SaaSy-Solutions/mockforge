@@ -504,6 +504,40 @@ impl BenchCommand {
         }
     }
 
+    /// Round 29 — capacity advisory. Counts the targets-file entries
+    /// (or 1 for single-target), multiplies by VUs and configured RPS,
+    /// and prints a warning when the product exceeds rule-of-thumb
+    /// limits a single client can handle. The detailed sizing table
+    /// lives in `book/src/reference/bench-capacity-sizing.md`; this
+    /// just nudges the user toward it before they hang their VM.
+    fn advise_capacity(&self) {
+        let target_count = self
+            .targets_file
+            .as_ref()
+            .and_then(|p| std::fs::read_to_string(p).ok())
+            .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+            .and_then(|v| v.as_array().map(|a| a.len()))
+            .unwrap_or(1);
+        let vus = self.vus.max(1);
+        let rps_total = self.target_rps.unwrap_or(0) as usize * target_count.max(1);
+        // 50 targets × 5 VUs = 250 is roughly where Srikanth's 15GB
+        // client started hanging on a 10 MB spec. Surface a warning
+        // well before that.
+        let load_product = target_count * vus as usize;
+        if load_product >= 150 {
+            let est_ram_gb =
+                (vus as usize * 50) / 1024 + (target_count * 10 * 2) / 1024 + target_count / 2;
+            let est_cores = ((vus as usize) / 50).max(2);
+            TerminalReporter::print_warning(&format!(
+                "Capacity advisory: targets={target_count}, VUs={vus}, RPS-total≈{rps_total}. \
+                 Single-client estimate: ~{est_cores} CPU cores, ~{est_ram_gb} GB RAM. \
+                 If your machine is below that, expect OOM hangs partway through the run. \
+                 See https://docs.mockforge.dev/reference/bench-capacity-sizing.html \
+                 for the sizing table and sharding guide."
+            ));
+        }
+    }
+
     /// Execute the bench command
     pub async fn execute(&self) -> Result<()> {
         // Round 23 — Srikanth flagged that k6 _does_ support per-VU source
@@ -517,6 +551,13 @@ impl BenchCommand {
                 "--use-k6 has no effect with --conformance-self-test: the self-test driver runs and returns before k6 is invoked. Drop one or the other depending on whether you want the spec-driven self-test or a k6 bench run.",
             );
         }
+
+        // Round 29 — Srikanth's "5 VUs against 50 targets hung the VM"
+        // report. Print an up-front capacity advisory so the user knows
+        // BEFORE the run starts that their config exceeds what one
+        // client can comfortably handle. Pure heuristic; rules of
+        // thumb live in book/src/reference/bench-capacity-sizing.md.
+        self.advise_capacity();
 
         // Check if we're in multi-target mode
         if let Some(targets_file) = &self.targets_file {

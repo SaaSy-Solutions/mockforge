@@ -46,8 +46,24 @@ pub struct ServerConformanceViolation {
 
 const DEFAULT_BUFFER_SIZE: usize = 256;
 
+/// Round 29 — Srikanth on 0.3.172 had 10,145 violations seen but only
+/// 114 unique entries in his export, because the in-memory ring buffer
+/// caps at 256. For long-running runs against large specs (vCenter,
+/// Microsoft Graph) that fills quickly. Override via
+/// `MOCKFORGE_CONFORMANCE_BUFFER_SIZE` so users can raise it without
+/// recompiling. Capped at 64k to keep peak memory bounded.
+fn effective_buffer_size() -> usize {
+    let cap: usize = 64 * 1024;
+    std::env::var("MOCKFORGE_CONFORMANCE_BUFFER_SIZE")
+        .ok()
+        .and_then(|s| s.parse::<usize>().ok())
+        .filter(|n| *n > 0)
+        .map(|n| n.min(cap))
+        .unwrap_or(DEFAULT_BUFFER_SIZE)
+}
+
 static VIOLATIONS: Lazy<Mutex<VecDeque<ServerConformanceViolation>>> =
-    Lazy::new(|| Mutex::new(VecDeque::with_capacity(DEFAULT_BUFFER_SIZE)));
+    Lazy::new(|| Mutex::new(VecDeque::with_capacity(effective_buffer_size())));
 
 /// Lifetime count of violations recorded since process start (Issue #79
 /// round 15). The ring buffer only keeps the most recent
@@ -79,8 +95,9 @@ pub fn total_ok() -> u64 {
 /// Mutex which is uncontended in steady state.
 pub fn record(violation: ServerConformanceViolation) {
     TOTAL_SEEN.fetch_add(1, Ordering::Relaxed);
+    let cap = effective_buffer_size();
     let mut buf = VIOLATIONS.lock();
-    if buf.len() == DEFAULT_BUFFER_SIZE {
+    while buf.len() >= cap {
         buf.pop_front();
     }
     buf.push_back(violation);
@@ -153,5 +170,53 @@ mod tests {
         assert_eq!(snap[0].reason, format!("{}", DEFAULT_BUFFER_SIZE + 50 - 1));
         // oldest still present is index 50 (the first 50 got dropped)
         assert_eq!(snap[DEFAULT_BUFFER_SIZE - 1].reason, format!("{}", 50));
+    }
+
+    /// Round 29 — `MOCKFORGE_CONFORMANCE_BUFFER_SIZE` env var
+    /// overrides the default 256 cap. Tagged `#[ignore]` because it
+    /// mutates a process-wide env var that races with the other
+    /// tests in this module (which call `record()` → which reads
+    /// the same env var). Run explicitly with
+    /// `cargo test -p mockforge-foundation -- --ignored
+    /// effective_buffer_size_respects_env_var --test-threads=1`.
+    #[test]
+    #[ignore]
+    fn effective_buffer_size_respects_env_var() {
+        let original = std::env::var("MOCKFORGE_CONFORMANCE_BUFFER_SIZE").ok();
+
+        // SAFETY: process-wide env mutation is unsound under multi-
+        // threaded test runs; this test is gated with `#[ignore]` to
+        // force serial execution by the developer when needed.
+        unsafe {
+            std::env::set_var("MOCKFORGE_CONFORMANCE_BUFFER_SIZE", "1000");
+        }
+        assert_eq!(effective_buffer_size(), 1000);
+
+        unsafe {
+            std::env::set_var("MOCKFORGE_CONFORMANCE_BUFFER_SIZE", "0");
+        }
+        assert_eq!(effective_buffer_size(), DEFAULT_BUFFER_SIZE, "zero falls back to default");
+
+        unsafe {
+            std::env::set_var("MOCKFORGE_CONFORMANCE_BUFFER_SIZE", "garbage");
+        }
+        assert_eq!(
+            effective_buffer_size(),
+            DEFAULT_BUFFER_SIZE,
+            "unparsable falls back to default"
+        );
+
+        unsafe {
+            std::env::set_var("MOCKFORGE_CONFORMANCE_BUFFER_SIZE", "999999");
+        }
+        assert_eq!(effective_buffer_size(), 64 * 1024, "clamped to 64k");
+
+        // Restore
+        unsafe {
+            match original {
+                Some(v) => std::env::set_var("MOCKFORGE_CONFORMANCE_BUFFER_SIZE", v),
+                None => std::env::remove_var("MOCKFORGE_CONFORMANCE_BUFFER_SIZE"),
+            }
+        }
     }
 }

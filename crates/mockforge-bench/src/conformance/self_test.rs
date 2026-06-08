@@ -1021,7 +1021,16 @@ fn validate_body_against_schema(body: &str, schema: &serde_json::Value) -> Optio
     } else {
         schema_str
     };
-    Some(format!("at {path}: {kind_msg}; expected schema {schema_str}"))
+    // Round 29 — Srikanth on 0.3.172 was confused by `at /:` thinking
+    // it referenced the URL path; it's actually a JSON pointer into
+    // the RESPONSE BODY. Reword so that's unambiguous: explicit
+    // "response body" prefix and a human label for the root case.
+    let location = if path == "/" {
+        "response body root".to_string()
+    } else {
+        format!("response body at {path}")
+    };
+    Some(format!("{location}: {kind_msg}; expected schema {schema_str}"))
 }
 
 /// Round 17.5 — one OWASP injection probe to send.
@@ -2147,17 +2156,44 @@ mod tests {
         let err = validate_body_against_schema(body, &schema).expect("type-mismatch fires");
         // The message must NOT contain Rust debug syntax leftovers
         // ("Type { kind:", trailing "{" or "(" tokens). It SHOULD say
-        // what type was expected and at which location.
+        // what type was expected.
         assert!(!err.contains("Type { kind"), "stale debug output: {err}");
         assert!(!err.contains("{ kind:"), "stale debug output: {err}");
         assert!(err.contains("string"), "should name expected type: {err}");
-        assert!(err.contains("at /"), "should include instance path: {err}");
+        // Round 29 — Srikanth on 0.3.172 was confused by `at /:`,
+        // thinking it pointed to the URL path. The new format
+        // explicitly says "response body root" for the root case
+        // (and "response body at /<pointer>" for nested fields).
+        assert!(
+            err.contains("response body root"),
+            "should label root explicitly so reader knows it's not the URL: {err}"
+        );
         // Round 28 — Srikanth wanted the expected schema embedded
         // in the message so it reads as 'expected schema {"type":"string"}'.
         assert!(
             err.contains("expected schema") && err.contains("\"type\":\"string\""),
             "should include expected schema JSON: {err}"
         );
+    }
+
+    /// Round 29 — for non-root paths the format reads
+    /// "response body at /name: ...". Catches the case where the
+    /// root rewording accidentally dropped the JSON-pointer for
+    /// nested fields.
+    #[test]
+    fn response_schema_error_uses_response_body_prefix_for_nested_paths() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "required": ["name"],
+            "properties": {"name": {"type": "string"}}
+        });
+        let body = r#"{"name": 123}"#;
+        let err = validate_body_against_schema(body, &schema).expect("type-mismatch fires");
+        assert!(
+            err.contains("response body at /name"),
+            "nested path should read 'response body at /name': {err}"
+        );
+        assert!(!err.contains("response body root"), "wrong label for nested: {err}");
     }
 
     #[test]
