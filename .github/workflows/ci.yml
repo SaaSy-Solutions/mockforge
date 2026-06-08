@@ -222,7 +222,7 @@ jobs:
         run: pnpm test
 
       - name: Upload coverage
-        uses: codecov/codecov-action@v6
+        uses: codecov/codecov-action@v7
         with:
           directory: crates/mockforge-ui/ui/coverage
           flags: ui-tests
@@ -414,7 +414,7 @@ jobs:
       run: cargo llvm-cov --workspace --exclude mockforge-desktop --lcov --output-path lcov.info
 
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v6
+      uses: codecov/codecov-action@v7
       with:
         files: lcov.info
         fail_ci_if_error: false
