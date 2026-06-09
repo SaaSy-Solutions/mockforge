@@ -54,10 +54,20 @@ pub struct ConformanceViolation {
     pub reason: String,
     #[serde(default)]
     pub category: String,
+    /// Round 30 — `MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE=true` causes the
+    /// server-side buffer to dedup by signature and stamp every entry
+    /// with how many duplicate hits coalesced into it. Defaults to `1`
+    /// when older mockforge instances send the field-less payload.
+    #[serde(default = "default_occurrences")]
+    pub occurrences: u32,
 }
 
 fn default_unknown() -> String {
     "unknown".to_string()
+}
+
+fn default_occurrences() -> u32 {
+    1
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -495,6 +495,7 @@ impl OpenApiRoute {
                             available.join(", ")
                         ),
                         category: "response-shape".to_string(),
+                        occurrences: 1,
                     },
                 );
             }
