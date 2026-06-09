@@ -408,6 +408,14 @@ impl ConformanceScreen {
 
         // Group by (method, path, category, reason). Insertion order
         // doesn't matter — we sort by count at the end.
+        //
+        // Round 30 — under `MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE=true`
+        // the server-side buffer ALREADY deduplicates and carries an
+        // `occurrences` field per entry. Use that as the increment
+        // instead of +1, so the TUI's headline count reflects the true
+        // server-side total instead of just "1 per unique signature".
+        // FIFO mode (the default) sends `occurrences: 1` per entry,
+        // so the math reduces to the prior behaviour for that path.
         let mut groups: HashMap<DedupKey, (DedupedViolation, u32, chrono::DateTime<chrono::Utc>)> =
             HashMap::new();
         for &i in &indices {
@@ -415,9 +423,11 @@ impl ConformanceScreen {
                 continue;
             };
             let key = (v.method.clone(), v.path.clone(), v.category.clone(), v.reason.clone());
+            let hits = v.occurrences.max(1);
             match groups.get_mut(&key) {
                 Some(slot) => {
-                    slot.1 += 1;
+                    slot.1 = slot.1.saturating_add(hits);
+                    slot.0.count = slot.0.count.saturating_add(hits);
                     if v.timestamp < slot.0.first_seen {
                         slot.0.first_seen = v.timestamp;
                     }
@@ -436,11 +446,11 @@ impl ConformanceScreen {
                                 category: v.category.clone(),
                                 reason: v.reason.clone(),
                                 status: v.status,
-                                count: 1,
+                                count: hits,
                                 first_seen: v.timestamp,
                                 last_seen: v.timestamp,
                             },
-                            1,
+                            hits,
                             v.timestamp,
                         ),
                     );
@@ -1215,6 +1225,7 @@ mod tests {
             status: 400,
             reason: reason.into(),
             category: "request-body".into(),
+            occurrences: 1,
         }
     }
 

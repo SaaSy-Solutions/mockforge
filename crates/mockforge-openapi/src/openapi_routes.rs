@@ -724,6 +724,7 @@ impl OpenApiRouteRegistry {
                                 status: status_code,
                                 reason: ct_err.clone(),
                                 category: "content-types".to_string(),
+                                occurrences: 1,
                             },
                         );
                         let status = axum::http::StatusCode::from_u16(status_code)
@@ -824,6 +825,7 @@ impl OpenApiRouteRegistry {
                                 status: status_code,
                                 reason,
                                 category,
+                                occurrences: 1,
                             },
                         );
 
@@ -1266,6 +1268,7 @@ impl OpenApiRouteRegistry {
                 status: status_code,
                 reason,
                 category,
+                occurrences: 1,
             },
         );
 

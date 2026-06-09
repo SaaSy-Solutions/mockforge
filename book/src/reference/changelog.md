@@ -1,5 +1,15 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.174] - 2026-06-09
+
+### Fixed
+
+- **[DevX]** `response_schema_error` now prints only the sub-schema at the offending JSON Pointer instead of the full top-level schema (#79 round 30 / Srikanth).
+
+### Added
+
+- **[Contracts]** `MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE=true` switches the violation buffer from FIFO to dedup-by-signature; every duplicate bumps a new `occurrences` field on the entry instead of consuming a new buffer slot (#79 round 30 / Srikanth).
+
 ## [0.3.173] - 2026-06-08
 
 ### Fixed

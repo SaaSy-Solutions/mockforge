@@ -18,7 +18,7 @@ use chrono::{DateTime, Utc};
 use once_cell::sync::Lazy;
 use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 
 /// A single server-side conformance violation captured at the OpenAPI
@@ -42,6 +42,18 @@ pub struct ServerConformanceViolation {
     /// `"request-body"`, `"headers"`, etc.). Empty if the validator
     /// couldn't classify.
     pub category: String,
+    /// Round 30 — number of times this signature has been observed.
+    /// Always `1` in FIFO mode (the default). In unique-buffer mode
+    /// (`MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE=true`) every duplicate
+    /// hit bumps this counter on the existing entry instead of
+    /// consuming a new buffer slot. Defaults to `1` when deserialising
+    /// older payloads that don't carry the field.
+    #[serde(default = "one")]
+    pub occurrences: u32,
+}
+
+fn one() -> u32 {
+    1
 }
 
 const DEFAULT_BUFFER_SIZE: usize = 256;
@@ -62,8 +74,85 @@ fn effective_buffer_size() -> usize {
         .unwrap_or(DEFAULT_BUFFER_SIZE)
 }
 
+/// Round 30 — Srikanth on 0.3.173: "Can we have this buffer for unique
+/// violation as opposed to duplicate violation. If this buffer size
+/// doesn't discount duplicates then again we will run out of buffer
+/// easily when more and more requests come to the server."
+///
+/// `MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE=true` switches storage from
+/// FIFO to dedup-by-signature: every duplicate of an already-buffered
+/// (method, path, status, category, reason) hits its existing entry
+/// and bumps `occurrences` instead of consuming a new slot. The buffer
+/// fills only as fast as unique signatures arrive — so at 256 entries
+/// a vCenter spec with ~150 unique violation kinds will hold every
+/// kind even under 10M+ requests, instead of being clobbered by the
+/// most common offender.
+fn unique_mode_enabled() -> bool {
+    std::env::var("MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE")
+        .ok()
+        .map(|s| matches!(s.to_ascii_lowercase().as_str(), "1" | "true" | "yes" | "on"))
+        .unwrap_or(false)
+}
+
+fn signature(v: &ServerConformanceViolation) -> String {
+    format!("{}|{}|{}|{}|{}", v.method, v.path, v.status, v.category, v.reason)
+}
+
+/// FIFO buffer (default mode). Each violation consumes one slot,
+/// oldest evicted when full.
 static VIOLATIONS: Lazy<Mutex<VecDeque<ServerConformanceViolation>>> =
     Lazy::new(|| Mutex::new(VecDeque::with_capacity(effective_buffer_size())));
+
+/// Unique-mode buffer: signature → entry (with bumped `occurrences`)
+/// plus a `VecDeque<signature>` for insertion-order eviction. Only
+/// touched when `MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE` is enabled.
+struct UniqueBuffer {
+    by_sig: HashMap<String, ServerConformanceViolation>,
+    order: VecDeque<String>,
+}
+
+impl UniqueBuffer {
+    fn new() -> Self {
+        Self {
+            by_sig: HashMap::new(),
+            order: VecDeque::new(),
+        }
+    }
+
+    fn record(&mut self, mut v: ServerConformanceViolation, cap: usize) {
+        let sig = signature(&v);
+        if let Some(existing) = self.by_sig.get_mut(&sig) {
+            existing.occurrences = existing.occurrences.saturating_add(1);
+            existing.timestamp = v.timestamp;
+            return;
+        }
+        v.occurrences = 1;
+        while self.order.len() >= cap {
+            if let Some(old) = self.order.pop_front() {
+                self.by_sig.remove(&old);
+            } else {
+                break;
+            }
+        }
+        self.order.push_back(sig.clone());
+        self.by_sig.insert(sig, v);
+    }
+
+    fn snapshot(&self) -> Vec<ServerConformanceViolation> {
+        self.order.iter().rev().filter_map(|s| self.by_sig.get(s).cloned()).collect()
+    }
+
+    fn len(&self) -> usize {
+        self.order.len()
+    }
+
+    fn clear(&mut self) {
+        self.by_sig.clear();
+        self.order.clear();
+    }
+}
+
+static UNIQUE_VIOLATIONS: Lazy<Mutex<UniqueBuffer>> = Lazy::new(|| Mutex::new(UniqueBuffer::new()));
 
 /// Lifetime count of violations recorded since process start (Issue #79
 /// round 15). The ring buffer only keeps the most recent
@@ -91,11 +180,20 @@ pub fn total_ok() -> u64 {
 }
 
 /// Record a violation. Old entries are dropped when the buffer is full
-/// (FIFO). Cheap enough to call from the hot path — uses a parking_lot
-/// Mutex which is uncontended in steady state.
-pub fn record(violation: ServerConformanceViolation) {
+/// (FIFO by default; signature-deduped under
+/// `MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE=true`). Cheap enough to call
+/// from the hot path — uses a parking_lot Mutex which is uncontended in
+/// steady state.
+pub fn record(mut violation: ServerConformanceViolation) {
     TOTAL_SEEN.fetch_add(1, Ordering::Relaxed);
     let cap = effective_buffer_size();
+    if unique_mode_enabled() {
+        UNIQUE_VIOLATIONS.lock().record(violation, cap);
+        return;
+    }
+    if violation.occurrences == 0 {
+        violation.occurrences = 1;
+    }
     let mut buf = VIOLATIONS.lock();
     while buf.len() >= cap {
         buf.pop_front();
@@ -105,13 +203,21 @@ pub fn record(violation: ServerConformanceViolation) {
 
 /// Snapshot of the buffered violations, newest first.
 pub fn snapshot() -> Vec<ServerConformanceViolation> {
-    let buf = VIOLATIONS.lock();
-    buf.iter().rev().cloned().collect()
+    if unique_mode_enabled() {
+        UNIQUE_VIOLATIONS.lock().snapshot()
+    } else {
+        let buf = VIOLATIONS.lock();
+        buf.iter().rev().cloned().collect()
+    }
 }
 
-/// Number of violations currently buffered (≤ `DEFAULT_BUFFER_SIZE`).
+/// Number of violations currently buffered (≤ `effective_buffer_size`).
 pub fn len() -> usize {
-    VIOLATIONS.lock().len()
+    if unique_mode_enabled() {
+        UNIQUE_VIOLATIONS.lock().len()
+    } else {
+        VIOLATIONS.lock().len()
+    }
 }
 
 /// Lifetime total of violations recorded since process start, including
@@ -120,10 +226,11 @@ pub fn total_seen() -> u64 {
     TOTAL_SEEN.load(Ordering::Relaxed)
 }
 
-/// Clear the buffer and reset both lifetime counters. Primarily for
+/// Clear both buffers and reset lifetime counters. Primarily for
 /// tests and TUI "reset" actions.
 pub fn clear() {
     VIOLATIONS.lock().clear();
+    UNIQUE_VIOLATIONS.lock().clear();
     TOTAL_SEEN.store(0, Ordering::Relaxed);
     TOTAL_OK.store(0, Ordering::Relaxed);
 }
@@ -141,6 +248,7 @@ mod tests {
             status,
             reason: "test".into(),
             category: "parameters".into(),
+            occurrences: 1,
         }
     }
 
@@ -218,5 +326,64 @@ mod tests {
                 None => std::env::remove_var("MOCKFORGE_CONFORMANCE_BUFFER_SIZE"),
             }
         }
+    }
+
+    /// Round 30 — unique-mode buffer dedups duplicate signatures and
+    /// bumps `occurrences` instead of consuming new slots. Direct
+    /// `UniqueBuffer::record` call avoids the global env-var read,
+    /// so this test stays threadsafe without `#[ignore]`.
+    #[test]
+    fn unique_buffer_dedups_by_signature_and_counts_occurrences() {
+        let mut buf = UniqueBuffer::new();
+        for _ in 0..10_000 {
+            buf.record(v("GET", 400), 256);
+        }
+        // 10k identical violations → 1 slot used, occurrences == 10000.
+        assert_eq!(buf.len(), 1);
+        let snap = buf.snapshot();
+        assert_eq!(snap.len(), 1);
+        assert_eq!(snap[0].occurrences, 10_000);
+        assert_eq!(snap[0].method, "GET");
+    }
+
+    /// Round 30 — different (method, path, status, category, reason)
+    /// tuples occupy distinct slots; identical tuples coalesce.
+    #[test]
+    fn unique_buffer_distinguishes_distinct_signatures() {
+        let mut buf = UniqueBuffer::new();
+        // 3 distinct signatures × 100 hits each
+        for _ in 0..100 {
+            buf.record(v("GET", 400), 256);
+            buf.record(v("POST", 422), 256);
+            let mut other = v("GET", 400);
+            other.reason = "different".into();
+            buf.record(other, 256);
+        }
+        assert_eq!(buf.len(), 3);
+        let snap = buf.snapshot();
+        assert_eq!(snap.len(), 3);
+        for entry in &snap {
+            assert_eq!(entry.occurrences, 100, "each signature seen 100×");
+        }
+    }
+
+    /// Round 30 — unique mode still evicts when distinct-signature
+    /// count exceeds the cap. Eviction is FIFO over insertion order
+    /// (NOT recency-of-hit), matching how the regular ring buffer
+    /// reads.
+    #[test]
+    fn unique_buffer_evicts_oldest_signature_at_capacity() {
+        let mut buf = UniqueBuffer::new();
+        let cap = 4;
+        for i in 0..(cap + 3) {
+            let mut entry = v("GET", 400);
+            entry.reason = format!("kind-{i}");
+            buf.record(entry, cap);
+        }
+        assert_eq!(buf.len(), cap);
+        let snap = buf.snapshot();
+        // newest first; signatures 0..2 evicted, 3..6 retained
+        let kinds: Vec<&str> = snap.iter().map(|e| e.reason.as_str()).collect();
+        assert_eq!(kinds, vec!["kind-6", "kind-5", "kind-4", "kind-3"]);
     }
 }

@@ -1015,7 +1015,15 @@ fn validate_body_against_schema(body: &str, schema: &serde_json::Value) -> Optio
         // Strip trailing newlines so the JSONL line stays one line.
         _ => first.to_string().trim().to_string(),
     };
-    let schema_str = serde_json::to_string(schema).unwrap_or_else(|_| "<schema>".into());
+    // Round 30 — Srikanth on 0.3.173 asked how a deeper nested mismatch
+    // reads. The prior output printed the WHOLE top-level schema even for
+    // a single-field mismatch, which buried the actual constraint that
+    // failed. Walk the instance pointer through the schema's properties
+    // chain and print the most specific sub-schema we can find. Falls
+    // back to the full schema for paths the walker can't resolve
+    // (additionalProperties, oneOf, allOf, $ref un-resolved, etc.).
+    let focused_schema = sub_schema_at_pointer(schema, path).unwrap_or_else(|| schema.clone());
+    let schema_str = serde_json::to_string(&focused_schema).unwrap_or_else(|_| "<schema>".into());
     let schema_str = if schema_str.len() > 300 {
         format!("{}...", &schema_str[..300])
     } else {
@@ -1031,6 +1039,38 @@ fn validate_body_against_schema(body: &str, schema: &serde_json::Value) -> Optio
         format!("response body at {path}")
     };
     Some(format!("{location}: {kind_msg}; expected schema {schema_str}"))
+}
+
+/// Round 30 — walk a JSON-Pointer-style instance path through a JSON
+/// Schema and return the sub-schema describing the value at that
+/// position. For path `/name/age` on
+/// `{"properties":{"name":{"properties":{"age":{"type":"integer"}}}}}`
+/// returns `{"type":"integer"}`. Returns `None` for paths the walker
+/// can't follow (array indices into `items` with no per-index schema,
+/// `additionalProperties`, `oneOf`/`allOf`, unresolved `$ref`); callers
+/// should fall back to the full schema in that case.
+fn sub_schema_at_pointer(schema: &serde_json::Value, pointer: &str) -> Option<serde_json::Value> {
+    if pointer.is_empty() || pointer == "/" {
+        return Some(schema.clone());
+    }
+    let mut current = schema;
+    for seg in pointer.trim_start_matches('/').split('/') {
+        let unescaped = seg.replace("~1", "/").replace("~0", "~");
+        if let Some(props) = current.get("properties") {
+            if let Some(sub) = props.get(&unescaped) {
+                current = sub;
+                continue;
+            }
+        }
+        if let Some(items) = current.get("items") {
+            if items.is_object() {
+                current = items;
+                continue;
+            }
+        }
+        return None;
+    }
+    Some(current.clone())
 }
 
 /// Round 17.5 — one OWASP injection probe to send.
@@ -2194,6 +2234,60 @@ mod tests {
             "nested path should read 'response body at /name': {err}"
         );
         assert!(!err.contains("response body root"), "wrong label for nested: {err}");
+        // Round 30 — the "expected schema" suffix should be the
+        // sub-schema at /name, not the entire object schema. Reader
+        // shouldn't have to scan a 300-char object to find the
+        // constraint that failed.
+        assert!(
+            err.contains(r#"expected schema {"type":"string"}"#),
+            "should show only the /name sub-schema, not the full object: {err}"
+        );
+    }
+
+    /// Round 30 — Srikanth asked how a deeper nested mismatch reads.
+    /// Schema: `name.type` should be a string; body has it as a number.
+    /// JSON pointer is `/name/type`.
+    #[test]
+    fn response_schema_error_uses_response_body_prefix_for_deep_nested_paths() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "object",
+                    "properties": {"type": {"type": "string"}}
+                }
+            }
+        });
+        let body = r#"{"name": {"type": 123}}"#;
+        let err = validate_body_against_schema(body, &schema).expect("type-mismatch fires");
+        assert!(
+            err.contains("response body at /name/type"),
+            "deep nested path should read 'response body at /name/type': {err}"
+        );
+        // Round 30 — for deep paths the sub-schema is the leaf
+        // {"type":"string"}, not the wrapping object schemas.
+        assert!(
+            err.contains(r#"expected schema {"type":"string"}"#),
+            "should show only the /name/type leaf sub-schema: {err}"
+        );
+    }
+
+    /// Round 30 — when the instance pointer can't be resolved through
+    /// the schema's `properties` chain (e.g. additionalProperties hit),
+    /// `sub_schema_at_pointer` returns None and the message falls back
+    /// to the full schema. Verifies the fallback path is wired.
+    #[test]
+    fn sub_schema_at_pointer_falls_back_for_unresolvable_paths() {
+        let schema = serde_json::json!({"type":"object","additionalProperties":true});
+        // Walker can't resolve /unknown, so we get the full schema back.
+        assert_eq!(
+            sub_schema_at_pointer(&schema, "/unknown"),
+            None,
+            "unresolvable path should return None to trigger fallback"
+        );
+        // Root path returns the whole schema.
+        assert_eq!(sub_schema_at_pointer(&schema, "/"), Some(schema.clone()));
+        assert_eq!(sub_schema_at_pointer(&schema, ""), Some(schema));
     }
 
     #[test]

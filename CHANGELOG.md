@@ -1,3 +1,13 @@
+## [0.3.174] - 2026-06-09
+
+### Fixed
+
+- **[DevX]** `response_schema_error` now prints only the sub-schema at the offending JSON Pointer instead of the full top-level schema (#79 round 30 / Srikanth on 0.3.173 asking what the message reads as for nested fields). A `{"name": 123}` mismatch against `{"type":"object","properties":{"name":{"type":"string"}}}` now reads `response body at /name: expected type string; expected schema {"type":"string"}`, not `... expected schema {"properties":{"name":{"type":"string"}},"type":"object"}`. Walker descends through `properties` (and `items` for arrays) following the instance pointer; falls back to the full schema when the path can't be resolved (additionalProperties, oneOf/allOf, unresolved $refs).
+
+### Added
+
+- **[Contracts]** `MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE=true` switches the server-side conformance violation buffer from FIFO to dedup-by-signature (#79 round 30 / Srikanth on 0.3.173: "Can we have this buffer for unique violation as opposed to duplicate violation"). Every duplicate of an already-buffered `(method, path, status, category, reason)` hits its existing entry and bumps the new `occurrences` field on `ServerConformanceViolation` instead of consuming a new slot — so 10M requests with 150 distinct violation kinds keep all 150 visible in a 256-slot buffer, instead of being clobbered by the most common offender. New `occurrences: u32` field on the violation struct (defaults to `1` on older payloads via serde default). TUI's export-time dedup grouping now sums `occurrences` per group so the headline counts reflect the true server-side hit count under unique mode. Three new tests cover dedup, multi-signature distinction, and FIFO-order eviction inside the unique buffer.
+
 ## [0.3.173] - 2026-06-08
 
 ### Fixed
