@@ -1,3 +1,9 @@
+## [0.3.176] - 2026-06-10
+
+### Fixed
+
+- **[Contracts]** `mockforge serve` POST / PUT / PATCH / DELETE responses now match the spec's response schema instead of MockAI's hardcoded `{id, status, data}` envelope (#79 round 31 follow-up / Srikanth's vCenter `Archive.Info` `comment` finding). Root cause: MockAI is wired on by default through the reality engine's `ModerateRealism` level (`reality.enabled = true` → `mockai.enabled = true`), and its `generate_response_body` for the Create / Update / PartialUpdate / Delete mutation kinds returned a hardcoded envelope that ignored the OpenAPI 2xx response schema. Result: every write operation came back as `{"id":"generated_id","status":"created","data":<echoed body>}`, missing whichever required fields the spec actually defined (e.g. the six fields on vCenter's `Appliance.Recovery.Backup.SystemName.Archive.Info`). The function now returns `{}` for every mutation kind, which the calling site already handles as "fall through to the OpenAPI ResponseGenerator", so the response body becomes spec-shape automatically and required fields are populated. New regression test enumerates every `MutationType` and asserts each returns `{}`. Real-binary verified against the exact vCenter route from Srikanth's r31 report: the response now contains `comment`, `location`, `parts`, `system_name`, `timestamp`, `version`.
+
 ## [0.3.175] - 2026-06-10
 
 ### Fixed
