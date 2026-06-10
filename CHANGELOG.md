@@ -1,3 +1,14 @@
+## [0.3.175] - 2026-06-10
+
+### Fixed
+
+- **[DevX]** `response_schema_error` now shows the missing property's own sub-schema for `required field missing` errors instead of the entire parent object schema (#79 round 31 / Srikanth on 0.3.174 against the vCenter `Appliance.Recovery.Backup.SystemName.Archive.Info` spec). The prior output dumped the parent's multi-paragraph description and every sibling property schema then truncated at 300 chars, which buried which field was missing and why. The walker now strips the surrounding quotes from `property` (jsonschema's Display impl wraps the name in `"..."`), descends one more step into `properties[<missing>]`, and prints just that. New test covers the vCenter scenario and asserts the parent description + sibling names don't leak into the suffix.
+- **[Install]** `cargo install mockforge-cli` no longer requires a system OpenSSL 1.1+ at runtime, so it works on Ubuntu 16.04 / RHEL 7 / boxes that only ship OpenSSL 1.0.2 (#79 round 31 / Srikanth's "few clients which runs ubuntu 16.04 and openssl version 1.0.2"). Two fixes: (1) the TLS stack is now rustls-only (workspace `reqwest`, `lettre`, and the `sqlx` uses in `mockforge-tunnel` + `mockforge-vbr` all dropped `*-native-tls` features); `cargo tree -i native-tls` against `mockforge-cli` comes back empty. (2) `git2` (via `mockforge-plugin-loader` and `mockforge-scenarios`) was still pulling `openssl-sys` for its HTTPS clone path, so we enabled `vendored-openssl` on it; that statically links a known-good OpenSSL into `libgit2-sys`/`libssh2-sys` so the binary no longer needs `libssl.so` at runtime. Also converted four crates that hand-wrote `reqwest = { version = "0.12", features = ["json"] }` to inherit the workspace dep so the default-tls drift can't reappear.
+
+### Added
+
+- **[Server]** `mockforge serve --conformance-buffer-size N` and `--conformance-buffer-unique` CLI flags (#79 round 31 / Srikanth: "is it possible give in the mockforge server command as opposed to environmental variable which I sometime forget"). Both mirror the round-29/round-30 env vars; flag values win when both are set. Surfaced in `mockforge serve --help` under "Server Configuration".
+
 ## [0.3.174] - 2026-06-09
 
 ### Fixed

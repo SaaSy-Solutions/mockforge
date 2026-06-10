@@ -565,6 +565,23 @@ struct ServeCliArgs {
     #[arg(long, help_heading = "Server Configuration")]
     pub shadow: bool,
 
+    /// Cap of the in-memory conformance-violation ring buffer that the
+    /// TUI / `/__mockforge/api/conformance/violations` endpoint reads
+    /// from (Issue #79 round 29). Default `256`, max `65536`. Mirrors
+    /// `MOCKFORGE_CONFORMANCE_BUFFER_SIZE`; the env var still works.
+    #[arg(long, value_name = "N", help_heading = "Server Configuration")]
+    pub conformance_buffer_size: Option<usize>,
+
+    /// Dedup conformance violations by `(method, path, status, category,
+    /// reason)` signature instead of FIFO (Issue #79 round 30 +
+    /// Srikanth's round-31 ask: "give in the mockforge server command
+    /// as opposed to environmental variable which I sometimes forget").
+    /// Each duplicate of a buffered signature bumps `occurrences`
+    /// instead of consuming a new slot. Mirrors
+    /// `MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE=true`.
+    #[arg(long, help_heading = "Server Configuration")]
+    pub conformance_buffer_unique: bool,
+
     #[command(flatten)]
     pub ports: PortArgs,
 
@@ -2618,6 +2635,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 bulkhead_max_concurrent: args.chaos_opts.bulkhead_max_concurrent,
                 bulkhead_max_queue: args.chaos_opts.bulkhead_max_queue,
                 bulkhead_queue_timeout_ms: args.chaos_opts.bulkhead_queue_timeout_ms,
+                conformance_buffer_size: args.conformance_buffer_size,
+                conformance_buffer_unique: args.conformance_buffer_unique,
             })
             .await?;
         }

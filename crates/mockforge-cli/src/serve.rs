@@ -109,6 +109,12 @@ pub(crate) struct ServeArgs {
     pub(crate) bulkhead_max_concurrent: u32,
     pub(crate) bulkhead_max_queue: u32,
     pub(crate) bulkhead_queue_timeout_ms: u64,
+    /// `--conformance-buffer-size` (round 31). Mirrors
+    /// `MOCKFORGE_CONFORMANCE_BUFFER_SIZE`. None = honour env or default 256.
+    pub(crate) conformance_buffer_size: Option<usize>,
+    /// `--conformance-buffer-unique` (round 31). Mirrors
+    /// `MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE=true`.
+    pub(crate) conformance_buffer_unique: bool,
 }
 
 impl Default for ServeArgs {
@@ -189,6 +195,8 @@ impl Default for ServeArgs {
             bulkhead_max_concurrent: 100,
             bulkhead_max_queue: 10,
             bulkhead_queue_timeout_ms: 5000,
+            conformance_buffer_size: None,
+            conformance_buffer_unique: false,
         }
     }
 }
@@ -684,6 +692,18 @@ pub async fn handle_serve(
     // a user who already disabled the limiter via env var sees no surprise.
     if serve_args.no_rate_limit && std::env::var_os("MOCKFORGE_RATE_LIMIT_ENABLED").is_none() {
         std::env::set_var("MOCKFORGE_RATE_LIMIT_ENABLED", "false");
+    }
+
+    // Issue #79 round 31 — Srikanth: "is it possible give in the
+    // mockforge server command as opposed to environmental variable
+    // which I sometime forget". Mirror the round-29/round-30 env vars
+    // as first-class flags. Flag-set values WIN over what the env says,
+    // because the user just typed the flag and expects it to take effect.
+    if let Some(n) = serve_args.conformance_buffer_size {
+        std::env::set_var("MOCKFORGE_CONFORMANCE_BUFFER_SIZE", n.to_string());
+    }
+    if serve_args.conformance_buffer_unique {
+        std::env::set_var("MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE", "true");
     }
 
     // Issue #79 round 20 — propagate `--base-path` so the management
