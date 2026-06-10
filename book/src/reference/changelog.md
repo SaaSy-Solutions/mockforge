@@ -1,5 +1,16 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.175] - 2026-06-10
+
+### Fixed
+
+- **[DevX]** For `required field missing` errors, the printed schema is now the missing property's own sub-schema, not the entire parent object (#79 round 31 / Srikanth).
+- **[Install]** `cargo install mockforge-cli` no longer requires OpenSSL 1.1+; the workspace is fully rustls-only (#79 round 31).
+
+### Added
+
+- **[Server]** `mockforge serve --conformance-buffer-size N` and `--conformance-buffer-unique` CLI flags mirror the round-29/round-30 env vars (#79 round 31 / Srikanth).
+
 ## [0.3.174] - 2026-06-09
 
 ### Fixed

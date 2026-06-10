@@ -181,7 +181,7 @@ prometheus = { version = "0.14", features = ["process"] }
 # HTTP client for Fly.io API. `stream` is also used by the OSV sync
 # worker so it can spool 100+ MB ecosystem dumps to a tempfile on disk
 # instead of buffering the whole body in memory.
-reqwest = { version = "0.12", features = ["json", "stream"] }
+reqwest = { workspace = true, features = ["stream"] }
 
 # Real-time Fly runtime-log subscription (#556). Fly publishes log
 # lines on the `logs.<app>.<region>.<machine>` NATS subject; this
@@ -222,7 +222,7 @@ opentelemetry-proto = { version = "0.32", default-features = false, features = [
 
 [dev-dependencies]
 tokio-test = "0.4"
-reqwest = { version = "0.12", features = ["json"] }
+reqwest = { workspace = true }
 serde_json = "1.0"
 chrono = { version = "0.4", features = ["serde"] }
 hex = "0.4"

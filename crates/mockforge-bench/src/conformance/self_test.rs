@@ -976,6 +976,16 @@ fn validate_body_against_schema(body: &str, schema: &serde_json::Value) -> Optio
     // tail. Combined with `at <instance-path>` for the field location.
     let path = first.instance_path.to_string();
     let path = if path.is_empty() { "/" } else { path.as_str() };
+    // Round 31 — Srikanth on 0.3.174 hit the vCenter case where the
+    // error is "required field missing: comment" but the printed
+    // schema was the WHOLE parent object schema (with descriptions of
+    // every property), not just the missing field's sub-schema. The
+    // jsonschema crate emits `Required` errors with
+    // `instance_path == /` (the parent), so the round-30 sub-schema
+    // walker had no extra info to focus the suffix. Carry the missing
+    // property name out of the kind match so we can descend one more
+    // step into `properties[property]` for the printed schema.
+    let mut required_property: Option<String> = None;
     let kind_msg: String = match &first.kind {
         jsonschema::error::ValidationErrorKind::Type { kind } => {
             // `kind` is `TypeKind::Single(JsonType)` or
@@ -987,6 +997,16 @@ fn validate_body_against_schema(body: &str, schema: &serde_json::Value) -> Optio
             }
         }
         jsonschema::error::ValidationErrorKind::Required { property } => {
+            // `property.to_string()` returns the Display of the JSON
+            // value, which for a string is `"name"` (with quotes).
+            // Strip them for the lookup; keep them in the human message.
+            let raw = property.to_string();
+            let unquoted = raw
+                .strip_prefix('"')
+                .and_then(|s| s.strip_suffix('"'))
+                .unwrap_or(&raw)
+                .to_string();
+            required_property = Some(unquoted);
             format!("required field missing: {property}")
         }
         jsonschema::error::ValidationErrorKind::AdditionalProperties { unexpected } => {
@@ -1022,7 +1042,17 @@ fn validate_body_against_schema(body: &str, schema: &serde_json::Value) -> Optio
     // chain and print the most specific sub-schema we can find. Falls
     // back to the full schema for paths the walker can't resolve
     // (additionalProperties, oneOf, allOf, $ref un-resolved, etc.).
-    let focused_schema = sub_schema_at_pointer(schema, path).unwrap_or_else(|| schema.clone());
+    let mut focused_schema = sub_schema_at_pointer(schema, path).unwrap_or_else(|| schema.clone());
+    // Round 31 — for Required errors, descend one more step into
+    // `properties[<missing>]` so the printed schema is the missing
+    // field's own constraint, not the whole parent.
+    if let Some(prop_name) = required_property.as_ref() {
+        if let Some(prop_schema) =
+            focused_schema.get("properties").and_then(|p| p.get(prop_name.as_str()))
+        {
+            focused_schema = prop_schema.clone();
+        }
+    }
     let schema_str = serde_json::to_string(&focused_schema).unwrap_or_else(|_| "<schema>".into());
     let schema_str = if schema_str.len() > 300 {
         format!("{}...", &schema_str[..300])
@@ -2301,6 +2331,52 @@ mod tests {
         let err = validate_body_against_schema(body, &schema).expect("required-missing fires");
         assert!(err.contains("required field missing"), "{err}");
         assert!(err.contains("id"), "{err}");
+    }
+
+    /// Round 31 — Srikanth's vCenter case on 0.3.174: the
+    /// `Appliance.Recovery.Backup.SystemName.Archive.Info` schema has
+    /// a multi-paragraph description and ~6 required fields, of which
+    /// `comment` was missing in the response. Before this fix the
+    /// printed schema was the WHOLE parent object schema (parent's
+    /// description bleeding in, all sibling property schemas dumped)
+    /// truncated to 300 chars; after the fix it's the missing field's
+    /// own schema. Verifies (a) parent description is gone and
+    /// (b) sibling property names don't appear in the message.
+    #[test]
+    fn response_schema_error_required_focuses_on_missing_field_only() {
+        let schema = serde_json::json!({
+            "description": "The Appliance.Recovery.Backup.SystemName.Archive.Info schema represents backup archive information.\n\nThis schema was added in vSphere API 6.7.",
+            "type": "object",
+            "required": ["comment", "location", "parts", "system_name", "timestamp", "version"],
+            "properties": {
+                "comment": {
+                    "type": "string",
+                    "description": "Custom comment added by the user for this backup."
+                },
+                "location": {"type": "string", "description": "Backup location URL."},
+                "parts": {"type": "array", "items": {"type": "string"}},
+                "system_name": {"type": "string"},
+                "timestamp": {"type": "string", "format": "date-time"},
+                "version": {"type": "string"}
+            }
+        });
+        let body = r#"{"location":"x","parts":[],"system_name":"y","timestamp":"z","version":"v"}"#;
+        let err = validate_body_against_schema(body, &schema).expect("required-missing fires");
+        assert!(err.contains("required field missing: \"comment\""), "{err}");
+        // Parent's description should not appear; only the `comment`
+        // field's own description (if any) may.
+        assert!(
+            !err.contains("Appliance.Recovery.Backup"),
+            "parent description should not bleed into focused schema: {err}"
+        );
+        // No sibling property names should appear in the focused schema
+        // suffix.
+        for sibling in ["location", "parts", "system_name", "timestamp", "version"] {
+            assert!(
+                !err.contains(&format!("\"{sibling}\"")),
+                "sibling field {sibling} should not appear in focused schema: {err}"
+            );
+        }
     }
 
     #[test]

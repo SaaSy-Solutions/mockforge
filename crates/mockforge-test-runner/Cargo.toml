@@ -34,7 +34,7 @@ uuid = { workspace = true, features = ["v4", "serde"] }
 chrono = { workspace = true }
 
 # HTTP for callbacks to registry (mTLS-secured POSTs)
-reqwest = { version = "0.12", features = ["json", "rustls-tls"] }
+reqwest = { workspace = true }
 
 # YAML parser used by ContractExecutor when an OpenAPI spec is served as YAML.
 serde_yaml = "0.9"

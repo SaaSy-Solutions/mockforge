@@ -34,7 +34,7 @@ tokio = { version = "1.52", features = ["full"] }
 # HTTP client (for target validation + native chunked traffic generator).
 # `stream` enables `Body::wrap_stream`, which is how chunked encoding gets
 # exercised on the wire from the native chunked-bench.
-reqwest = { version = "0.12", features = ["json", "multipart", "stream"] }
+reqwest = { workspace = true, features = ["multipart", "stream"] }
 futures = { workspace = true }
 async-stream = "0.3"
 

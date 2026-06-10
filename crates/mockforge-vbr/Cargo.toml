@@ -34,7 +34,7 @@ serde_json = { workspace = true }
 serde_yaml = { workspace = true }
 
 # Database
-sqlx = { version = "0.8", features = ["runtime-tokio-native-tls", "sqlite", "chrono", "uuid"] }
+sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "sqlite", "chrono", "uuid"] }
 
 # Logging
 tracing = { workspace = true }
