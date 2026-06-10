@@ -293,21 +293,22 @@ impl MockAI {
             });
         }
 
-        // Generate normal response based on mutation type
-        // For GET/HEAD/OPTIONS (Read operations), this should return an empty object
-        // to signal that OpenAPI response generation should be used instead
+        // Round 31 (#79) — `generate_response_body` now ALWAYS returns
+        // an empty object so the calling site (mockforge-openapi's
+        // router) falls back to spec-driven OpenAPI response
+        // generation. We still call it for mutation methods so any
+        // future mutation-side-effects (state tracking, drift
+        // detection) keep firing; we just don't let it shape the
+        // response body any more.
         let response_body = if is_mutation_method {
-            // Only use mutation-based response generation for actual mutations
             self.generate_response_body(&mutation_analysis, request, session_context)
                 .await?
         } else {
-            // For GET/HEAD/OPTIONS, return empty object to signal OpenAPI generation should be used
-            // This prevents GET requests from returning POST-style {id: "generated_id", status: "created"} responses
             tracing::debug!(
                 "Skipping mutation-based response generation for {} request - using OpenAPI response generation",
                 method_upper
             );
-            serde_json::json!({}) // Empty object signals to use OpenAPI response generation
+            serde_json::json!({})
         };
 
         Ok(Response {
@@ -482,55 +483,41 @@ impl MockAI {
         }))
     }
 
-    /// Generate response body based on mutation analysis
+    /// Generate response body based on mutation analysis.
+    ///
+    /// Issue #79 round 31 — Srikanth on 0.3.174 hit the vCenter
+    /// `Appliance.Recovery.Backup.SystemName.Archive_get` route (a
+    /// POST that vCenter's spec models as a Create-style mutation) and
+    /// saw the response come back as the hardcoded envelope
+    /// `{id: "generated_id", status: "created", data: <echoed body>}`,
+    /// even though the spec's 200 response promised
+    /// `Archive.Info` with six required fields. The hardcoded envelope
+    /// here was a holdover from before the OpenAPI ResponseGenerator
+    /// could shape Create/Update/Delete responses on its own — but
+    /// keeping it means MockAI silently overrides the spec for every
+    /// write request and the body Srikanth got back was missing
+    /// required fields like `comment` / `parts` / `timestamp` /
+    /// `version`.
+    ///
+    /// The fix: for any mutation kind, return an empty object. The
+    /// calling site in `mockforge-openapi`'s router (the
+    /// `if is_empty { fall through to OpenAPI response generation }`
+    /// branch) already treats `{}` as "use the spec-driven response".
+    /// So the body becomes spec-shape automatically and required
+    /// fields are populated by the same path that already handles
+    /// `NoChange` (GET/HEAD/OPTIONS). MockAI's mutation analysis still
+    /// runs (state tracking, drift detection, etc.); only the
+    /// response-body shape changes.
     async fn generate_response_body(
         &self,
-        mutation: &super::mutation_analyzer::MutationAnalysis,
-        request: &Request,
+        _mutation: &super::mutation_analyzer::MutationAnalysis,
+        _request: &Request,
         _session_context: &StatefulAiContext,
     ) -> Result<Value> {
-        // Generate response based on mutation type
-        // CRITICAL: NoChange (used for GET/HEAD/OPTIONS) should return empty object
-        // to signal that OpenAPI response generation should be used instead
-        match mutation.mutation_type {
-            super::mutation_analyzer::MutationType::NoChange => {
-                // For read operations (GET, HEAD, OPTIONS), return empty object
-                // This signals to use OpenAPI response generation, not mutation responses
-                tracing::debug!("MutationType::NoChange - returning empty object to use OpenAPI response generation");
-                Ok(serde_json::json!({}))
-            }
-            super::mutation_analyzer::MutationType::Create => {
-                // Generate created resource response
-                Ok(serde_json::json!({
-                    "id": "generated_id",
-                    "status": "created",
-                    "data": request.body.clone().unwrap_or(serde_json::json!({}))
-                }))
-            }
-            super::mutation_analyzer::MutationType::Update
-            | super::mutation_analyzer::MutationType::PartialUpdate => {
-                // Generate updated resource response
-                Ok(serde_json::json!({
-                    "id": "resource_id",
-                    "status": "updated",
-                    "data": request.body.clone().unwrap_or(serde_json::json!({}))
-                }))
-            }
-            super::mutation_analyzer::MutationType::Delete => {
-                // Generate deletion response
-                Ok(serde_json::json!({
-                    "status": "deleted",
-                    "message": "Resource deleted successfully"
-                }))
-            }
-            _ => {
-                // Default success response
-                Ok(serde_json::json!({
-                    "status": "success",
-                    "data": request.body.clone().unwrap_or(serde_json::json!({}))
-                }))
-            }
-        }
+        tracing::debug!(
+            "MockAI mutation response: returning empty object so spec-driven OpenAPI response generation populates the body (#79 r31)"
+        );
+        Ok(serde_json::json!({}))
     }
 
     /// Merge new rules with existing rules
@@ -1024,6 +1011,63 @@ mod tests {
                 headers: HashMap::new(),
             };
             assert_eq!(response.status_code, status_code);
+        }
+    }
+
+    /// Round 31 (#79) — Srikanth on 0.3.174: MockAI was returning
+    /// `{id: "generated_id", status: "created", data: ...}` for POST
+    /// (and similar envelopes for PUT / PATCH / DELETE), overriding
+    /// the response body the OpenAPI spec described. The vCenter
+    /// `Archive.Info` schema requires six fields; MockAI's three-field
+    /// envelope was missing five of them, leading to
+    /// `response body root: required field missing: "comment"` reports
+    /// from the bench. Fixed by making `generate_response_body` return
+    /// `{}` for every mutation kind so the calling site's
+    /// `is_empty → use OpenAPI ResponseGenerator` fall-through kicks
+    /// in. Regression guard: every variant must return an empty
+    /// object.
+    #[tokio::test]
+    async fn generate_response_body_returns_empty_for_all_mutation_kinds() {
+        use crate::intelligent_behavior::mutation_analyzer::{MutationAnalysis, MutationType};
+        let mockai = MockAI::new(IntelligentBehaviorConfig::default());
+        let req = Request {
+            method: "POST".to_string(),
+            path: "/api/anything".to_string(),
+            body: Some(json!({"name": "X"})),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+        };
+        let ctx = StatefulAiContext::new("test-session", IntelligentBehaviorConfig::default());
+
+        for kind in [
+            MutationType::NoChange,
+            MutationType::Create,
+            MutationType::Update,
+            MutationType::PartialUpdate,
+            MutationType::Delete,
+        ] {
+            let kind_label = format!("{:?}", kind);
+            let mutation = MutationAnalysis {
+                mutation_type: kind,
+                changed_fields: Vec::new(),
+                added_fields: Vec::new(),
+                removed_fields: Vec::new(),
+                validation_issues: Vec::new(),
+                confidence: 1.0,
+            };
+            let body = mockai
+                .generate_response_body(&mutation, &req, &ctx)
+                .await
+                .expect("generate_response_body should not error");
+            assert_eq!(
+                body,
+                json!({}),
+                "MockAI must return empty object for mutation kind {} so the calling \
+                 site falls back to spec-driven response generation (regression #79 r31). \
+                 Got: {:?}",
+                kind_label,
+                body
+            );
         }
     }
 }

@@ -1,5 +1,11 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.176] - 2026-06-10
+
+### Fixed
+
+- **[Contracts]** Write requests (POST / PUT / PATCH / DELETE) now return spec-shape response bodies instead of MockAI's hardcoded `{id, status, data}` envelope (#79 round 31 follow-up / Srikanth).
+
 ## [0.3.175] - 2026-06-10
 
 ### Fixed
