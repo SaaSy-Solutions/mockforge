@@ -116,6 +116,12 @@ pub struct SelfTestConfig {
     /// JSON-Schema validation of large response bodies adds wall-clock
     /// time and the user has to opt in.
     pub validate_response_schemas: bool,
+    /// Round 33 (#823) — human-readable label for the OpenAPI spec
+    /// this run is exercising. Stamped on every `CaseCapture` so the
+    /// per-endpoint summary can attribute rows back to a spec in
+    /// multi-spec / multi-target benches. `None` when the bench didn't
+    /// track a spec path.
+    pub spec_label: Option<String>,
 }
 
 /// Round 23 (c-iii) — one captured request/response pair, one per
@@ -153,6 +159,19 @@ pub struct CaseCapture {
     /// "show mismatches only" filter.
     #[serde(default)]
     pub expected_status_range: String,
+    /// Round 33 (#823) — the spec's path template (e.g.
+    /// `/users/{id}`) before path-param substitution. Lets the
+    /// per-endpoint summary collapse `/users/X` and `/users/Y` into
+    /// one row. Empty string when the call site predates this field
+    /// (older `CaseCapture` payloads on disk also deserialise OK).
+    #[serde(default)]
+    pub path_template: String,
+    /// Round 33 (#823) — basename (or fallback to full path) of the
+    /// OpenAPI spec file this probe came from. Lets multi-spec runs
+    /// attribute rows back to the spec they came from. `None` when
+    /// the bench didn't track a spec path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spec_label: Option<String>,
 }
 
 impl Default for SelfTestConfig {
@@ -169,6 +188,7 @@ impl Default for SelfTestConfig {
             geo_source_headers: default_geo_source_headers(),
             capture: None,
             validate_response_schemas: false,
+            spec_label: None,
         }
     }
 }
@@ -438,6 +458,7 @@ async fn test_operation(
         op.sample_body.as_deref(),
         op.query_params.clone(),
         op_headers.clone(),
+        &op.path,
     )
     .await;
 
@@ -464,6 +485,7 @@ async fn test_operation(
                 Some("{}"),
                 op.query_params.clone(),
                 op_headers.clone(),
+                &op.path,
             )
             .await,
         );
@@ -482,6 +504,7 @@ async fn test_operation(
                 Some("[]"),
                 op.query_params.clone(),
                 op_headers.clone(),
+                &op.path,
             )
             .await,
         );
@@ -539,6 +562,7 @@ async fn test_operation(
                         // override here wins because reqwest preserves
                         // the last-set header value.
                         vec![("Content-Type".to_string(), (*ct).to_string())],
+                        &op.path,
                     )
                     .await,
                 );
@@ -572,6 +596,7 @@ async fn test_operation(
                         Some(&body),
                         op.query_params.clone(),
                         op_headers.clone(),
+                        &op.path,
                     )
                     .await,
                 );
@@ -610,6 +635,7 @@ async fn test_operation(
                             // symmetric, otherwise a GEODB front-end sees
                             // the rotating IP only on positives).
                             op_headers.clone(),
+                            &op.path,
                         )
                         .await,
                     );
@@ -643,6 +669,7 @@ async fn test_operation(
                 // `op_headers` (carries geo IP) instead of bare
                 // `op.header_params`.
                 op_headers.clone(),
+                &op.path,
             )
             .await,
         );
@@ -697,6 +724,7 @@ async fn test_operation(
                     op.sample_body.as_deref(),
                     op.query_params.clone(),
                     op_headers.clone(),
+                    &op.path,
                 )
                 .await,
             );
@@ -718,6 +746,7 @@ async fn test_operation(
                 op.sample_body.as_deref(),
                 q,
                 op_headers.clone(),
+                &op.path,
             )
             .await,
         );
@@ -781,6 +810,7 @@ async fn test_operation(
                 req_query,
                 req_headers,
                 stripped_extra,
+                &op.path,
             )
             .await,
         );
@@ -808,6 +838,7 @@ async fn test_operation(
                 op.sample_body.as_deref(),
                 op.query_params.clone(),
                 h,
+                &op.path,
             )
             .await,
         );
@@ -848,6 +879,7 @@ async fn test_operation(
                 // tuned to a specific source IP would silently let
                 // them through.
                 op_headers.clone(),
+                &op.path,
             )
             .await,
         );
@@ -1362,6 +1394,10 @@ async fn send_case_with_extra(
     query: Vec<(String, String)>,
     headers: Vec<(String, String)>,
     extra_headers: Vec<(String, String)>,
+    // Round 33 (#823) — spec path template (e.g. `/users/{id}`)
+    // for the operation this probe belongs to. Stamped on the
+    // capture so the per-endpoint summary can group by template.
+    path_template: &str,
 ) -> CaseOutcome {
     let mut req = client.request(method.clone(), url);
     let mut capture_headers: BTreeMap<String, String> = BTreeMap::new();
@@ -1472,6 +1508,12 @@ async fn send_case_with_extra(
             } else {
                 "2xx-3xx".into()
             },
+            // Round 33 (#823) — path_template carries the spec's
+            // pre-substitution path so the per-endpoint summary can
+            // collapse `/users/X` and `/users/Y` into one row.
+            // spec_label is constant per run, read from the config.
+            path_template: path_template.to_string(),
+            spec_label: config.spec_label.clone(),
         };
         if let Ok(mut guard) = sink.lock() {
             guard.push(entry);
@@ -1501,6 +1543,7 @@ async fn send_case(
     body: Option<&str>,
     query: Vec<(String, String)>,
     headers: Vec<(String, String)>,
+    path_template: &str,
 ) -> CaseOutcome {
     // Forwarding to `send_case_with_extra` keeps the capture logic in
     // one place so request/response tracing can't drift between the
@@ -1516,6 +1559,7 @@ async fn send_case(
         query,
         headers,
         config.extra_headers.clone(),
+        path_template,
     )
     .await
 }

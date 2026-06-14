@@ -1,3 +1,10 @@
+## [0.3.178] - 2026-06-14
+
+### Added
+
+- **[Contracts]** Per-endpoint summary now groups by the spec's path TEMPLATE rather than the resolved URL, and rows carry a `spec` label for multi-spec runs (#79 round 33 / #823 / Srikanth's r32 follow-up). On a v1 run that exercised `/users/X` and `/users/Y` as 1000 distinct VU iterations, the report exploded to 1000 rows; on v2 those collapse into a single `(GET, /users/{id})` row. `CaseCapture` gains `path_template: String` and `spec_label: Option<String>` (both default-via-serde so older JSONL captures still load). HTML section only renders the Spec column when at least one row has a label, so single-spec runs stay tidy. New tests cover template collapsing, multi-spec separation, the HTML column toggle, and legacy-fallback to resolved path.
+- **[Contracts]** `MOCKFORGE_INJECT_RESPONSE_VIOLATIONS=true` env var + `mockforge serve --inject-response-violations` CLI flag (#79 round 33 / #822 / Srikanth's r32 follow-up: "can we add those as a negative response tests from mockforge server side"). When enabled, the OpenAPI response generator drops the first declared required field from every synthesized 2xx response body, so the caller can exercise their proxy / conformance pipeline against a known-bad-shape mockforge end-to-end. Off by default. No-op for non-2xx, non-Object schemas, schemas without `required`, and bodies that already don't carry the field.
+
 ## [0.3.177] - 2026-06-14
 
 ### Fixed

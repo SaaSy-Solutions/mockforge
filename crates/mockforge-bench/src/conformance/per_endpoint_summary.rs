@@ -31,9 +31,15 @@ use super::self_test::CaseCapture;
 pub struct PerEndpointSummary {
     /// HTTP method, uppercase.
     pub method: String,
-    /// Resolved URL path. Query string stripped. NOT the spec
-    /// template — see module docstring.
+    /// Round 33 (#823) — spec path template (e.g. `/users/{id}`)
+    /// pre path-param substitution. Falls back to the resolved URL
+    /// path when the capture predates the template field.
     pub path: String,
+    /// Round 33 (#823) — basename of the OpenAPI spec the probes for
+    /// this endpoint came from. `None` for single-spec runs that didn't
+    /// stamp a label, or for legacy captures.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spec: Option<String>,
     pub sent: usize,
     pub status_2xx: usize,
     pub status_3xx: usize,
@@ -91,12 +97,25 @@ impl LenStats {
 
 /// Build the per-endpoint summary. Pass the captured slice as
 /// produced by the conformance self-test sink.
+///
+/// Round 33 (#823) — grouping key is `(method, path_template, spec)`
+/// when the capture carries a non-empty `path_template`, and falls
+/// back to `(method, resolved-path)` otherwise so this stays
+/// compatible with older capture files that don't have the field.
 pub fn build_summary(captures: &[CaseCapture]) -> Vec<PerEndpointSummary> {
-    let mut by_key: BTreeMap<(String, String), EndpointAccumulator> = BTreeMap::new();
+    let mut by_key: BTreeMap<(String, String, Option<String>), EndpointAccumulator> =
+        BTreeMap::new();
 
     for c in captures {
-        let (path, query) = split_url(&c.url);
-        let key = (c.method.to_ascii_uppercase(), path);
+        let (resolved_path, query) = split_url(&c.url);
+        // Prefer the spec template; resolved URL path is the fallback
+        // only for legacy captures that predate `path_template`.
+        let path = if c.path_template.is_empty() {
+            resolved_path
+        } else {
+            c.path_template.clone()
+        };
+        let key = (c.method.to_ascii_uppercase(), path, c.spec_label.clone());
         let entry = by_key.entry(key).or_default();
         entry.sent += 1;
         match c.response_status {
@@ -122,7 +141,8 @@ pub fn build_summary(captures: &[CaseCapture]) -> Vec<PerEndpointSummary> {
 
     let mut out: Vec<PerEndpointSummary> = by_key
         .into_iter()
-        .map(|((method, path), acc)| PerEndpointSummary {
+        .map(|((method, path, spec), acc)| PerEndpointSummary {
+            spec,
             method,
             path,
             sent: acc.sent,
@@ -183,16 +203,23 @@ pub fn render_html_section(summaries: &[PerEndpointSummary]) -> String {
     if summaries.is_empty() {
         return String::new();
     }
+    // Round 33 (#823) — show the Spec column only when at least one row
+    // carries a spec label, so single-spec runs don't get an empty
+    // column and multi-spec runs can attribute rows.
+    let show_spec = summaries.iter().any(|s| s.spec.is_some());
     let mut out = String::from("<h2 id=\"per-endpoint\">Per-endpoint traffic summary</h2>\n");
     out.push_str(
-        "<p class=\"small\">Aggregated from the JSONL capture sink. Lengths are byte counts on the captured (truncated) bodies.</p>\n",
+        "<p class=\"small\">Aggregated from the JSONL capture sink. Path is the spec template; lengths are byte counts on the captured (truncated) bodies.</p>\n",
     );
+    out.push_str("<table>\n<thead><tr>");
+    if show_spec {
+        out.push_str("<th>Spec</th>");
+    }
     out.push_str(
-        "<table>\n<thead><tr>\
-        <th>Method</th><th>Path</th>\
-        <th>Sent</th><th>2xx</th><th>3xx</th><th>4xx</th><th>5xx</th><th>Err</th>\
-        <th>Req p95 (B)</th><th>Resp p95 (B)</th><th>Query p95 (B)</th>\
-        </tr></thead>\n<tbody>\n",
+        "<th>Method</th><th>Path</th>\
+         <th>Sent</th><th>2xx</th><th>3xx</th><th>4xx</th><th>5xx</th><th>Err</th>\
+         <th>Req p95 (B)</th><th>Resp p95 (B)</th><th>Query p95 (B)</th>\
+         </tr></thead>\n<tbody>\n",
     );
     for s in summaries {
         let req = s
@@ -210,8 +237,13 @@ pub fn render_html_section(summaries: &[PerEndpointSummary]) -> String {
             .as_ref()
             .map(|l| l.p95.to_string())
             .unwrap_or_else(|| "-".to_string());
+        out.push_str("<tr>");
+        if show_spec {
+            let spec_cell = s.spec.as_deref().unwrap_or("-");
+            out.push_str(&format!("<td><code>{}</code></td>", html_escape(spec_cell)));
+        }
         out.push_str(&format!(
-            "<tr><td><code>{}</code></td><td><code>{}</code></td>\
+            "<td><code>{}</code></td><td><code>{}</code></td>\
              <td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td><td>{}</td>\
              <td>{}</td><td>{}</td><td>{}</td></tr>\n",
             html_escape(&s.method),
@@ -246,6 +278,17 @@ mod tests {
         req: Option<&str>,
         resp: Option<&str>,
     ) -> CaseCapture {
+        cap_with_template(method, url, status, req, resp, "")
+    }
+
+    fn cap_with_template(
+        method: &str,
+        url: &str,
+        status: u16,
+        req: Option<&str>,
+        resp: Option<&str>,
+        path_template: &str,
+    ) -> CaseCapture {
         CaseCapture {
             label: "x".to_string(),
             method: method.to_string(),
@@ -260,6 +303,8 @@ mod tests {
             error: None,
             response_schema_error: None,
             expected_status_range: "2xx-3xx".to_string(),
+            path_template: path_template.to_string(),
+            spec_label: None,
         }
     }
 
@@ -310,5 +355,116 @@ mod tests {
     #[test]
     fn empty_input_renders_to_empty_html() {
         assert_eq!(render_html_section(&[]), "");
+    }
+
+    /// Round 33 (#823) — Srikanth's vCenter spec resolves the same
+    /// path template to many distinct URLs (`/users/{id}` →
+    /// `/users/test-value`, `/users/abc`, etc). Without template
+    /// grouping the report blows up to one row per VU. With it, every
+    /// hit on the same `(method, path_template)` collapses into one row.
+    #[test]
+    fn template_grouping_collapses_distinct_resolved_urls() {
+        let caps = vec![
+            cap_with_template(
+                "GET",
+                "https://host/api/users/test-value",
+                200,
+                None,
+                Some("ok"),
+                "/users/{id}",
+            ),
+            cap_with_template(
+                "GET",
+                "https://host/api/users/abc",
+                404,
+                None,
+                Some("nf"),
+                "/users/{id}",
+            ),
+            cap_with_template(
+                "GET",
+                "https://host/api/users/zzz",
+                200,
+                None,
+                Some("ok"),
+                "/users/{id}",
+            ),
+        ];
+        let s = build_summary(&caps);
+        assert_eq!(s.len(), 1, "all three URLs collapse into one template-grouped row");
+        let row = &s[0];
+        assert_eq!(row.path, "/users/{id}", "path field carries the spec template");
+        assert_eq!(row.sent, 3);
+        assert_eq!(row.status_2xx, 2);
+        assert_eq!(row.status_4xx, 1);
+    }
+
+    /// Round 33 (#823) — when probes from two different specs share
+    /// the same `(method, path_template)` they stay separate rows, so
+    /// a multi-spec run keeps the attribution.
+    #[test]
+    fn spec_label_keeps_same_template_rows_separate() {
+        let mut a = cap_with_template(
+            "POST",
+            "https://host/api/foo",
+            201,
+            Some("body"),
+            Some("ok"),
+            "/foo",
+        );
+        a.spec_label = Some("specA.yaml".to_string());
+        let mut b = cap_with_template(
+            "POST",
+            "https://host/api/foo",
+            201,
+            Some("body"),
+            Some("ok"),
+            "/foo",
+        );
+        b.spec_label = Some("specB.yaml".to_string());
+        let caps = vec![a, b];
+        let s = build_summary(&caps);
+        assert_eq!(s.len(), 2, "different specs must not collapse same-template rows");
+        let labels: Vec<Option<&str>> = s.iter().map(|x| x.spec.as_deref()).collect();
+        assert!(labels.contains(&Some("specA.yaml")));
+        assert!(labels.contains(&Some("specB.yaml")));
+    }
+
+    /// Round 33 (#823) — the HTML section only emits a Spec column
+    /// when at least one row carries a spec label. Keeps the
+    /// single-spec single-target run from showing a useless column.
+    #[test]
+    fn html_spec_column_only_appears_with_labels() {
+        let no_label = vec![cap_with_template(
+            "GET",
+            "https://h/a",
+            200,
+            None,
+            Some("x"),
+            "/a",
+        )];
+        let html_no = render_html_section(&build_summary(&no_label));
+        assert!(!html_no.contains("<th>Spec</th>"), "single-spec runs hide the column");
+
+        let mut labelled = cap_with_template("GET", "https://h/b", 200, None, Some("x"), "/b");
+        labelled.spec_label = Some("spec.yaml".to_string());
+        let html_yes = render_html_section(&build_summary(&[labelled]));
+        assert!(html_yes.contains("<th>Spec</th>"), "labelled runs surface the column");
+        assert!(html_yes.contains("spec.yaml"), "spec label rendered in the row");
+    }
+
+    /// Round 33 (#823) — captures with empty `path_template` (e.g.
+    /// legacy JSONL on disk) still group by resolved path, so we
+    /// don't break backward compatibility.
+    #[test]
+    fn empty_template_falls_back_to_resolved_path() {
+        let caps = vec![
+            cap("GET", "https://host/api/foo", 200, None, Some("ok")),
+            cap("GET", "https://host/api/foo", 200, None, Some("ok")),
+        ];
+        let s = build_summary(&caps);
+        assert_eq!(s.len(), 1);
+        assert_eq!(s[0].path, "/api/foo");
+        assert_eq!(s[0].sent, 2);
     }
 }
