@@ -115,6 +115,10 @@ pub(crate) struct ServeArgs {
     /// `--conformance-buffer-unique` (round 31). Mirrors
     /// `MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE=true`.
     pub(crate) conformance_buffer_unique: bool,
+    /// `--inject-response-violations` (round 33, #822). Mirrors
+    /// `MOCKFORGE_INJECT_RESPONSE_VIOLATIONS=true`. Drops the first
+    /// required field from synthesized 2xx response bodies.
+    pub(crate) inject_response_violations: bool,
 }
 
 impl Default for ServeArgs {
@@ -197,6 +201,7 @@ impl Default for ServeArgs {
             bulkhead_queue_timeout_ms: 5000,
             conformance_buffer_size: None,
             conformance_buffer_unique: false,
+            inject_response_violations: false,
         }
     }
 }
@@ -704,6 +709,12 @@ pub async fn handle_serve(
     }
     if serve_args.conformance_buffer_unique {
         std::env::set_var("MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE", "true");
+    }
+    // Round 33 (#822) — propagate `--inject-response-violations` to
+    // the env so the deep-stack response generator in mockforge-openapi
+    // picks it up without a separate plumbing path.
+    if serve_args.inject_response_violations {
+        std::env::set_var("MOCKFORGE_INJECT_RESPONSE_VIOLATIONS", "true");
     }
 
     // Issue #79 round 20 — propagate `--base-path` so the management

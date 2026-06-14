@@ -1,5 +1,12 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.178] - 2026-06-14
+
+### Added
+
+- **[Contracts]** Per-endpoint summary groups by spec path template, with a `spec` label for multi-spec runs (#79 round 33 / #823 / Srikanth).
+- **[Contracts]** `MOCKFORGE_INJECT_RESPONSE_VIOLATIONS=true` (+ `--inject-response-violations`) intentionally drops one required field from 2xx response bodies for negative-testing downstream proxies (#79 round 33 / #822 / Srikanth).
+
 ## [0.3.177] - 2026-06-14
 
 ### Fixed

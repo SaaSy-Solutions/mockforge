@@ -360,6 +360,8 @@ mod tests {
                 error: None,
                 response_schema_error: None,
                 expected_status_range: "2xx-3xx".to_string(),
+                path_template: String::new(),
+                spec_label: None,
             },
             CaseCapture {
                 label: "owasp:sqli".to_string(),
@@ -375,6 +377,8 @@ mod tests {
                 error: None,
                 response_schema_error: None,
                 expected_status_range: "2xx-3xx".to_string(),
+                path_template: String::new(),
+                spec_label: None,
             },
         ]
     }
@@ -411,6 +415,8 @@ mod tests {
                 error: None,
                 response_schema_error: None,
                 expected_status_range: "2xx-3xx".to_string(),
+                path_template: String::new(),
+                spec_label: None,
             });
         }
         let html = render_capture_html(&entries);
@@ -465,6 +471,8 @@ mod tests {
             error: None,
             response_schema_error: None,
             expected_status_range: "2xx-3xx".to_string(),
+            path_template: String::new(),
+            spec_label: None,
         };
         let html = render_capture_html(&[entry]);
         assert!(

@@ -2531,6 +2531,16 @@ impl BenchCommand {
                     None
                 },
                 validate_response_schemas: self.validate_response_schemas,
+                // Round 33 (#823) — basename of the spec, stamped on
+                // every capture entry so the per-endpoint summary can
+                // attribute rows back to the right spec on multi-spec
+                // runs. Falls back to the full path string if the
+                // basename can't be derived.
+                spec_label: self.spec.first().map(|p| {
+                    p.file_name()
+                        .map(|s| s.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| p.to_string_lossy().into_owned())
+                }),
             };
             let capture_sink = cfg.capture.clone();
             TerminalReporter::print_progress(&format!(

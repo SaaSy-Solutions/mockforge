@@ -582,6 +582,18 @@ struct ServeCliArgs {
     #[arg(long, help_heading = "Server Configuration")]
     pub conformance_buffer_unique: bool,
 
+    /// Force-inject spec violations into synthesized 2xx responses
+    /// (Issue #79 round 33 / Srikanth's r32 ask: "can we add those as
+    /// a negative response tests from mockforge server side"). When
+    /// set, drops the first declared required field from every 2xx
+    /// response body so a downstream proxy / conformance pipeline can
+    /// be exercised against a known-bad-shape mockforge end-to-end.
+    /// Mirrors `MOCKFORGE_INJECT_RESPONSE_VIOLATIONS=true`. OFF by
+    /// default; honour `--no-validate-responses` semantics: this is a
+    /// negative-testing knob, not a release-grade behavior.
+    #[arg(long, help_heading = "Server Configuration")]
+    pub inject_response_violations: bool,
+
     #[command(flatten)]
     pub ports: PortArgs,
 
@@ -2637,6 +2649,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 bulkhead_queue_timeout_ms: args.chaos_opts.bulkhead_queue_timeout_ms,
                 conformance_buffer_size: args.conformance_buffer_size,
                 conformance_buffer_unique: args.conformance_buffer_unique,
+                inject_response_violations: args.inject_response_violations,
             })
             .await?;
         }
