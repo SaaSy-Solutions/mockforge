@@ -1,3 +1,17 @@
+## [0.3.177] - 2026-06-14
+
+### Fixed
+
+- **[Contracts]** Server-side conformance buffer now records `content-types` violations from the MockAI-enabled router path too (#79 round 32 / Srikanth on 0.3.176: "in the client I see response status as 415 for label `request-body:content-type-mismatch:xml` request but in the server I see only 400"). Root cause: the MockAI request handler took `body: Option<Json<Value>>`, and axum's `Json` extractor 415s a request whose `Content-Type` isn't `application/json` BEFORE the handler runs, so the buffer never got a chance to record the violation. The handler now takes raw `axum::body::Bytes`, runs the same `check_request_content_type` precheck the non-MockAI router already had (records the violation with category `content-types` and the configured validation status, default 415), and parses the body as JSON manually for the validator / fingerprint / MockAI paths. The existing `check_request_content_type_flags_mismatch` test covers the logic; the wiring is in `build_router_with_mockai`.
+- **[Install]** `cargo install mockforge-cli` no longer requires `protobuf-compiler` on the build host (#79 round 32 / Srikanth's VM1 Ubuntu 16.04 install error "Could not find `protoc`"). `mockforge-grpc/build.rs` now picks the `protoc` binary from the `protoc-bin-vendored` crate when the user hasn't pointed `PROTOC` at their own copy; user-set `PROTOC` still wins (empty string treated as unset). Build verified against the vCenter spec build with `PROTOC` cleared from the environment.
+
+### Added
+
+- **[Contracts]** Per-endpoint traffic summary derived from the conformance self-test capture (#79 round 32 / Srikanth's Q6 ask). Two surfaces:
+  - JSON sidecar at `bench-results/conformance-per-endpoint.json` for automation pipelines. One entry per `(method, resolved URL path)` with `sent`, `status_2xx` / `status_3xx` / `status_4xx` / `status_5xx` / `errors`, plus `request_body_len` / `response_body_len` / `query_len` with samples / avg / p50 / p95 / max.
+  - HTML section "Per-endpoint traffic summary" spliced into `bench-results/conformance-report.html`.
+  - Grouping is by RESOLVED path for v1, not the spec template (so `/foo/X` and `/foo/Y` are distinct rows). A future round will collapse to the spec template once we surface `op.path` on each `CaseCapture`. 4 new unit tests cover the bucketing, query-string strip, p95 calculation, and empty-input HTML.
+
 ## [0.3.176] - 2026-06-10
 
 ### Fixed

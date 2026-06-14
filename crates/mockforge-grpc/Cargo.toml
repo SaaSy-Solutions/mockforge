@@ -53,6 +53,13 @@ thiserror = "2.0"
 
 [build-dependencies]
 tonic-prost-build = "0.14"
+# Round 32 (#79 / Srikanth on 0.3.176): `cargo install mockforge-cli`
+# on Ubuntu 16.04 failed with "Could not find `protoc`" because the
+# system didn't have the `protobuf-compiler` package. Bundling a known-
+# good protoc binary lets the build succeed without any apt install.
+# The build.rs prefers system `PROTOC` when set, then falls back to the
+# vendored one.
+protoc-bin-vendored = "3"
 
 [features]
 default = ["data-faker"]

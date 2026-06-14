@@ -1,5 +1,16 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.177] - 2026-06-14
+
+### Fixed
+
+- **[Contracts]** Server-side conformance buffer now records `content-types` (415) violations from the MockAI router path too (#79 round 32 / Srikanth).
+- **[Install]** `cargo install mockforge-cli` no longer requires `protobuf-compiler` on Ubuntu 16.04 / RHEL 7; `mockforge-grpc` build uses a vendored `protoc` when `PROTOC` is unset (#79 round 32 / Srikanth).
+
+### Added
+
+- **[Contracts]** Per-endpoint traffic summary (sent count, status-class breakdown, request/response/query length p95) in `bench-results/conformance-per-endpoint.json` and a new section in `conformance-report.html` (#79 round 32 / Srikanth).
+
 ## [0.3.176] - 2026-06-10
 
 ### Fixed

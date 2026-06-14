@@ -1807,20 +1807,28 @@ impl OpenApiRouteRegistry {
 
             // Create async handler that processes requests through MockAI
             // Query params are extracted via Query extractor with HashMap
-            // Note: Using Query<HashMap<String, String>> wrapped in Option to handle missing query params
+            // Round 32 — Srikanth on 0.3.176: bench's content-type-swap
+            // probes return 415 client-side but the server-side
+            // conformance buffer only ever shows 400s. Root cause: this
+            // handler used to take `body: Option<Json<Value>>`, and
+            // axum's `Json` extractor 415s a request whose
+            // `Content-Type` isn't `application/json` BEFORE the
+            // handler runs — so the buffer never had a chance to
+            // record the violation, and client/server logs got out of
+            // sync on the same URI. Extract raw bytes instead; we now
+            // do the content-type check ourselves (recording to the
+            // buffer with category `content-types` and the configured
+            // validation status, default 415) and parse the body as
+            // JSON manually for the validator + MockAI paths below.
             let handler = move |AxumPath(path_params): AxumPath<HashMap<String, String>>,
                                 query: axum::extract::Query<HashMap<String, String>>,
                                 headers: HeaderMap,
-                                body: Option<Json<Value>>| {
+                                body_bytes: axum::body::Bytes| {
                 let route = route_clone.clone();
                 let mockai = mockai_clone.clone();
                 let validator = validator_clone.clone();
 
                 async move {
-                    // (a-pre) Run request validation against the spec
-                    // before any response synthesis. On failure this
-                    // also records to the foundation conformance ring
-                    // buffer surfaced by the TUI Conformance tab.
                     let mut path_map = Map::new();
                     for (k, v) in &path_params {
                         path_map.insert(k.clone(), Value::String(v.clone()));
@@ -1835,6 +1843,67 @@ impl OpenApiRouteRegistry {
                             header_map.insert(k.to_string(), Value::String(s.to_string()));
                         }
                     }
+
+                    // (a-pre1) Round 32 — content-type mismatch check
+                    // BEFORE body parsing. Mirrors the existing check
+                    // in `build_router_with_context`; both must record
+                    // because at any given moment exactly one of the
+                    // two router builders is wired up.
+                    if !body_bytes.is_empty() {
+                        let actual_ct = headers
+                            .get(axum::http::header::CONTENT_TYPE)
+                            .and_then(|v| v.to_str().ok());
+                        if let Err(ct_err) = validator.check_request_content_type(
+                            &route.path,
+                            &route.method,
+                            actual_ct,
+                        ) {
+                            let status_code =
+                                validator.options.validation_status.unwrap_or_else(|| {
+                                    std::env::var("MOCKFORGE_VALIDATION_STATUS")
+                                        .ok()
+                                        .and_then(|s| s.parse::<u16>().ok())
+                                        .unwrap_or(415)
+                                });
+                            mockforge_foundation::conformance_violations::record(
+                                mockforge_foundation::conformance_violations::ServerConformanceViolation {
+                                    timestamp: Utc::now(),
+                                    method: route.method.clone(),
+                                    path: route.path.clone(),
+                                    client_ip: "unknown".to_string(),
+                                    status: status_code,
+                                    reason: ct_err.clone(),
+                                    category: "content-types".to_string(),
+                                    occurrences: 1,
+                                },
+                            );
+                            let status = axum::http::StatusCode::from_u16(status_code)
+                                .unwrap_or(axum::http::StatusCode::UNSUPPORTED_MEDIA_TYPE);
+                            return (
+                                status,
+                                Json(serde_json::json!({
+                                    "error": "content_type_not_allowed",
+                                    "message": ct_err,
+                                })),
+                            );
+                        }
+                    }
+
+                    // (a-pre2) Parse body as JSON when present so the
+                    // validator, fingerprint, and MockAI paths can all
+                    // see it. We deliberately don't fail on JSON parse
+                    // errors here — the body validator below produces
+                    // the right shape of error message in that case.
+                    let body: Option<Json<Value>> = if body_bytes.is_empty() {
+                        None
+                    } else {
+                        serde_json::from_slice::<Value>(&body_bytes).ok().map(Json)
+                    };
+
+                    // (a-pre3) Run request validation against the spec
+                    // before any response synthesis. On failure this
+                    // also records to the foundation conformance ring
+                    // buffer surfaced by the TUI Conformance tab.
                     let body_val: Option<&Value> = body.as_ref().map(|Json(b)| b);
                     if let Err((status_code, payload)) = validator.run_validation_with_recording(
                         &route.path,
