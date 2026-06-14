@@ -2546,6 +2546,12 @@ impl BenchCommand {
             // (d) — also emit a self-contained HTML viewer at
             // `conformance-self-test-requests.html` for users who
             // want to browse the capture without piping through `jq`.
+            // Round 32 (#79 / Srikanth) — derive the per-endpoint
+            // traffic summary from the same in-memory capture sink so
+            // we don't re-parse the JSONL from disk later.
+            let per_endpoint_summary: Vec<
+                crate::conformance::per_endpoint_summary::PerEndpointSummary,
+            >;
             if let Some(sink) = capture_sink {
                 if let Ok(guard) = sink.lock() {
                     let jsonl_path = self.output.join("conformance-self-test-requests.jsonl");
@@ -2561,13 +2567,35 @@ impl BenchCommand {
                     let html =
                         crate::conformance::capture_html::render_capture_html(guard.as_slice());
                     let _ = std::fs::write(&html_path, html);
-                    TerminalReporter::print_progress(&format!(
-                        "Self-test request/response capture written to {} ({} entries) + {}",
-                        jsonl_path.display(),
-                        guard.len(),
-                        html_path.display(),
-                    ));
+
+                    // Round 32 — per-endpoint summary derived once from
+                    // the same slice. Written as a JSON sidecar for
+                    // automation and spliced into the HTML report below.
+                    per_endpoint_summary =
+                        crate::conformance::per_endpoint_summary::build_summary(guard.as_slice());
+                    let summary_path = self.output.join("conformance-per-endpoint.json");
+                    if let Ok(json) = serde_json::to_string_pretty(&per_endpoint_summary) {
+                        let _ = std::fs::write(&summary_path, json);
+                        TerminalReporter::print_progress(&format!(
+                            "Self-test request/response capture written to {} ({} entries) + {} + {}",
+                            jsonl_path.display(),
+                            guard.len(),
+                            html_path.display(),
+                            summary_path.display(),
+                        ));
+                    } else {
+                        TerminalReporter::print_progress(&format!(
+                            "Self-test request/response capture written to {} ({} entries) + {}",
+                            jsonl_path.display(),
+                            guard.len(),
+                            html_path.display(),
+                        ));
+                    }
+                } else {
+                    per_endpoint_summary = Vec::new();
                 }
+            } else {
+                per_endpoint_summary = Vec::new();
             }
             TerminalReporter::print_progress(&report.render_summary());
             // Persist the JSON report alongside the regular conformance
@@ -2629,11 +2657,26 @@ impl BenchCommand {
                     None => Some(200),
                 },
             };
-            let html = crate::conformance::report_html::render_html_with_options(
+            let mut html = crate::conformance::report_html::render_html_with_options(
                 &report,
                 audit_value.as_ref(),
                 &render_opts,
             );
+            // Round 32 (#79 / Srikanth) — splice the per-endpoint
+            // summary just before the closing `</body>` so it lands at
+            // the bottom of the report. Empty summary renders as an
+            // empty string so we don't even introduce an extra newline
+            // when there were no captures.
+            let summary_section = crate::conformance::per_endpoint_summary::render_html_section(
+                &per_endpoint_summary,
+            );
+            if !summary_section.is_empty() {
+                if let Some(idx) = html.rfind("</body>") {
+                    html.insert_str(idx, &summary_section);
+                } else {
+                    html.push_str(&summary_section);
+                }
+            }
             if std::fs::write(&html_path, html).is_ok() {
                 TerminalReporter::print_progress(&format!(
                     "HTML report written to {}",

@@ -11,6 +11,34 @@ fn main() {
     let manifest_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     let out_dir = env::var("OUT_DIR").unwrap();
 
+    // Round 32 (#79 / Srikanth on 0.3.176): Ubuntu 16.04 boxes don't
+    // ship `protobuf-compiler`, so `cargo install mockforge-cli`
+    // failed with "Could not find `protoc`". Use the vendored binary
+    // from `protoc-bin-vendored` when the user hasn't already set
+    // `PROTOC` themselves. The crate ships per-target binaries inside
+    // its source tarball, so cargo install picks it up automatically.
+    let user_protoc = env::var("PROTOC").ok().filter(|s| !s.is_empty());
+    if user_protoc.is_none() {
+        match protoc_bin_vendored::protoc_bin_path() {
+            Ok(p) => {
+                // SAFETY: build scripts run single-threaded, so this
+                // env mutation is sound. tonic-prost-build reads
+                // PROTOC at configure() time later in this main(),
+                // so it must be set before then.
+                unsafe {
+                    env::set_var("PROTOC", &p);
+                }
+                println!("cargo:rerun-if-env-changed=PROTOC");
+                println!("cargo:info=using vendored protoc at {}", p.display());
+            }
+            Err(e) => {
+                println!(
+                    "cargo:warning=protoc-bin-vendored returned no binary ({e}); falling back to system PATH"
+                );
+            }
+        }
+    }
+
     // Get proto directory from environment variable or use default
     let proto_dir =
         env::var("MOCKFORGE_PROTO_DIR").unwrap_or_else(|_| format!("{}/proto", manifest_dir));
