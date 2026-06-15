@@ -467,4 +467,44 @@ mod tests {
         assert_eq!(s[0].path, "/api/foo");
         assert_eq!(s[0].sent, 2);
     }
+
+    /// Round 34 (#828) — Srikanth on 0.3.178 searched for
+    /// `/api/appliance/access/consolecli` in the per-endpoint JSON
+    /// and didn't find it; r33 stored just the spec path
+    /// `/appliance/access/consolecli` because the bench bench
+    /// threaded `&op.path` (no base_path prefix). r34 prefixes
+    /// `--base-path` so the stored `path_template` matches the URL
+    /// the user actually sent. Captures stamped with the prefixed
+    /// template here simulate the new behavior and the summary
+    /// surfaces the user-facing URL path.
+    #[test]
+    fn base_path_prefixed_template_appears_in_path_column() {
+        let caps = vec![
+            cap_with_template(
+                "PUT",
+                "https://host/api/appliance/access/consolecli",
+                204,
+                Some(r#"{"enabled":true}"#),
+                None,
+                "/api/appliance/access/consolecli",
+            ),
+            cap_with_template(
+                "PUT",
+                "https://host/api/appliance/access/consolecli",
+                400,
+                Some(r#"{"data":"x"}"#),
+                Some("bad"),
+                "/api/appliance/access/consolecli",
+            ),
+        ];
+        let s = build_summary(&caps);
+        assert_eq!(s.len(), 1, "both probes collapse into one row");
+        assert_eq!(
+            s[0].path, "/api/appliance/access/consolecli",
+            "stored path includes the --base-path prefix so it matches the URL the user sent"
+        );
+        assert_eq!(s[0].sent, 2);
+        assert_eq!(s[0].status_2xx, 1);
+        assert_eq!(s[0].status_4xx, 1);
+    }
 }

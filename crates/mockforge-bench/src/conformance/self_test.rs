@@ -441,6 +441,34 @@ async fn test_operation(
     );
     let method = Method::from_bytes(op.method.to_uppercase().as_bytes()).unwrap_or(Method::GET);
 
+    // Round 34 (#828) — stamp every `CaseCapture` with the spec
+    // template PREFIXED by `--base-path`, so the per-endpoint
+    // summary's `path` column matches what the user sees in URLs
+    // and logs. Srikanth searched for `/api/appliance/access/...`
+    // and didn't find it because round 33 stored just `/appliance/
+    // access/...`. Same normalization as `build_url_with_base`:
+    // leading `/` auto-added, trailing `/` stripped, empty
+    // base_path → no prefix at all.
+    let path_template = {
+        let prefix = match config.base_path.as_deref() {
+            Some(bp) if !bp.is_empty() => {
+                let trimmed = bp.trim_end_matches('/');
+                if trimmed.starts_with('/') {
+                    trimmed.to_string()
+                } else {
+                    format!("/{}", trimmed)
+                }
+            }
+            _ => String::new(),
+        };
+        let path = if op.path.starts_with('/') {
+            op.path.clone()
+        } else {
+            format!("/{}", op.path)
+        };
+        format!("{prefix}{path}")
+    };
+
     // Round 18.5 — pre-compute the operation's effective headers
     // with the geo source IP baked in. Doing it once here keeps the
     // per-case `send_case` calls below unchanged. When `geo_ip` is
@@ -458,7 +486,7 @@ async fn test_operation(
         op.sample_body.as_deref(),
         op.query_params.clone(),
         op_headers.clone(),
-        &op.path,
+        &path_template,
     )
     .await;
 
@@ -485,7 +513,7 @@ async fn test_operation(
                 Some("{}"),
                 op.query_params.clone(),
                 op_headers.clone(),
-                &op.path,
+                &path_template,
             )
             .await,
         );
@@ -504,7 +532,7 @@ async fn test_operation(
                 Some("[]"),
                 op.query_params.clone(),
                 op_headers.clone(),
-                &op.path,
+                &path_template,
             )
             .await,
         );
@@ -562,7 +590,7 @@ async fn test_operation(
                         // override here wins because reqwest preserves
                         // the last-set header value.
                         vec![("Content-Type".to_string(), (*ct).to_string())],
-                        &op.path,
+                        &path_template,
                     )
                     .await,
                 );
@@ -581,7 +609,17 @@ async fn test_operation(
             // string-field behaviour.
             for (label, snippet) in EMBEDDED_CONTENT_VARIANTS {
                 let payload = op.sample_body.as_deref().unwrap_or("{}");
-                let body = embed_payload_in_first_string_field(payload, snippet);
+                // Round 34 (#829) — skip the probe entirely when the
+                // positive sample has no string leaf we can mutate.
+                // The previous round-27 fallback `{"data": <snippet>}`
+                // produced a body that doesn't match the spec's actual
+                // schema for endpoints like vCenter's `consolecli` PUT
+                // (which wants `{enabled: bool}`), so the server
+                // correctly 400'd and the bench misreported the
+                // mismatch as an expectation failure.
+                let Some(body) = embed_payload_in_first_string_field(payload, snippet) else {
+                    continue;
+                };
                 negatives.push(
                     send_case(
                         client,
@@ -596,7 +634,7 @@ async fn test_operation(
                         Some(&body),
                         op.query_params.clone(),
                         op_headers.clone(),
-                        &op.path,
+                        &path_template,
                     )
                     .await,
                 );
@@ -635,7 +673,7 @@ async fn test_operation(
                             // symmetric, otherwise a GEODB front-end sees
                             // the rotating IP only on positives).
                             op_headers.clone(),
-                            &op.path,
+                            &path_template,
                         )
                         .await,
                     );
@@ -669,7 +707,7 @@ async fn test_operation(
                 // `op_headers` (carries geo IP) instead of bare
                 // `op.header_params`.
                 op_headers.clone(),
-                &op.path,
+                &path_template,
             )
             .await,
         );
@@ -724,7 +762,7 @@ async fn test_operation(
                     op.sample_body.as_deref(),
                     op.query_params.clone(),
                     op_headers.clone(),
-                    &op.path,
+                    &path_template,
                 )
                 .await,
             );
@@ -746,7 +784,7 @@ async fn test_operation(
                 op.sample_body.as_deref(),
                 q,
                 op_headers.clone(),
-                &op.path,
+                &path_template,
             )
             .await,
         );
@@ -810,7 +848,7 @@ async fn test_operation(
                 req_query,
                 req_headers,
                 stripped_extra,
-                &op.path,
+                &path_template,
             )
             .await,
         );
@@ -838,7 +876,7 @@ async fn test_operation(
                 op.sample_body.as_deref(),
                 op.query_params.clone(),
                 h,
-                &op.path,
+                &path_template,
             )
             .await,
         );
@@ -879,7 +917,7 @@ async fn test_operation(
                 // tuned to a specific source IP would silently let
                 // them through.
                 op_headers.clone(),
-                &op.path,
+                &path_template,
             )
             .await,
         );
@@ -931,20 +969,19 @@ async fn test_operation(
 /// Round 27 (k variant b) — return a JSON body string identical to
 /// `sample` except that the first string-valued leaf has been
 /// replaced with `snippet`. Walks objects depth-first and stops at
-/// the first string. If `sample` is not parseable JSON, or has no
-/// string fields, falls back to wrapping the snippet under a `data`
-/// key so the probe still has a body to send: `{"data": <snippet>}`.
-/// The result is always valid JSON ready for `application/json`.
-fn embed_payload_in_first_string_field(sample: &str, snippet: &str) -> String {
-    let mut parsed: serde_json::Value = match serde_json::from_str(sample) {
-        Ok(v) => v,
-        Err(_) => return format!(r#"{{"data":{}}}"#, json_quote(snippet)),
-    };
+/// the first string. Returns `None` when `sample` is not parseable
+/// JSON or has no string field anywhere; the caller skips emitting
+/// a probe in that case (Round 34 #829: Srikanth on 0.3.178 found
+/// that the previous `{"data": <snippet>}` fallback envelope didn't
+/// match real-API schemas like vCenter's `{enabled: bool}` and the
+/// server correctly 400'd, which the bench then misreported as a
+/// `2xx-3xx` expectation miss).
+fn embed_payload_in_first_string_field(sample: &str, snippet: &str) -> Option<String> {
+    let mut parsed: serde_json::Value = serde_json::from_str(sample).ok()?;
     if !replace_first_string(&mut parsed, snippet) {
-        return format!(r#"{{"data":{}}}"#, json_quote(snippet));
+        return None;
     }
-    serde_json::to_string(&parsed)
-        .unwrap_or_else(|_| format!(r#"{{"data":{}}}"#, json_quote(snippet)))
+    serde_json::to_string(&parsed).ok()
 }
 
 /// Helper for `embed_payload_in_first_string_field`: recursively
@@ -977,14 +1014,6 @@ fn replace_first_string(v: &mut serde_json::Value, snippet: &str) -> bool {
         }
         _ => false,
     }
-}
-
-/// Helper for `embed_payload_in_first_string_field`'s fallback: take
-/// an arbitrary string and quote it for embedding inside a JSON
-/// literal. `serde_json::to_string(&value)` handles escaping
-/// correctly for unicode + control chars + quotes.
-fn json_quote(s: &str) -> String {
-    serde_json::to_string(s).unwrap_or_else(|_| "\"\"".to_string())
 }
 
 fn validate_body_against_schema(body: &str, schema: &serde_json::Value) -> Option<String> {
@@ -1085,6 +1114,14 @@ fn validate_body_against_schema(body: &str, schema: &serde_json::Value) -> Optio
             focused_schema = prop_schema.clone();
         }
     }
+    // Round 34 (#827) — Srikanth on 0.3.178 hit the vCenter
+    // `enabled: boolean` case where the schema's multi-paragraph
+    // `description` (and other prose fields) ate the 300-char budget
+    // before the actually-useful `type` keyword could appear. Strip
+    // the noise-fields recursively before serializing so the type
+    // signal survives truncation; constraint keywords (`type`,
+    // `properties`, `required`, `format`, `items`, etc.) stay.
+    let focused_schema = strip_schema_noise(&focused_schema);
     let schema_str = serde_json::to_string(&focused_schema).unwrap_or_else(|_| "<schema>".into());
     let schema_str = if schema_str.len() > 300 {
         format!("{}...", &schema_str[..300])
@@ -1101,6 +1138,45 @@ fn validate_body_against_schema(body: &str, schema: &serde_json::Value) -> Optio
         format!("response body at {path}")
     };
     Some(format!("{location}: {kind_msg}; expected schema {schema_str}"))
+}
+
+/// Round 34 (#827) — drop the human-readable / documentation-only
+/// fields from a JSON Schema before printing it inside a
+/// `response_schema_error` message. The validator only cares about
+/// constraint keywords (`type`, `required`, `properties`, `items`,
+/// `format`, `enum`, `min*`/`max*`, `pattern`, `oneOf`/`anyOf`/
+/// `allOf`/`not`); the prose fields can be paragraphs long for real-
+/// world specs (vCenter's `enabled: bool` field has a multi-paragraph
+/// description) and were eating the 300-char truncation budget before
+/// the actually-useful type info could appear. Stripped fields:
+/// `description`, `example`, `examples`, `summary`, `title`,
+/// `externalDocs`, `xml`, `discriminator.description`.
+fn strip_schema_noise(schema: &serde_json::Value) -> serde_json::Value {
+    const NOISE_KEYS: &[&str] = &[
+        "description",
+        "example",
+        "examples",
+        "summary",
+        "title",
+        "externalDocs",
+        "xml",
+    ];
+    match schema {
+        serde_json::Value::Object(map) => {
+            let mut out = serde_json::Map::with_capacity(map.len());
+            for (k, v) in map {
+                if NOISE_KEYS.contains(&k.as_str()) {
+                    continue;
+                }
+                out.insert(k.clone(), strip_schema_noise(v));
+            }
+            serde_json::Value::Object(out)
+        }
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.iter().map(strip_schema_noise).collect())
+        }
+        other => other.clone(),
+    }
 }
 
 /// Round 30 — walk a JSON-Pointer-style instance path through a JSON
@@ -2226,7 +2302,8 @@ mod tests {
     #[test]
     fn embed_payload_replaces_first_string_only() {
         let sample = r#"{"name":"alice","age":30,"tags":["admin","user"]}"#;
-        let mutated = embed_payload_in_first_string_field(sample, "<x/>");
+        let mutated = embed_payload_in_first_string_field(sample, "<x/>")
+            .expect("string field present so probe constructed");
         let v: serde_json::Value = serde_json::from_str(&mutated).unwrap();
         assert_eq!(v["name"], serde_json::json!("<x/>"));
         // age stays an integer (not stringified by the mutation).
@@ -2237,24 +2314,25 @@ mod tests {
         assert_eq!(v["tags"][1], serde_json::json!("user"));
     }
 
-    /// When the sample has NO string field, the helper falls back to
-    /// `{"data": "<snippet>"}` so the probe still has something to
-    /// POST. The fallback must produce valid JSON regardless of what
-    /// characters the snippet contains.
+    /// Round 34 (#829) — Srikanth on 0.3.178: when the positive
+    /// sample has NO string field, the previous `{"data": <snippet>}`
+    /// fallback produced an envelope that doesn't match real-API
+    /// schemas (e.g. vCenter's `consolecli` PUT wants
+    /// `{enabled: bool}`), so the server correctly 400'd and the
+    /// bench misreported the 2xx-3xx expectation. Now we return None
+    /// and the caller skips the probe.
     #[test]
-    fn embed_payload_falls_back_when_no_string_field() {
+    fn embed_payload_returns_none_when_no_string_field() {
         let no_strings = r#"{"a":1,"b":[2,3]}"#;
-        let mutated = embed_payload_in_first_string_field(no_strings, "<x><y></y></x>");
-        let v: serde_json::Value = serde_json::from_str(&mutated).unwrap();
-        assert_eq!(v["data"], serde_json::json!("<x><y></y></x>"));
+        assert!(embed_payload_in_first_string_field(no_strings, "<x><y></y></x>").is_none());
+        // The exact vCenter-style case Srikanth hit.
+        let bool_only = r#"{"enabled":true}"#;
+        assert!(embed_payload_in_first_string_field(bool_only, "<x/>").is_none());
     }
 
     #[test]
-    fn embed_payload_handles_invalid_json_sample() {
-        let not_json = "garbage";
-        let mutated = embed_payload_in_first_string_field(not_json, "a=1&b=2");
-        let v: serde_json::Value = serde_json::from_str(&mutated).unwrap();
-        assert_eq!(v["data"], serde_json::json!("a=1&b=2"));
+    fn embed_payload_returns_none_for_invalid_json_sample() {
+        assert!(embed_payload_in_first_string_field("garbage", "a=1&b=2").is_none());
     }
 
     /// Round 26 — Srikanth saw `at /: Type { kind: Single` in his
@@ -2427,6 +2505,84 @@ mod tests {
     fn response_schema_error_none_on_match() {
         let schema = serde_json::json!({"type": "string"});
         assert_eq!(validate_body_against_schema("\"hello\"", &schema), None);
+    }
+
+    /// Round 34 (#827) — Srikanth on 0.3.178 hit the vCenter
+    /// `consolecli` PUT where the `enabled: boolean` property has a
+    /// multi-paragraph description. The schema printout truncated
+    /// mid-description, hiding `type: boolean` past the 300-char cap.
+    /// Stripping `description` (and friends) before serializing must
+    /// keep the type info visible.
+    #[test]
+    fn response_schema_error_strips_description_so_type_survives_truncation() {
+        // Schema crafted so without stripping, `description` would
+        // push `type` past the 300-char truncation cap. The
+        // description we use here is intentionally close to the
+        // vCenter-spec wording Srikanth quoted.
+        let big_desc = "In the result of the #get and #list operations this property indicates whether proxying is enabled for a particular protocol. In the input to the test and set operations this property specifies whether proxying should be enabled for a particular protocol. This property was added in vSphere API 6.7. Defaults to enabled if both this field and the value field are unset.";
+        let schema = serde_json::json!({
+            "type": "object",
+            "required": ["enabled"],
+            "properties": {
+                "enabled": {
+                    "type": "boolean",
+                    "description": big_desc,
+                    "example": true,
+                }
+            }
+        });
+        let body = r#"{}"#;
+        let err = validate_body_against_schema(body, &schema).expect("required-missing fires");
+        assert!(err.contains("required field missing: \"enabled\""), "{err}");
+        assert!(
+            err.contains(r#""type":"boolean""#),
+            "the `type: boolean` keyword must survive truncation: {err}"
+        );
+        // Description should NOT appear (we stripped it) so the
+        // suffix is type-focused, not prose.
+        assert!(
+            !err.contains("proxying is enabled"),
+            "description should be stripped from the printed schema: {err}"
+        );
+        assert!(
+            !err.contains("\"example\""),
+            "`example` field should be stripped from the printed schema: {err}"
+        );
+    }
+
+    /// Round 34 (#827) — strip_schema_noise should keep all
+    /// constraint keywords intact; only the prose noise goes.
+    #[test]
+    fn strip_schema_noise_preserves_constraint_keywords() {
+        let schema = serde_json::json!({
+            "type": "object",
+            "required": ["a", "b"],
+            "description": "should be stripped",
+            "title": "should be stripped",
+            "example": {"a": 1, "b": 2},
+            "properties": {
+                "a": {"type": "string", "format": "uri", "minLength": 1, "description": "drop"},
+                "b": {"type": "integer", "minimum": 0, "maximum": 100, "summary": "drop"},
+            },
+        });
+        let stripped = strip_schema_noise(&schema);
+        let s = serde_json::to_string(&stripped).unwrap();
+        // Constraint keywords survive.
+        for keep in [
+            "\"type\"",
+            "\"required\"",
+            "\"properties\"",
+            "\"format\"",
+            "\"minLength\"",
+            "\"minimum\"",
+            "\"maximum\"",
+        ] {
+            assert!(s.contains(keep), "should keep {keep}: {s}");
+        }
+        // Noise fields are gone.
+        for drop in ["description", "title", "example", "summary"] {
+            assert!(!s.contains(&format!("\"{drop}\"")), "should strip {drop}: {s}");
+        }
     }
 
     #[test]
