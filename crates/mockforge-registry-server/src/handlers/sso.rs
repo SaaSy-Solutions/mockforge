@@ -1183,11 +1183,22 @@ async fn find_or_create_user_from_saml(
         None
     };
 
-    let user = if let Some(user) = user {
-        // User exists - ensure they're a member of the organization
-        use crate::models::organization::OrgRole;
+    use crate::models::organization::OrgRole;
+    // Domain-ownership gate (#833/#746/#778). SSO must not be able to provision
+    // or absorb an account for an email domain the org has not proven it owns,
+    // or a malicious org's IdP could mint an assertion for victim@othercorp.com
+    // and take over / squat that account. Verified live via DNS, fail-closed.
+    let domain_verifier = crate::sso_domain::DnsDomainVerifier;
 
+    let user = if let Some(user) = user {
+        // Existing account. A normal SSO login for a current member needs no
+        // gate; only *attaching* a foreign account to this org does.
         if state.store.find_org_member(org.id, user.id).await?.is_none() {
+            let email = user_info.email.as_deref().ok_or_else(|| {
+                ApiError::InvalidRequest("Email not found in SAML assertion".to_string())
+            })?;
+            crate::sso_domain::assert_email_in_verified_domain(&domain_verifier, org.id, email)
+                .await?;
             state.store.create_org_member(org.id, user.id, OrgRole::Member).await?;
         }
 
@@ -1197,6 +1208,9 @@ async fn find_or_create_user_from_saml(
         let email = user_info.email.as_ref().ok_or_else(|| {
             ApiError::InvalidRequest("Email not found in SAML assertion".to_string())
         })?;
+
+        // JIT provisioning requires the org to own the email's domain.
+        crate::sso_domain::assert_email_in_verified_domain(&domain_verifier, org.id, email).await?;
 
         let username = user_info.username.as_ref().cloned().unwrap_or_else(|| {
             // Generate username from email
@@ -1214,7 +1228,6 @@ async fn find_or_create_user_from_saml(
         state.store.mark_user_verified(user.id).await?;
 
         // Add user to organization as member
-        use crate::models::organization::OrgRole;
         state.store.create_org_member(org.id, user.id, OrgRole::Member).await?;
 
         user
