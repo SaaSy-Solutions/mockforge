@@ -1,5 +1,13 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.179] - 2026-06-15
+
+### Fixed
+
+- **[DevX]** `response_schema_error` strips description/example fields from the focused schema before truncation so `type` survives (#79 round 34 / #827 / Srikanth).
+- **[Contracts]** Per-endpoint summary `path` column matches the URL user sent: `base_path` prefixed (#79 round 34 / #828 / Srikanth).
+- **[Contracts]** Embedded-content variant-b probes skip when positive sample has no string field, instead of synthesizing a non-conforming envelope (#79 round 34 / #829 / Srikanth).
+
 ## [0.3.178] - 2026-06-14
 
 ### Added

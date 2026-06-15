@@ -1,3 +1,11 @@
+## [0.3.179] - 2026-06-15
+
+### Fixed
+
+- **[DevX]** `response_schema_error` strips `description` / `example` / `examples` / `summary` / `title` / `externalDocs` / `xml` from the focused schema before serializing, so the actually-useful constraint keywords (`type`, `required`, `properties`, `format`, `min*`/`max*`, `pattern`, `oneOf`/`anyOf`/`allOf`/`not`) survive the 300-char truncation cap (#79 round 34 / #827 / Srikanth on 0.3.178: vCenter's `enabled: boolean` property had a multi-paragraph description that ate the budget before `"type":"boolean"` could appear). Two new unit tests assert (1) the vCenter-shaped case keeps `"type":"boolean"` in the printed schema and (2) `strip_schema_noise` keeps every constraint keyword while dropping every prose key.
+- **[Contracts]** Per-endpoint summary `path` column now matches the URL the user actually sent (#79 round 34 / #828 / Srikanth on 0.3.178: searched for `/api/appliance/access/consolecli` in `conformance-per-endpoint.json` and didn't find it because round 33 stored just the spec template `/appliance/access/consolecli`). The bench now constructs `path_template` as `base_path + op.path` and stamps that on every `CaseCapture`, matching the same prefix logic `build_url_with_base` already uses. New unit test asserts the prefixed value flows through to `PerEndpointSummary.path`.
+- **[Contracts]** Embedded-content variant-b probes are skipped when the positive sample body has no string field (#79 round 34 / #829 / Srikanth on 0.3.178: PUT `/api/appliance/access/consolecli` expects `{enabled: boolean}` but the round-27 fallback envelope `{"data": <snippet>}` was structurally different, so the server correctly 400'd and the bench misreported the `2xx-3xx` expectation as a miss). `embed_payload_in_first_string_field` now returns `Option<String>`; the variant-b loop `continue`s when the helper returns `None`. Three test cases cover Srikanth's exact `{"enabled":true}` shape, the no-string scalar-only case, and invalid-JSON samples.
+
 ## [0.3.178] - 2026-06-14
 
 ### Added
