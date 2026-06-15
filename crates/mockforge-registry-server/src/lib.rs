@@ -73,6 +73,7 @@ pub mod platform_signing;
 pub mod redis;
 pub mod routes;
 pub mod run_queue;
+pub mod sso_domain;
 pub mod storage;
 /// Storage trait + backends now live in `mockforge-registry-core`.
 /// Re-exported so existing `crate::store::*` paths keep working.
