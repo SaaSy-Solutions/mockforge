@@ -155,6 +155,7 @@ redis = { version = "0.24", features = ["tokio-comp", "connection-manager"], opt
 # Using quick-xml for parsing and ring/rustls for signature verification
 quick-xml = { version = "0.31", features = ["serialize", "overlapped-lists"], optional = true }
 regex = "1.10"
+url = { workspace = true }
 urlencoding = "2.1"
 # X.509 certificate handling (feature: `saml`)
 x509-parser = { version = "0.17", optional = true }

@@ -45,18 +45,22 @@ pub async fn create_organization(
         return Err(ApiError::InvalidRequest("Organization slug is already taken".to_string()));
     }
 
-    // Create organization (defaults to Free plan)
-    let plan = request.plan.as_deref().unwrap_or("free");
-    let plan_enum = match plan {
-        "free" => Plan::Free,
-        "pro" => Plan::Pro,
-        "team" => Plan::Team,
-        _ => Plan::Free,
-    };
+    // The plan is server-authoritative (#733): the ONLY writer of
+    // `organizations.plan` is the Stripe billing webhook. Org creation always
+    // provisions the Free plan regardless of the request body. If a client
+    // tries to set a non-free plan on create, reject it explicitly so the abuse
+    // is visible/logged rather than silently downgraded.
+    if let Some(requested) = request.plan.as_deref() {
+        if requested != "free" {
+            return Err(ApiError::InvalidRequest(
+                "plan cannot be set on organization create; upgrade via billing".to_string(),
+            ));
+        }
+    }
 
     let org = state
         .store
-        .create_organization(&request.name, &request.slug, user_id, plan_enum)
+        .create_organization(&request.name, &request.slug, user_id, Plan::Free)
         .await?;
 
     Ok(Json(OrganizationResponse {
@@ -549,7 +553,9 @@ pub async fn update_organization(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
     Path(org_id): Path<Uuid>,
-    headers: HeaderMap,
+    // `headers` is retained for the axum extractor signature only; the plan
+    // mutation that previously logged an audit event from here was removed (#733).
+    _headers: HeaderMap,
     Json(request): Json<UpdateOrganizationRequest>,
 ) -> ApiResult<Json<OrganizationResponse>> {
     // Get organization
@@ -597,42 +603,14 @@ pub async fn update_organization(
         state.store.update_organization_slug(org_id, slug).await?;
     }
 
-    // Update plan if provided
-    if let Some(plan_str) = &request.plan {
-        let new_plan = match plan_str.as_str() {
-            "free" => Plan::Free,
-            "pro" => Plan::Pro,
-            "team" => Plan::Team,
-            _ => {
-                return Err(ApiError::InvalidRequest(
-                    "Invalid plan. Must be 'free', 'pro', or 'team'".to_string(),
-                ))
-            }
-        };
-
-        state.store.update_organization_plan(org_id, new_plan).await?;
-
-        // Record audit event for plan change
-        let ip_address = headers
-            .get("x-forwarded-for")
-            .or_else(|| headers.get("x-real-ip"))
-            .and_then(|h| h.to_str().ok())
-            .map(|s| s.to_string());
-        let user_agent =
-            headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
-
-        state
-            .store
-            .record_audit_event(
-                org_id,
-                Some(user_id),
-                AuditEventType::OrgPlanChanged,
-                format!("Changed plan from {} to {}", org.plan(), new_plan),
-                None,
-                ip_address.as_deref(),
-                user_agent.as_deref(),
-            )
-            .await;
+    // The plan is server-authoritative (#733): it is managed exclusively by the
+    // Stripe billing webhook (`handlers/billing.rs` → `update_organization_plan`).
+    // An org owner must NOT be able to self-upgrade by PATCHing this endpoint, so
+    // reject any attempt to set the plan here rather than mutating it.
+    if request.plan.is_some() {
+        return Err(ApiError::InvalidRequest(
+            "plan is managed by billing and cannot be set here".to_string(),
+        ));
     }
 
     // Get updated organization
