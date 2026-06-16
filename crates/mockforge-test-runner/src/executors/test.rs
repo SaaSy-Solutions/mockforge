@@ -443,7 +443,7 @@ async fn run_cloud_bench(
         operations: extract_string(&job.payload, "operations"),
         exclude_operations: extract_string(&job.payload, "exclude_operations"),
         auth: extract_string(&job.payload, "auth"),
-        headers: extract_string(&job.payload, "headers"),
+        headers: extract_string_vec(&job.payload, "headers"),
         threshold_percentile: extract_string(&job.payload, "threshold_percentile")
             .unwrap_or_else(|| "p(95)".to_string()),
         threshold_ms: job.payload.get("threshold_ms").and_then(|v| v.as_u64()).unwrap_or(1000),
@@ -527,7 +527,7 @@ async fn run_cloud_owasp(
             .get("skip_tls_verify")
             .and_then(|v| v.as_bool())
             .unwrap_or(false),
-        headers: extract_string(&job.payload, "headers"),
+        headers: extract_string_vec(&job.payload, "headers"),
     };
 
     match cloud_api::run_owasp(inputs).await {
@@ -865,7 +865,7 @@ async fn run_cloud_security(
         categories: extract_string(&job.payload, "security_categories"),
         target_fields: extract_string(&job.payload, "security_target_fields"),
         auth: extract_string(&job.payload, "auth"),
-        headers: extract_string(&job.payload, "headers"),
+        headers: extract_string_vec(&job.payload, "headers"),
         skip_tls_verify: job
             .payload
             .get("skip_tls_verify")
@@ -938,7 +938,7 @@ async fn run_cloud_wafbench(
         rules_dir,
         cycle_all: job.payload.get("wafbench_cycle_all").and_then(|v| v.as_bool()).unwrap_or(false),
         auth: extract_string(&job.payload, "auth"),
-        headers: extract_string(&job.payload, "headers"),
+        headers: extract_string_vec(&job.payload, "headers"),
         skip_tls_verify: job
             .payload
             .get("skip_tls_verify")
@@ -1004,7 +1004,7 @@ async fn run_cloud_crud_flow(
         flow_config_yaml: extract_string(&job.payload, "flow_config_yaml"),
         extract_fields: extract_string(&job.payload, "extract_fields"),
         auth: extract_string(&job.payload, "auth"),
-        headers: extract_string(&job.payload, "headers"),
+        headers: extract_string_vec(&job.payload, "headers"),
         skip_tls_verify: job
             .payload
             .get("skip_tls_verify")

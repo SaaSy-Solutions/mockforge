@@ -693,7 +693,7 @@ pub async fn compare_contracts_handler(
             // Evaluate drift budget (for protocol contracts, we need to use evaluate_with_specs equivalent)
             // Since we don't have OpenAPI specs for protocol contracts, we'll use a simplified evaluation
             // that works with the diff result directly
-            let drift_result = drift_engine.evaluate(&diff_result, &endpoint, &method);
+            let drift_result = drift_engine.evaluate(&diff_result, &endpoint, &method).await;
 
             // Run fitness tests if registry is available
             let mut drift_result_with_fitness = drift_result.clone();

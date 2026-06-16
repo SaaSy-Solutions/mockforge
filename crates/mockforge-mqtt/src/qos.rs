@@ -130,42 +130,59 @@ impl QoSHandler {
 
     /// Handle PUBREC (QoS 2 first acknowledgment)
     pub async fn handle_pubrec(&self, packet_id: u16, client_id: &str) -> Result<()> {
-        let mut states = self.qos2_states.write().await;
-        if let Some(state) = states.get_mut(&packet_id) {
-            match state {
-                QoS2State::Received => {
+        // Decide what to do under the lock, mutate the map, then DROP the guard before any
+        // `.await` send. Holding a tokio RwLock guard across an await is the known deadlock
+        // pattern (#759).
+        let should_send_pubrel = {
+            let mut states = self.qos2_states.write().await;
+            match states.get_mut(&packet_id) {
+                Some(state @ QoS2State::Received) => {
                     *state = QoS2State::Released;
-                    info!("QoS 2: Received PUBREC for packet {}, sending PUBREL", packet_id);
-                    // Send PUBREL to client
-                    self.send_pubrel(client_id, packet_id).await?;
+                    true
                 }
-                _ => {
+                Some(state) => {
                     warn!("QoS 2: Unexpected PUBREC for packet {} in state {:?}", packet_id, state);
+                    false
+                }
+                None => {
+                    warn!("QoS 2: Received PUBREC for unknown packet {}", packet_id);
+                    false
                 }
             }
-        } else {
-            warn!("QoS 2: Received PUBREC for unknown packet {}", packet_id);
+        };
+
+        if should_send_pubrel {
+            info!("QoS 2: Received PUBREC for packet {}, sending PUBREL", packet_id);
+            self.send_pubrel(client_id, packet_id).await?;
         }
         Ok(())
     }
 
     /// Handle PUBREL (QoS 2 release)
     pub async fn handle_pubrel(&self, packet_id: u16, client_id: &str) -> Result<()> {
-        let mut states = self.qos2_states.write().await;
-        if let Some(state) = states.get_mut(&packet_id) {
-            match state {
-                QoS2State::Released => {
+        // Compute the transition under the lock, remove the entry, then DROP the guard before
+        // sending PUBCOMP (#759: no guard held across await).
+        let should_send_pubcomp = {
+            let mut states = self.qos2_states.write().await;
+            match states.get(&packet_id) {
+                Some(QoS2State::Released) => {
                     states.remove(&packet_id);
-                    info!("QoS 2: Received PUBREL for packet {}, sending PUBCOMP", packet_id);
-                    // Send PUBCOMP to client
-                    self.send_pubcomp(client_id, packet_id).await?;
+                    true
                 }
-                _ => {
+                Some(state) => {
                     warn!("QoS 2: Unexpected PUBREL for packet {} in state {:?}", packet_id, state);
+                    false
+                }
+                None => {
+                    warn!("QoS 2: Received PUBREL for unknown packet {}", packet_id);
+                    false
                 }
             }
-        } else {
-            warn!("QoS 2: Received PUBREL for unknown packet {}", packet_id);
+        };
+
+        if should_send_pubcomp {
+            info!("QoS 2: Received PUBREL for packet {}, sending PUBCOMP", packet_id);
+            self.send_pubcomp(client_id, packet_id).await?;
         }
         Ok(())
     }

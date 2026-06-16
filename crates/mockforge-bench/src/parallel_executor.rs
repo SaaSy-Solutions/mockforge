@@ -527,7 +527,7 @@ impl ParallelExecutor {
         _scenario_str: &str,
         _operations: &Option<String>,
         auth: &Option<String>,
-        _headers: &Option<String>,
+        _headers: &[String],
         threshold_percentile: &str,
         threshold_ms: u64,
         max_error_rate: f64,

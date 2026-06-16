@@ -117,6 +117,8 @@ async fn start_embedded_servers(
         None,                         // ai_generator
         None,                         // smtp_registry
         None,                         // mqtt_broker
+        None,                         // amqp_broker
+        None,                         // kafka_broker
         None,                         // traffic_shaper
         false,                        // traffic_shaping_enabled
         Some(health_manager.clone()), // health_manager
