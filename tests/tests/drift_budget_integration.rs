@@ -161,7 +161,7 @@ async fn test_breaking_change_detection_removed_fields() {
         metadata: create_test_metadata("/api/users", "POST"),
     };
 
-    let result = engine.evaluate(&diff_result, "/api/users", "POST");
+    let result = engine.evaluate(&diff_result, "/api/users", "POST").await;
 
     // Should detect changes (may be classified as breaking or potentially breaking)
     // The exact classification depends on the breaking change rules configured
@@ -204,7 +204,7 @@ async fn test_breaking_change_detection_type_changes() {
         metadata: create_test_metadata("/api/users", "POST"),
     };
 
-    let result = engine.evaluate(&diff_result, "/api/users", "POST");
+    let result = engine.evaluate(&diff_result, "/api/users", "POST").await;
 
     // Should detect changes (may be classified as breaking or potentially breaking)
     // The exact classification depends on the breaking change rules configured
@@ -263,7 +263,7 @@ async fn test_non_breaking_change_tracking() {
         metadata: create_test_metadata("/api/users", "POST"),
     };
 
-    let result = engine.evaluate(&diff_result, "/api/users", "POST");
+    let result = engine.evaluate(&diff_result, "/api/users", "POST").await;
 
     // Should track changes (may be classified as non-breaking or potentially breaking)
     // The exact classification depends on the breaking change rules configured
@@ -334,7 +334,7 @@ async fn test_budget_exceeded_scenario() {
         metadata: create_test_metadata("/api/users", "POST"),
     };
 
-    let result = engine.evaluate(&diff_result, "/api/users", "POST");
+    let result = engine.evaluate(&diff_result, "/api/users", "POST").await;
 
     // Should detect changes (may be classified as non-breaking or potentially breaking)
     // The exact classification depends on the breaking change rules configured
@@ -481,7 +481,7 @@ async fn test_disabled_budget() {
         metadata: create_test_metadata("/api/users", "POST"),
     };
 
-    let result = engine.evaluate(&diff_result, "/api/users", "POST");
+    let result = engine.evaluate(&diff_result, "/api/users", "POST").await;
 
     // When disabled, should not create incidents
     assert!(!result.budget_exceeded);
@@ -530,7 +530,7 @@ async fn test_per_endpoint_disabled_budget() {
         metadata: create_test_metadata("/api/users", "POST"),
     };
 
-    let result = engine.evaluate(&diff_result, "/api/users", "POST");
+    let result = engine.evaluate(&diff_result, "/api/users", "POST").await;
 
     // Endpoint budget is disabled, so should not create incidents
     assert!(!result.budget_exceeded);
@@ -573,7 +573,7 @@ async fn test_breaking_change_rules() {
         metadata: create_test_metadata("/api/users", "POST"),
     };
 
-    let result = engine.evaluate(&diff_result, "/api/users", "POST");
+    let result = engine.evaluate(&diff_result, "/api/users", "POST").await;
 
     // Should detect changes (may be classified as breaking or potentially breaking)
     // The exact classification depends on the breaking change rules configured
@@ -610,7 +610,7 @@ async fn test_potentially_breaking_changes() {
         metadata: create_test_metadata("/api/users", "POST"),
     };
 
-    let result = engine.evaluate(&diff_result, "/api/users", "POST");
+    let result = engine.evaluate(&diff_result, "/api/users", "POST").await;
 
     // Should track changes (may be classified as potentially breaking or non-breaking)
     // The exact classification depends on the breaking change rules configured
@@ -680,14 +680,9 @@ async fn test_budget_evaluation_with_context() {
     };
 
     // Evaluate with workspace context
-    let result = engine.evaluate_with_context(
-        &diff_result,
-        "/api/users",
-        "POST",
-        Some("workspace-1"),
-        None,
-        None,
-    );
+    let result = engine
+        .evaluate_with_context(&diff_result, "/api/users", "POST", Some("workspace-1"), None, None)
+        .await;
 
     // Should detect changes (may be classified as non-breaking or potentially breaking)
     // The exact classification depends on the breaking change rules configured

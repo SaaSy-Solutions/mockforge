@@ -99,9 +99,10 @@ pub struct CloudBenchInputs {
     pub operations: Option<String>,
     pub exclude_operations: Option<String>,
     pub auth: Option<String>,
-    /// Comma-separated `Key:Value,Key2:Value2` header list (matches CLI
-    /// `--headers` semantics — see [`crate::command::parse_header_string`]).
-    pub headers: Option<String>,
+    /// Additional headers, one `Key:Value` per entry (matches the repeated CLI
+    /// `--headers` flag — see [`crate::command::parse_header_string`]). One header
+    /// per entry so values may contain commas (#761).
+    pub headers: Vec<String>,
     pub threshold_percentile: String,
     pub threshold_ms: u64,
     pub max_error_rate: f64,
@@ -122,7 +123,7 @@ impl Default for CloudBenchInputs {
             operations: None,
             exclude_operations: None,
             auth: None,
-            headers: None,
+            headers: Vec::new(),
             threshold_percentile: "p(95)".to_string(),
             threshold_ms: 1000,
             max_error_rate: 0.01,
@@ -341,7 +342,7 @@ pub struct CloudOwaspInputs {
     pub vus: u32,
     pub skip_tls_verify: bool,
     /// `Key:Value,Key2:Value2` header string.
-    pub headers: Option<String>,
+    pub headers: Vec<String>,
 }
 
 impl Default for CloudOwaspInputs {
@@ -360,7 +361,7 @@ impl Default for CloudOwaspInputs {
             iterations: 1,
             vus: 10,
             skip_tls_verify: false,
-            headers: None,
+            headers: Vec::new(),
         }
     }
 }
@@ -386,7 +387,7 @@ pub struct CloudSecurityInputs {
     /// Comma-separated field names to inject into (e.g. `"username,query"`).
     pub target_fields: Option<String>,
     pub auth: Option<String>,
-    pub headers: Option<String>,
+    pub headers: Vec<String>,
     pub skip_tls_verify: bool,
 }
 
@@ -403,7 +404,7 @@ impl Default for CloudSecurityInputs {
             categories: None,
             target_fields: None,
             auth: None,
-            headers: None,
+            headers: Vec::new(),
             skip_tls_verify: false,
         }
     }
@@ -430,7 +431,7 @@ pub struct CloudWafBenchInputs {
     /// sampling. Use for coverage runs; expect long durations.
     pub cycle_all: bool,
     pub auth: Option<String>,
-    pub headers: Option<String>,
+    pub headers: Vec<String>,
     pub skip_tls_verify: bool,
 }
 
@@ -447,7 +448,7 @@ impl Default for CloudWafBenchInputs {
             rules_dir: String::new(),
             cycle_all: false,
             auth: None,
-            headers: None,
+            headers: Vec::new(),
             skip_tls_verify: false,
         }
     }
@@ -474,7 +475,7 @@ pub struct CloudCrudFlowInputs {
     /// (e.g. `"id,user_id"`).
     pub extract_fields: Option<String>,
     pub auth: Option<String>,
-    pub headers: Option<String>,
+    pub headers: Vec<String>,
     pub skip_tls_verify: bool,
 }
 
@@ -491,7 +492,7 @@ impl Default for CloudCrudFlowInputs {
             flow_config_yaml: None,
             extract_fields: None,
             auth: None,
-            headers: None,
+            headers: Vec::new(),
             skip_tls_verify: false,
         }
     }
@@ -715,7 +716,7 @@ fn default_bench_command(output_dir: &Path) -> BenchCommand {
         operations: None,
         exclude_operations: None,
         auth: None,
-        headers: None,
+        headers: Vec::new(),
         output: output_dir.to_path_buf(),
         generate_only: false,
         script_output: None,

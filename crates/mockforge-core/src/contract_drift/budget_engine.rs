@@ -74,20 +74,21 @@ impl DriftBudgetEngine {
     ///
     /// Returns a `DriftResult` indicating whether the budget is exceeded and
     /// which mismatches are considered breaking.
-    pub fn evaluate(
+    pub async fn evaluate(
         &self,
         diff_result: &ContractDiffResult,
         endpoint: &str,
         method: &str,
     ) -> DriftResult {
         self.evaluate_with_context(diff_result, endpoint, method, None, None, None)
+            .await
     }
 
     /// Evaluate contract diff result against drift budget with context
     ///
     /// Returns a `DriftResult` indicating whether the budget is exceeded and
     /// which mismatches are considered breaking.
-    pub fn evaluate_with_context(
+    pub async fn evaluate_with_context(
         &self,
         diff_result: &ContractDiffResult,
         endpoint: &str,
@@ -150,30 +151,20 @@ impl DriftBudgetEngine {
             };
         }
 
-        // Calculate baseline field count if percentage-based budget is enabled and tracker is available
+        // Calculate baseline field count if percentage-based budget is enabled and tracker is available.
+        // Awaiting directly (instead of Handle::block_on) avoids panicking when this runs inside a
+        // tokio runtime, and never blocks a worker thread (#759).
         let baseline_field_count = if budget.max_field_churn_percent.is_some() {
-            if let Some(ref tracker) = self.field_tracker {
-                // Use blocking call to get baseline (evaluate_with_context is sync)
-                // This is safe because we're in a tokio runtime context
-                let rt = tokio::runtime::Handle::try_current();
-                if let Ok(handle) = rt {
-                    if let Some(time_window) = budget.time_window_days {
-                        // Use blocking call to get baseline (average over time window)
-                        handle.block_on(async {
-                            let guard = tracker.read().await;
-                            guard.get_average_count(
-                                None, // workspace_id - could be passed through if needed
-                                endpoint,
-                                method,
-                                time_window,
-                            )
-                        })
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
+            if let (Some(tracker), Some(time_window)) =
+                (self.field_tracker.as_ref(), budget.time_window_days)
+            {
+                let guard = tracker.read().await;
+                guard.get_average_count(
+                    None, // workspace_id - could be passed through if needed
+                    endpoint,
+                    method,
+                    time_window,
+                )
             } else {
                 None
             }
@@ -196,15 +187,9 @@ impl DriftBudgetEngine {
 
         // Analyze consumer impact if analyzer is available
         if let Some(ref analyzer) = self.consumer_analyzer {
-            let rt = tokio::runtime::Handle::try_current();
-            if let Ok(handle) = rt {
-                let impact = handle.block_on(async {
-                    let guard = analyzer.read().await;
-                    guard.analyze_impact(endpoint, method)
-                });
-                if let Some(impact) = impact {
-                    result.consumer_impact = Some(impact);
-                }
+            let guard = analyzer.read().await;
+            if let Some(impact) = guard.analyze_impact(endpoint, method) {
+                result.consumer_impact = Some(impact);
             }
         }
 
@@ -216,7 +201,7 @@ impl DriftBudgetEngine {
     /// This method is similar to `evaluate_with_context` but accepts old and new OpenAPI specs
     /// to enable fitness function evaluation.
     #[allow(clippy::too_many_arguments)]
-    pub fn evaluate_with_specs(
+    pub async fn evaluate_with_specs(
         &self,
         old_spec: Option<&OpenApiSpec>,
         new_spec: &OpenApiSpec,
@@ -281,30 +266,19 @@ impl DriftBudgetEngine {
             };
         }
 
-        // Calculate baseline field count if percentage-based budget is enabled and tracker is available
+        // Calculate baseline field count if percentage-based budget is enabled and tracker is available.
+        // Awaiting directly avoids the Handle::block_on panic inside a runtime (#759).
         let baseline_field_count = if budget.max_field_churn_percent.is_some() {
-            if let Some(ref tracker) = self.field_tracker {
-                // Use blocking call to get baseline (evaluate_with_context is sync)
-                // This is safe because we're in a tokio runtime context
-                let rt = tokio::runtime::Handle::try_current();
-                if let Ok(handle) = rt {
-                    if let Some(time_window) = budget.time_window_days {
-                        // Use blocking call to get baseline (average over time window)
-                        handle.block_on(async {
-                            let guard = tracker.read().await;
-                            guard.get_average_count(
-                                None, // workspace_id - could be passed through if needed
-                                endpoint,
-                                method,
-                                time_window,
-                            )
-                        })
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                }
+            if let (Some(tracker), Some(time_window)) =
+                (self.field_tracker.as_ref(), budget.time_window_days)
+            {
+                let guard = tracker.read().await;
+                guard.get_average_count(
+                    None, // workspace_id - could be passed through if needed
+                    endpoint,
+                    method,
+                    time_window,
+                )
             } else {
                 None
             }
@@ -324,41 +298,29 @@ impl DriftBudgetEngine {
 
         // Run fitness tests if registry is available
         if let Some(ref registry) = self.fitness_registry {
-            let rt = tokio::runtime::Handle::try_current();
-            if let Ok(handle) = rt {
-                let fitness_results = handle.block_on(async {
-                    let guard = registry.read().await;
-                    guard.evaluate_all(
-                        old_spec,
-                        new_spec,
-                        diff_result,
-                        endpoint,
-                        method,
-                        workspace_id,
-                        service_name,
-                    )
-                });
-                if let Ok(results) = fitness_results {
-                    result.fitness_test_results = results;
-                    // If any fitness test fails, we should consider creating an incident
-                    if result.fitness_test_results.iter().any(|r| !r.passed) {
-                        result.should_create_incident = true;
-                    }
+            let guard = registry.read().await;
+            if let Ok(results) = guard.evaluate_all(
+                old_spec,
+                new_spec,
+                diff_result,
+                endpoint,
+                method,
+                workspace_id,
+                service_name,
+            ) {
+                result.fitness_test_results = results;
+                // If any fitness test fails, we should consider creating an incident
+                if result.fitness_test_results.iter().any(|r| !r.passed) {
+                    result.should_create_incident = true;
                 }
             }
         }
 
         // Analyze consumer impact if analyzer is available
         if let Some(ref analyzer) = self.consumer_analyzer {
-            let rt = tokio::runtime::Handle::try_current();
-            if let Ok(handle) = rt {
-                let impact = handle.block_on(async {
-                    let guard = analyzer.read().await;
-                    guard.analyze_impact(endpoint, method)
-                });
-                if let Some(impact) = impact {
-                    result.consumer_impact = Some(impact);
-                }
+            let guard = analyzer.read().await;
+            if let Some(impact) = guard.analyze_impact(endpoint, method) {
+                result.consumer_impact = Some(impact);
             }
         }
 
@@ -452,13 +414,13 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_budget_evaluation_no_mismatches() {
+    #[tokio::test]
+    async fn test_budget_evaluation_no_mismatches() {
         let config = DriftBudgetConfig::default();
         let engine = DriftBudgetEngine::new(config);
         let diff_result = create_test_diff_result(vec![]);
 
-        let result = engine.evaluate(&diff_result, "/api/users", "GET");
+        let result = engine.evaluate(&diff_result, "/api/users", "GET").await;
 
         assert!(!result.budget_exceeded);
         assert_eq!(result.breaking_changes, 0);
@@ -466,8 +428,41 @@ mod tests {
         assert!(!result.should_create_incident);
     }
 
-    #[test]
-    fn test_budget_evaluation_breaking_change() {
+    /// #759: evaluating from inside a multi-threaded tokio runtime must not panic.
+    /// The old `Handle::try_current()` + `handle.block_on(...)` pattern panicked
+    /// ("Cannot start a runtime from within a runtime") whenever a percentage-based
+    /// budget with a configured tracker drove the baseline lookup.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn test_evaluate_from_within_runtime_does_not_panic() {
+        use mockforge_contracts::contract_drift::field_tracking::FieldCountTracker;
+        use std::sync::Arc;
+
+        let budget = DriftBudget {
+            enabled: true,
+            max_field_churn_percent: Some(10.0),
+            time_window_days: Some(7),
+            ..Default::default()
+        };
+
+        let config = DriftBudgetConfig {
+            enabled: true,
+            default_budget: Some(budget),
+            ..Default::default()
+        };
+
+        let tracker = Arc::new(tokio::sync::RwLock::new(FieldCountTracker::default()));
+        let engine = DriftBudgetEngine::new_with_tracker(config, tracker);
+
+        let diff_result = create_test_diff_result(vec![]);
+        // Would panic under the old block_on path; with `.await` it completes cleanly.
+        let result = engine
+            .evaluate_with_context(&diff_result, "/api/users", "GET", None, None, None)
+            .await;
+        assert!(!result.budget_exceeded);
+    }
+
+    #[tokio::test]
+    async fn test_budget_evaluation_breaking_change() {
         let config = DriftBudgetConfig::default();
         let engine = DriftBudgetEngine::new(config);
 
@@ -484,14 +479,14 @@ mod tests {
         };
 
         let diff_result = create_test_diff_result(vec![mismatch]);
-        let result = engine.evaluate(&diff_result, "/api/users", "POST");
+        let result = engine.evaluate(&diff_result, "/api/users", "POST").await;
 
         assert!(result.breaking_changes > 0);
         assert!(result.should_create_incident);
     }
 
-    #[test]
-    fn test_budget_evaluation_non_breaking_change() {
+    #[tokio::test]
+    async fn test_budget_evaluation_non_breaking_change() {
         let config = DriftBudgetConfig::default();
         let engine = DriftBudgetEngine::new(config);
 
@@ -508,7 +503,7 @@ mod tests {
         };
 
         let diff_result = create_test_diff_result(vec![mismatch]);
-        let result = engine.evaluate(&diff_result, "/api/users", "POST");
+        let result = engine.evaluate(&diff_result, "/api/users", "POST").await;
 
         assert_eq!(result.breaking_changes, 0);
         assert!(result.non_breaking_changes > 0);

@@ -122,79 +122,127 @@ impl RequestContext {
 /// ```
 #[must_use]
 pub fn expand_prompt_template(template: &str, context: &RequestContext) -> String {
-    let mut result = template.to_string();
-
-    // Replace {{method}}
-    result = result.replace("{{method}}", &context.method);
-
-    // Replace {{path}}
-    result = result.replace("{{path}}", &context.path);
-
-    // Replace {{body.*}} variables
-    if let Some(body) = &context.body {
-        result = expand_json_variables(&result, "body", body);
+    // SECURITY (#758): this is a SINGLE-PASS tokenizer. The template is scanned
+    // exactly once; each `{{ key }}` span is resolved against a unified namespace
+    // and the resolved value is written straight into an output buffer that is
+    // never rescanned. This makes any `{{...}}` text contained inside a
+    // substituted value inert -- e.g. a `{{headers.authorization}}` token that
+    // arrives via the request body cannot trigger a second-order expansion of the
+    // real `authorization` header. The previous implementation ran an ordered
+    // chain of full-buffer `String::replace` passes, which leaked values across
+    // namespaces depending on pass order.
+    let bytes = template.as_bytes();
+    let mut out = String::with_capacity(template.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        // Look for the start of a placeholder: literal "{{"
+        if bytes[i] == b'{' && i + 1 < bytes.len() && bytes[i + 1] == b'{' {
+            // Find the closing "}}" after the opening braces.
+            if let Some(close_rel) = find_close(&template[i + 2..]) {
+                let key = &template[i + 2..i + 2 + close_rel];
+                let after = i + 2 + close_rel + 2; // index just past the "}}"
+                match resolve_key(key.trim(), context) {
+                    Some(value) => {
+                        // Write the resolved value verbatim; it is never rescanned.
+                        out.push_str(&value);
+                    }
+                    None => {
+                        // Unknown placeholder: preserve it literally (legacy behavior).
+                        out.push_str(&template[i..after]);
+                    }
+                }
+                i = after;
+                continue;
+            }
+            // No closing "}}" -- emit the literal "{{" and continue scanning so that
+            // partial/unterminated placeholders are left untouched.
+            out.push_str("{{");
+            i += 2;
+            continue;
+        }
+        // Regular character: copy a UTF-8 char so we never split a multibyte boundary.
+        let ch_len = utf8_char_len(bytes[i]);
+        out.push_str(&template[i..i + ch_len]);
+        i += ch_len;
     }
-
-    // Replace {{path.*}} variables
-    result = expand_map_variables(&result, "path", &context.path_params);
-
-    // Replace {{query.*}} variables
-    result = expand_map_variables(&result, "query", &context.query_params);
-
-    // Replace {{headers.*}} variables
-    result = expand_map_variables(&result, "headers", &context.headers);
-
-    // Replace {{multipart.*}} variables for form fields
-    result = expand_map_variables(&result, "multipart", &context.multipart_fields);
-
-    result
+    out
 }
 
-/// Expand template variables from a JSON value
+/// Find the byte offset (relative to `s`) of the closing `}}` of the placeholder
+/// that opened immediately before `s`.
 ///
-/// This helper function extracts values from a JSON object and replaces
-/// template placeholders like `{{body.field}}` with the actual field value.
-fn expand_json_variables(template: &str, prefix: &str, value: &Value) -> String {
-    let mut result = template.to_string();
+/// Returns `None` if a new `{{` is encountered before any `}}` (so the leading
+/// `{{` is a false start and should be emitted literally) or if there is no
+/// closing `}}` at all. This keeps placeholder contents free of nested `{{`,
+/// matching how a well-formed `{{ key }}` token looks.
+fn find_close(s: &str) -> Option<usize> {
+    let bytes = s.as_bytes();
+    let mut j = 0;
+    while j + 1 < bytes.len() {
+        if bytes[j] == b'}' && bytes[j + 1] == b'}' {
+            return Some(j);
+        }
+        if bytes[j] == b'{' && bytes[j + 1] == b'{' {
+            // A fresh placeholder opened before this one closed -- abandon this span.
+            return None;
+        }
+        j += 1;
+    }
+    None
+}
 
-    // Handle object fields
-    if let Some(obj) = value.as_object() {
-        for (key, val) in obj {
-            let placeholder = format!("{{{{{prefix}.{key}}}}}");
-            let replacement = match val {
-                Value::String(s) => s.clone(),
-                Value::Number(n) => n.to_string(),
-                Value::Bool(b) => b.to_string(),
-                Value::Null => "null".to_string(),
-                _ => serde_json::to_string(val).unwrap_or_default(),
-            };
-            result = result.replace(&placeholder, &replacement);
+/// Length in bytes of the UTF-8 character that starts with `first_byte`.
+fn utf8_char_len(first_byte: u8) -> usize {
+    if first_byte < 0x80 {
+        1
+    } else if first_byte < 0xE0 {
+        2
+    } else if first_byte < 0xF0 {
+        3
+    } else {
+        4
+    }
+}
+
+/// Resolve a single placeholder key against the unified request-context namespace.
+///
+/// Returns `Some(value)` if the key is recognized AND a value is present, or
+/// `None` if the key is unknown / the backing value is missing (in which case the
+/// caller preserves the original placeholder text). This single resolution point
+/// is what guarantees the expansion is non-recursive: a value returned here is
+/// never fed back into the tokenizer.
+fn resolve_key(key: &str, context: &RequestContext) -> Option<String> {
+    match key {
+        "method" => Some(context.method.clone()),
+        "path" => Some(context.path.clone()),
+        _ => {
+            let (prefix, field) = key.split_once('.')?;
+            match prefix {
+                "body" => context.body.as_ref().and_then(|b| lookup_json_field(b, field)),
+                "path" => context.path_params.get(field).map(json_value_to_string),
+                "query" => context.query_params.get(field).map(json_value_to_string),
+                "headers" => context.headers.get(field).map(json_value_to_string),
+                "multipart" => context.multipart_fields.get(field).map(json_value_to_string),
+                _ => None,
+            }
         }
     }
-
-    result
 }
 
-/// Expand template variables from a `HashMap`
-///
-/// This helper function extracts values from a `HashMap` and replaces
-/// template placeholders like `{{query.name}}` with the actual value.
-fn expand_map_variables(template: &str, prefix: &str, map: &HashMap<String, Value>) -> String {
-    let mut result = template.to_string();
+/// Look up a top-level field on a JSON body object and render it as a string.
+fn lookup_json_field(value: &Value, field: &str) -> Option<String> {
+    value.as_object().and_then(|obj| obj.get(field)).map(json_value_to_string)
+}
 
-    for (key, val) in map {
-        let placeholder = format!("{{{{{prefix}.{key}}}}}");
-        let replacement = match val {
-            Value::String(s) => s.clone(),
-            Value::Number(n) => n.to_string(),
-            Value::Bool(b) => b.to_string(),
-            Value::Null => "null".to_string(),
-            _ => serde_json::to_string(val).unwrap_or_default(),
-        };
-        result = result.replace(&placeholder, &replacement);
+/// Render a JSON value as the string used for template substitution.
+fn json_value_to_string(val: &Value) -> String {
+    match val {
+        Value::String(s) => s.clone(),
+        Value::Number(n) => n.to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Null => "null".to_string(),
+        _ => serde_json::to_string(val).unwrap_or_default(),
     }
-
-    result
 }
 
 /// Expand template variables in a JSON value recursively using request context
@@ -929,48 +977,43 @@ mod tests {
     }
 
     #[test]
-    fn test_expand_json_variables_non_object() {
-        // Direct test of expand_json_variables with non-object values
-        let template = "Value: {{test.field}}, other: {{other}}";
+    fn test_body_non_object_fields_remain() {
+        // When the body is not an object, {{body.field}} placeholders are unknown
+        // keys and are preserved verbatim. Unknown bare keys are also preserved.
+        let template = "Value: {{body.field}}, other: {{other}}";
 
-        // Test with string
-        let result = expand_json_variables(template, "test", &json!("string value"));
-        assert_eq!(result, "Value: {{test.field}}, other: {{other}}");
-
-        // Test with number
-        let result = expand_json_variables(template, "test", &json!(123));
-        assert_eq!(result, "Value: {{test.field}}, other: {{other}}");
-
-        // Test with boolean
-        let result = expand_json_variables(template, "test", &json!(true));
-        assert_eq!(result, "Value: {{test.field}}, other: {{other}}");
-
-        // Test with null
-        let result = expand_json_variables(template, "test", &json!(null));
-        assert_eq!(result, "Value: {{test.field}}, other: {{other}}");
-
-        // Test with array
-        let result = expand_json_variables(template, "test", &json!([1, 2, 3]));
-        assert_eq!(result, "Value: {{test.field}}, other: {{other}}");
+        for body in [
+            json!("string value"),
+            json!(123),
+            json!(true),
+            json!(null),
+            json!([1, 2, 3]),
+        ] {
+            let context = RequestContext::new("GET".to_string(), "/t".to_string()).with_body(body);
+            let result = expand_prompt_template(template, &context);
+            assert_eq!(result, "Value: {{body.field}}, other: {{other}}");
+        }
     }
 
     #[test]
-    fn test_expand_map_variables_empty_map() {
+    fn test_empty_maps_leave_placeholders() {
         let template = "Query: {{query.param}}, path: {{path.id}}";
-        let empty_map = HashMap::new();
-
-        let result = expand_map_variables(template, "query", &empty_map);
+        let context = RequestContext::new("GET".to_string(), "/t".to_string());
+        let result = expand_prompt_template(template, &context);
         assert_eq!(result, "Query: {{query.param}}, path: {{path.id}}");
     }
 
     #[test]
-    fn test_expand_map_variables_complex_types() {
-        let mut map = HashMap::new();
-        map.insert("nested".to_string(), json!({"inner": "value"}));
-        map.insert("array".to_string(), json!([1, 2, 3]));
+    fn test_map_complex_types_serialized() {
+        let mut query_params = HashMap::new();
+        query_params.insert("nested".to_string(), json!({"inner": "value"}));
+        query_params.insert("array".to_string(), json!([1, 2, 3]));
 
-        let template = "Nested: {{test.nested}}, Array: {{test.array}}";
-        let result = expand_map_variables(template, "test", &map);
+        let context = RequestContext::new("GET".to_string(), "/t".to_string())
+            .with_query_params(query_params);
+
+        let template = "Nested: {{query.nested}}, Array: {{query.array}}";
+        let result = expand_prompt_template(template, &context);
         assert_eq!(result, r#"Nested: {"inner":"value"}, Array: [1,2,3]"#);
     }
 
@@ -1075,13 +1118,10 @@ mod tests {
     }
 
     #[test]
-    fn test_template_syntax_in_values_gets_reexpanded() {
-        // If a value itself contains {{method}}, it WILL be expanded because
-        // expand_prompt_template uses sequential string::replace() calls.
-        // The query replacement happens first, inserting "{{method}}" into the result,
-        // but {{method}} was already replaced earlier in the sequence.
-        // However, since method replacement happens BEFORE query replacement in the code,
-        // the injected {{method}} will NOT be expanded (it's inserted after method expansion).
+    fn test_substituted_value_is_not_reexpanded() {
+        // #758: the single-pass tokenizer never rescans substituted text. A value
+        // that itself contains "{{method}}" is written verbatim and stays literal,
+        // regardless of namespace ordering.
         let mut query_params = HashMap::new();
         query_params.insert("val".to_string(), json!("{{method}}"));
 
@@ -1090,10 +1130,78 @@ mod tests {
 
         let template = "Val: {{query.val}}";
         let expanded = expand_prompt_template(template, &context);
-        // method replacement happens first (line 128), query replacement happens later (line 142).
-        // So when {{query.val}} is replaced with "{{method}}", the {{method}} token was
-        // already processed. The result keeps the literal "{{method}}" string.
         assert_eq!(expanded, "Val: {{method}}");
+    }
+
+    // ==================== #758: Second-order injection regression ====================
+
+    #[test]
+    fn test_no_second_order_injection_via_body_into_headers() {
+        // A request body field carries a literal "{{headers.authorization}}" token.
+        // Under the old ordered replace-chain, body.* was expanded before headers.*,
+        // so the injected token got re-expanded and leaked the real header value.
+        // The single-pass tokenizer must leave the token inert.
+        let body = json!({ "note": "{{headers.authorization}}" });
+        let mut headers = HashMap::new();
+        headers.insert("authorization".to_string(), json!("Bearer SECRET"));
+
+        let context = RequestContext::new("POST".to_string(), "/api".to_string())
+            .with_body(body)
+            .with_headers(headers);
+
+        let template = "{{body.note}}";
+        let expanded = expand_prompt_template(template, &context);
+        assert_eq!(expanded, "{{headers.authorization}}");
+        assert!(!expanded.contains("Bearer SECRET"));
+    }
+
+    #[test]
+    fn test_no_second_order_injection_via_body_into_query() {
+        // Symmetric case: body field carries a "{{query.secret}}" token.
+        let body = json!({ "note": "{{query.secret}}" });
+        let mut query_params = HashMap::new();
+        query_params.insert("secret".to_string(), json!("top-secret"));
+
+        let context = RequestContext::new("POST".to_string(), "/api".to_string())
+            .with_body(body)
+            .with_query_params(query_params);
+
+        let template = "{{body.note}}";
+        let expanded = expand_prompt_template(template, &context);
+        assert_eq!(expanded, "{{query.secret}}");
+        assert!(!expanded.contains("top-secret"));
+    }
+
+    #[test]
+    fn test_no_second_order_injection_in_expand_templates_in_json() {
+        // Same flaw must not exist in the recursive JSON variant.
+        let body = json!({ "note": "{{headers.authorization}}" });
+        let mut headers = HashMap::new();
+        headers.insert("authorization".to_string(), json!("Bearer SECRET"));
+
+        let context = RequestContext::new("POST".to_string(), "/api".to_string())
+            .with_body(body)
+            .with_headers(headers);
+
+        let value = json!({ "leaked": "{{body.note}}" });
+        let expanded = expand_templates_in_json(value, &context);
+        assert_eq!(expanded["leaked"], "{{headers.authorization}}");
+    }
+
+    #[test]
+    fn test_single_level_expansion_still_works_after_fix() {
+        // Positive control: normal one-level expansion is unaffected by the fix.
+        let body = json!({ "user": "Alice" });
+        let mut headers = HashMap::new();
+        headers.insert("authorization".to_string(), json!("Bearer SECRET"));
+
+        let context = RequestContext::new("POST".to_string(), "/chat".to_string())
+            .with_body(body)
+            .with_headers(headers);
+
+        let template = "User {{body.user}} token {{headers.authorization}}";
+        let expanded = expand_prompt_template(template, &context);
+        assert_eq!(expanded, "User Alice token Bearer SECRET");
     }
 
     // ==================== Multipart Files Tests ====================

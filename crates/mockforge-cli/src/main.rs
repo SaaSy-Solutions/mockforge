@@ -1757,9 +1757,11 @@ enum Commands {
         #[arg(long)]
         auth: Option<String>,
 
-        /// Additional headers (format: "Key:Value,Key2:Value2")
+        /// Additional header, format "Key:Value". Repeatable: pass --headers once
+        /// per header (e.g. --headers "A:1" --headers "B:2"). One header per flag
+        /// means values may contain commas (#761).
         #[arg(long)]
-        headers: Option<String>,
+        headers: Vec<String>,
 
         /// Output directory for results
         #[arg(short, long, default_value = "bench-results")]

@@ -34,17 +34,21 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-/// Parse a comma-separated header string into a `HashMap`.
+/// Parse a list of `Key:Value` header strings into a `HashMap`.
 ///
-/// Format: `Key:Value,Key2:Value2`
-///
-/// **Known limitation**: Header values containing commas will be incorrectly
-/// split. Cookie headers with semicolons work fine, but Cookie values with
-/// commas (e.g. `expires=Thu, 01 Jan 2099`) will break.
-pub fn parse_header_string(input: &str) -> Result<HashMap<String, String>> {
+/// Each element is one header in `Key:Value` form, supplied via a repeated
+/// `--headers` flag (`--headers "A:1" --headers "B:2"`). One header per flag
+/// means header VALUES may freely contain commas (#761) -- e.g. a Cookie value
+/// like `expires=Thu, 01 Jan 2099` is preserved intact, because we no longer
+/// split on commas. Empty elements are skipped so a stray flag is harmless.
+pub fn parse_header_string(inputs: &[String]) -> Result<HashMap<String, String>> {
     let mut headers = HashMap::new();
 
-    for pair in input.split(',') {
+    for pair in inputs {
+        let pair = pair.trim();
+        if pair.is_empty() {
+            continue;
+        }
         let parts: Vec<&str> = pair.splitn(2, ':').collect();
         if parts.len() != 2 {
             return Err(BenchError::Other(format!(
@@ -94,7 +98,9 @@ pub struct BenchCommand {
     /// Supports "METHOD /path" or just "METHOD" to exclude all operations of that type.
     pub exclude_operations: Option<String>,
     pub auth: Option<String>,
-    pub headers: Option<String>,
+    /// Additional headers, one `Key:Value` per entry (repeated `--headers` flag).
+    /// One header per entry so values may contain commas (#761).
+    pub headers: Vec<String>,
     pub output: PathBuf,
     pub generate_only: bool,
     pub script_output: Option<PathBuf>,
@@ -1156,12 +1162,9 @@ impl BenchCommand {
         }
     }
 
-    /// Parse headers from command line format (Key:Value,Key2:Value2)
+    /// Parse headers from the repeated `--headers "Key:Value"` flags.
     pub fn parse_headers(&self) -> Result<HashMap<String, String>> {
-        match &self.headers {
-            Some(s) => parse_header_string(s),
-            None => Ok(HashMap::new()),
-        }
+        parse_header_string(&self.headers)
     }
 
     fn parse_extracted_values(output_dir: &Path) -> Result<ExtractedValues> {
@@ -3540,7 +3543,10 @@ mod tests {
             operations: None,
             exclude_operations: None,
             auth: None,
-            headers: Some("X-API-Key:test123,X-Client-ID:client456".to_string()),
+            headers: vec![
+                "X-API-Key:test123".to_string(),
+                "X-Client-ID:client456".to_string(),
+            ],
             output: PathBuf::from("output"),
             generate_only: false,
             script_output: None,
@@ -3610,6 +3616,22 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_header_string_preserves_comma_in_value() {
+        // #761: with one header per --headers flag, a comma in the value (e.g. a
+        // Cookie expiry date) is preserved instead of being split into junk pairs.
+        let inputs = vec![
+            "Cookie:session=abc; expires=Thu, 01 Jan 2099 00:00:00 GMT".to_string(),
+            "X-Trace:1".to_string(),
+        ];
+        let headers = parse_header_string(&inputs).unwrap();
+        assert_eq!(
+            headers.get("Cookie"),
+            Some(&"session=abc; expires=Thu, 01 Jan 2099 00:00:00 GMT".to_string())
+        );
+        assert_eq!(headers.get("X-Trace"), Some(&"1".to_string()));
+    }
+
+    #[test]
     fn test_get_spec_display_name() {
         let cmd = BenchCommand {
             spec: vec![PathBuf::from("test.yaml")],
@@ -3625,7 +3647,7 @@ mod tests {
             operations: None,
             exclude_operations: None,
             auth: None,
-            headers: None,
+            headers: Vec::new(),
             output: PathBuf::from("output"),
             generate_only: false,
             script_output: None,
@@ -3706,7 +3728,7 @@ mod tests {
             operations: None,
             exclude_operations: None,
             auth: None,
-            headers: None,
+            headers: Vec::new(),
             output: PathBuf::from("output"),
             generate_only: false,
             script_output: None,

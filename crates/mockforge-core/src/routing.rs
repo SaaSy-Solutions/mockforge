@@ -62,27 +62,41 @@ impl Route {
     }
 }
 
-/// Convert a route pattern with `*` wildcards to matchit's `:param` syntax.
+/// Convert a route pattern with wildcards to matchit's `{param}` syntax.
 ///
-/// Each `*` segment becomes `:__wild_N` where N is the segment index,
-/// ensuring unique parameter names within the same path.
+/// - A `*` segment matches EXACTLY one path segment and becomes `{wN}` where N
+///   is the segment index (unique within the path).
+/// - A trailing `{*rest}` token is an explicit catch-all that matches ALL
+///   remaining path segments; it is emitted verbatim as matchit's `{*rest}`
+///   catch-all (#761). It is only valid as the final segment.
 fn to_matchit_pattern(pattern: &str) -> String {
     if !pattern.contains('*') {
         return pattern.to_string();
     }
 
-    pattern
-        .split('/')
+    let segments: Vec<&str> = pattern.split('/').collect();
+    let last = segments.len().saturating_sub(1);
+
+    segments
+        .iter()
         .enumerate()
         .map(|(i, seg)| {
-            if seg == "*" {
+            if is_catch_all(seg) && i == last {
+                // Emit matchit's catch-all verbatim (already `{*name}` form).
+                (*seg).to_string()
+            } else if *seg == "*" {
                 format!("{{w{i}}}")
             } else {
-                seg.to_string()
+                (*seg).to_string()
             }
         })
         .collect::<Vec<_>>()
         .join("/")
+}
+
+/// Whether a segment is an explicit catch-all token of the form `{*name}`.
+fn is_catch_all(seg: &str) -> bool {
+    seg.starts_with("{*") && seg.ends_with('}') && seg.len() > 3
 }
 
 /// Per-method route index backed by [`matchit::Router`].
@@ -221,23 +235,42 @@ impl RouteRegistry {
             .unwrap_or_default()
     }
 
-    /// Check if a path matches a route pattern (used for WS/gRPC linear scan)
+    /// Check if a path matches a route pattern (used for WS/gRPC linear scan).
+    ///
+    /// Wildcard semantics mirror [`to_matchit_pattern`] so WS/gRPC linear-scan
+    /// matching agrees with HTTP trie matching (#761):
+    /// - `*` matches EXACTLY one segment.
+    /// - a trailing `{*rest}` catch-all matches ALL remaining segments.
     fn matches_path(&self, pattern: &str, path: &str) -> bool {
         if pattern == path {
             return true;
         }
 
-        // Simple wildcard matching (* matches any segment)
         if pattern.contains('*') {
             let pattern_parts: Vec<&str> = pattern.split('/').collect();
             let path_parts: Vec<&str> = path.split('/').collect();
+            let last = pattern_parts.len().saturating_sub(1);
 
-            if pattern_parts.len() != path_parts.len() {
+            // A trailing `{*rest}` catch-all matches every remaining path segment,
+            // so the path may be LONGER than the pattern. It still requires at least
+            // as many path segments as the fixed prefix of the pattern.
+            let has_catch_all = pattern_parts.last().is_some_and(|seg| is_catch_all(seg));
+
+            if has_catch_all {
+                if path_parts.len() < pattern_parts.len() {
+                    return false;
+                }
+            } else if pattern_parts.len() != path_parts.len() {
                 return false;
             }
 
-            for (pattern_part, path_part) in pattern_parts.iter().zip(path_parts.iter()) {
-                if *pattern_part != "*" && *pattern_part != *path_part {
+            for (i, pattern_part) in pattern_parts.iter().enumerate() {
+                // The final catch-all token consumes all remaining segments.
+                if has_catch_all && i == last {
+                    return true;
+                }
+                let path_part = path_parts[i];
+                if *pattern_part != "*" && *pattern_part != path_part {
                     return false;
                 }
             }
@@ -468,6 +501,44 @@ mod tests {
     }
 
     #[test]
+    fn test_find_ws_routes_catch_all() {
+        // #761: a trailing `{*rest}` catch-all matches one OR many remaining segments.
+        let mut registry = RouteRegistry::new();
+        registry
+            .add_ws_route(Route::new(HttpMethod::GET, "/ws/{*rest}".to_string()))
+            .unwrap();
+
+        assert_eq!(registry.find_ws_routes("/ws/chat").len(), 1);
+        assert_eq!(registry.find_ws_routes("/ws/room/42").len(), 1);
+        assert_eq!(registry.find_ws_routes("/ws/a/b/c/d").len(), 1);
+        // A single `*` would NOT match the multi-segment path; catch-all must.
+        assert_eq!(registry.find_ws_routes("/other/chat").len(), 0);
+    }
+
+    #[test]
+    fn test_find_http_routes_catch_all_agrees_with_ws() {
+        // HTTP trie matching must agree with the WS linear-scan catch-all semantics.
+        let mut registry = RouteRegistry::new();
+        registry
+            .add_http_route(Route::new(HttpMethod::GET, "/ws/{*rest}".to_string()))
+            .unwrap();
+
+        assert_eq!(registry.find_http_routes(&HttpMethod::GET, "/ws/chat").len(), 1);
+        assert_eq!(registry.find_http_routes(&HttpMethod::GET, "/ws/room/42").len(), 1);
+        assert_eq!(registry.find_http_routes(&HttpMethod::GET, "/ws/a/b/c").len(), 1);
+    }
+
+    #[test]
+    fn test_single_star_matches_exactly_one_segment() {
+        // `*` stays single-segment; it must NOT swallow a multi-segment tail.
+        let mut registry = RouteRegistry::new();
+        registry.add_ws_route(Route::new(HttpMethod::GET, "/ws/*".to_string())).unwrap();
+
+        assert_eq!(registry.find_ws_routes("/ws/chat").len(), 1);
+        assert_eq!(registry.find_ws_routes("/ws/room/42").len(), 0);
+    }
+
+    #[test]
     fn test_find_grpc_routes() {
         let mut registry = RouteRegistry::new();
         registry
@@ -563,6 +634,9 @@ mod tests {
         assert_eq!(to_matchit_pattern("/api/*/details"), "/api/{w2}/details");
         assert_eq!(to_matchit_pattern("/api/*/*"), "/api/{w2}/{w3}");
         assert_eq!(to_matchit_pattern("/*"), "/{w1}");
+        // #761: trailing catch-all is emitted verbatim for matchit.
+        assert_eq!(to_matchit_pattern("/ws/{*rest}"), "/ws/{*rest}");
+        assert_eq!(to_matchit_pattern("/api/*/{*rest}"), "/api/{w2}/{*rest}");
     }
 
     #[test]

@@ -452,13 +452,17 @@ impl MqttBroker {
             }
         }
 
-        // Check if this matches any fixtures (skip if this is already a fixture response to avoid recursion)
+        // Check if this matches any fixtures (skip if this is already a fixture response to avoid recursion).
+        // Clone the matched fixture out so the registry read lock is released BEFORE the
+        // `publish_with_qos(...).await` below; holding a tokio RwLock guard across an await is the
+        // known deadlock pattern (#759).
         if !is_fixture_response {
-            if let Some(fixture) = self.fixture_registry.read().await.find_by_topic(topic) {
+            let fixture = self.fixture_registry.read().await.find_by_topic(topic).cloned();
+            if let Some(fixture) = fixture {
                 info!("Found matching fixture: {}", fixture.identifier);
 
                 // Generate response using template engine
-                match self.generate_fixture_response(fixture, topic, &payload) {
+                match self.generate_fixture_response(&fixture, topic, &payload) {
                     Ok(response_payload) => {
                         info!("Generated fixture response with {} bytes", response_payload.len());
                         // Publish the response to the same topic as the request (skip fixture lookup to avoid recursion)

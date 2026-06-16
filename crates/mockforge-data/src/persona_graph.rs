@@ -3,9 +3,10 @@
 //! This module provides graph-based relationship management for personas,
 //! enabling coherent persona switching across related entities (user → orders → payments → support tickets).
 
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::sync::{Arc, RwLock};
+use std::sync::Arc;
 
 /// Represents a node in the persona graph
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,13 +98,13 @@ impl PersonaGraph {
 
     /// Add a persona node to the graph
     pub fn add_node(&self, node: PersonaNode) {
-        let mut nodes = self.nodes.write().unwrap();
+        let mut nodes = self.nodes.write();
         nodes.insert(node.persona_id.clone(), node);
     }
 
     /// Get a node by persona ID
     pub fn get_node(&self, persona_id: &str) -> Option<PersonaNode> {
-        let nodes = self.nodes.read().unwrap();
+        let nodes = self.nodes.read();
         nodes.get(persona_id).cloned()
     }
 
@@ -118,11 +119,11 @@ impl PersonaGraph {
         };
 
         // Add forward edge
-        let mut edges = self.edges.write().unwrap();
+        let mut edges = self.edges.write();
         edges.entry(from.clone()).or_default().push(edge.clone());
 
         // Add reverse edge
-        let mut reverse_edges = self.reverse_edges.write().unwrap();
+        let mut reverse_edges = self.reverse_edges.write();
         reverse_edges.entry(to_clone.clone()).or_default().push(edge);
 
         // Update node relationships
@@ -135,13 +136,13 @@ impl PersonaGraph {
 
     /// Get all edges from a persona
     pub fn get_edges_from(&self, persona_id: &str) -> Vec<Edge> {
-        let edges = self.edges.read().unwrap();
+        let edges = self.edges.read();
         edges.get(persona_id).cloned().unwrap_or_default()
     }
 
     /// Get all edges to a persona
     pub fn get_edges_to(&self, persona_id: &str) -> Vec<Edge> {
-        let reverse_edges = self.reverse_edges.read().unwrap();
+        let reverse_edges = self.reverse_edges.read();
         reverse_edges.get(persona_id).cloned().unwrap_or_default()
     }
 
@@ -284,8 +285,8 @@ impl PersonaGraph {
         let mut all_ids = vec![start_persona_id.to_string()];
         all_ids.extend(related_ids);
 
-        let nodes = self.nodes.read().unwrap();
-        let edges = self.edges.read().unwrap();
+        let nodes = self.nodes.read();
+        let edges = self.edges.read();
 
         let subgraph_nodes: Vec<PersonaNode> =
             all_ids.iter().filter_map(|id| nodes.get(id).cloned()).collect();
@@ -301,21 +302,21 @@ impl PersonaGraph {
 
     /// Get all nodes in the graph
     pub fn get_all_nodes(&self) -> Vec<PersonaNode> {
-        let nodes = self.nodes.read().unwrap();
+        let nodes = self.nodes.read();
         nodes.values().cloned().collect()
     }
 
     /// Remove a node and all its edges
     pub fn remove_node(&self, persona_id: &str) {
-        let mut nodes = self.nodes.write().unwrap();
+        let mut nodes = self.nodes.write();
         nodes.remove(persona_id);
 
         // Remove forward edges
-        let mut edges = self.edges.write().unwrap();
+        let mut edges = self.edges.write();
         edges.remove(persona_id);
 
         // Remove reverse edges
-        let mut reverse_edges = self.reverse_edges.write().unwrap();
+        let mut reverse_edges = self.reverse_edges.write();
         reverse_edges.remove(persona_id);
 
         // Remove edges pointing to this node
@@ -329,20 +330,20 @@ impl PersonaGraph {
 
     /// Clear the entire graph
     pub fn clear(&self) {
-        let mut nodes = self.nodes.write().unwrap();
+        let mut nodes = self.nodes.write();
         nodes.clear();
 
-        let mut edges = self.edges.write().unwrap();
+        let mut edges = self.edges.write();
         edges.clear();
 
-        let mut reverse_edges = self.reverse_edges.write().unwrap();
+        let mut reverse_edges = self.reverse_edges.write();
         reverse_edges.clear();
     }
 
     /// Get graph statistics
     pub fn get_stats(&self) -> GraphStats {
-        let nodes = self.nodes.read().unwrap();
-        let edges = self.edges.read().unwrap();
+        let nodes = self.nodes.read();
+        let edges = self.edges.read();
 
         let mut relationship_type_counts = HashMap::new();
         for edges_list in edges.values() {
@@ -547,7 +548,7 @@ impl PersonaGraph {
     /// Generate visualization data for the graph
     pub fn to_visualization(&self) -> GraphVisualization {
         let nodes = self.get_all_nodes();
-        let edges = self.edges.read().unwrap();
+        let edges = self.edges.read();
 
         let vis_nodes: Vec<VisualizationNode> = nodes
             .iter()
@@ -580,6 +581,29 @@ impl PersonaGraph {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// #759: parking_lot::RwLock does not poison. If a thread panics while holding
+    /// the write lock, subsequent operations on the graph must still succeed (the old
+    /// std::sync::RwLock would have poisoned and made every `.read()/.write().unwrap()`
+    /// panic-cascade).
+    #[test]
+    fn test_persona_graph_lock_not_poisoned_after_panic() {
+        let graph = PersonaGraph::new();
+        graph.add_node(PersonaNode::new("user-1".to_string(), "user".to_string()));
+
+        let graph_clone = graph.clone();
+        let handle = std::thread::spawn(move || {
+            // Acquire the write lock and then panic while holding it.
+            let _guard = graph_clone.nodes.write();
+            panic!("intentional panic while holding the write lock");
+        });
+        assert!(handle.join().is_err(), "spawned thread should have panicked");
+
+        // With parking_lot the lock is NOT poisoned: these still work.
+        assert!(graph.get_node("user-1").is_some());
+        graph.add_node(PersonaNode::new("user-2".to_string(), "user".to_string()));
+        assert!(graph.get_node("user-2").is_some());
+    }
 
     // =========================================================================
     // PersonaNode tests

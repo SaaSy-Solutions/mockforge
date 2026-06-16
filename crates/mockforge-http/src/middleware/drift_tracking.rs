@@ -168,7 +168,7 @@ pub async fn drift_tracking_middleware_with_extensions(
         match analyzer.analyze(&captured, spec).await {
             Ok(diff_result) => {
                 // Evaluate drift budget
-                let drift_result = state.drift_engine.evaluate(&diff_result, &path, &method);
+                let drift_result = state.drift_engine.evaluate(&diff_result, &path, &method).await;
 
                 // Emit Prometheus gauges for the drift dashboard (#678). The
                 // workspace_id is not yet plumbed through the middleware —

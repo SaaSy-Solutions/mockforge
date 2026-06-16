@@ -5,6 +5,7 @@ use mockforge_core::protocol_abstraction::{
     ValidationError, ValidationResult,
 };
 use mockforge_core::Result;
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
 
@@ -23,7 +24,7 @@ pub struct UploadRecord {
 pub struct FtpSpecRegistry {
     pub fixtures: Vec<FtpFixture>,
     pub vfs: Arc<VirtualFileSystem>,
-    pub uploads: Arc<std::sync::RwLock<Vec<UploadRecord>>>,
+    pub uploads: Arc<RwLock<Vec<UploadRecord>>>,
 }
 
 impl FtpSpecRegistry {
@@ -31,7 +32,7 @@ impl FtpSpecRegistry {
         Self {
             fixtures: Vec::new(),
             vfs: Arc::new(VirtualFileSystem::new(std::path::PathBuf::from("/"))),
-            uploads: Arc::new(std::sync::RwLock::new(Vec::new())),
+            uploads: Arc::new(RwLock::new(Vec::new())),
         }
     }
 
@@ -82,18 +83,18 @@ impl FtpSpecRegistry {
             rule_name,
         };
 
-        let mut uploads = self.uploads.write().unwrap();
+        let mut uploads = self.uploads.write();
         uploads.push(record);
 
         Ok(id)
     }
 
     pub fn get_uploads(&self) -> Vec<UploadRecord> {
-        self.uploads.read().unwrap().clone()
+        self.uploads.read().clone()
     }
 
     pub fn get_upload(&self, id: &str) -> Option<UploadRecord> {
-        self.uploads.read().unwrap().iter().find(|u| u.id == id).cloned()
+        self.uploads.read().iter().find(|u| u.id == id).cloned()
     }
 }
 

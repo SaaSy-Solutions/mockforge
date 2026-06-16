@@ -106,10 +106,13 @@ pub fn rewrite_odata_path(path: &str) -> String {
             }
 
             if paren_content.contains('=') {
-                // key='value' or key=value pairs → /value segments
-                for part in paren_content.split(',') {
-                    if let Some((_key, value)) = part.split_once('=') {
-                        let param = value.trim_matches(|c| c == '\'' || c == '"');
+                // key='value' or key=value pairs → /value segments.
+                // Split on commas and on the key/value `=` only OUTSIDE quotes so a
+                // quoted value like Name='Doe, John' (or one containing `=`) stays
+                // intact (#761).
+                for part in split_outside_quotes(&paren_content, ',') {
+                    if let Some((_key, value)) = split_once_outside_quotes(&part, '=') {
+                        let param = value.trim().trim_matches(|c| c == '\'' || c == '"');
                         result.push('/');
                         result.push_str(param);
                     }
@@ -126,6 +129,55 @@ pub fn rewrite_odata_path(path: &str) -> String {
     }
 
     result
+}
+
+/// Split `s` on `delim`, but only when `delim` appears OUTSIDE single or double
+/// quotes. Quote characters are tracked so OData literals such as
+/// `Name='Doe, John'` are not shredded on the embedded comma.
+fn split_outside_quotes(s: &str, delim: char) -> Vec<String> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    let mut in_single = false;
+    let mut in_double = false;
+
+    for c in s.chars() {
+        match c {
+            '\'' if !in_double => {
+                in_single = !in_single;
+                current.push(c);
+            }
+            '"' if !in_single => {
+                in_double = !in_double;
+                current.push(c);
+            }
+            _ if c == delim && !in_single && !in_double => {
+                parts.push(std::mem::take(&mut current));
+            }
+            _ => current.push(c),
+        }
+    }
+    parts.push(current);
+    parts
+}
+
+/// Split `s` once on the first `delim` that appears OUTSIDE quotes, returning
+/// `(before, after)`. Mirrors `str::split_once` but is quote-aware so a `=`
+/// inside a quoted value does not act as the key/value separator.
+fn split_once_outside_quotes(s: &str, delim: char) -> Option<(String, String)> {
+    let mut in_single = false;
+    let mut in_double = false;
+
+    for (idx, c) in s.char_indices() {
+        match c {
+            '\'' if !in_double => in_single = !in_single,
+            '"' if !in_single => in_double = !in_double,
+            _ if c == delim && !in_single && !in_double => {
+                return Some((s[..idx].to_string(), s[idx + c.len_utf8()..].to_string()));
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -154,6 +206,26 @@ mod tests {
     #[test]
     fn test_multi_param_odata_rewrite() {
         assert_eq!(rewrite_odata_path("/func(key1='val1',key2='val2')"), "/func/val1/val2");
+    }
+
+    #[test]
+    fn test_quoted_value_with_comma_preserved() {
+        // #761: a comma inside a quoted value must not split the key=value pair.
+        assert_eq!(rewrite_odata_path("/Customers(Name='Doe, John')"), "/Customers/Doe, John");
+    }
+
+    #[test]
+    fn test_quoted_value_with_comma_multi_param() {
+        assert_eq!(
+            rewrite_odata_path("/func(name='Doe, John',city='Paris, FR')"),
+            "/func/Doe, John/Paris, FR"
+        );
+    }
+
+    #[test]
+    fn test_quoted_value_with_equals_preserved() {
+        // An `=` inside a quoted value must not act as the key/value separator.
+        assert_eq!(rewrite_odata_path("/func(expr='a=b')"), "/func/a=b");
     }
 
     #[test]
