@@ -1398,6 +1398,9 @@ pub trait RegistryStore: Send + Sync + 'static {
         require_signed_assertions: bool,
         require_signed_responses: bool,
         allow_unsolicited_responses: bool,
+        oidc_issuer_url: Option<&str>,
+        oidc_client_id: Option<&str>,
+        oidc_client_secret: Option<&str>,
     ) -> StoreResult<SSOConfiguration>;
 
     async fn enable_sso_config(&self, org_id: Uuid) -> StoreResult<()>;

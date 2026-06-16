@@ -3,7 +3,7 @@
 //! Handles SAML 2.0 SSO setup and authentication for Team plan organizations
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::HeaderMap,
     response::{IntoResponse, Redirect, Response},
     Form, Json,
@@ -38,6 +38,11 @@ pub struct CreateSSOConfigRequest {
     pub require_signed_assertions: Option<bool>,
     pub require_signed_responses: Option<bool>,
     pub allow_unsolicited_responses: Option<bool>,
+    // OIDC fields (used when provider == "oidc"). The full OIDC login flow lands
+    // with #746; this stores + SSRF-validates the issuer so the config exists.
+    pub oidc_issuer_url: Option<String>,
+    pub oidc_client_id: Option<String>,
+    pub oidc_client_secret: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -117,6 +122,26 @@ pub async fn create_sso_config(
         ));
     }
 
+    // OIDC completeness: an OIDC provider needs an issuer and client_id.
+    if provider == SSOProvider::Oidc {
+        let issuer = request.oidc_issuer_url.as_deref().filter(|s| !s.is_empty());
+        let client_id = request.oidc_client_id.as_deref().filter(|s| !s.is_empty());
+        if issuer.is_none() || client_id.is_none() {
+            return Err(ApiError::InvalidRequest(
+                "OIDC configuration requires oidc_issuer_url and oidc_client_id".to_string(),
+            ));
+        }
+    }
+
+    // SSRF guard: the issuer URL is tenant-supplied and will be fetched
+    // (discovery/JWKS) once the OIDC login flow lands (#746). Validate it
+    // whenever it is present, regardless of provider, so an unvalidated issuer
+    // can never be persisted (a SAML config carrying an oidc_issuer_url must not
+    // smuggle a loopback/metadata URL into storage).
+    if let Some(issuer) = request.oidc_issuer_url.as_deref().filter(|s| !s.is_empty()) {
+        crate::sso_domain::validate_issuer_url(issuer)?;
+    }
+
     // Create or update SSO configuration
     let config = state
         .store
@@ -132,6 +157,9 @@ pub async fn create_sso_config(
             request.require_signed_assertions.unwrap_or(true),
             request.require_signed_responses.unwrap_or(true),
             request.allow_unsolicited_responses.unwrap_or(false),
+            request.oidc_issuer_url.as_deref(),
+            request.oidc_client_id.as_deref(),
+            request.oidc_client_secret.as_deref(),
         )
         .await?;
 
@@ -226,6 +254,69 @@ pub async fn get_sso_config(
     } else {
         Ok(Json(None))
     }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct DomainStatusQuery {
+    pub domain: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct DomainStatusResponse {
+    /// The email domain being checked (normalized).
+    pub domain: String,
+    /// DNS name where the ownership TXT record must be published.
+    pub record_name: String,
+    /// Exact TXT value the org must publish to prove ownership.
+    pub record_value: String,
+    /// Whether the record is currently resolvable and authorizes this org.
+    pub verified: bool,
+}
+
+/// Report SSO domain-verification status for `?domain=` (org admin only).
+///
+/// SSO provisioning (#833) only creates/attaches accounts whose email domain the
+/// org has proven it owns via a DNS TXT record. This endpoint tells an admin the
+/// exact record to publish and whether it currently verifies, so they can
+/// self-serve enabling a domain for their SAML/OIDC users.
+pub async fn get_domain_verification_status(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
+    Query(query): Query<DomainStatusQuery>,
+) -> ApiResult<Json<DomainStatusResponse>> {
+    let org_ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization context required".to_string()))?;
+
+    use crate::models::OrgRole;
+    let is_admin = org_ctx.org.owner_id == user_id || {
+        if let Ok(Some(member)) = state.store.find_org_member(org_ctx.org_id, user_id).await {
+            matches!(member.role(), OrgRole::Admin | OrgRole::Owner)
+        } else {
+            false
+        }
+    };
+    if !is_admin {
+        return Err(ApiError::PermissionDenied);
+    }
+
+    // Validate the requested domain (must be a plausible dotted host).
+    let domain = crate::sso_domain::normalize_domain(&query.domain);
+    if domain.is_empty() || !domain.contains('.') || domain.contains('@') {
+        return Err(ApiError::InvalidRequest(
+            "A valid email domain (e.g. acme.com) is required".to_string(),
+        ));
+    }
+
+    let verified = crate::sso_domain::domain_ownership_verified(org_ctx.org_id, &domain).await;
+
+    Ok(Json(DomainStatusResponse {
+        record_name: crate::sso_domain::verification_record_name(&domain),
+        record_value: crate::sso_domain::expected_txt_value(org_ctx.org_id),
+        domain,
+        verified,
+    }))
 }
 
 /// Enable SSO (org admin only)
