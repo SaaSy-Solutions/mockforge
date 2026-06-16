@@ -1,5 +1,11 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.180] - 2026-06-16
+
+### Fixed
+
+- **[Contracts]** Embedded-content variant-b probes no longer flag 4xx responses as mismatches; only 5xx counts as failure (#79 round 35 / #859 / Srikanth).
+
 ## [0.3.179] - 2026-06-15
 
 ### Fixed
