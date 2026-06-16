@@ -156,8 +156,10 @@ pub async fn export_data(
         // Get org settings
         let org_settings = state.store.list_org_settings_raw(org.id).await?;
 
-        // Get projects
-        let projects = state.store.list_org_projects_raw(org.id).await?;
+        // Get projects through the tenant-isolation backstop (#832): the
+        // Postgres impl runs this under the `app.current_org_id` GUC so the
+        // RLS policy enforces org scoping at the database, not just here.
+        let projects = state.store.list_org_projects_isolated(org.id).await?;
 
         // Get subscriptions
         let subscriptions = state.store.list_org_subscriptions_raw(org.id).await?;

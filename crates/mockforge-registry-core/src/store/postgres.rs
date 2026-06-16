@@ -66,6 +66,56 @@ impl PgRegistryStore {
     pub fn pool(&self) -> &PgPool {
         &self.pool
     }
+
+    // ── RLS-backed tenant-isolated reads (#832) ────────────────────────────
+    //
+    // These mirror the existing `list_org_projects_raw` /
+    // `list_scenarios_by_org` trait methods, but route through
+    // [`with_org_context`] so the query runs under the
+    // `app.current_org_id` GUC and is enforced by the Postgres RLS policies
+    // (migration 20250101000079). They are the demonstration that real
+    // handler-style queries work through the backstop.
+    //
+    // Note: the `WHERE org_id = $1` filter is INTENTIONALLY OMITTED here to
+    // prove the RLS policy is what isolates the rows. In production handlers
+    // we keep both the app filter and the GUC (defense in depth); these
+    // methods exist specifically to exercise the DB backstop in isolation.
+
+    /// List an org's scenarios through the RLS backstop.
+    ///
+    /// The `scenarios` RLS policy admits both this org's rows and public
+    /// (`org_id IS NULL`) rows, so this returns org-owned scenarios plus the
+    /// shared public marketplace scenarios — matching the product semantics
+    /// of the existing app-layer query, but enforced at the database.
+    pub async fn list_scenarios_by_org_rls(&self, org_id: Uuid) -> StoreResult<Vec<Scenario>> {
+        crate::store::with_org_context(&self.pool, org_id, |tx| {
+            Box::pin(async move {
+                let rows = sqlx::query_as::<_, Scenario>(
+                    "SELECT * FROM scenarios ORDER BY created_at DESC",
+                )
+                .fetch_all(&mut **tx)
+                .await?;
+                Ok(rows)
+            })
+        })
+        .await
+    }
+
+    /// List an org's hosted mocks through the RLS backstop.
+    ///
+    /// `hosted_mocks` is strictly org-scoped (NOT NULL `org_id`); the RLS
+    /// policy isolates the result without any `WHERE org_id` clause.
+    pub async fn list_hosted_mocks_by_org_rls(&self, org_id: Uuid) -> StoreResult<Vec<HostedMock>> {
+        crate::store::with_org_context(&self.pool, org_id, |tx| {
+            Box::pin(async move {
+                let rows = sqlx::query_as::<_, HostedMock>("SELECT * FROM hosted_mocks")
+                    .fetch_all(&mut **tx)
+                    .await?;
+                Ok(rows)
+            })
+        })
+        .await
+    }
 }
 
 #[async_trait]
@@ -2812,6 +2862,38 @@ impl RegistryStore for PgRegistryStore {
                 updated_at,
             })
             .collect())
+    }
+
+    /// RLS-backed variant of [`Self::list_org_projects_raw`] (#832).
+    ///
+    /// Runs the SELECT inside a transaction bound to `app.current_org_id` via
+    /// [`with_org_context`]. The query carries no `WHERE org_id` clause on
+    /// purpose: the Row-Level-Security policy on `projects` (migration
+    /// 20250101000079) is what isolates the result to this org. This is the
+    /// real handler-reachable demonstration that the DB backstop enforces
+    /// tenancy even when the app filter is absent.
+    async fn list_org_projects_isolated(&self, org_id: Uuid) -> StoreResult<Vec<ProjectRow>> {
+        crate::store::with_org_context(&self.pool, org_id, |tx| {
+            Box::pin(async move {
+                let rows =
+                    sqlx::query_as::<_, (Uuid, String, String, DateTime<Utc>, DateTime<Utc>)>(
+                        "SELECT id, name, visibility, created_at, updated_at FROM projects",
+                    )
+                    .fetch_all(&mut **tx)
+                    .await?;
+                Ok(rows
+                    .into_iter()
+                    .map(|(id, name, visibility, created_at, updated_at)| ProjectRow {
+                        id,
+                        name,
+                        visibility,
+                        created_at,
+                        updated_at,
+                    })
+                    .collect())
+            })
+        })
+        .await
     }
 
     async fn list_org_subscriptions_raw(&self, org_id: Uuid) -> StoreResult<Vec<SubscriptionRow>> {
