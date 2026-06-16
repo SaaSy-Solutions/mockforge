@@ -246,6 +246,18 @@ const deleteSSOConfig = () => apiFetch<void>(`${API_BASE}/sso/config`, { method:
 const enableSSO = () => apiFetch<void>(`${API_BASE}/sso/enable`, { method: 'POST' });
 const disableSSO = () => apiFetch<void>(`${API_BASE}/sso/disable`, { method: 'POST' });
 
+// SSO domain verification (#833): SSO only provisions users whose email domain
+// the org has proven it owns via a DNS TXT record. This reports the exact record
+// to publish and whether it currently verifies.
+interface DomainStatus {
+  domain: string;
+  record_name: string;
+  record_value: string;
+  verified: boolean;
+}
+const fetchDomainStatus = (domain: string) =>
+  apiFetch<DomainStatus>(`${API_BASE}/sso/domain/status?domain=${encodeURIComponent(domain)}`);
+
 // Templates
 const fetchOrgTemplates = (orgId: string) =>
   apiFetch<{ templates: OrgTemplate[] }>(`${API_BASE}/organizations/${orgId}/templates`);
@@ -1168,6 +1180,92 @@ function TemplatesTab({ org }: { org: Organization }) {
   );
 }
 
+function DomainVerificationCard() {
+  const { showToast } = useToast();
+  const [domain, setDomain] = useState('');
+  const [status, setStatus] = useState<DomainStatus | null>(null);
+
+  const checkMutation = useMutation({
+    mutationFn: () => fetchDomainStatus(domain.trim()),
+    onSuccess: (data) => {
+      setStatus(data);
+      showToast(
+        data.verified ? 'success' : 'info',
+        data.verified ? `${data.domain} is verified` : `${data.domain} is not verified yet`,
+      );
+    },
+    onError: (err: Error) => showToast('error', 'Domain check failed', err.message),
+  });
+
+  const copy = (text: string) => {
+    navigator.clipboard?.writeText(text);
+    showToast('success', 'Copied to clipboard');
+  };
+
+  return (
+    <div className="space-y-3 border-t pt-4">
+      <h4 className="text-sm font-semibold flex items-center gap-2">
+        <Shield className="w-4 h-4" /> Domain Verification
+      </h4>
+      <p className="text-sm text-muted-foreground">
+        SSO only creates or links accounts for email domains your organization has verified.
+        Enter a domain, publish the DNS TXT record shown, then check.
+      </p>
+      <div className="flex gap-2">
+        <Input
+          value={domain}
+          onChange={(e) => {
+            setDomain(e.target.value);
+            setStatus(null);
+          }}
+          placeholder="acme.com"
+        />
+        <Button onClick={() => checkMutation.mutate()} disabled={!domain.trim() || checkMutation.isPending}>
+          {checkMutation.isPending ? 'Checking...' : 'Check'}
+        </Button>
+      </div>
+      {status && (
+        <div className="p-3 border rounded-lg bg-muted/50 text-sm space-y-2">
+          <div className="flex items-center gap-2">
+            {status.verified ? (
+              <Badge className="bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-300">
+                <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Verified
+              </Badge>
+            ) : (
+              <Badge className="bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300">
+                <AlertTriangle className="w-3.5 h-3.5 mr-1" /> Pending
+              </Badge>
+            )}
+            <span className="text-muted-foreground">{status.domain}</span>
+          </div>
+          <div className="space-y-1">
+            <div className="text-muted-foreground text-xs">Add this DNS TXT record:</div>
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground text-xs w-12">Name</span>
+              <code className="text-xs flex-1 break-all">{status.record_name}</code>
+              <Button size="sm" variant="ghost" onClick={() => copy(status.record_name)}>
+                <Copy className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-muted-foreground text-xs w-12">Value</span>
+              <code className="text-xs flex-1 break-all">{status.record_value}</code>
+              <Button size="sm" variant="ghost" onClick={() => copy(status.record_value)}>
+                <Copy className="w-3.5 h-3.5" />
+              </Button>
+            </div>
+          </div>
+          {!status.verified && (
+            <p className="text-xs text-muted-foreground">
+              DNS changes can take a few minutes to propagate. Check again after publishing.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SSOTab({ org }: { org: Organization }) {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
@@ -1317,6 +1415,8 @@ function SSOTab({ org }: { org: Organization }) {
           </div>
         </div>
       )}
+
+      <DomainVerificationCard />
 
       {ssoConfig && (
         <div className="border-t pt-4">
