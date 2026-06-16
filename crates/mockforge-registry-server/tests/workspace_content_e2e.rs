@@ -20,8 +20,17 @@
 //!   REGISTRY_URL=http://localhost:8080 \
 //!   cargo test --test workspace_content_e2e -- --ignored --nocapture
 
+use hmac::{Hmac, Mac};
 use reqwest::{Client, StatusCode};
 use serde_json::{json, Value};
+use sha2::Sha256;
+
+type HmacSha256 = Hmac<Sha256>;
+
+/// Stripe webhook secret the e2e registry server is started with. Must match
+/// `STRIPE_WEBHOOK_SECRET` in `.github/workflows/registry-e2e.yml` (see
+/// `paid_flow_e2e.rs`, which uses the same literal).
+const DEFAULT_WEBHOOK_SECRET: &str = "whsec_e2e_test_secret";
 
 /// Thin wrapper around reqwest::Client that tracks auth + org headers.
 struct E2e {
@@ -88,15 +97,20 @@ async fn register_and_setup(base_url: &str) -> E2e {
         .expect("no access token")
         .to_string();
 
-    // Create org (using a slug unique per run)
+    // Create org (using a slug unique per run).
+    //
+    // The org plan is now server-authoritative (#733): org creation always
+    // provisions Free and the create API rejects a non-free `plan` in the body.
+    // These tests create multiple workspaces in one org to exercise
+    // cross-workspace isolation, and the Free plan caps an org at 1 workspace
+    // (max_projects), so we still need a Team org. We reach Team the only way a
+    // real customer can — by driving the Stripe billing webhook — instead of
+    // setting the plan on create.
     let org_slug = format!("wsct-{}", ts);
     let res = client
         .post(format!("{}/api/v1/organizations", base_url))
         .header("Authorization", format!("Bearer {}", access_token))
-        // These tests create multiple workspaces in one org to exercise
-        // cross-workspace isolation; the Free plan caps an org at 1 workspace
-        // (max_projects), so provision a Team org which is uncapped.
-        .json(&json!({ "name": format!("WS-Content Test Org {}", ts), "slug": org_slug, "plan": "team" }))
+        .json(&json!({ "name": format!("WS-Content Test Org {}", ts), "slug": org_slug }))
         .send()
         .await
         .expect("create org failed");
@@ -105,12 +119,99 @@ async fn register_and_setup(base_url: &str) -> E2e {
     assert!(status.is_success(), "create org {}: {}", status, body);
     let org_id = body["id"].as_str().expect("no org id").to_string();
 
+    // Upgrade the org to Team via a Stripe-signed `customer.subscription.created`
+    // webhook (the only server-authoritative path to a paid plan). The
+    // `price_test_team` id triggers the handler's heuristic Team mapping in
+    // `determine_plan_from_price_id`, so no STRIPE_PRICE_ID_TEAM env is needed.
+    upgrade_org_to_team(&client, base_url, &org_id, ts).await;
+
     E2e {
         client,
         base_url: base_url.to_string(),
         access_token,
         org_id,
     }
+}
+
+/// Sign a Stripe webhook body with the shared e2e secret, matching what
+/// `stripe::Webhook::construct_event` verifies: `t=<ts>,v1=<hex hmac-sha256>`.
+fn sign_webhook(secret: &str, payload: &str, timestamp: i64) -> String {
+    let signed = format!("{}.{}", timestamp, payload);
+    let mut mac =
+        HmacSha256::new_from_slice(secret.as_bytes()).expect("HMAC accepts arbitrary key length");
+    mac.update(signed.as_bytes());
+    format!("t={},v1={}", timestamp, hex::encode(mac.finalize().into_bytes()))
+}
+
+/// POST a Stripe-signed `customer.subscription.created` (Team) webhook so the
+/// server flips the org's plan to Team. Mirrors `paid_flow_e2e.rs`.
+async fn upgrade_org_to_team(client: &Client, base_url: &str, org_id: &str, ts: i64) {
+    let secret = std::env::var("STRIPE_WEBHOOK_SECRET")
+        .unwrap_or_else(|_| DEFAULT_WEBHOOK_SECRET.to_string());
+    let now = chrono::Utc::now().timestamp();
+    let body = json!({
+        "id": format!("evt_wsct_{}", uuid::Uuid::new_v4()),
+        "object": "event",
+        "api_version": "2024-04-10",
+        "created": now,
+        "type": "customer.subscription.created",
+        "livemode": false,
+        "pending_webhooks": 0,
+        "request": { "id": null, "idempotency_key": null },
+        "data": {
+            "object": {
+                "id": format!("sub_wsct_{}", ts),
+                "object": "subscription",
+                "customer": format!("cus_wsct_{}", ts),
+                "status": "active",
+                "livemode": false,
+                "automatic_tax": { "enabled": false },
+                "current_period_start": now,
+                "current_period_end": now + 30 * 86400,
+                "cancel_at_period_end": false,
+                "canceled_at": Value::Null,
+                "created": now,
+                "start_date": now,
+                "billing_cycle_anchor": now,
+                "collection_method": "charge_automatically",
+                "currency": "usd",
+                "items": {
+                    "object": "list",
+                    "data": [{
+                        "id": format!("si_wsct_{}", uuid::Uuid::new_v4()),
+                        "object": "subscription_item",
+                        "price": {
+                            "id": "price_test_team",
+                            "object": "price",
+                            "active": true,
+                            "currency": "usd",
+                            "product": "prod_wsct",
+                            "type": "recurring",
+                        },
+                        "quantity": 1,
+                        "subscription": format!("sub_wsct_{}", ts),
+                    }],
+                    "has_more": false,
+                    "url": "/v1/subscription_items"
+                },
+                "metadata": { "org_id": org_id },
+            }
+        }
+    })
+    .to_string();
+
+    let sig = sign_webhook(&secret, &body, now);
+    let res = client
+        .post(format!("{}/api/v1/billing/webhook", base_url))
+        .header("stripe-signature", sig)
+        .header("content-type", "application/json")
+        .body(body)
+        .send()
+        .await
+        .expect("team-upgrade webhook POST failed");
+    let status = res.status();
+    let text = res.text().await.unwrap_or_default();
+    assert!(status.is_success(), "team-upgrade webhook returned {}: {}", status, text);
 }
 
 async fn create_workspace(e: &E2e, name: &str) -> String {

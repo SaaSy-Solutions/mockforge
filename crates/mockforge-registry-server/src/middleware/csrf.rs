@@ -49,29 +49,47 @@ fn get_allowed_origins() -> &'static Vec<String> {
     })
 }
 
-/// Check if an origin is allowed
-fn is_origin_allowed(origin: &str) -> bool {
-    let allowed = get_allowed_origins();
-
-    // Check for exact match
+/// Check if an origin is allowed against a given allowlist.
+///
+/// The allowlist is taken as a parameter (rather than read from the global
+/// `OnceLock`) so this is unit-testable without mutating process-wide env state.
+///
+/// Wildcard entries (`*.base`) are matched against the **parsed host** of the
+/// origin URL, never by raw string suffix. A naive `strip_suffix(".mockforge.dev")`
+/// would wrongly accept `https://evilmockforge.dev` and
+/// `https://app.mockforge.dev.attacker.com` (#760), so we parse the origin,
+/// extract its host, and require `host == base || host.ends_with(".{base}")`.
+/// Origins that don't parse or have no host are rejected.
+fn is_origin_allowed_with(origin: &str, allowed: &[String]) -> bool {
+    // Check for exact match first (cheap, and preserves scheme/port semantics).
     if allowed.iter().any(|o| o == origin) {
         return true;
     }
 
-    // Check for wildcard patterns (e.g., "*.mockforge.dev")
+    // Any wildcard handling requires the parsed host of the request origin.
+    let Ok(parsed) = url::Url::parse(origin) else {
+        return false;
+    };
+    let Some(host) = parsed.host_str() else {
+        return false;
+    };
+
     for allowed_origin in allowed {
-        if allowed_origin.starts_with("*.") {
-            let suffix = &allowed_origin[1..]; // ".mockforge.dev"
-            if let Some(prefix) = origin.strip_suffix(suffix) {
-                // Verify it's a valid subdomain (has a dot before the suffix)
-                if prefix.starts_with("https://") || prefix.starts_with("http://") {
-                    return true;
-                }
+        if let Some(base) = allowed_origin.strip_prefix("*.") {
+            // Allow the apex domain and any genuine subdomain of it. The leading
+            // dot in `".{base}"` is what blocks `evil{base}` style lookalike domains.
+            if host == base || host.ends_with(&format!(".{base}")) {
+                return true;
             }
         }
     }
 
     false
+}
+
+/// Check if an origin is allowed (uses the cached global allowlist).
+fn is_origin_allowed(origin: &str) -> bool {
+    is_origin_allowed_with(origin, get_allowed_origins())
 }
 
 /// Extract origin from request headers
@@ -204,6 +222,49 @@ mod tests {
         // Test non-allowed origin
         assert!(!is_origin_allowed("https://evil.com"));
         assert!(!is_origin_allowed("http://localhost:9999"));
+    }
+
+    #[test]
+    fn test_is_origin_allowed_wildcard_accepts_apex_and_subdomains() {
+        let allowed = vec!["*.mockforge.dev".to_string()];
+        // Apex and genuine subdomains are accepted.
+        assert!(is_origin_allowed_with("https://app.mockforge.dev", &allowed));
+        assert!(is_origin_allowed_with("https://x.mockforge.dev", &allowed));
+        assert!(is_origin_allowed_with("https://mockforge.dev", &allowed));
+    }
+
+    #[test]
+    fn test_is_origin_allowed_wildcard_rejects_lookalikes() {
+        let allowed = vec!["*.mockforge.dev".to_string()];
+        // Suffix-match smuggling that the old strip_suffix logic let through (#760).
+        assert!(!is_origin_allowed_with("https://evilmockforge.dev", &allowed));
+        assert!(!is_origin_allowed_with("https://mockforge.dev.evil.com", &allowed));
+        assert!(!is_origin_allowed_with("https://app.mockforge.dev.attacker.com", &allowed));
+    }
+
+    #[test]
+    fn test_is_origin_allowed_wildcard_rejects_port_and_userinfo_smuggling() {
+        let allowed = vec!["*.mockforge.dev".to_string()];
+        // Userinfo-smuggled host: the real host is attacker.com, not mockforge.dev.
+        assert!(!is_origin_allowed_with("https://app.mockforge.dev@attacker.com", &allowed));
+        // A port on a look-alike host must still be rejected.
+        assert!(!is_origin_allowed_with("https://evilmockforge.dev:443", &allowed));
+        // A real subdomain with a port is still a real subdomain → allowed.
+        assert!(is_origin_allowed_with("https://app.mockforge.dev:8443", &allowed));
+    }
+
+    #[test]
+    fn test_is_origin_allowed_with_exact_match() {
+        let allowed = vec!["https://app.mockforge.dev".to_string()];
+        assert!(is_origin_allowed_with("https://app.mockforge.dev", &allowed));
+        assert!(!is_origin_allowed_with("https://evil.com", &allowed));
+    }
+
+    #[test]
+    fn test_is_origin_allowed_rejects_unparsable() {
+        let allowed = vec!["*.mockforge.dev".to_string()];
+        assert!(!is_origin_allowed_with("not-a-url", &allowed));
+        assert!(!is_origin_allowed_with("", &allowed));
     }
 
     #[test]
