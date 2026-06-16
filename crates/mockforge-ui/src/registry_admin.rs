@@ -15,8 +15,9 @@
 use std::sync::Arc;
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Request, State},
     http::StatusCode,
+    middleware::{from_fn_with_state, Next},
     response::{IntoResponse, Response},
     routing::{get, post},
     Json, Router,
@@ -171,17 +172,80 @@ impl From<mockforge_registry_core::error::StoreError> for ApiError {
     }
 }
 
+/// Auth middleware for the registry-admin write/read surface.
+///
+/// Requires an `Authorization: Bearer <token>` header whose JWT verifies
+/// against [`CoreAppState::jwt_secret`]. Reuses the exact parsing/semantics
+/// of [`auth_me`]. On any failure it returns `401 UNAUTHORIZED` with the
+/// crate's [`ApiError`] JSON body.
+///
+/// **Fail closed on empty secret**: if `jwt_secret` is empty the middleware
+/// rejects unconditionally rather than accepting trivially-forgeable /
+/// unsigned tokens. (Mounting with an empty secret is also refused at
+/// startup in `lib.rs`, so this is defense in depth.)
+///
+/// On success the verified user id (`Uuid`) and full `Claims` are inserted
+/// into the request extensions so downstream handlers can read them.
+async fn require_auth(
+    State(state): State<CoreAppState>,
+    mut req: Request,
+    next: Next,
+) -> Result<Response, ApiError> {
+    // Fail closed: an empty signing secret means any token (including an
+    // unsigned/alg=none-style forgery against an empty HMAC key) could be
+    // accepted, so refuse outright.
+    if state.jwt_secret.is_empty() {
+        return Err(ApiError(
+            StatusCode::UNAUTHORIZED,
+            "registry admin auth is misconfigured (empty JWT secret)".into(),
+        ));
+    }
+
+    let auth = req
+        .headers()
+        .get("authorization")
+        .and_then(|h| h.to_str().ok())
+        .ok_or(ApiError(StatusCode::UNAUTHORIZED, "missing Authorization header".into()))?;
+    let token = auth.strip_prefix("Bearer ").ok_or(ApiError(
+        StatusCode::UNAUTHORIZED,
+        "expected 'Authorization: Bearer <token>'".into(),
+    ))?;
+    let claims = mockforge_registry_core::auth::verify_token(token, &state.jwt_secret)
+        .map_err(|e| ApiError(StatusCode::UNAUTHORIZED, format!("invalid token: {}", e)))?;
+    let user_id = Uuid::parse_str(&claims.sub)
+        .map_err(|e| ApiError(StatusCode::UNAUTHORIZED, format!("bad subject: {}", e)))?;
+
+    // Make the verified identity available to handlers (nice-to-have).
+    // `Claims` isn't `Clone` (a requirement for request extensions), so we
+    // surface just the user id, which is the piece handlers actually need.
+    req.extensions_mut().insert(user_id);
+
+    Ok(next.run(req).await)
+}
+
 /// Build the registry-admin sub-router.
 ///
 /// The returned router is fully state-erased (`Router<()>`) so it can be
 /// `.merge()`d into any parent axum router without additional wiring.
+///
+/// Security (#856): every state-changing / data-reading admin route lives
+/// on the `protected` router behind [`require_auth`], applied as a
+/// `route_layer` so the layer only runs for routes this router actually
+/// matches. Only `health` and the unauthenticated `auth/login` entry point
+/// stay on the `public` router. `auth/register` is admin-gated: it mints a
+/// user + JWT, so leaving it open lets anyone self-issue a token that passes
+/// [`require_auth`] on every protected route (the `Claims` type carries no
+/// role, so any valid token authorizes the whole surface). The first admin
+/// is provisioned out-of-band via `bootstrap_admin_user_from_env`; further
+/// admins are created by an already-authenticated admin. `auth/me` also sits
+/// behind the layer (it additionally does its own check, which is harmless
+/// and slightly cleaner).
 pub fn router(state: CoreAppState) -> Router {
-    Router::new()
-        .route("/api/admin/registry/health", get(health))
-        // Auth — register/login issue a JWT bound to the user id
-        .route("/api/admin/registry/auth/register", post(register))
-        .route("/api/admin/registry/auth/login", post(login))
+    let protected = Router::new()
         .route("/api/admin/registry/auth/me", get(auth_me))
+        // register mints a user + JWT, so it must require an existing admin
+        // token — otherwise it's a public token-minting bypass of require_auth.
+        .route("/api/admin/registry/auth/register", post(register))
         // User management
         .route("/api/admin/registry/users", post(create_user))
         .route("/api/admin/registry/users/email/{email}", get(find_user_by_email))
@@ -208,13 +272,33 @@ pub fn router(state: CoreAppState) -> Router {
         )
         // Invitation flow — uses the existing verification_tokens table
         // by storing a JSON-encoded payload in the `token` column.
+        //
+        // NOTE: invitation GET/accept are intentionally behind admin auth
+        // here because this is the operator-facing OSS admin surface, not a
+        // public self-serve onboarding endpoint. Acceptance still requires
+        // the unguessable nonce token.
         .route("/api/admin/registry/orgs/{org_id}/invitations", post(create_invitation))
         .route("/api/admin/registry/invitations/{token}", get(get_invitation))
         .route(
             "/api/admin/registry/invitations/{token}/accept",
             post(accept_invitation),
         )
-        .with_state(state)
+        // Gate the entire protected surface behind the JWT auth layer.
+        // route_layer (not layer) ensures the middleware only runs for
+        // requests that match one of the routes above — unmatched paths
+        // fall through to the public router / parent without a spurious 401.
+        .route_layer(from_fn_with_state(state.clone(), require_auth));
+
+    let public = Router::new()
+        .route("/api/admin/registry/health", get(health))
+        // Auth — only `login` stays public. It's the sole credential-issuing
+        // endpoint: it verifies an existing password before minting a JWT, so
+        // it can't be used to forge an identity. `register` is now admin-gated
+        // (see the protected router above) because it creates a brand-new user
+        // and hands back a valid token with no prior authentication.
+        .route("/api/admin/registry/auth/login", post(login));
+
+    public.merge(protected).with_state(state)
 }
 
 async fn health(State(state): State<CoreAppState>) -> Result<Json<serde_json::Value>, ApiError> {
@@ -506,6 +590,11 @@ async fn create_org(
     }
     let owner_id = Uuid::parse_str(&req.owner_id)
         .map_err(|e| ApiError(StatusCode::BAD_REQUEST, format!("bad owner_id uuid: {}", e)))?;
+    // #733/#856: this route accepts a client-supplied `plan` (pro/team) and
+    // is now gated behind the `require_auth` admin-JWT layer (see `router`),
+    // so operator-authenticated provisioning of paid-tier orgs is legitimate
+    // here. This is the operator admin path and is deliberately distinct from
+    // the public self-serve tenant path, which must force Plan::Free.
     let plan = match req.plan.as_deref() {
         Some("pro") => Plan::Pro,
         Some("team") => Plan::Team,
@@ -1029,7 +1118,45 @@ mod tests {
         assert_eq!(reloaded_org.id, org.id);
     }
 
+    /// Shared JWT secret for tests that need a meaningfully-signed token.
+    const TEST_SECRET: &str = "test-secret-please-do-not-use-in-prod";
+
+    /// Mint a valid admin bearer token for `user_id` signed with [`TEST_SECRET`].
+    fn test_bearer(user_id: Uuid) -> String {
+        let tok =
+            mockforge_registry_core::auth::create_access_token(&user_id.to_string(), TEST_SECRET)
+                .expect("mint test token");
+        format!("Bearer {}", tok)
+    }
+
+    /// Build an authenticated GET request carrying a valid admin bearer token.
+    fn authed_get(uri: &str, user_id: Uuid) -> Request<Body> {
+        Request::builder()
+            .method("GET")
+            .uri(uri)
+            .header("authorization", test_bearer(user_id))
+            .body(Body::empty())
+            .unwrap()
+    }
+
+    /// Like [`json_post`] but with a valid admin bearer token attached.
+    fn authed_json_post(uri: &str, body: serde_json::Value, user_id: Uuid) -> Request<Body> {
+        Request::builder()
+            .method("POST")
+            .uri(uri)
+            .header("content-type", "application/json")
+            .header("authorization", test_bearer(user_id))
+            .body(Body::from(body.to_string()))
+            .unwrap()
+    }
+
     /// Build a fully bootstrapped router + test fixtures for the HTTP tests.
+    ///
+    /// The router is built with [`TEST_SECRET`] so the protected admin
+    /// surface (everything except health/register/login) requires a valid
+    /// bearer token. The returned `Uuid`s identify the seeded user/org; mint
+    /// a token for the user via [`test_bearer`] / [`authed_get`] /
+    /// [`authed_json_post`].
     async fn test_router_with_seed() -> (Router, Uuid, Uuid) {
         let store = init_sqlite_registry_store("sqlite::memory:").await.unwrap();
         let user = store.create_user("route-admin", "route@example.com", "hash").await.unwrap();
@@ -1037,7 +1164,7 @@ mod tests {
             .create_organization("Route Org", "route-org", user.id, Plan::Free)
             .await
             .unwrap();
-        let state = CoreAppState::new(Arc::new(store));
+        let state = CoreAppState::with_jwt_secret(Arc::new(store), TEST_SECRET.to_string());
         (router(state), user.id, org.id)
     }
 
@@ -1067,12 +1194,7 @@ mod tests {
     async fn test_find_user_by_email_endpoint() {
         let (router, user_id, _) = test_router_with_seed().await;
         let resp = router
-            .oneshot(
-                Request::builder()
-                    .uri("/api/admin/registry/users/email/route@example.com")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(authed_get("/api/admin/registry/users/email/route@example.com", user_id))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -1084,14 +1206,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_find_user_by_email_missing_returns_404() {
-        let (router, _, _) = test_router_with_seed().await;
+        let (router, user_id, _) = test_router_with_seed().await;
         let resp = router
-            .oneshot(
-                Request::builder()
-                    .uri("/api/admin/registry/users/email/nobody@example.com")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(authed_get("/api/admin/registry/users/email/nobody@example.com", user_id))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
@@ -1103,12 +1220,7 @@ mod tests {
     async fn test_find_user_by_username_endpoint() {
         let (router, user_id, _) = test_router_with_seed().await;
         let resp = router
-            .oneshot(
-                Request::builder()
-                    .uri("/api/admin/registry/users/username/route-admin")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(authed_get("/api/admin/registry/users/username/route-admin", user_id))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -1121,12 +1233,7 @@ mod tests {
     async fn test_find_org_by_slug_endpoint() {
         let (router, user_id, org_id) = test_router_with_seed().await;
         let resp = router
-            .oneshot(
-                Request::builder()
-                    .uri("/api/admin/registry/orgs/slug/route-org")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(authed_get("/api/admin/registry/orgs/slug/route-org", user_id))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -1140,15 +1247,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_user_endpoint() {
-        let (router, _, _) = test_router_with_seed().await;
+        let (router, user_id, _) = test_router_with_seed().await;
         let resp = router
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 "/api/admin/registry/users",
                 json!({
                     "username": "brand-new",
                     "email": "new@example.com",
                     "password_hash": "bcrypt-hash-placeholder-long-enough"
                 }),
+                user_id,
             ))
             .await
             .unwrap();
@@ -1161,15 +1269,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_user_validates_empty_username() {
-        let (router, _, _) = test_router_with_seed().await;
+        let (router, user_id, _) = test_router_with_seed().await;
         let resp = router
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 "/api/admin/registry/users",
                 json!({
                     "username": "",
                     "email": "ok@example.com",
                     "password_hash": "bcrypt-hash-placeholder-long-enough"
                 }),
+                user_id,
             ))
             .await
             .unwrap();
@@ -1178,15 +1287,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_user_rejects_short_password_hash() {
-        let (router, _, _) = test_router_with_seed().await;
+        let (router, user_id, _) = test_router_with_seed().await;
         let resp = router
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 "/api/admin/registry/users",
                 json!({
                     "username": "x",
                     "email": "x@example.com",
                     "password_hash": "plaintext"
                 }),
+                user_id,
             ))
             .await
             .unwrap();
@@ -1201,6 +1311,7 @@ mod tests {
                 Request::builder()
                     .method("POST")
                     .uri(format!("/api/admin/registry/users/{}/verify", user_id))
+                    .header("authorization", test_bearer(user_id))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -1216,7 +1327,7 @@ mod tests {
     async fn test_create_org_endpoint() {
         let (router, user_id, _) = test_router_with_seed().await;
         let resp = router
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 "/api/admin/registry/orgs",
                 json!({
                     "name": "Second Org",
@@ -1224,6 +1335,7 @@ mod tests {
                     "owner_id": user_id.to_string(),
                     "plan": "pro"
                 }),
+                user_id,
             ))
             .await
             .unwrap();
@@ -1238,7 +1350,7 @@ mod tests {
     async fn test_create_org_rejects_unknown_plan() {
         let (router, user_id, _) = test_router_with_seed().await;
         let resp = router
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 "/api/admin/registry/orgs",
                 json!({
                     "name": "X",
@@ -1246,6 +1358,7 @@ mod tests {
                     "owner_id": user_id.to_string(),
                     "plan": "enterprise"
                 }),
+                user_id,
             ))
             .await
             .unwrap();
@@ -1256,13 +1369,14 @@ mod tests {
     async fn test_create_api_token_endpoint() {
         let (router, user_id, org_id) = test_router_with_seed().await;
         let resp = router
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 &format!("/api/admin/registry/orgs/{}/tokens", org_id),
                 json!({
                     "name": "ci-token",
                     "user_id": user_id.to_string(),
                     "scopes": ["read:packages", "publish:packages"]
                 }),
+                user_id,
             ))
             .await
             .unwrap();
@@ -1277,29 +1391,34 @@ mod tests {
     /// Build a test router with a non-empty JWT secret so tokens are
     /// meaningfully signed. The seed fixtures above use the default
     /// empty-secret CoreAppState::new path.
-    async fn test_router_with_jwt() -> Router {
+    /// Build a JWT-enabled router seeded with one admin user, returning the
+    /// router and that admin's id. `register` is admin-gated (#856), so the
+    /// admin id lets callers mint a token (via [`test_bearer`] /
+    /// [`authed_json_post`]) to authorize register calls. Login and health
+    /// remain reachable without a token.
+    async fn test_router_with_jwt() -> (Router, Uuid) {
         let store = init_sqlite_registry_store("sqlite::memory:").await.unwrap();
-        let state = CoreAppState::with_jwt_secret(
-            Arc::new(store),
-            "test-secret-please-do-not-use-in-prod".to_string(),
-        );
-        router(state)
+        let admin =
+            store.create_user("seed-admin", "seed-admin@example.com", "hash").await.unwrap();
+        let state = CoreAppState::with_jwt_secret(Arc::new(store), TEST_SECRET.to_string());
+        (router(state), admin.id)
     }
 
     #[tokio::test]
     async fn test_register_then_login_roundtrip() {
-        let router = test_router_with_jwt().await;
+        let (router, admin_id) = test_router_with_jwt().await;
 
-        // Register
+        // Register (admin-gated #856 — authenticate as the seeded admin).
         let resp = router
             .clone()
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 "/api/admin/registry/auth/register",
                 json!({
                     "username": "newbie",
                     "email": "newbie@example.com",
                     "password": "correcthorsebatterystaple"
                 }),
+                admin_id,
             ))
             .await
             .unwrap();
@@ -1349,16 +1468,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_login_with_email_identifier() {
-        let router = test_router_with_jwt().await;
+        let (router, admin_id) = test_router_with_jwt().await;
         router
             .clone()
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 "/api/admin/registry/auth/register",
                 json!({
                     "username": "bob",
                     "email": "bob@example.com",
                     "password": "hunter2hunter2"
                 }),
+                admin_id,
             ))
             .await
             .unwrap();
@@ -1379,16 +1499,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_login_wrong_password_returns_401() {
-        let router = test_router_with_jwt().await;
+        let (router, admin_id) = test_router_with_jwt().await;
         router
             .clone()
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 "/api/admin/registry/auth/register",
                 json!({
                     "username": "carol",
                     "email": "carol@example.com",
                     "password": "rightpassword"
                 }),
+                admin_id,
             ))
             .await
             .unwrap();
@@ -1408,7 +1529,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_login_unknown_user_also_401() {
-        let router = test_router_with_jwt().await;
+        let (router, _admin_id) = test_router_with_jwt().await;
         let resp = router
             .oneshot(json_post(
                 "/api/admin/registry/auth/login",
@@ -1424,28 +1545,30 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_duplicate_email_is_409() {
-        let router = test_router_with_jwt().await;
+        let (router, admin_id) = test_router_with_jwt().await;
         router
             .clone()
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 "/api/admin/registry/auth/register",
                 json!({
                     "username": "first",
                     "email": "dup@example.com",
                     "password": "password1"
                 }),
+                admin_id,
             ))
             .await
             .unwrap();
 
         let resp = router
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 "/api/admin/registry/auth/register",
                 json!({
                     "username": "second",
                     "email": "dup@example.com",
                     "password": "password2"
                 }),
+                admin_id,
             ))
             .await
             .unwrap();
@@ -1454,15 +1577,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_register_rejects_short_password() {
-        let router = test_router_with_jwt().await;
+        let (router, admin_id) = test_router_with_jwt().await;
         let resp = router
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 "/api/admin/registry/auth/register",
                 json!({
                     "username": "x",
                     "email": "x@example.com",
                     "password": "short"
                 }),
+                admin_id,
             ))
             .await
             .unwrap();
@@ -1471,7 +1595,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_auth_me_rejects_missing_header() {
-        let router = test_router_with_jwt().await;
+        let (router, _admin_id) = test_router_with_jwt().await;
         let resp = router
             .oneshot(
                 Request::builder()
@@ -1487,7 +1611,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_auth_me_rejects_bogus_token() {
-        let router = test_router_with_jwt().await;
+        let (router, _admin_id) = test_router_with_jwt().await;
         let resp = router
             .oneshot(
                 Request::builder()
@@ -1504,14 +1628,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_list_org_members_endpoint() {
-        let (router, _, org_id) = test_router_with_seed().await;
+        let (router, user_id, org_id) = test_router_with_seed().await;
         let resp = router
-            .oneshot(
-                Request::builder()
-                    .uri(format!("/api/admin/registry/orgs/{}/members", org_id))
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(authed_get(&format!("/api/admin/registry/orgs/{}/members", org_id), user_id))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -1522,18 +1641,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_add_update_remove_org_member_lifecycle() {
-        let (router, _, org_id) = test_router_with_seed().await;
+        let (router, user_id, org_id) = test_router_with_seed().await;
 
         // Create a new user via the write endpoint first.
         let resp = router
             .clone()
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 "/api/admin/registry/users",
                 json!({
                     "username": "team-member",
                     "email": "member@example.com",
                     "password_hash": "bcrypt-hash-placeholder-long-enough"
                 }),
+                user_id,
             ))
             .await
             .unwrap();
@@ -1543,9 +1663,10 @@ mod tests {
         // Add as member
         let resp = router
             .clone()
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 &format!("/api/admin/registry/orgs/{}/members", org_id),
                 json!({ "user_id": member_id, "role": "member" }),
+                user_id,
             ))
             .await
             .unwrap();
@@ -1555,12 +1676,7 @@ mod tests {
         // List shows the new member
         let resp = router
             .clone()
-            .oneshot(
-                Request::builder()
-                    .uri(format!("/api/admin/registry/orgs/{}/members", org_id))
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(authed_get(&format!("/api/admin/registry/orgs/{}/members", org_id), user_id))
             .await
             .unwrap();
         let body = body_json(resp).await;
@@ -1574,6 +1690,7 @@ mod tests {
                     .method("PATCH")
                     .uri(format!("/api/admin/registry/orgs/{}/members/{}", org_id, member_id))
                     .header("content-type", "application/json")
+                    .header("authorization", test_bearer(user_id))
                     .body(Body::from(json!({"role": "admin"}).to_string()))
                     .unwrap(),
             )
@@ -1588,6 +1705,7 @@ mod tests {
                 Request::builder()
                     .method("DELETE")
                     .uri(format!("/api/admin/registry/orgs/{}/members/{}", org_id, member_id))
+                    .header("authorization", test_bearer(user_id))
                     .body(Body::empty())
                     .unwrap(),
             )
@@ -1598,17 +1716,12 @@ mod tests {
 
     #[tokio::test]
     async fn test_org_quota_get_set() {
-        let (router, _, org_id) = test_router_with_seed().await;
+        let (router, user_id, org_id) = test_router_with_seed().await;
 
         // Initially empty
         let resp = router
             .clone()
-            .oneshot(
-                Request::builder()
-                    .uri(format!("/api/admin/registry/orgs/{}/quota", org_id))
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(authed_get(&format!("/api/admin/registry/orgs/{}/quota", org_id), user_id))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -1623,6 +1736,7 @@ mod tests {
                     .method("PUT")
                     .uri(format!("/api/admin/registry/orgs/{}/quota", org_id))
                     .header("content-type", "application/json")
+                    .header("authorization", test_bearer(user_id))
                     .body(Body::from(json!({ "max_tokens": 10, "max_mocks": 100 }).to_string()))
                     .unwrap(),
             )
@@ -1632,12 +1746,7 @@ mod tests {
 
         // GET reflects it
         let resp = router
-            .oneshot(
-                Request::builder()
-                    .uri(format!("/api/admin/registry/orgs/{}/quota", org_id))
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(authed_get(&format!("/api/admin/registry/orgs/{}/quota", org_id), user_id))
             .await
             .unwrap();
         let body = body_json(resp).await;
@@ -1647,13 +1756,14 @@ mod tests {
 
     #[tokio::test]
     async fn test_org_quota_rejects_non_object() {
-        let (router, _, org_id) = test_router_with_seed().await;
+        let (router, user_id, org_id) = test_router_with_seed().await;
         let resp = router
             .oneshot(
                 Request::builder()
                     .method("PUT")
                     .uri(format!("/api/admin/registry/orgs/{}/quota", org_id))
                     .header("content-type", "application/json")
+                    .header("authorization", test_bearer(user_id))
                     .body(Body::from(json!([1, 2, 3]).to_string()))
                     .unwrap(),
             )
@@ -1664,27 +1774,29 @@ mod tests {
 
     #[tokio::test]
     async fn test_invitation_full_lifecycle() {
-        let router = test_router_with_jwt().await;
+        let (router, admin_id) = test_router_with_jwt().await;
 
-        // Bootstrap: register owner, create org.
+        // Bootstrap: register owner (admin-gated #856), create org.
         let resp = router
             .clone()
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 "/api/admin/registry/auth/register",
                 json!({
                     "username": "owner",
                     "email": "owner@example.com",
                     "password": "ownerpass1"
                 }),
+                admin_id,
             ))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::CREATED);
         let owner_id = body_json(resp).await["user"]["id"].as_str().unwrap().to_string();
+        let owner_uuid = Uuid::parse_str(&owner_id).unwrap();
 
         let resp = router
             .clone()
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 "/api/admin/registry/orgs",
                 json!({
                     "name": "Invite Corp",
@@ -1692,6 +1804,7 @@ mod tests {
                     "owner_id": owner_id,
                     "plan": "free"
                 }),
+                owner_uuid,
             ))
             .await
             .unwrap();
@@ -1701,9 +1814,10 @@ mod tests {
         // Create an invitation for a new email.
         let resp = router
             .clone()
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 &format!("/api/admin/registry/orgs/{}/invitations", org_id),
                 json!({ "email": "invitee@example.com", "role": "admin" }),
+                owner_uuid,
             ))
             .await
             .unwrap();
@@ -1713,15 +1827,13 @@ mod tests {
         assert_eq!(body["email"], "invitee@example.com");
         assert_eq!(body["role"], "admin");
 
-        // GET the invitation (simulates the invitee clicking a link)
+        // GET the invitation (operator-facing; behind admin auth).
         let resp = router
             .clone()
-            .oneshot(
-                Request::builder()
-                    .uri(format!("/api/admin/registry/invitations/{}", urlencoding::encode(&token)))
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(authed_get(
+                &format!("/api/admin/registry/invitations/{}", urlencoding::encode(&token)),
+                owner_uuid,
+            ))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::OK);
@@ -1732,12 +1844,13 @@ mod tests {
         // Accept — creates user, membership, and returns a JWT.
         let resp = router
             .clone()
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 &format!("/api/admin/registry/invitations/{}/accept", urlencoding::encode(&token)),
                 json!({
                     "username": "invitee",
                     "password": "inviteepassword"
                 }),
+                owner_uuid,
             ))
             .await
             .unwrap();
@@ -1752,12 +1865,13 @@ mod tests {
         // Second accept of the same token must fail — it's consumed.
         let resp = router
             .clone()
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 &format!("/api/admin/registry/invitations/{}/accept", urlencoding::encode(&token)),
                 json!({
                     "username": "invitee2",
                     "password": "anotherpassword"
                 }),
+                owner_uuid,
             ))
             .await
             .unwrap();
@@ -1766,14 +1880,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_invitation_rejects_garbage_token() {
-        let router = test_router_with_jwt().await;
+        let (router, user_id, _) = test_router_with_seed().await;
         let resp = router
-            .oneshot(
-                Request::builder()
-                    .uri("/api/admin/registry/invitations/not-a-real-token")
-                    .body(Body::empty())
-                    .unwrap(),
-            )
+            .oneshot(authed_get("/api/admin/registry/invitations/not-a-real-token", user_id))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::NOT_FOUND);
@@ -1795,16 +1904,276 @@ mod tests {
     async fn test_create_api_token_rejects_unknown_scope() {
         let (router, user_id, org_id) = test_router_with_seed().await;
         let resp = router
-            .oneshot(json_post(
+            .oneshot(authed_json_post(
                 &format!("/api/admin/registry/orgs/{}/tokens", org_id),
                 json!({
                     "name": "ci-token",
                     "user_id": user_id.to_string(),
                     "scopes": ["bogus:scope"]
                 }),
+                user_id,
             ))
             .await
             .unwrap();
         assert_eq!(resp.status(), StatusCode::BAD_REQUEST);
+    }
+
+    // -----------------------------------------------------------------------
+    // #856 — auth middleware tests: the protected admin surface must reject
+    // unauthenticated / invalid-token requests, accept valid tokens, leave
+    // health/register/login open, and fail closed on an empty JWT secret.
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn test_protected_routes_require_auth_without_header() {
+        let (router, user_id, org_id) = test_router_with_seed().await;
+
+        // POST /orgs (create_org) — no Authorization header.
+        let resp = router
+            .clone()
+            .oneshot(json_post(
+                "/api/admin/registry/orgs",
+                json!({ "name": "X", "slug": "x", "owner_id": user_id.to_string() }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        // POST /users (create_user) — no Authorization header.
+        let resp = router
+            .clone()
+            .oneshot(json_post(
+                "/api/admin/registry/users",
+                json!({
+                    "username": "x",
+                    "email": "x@example.com",
+                    "password_hash": "bcrypt-hash-placeholder-long-enough"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        // POST /users/{id}/verify — no Authorization header.
+        let resp = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri(format!("/api/admin/registry/users/{}/verify", user_id))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        // POST /orgs/{org_id}/tokens (create_api_token) — no header.
+        let resp = router
+            .oneshot(json_post(
+                &format!("/api/admin/registry/orgs/{}/tokens", org_id),
+                json!({ "name": "ci-token" }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_protected_route_rejects_malformed_token() {
+        let (router, _, _) = test_router_with_seed().await;
+
+        // Not a Bearer token at all.
+        let resp = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/admin/registry/orgs")
+                    .header("content-type", "application/json")
+                    .header("authorization", "Basic abc123")
+                    .body(Body::from(json!({ "name": "X", "slug": "x" }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        // Bearer with garbage JWT.
+        let resp = router
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/admin/registry/orgs")
+                    .header("content-type", "application/json")
+                    .header("authorization", "Bearer not-a-real-jwt")
+                    .body(Body::from(json!({ "name": "X", "slug": "x" }).to_string()))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_protected_route_reached_with_valid_token() {
+        let (router, user_id, _) = test_router_with_seed().await;
+
+        // create_user with a valid token: must NOT be 401 (it's a 201 here).
+        let resp = router
+            .oneshot(authed_json_post(
+                "/api/admin/registry/users",
+                json!({
+                    "username": "authed-new",
+                    "email": "authed-new@example.com",
+                    "password_hash": "bcrypt-hash-placeholder-long-enough"
+                }),
+                user_id,
+            ))
+            .await
+            .unwrap();
+        assert_ne!(
+            resp.status(),
+            StatusCode::UNAUTHORIZED,
+            "valid token should reach the handler, not 401"
+        );
+        assert_eq!(resp.status(), StatusCode::CREATED);
+    }
+
+    #[tokio::test]
+    async fn test_health_is_public_without_token() {
+        let (router, _, _) = test_router_with_seed().await;
+        let resp = router
+            .oneshot(
+                Request::builder()
+                    .uri("/api/admin/registry/health")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+    }
+
+    // #856 — `register` mints a user + a valid JWT. Left public it would be a
+    // token-minting bypass: anyone could self-issue a token that passes
+    // `require_auth` on every protected route. It must require an existing
+    // admin token.
+
+    #[tokio::test]
+    async fn test_register_requires_auth() {
+        let (router, _, _) = test_router_with_seed().await;
+        // Unauthenticated POST to register must NOT mint a token — 401.
+        let resp = router
+            .oneshot(json_post(
+                "/api/admin/registry/auth/register",
+                json!({
+                    "username": "intruder",
+                    "email": "intruder@example.com",
+                    "password": "letmeinletmein"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[tokio::test]
+    async fn test_register_succeeds_with_admin_token() {
+        let (router, admin_id, _) = test_router_with_seed().await;
+        // An already-authenticated admin CAN still register a new user.
+        let resp = router
+            .oneshot(authed_json_post(
+                "/api/admin/registry/auth/register",
+                json!({
+                    "username": "fresh-admin",
+                    "email": "fresh-admin@example.com",
+                    "password": "correcthorsebatterystaple"
+                }),
+                admin_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+        let body = body_json(resp).await;
+        assert_eq!(body["user"]["username"], "fresh-admin");
+        assert!(body["token"].as_str().unwrap().len() > 20);
+    }
+
+    #[tokio::test]
+    async fn test_login_is_public_without_token() {
+        // login is the sole credential-issuing public endpoint — it must be
+        // reachable WITHOUT a token (it verifies the password itself). Prove
+        // it by having the admin register a real user, then logging in as that
+        // user with no Authorization header and getting a 200 + token back.
+        let (router, admin_id) = test_router_with_jwt().await;
+
+        let resp = router
+            .clone()
+            .oneshot(authed_json_post(
+                "/api/admin/registry/auth/register",
+                json!({
+                    "username": "loginer",
+                    "email": "loginer@example.com",
+                    "password": "correcthorsebatterystaple"
+                }),
+                admin_id,
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::CREATED);
+
+        // No token on the login call — must still succeed.
+        let resp = router
+            .oneshot(json_post(
+                "/api/admin/registry/auth/login",
+                json!({
+                    "identifier": "loginer",
+                    "password": "correcthorsebatterystaple"
+                }),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::OK);
+        let body = body_json(resp).await;
+        assert!(body["token"].as_str().unwrap().len() > 20);
+    }
+
+    #[tokio::test]
+    async fn test_empty_jwt_secret_fails_closed() {
+        // Build a router whose state has an EMPTY jwt secret (the default
+        // CoreAppState::new path). Even a token that's "valid-looking"
+        // (well-formed Bearer header, signed against the empty secret) must
+        // be rejected because the middleware fails closed.
+        let store = init_sqlite_registry_store("sqlite::memory:").await.unwrap();
+        let user = store.create_user("empty-secret", "empty@example.com", "hash").await.unwrap();
+        let user_id = user.id;
+        let state = CoreAppState::new(Arc::new(store)); // empty secret
+        let router = router(state);
+
+        // A token signed against the empty secret would normally verify, but
+        // the middleware refuses outright when the configured secret is empty.
+        let tok = mockforge_registry_core::auth::create_access_token(&user_id.to_string(), "")
+            .expect("mint token against empty secret");
+        let resp = router
+            .oneshot(
+                Request::builder()
+                    .method("POST")
+                    .uri("/api/admin/registry/users")
+                    .header("content-type", "application/json")
+                    .header("authorization", format!("Bearer {}", tok))
+                    .body(Body::from(
+                        json!({
+                            "username": "x",
+                            "email": "x@example.com",
+                            "password_hash": "bcrypt-hash-placeholder-long-enough"
+                        })
+                        .to_string(),
+                    ))
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
     }
 }

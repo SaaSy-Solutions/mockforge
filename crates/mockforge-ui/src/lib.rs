@@ -147,23 +147,30 @@ pub async fn start_admin_server_notify(
                     tracing::error!("Registry admin bootstrap failed: {} — continuing startup", e);
                 }
 
-                let jwt_secret = std::env::var("MOCKFORGE_ADMIN_JWT_SECRET").unwrap_or_else(|_| {
-                    tracing::warn!(
-                        "MOCKFORGE_ADMIN_JWT_SECRET not set — using empty secret. \
-                             Tokens issued by /api/admin/registry/auth/* will be \
-                             trivially forgeable. Set the env var in production."
+                let jwt_secret = std::env::var("MOCKFORGE_ADMIN_JWT_SECRET").unwrap_or_default();
+
+                // Fail closed (#856): the registry-admin router exposes
+                // state-changing org/user/token endpoints gated only by a
+                // JWT signed with this secret. An empty secret makes those
+                // tokens trivially forgeable, so refuse to mount the router
+                // entirely rather than expose an unauthenticated admin API.
+                if jwt_secret.is_empty() {
+                    tracing::error!(
+                        "MOCKFORGE_ADMIN_JWT_SECRET is unset/empty — refusing to mount the \
+                         registry admin API at /api/admin/registry/*. Set a strong \
+                         MOCKFORGE_ADMIN_JWT_SECRET to enable it."
                     );
-                    String::new()
-                });
-                let state = registry_admin::CoreAppState::with_jwt_secret(
-                    std::sync::Arc::new(store),
-                    jwt_secret,
-                );
-                app = app.merge(registry_admin::router(state));
-                tracing::info!(
-                    "Registry admin (SQLite) enabled at /api/admin/registry/* — db: {}",
-                    db_url
-                );
+                } else {
+                    let state = registry_admin::CoreAppState::with_jwt_secret(
+                        std::sync::Arc::new(store),
+                        jwt_secret,
+                    );
+                    app = app.merge(registry_admin::router(state));
+                    tracing::info!(
+                        "Registry admin (SQLite) enabled at /api/admin/registry/* — db: {}",
+                        db_url
+                    );
+                }
             }
             Err(e) => {
                 tracing::error!(
