@@ -482,7 +482,7 @@ async fn test_operation(
         method.clone(),
         &url,
         "positive",
-        false,
+        ExpectedOutcome::Success,
         op.sample_body.as_deref(),
         op.query_params.clone(),
         op_headers.clone(),
@@ -509,7 +509,7 @@ async fn test_operation(
                 method.clone(),
                 &url,
                 "request-body:empty",
-                true,
+                ExpectedOutcome::ClientError,
                 Some("{}"),
                 op.query_params.clone(),
                 op_headers.clone(),
@@ -528,7 +528,7 @@ async fn test_operation(
                 method.clone(),
                 &url,
                 "request-body:wrong-type",
-                true,
+                ExpectedOutcome::ClientError,
                 Some("[]"),
                 op.query_params.clone(),
                 op_headers.clone(),
@@ -570,7 +570,7 @@ async fn test_operation(
                         method.clone(),
                         &url,
                         label,
-                        true,
+                        ExpectedOutcome::ClientError,
                         Some(payload),
                         op.query_params.clone(),
                         // Strip any Content-Type already on the operation
@@ -630,7 +630,7 @@ async fn test_operation(
                         // expected_4xx=false: any non-2xx is a probe
                         // failure. 5xx in particular is "server panicked
                         // on the embedded content".
-                        false,
+                        ExpectedOutcome::NotServerError,
                         Some(&body),
                         op.query_params.clone(),
                         op_headers.clone(),
@@ -663,7 +663,7 @@ async fn test_operation(
                             method.clone(),
                             &url,
                             &m.label,
-                            true,
+                            ExpectedOutcome::ClientError,
                             Some(&body_str),
                             op.query_params.clone(),
                             // Round 24 (f) — was `op.header_params`, which
@@ -700,7 +700,7 @@ async fn test_operation(
                 method.clone(),
                 &bad_url,
                 "parameters:uri-too-long",
-                true,
+                ExpectedOutcome::ClientError,
                 op.sample_body.as_deref(),
                 op.query_params.clone(),
                 // Round 24 (f) — see schema-mutation note above. Use
@@ -758,7 +758,7 @@ async fn test_operation(
                     method.clone(),
                     &bad_url,
                     "parameters:bad-path-param",
-                    true,
+                    ExpectedOutcome::ClientError,
                     op.sample_body.as_deref(),
                     op.query_params.clone(),
                     op_headers.clone(),
@@ -780,7 +780,7 @@ async fn test_operation(
                 method.clone(),
                 &url,
                 "parameters:missing-query",
-                true,
+                ExpectedOutcome::ClientError,
                 op.sample_body.as_deref(),
                 q,
                 op_headers.clone(),
@@ -843,7 +843,7 @@ async fn test_operation(
                 method.clone(),
                 &url,
                 &probe.label,
-                true,
+                ExpectedOutcome::ClientError,
                 op.sample_body.as_deref(),
                 req_query,
                 req_headers,
@@ -872,7 +872,7 @@ async fn test_operation(
                 method.clone(),
                 &url,
                 "parameters:missing-header",
-                true,
+                ExpectedOutcome::ClientError,
                 op.sample_body.as_deref(),
                 op.query_params.clone(),
                 h,
@@ -909,7 +909,7 @@ async fn test_operation(
                 method.clone(),
                 &url,
                 &probe.label,
-                true,
+                ExpectedOutcome::ClientError,
                 probe.body.as_deref(),
                 probe.query,
                 // Round 24 (f) — OWASP injection probes must also
@@ -1455,6 +1455,49 @@ fn strip_auth_query(
     query.iter().filter(|(k, _)| !apikey_query.contains(k)).cloned().collect()
 }
 
+/// Round 35 (#859) — Srikanth on 0.3.179: embedded-content variant-b
+/// probes were flagging well-behaved 4xx responses as mismatches when
+/// in reality only a 5xx (server CRASHED trying to parse the embedded
+/// XML/YAML/multipart/urlencoded payload) is the bug the probe was
+/// designed to find. Tristate replaces the older `expected_4xx: bool`
+/// so variant-b probes can opt into "anything but 5xx is fine".
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ExpectedOutcome {
+    /// Positive probe: spec-compliant request, expect 2xx or 3xx.
+    Success,
+    /// Negative probe: invalid request, expect 4xx.
+    ClientError,
+    /// Embedded-content variant-b probe: spec-shape envelope with a
+    /// non-JSON payload embedded in the first string field. Any
+    /// response that isn't a 5xx is fine; the probe is here to catch
+    /// server crashes on the embedded payload.
+    NotServerError,
+}
+
+impl ExpectedOutcome {
+    /// Whether `actual_status` counts as a pass for this outcome.
+    fn passes(self, actual_status: u16) -> bool {
+        match self {
+            ExpectedOutcome::Success => (200..400).contains(&actual_status),
+            ExpectedOutcome::ClientError => (400..500).contains(&actual_status),
+            ExpectedOutcome::NotServerError => {
+                actual_status >= 200 && !(500..600).contains(&actual_status)
+            }
+        }
+    }
+
+    /// Human-readable hint persisted in the JSONL capture + HTML
+    /// viewer's "show mismatches only" filter; also what users `jq`
+    /// against.
+    fn as_str(self) -> &'static str {
+        match self {
+            ExpectedOutcome::Success => "2xx-3xx",
+            ExpectedOutcome::ClientError => "4xx",
+            ExpectedOutcome::NotServerError => "2xx-4xx",
+        }
+    }
+}
+
 /// Variant of `send_case` that takes an explicit `extra_headers`
 /// (rather than reading them from `config`). Used by security probes
 /// to substitute or strip the configured Authorization header.
@@ -1465,7 +1508,7 @@ async fn send_case_with_extra(
     method: Method,
     url: &str,
     label: &str,
-    expected_4xx: bool,
+    expected: ExpectedOutcome,
     body: Option<&str>,
     query: Vec<(String, String)>,
     headers: Vec<(String, String)>,
@@ -1543,11 +1586,7 @@ async fn send_case_with_extra(
             }
         }
     };
-    let passed = if expected_4xx {
-        (400..500).contains(&actual_status)
-    } else {
-        (200..400).contains(&actual_status)
-    };
+    let passed = expected.passes(actual_status);
     if let Some((resp_body, resp_headers, error, sink)) = response_capture {
         let (request_body, request_body_truncated) = match body {
             Some(b) => {
@@ -1577,13 +1616,12 @@ async fn send_case_with_extra(
             // the schema map.
             response_schema_error: None,
             // Round 28 — derive the expected range from the probe's
-            // `expected_4xx` flag so the JSONL line and HTML viewer
-            // can show mismatches without re-deriving on the read side.
-            expected_status_range: if expected_4xx {
-                "4xx".into()
-            } else {
-                "2xx-3xx".into()
-            },
+            // outcome shape so the JSONL line and HTML viewer can
+            // filter mismatches without re-deriving on the read side.
+            // Round 35 (#859) — add a third value `"2xx-4xx"` for
+            // embedded-content variant-b probes whose only failure
+            // mode is a 5xx server crash.
+            expected_status_range: expected.as_str().to_string(),
             // Round 33 (#823) — path_template carries the spec's
             // pre-substitution path so the per-endpoint summary can
             // collapse `/users/X` and `/users/Y` into one row.
@@ -1595,6 +1633,13 @@ async fn send_case_with_extra(
             guard.push(entry);
         }
     }
+    // Round 35 (#859) — keep the `expected_4xx` field on `CaseOutcome`
+    // semantically tied to "negative probe expecting 400-class", so
+    // downstream code in `report_html.rs` doesn't have to learn about
+    // the new tristate. `NotServerError` reports as `expected_4xx:
+    // false` (it's a positive probe in spirit) and instead carries
+    // its outcome through the per-capture `expected_status_range`.
+    let expected_4xx = matches!(expected, ExpectedOutcome::ClientError);
     CaseOutcome {
         label: label.to_string(),
         expected_4xx,
@@ -1615,7 +1660,7 @@ async fn send_case(
     method: Method,
     url: &str,
     label: &str,
-    expected_4xx: bool,
+    expected: ExpectedOutcome,
     body: Option<&str>,
     query: Vec<(String, String)>,
     headers: Vec<(String, String)>,
@@ -1630,7 +1675,7 @@ async fn send_case(
         method,
         url,
         label,
-        expected_4xx,
+        expected,
         body,
         query,
         headers,
@@ -2333,6 +2378,59 @@ mod tests {
     #[test]
     fn embed_payload_returns_none_for_invalid_json_sample() {
         assert!(embed_payload_in_first_string_field("garbage", "a=1&b=2").is_none());
+    }
+
+    /// Round 35 (#859) — Srikanth on 0.3.179 saw variant-b probes flag
+    /// every 4xx as a mismatch when the spec field had a `pattern` /
+    /// `format` validator that correctly rejected the embedded
+    /// payload. The probe was only ever meant to catch 5xx (server
+    /// crashed parsing the embedded content); 4xx is the well-behaved
+    /// outcome. Tristate `ExpectedOutcome::NotServerError` lets a
+    /// variant-b probe pass on 2xx-4xx and fail only on 5xx.
+    #[test]
+    fn expected_outcome_pass_rules() {
+        // Success (positive): 2xx-3xx pass, 4xx + 5xx fail.
+        assert!(ExpectedOutcome::Success.passes(200));
+        assert!(ExpectedOutcome::Success.passes(201));
+        assert!(ExpectedOutcome::Success.passes(204));
+        assert!(ExpectedOutcome::Success.passes(301));
+        assert!(!ExpectedOutcome::Success.passes(400));
+        assert!(!ExpectedOutcome::Success.passes(415));
+        assert!(!ExpectedOutcome::Success.passes(500));
+        assert!(!ExpectedOutcome::Success.passes(0));
+
+        // ClientError (negative): only 4xx pass.
+        assert!(!ExpectedOutcome::ClientError.passes(200));
+        assert!(ExpectedOutcome::ClientError.passes(400));
+        assert!(ExpectedOutcome::ClientError.passes(404));
+        assert!(ExpectedOutcome::ClientError.passes(422));
+        assert!(!ExpectedOutcome::ClientError.passes(500));
+
+        // NotServerError (variant-b): 2xx-4xx pass, 5xx fails.
+        assert!(ExpectedOutcome::NotServerError.passes(200));
+        assert!(ExpectedOutcome::NotServerError.passes(204));
+        assert!(ExpectedOutcome::NotServerError.passes(400), "Srikanth's vCenter consolecli case: 400 from a pattern validator should NOT be a probe failure");
+        assert!(ExpectedOutcome::NotServerError.passes(415));
+        assert!(ExpectedOutcome::NotServerError.passes(422));
+        assert!(
+            !ExpectedOutcome::NotServerError.passes(500),
+            "Server CRASH on embedded content is the only real failure"
+        );
+        assert!(!ExpectedOutcome::NotServerError.passes(502));
+        assert!(!ExpectedOutcome::NotServerError.passes(503));
+        // status 0 (network error / probe never reached the server) does not pass either
+        assert!(!ExpectedOutcome::NotServerError.passes(0));
+    }
+
+    /// Round 35 (#859) — the per-capture `expected_status_range`
+    /// string is what the HTML viewer's "show mismatches only"
+    /// filter and Srikanth's `jq` pipelines key off, so the new
+    /// tristate must surface a third distinct value.
+    #[test]
+    fn expected_outcome_string_labels() {
+        assert_eq!(ExpectedOutcome::Success.as_str(), "2xx-3xx");
+        assert_eq!(ExpectedOutcome::ClientError.as_str(), "4xx");
+        assert_eq!(ExpectedOutcome::NotServerError.as_str(), "2xx-4xx");
     }
 
     /// Round 26 — Srikanth saw `at /: Type { kind: Single` in his

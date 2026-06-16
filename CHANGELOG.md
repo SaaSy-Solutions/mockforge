@@ -1,3 +1,9 @@
+## [0.3.180] - 2026-06-16
+
+### Fixed
+
+- **[Contracts]** Embedded-content variant-b probes (`request-body:embedded-content:xml/yaml/multipart/urlencoded`) no longer flag 4xx responses as mismatches (#79 round 35 / #859 / Srikanth on 0.3.179: 4 noise rows on `POST /api/appliance/local-accounts` and ~268 similar rows across the vCenter spec). The round-27 design only ever wanted to catch 5xx server crashes; a 4xx from the server's pattern / format validator on the field we inject into is correct behavior. Replaced the older `expected_4xx: bool` flag on `send_case` / `send_case_with_extra` with a tristate `ExpectedOutcome` enum (`Success` / `ClientError` / `NotServerError`); variant-b probes opt into `NotServerError` so the pass calculation is `actual_status >= 200 && actual_status < 500`. `expected_status_range` on `CaseCapture` carries the new `"2xx-4xx"` value, which the HTML viewer + `jq` filters pick up automatically. `CaseOutcome.expected_4xx` keeps its old semantics (negative-probe flag), so `report_html.rs` is unchanged. Reproduced locally against the exact `POST /appliance/local-accounts` route Srikanth flagged: 4 embedded-content rows go from 4 misses to 4 passes on v0.3.180. Two new unit tests cover the pass-rule and the string-label table.
+
 ## [0.3.179] - 2026-06-15
 
 ### Fixed
