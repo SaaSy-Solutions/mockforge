@@ -97,28 +97,36 @@ impl DomainOwnershipVerifier for DnsDomainVerifier {
             tracing::warn!("SSO domain gate: assertion email has no usable domain; failing closed");
             return false;
         };
-        let name = verification_record_name(&domain);
-        match lookup_txt_records(&name).await {
-            Ok(records) => {
-                let authorized = txt_records_authorize(&records, org_id);
-                if !authorized {
-                    tracing::warn!(
-                        org_id = %org_id,
-                        domain = %domain,
-                        "SSO domain gate: no authorizing TXT record at {name}; rejecting"
-                    );
-                }
-                authorized
-            }
-            Err(e) => {
+        domain_ownership_verified(org_id, &domain).await
+    }
+}
+
+/// Live DNS check that `org_id` owns `domain` (the org published the expected
+/// `_mockforge-verify.<domain>` TXT record). Fails closed on any DNS error.
+/// Shared by the SSO provisioning gate and the admin domain-status endpoint.
+pub async fn domain_ownership_verified(org_id: Uuid, domain: &str) -> bool {
+    let domain = normalize_domain(domain);
+    let name = verification_record_name(&domain);
+    match lookup_txt_records(&name).await {
+        Ok(records) => {
+            let authorized = txt_records_authorize(&records, org_id);
+            if !authorized {
                 tracing::warn!(
                     org_id = %org_id,
                     domain = %domain,
-                    error = %e,
-                    "SSO domain gate: TXT lookup failed; failing closed"
+                    "SSO domain check: no authorizing TXT record at {name}"
                 );
-                false
             }
+            authorized
+        }
+        Err(e) => {
+            tracing::warn!(
+                org_id = %org_id,
+                domain = %domain,
+                error = %e,
+                "SSO domain check: TXT lookup failed; failing closed"
+            );
+            false
         }
     }
 }

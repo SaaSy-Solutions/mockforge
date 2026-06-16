@@ -284,6 +284,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/sso/config", delete(handlers::sso::delete_sso_config))
         .route("/api/v1/sso/enable", post(handlers::sso::enable_sso))
         .route("/api/v1/sso/disable", post(handlers::sso::disable_sso))
+        .route(
+            "/api/v1/sso/domain/status",
+            get(handlers::sso::get_domain_verification_status),
+        )
         .route("/api/v1/sso/saml/metadata/{org_slug}", get(handlers::sso::get_saml_metadata))
         // Billing routes
         .route("/api/v1/billing/subscription", get(handlers::billing::get_subscription))
@@ -1202,6 +1206,7 @@ mod tests {
             "/api/v1/sso/config",
             "/api/v1/sso/enable",
             "/api/v1/sso/disable",
+            "/api/v1/sso/domain/status",
             "/api/v1/sso/saml/metadata/{org_slug}",
             "/api/v1/sso/saml/login/{org_slug}",
             "/api/v1/sso/saml/acs/{org_slug}",

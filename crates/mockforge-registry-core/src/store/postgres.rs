@@ -1123,6 +1123,9 @@ impl RegistryStore for PgRegistryStore {
         require_signed_assertions: bool,
         require_signed_responses: bool,
         allow_unsolicited_responses: bool,
+        oidc_issuer_url: Option<&str>,
+        oidc_client_id: Option<&str>,
+        oidc_client_secret: Option<&str>,
     ) -> StoreResult<SSOConfiguration> {
         SSOConfiguration::upsert(
             &self.pool,
@@ -1137,6 +1140,9 @@ impl RegistryStore for PgRegistryStore {
             require_signed_assertions,
             require_signed_responses,
             allow_unsolicited_responses,
+            oidc_issuer_url,
+            oidc_client_id,
+            oidc_client_secret,
         )
         .await
         .map_err(Into::into)
