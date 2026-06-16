@@ -53,12 +53,21 @@ pub struct SmtpConfig {
     pub enable_mailbox: bool,
     /// Maximum mailbox size
     pub max_mailbox_messages: usize,
+    /// Maximum accepted message size in bytes for a single DATA payload
+    /// (default: 25 MiB). Protects against unbounded DATA accumulation (#754).
+    #[serde(default = "default_max_message_bytes")]
+    pub max_message_bytes: usize,
     /// Enable STARTTLS support
     pub enable_starttls: bool,
     /// Path to TLS certificate file
     pub tls_cert_path: Option<PathBuf>,
     /// Path to TLS private key file
     pub tls_key_path: Option<PathBuf>,
+}
+
+/// Default maximum accepted DATA payload size (25 MiB).
+fn default_max_message_bytes() -> usize {
+    26_214_400
 }
 
 impl Default for SmtpConfig {
@@ -72,6 +81,7 @@ impl Default for SmtpConfig {
             max_connections: 10,
             enable_mailbox: true,
             max_mailbox_messages: 1000,
+            max_message_bytes: default_max_message_bytes(),
             enable_starttls: false,
             tls_cert_path: None,
             tls_key_path: None,

@@ -11,6 +11,7 @@
 //! Response header for all of these is v0: just `correlation_id`, no tag
 //! buffer.
 
+use crate::codec_util::sane_capacity;
 use crate::produce_codec::{read_i32, read_i8, take};
 
 // =========================================================================
@@ -139,7 +140,7 @@ pub fn parse_join_group_v5(body: &[u8]) -> Result<JoinGroupRequestV5, String> {
     if protos_count < 0 {
         return Err("join_group protocols count is negative".into());
     }
-    let mut protocols = Vec::with_capacity(protos_count as usize);
+    let mut protocols = Vec::with_capacity(sane_capacity(protos_count as usize, cur.len(), 2));
     for _ in 0..protos_count {
         let name = read_string(&mut cur)?;
         let metadata = read_bytes(&mut cur)?;
@@ -211,7 +212,7 @@ pub fn parse_sync_group_v3(body: &[u8]) -> Result<SyncGroupRequestV3, String> {
     if count < 0 {
         return Err("sync_group assignments count is negative".into());
     }
-    let mut assignments = Vec::with_capacity(count as usize);
+    let mut assignments = Vec::with_capacity(sane_capacity(count as usize, cur.len(), 2));
     for _ in 0..count {
         let m_id = read_string(&mut cur)?;
         let asn = read_bytes(&mut cur)?;
@@ -302,7 +303,7 @@ pub fn parse_leave_group(api_version: i16, body: &[u8]) -> Result<LeaveGroupRequ
         if count < 0 {
             return Err("leave_group members count is negative".into());
         }
-        let mut out = Vec::with_capacity(count as usize);
+        let mut out = Vec::with_capacity(sane_capacity(count as usize, cur.len(), 2));
         for _ in 0..count {
             let member_id = read_string(&mut cur)?;
             let _group_instance_id = read_nullable_string(&mut cur)?;
@@ -375,14 +376,14 @@ pub fn parse_offset_commit_v7(body: &[u8]) -> Result<OffsetCommitRequestV7, Stri
     if topics_count < 0 {
         return Err("offset_commit topics count is negative".into());
     }
-    let mut topics = Vec::with_capacity(topics_count as usize);
+    let mut topics = Vec::with_capacity(sane_capacity(topics_count as usize, cur.len(), 2));
     for _ in 0..topics_count {
         let name = read_string(&mut cur)?;
         let parts_count = read_i32(&mut cur)?;
         if parts_count < 0 {
             return Err(format!("offset_commit partitions count for {name} is negative"));
         }
-        let mut partitions = Vec::with_capacity(parts_count as usize);
+        let mut partitions = Vec::with_capacity(sane_capacity(parts_count as usize, cur.len(), 4));
         for _ in 0..parts_count {
             let partition_index = read_i32(&mut cur)?;
             let committed_offset = read_i64(&mut cur)?;
@@ -444,7 +445,8 @@ pub fn parse_offset_fetch_v5(body: &[u8]) -> Result<OffsetFetchRequestV5, String
         for _ in 0..topics_count {
             let name = read_string(&mut cur)?;
             let parts_count = read_i32(&mut cur)?;
-            let mut partition_indexes = Vec::with_capacity(parts_count.max(0) as usize);
+            let mut partition_indexes =
+                Vec::with_capacity(sane_capacity(parts_count.max(0) as usize, cur.len(), 4));
             for _ in 0..parts_count.max(0) {
                 partition_indexes.push(read_i32(&mut cur)?);
             }

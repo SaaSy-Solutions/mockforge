@@ -12,8 +12,65 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader, ReadBuf};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::Semaphore;
 use tokio_rustls::{rustls, server::TlsStream, TlsAcceptor};
 use tracing::{debug, error, info, warn};
+
+/// Hard cap on a single SMTP protocol line (command or DATA line) before the
+/// connection is dropped. SMTP lines are spec-limited to ~1000 bytes, so 1 MiB
+/// is generous headroom while still bounding a newline-less flood (#754).
+const MAX_LINE_BYTES: usize = 1024 * 1024;
+
+/// Outcome of a bounded line read.
+enum LineRead {
+    /// A full line (terminated by `\n` or by EOF after some bytes) was read.
+    Ok,
+    /// The stream ended with no further bytes.
+    Eof,
+    /// The line exceeded the byte cap before a newline arrived.
+    TooLong,
+}
+
+/// Read a single `\n`-terminated line into `line`, but stop and report
+/// [`LineRead::TooLong`] once the accumulated line exceeds `max_bytes`.
+///
+/// This wraps `read_until` one byte chunk at a time so an attacker can't make
+/// the underlying buffer grow without bound by simply never sending a newline.
+async fn read_line_capped<R>(
+    reader: &mut R,
+    line: &mut Vec<u8>,
+    max_bytes: usize,
+) -> std::io::Result<LineRead>
+where
+    R: AsyncBufReadExt + Unpin,
+{
+    loop {
+        let before = line.len();
+        let n = reader.read_until(b'\n', line).await?;
+        if n == 0 {
+            // EOF: if we'd already accumulated a partial line, treat it as a
+            // final line; otherwise the stream is closed.
+            return Ok(if line.is_empty() {
+                LineRead::Eof
+            } else {
+                LineRead::Ok
+            });
+        }
+        let ends_with_newline = line.last() == Some(&b'\n');
+        if line.len() > max_bytes {
+            return Ok(LineRead::TooLong);
+        }
+        if ends_with_newline {
+            return Ok(LineRead::Ok);
+        }
+        // No newline yet and under the cap — `read_until` returned because the
+        // buffered chunk was exhausted; keep reading. Guard against a stuck
+        // reader that returns 0-growth without EOF.
+        if line.len() == before {
+            return Ok(LineRead::Ok);
+        }
+    }
+}
 
 /// Stream wrapper that can be either plaintext TCP or TLS-upgraded.
 /// The session handler starts each connection as `Plain` and swaps to
@@ -165,10 +222,27 @@ impl SmtpServer {
 
         info!("SMTP server listening on {}", addr);
 
+        // Cap concurrent sessions at `max_connections` so a connection flood
+        // can't spawn unbounded tasks (#755). A permit is acquired before each
+        // session task and moved into it, freeing on disconnect.
+        let max_connections = self.config.max_connections.max(1);
+        let connection_limiter = Arc::new(Semaphore::new(max_connections));
+        let max_message_bytes = self.config.max_message_bytes;
+
         loop {
             match listener.accept().await {
                 Ok((stream, peer_addr)) => {
                     debug!("New SMTP connection from {}", peer_addr);
+
+                    let permit = match connection_limiter.clone().acquire_owned().await {
+                        Ok(permit) => permit,
+                        Err(_) => {
+                            // Semaphore closed — should not happen while the
+                            // server runs, but bail cleanly if it does.
+                            error!("SMTP connection limiter closed; stopping accept loop");
+                            break Ok(());
+                        }
+                    };
 
                     let registry = self.spec_registry.clone();
                     let middleware = self.middleware_chain.clone();
@@ -176,6 +250,8 @@ impl SmtpServer {
                     let tls_acceptor = self.tls_acceptor.clone();
 
                     tokio::spawn(async move {
+                        // Hold the permit for the lifetime of the session.
+                        let _permit = permit;
                         if let Err(e) = handle_smtp_session(
                             SmtpStream::Plain(stream),
                             peer_addr,
@@ -183,6 +259,7 @@ impl SmtpServer {
                             middleware,
                             hostname,
                             tls_acceptor,
+                            max_message_bytes,
                         )
                         .await
                         {
@@ -208,6 +285,7 @@ async fn handle_smtp_session(
     middleware: Arc<MiddlewareChain>,
     hostname: String,
     tls_acceptor: Option<TlsAcceptor>,
+    max_message_bytes: usize,
 ) -> Result<()> {
     // Keep read + write on the same `SmtpStream` so STARTTLS can
     // upgrade both halves atomically. Writes go through
@@ -218,13 +296,25 @@ async fn handle_smtp_session(
     let greeting = format!("220 {} ESMTP MockForge SMTP Server\r\n", hostname);
     reader.get_mut().write_all(greeting.as_bytes()).await?;
 
-    let mut session_state = SessionState::new();
+    let mut session_state = SessionState::with_max_message_bytes(max_message_bytes);
     // Byte-level accumulator so 8BITMIME bodies (Latin-1, UTF-8 with
     // explicit content-transfer-encoding, etc.) round-trip verbatim.
     // `read_line` would fail on non-UTF-8 inputs.
     let mut line: Vec<u8> = Vec::new();
 
-    while reader.read_until(b'\n', &mut line).await? > 0 {
+    loop {
+        // Bound each line read so a client that never sends a newline can't
+        // make `read_until` accumulate an unbounded buffer (#754).
+        match read_line_capped(&mut reader, &mut line, MAX_LINE_BYTES).await? {
+            LineRead::Eof => break,
+            LineRead::Ok => {}
+            LineRead::TooLong => {
+                warn!("SMTP line from {} exceeded {} bytes; closing", peer_addr, MAX_LINE_BYTES);
+                reader.get_mut().write_all(b"500 line too long\r\n").await?;
+                break;
+            }
+        }
+
         // DATA mode bypasses command parsing entirely. Without this, the
         // first word of every body line would be matched against the SMTP
         // verb table — any body beginning with "Hello ..." / "Data ..." /
@@ -241,6 +331,19 @@ async fn handle_smtp_session(
                 let response =
                     process_email(&session_state, &registry, &middleware, peer_addr).await?;
                 reader.get_mut().write_all(response.as_bytes()).await?;
+                session_state.reset();
+            } else if session_state.data_would_overflow(trimmed.len() + 1) {
+                // Reject oversized messages instead of buffering them to OOM
+                // (#754). Per RFC 5321 the 552 response ends the DATA phase;
+                // reset the transaction and leave DATA mode.
+                warn!(
+                    "SMTP DATA from {} exceeded max_message_bytes ({}); rejecting",
+                    peer_addr, max_message_bytes
+                );
+                reader
+                    .get_mut()
+                    .write_all(b"552 message size exceeds fixed maximum message size\r\n")
+                    .await?;
                 session_state.reset();
             } else {
                 session_state.data.extend_from_slice(trimmed);
@@ -297,7 +400,7 @@ async fn handle_smtp_session(
                     mockforge_core::Error::internal(format!("TLS accept failed: {e}"))
                 })?;
                 reader = BufReader::new(SmtpStream::Tls(Box::new(tls_stream)));
-                session_state = SessionState::new();
+                session_state = SessionState::with_max_message_bytes(max_message_bytes);
                 line.clear();
                 continue;
             } else {
@@ -597,6 +700,14 @@ async fn handle_smtp_command<W: AsyncWriteExt + Unpin>(
                     let response = process_email(state, registry, middleware, peer_addr).await?;
                     writer.write_all(response.as_bytes()).await?;
                     state.reset();
+                } else if state.data_would_overflow(command.len() + 1) {
+                    // Mirror the primary DATA-path cap so the fallback can't be
+                    // used to bypass max_message_bytes (#754).
+                    warn!("SMTP DATA fallback exceeded max_message_bytes; rejecting");
+                    writer
+                        .write_all(b"552 message size exceeds fixed maximum message size\r\n")
+                        .await?;
+                    state.reset();
                 } else {
                     // Command path: the caller already trimmed the line
                     // into a `&str`. Non-ASCII bodies are accumulated
@@ -769,10 +880,19 @@ struct SessionState {
     /// inspecting the mailbox can filter by who sent what. Populated
     /// on successful AUTH PLAIN / AUTH LOGIN; cleared by RSET/reset().
     authenticated_user: Option<String>,
+    /// Maximum accepted DATA payload size in bytes. Carried on the
+    /// session so both the primary DATA path and the defensive fallback
+    /// can enforce the same cap (#754).
+    max_message_bytes: usize,
 }
 
 impl SessionState {
+    #[cfg(test)]
     fn new() -> Self {
+        Self::with_max_message_bytes(crate::SmtpConfig::default().max_message_bytes)
+    }
+
+    fn with_max_message_bytes(max_message_bytes: usize) -> Self {
         Self {
             mail_from: None,
             rcpt_to: Vec::new(),
@@ -780,7 +900,14 @@ impl SessionState {
             in_data_mode: false,
             pending_auth: None,
             authenticated_user: None,
+            max_message_bytes,
         }
+    }
+
+    /// True if appending `additional` bytes to `data` would exceed the
+    /// configured `max_message_bytes` cap.
+    fn data_would_overflow(&self, additional: usize) -> bool {
+        self.data.len().saturating_add(additional) > self.max_message_bytes
     }
 
     fn reset(&mut self) {

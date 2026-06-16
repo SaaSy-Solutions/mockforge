@@ -58,6 +58,17 @@ pub struct TcpConfig {
     pub echo_mode: bool,
     /// Delimiter for message boundaries (None = stream mode, Some = frame by delimiter)
     pub delimiter: Option<Vec<u8>>,
+    /// Maximum bytes buffered for a single delimiter-framed message before the
+    /// connection is dropped (default: 1 MiB). Bounds the delimiter-mode
+    /// accumulator so a client that never sends the delimiter can't drive the
+    /// server to OOM (#755).
+    #[serde(default = "default_tcp_max_message_bytes")]
+    pub max_message_bytes: usize,
+}
+
+/// Default maximum buffered bytes for a delimiter-framed TCP message (1 MiB).
+fn default_tcp_max_message_bytes() -> usize {
+    1_048_576
 }
 
 impl Default for TcpConfig {
@@ -75,6 +86,7 @@ impl Default for TcpConfig {
             tls_key_path: None,
             echo_mode: true,
             delimiter: None, // Stream mode by default
+            max_message_bytes: default_tcp_max_message_bytes(),
         }
     }
 }
@@ -133,6 +145,7 @@ mod tests {
             tls_key_path: Some(std::path::PathBuf::from("/path/to/key")),
             echo_mode: false,
             delimiter: Some(b"\n".to_vec()),
+            ..Default::default()
         };
 
         let cloned = config.clone();
