@@ -29,6 +29,7 @@ pub mod mockai;
 pub mod notification_channels;
 pub mod oauth;
 pub mod observability;
+pub mod oidc;
 pub mod org_templates;
 pub mod organization_settings;
 pub mod organizations;

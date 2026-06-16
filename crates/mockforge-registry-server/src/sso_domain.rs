@@ -225,10 +225,34 @@ pub fn issuer_url_is_safe(raw: &str) -> bool {
     !host_is_blocked(host)
 }
 
+/// Escape hatch for integration tests / local dev against a mock IdP on
+/// localhost. OFF by default; the production SSRF guard always applies unless
+/// `MOCKFORGE_SSO_ALLOW_INSECURE_ISSUERS=1` is explicitly set. When on, a loud
+/// warning is logged so it can never be mistaken for normal operation.
+pub fn allow_insecure_issuers() -> bool {
+    match std::env::var("MOCKFORGE_SSO_ALLOW_INSECURE_ISSUERS") {
+        Ok(v) if v == "1" || v.eq_ignore_ascii_case("true") => {
+            tracing::warn!(
+                "MOCKFORGE_SSO_ALLOW_INSECURE_ISSUERS is set: the OIDC issuer SSRF guard is \
+                 RELAXED (localhost/http allowed). This must only be used in tests/dev."
+            );
+            true
+        }
+        _ => false,
+    }
+}
+
+/// SSRF decision for any URL the server will FETCH during the OIDC flow
+/// (issuer discovery, token endpoint, JWKS). Strict by default; honors the
+/// insecure-issuers escape hatch for tests.
+pub fn fetch_url_is_safe(raw: &str) -> bool {
+    issuer_url_is_safe(raw) || allow_insecure_issuers()
+}
+
 /// Validate an OIDC issuer URL, returning a descriptive `InvalidRequest` when
 /// it fails the SSRF guard.
 pub fn validate_issuer_url(raw: &str) -> Result<(), ApiError> {
-    if issuer_url_is_safe(raw) {
+    if fetch_url_is_safe(raw) {
         Ok(())
     } else {
         Err(ApiError::InvalidRequest(

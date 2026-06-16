@@ -1261,69 +1261,62 @@ fn generate_saml_logout_response(slo_url: &str) -> String {
     )
 }
 
-/// Find or create user from SAML attributes
+/// Find or create user from SAML attributes (thin wrapper over the shared,
+/// domain-gated SSO provisioning path).
 async fn find_or_create_user_from_saml(
     state: &AppState,
     user_info: &SAMLUserInfo,
     org: &Organization,
 ) -> Result<User, ApiError> {
-    // Try to find user by email
-    let user = if let Some(email) = &user_info.email {
-        state.store.find_user_by_email(email).await?
-    } else {
-        None
-    };
+    let email = user_info
+        .email
+        .as_deref()
+        .ok_or_else(|| ApiError::InvalidRequest("Email not found in SAML assertion".to_string()))?;
+    provision_sso_user(state, org, email, user_info.username.as_deref()).await
+}
 
+/// Provision (or attach) an SSO user for `org`, gated on DNS-verified domain
+/// ownership. Shared by the SAML (`saml_acs`) and OIDC (`oidc_callback`) paths so
+/// the #833/#746/#778 cross-tenant takeover gate lives in exactly one place.
+///
+/// - Existing account already a member of `org`: normal login, NOT gated.
+/// - Existing account NOT a member: attaching it requires the org to own the
+///   email's domain (prevents absorbing a foreign account).
+/// - No account: JIT-create, also gated on domain ownership.
+///
+/// Always fail-closed: any domain-verification failure rejects provisioning.
+pub(crate) async fn provision_sso_user(
+    state: &AppState,
+    org: &Organization,
+    email: &str,
+    username_hint: Option<&str>,
+) -> Result<User, ApiError> {
     use crate::models::organization::OrgRole;
-    // Domain-ownership gate (#833/#746/#778). SSO must not be able to provision
-    // or absorb an account for an email domain the org has not proven it owns,
-    // or a malicious org's IdP could mint an assertion for victim@othercorp.com
-    // and take over / squat that account. Verified live via DNS, fail-closed.
-    let domain_verifier = crate::sso_domain::DnsDomainVerifier;
 
-    let user = if let Some(user) = user {
-        // Existing account. A normal SSO login for a current member needs no
-        // gate; only *attaching* a foreign account to this org does.
+    let verifier = crate::sso_domain::DnsDomainVerifier;
+    let existing = state.store.find_user_by_email(email).await?;
+
+    if let Some(user) = existing {
+        // Existing member -> normal login (no gate). Otherwise attaching a
+        // foreign account to this org requires verified domain ownership.
         if state.store.find_org_member(org.id, user.id).await?.is_none() {
-            let email = user_info.email.as_deref().ok_or_else(|| {
-                ApiError::InvalidRequest("Email not found in SAML assertion".to_string())
-            })?;
-            crate::sso_domain::assert_email_in_verified_domain(&domain_verifier, org.id, email)
-                .await?;
+            crate::sso_domain::assert_email_in_verified_domain(&verifier, org.id, email).await?;
             state.store.create_org_member(org.id, user.id, OrgRole::Member).await?;
         }
+        return Ok(user);
+    }
 
-        user
-    } else {
-        // Create new user from SAML attributes
-        let email = user_info.email.as_ref().ok_or_else(|| {
-            ApiError::InvalidRequest("Email not found in SAML assertion".to_string())
-        })?;
+    // JIT-provision a new user; gated on domain ownership.
+    crate::sso_domain::assert_email_in_verified_domain(&verifier, org.id, email).await?;
 
-        // JIT provisioning requires the org to own the email's domain.
-        crate::sso_domain::assert_email_in_verified_domain(&domain_verifier, org.id, email).await?;
-
-        let username = user_info.username.as_ref().cloned().unwrap_or_else(|| {
-            // Generate username from email
-            email.split('@').next().unwrap_or("user").to_string()
-        });
-
-        // Generate a random password (user won't need it for SSO login)
-        let password_hash = crate::auth::hash_password(&uuid::Uuid::new_v4().to_string())
-            .map_err(ApiError::Internal)?;
-
-        // Create user
-        let user = state.store.create_user(&username, email, &password_hash).await?;
-
-        // Mark user as verified (SSO users are pre-verified)
-        state.store.mark_user_verified(user.id).await?;
-
-        // Add user to organization as member
-        state.store.create_org_member(org.id, user.id, OrgRole::Member).await?;
-
-        user
-    };
-
+    let username = username_hint
+        .map(str::to_string)
+        .unwrap_or_else(|| email.split('@').next().unwrap_or("user").to_string());
+    let password_hash = crate::auth::hash_password(&uuid::Uuid::new_v4().to_string())
+        .map_err(ApiError::Internal)?;
+    let user = state.store.create_user(&username, email, &password_hash).await?;
+    state.store.mark_user_verified(user.id).await?;
+    state.store.create_org_member(org.id, user.id, OrgRole::Member).await?;
     Ok(user)
 }
 
