@@ -34,6 +34,7 @@
 //! Response header for every non-flexible version is v0: just correlation_id
 //! (no tag buffer). `produce_codec` handles v9 with the flexible v1 header.
 
+use crate::codec_util::sane_capacity;
 use crate::produce_codec::{
     parse_record_batch, PartitionProduceData, ProduceRequestV9, TopicProduceData,
     TopicProduceResult,
@@ -109,14 +110,14 @@ pub fn parse_produce_v3_v8(body: &[u8]) -> Result<ProduceRequestV9, String> {
     if topics_count < 0 {
         return Err(format!("produce topics count is negative: {topics_count}"));
     }
-    let mut topics = Vec::with_capacity(topics_count as usize);
+    let mut topics = Vec::with_capacity(sane_capacity(topics_count as usize, cur.len(), 2));
     for _ in 0..topics_count {
         let name = read_string(&mut cur)?;
         let parts_count = read_i32(&mut cur)?;
         if parts_count < 0 {
             return Err(format!("produce partitions count for {name} is negative"));
         }
-        let mut parts = Vec::with_capacity(parts_count as usize);
+        let mut parts = Vec::with_capacity(sane_capacity(parts_count as usize, cur.len(), 4));
         for _ in 0..parts_count {
             let partition_index = read_i32(&mut cur)?;
             let records_bytes = read_nullable_bytes(&mut cur)?;
@@ -225,6 +226,23 @@ mod tests {
         body.extend_from_slice(&(batch.len() as i32).to_be_bytes());
         body.extend_from_slice(batch);
         body
+    }
+
+    #[test]
+    fn huge_topics_count_fails_fast_without_giant_alloc() {
+        // A tiny buffer that advertises i32::MAX topics. sane_capacity must
+        // clamp the pre-allocation to the (near-empty) remaining buffer, and
+        // the bounded parse loop must error on the first short read rather
+        // than attempting to reserve ~2 billion entries.
+        let mut body = Vec::new();
+        body.extend_from_slice(&(-1i16).to_be_bytes()); // transactional_id = null
+        body.extend_from_slice(&(-1i16).to_be_bytes()); // acks
+        body.extend_from_slice(&30_000i32.to_be_bytes()); // timeout_ms
+        body.extend_from_slice(&0x7FFF_FFFFi32.to_be_bytes()); // topics_count = i32::MAX
+                                                               // No topic data follows -> first read_string short-reads.
+
+        let result = parse_produce_v3_v8(&body);
+        assert!(result.is_err(), "expected parse error, got {result:?}");
     }
 
     #[test]

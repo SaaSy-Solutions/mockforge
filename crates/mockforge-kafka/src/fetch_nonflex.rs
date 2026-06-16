@@ -41,6 +41,7 @@
 //! Response header is v0 for every non-flexible version: just
 //! correlation_id, no tag buffer.
 
+use crate::codec_util::sane_capacity;
 use crate::fetch_codec::{
     FetchPartitionRequest, FetchRequestV12, FetchTopicRequest, FetchTopicResponse,
 };
@@ -149,7 +150,7 @@ pub fn parse_fetch_v4_v11(api_version: i16, body: &[u8]) -> Result<FetchRequestV
     if topics_count < 0 {
         return Err(format!("fetch topics count is negative: {topics_count}"));
     }
-    let mut topics = Vec::with_capacity(topics_count as usize);
+    let mut topics = Vec::with_capacity(sane_capacity(topics_count as usize, cur.len(), 2));
 
     for _ in 0..topics_count {
         let topic = read_string(&mut cur)?;
@@ -157,7 +158,7 @@ pub fn parse_fetch_v4_v11(api_version: i16, body: &[u8]) -> Result<FetchRequestV
         if parts_count < 0 {
             return Err(format!("fetch partitions count for {topic} is negative"));
         }
-        let mut partitions = Vec::with_capacity(parts_count as usize);
+        let mut partitions = Vec::with_capacity(sane_capacity(parts_count as usize, cur.len(), 4));
         for _ in 0..parts_count {
             let partition_index = read_i32(&mut cur)?;
             if has_current_leader_epoch(api_version) {

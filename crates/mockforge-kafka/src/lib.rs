@@ -125,6 +125,7 @@
 //! - [`rdkafka`](https://docs.rs/rdkafka): Kafka client library for testing integration
 
 pub mod broker;
+pub mod codec_util;
 pub mod consumer_groups;
 pub mod fetch_codec;
 pub mod fetch_nonflex;

@@ -74,8 +74,22 @@ impl Topic {
         partition: i32,
         record: crate::partitions::KafkaMessage,
     ) -> mockforge_core::Result<i64> {
+        let retention_ms = self.config.retention_ms;
         if let Some(partition) = self.partitions.get_mut(partition as usize) {
-            Ok(partition.append(record))
+            let offset = partition.append(record);
+            // Enforce per-partition retention/size caps so the log can't grow
+            // unbounded (#753).
+            let now_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as i64)
+                .unwrap_or(0);
+            partition.trim(
+                retention_ms,
+                now_ms,
+                crate::partitions::MAX_LOG_MESSAGES,
+                crate::partitions::MAX_LOG_BYTES,
+            );
+            Ok(offset)
         } else {
             Err(mockforge_core::Error::internal(format!(
                 "Partition {} does not exist",

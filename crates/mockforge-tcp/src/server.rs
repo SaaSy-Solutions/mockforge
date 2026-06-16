@@ -6,6 +6,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
+use tokio::sync::Semaphore;
 use tokio::time::{sleep, timeout, Duration};
 use tracing::{debug, error, info, warn};
 
@@ -31,15 +32,30 @@ impl TcpServer {
 
         info!("TCP server listening on {}", addr);
 
+        // Cap concurrent connections at `max_connections` so a connection flood
+        // can't spawn unbounded tasks (#755). A permit is acquired before each
+        // connection task and moved into it, freeing on disconnect.
+        let connection_limiter = Arc::new(Semaphore::new(self.config.max_connections.max(1)));
+
         loop {
             match listener.accept().await {
                 Ok((stream, peer_addr)) => {
                     debug!("New TCP connection from {}", peer_addr);
 
+                    let permit = match connection_limiter.clone().acquire_owned().await {
+                        Ok(permit) => permit,
+                        Err(_) => {
+                            error!("TCP connection limiter closed; stopping accept loop");
+                            break Ok(());
+                        }
+                    };
+
                     let registry = self.spec_registry.clone();
                     let config = self.config.clone();
 
                     tokio::spawn(async move {
+                        // Hold the permit for the lifetime of the connection.
+                        let _permit = permit;
                         if let Err(e) =
                             handle_tcp_connection(stream, peer_addr, registry, config).await
                         {
@@ -82,6 +98,19 @@ async fn handle_tcp_connection(
                 accumulated_data.extend_from_slice(received_data);
 
                 debug!("Received {} bytes from {}", n, peer_addr);
+
+                // In delimiter mode the accumulator only clears on a delimiter
+                // match, so a client that never sends the delimiter would grow
+                // it without bound. Cap it and drop the connection. (#755)
+                // Stream mode (no delimiter) clears every read below, so it's
+                // already bounded.
+                if config.delimiter.is_some() && accumulated_data.len() > config.max_message_bytes {
+                    warn!(
+                        "TCP delimiter buffer from {} exceeded max_message_bytes ({}); closing",
+                        peer_addr, config.max_message_bytes
+                    );
+                    break;
+                }
 
                 // Try to find matching fixture
                 let response_data =
@@ -491,6 +520,7 @@ mod tests {
             tls_key_path: Some(PathBuf::from("/path/to/key.pem")),
             echo_mode: false,
             delimiter: Some(b"\r\n".to_vec()),
+            ..Default::default()
         };
 
         let registry = Arc::new(TcpSpecRegistry::new());

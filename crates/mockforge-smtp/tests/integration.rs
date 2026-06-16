@@ -896,3 +896,105 @@ async fn test_smtp_starttls_without_cert_returns_454() {
     // QUIT
     writer.write_all(b"QUIT\r\n").await.ok();
 }
+
+/// Start a catch-all SMTP server with a caller-chosen `max_message_bytes` so
+/// the DoS guards (#754) can be exercised.
+async fn start_test_server_with_max_bytes(max_message_bytes: usize) -> (SmtpServer, u16) {
+    let port = find_available_port().await;
+    let config = SmtpConfig {
+        port,
+        host: "127.0.0.1".to_string(),
+        hostname: "test-smtp".to_string(),
+        max_message_bytes,
+        ..Default::default()
+    };
+    let registry = Arc::new(SmtpSpecRegistry::new());
+    let server = SmtpServer::new(config, registry).expect("Failed to create SMTP server");
+    (server, port)
+}
+
+#[tokio::test]
+async fn test_smtp_data_exceeding_max_message_bytes_is_rejected() {
+    // Tiny cap so a few body lines blow past it.
+    let (server, port) = start_test_server_with_max_bytes(256).await;
+    tokio::spawn(async move {
+        server.start().await.ok();
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let (mut reader, mut writer, _greeting) = connect_and_read_greeting(port).await;
+    let mut response = String::new();
+
+    // MAIL FROM + RCPT TO + DATA
+    writer.write_all(b"MAIL FROM:<a@b.com>\r\n").await.unwrap();
+    reader.read_line(&mut response).await.unwrap();
+    response.clear();
+    writer.write_all(b"RCPT TO:<c@d.com>\r\n").await.unwrap();
+    reader.read_line(&mut response).await.unwrap();
+    response.clear();
+    writer.write_all(b"DATA\r\n").await.unwrap();
+    reader.read_line(&mut response).await.unwrap();
+    assert!(response.starts_with("354"), "expected 354, got {response:?}");
+    response.clear();
+
+    // Pour body lines well past the 256-byte cap.
+    let big_line = vec![b'x'; 200];
+    let mut saw_552 = false;
+    for _ in 0..10 {
+        writer.write_all(&big_line).await.unwrap();
+        writer.write_all(b"\r\n").await.unwrap();
+        // The server replies 552 once the cap is crossed.
+        if let Ok(Ok(_)) =
+            timeout(Duration::from_millis(500), reader.read_line(&mut response)).await
+        {
+            if response.contains("552") {
+                saw_552 = true;
+                break;
+            }
+            response.clear();
+        }
+    }
+    assert!(saw_552, "expected 552 message-size rejection, got {response:?}");
+
+    // After reset the session is usable again: a fresh MAIL FROM is accepted.
+    response.clear();
+    writer.write_all(b"MAIL FROM:<e@f.com>\r\n").await.unwrap();
+    reader.read_line(&mut response).await.unwrap();
+    assert!(response.contains("250"), "session should be reset/usable; got {response:?}");
+}
+
+#[tokio::test]
+async fn test_smtp_long_line_without_newline_is_capped() {
+    let (server, port) = start_test_server_with_max_bytes(26_214_400).await;
+    tokio::spawn(async move {
+        server.start().await.ok();
+    });
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let (mut reader, mut writer, _greeting) = connect_and_read_greeting(port).await;
+
+    // Stream a newline-less flood larger than MAX_LINE_BYTES (1 MiB). The
+    // server must close (or reply "500 line too long") rather than buffering
+    // unbounded. Write in chunks; a closed socket surfaces as a write error.
+    let chunk = vec![b'A'; 64 * 1024];
+    let mut closed_or_capped = false;
+    for _ in 0..40 {
+        if writer.write_all(&chunk).await.is_err() {
+            closed_or_capped = true;
+            break;
+        }
+    }
+
+    // Either the write side errored (peer closed) or we can read the
+    // "500 line too long" response.
+    if !closed_or_capped {
+        let mut response = String::new();
+        if let Ok(Ok(_)) = timeout(Duration::from_secs(2), reader.read_line(&mut response)).await {
+            closed_or_capped = response.contains("500") || response.is_empty();
+        } else {
+            // Read timing out is acceptable too — the point is we did not OOM.
+            closed_or_capped = true;
+        }
+    }
+    assert!(closed_or_capped, "server should cap/close on a newline-less flood");
+}

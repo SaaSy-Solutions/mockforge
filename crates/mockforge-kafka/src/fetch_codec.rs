@@ -12,6 +12,7 @@
 //! The broker is responsible for looking records up in partition storage;
 //! this module just decodes the request and encodes the response.
 
+use crate::codec_util::sane_capacity;
 use crate::partitions::KafkaMessage;
 use crate::produce_codec::{
     push_compact_string, push_empty_tag_buffer, push_signed_varint, push_unsigned_varint,
@@ -82,7 +83,7 @@ pub fn parse_fetch_v12(body: &[u8]) -> Result<FetchRequestV12, String> {
         return Err("fetch topics array is null".into());
     }
     let topics_len = (topics_len_plus_one - 1) as usize;
-    let mut topics = Vec::with_capacity(topics_len);
+    let mut topics = Vec::with_capacity(sane_capacity(topics_len, cur.len(), 2));
 
     for _ in 0..topics_len {
         let topic = read_compact_string(&mut cur)?;
@@ -92,7 +93,7 @@ pub fn parse_fetch_v12(body: &[u8]) -> Result<FetchRequestV12, String> {
             return Err(format!("fetch partitions array for {topic} is null"));
         }
         let parts_len = (parts_len_plus_one - 1) as usize;
-        let mut partitions = Vec::with_capacity(parts_len);
+        let mut partitions = Vec::with_capacity(sane_capacity(parts_len, cur.len(), 4));
         for _ in 0..parts_len {
             let partition_index = read_i32(&mut cur)?;
             let _current_leader_epoch = read_i32(&mut cur)?;

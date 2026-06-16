@@ -2579,6 +2579,9 @@ pub async fn handle_serve(
             enable_starttls: smtp_config.enable_starttls,
             tls_cert_path: smtp_config.tls_cert_path.clone(),
             tls_key_path: smtp_config.tls_key_path.clone(),
+            // Use the mock-SMTP crate default for the DATA size cap (#754);
+            // the core protocol config doesn't surface this field.
+            ..Default::default()
         };
 
         // Downcast the registry with proper error handling

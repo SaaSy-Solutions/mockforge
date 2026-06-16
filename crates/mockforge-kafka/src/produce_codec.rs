@@ -17,6 +17,8 @@
 //! The broker is responsible for actually writing records into topic storage.
 //! This module only decodes and encodes.
 
+use crate::codec_util::sane_capacity;
+
 /// A record extracted from a RecordBatch v2.
 ///
 /// Offsets are not set here — the broker assigns them when calling
@@ -289,7 +291,10 @@ pub fn parse_record_batch(batch_bytes: &[u8]) -> Result<(Vec<DecodedRecord>, i16
         None => cur,
     };
 
-    let mut records = Vec::with_capacity(records_count as usize);
+    // Each record is at least one signed varint (1 byte), so clamp the
+    // pre-allocation to the remaining records blob.
+    let mut records =
+        Vec::with_capacity(sane_capacity(records_count as usize, records_cur.len(), 1));
     for _ in 0..records_count {
         let record_len = read_signed_varint(&mut records_cur)?;
         if record_len < 0 {
@@ -321,7 +326,9 @@ pub fn parse_record_batch(batch_bytes: &[u8]) -> Result<(Vec<DecodedRecord>, i16
         if headers_len < 0 {
             return Err(format!("negative headers count: {headers_len}"));
         }
-        let mut headers = Vec::with_capacity(headers_len as usize);
+        // Each header is at least two signed varints (key len + value len),
+        // so ~2 bytes minimum on the wire.
+        let mut headers = Vec::with_capacity(sane_capacity(headers_len as usize, body.len(), 2));
         for _ in 0..headers_len {
             let hk_len = read_signed_varint(&mut body)?;
             if hk_len < 0 {
@@ -368,7 +375,7 @@ pub fn parse_produce_v9(body: &[u8]) -> Result<ProduceRequestV9, String> {
         return Err("produce request topic array is null".into());
     }
     let topics_len = (topics_len_plus_one - 1) as usize;
-    let mut topics = Vec::with_capacity(topics_len);
+    let mut topics = Vec::with_capacity(sane_capacity(topics_len, cur.len(), 2));
 
     for _ in 0..topics_len {
         let name = read_compact_string(&mut cur)?;
@@ -378,7 +385,7 @@ pub fn parse_produce_v9(body: &[u8]) -> Result<ProduceRequestV9, String> {
             return Err(format!("topic {name} partition array is null"));
         }
         let parts_len = (parts_len_plus_one - 1) as usize;
-        let mut parts = Vec::with_capacity(parts_len);
+        let mut parts = Vec::with_capacity(sane_capacity(parts_len, cur.len(), 4));
 
         for _ in 0..parts_len {
             let partition_index = read_i32(&mut cur)?;
