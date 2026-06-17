@@ -56,6 +56,48 @@ Bounded at `SCHEMA_MUTATION_CAP = 12` mutations per operation (top 20
 properties, top 5 required) so a 100-property body on a 22 000-op
 spec doesn't produce a runaway test matrix.
 
+## Content-type negatives (rounds 27 / 28 / 32)
+
+Fire on operations that declare `application/json` as an accepted
+request-body content type. Each variant covers one way a real client
+can get the content-type vs the body wrong.
+
+| Label | What it sends | Expected | Miss = |
+|---|---|---|---|
+| `request-body:content-type-mismatch:xml` | spec-shape JSON body, `Content-Type: application/xml` header | `415` | Server didn't enforce `Content-Type` |
+| `request-body:content-type-mismatch:yaml` | spec-shape JSON body, `Content-Type: application/yaml` | `415` | as above |
+| `request-body:content-type-mismatch:multipart` | spec-shape JSON body, `Content-Type: multipart/form-data` | `415` | as above |
+| `request-body:content-type-mismatch:urlencoded` | spec-shape JSON body, `Content-Type: application/x-www-form-urlencoded` | `415` | as above |
+
+Round 28 wired these into the shared `ServerConformanceViolation`
+buffer so the server-side report also records when a server accepts
+the mismatched content-type, not just the client-side bench.
+
+### Variant-b: embedded non-JSON content
+
+Companion probes (round 27) inject an XML / YAML / multipart /
+urlencoded snippet into the first string field of a spec-shape JSON
+envelope. The `Content-Type` header stays `application/json` and the
+body parses as valid JSON; only the string-valued payload changes.
+
+Round 35 made these tolerate 4xx server responses, because a server
+with a `pattern` / `format` validator on the target field will
+(correctly) reject the embedded snippet. That's why the expected
+range is `2xx-4xx`: only a `5xx` is a finding (server crashed
+parsing the embedded payload).
+
+| Label | What it sends | Expected | Miss = |
+|---|---|---|---|
+| `request-body:embedded-content:xml` | `{"<first-string-field>": "<root>...</root>"}` | `2xx-4xx` | `5xx` only: server crashed parsing the embedded XML |
+| `request-body:embedded-content:yaml` | same shape, YAML-shaped snippet | `2xx-4xx` | `5xx` only: server crashed parsing the embedded YAML |
+| `request-body:embedded-content:multipart` | same shape, multipart-shaped snippet | `2xx-4xx` | `5xx` only: server crashed parsing the embedded multipart |
+| `request-body:embedded-content:urlencoded` | same shape, urlencoded-shaped snippet | `2xx-4xx` | `5xx` only: server crashed parsing the embedded urlencoded |
+
+Round 34 skips these probes entirely when the positive sample has no
+string leaf to mutate (e.g. a `{enabled: boolean}` body), so the
+bench doesn't emit a probe it knows can't construct a valid
+envelope.
+
 ## Parameter negatives
 
 | Label | What it sends | Expected | Miss = |
@@ -104,15 +146,58 @@ payload reaches a sink).
 
 ## How "passed" is decided
 
-For now, **response-code-only**. The driver compares the actual HTTP
-status against the expected range:
+Currently **response-code-only**. Each probe records the expected
+status range it was designed for (`CaseCapture.expected_status_range`)
+and the driver compares the actual HTTP status against that range.
+The driver uses a tristate `ExpectedOutcome` enum (round 35):
 
-- **Positive case**: `passed = (200..400).contains(&status)`
-- **Negative case**: `passed = (400..500).contains(&status)`
+| `ExpectedOutcome` | `expected_status_range` | `passed` is true when |
+|---|---|---|
+| `Success` | `2xx-3xx` | `(200..400).contains(&status)` |
+| `ClientError` | `4xx` | `(400..500).contains(&status)` |
+| `NotServerError` | `2xx-4xx` | `(200..500).contains(&status)` (only `5xx` fails) |
 
-This means a server returning 4xx with an unhelpful generic body
-still counts as "caught" by the negatives. Adding response-body shape
-validation alongside the response-code check is queued (round 21.3).
+Probe-by-probe assignment:
+
+- Positive case → `Success` → `2xx-3xx`.
+- All request-body / parameter / security / OWASP negatives → `ClientError` → `4xx`.
+- `content-type-mismatch:*` negatives → `ClientError` → expected `415`, evaluated as `4xx`.
+- `embedded-content:*` (variant-b) negatives → `NotServerError` → `2xx-4xx`.
+
+A response-body shape validator (in addition to the status-code
+check) is queued (round 21.3).
+
+### 5xx is always a finding
+
+The bench never deliberately **elicits** a 5xx. None of the probe
+families above expect or tolerate a `5xx`. A server emitting `5xx`
+on any probe is a server-side bug to fix, not a noisy test result.
+That's true for the `NotServerError` variants too: the `2xx-4xx`
+tolerance still treats `5xx` as a fail.
+
+## What `--inject-response-violations` changes
+
+This flag is sometimes confused with status-class chaos. It is
+narrowly scoped to **response bodies**:
+
+- Modifies the response **body** for synthesized 2xx responses by
+  dropping the first declared required field from the response
+  schema, so the body becomes spec-non-conforming while still
+  parsing as JSON.
+- Does **not** change the HTTP status. A 2xx response stays 2xx; a
+  4xx response stays 4xx.
+- Use case: feed a downstream proxy or conformance harness a known
+  bad-shape body so you can confirm it catches the mismatch.
+
+If you want to exercise downstream handling of varied 4xx / 5xx
+**statuses**, use the chaos surface instead:
+
+- `mockforge serve --chaos` — global random failure injection with
+  configurable per-status weight.
+- `mockforge route-chaos` — per-route status overrides.
+
+Those are documented in the book's chaos chapter; they're
+intentionally separate knobs from request-body conformance.
 
 ## Interpreting bucket totals
 
