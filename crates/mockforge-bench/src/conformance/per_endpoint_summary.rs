@@ -305,6 +305,8 @@ mod tests {
             expected_status_range: "2xx-3xx".to_string(),
             path_template: path_template.to_string(),
             spec_label: None,
+            mockforge_version: String::new(),
+            client_sent_at: String::new(),
         }
     }
 

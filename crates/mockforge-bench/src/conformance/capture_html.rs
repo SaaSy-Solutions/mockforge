@@ -282,6 +282,22 @@ function renderCard(c) {
   html += '<span class="label">' + escapeHtml(c.label) + '</span> ';
   html += '<code class="url">' + escapeHtml(c.url) + '</code>';
   html += '</summary><div class="body">';
+  // Round 36 (#876) — surface the client stamps in a dedicated row so
+  // a reader can spot them without expanding the request-headers
+  // section. Older captures without these fields skip the row.
+  if (c.mockforge_version || c.client_sent_at) {
+    html += '<div class="stamps"><strong>Client:</strong> ';
+    if (c.mockforge_version) {
+      html += 'mockforge ' + escapeHtml(c.mockforge_version);
+    }
+    if (c.mockforge_version && c.client_sent_at) {
+      html += ' &middot; ';
+    }
+    if (c.client_sent_at) {
+      html += 'sent ' + escapeHtml(c.client_sent_at);
+    }
+    html += '</div>';
+  }
   html += renderKv('Request headers', c.request_headers);
   html += renderBody('Request body', c.request_body, c.request_body_truncated);
   html += renderKv('Response headers', c.response_headers);
@@ -398,6 +414,8 @@ mod tests {
                 expected_status_range: "2xx-3xx".to_string(),
                 path_template: String::new(),
                 spec_label: None,
+                mockforge_version: String::new(),
+                client_sent_at: String::new(),
             },
             CaseCapture {
                 label: "owasp:sqli".to_string(),
@@ -415,6 +433,8 @@ mod tests {
                 expected_status_range: "2xx-3xx".to_string(),
                 path_template: String::new(),
                 spec_label: None,
+                mockforge_version: String::new(),
+                client_sent_at: String::new(),
             },
         ]
     }
@@ -453,6 +473,8 @@ mod tests {
                 expected_status_range: "2xx-3xx".to_string(),
                 path_template: String::new(),
                 spec_label: None,
+                mockforge_version: String::new(),
+                client_sent_at: String::new(),
             });
         }
         let html = render_capture_html(&entries);
@@ -590,6 +612,8 @@ mod tests {
             expected_status_range: "2xx-3xx".to_string(),
             path_template: String::new(),
             spec_label: None,
+            mockforge_version: String::new(),
+            client_sent_at: String::new(),
         };
         let html = render_capture_html(&[entry]);
         assert!(

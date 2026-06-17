@@ -496,6 +496,14 @@ impl OpenApiRoute {
                         ),
                         category: "response-shape".to_string(),
                         occurrences: 1,
+                        // Round 36 (#876) — response-shape mismatches are
+                        // detected during response synthesis, after the
+                        // inbound request headers are out of scope. The
+                        // fields stay `None`; client correlation isn't
+                        // meaningful here anyway (this is a server-side
+                        // discovery, not a wire-level conformance issue).
+                        client_mockforge_version: None,
+                        client_sent_at: None,
                     },
                 );
             }

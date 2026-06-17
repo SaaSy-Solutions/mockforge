@@ -18,6 +18,10 @@ mockforge-core = { version = "0.3.103", path = "../mockforge-core" }
 mockforge-openapi = { path = "../mockforge-openapi" }
 mockforge-data = { version = "0.3.103", path = "../mockforge-data" }
 mockforge-recorder = { version = "0.3.103", path = "../mockforge-recorder", optional = true }
+# Round 36 (#876) — shared constants for the client/server stamp
+# headers (`X-Mockforge-Client-Version`, `X-Mockforge-Client-Sent-At`)
+# so bench and openapi don't drift on the wire format.
+mockforge-foundation = { version = "0.3.180", path = "../mockforge-foundation" }
 
 # OpenAPI and spec parsing
 openapiv3 = "2.0"

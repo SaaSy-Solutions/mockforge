@@ -50,6 +50,47 @@ pub struct ServerConformanceViolation {
     /// older payloads that don't carry the field.
     #[serde(default = "one")]
     pub occurrences: u32,
+    /// Round 36 (#876) — mockforge version the *client* (the bench
+    /// driver) was running when it sent the request, as read from the
+    /// `X-Mockforge-Client-Version` header. `None` when the inbound
+    /// request didn't carry the header (older client, real proxy
+    /// traffic, etc.). Lets users cross-correlate a client-side
+    /// `CaseCapture` JSONL line with the matching server-side
+    /// violation when both sides log against the same code base.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_mockforge_version: Option<String>,
+    /// Round 36 (#876) — wall-clock timestamp the *client* stamped on
+    /// its `CaseCapture`, as read from the `X-Mockforge-Client-Sent-At`
+    /// header (RFC3339). Server-side `timestamp` is when the
+    /// violation was *received*; this is when the probe was *sent*.
+    /// Grep both for the same value to line up client + server
+    /// records of the same probe.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_sent_at: Option<DateTime<Utc>>,
+}
+
+/// Header set by the bench client (round 36, #876) carrying the
+/// mockforge version that sent the request.
+pub const CLIENT_VERSION_HEADER: &str = "x-mockforge-client-version";
+
+/// Header set by the bench client (round 36, #876) carrying the
+/// RFC3339 timestamp the request was sent at.
+pub const CLIENT_SENT_AT_HEADER: &str = "x-mockforge-client-sent-at";
+
+/// Parse the client-stamp headers off a raw `(name, value)` lookup
+/// function. Accepts a closure so the same helper can read from
+/// `axum::http::HeaderMap`, `reqwest::header::HeaderMap`, or a plain
+/// `HashMap<String, String>` without forcing a particular type on
+/// the caller. Header names are looked up case-insensitively.
+pub fn read_client_stamps<F>(get: F) -> (Option<String>, Option<DateTime<Utc>>)
+where
+    F: Fn(&str) -> Option<String>,
+{
+    let version = get(CLIENT_VERSION_HEADER).filter(|s| !s.is_empty());
+    let sent_at = get(CLIENT_SENT_AT_HEADER)
+        .and_then(|s| DateTime::parse_from_rfc3339(&s).ok())
+        .map(|d| d.with_timezone(&Utc));
+    (version, sent_at)
 }
 
 fn one() -> u32 {
@@ -249,7 +290,53 @@ mod tests {
             reason: "test".into(),
             category: "parameters".into(),
             occurrences: 1,
+            client_mockforge_version: None,
+            client_sent_at: None,
         }
+    }
+
+    /// Round 36 (#876) — `read_client_stamps` returns both fields
+    /// when the headers are present and RFC3339-parsable.
+    #[test]
+    fn read_client_stamps_roundtrips_when_headers_present() {
+        let stamped_at = "2026-06-17T12:34:56Z";
+        let (version, sent_at) = read_client_stamps(|name| match name {
+            CLIENT_VERSION_HEADER => Some("0.3.183".to_string()),
+            CLIENT_SENT_AT_HEADER => Some(stamped_at.to_string()),
+            _ => None,
+        });
+        assert_eq!(version.as_deref(), Some("0.3.183"));
+        let sent_at = sent_at.expect("should parse RFC3339 timestamp");
+        assert_eq!(sent_at.to_rfc3339(), "2026-06-17T12:34:56+00:00");
+    }
+
+    /// Missing or malformed headers should yield `None`, not panic
+    /// or fall back to "now" (we don't want to fabricate timestamps).
+    #[test]
+    fn read_client_stamps_returns_none_when_headers_absent_or_garbage() {
+        let (v, s) = read_client_stamps(|_| None);
+        assert!(v.is_none());
+        assert!(s.is_none());
+
+        let (v, s) = read_client_stamps(|name| {
+            if name == CLIENT_SENT_AT_HEADER {
+                Some("not-a-timestamp".to_string())
+            } else {
+                None
+            }
+        });
+        assert!(v.is_none());
+        assert!(s.is_none(), "garbage timestamp must not be invented");
+
+        // Empty version string treated as absent.
+        let (v, _) = read_client_stamps(|name| {
+            if name == CLIENT_VERSION_HEADER {
+                Some(String::new())
+            } else {
+                None
+            }
+        });
+        assert!(v.is_none());
     }
 
     #[test]

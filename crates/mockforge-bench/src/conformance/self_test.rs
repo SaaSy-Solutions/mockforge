@@ -130,7 +130,7 @@ pub struct SelfTestConfig {
 /// `BTreeMap` for stable ordering. Bodies are truncated to
 /// `CAPTURE_BODY_CAP_BYTES`; `*_truncated` flags whether more was
 /// dropped.
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct CaseCapture {
     pub label: String,
     pub method: String,
@@ -172,6 +172,21 @@ pub struct CaseCapture {
     /// the bench didn't track a spec path.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub spec_label: Option<String>,
+    /// Round 36 (#876) — mockforge version that ran the probe.
+    /// Stamped from `CARGO_PKG_VERSION` at compile time. Also sent
+    /// as the `X-Mockforge-Client-Version` request header so a
+    /// matching `ServerConformanceViolation.client_mockforge_version`
+    /// can be cross-correlated. Empty string when the capture
+    /// pre-dates this field.
+    #[serde(default)]
+    pub mockforge_version: String,
+    /// Round 36 (#876) — wall-clock moment the bench driver sent the
+    /// request, as RFC3339 / ISO-8601. Also sent as the
+    /// `X-Mockforge-Client-Sent-At` request header so the server-side
+    /// `ServerConformanceViolation.client_sent_at` carries the same
+    /// value. Empty string when the capture pre-dates this field.
+    #[serde(default)]
+    pub client_sent_at: String,
 }
 
 impl Default for SelfTestConfig {
@@ -1523,6 +1538,14 @@ async fn send_case_with_extra(
     for (k, v) in &query {
         req = req.query(&[(k.as_str(), v.as_str())]);
     }
+    // Round 36 (#876) — stamp the client side first so the same
+    // `client_sent_at` string flows into both the request headers
+    // (so the server-side `ServerConformanceViolation` records it
+    // verbatim) and the on-disk `CaseCapture` JSONL line. Don't
+    // re-call `Utc::now()` after `req.send()` — that would record
+    // a different timestamp than the server sees.
+    let mockforge_version = env!("CARGO_PKG_VERSION").to_string();
+    let client_sent_at = chrono::Utc::now().to_rfc3339();
     // Round 28 — reqwest's `.header(k, v)` APPENDS rather than replaces
     // (.headers().insert() would replace but isn't on the builder).
     // The previous round-25 fix relied on "last-write-wins" semantics
@@ -1556,6 +1579,28 @@ async fn send_case_with_extra(
             final_headers.insert(hn, hv);
         }
         capture_headers.insert(k.clone(), v.clone());
+    }
+    // Round 36 (#876) — outbound client stamps. Inserted last so
+    // they can't be clobbered by user-supplied extra-headers, and
+    // recorded in `capture_headers` so the JSONL line shows the
+    // exact bytes that went on the wire.
+    {
+        let v_header = mockforge_foundation::conformance_violations::CLIENT_VERSION_HEADER;
+        let s_header = mockforge_foundation::conformance_violations::CLIENT_SENT_AT_HEADER;
+        if let (Ok(hn), Ok(hv)) = (
+            reqwest::header::HeaderName::from_bytes(v_header.as_bytes()),
+            reqwest::header::HeaderValue::from_str(&mockforge_version),
+        ) {
+            final_headers.insert(hn, hv);
+        }
+        if let (Ok(hn), Ok(hv)) = (
+            reqwest::header::HeaderName::from_bytes(s_header.as_bytes()),
+            reqwest::header::HeaderValue::from_str(&client_sent_at),
+        ) {
+            final_headers.insert(hn, hv);
+        }
+        capture_headers.insert(v_header.to_string(), mockforge_version.clone());
+        capture_headers.insert(s_header.to_string(), client_sent_at.clone());
     }
     if let Some(b) = body {
         req = req.body(b.to_string());
@@ -1628,6 +1673,13 @@ async fn send_case_with_extra(
             // spec_label is constant per run, read from the config.
             path_template: path_template.to_string(),
             spec_label: config.spec_label.clone(),
+            // Round 36 (#876) — same values that went on the wire as
+            // request headers, so a server-side
+            // `ServerConformanceViolation` recorded with
+            // `client_mockforge_version` + `client_sent_at` matches
+            // the JSONL line byte-for-byte.
+            mockforge_version: mockforge_version.clone(),
+            client_sent_at: client_sent_at.clone(),
         };
         if let Ok(mut guard) = sink.lock() {
             guard.push(entry);
@@ -1784,6 +1836,61 @@ mod tests {
             request_body_schema: None,
             security_schemes: Vec::new(),
         }
+    }
+
+    /// Round 36 (#876) — older JSONL lines (written before the stamp
+    /// fields existed) must still deserialise without error and
+    /// default to empty strings. Prevents a back-compat regression
+    /// the next time we extend `CaseCapture`.
+    #[test]
+    fn case_capture_back_compat_when_stamp_fields_missing() {
+        let pre_r36 = serde_json::json!({
+            "label": "positive",
+            "method": "GET",
+            "url": "http://api/users",
+            "request_headers": {},
+            "request_body_truncated": false,
+            "response_status": 200,
+            "response_headers": {},
+            "response_body_truncated": false,
+        });
+        let capture: CaseCapture =
+            serde_json::from_value(pre_r36).expect("pre-r36 payload must deserialise");
+        assert!(capture.mockforge_version.is_empty(), "default to empty");
+        assert!(capture.client_sent_at.is_empty(), "default to empty");
+    }
+
+    /// Round 36 (#876) — when the bench stamps fields itself (the
+    /// happy path), they round-trip through serde unchanged. Pins
+    /// the on-wire shape so tooling that grep's `mockforge_version`
+    /// out of the JSONL stays valid.
+    #[test]
+    fn case_capture_stamps_round_trip_through_serde() {
+        let stamped = CaseCapture {
+            label: "positive".into(),
+            method: "GET".into(),
+            url: "http://api/users".into(),
+            request_headers: BTreeMap::new(),
+            request_body: None,
+            request_body_truncated: false,
+            response_status: 200,
+            response_headers: BTreeMap::new(),
+            response_body: None,
+            response_body_truncated: false,
+            error: None,
+            response_schema_error: None,
+            expected_status_range: "2xx-3xx".into(),
+            path_template: "/users".into(),
+            spec_label: None,
+            mockforge_version: "0.3.183".into(),
+            client_sent_at: "2026-06-17T12:34:56+00:00".into(),
+        };
+        let json = serde_json::to_string(&stamped).unwrap();
+        assert!(json.contains("\"mockforge_version\":\"0.3.183\""));
+        assert!(json.contains("\"client_sent_at\":\"2026-06-17T12:34:56+00:00\""));
+        let back: CaseCapture = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.mockforge_version, "0.3.183");
+        assert_eq!(back.client_sent_at, "2026-06-17T12:34:56+00:00");
     }
 
     #[test]

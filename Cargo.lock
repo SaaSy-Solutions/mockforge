@@ -7800,6 +7800,7 @@ dependencies = [
  "jsonschema",
  "mockforge-core",
  "mockforge-data",
+ "mockforge-foundation",
  "mockforge-openapi",
  "mockforge-recorder",
  "mockito",
