@@ -715,6 +715,15 @@ impl OpenApiRouteRegistry {
                                     .and_then(|s| s.parse::<u16>().ok())
                                     .unwrap_or(415)
                             });
+                        let (client_mockforge_version, client_sent_at) =
+                            mockforge_foundation::conformance_violations::read_client_stamps(
+                                |name| {
+                                    headers
+                                        .get(name)
+                                        .and_then(|v| v.to_str().ok())
+                                        .map(|s| s.to_string())
+                                },
+                            );
                         mockforge_foundation::conformance_violations::record(
                             mockforge_foundation::conformance_violations::ServerConformanceViolation {
                                 timestamp: Utc::now(),
@@ -725,6 +734,8 @@ impl OpenApiRouteRegistry {
                                 reason: ct_err.clone(),
                                 category: "content-types".to_string(),
                                 occurrences: 1,
+                                client_mockforge_version,
+                                client_sent_at,
                             },
                         );
                         let status = axum::http::StatusCode::from_u16(status_code)
@@ -816,6 +827,15 @@ impl OpenApiRouteRegistry {
                                     .to_string()
                             });
                         let category = classify_validation_reason(&reason);
+                        let (client_mockforge_version, client_sent_at) =
+                            mockforge_foundation::conformance_violations::read_client_stamps(
+                                |name| {
+                                    headers
+                                        .get(name)
+                                        .and_then(|v| v.to_str().ok())
+                                        .map(|s| s.to_string())
+                                },
+                            );
                         mockforge_foundation::conformance_violations::record(
                             mockforge_foundation::conformance_violations::ServerConformanceViolation {
                                 timestamp: Utc::now(),
@@ -826,6 +846,8 @@ impl OpenApiRouteRegistry {
                                 reason,
                                 category,
                                 occurrences: 1,
+                                client_mockforge_version,
+                                client_sent_at,
                             },
                         );
 
@@ -1259,6 +1281,13 @@ impl OpenApiRouteRegistry {
             reason = %reason,
             "request conformance violation"
         );
+        let (client_mockforge_version, client_sent_at) =
+            mockforge_foundation::conformance_violations::read_client_stamps(|name| {
+                header_map
+                    .iter()
+                    .find(|(k, _)| k.eq_ignore_ascii_case(name))
+                    .and_then(|(_, v)| v.as_str().map(|s| s.to_string()))
+            });
         mockforge_foundation::conformance_violations::record(
             mockforge_foundation::conformance_violations::ServerConformanceViolation {
                 timestamp: Utc::now(),
@@ -1269,6 +1298,8 @@ impl OpenApiRouteRegistry {
                 reason,
                 category,
                 occurrences: 1,
+                client_mockforge_version,
+                client_sent_at,
             },
         );
 
@@ -1865,6 +1896,15 @@ impl OpenApiRouteRegistry {
                                         .and_then(|s| s.parse::<u16>().ok())
                                         .unwrap_or(415)
                                 });
+                            let (client_mockforge_version, client_sent_at) =
+                                mockforge_foundation::conformance_violations::read_client_stamps(
+                                    |name| {
+                                        headers
+                                            .get(name)
+                                            .and_then(|v| v.to_str().ok())
+                                            .map(|s| s.to_string())
+                                    },
+                                );
                             mockforge_foundation::conformance_violations::record(
                                 mockforge_foundation::conformance_violations::ServerConformanceViolation {
                                     timestamp: Utc::now(),
@@ -1875,6 +1915,8 @@ impl OpenApiRouteRegistry {
                                     reason: ct_err.clone(),
                                     category: "content-types".to_string(),
                                     occurrences: 1,
+                                    client_mockforge_version,
+                                    client_sent_at,
                                 },
                             );
                             let status = axum::http::StatusCode::from_u16(status_code)
