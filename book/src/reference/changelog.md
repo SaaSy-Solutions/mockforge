@@ -1,5 +1,11 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.181] - 2026-06-17
+
+### Fixed
+
+- **[DevX]** Capture-viewer HTML status badge colour now follows the probe's `expected_status_range`; a variant-b 400 reads green to match the `exp 2xx-4xx` badge (#79 round 36 / #875 / Srikanth).
+
 ## [0.3.180] - 2026-06-16
 
 ### Fixed

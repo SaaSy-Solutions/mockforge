@@ -1,3 +1,9 @@
+## [0.3.181] - 2026-06-17
+
+### Fixed
+
+- **[DevX]** Capture-viewer HTML (`conformance-self-test-requests.html`) status badge colour now agrees with the `exp 2xx-4xx` badge it sits next to (#79 round 36 / #875 / Srikanth on 0.3.180). Round 35 made variant-b embedded-content probes pass on 4xx in the JSONL + JSON report, but the per-card badge in the capture viewer still rendered a 400 in red because `statusClass(c)` colored by the raw 200..400 range, ignoring `expected_status_range`. Now `statusClass` consults `isMismatch(c)` whenever the capture knows its expected range (older captures without the field fall back to the round-23 raw-range behaviour for backwards compat). The top-of-page summary line and the "matched expected" / "mismatch" filter checkboxes use the same logic via a new `probe_passed` Rust helper. Two new unit tests cover the `2xx-4xx` / `4xx` / `2xx-3xx` / legacy / error branches of `probe_passed`, and snapshot the summary line for a mixed variant-b + positive capture. Real-binary verified against Srikanth's exact `POST /api/appliance/local-accounts` scenario.
+
 ## [0.3.180] - 2026-06-16
 
 ### Fixed
