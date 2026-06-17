@@ -1904,6 +1904,7 @@ impl RegistryStore for SqliteRegistryStore {
         oidc_issuer_url: Option<&str>,
         oidc_client_id: Option<&str>,
         oidc_client_secret: Option<&str>,
+        email_domain: Option<&str>,
     ) -> StoreResult<SSOConfiguration> {
         Err(StoreError::NotFound)
     }

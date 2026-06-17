@@ -58,6 +58,10 @@ pub struct SSOConfiguration {
     #[serde(skip_serializing)]
     pub oidc_client_secret: Option<String>,
 
+    // Email domain used by the pre-login discovery endpoint to route a user to
+    // this org/provider. Routing key only; ownership is still DNS-verified.
+    pub email_domain: Option<String>,
+
     // Attribute mapping
     pub attribute_mapping: serde_json::Value,
 
@@ -68,6 +72,16 @@ pub struct SSOConfiguration {
 
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+/// Internal row type for `find_by_email_domain`: an SSO config plus the joined
+/// org slug, so discovery can return the slug without a second query.
+#[cfg(feature = "postgres")]
+#[derive(Debug, FromRow)]
+struct SsoConfigWithSlug {
+    #[sqlx(flatten)]
+    config: SSOConfiguration,
+    org_slug: String,
 }
 
 /// SSO session
@@ -115,8 +129,13 @@ impl SSOConfiguration {
         oidc_issuer_url: Option<&str>,
         oidc_client_id: Option<&str>,
         oidc_client_secret: Option<&str>,
+        email_domain: Option<&str>,
     ) -> sqlx::Result<Self> {
         let attribute_mapping = attribute_mapping.unwrap_or_else(|| serde_json::json!({}));
+        // Normalize the routing domain to lowercase so discovery matching is
+        // case-insensitive and consistent with the partial unique index.
+        let email_domain =
+            email_domain.map(|d| d.trim().to_ascii_lowercase()).filter(|d| !d.is_empty());
 
         sqlx::query_as::<_, Self>(
             r#"
@@ -124,9 +143,9 @@ impl SSOConfiguration {
                 org_id, provider, saml_entity_id, saml_sso_url, saml_slo_url,
                 saml_x509_cert, saml_name_id_format, attribute_mapping,
                 require_signed_assertions, require_signed_responses, allow_unsolicited_responses,
-                oidc_issuer_url, oidc_client_id, oidc_client_secret
+                oidc_issuer_url, oidc_client_id, oidc_client_secret, email_domain
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
             ON CONFLICT (org_id) DO UPDATE SET
                 provider = EXCLUDED.provider,
                 saml_entity_id = EXCLUDED.saml_entity_id,
@@ -141,6 +160,7 @@ impl SSOConfiguration {
                 oidc_issuer_url = EXCLUDED.oidc_issuer_url,
                 oidc_client_id = EXCLUDED.oidc_client_id,
                 oidc_client_secret = EXCLUDED.oidc_client_secret,
+                email_domain = EXCLUDED.email_domain,
                 updated_at = NOW()
             RETURNING *
             "#,
@@ -159,8 +179,37 @@ impl SSOConfiguration {
         .bind(oidc_issuer_url)
         .bind(oidc_client_id)
         .bind(oidc_client_secret)
+        .bind(email_domain)
         .fetch_one(pool)
         .await
+    }
+
+    /// Find an enabled SSO configuration by its routing email domain, returning
+    /// the config together with the org's slug. Used by the pre-login discovery
+    /// endpoint. Only `enabled` configs match (a disabled config is invisible).
+    pub async fn find_by_email_domain(
+        pool: &sqlx::PgPool,
+        domain: &str,
+    ) -> sqlx::Result<Option<(Self, String)>> {
+        let domain = domain.trim().to_ascii_lowercase();
+        if domain.is_empty() {
+            return Ok(None);
+        }
+        let row = sqlx::query_as::<_, SsoConfigWithSlug>(
+            r#"
+            SELECT c.*, o.slug AS org_slug
+            FROM sso_configurations c
+            JOIN organizations o ON o.id = c.org_id
+            WHERE c.enabled = TRUE
+              AND c.email_domain IS NOT NULL
+              AND LOWER(c.email_domain) = $1
+            LIMIT 1
+            "#,
+        )
+        .bind(&domain)
+        .fetch_optional(pool)
+        .await?;
+        Ok(row.map(|r| (r.config, r.org_slug)))
     }
 
     /// Enable SSO for an organization

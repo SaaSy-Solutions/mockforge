@@ -1384,6 +1384,17 @@ pub trait RegistryStore: Send + Sync + 'static {
 
     async fn find_sso_config_by_org(&self, org_id: Uuid) -> StoreResult<Option<SSOConfiguration>>;
 
+    /// Find an enabled SSO config by its routing email domain, returning the
+    /// config and the owning org's slug. Used by the pre-login discovery
+    /// endpoint. Default impl returns `None` (e.g. the SQLite store, which does
+    /// not back SSO discovery).
+    async fn find_sso_config_by_email_domain(
+        &self,
+        _domain: &str,
+    ) -> StoreResult<Option<(SSOConfiguration, String)>> {
+        Ok(None)
+    }
+
     #[allow(clippy::too_many_arguments)]
     async fn upsert_sso_config(
         &self,
@@ -1401,6 +1412,7 @@ pub trait RegistryStore: Send + Sync + 'static {
         oidc_issuer_url: Option<&str>,
         oidc_client_id: Option<&str>,
         oidc_client_secret: Option<&str>,
+        email_domain: Option<&str>,
     ) -> StoreResult<SSOConfiguration>;
 
     async fn enable_sso_config(&self, org_id: Uuid) -> StoreResult<()>;

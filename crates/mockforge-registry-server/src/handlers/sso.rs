@@ -43,6 +43,9 @@ pub struct CreateSSOConfigRequest {
     pub oidc_issuer_url: Option<String>,
     pub oidc_client_id: Option<String>,
     pub oidc_client_secret: Option<String>,
+    // Email domain that the pre-login discovery endpoint maps to this org. Only a
+    // routing key; ownership is still DNS-verified at provisioning time.
+    pub email_domain: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -59,8 +62,81 @@ pub struct SSOConfigResponse {
     pub require_signed_assertions: bool,
     pub require_signed_responses: bool,
     pub allow_unsolicited_responses: bool,
+    pub email_domain: Option<String>,
     pub created_at: String,
     pub updated_at: String,
+}
+
+/// Query for the pre-login SSO discovery endpoint.
+#[derive(Debug, Deserialize)]
+pub struct DiscoverSsoQuery {
+    pub email: String,
+}
+
+/// Response body for a successful SSO discovery: which provider to use and the
+/// org slug to address in the follow-up `/api/v1/sso/{provider}/login/{slug}`.
+#[derive(Debug, Serialize)]
+pub struct DiscoverSsoResponse {
+    pub provider: String,
+    pub org_slug: String,
+}
+
+/// Extract + normalize the email domain for SSO discovery: the part after the
+/// last `@`, lowercased, requiring a plausible dotted host. Returns `None` for
+/// anything that isn't a usable mail domain so a malformed input is a clean 404.
+fn extract_sso_domain(email: &str) -> Option<String> {
+    let (_, raw) = email.rsplit_once('@')?;
+    let domain = crate::sso_domain::normalize_domain(raw);
+    if domain.is_empty() || !domain.contains('.') || domain.contains('@') {
+        return None;
+    }
+    Some(domain)
+}
+
+/// Pre-login SSO discovery (PUBLIC, no auth): map an email's domain to the org
+/// and provider configured for it, so the login UI can redirect into the SSO
+/// flow. Returns 200 `{provider, org_slug}` when an enabled, domain-matched SSO
+/// config exists, or a clean 404 otherwise.
+///
+/// Privacy: this only reveals whether SSO is configured for a *domain*; it never
+/// reveals whether a given user exists. A domain with no enabled config and a
+/// domain that exists but is unverified/disabled return the SAME 404, so the UI
+/// falls back to manual org-slug entry without leaking anything.
+pub async fn discover_sso(
+    State(state): State<AppState>,
+    Query(query): Query<DiscoverSsoQuery>,
+) -> Response {
+    let not_found = || {
+        (
+            axum::http::StatusCode::NOT_FOUND,
+            Json(serde_json::json!({ "error": "No SSO configured for this email domain" })),
+        )
+            .into_response()
+    };
+
+    // Extract + normalize the email domain (everything after the last '@').
+    let Some(domain) = extract_sso_domain(&query.email) else {
+        return not_found();
+    };
+
+    // Only an enabled, domain-matched config resolves. The store method filters
+    // on `enabled = TRUE`, so disabled configs are invisible here.
+    match state.store.find_sso_config_by_email_domain(&domain).await {
+        Ok(Some((config, org_slug))) => (
+            axum::http::StatusCode::OK,
+            Json(serde_json::json!(DiscoverSsoResponse {
+                provider: config.provider().to_string(),
+                org_slug,
+            })),
+        )
+            .into_response(),
+        Ok(None) => not_found(),
+        Err(e) => {
+            // Fail closed AND opaque: never surface store internals pre-login.
+            tracing::warn!(domain = %domain, error = %e, "SSO discovery lookup failed");
+            not_found()
+        }
+    }
 }
 
 /// Create or update SSO configuration (Team plan only, org admin only)
@@ -160,6 +236,7 @@ pub async fn create_sso_config(
             request.oidc_issuer_url.as_deref(),
             request.oidc_client_id.as_deref(),
             request.oidc_client_secret.as_deref(),
+            request.email_domain.as_deref().map(str::trim).filter(|s| !s.is_empty()),
         )
         .await?;
 
@@ -200,6 +277,7 @@ pub async fn create_sso_config(
         require_signed_assertions: config.require_signed_assertions,
         require_signed_responses: config.require_signed_responses,
         allow_unsolicited_responses: config.allow_unsolicited_responses,
+        email_domain: config.email_domain,
         created_at: config.created_at.to_rfc3339(),
         updated_at: config.updated_at.to_rfc3339(),
     }))
@@ -248,6 +326,7 @@ pub async fn get_sso_config(
             require_signed_assertions: config.require_signed_assertions,
             require_signed_responses: config.require_signed_responses,
             allow_unsolicited_responses: config.allow_unsolicited_responses,
+            email_domain: config.email_domain,
             created_at: config.created_at.to_rfc3339(),
             updated_at: config.updated_at.to_rfc3339(),
         })))
@@ -1261,69 +1340,62 @@ fn generate_saml_logout_response(slo_url: &str) -> String {
     )
 }
 
-/// Find or create user from SAML attributes
+/// Find or create user from SAML attributes (thin wrapper over the shared,
+/// domain-gated SSO provisioning path).
 async fn find_or_create_user_from_saml(
     state: &AppState,
     user_info: &SAMLUserInfo,
     org: &Organization,
 ) -> Result<User, ApiError> {
-    // Try to find user by email
-    let user = if let Some(email) = &user_info.email {
-        state.store.find_user_by_email(email).await?
-    } else {
-        None
-    };
+    let email = user_info
+        .email
+        .as_deref()
+        .ok_or_else(|| ApiError::InvalidRequest("Email not found in SAML assertion".to_string()))?;
+    provision_sso_user(state, org, email, user_info.username.as_deref()).await
+}
 
+/// Provision (or attach) an SSO user for `org`, gated on DNS-verified domain
+/// ownership. Shared by the SAML (`saml_acs`) and OIDC (`oidc_callback`) paths so
+/// the #833/#746/#778 cross-tenant takeover gate lives in exactly one place.
+///
+/// - Existing account already a member of `org`: normal login, NOT gated.
+/// - Existing account NOT a member: attaching it requires the org to own the
+///   email's domain (prevents absorbing a foreign account).
+/// - No account: JIT-create, also gated on domain ownership.
+///
+/// Always fail-closed: any domain-verification failure rejects provisioning.
+pub(crate) async fn provision_sso_user(
+    state: &AppState,
+    org: &Organization,
+    email: &str,
+    username_hint: Option<&str>,
+) -> Result<User, ApiError> {
     use crate::models::organization::OrgRole;
-    // Domain-ownership gate (#833/#746/#778). SSO must not be able to provision
-    // or absorb an account for an email domain the org has not proven it owns,
-    // or a malicious org's IdP could mint an assertion for victim@othercorp.com
-    // and take over / squat that account. Verified live via DNS, fail-closed.
-    let domain_verifier = crate::sso_domain::DnsDomainVerifier;
 
-    let user = if let Some(user) = user {
-        // Existing account. A normal SSO login for a current member needs no
-        // gate; only *attaching* a foreign account to this org does.
+    let verifier = crate::sso_domain::DnsDomainVerifier;
+    let existing = state.store.find_user_by_email(email).await?;
+
+    if let Some(user) = existing {
+        // Existing member -> normal login (no gate). Otherwise attaching a
+        // foreign account to this org requires verified domain ownership.
         if state.store.find_org_member(org.id, user.id).await?.is_none() {
-            let email = user_info.email.as_deref().ok_or_else(|| {
-                ApiError::InvalidRequest("Email not found in SAML assertion".to_string())
-            })?;
-            crate::sso_domain::assert_email_in_verified_domain(&domain_verifier, org.id, email)
-                .await?;
+            crate::sso_domain::assert_email_in_verified_domain(&verifier, org.id, email).await?;
             state.store.create_org_member(org.id, user.id, OrgRole::Member).await?;
         }
+        return Ok(user);
+    }
 
-        user
-    } else {
-        // Create new user from SAML attributes
-        let email = user_info.email.as_ref().ok_or_else(|| {
-            ApiError::InvalidRequest("Email not found in SAML assertion".to_string())
-        })?;
+    // JIT-provision a new user; gated on domain ownership.
+    crate::sso_domain::assert_email_in_verified_domain(&verifier, org.id, email).await?;
 
-        // JIT provisioning requires the org to own the email's domain.
-        crate::sso_domain::assert_email_in_verified_domain(&domain_verifier, org.id, email).await?;
-
-        let username = user_info.username.as_ref().cloned().unwrap_or_else(|| {
-            // Generate username from email
-            email.split('@').next().unwrap_or("user").to_string()
-        });
-
-        // Generate a random password (user won't need it for SSO login)
-        let password_hash = crate::auth::hash_password(&uuid::Uuid::new_v4().to_string())
-            .map_err(ApiError::Internal)?;
-
-        // Create user
-        let user = state.store.create_user(&username, email, &password_hash).await?;
-
-        // Mark user as verified (SSO users are pre-verified)
-        state.store.mark_user_verified(user.id).await?;
-
-        // Add user to organization as member
-        state.store.create_org_member(org.id, user.id, OrgRole::Member).await?;
-
-        user
-    };
-
+    let username = username_hint
+        .map(str::to_string)
+        .unwrap_or_else(|| email.split('@').next().unwrap_or("user").to_string());
+    let password_hash = crate::auth::hash_password(&uuid::Uuid::new_v4().to_string())
+        .map_err(ApiError::Internal)?;
+    let user = state.store.create_user(&username, email, &password_hash).await?;
+    state.store.mark_user_verified(user.id).await?;
+    state.store.create_org_member(org.id, user.id, OrgRole::Member).await?;
     Ok(user)
 }
 
@@ -1379,4 +1451,36 @@ fn validate_saml_timestamps(user_info: &SAMLUserInfo) -> Result<(), ApiError> {
 
     tracing::debug!("SAML timestamp validation passed");
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn extract_sso_domain_lowercases_and_takes_part_after_at() {
+        assert_eq!(extract_sso_domain("alice@Acme.com").as_deref(), Some("acme.com"));
+        assert_eq!(
+            extract_sso_domain("BOB@Sub.Example.CO.UK").as_deref(),
+            Some("sub.example.co.uk")
+        );
+    }
+
+    #[test]
+    fn extract_sso_domain_uses_last_at_for_quoted_locals() {
+        // Only the final '@' separates local-part from domain.
+        assert_eq!(extract_sso_domain("weird@name@acme.com").as_deref(), Some("acme.com"));
+    }
+
+    #[test]
+    fn extract_sso_domain_rejects_malformed() {
+        // No '@' at all.
+        assert!(extract_sso_domain("not-an-email").is_none());
+        // Empty domain.
+        assert!(extract_sso_domain("user@").is_none());
+        // Domain without a dot is not a usable mail domain.
+        assert!(extract_sso_domain("user@localhost").is_none());
+        // Empty input.
+        assert!(extract_sso_domain("").is_none());
+    }
 }
