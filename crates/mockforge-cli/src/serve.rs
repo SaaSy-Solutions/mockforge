@@ -2859,6 +2859,12 @@ pub async fn handle_serve(
             read_buffer_size: 8192, // Default buffer sizes
             write_buffer_size: 8192,
             delimiter: None, // Stream mode by default
+            // Round 36 — `mockforge-tcp::TcpConfig` gained
+            // `max_message_bytes` in a separate landing; mirror the
+            // 1 MiB default so this struct literal compiles. The CLI
+            // doesn't expose a flag for this yet; users who want a
+            // different cap can set it in YAML config.
+            max_message_bytes: 1_048_576,
         };
 
         Some(tokio::spawn(async move {
