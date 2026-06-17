@@ -1110,6 +1110,15 @@ impl RegistryStore for PgRegistryStore {
         SSOConfiguration::find_by_org(&self.pool, org_id).await.map_err(Into::into)
     }
 
+    async fn find_sso_config_by_email_domain(
+        &self,
+        domain: &str,
+    ) -> StoreResult<Option<(SSOConfiguration, String)>> {
+        SSOConfiguration::find_by_email_domain(&self.pool, domain)
+            .await
+            .map_err(Into::into)
+    }
+
     async fn upsert_sso_config(
         &self,
         org_id: Uuid,
@@ -1126,6 +1135,7 @@ impl RegistryStore for PgRegistryStore {
         oidc_issuer_url: Option<&str>,
         oidc_client_id: Option<&str>,
         oidc_client_secret: Option<&str>,
+        email_domain: Option<&str>,
     ) -> StoreResult<SSOConfiguration> {
         SSOConfiguration::upsert(
             &self.pool,
@@ -1143,6 +1153,7 @@ impl RegistryStore for PgRegistryStore {
             oidc_issuer_url,
             oidc_client_id,
             oidc_client_secret,
+            email_domain,
         )
         .await
         .map_err(Into::into)

@@ -1,6 +1,15 @@
 # Typos configuration for MockForge
 # Allows common technical acronyms and terms
 
+[default]
+# Throwaway RSA test-key material in the OIDC SSO tests (handlers/oidc.rs and
+# tests/oidc_flow.rs). The base64 PEM + modulus blobs trip false positives like
+# "Fo"/"Opf"; ignore the PEM block and the test modulus wherever they appear.
+extend-ignore-re = [
+  "(?s)-----BEGIN PRIVATE KEY-----.*?-----END PRIVATE KEY-----",
+  "tlVSZ3rda5uMJ625[A-Za-z0-9_-]+",
+]
+
 [default.extend-words]
 # Technical acronyms and library names
 ratatui = "ratatui"  # Rust TUI library (not ratatouille)
