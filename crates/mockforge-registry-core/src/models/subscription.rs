@@ -312,23 +312,36 @@ impl UsageCounter {
         Ok(())
     }
 
-    /// Increment AI tokens used
+    /// Increment AI tokens used and return the new running total.
+    ///
+    /// Atomic (#867): a single `UPDATE ... RETURNING` performs the
+    /// read-modify-write in one statement so concurrent AI calls can't both
+    /// observe the same pre-increment value and overrun the monthly cap (the
+    /// previous get-then-UPDATE was a TOCTOU race). The current period row is
+    /// created first if it doesn't exist yet; the increment itself never reads
+    /// the counter into the application before writing.
     pub async fn increment_ai_tokens(
         pool: &sqlx::PgPool,
         org_id: Uuid,
         tokens: i64,
-    ) -> sqlx::Result<()> {
+    ) -> sqlx::Result<i64> {
+        // Ensure the current-period row exists. This is idempotent and does
+        // not participate in the increment's atomicity — the running total is
+        // only ever mutated by the single atomic UPDATE below.
         let counter = Self::get_or_create_current(pool, org_id).await?;
 
-        sqlx::query(
-            "UPDATE usage_counters SET ai_tokens_used = ai_tokens_used + $1, updated_at = NOW() WHERE id = $2",
+        let (new_total,): (i64,) = sqlx::query_as(
+            "UPDATE usage_counters \
+             SET ai_tokens_used = ai_tokens_used + $1, updated_at = NOW() \
+             WHERE id = $2 \
+             RETURNING ai_tokens_used",
         )
         .bind(tokens)
         .bind(counter.id)
-        .execute(pool)
+        .fetch_one(pool)
         .await?;
 
-        Ok(())
+        Ok(new_total)
     }
 
     /// Increment runner-seconds used. Charged for every wall-clock second

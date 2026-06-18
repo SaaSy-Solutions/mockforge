@@ -1,8 +1,9 @@
 //! Authentication handlers
 
-use axum::{extract::State, Json};
+use axum::{extract::State, http::HeaderMap, Json};
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::{
     auth::{
@@ -11,10 +12,39 @@ use crate::{
     },
     email::EmailService,
     error::{ApiError, ApiResult},
-    middleware::AuthUser,
-    models::organization::Plan,
+    middleware::{trusted_proxy::extract_client_ip_from_headers, AuthUser},
+    models::{organization::Plan, AuditEventType},
     AppState,
 };
+
+/// Resolve the source IP for an audit record from proxy headers.
+///
+/// Returns `None` when the extractor yields its `"unknown"` sentinel so the
+/// audit `ip_address` column stays NULL rather than storing a placeholder.
+fn audit_source_ip(headers: &HeaderMap) -> Option<String> {
+    let ip = extract_client_ip_from_headers(headers);
+    if ip == "unknown" {
+        None
+    } else {
+        Some(ip)
+    }
+}
+
+/// Best-effort resolution of a user's organization for an audit record.
+///
+/// Auth events are user-scoped but the audit log is org-partitioned, so we
+/// attribute the event to the user's first organization. Falls back to the nil
+/// UUID when the user belongs to no org or the lookup fails — auditing must
+/// never block (or fail) the auth action itself (#871).
+async fn audit_org_for_user(state: &AppState, user_id: Uuid) -> Uuid {
+    match state.store.list_organizations_by_user(user_id).await {
+        Ok(orgs) => orgs.first().map(|o| o.id).unwrap_or_else(Uuid::nil),
+        Err(e) => {
+            tracing::warn!("Failed to resolve org for auth audit (user {}): {}", user_id, e);
+            Uuid::nil()
+        }
+    }
+}
 
 #[derive(Debug, Deserialize)]
 pub struct RegisterRequest {
@@ -142,20 +172,60 @@ pub async fn register(
 
 pub async fn login(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(request): Json<LoginRequest>,
 ) -> ApiResult<Json<AuthResponseV2>> {
+    let source_ip = audit_source_ip(&headers);
+
     // Find user
-    let user = state
-        .store
-        .find_user_by_email(&request.email)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Invalid email or password".to_string()))?;
+    let user = match state.store.find_user_by_email(&request.email).await? {
+        Some(user) => user,
+        None => {
+            // Unknown-user branch — emit LoginFailed so password-spray against
+            // non-existent accounts is still visible (#871). user_id is NULL;
+            // org is nil since we have no user to attribute to.
+            state
+                .store
+                .record_audit_event(
+                    Uuid::nil(),
+                    None,
+                    AuditEventType::LoginFailed,
+                    "Login failed: unknown email".to_string(),
+                    Some(serde_json::json!({
+                        "attempted_email": request.email,
+                        "reason": "unknown_user",
+                    })),
+                    source_ip.as_deref(),
+                    None,
+                )
+                .await;
+            return Err(ApiError::InvalidRequest("Invalid email or password".to_string()));
+        }
+    };
 
     // Verify password
     let valid =
         verify_password(&request.password, &user.password_hash).map_err(ApiError::Internal)?;
 
     if !valid {
+        // Wrong-password branch — emit LoginFailed for brute-force visibility
+        // (#871). We know the user, so attribute the org + user_id.
+        let org_id = audit_org_for_user(&state, user.id).await;
+        state
+            .store
+            .record_audit_event(
+                org_id,
+                Some(user.id),
+                AuditEventType::LoginFailed,
+                "Login failed: incorrect password".to_string(),
+                Some(serde_json::json!({
+                    "attempted_email": request.email,
+                    "reason": "bad_password",
+                })),
+                source_ip.as_deref(),
+                None,
+            )
+            .await;
         return Err(ApiError::InvalidRequest("Invalid email or password".to_string()));
     }
 
@@ -215,6 +285,23 @@ pub async fn login(
         tracing::warn!("Failed to store refresh token JTI: {}", e);
         ApiError::Internal(e)
     })?;
+
+    // Successful login — audit with org (if resolvable), user_id and source IP (#871).
+    let org_id = audit_org_for_user(&state, user.id).await;
+    state
+        .store
+        .record_audit_event(
+            org_id,
+            Some(user.id),
+            AuditEventType::LoginSucceeded,
+            "Login succeeded".to_string(),
+            Some(serde_json::json!({
+                "two_factor": user.two_factor_enabled,
+            })),
+            source_ip.as_deref(),
+            None,
+        )
+        .await;
 
     Ok(Json(AuthResponseV2 {
         access_token: token_pair.access_token,
@@ -538,6 +625,7 @@ pub struct ChangePasswordResponse {
 pub async fn change_password(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
     Json(request): Json<ChangePasswordRequest>,
 ) -> ApiResult<Json<ChangePasswordResponse>> {
     if request.new_password.len() < 8 {
@@ -577,6 +665,23 @@ pub async fn change_password(
         user.id,
         revoked_count
     );
+
+    // Audit the password change with the existing PasswordChanged type (#873).
+    let org_id = audit_org_for_user(&state, user.id).await;
+    state
+        .store
+        .record_audit_event(
+            org_id,
+            Some(user.id),
+            AuditEventType::PasswordChanged,
+            "Password changed".to_string(),
+            Some(serde_json::json!({
+                "revoked_sessions": revoked_count,
+            })),
+            audit_source_ip(&headers).as_deref(),
+            None,
+        )
+        .await;
 
     // Best-effort security-alert email. Never fails the request.
     if user.security_alerts {

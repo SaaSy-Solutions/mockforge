@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
+#[cfg(feature = "postgres")]
+use sha2::{Digest, Sha256};
+
 /// Audit event types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "audit_event_type", rename_all = "snake_case")]
@@ -48,11 +51,17 @@ pub enum AuditEventType {
     PublisherKeyCreated,
     PublisherKeyRevoked,
     PublisherKeyRotated,
+    // Authentication (#871) — login/logout visibility for SOC2 / brute-force forensics.
+    LoginSucceeded,
+    LoginFailed,
+    Logout,
     // Security
     PasswordChanged,
     EmailChanged,
     TwoFactorEnabled,
     TwoFactorDisabled,
+    // GDPR / data egress (#872) — bulk personal-data export.
+    DataExported,
     // Federation
     FederationCreated,
     FederationUpdated,
@@ -131,10 +140,14 @@ impl AuditEventType {
             "publisher_key_created" => Some(Self::PublisherKeyCreated),
             "publisher_key_revoked" => Some(Self::PublisherKeyRevoked),
             "publisher_key_rotated" => Some(Self::PublisherKeyRotated),
+            "login_succeeded" => Some(Self::LoginSucceeded),
+            "login_failed" => Some(Self::LoginFailed),
+            "logout" => Some(Self::Logout),
             "password_changed" => Some(Self::PasswordChanged),
             "email_changed" => Some(Self::EmailChanged),
             "two_factor_enabled" => Some(Self::TwoFactorEnabled),
             "two_factor_disabled" => Some(Self::TwoFactorDisabled),
+            "data_exported" => Some(Self::DataExported),
             "federation_created" => Some(Self::FederationCreated),
             "federation_updated" => Some(Self::FederationUpdated),
             "federation_deleted" => Some(Self::FederationDeleted),
@@ -202,10 +215,14 @@ impl AuditEventType {
             Self::PublisherKeyCreated => "publisher_key_created",
             Self::PublisherKeyRevoked => "publisher_key_revoked",
             Self::PublisherKeyRotated => "publisher_key_rotated",
+            Self::LoginSucceeded => "login_succeeded",
+            Self::LoginFailed => "login_failed",
+            Self::Logout => "logout",
             Self::PasswordChanged => "password_changed",
             Self::EmailChanged => "email_changed",
             Self::TwoFactorEnabled => "two_factor_enabled",
             Self::TwoFactorDisabled => "two_factor_disabled",
+            Self::DataExported => "data_exported",
             Self::FederationCreated => "federation_created",
             Self::FederationUpdated => "federation_updated",
             Self::FederationDeleted => "federation_deleted",
@@ -251,9 +268,84 @@ pub struct AuditLog {
     pub created_at: DateTime<Utc>,
 }
 
+/// Build the canonical, order-stable string that the hash chain commits to for
+/// a single audit row. Field order and the `|` separator are part of the
+/// on-disk contract — changing either breaks verification of existing chains.
+///
+/// `metadata` is rendered via its compact JSON form (`Value::to_string`), which
+/// `serde_json` emits with sorted-by-insertion keys; we feed the already-parsed
+/// `serde_json::Value` so the bytes are stable regardless of inbound whitespace.
+#[cfg(feature = "postgres")]
+fn canonical_entry(
+    org_id: Uuid,
+    user_id: Option<Uuid>,
+    event_type: AuditEventType,
+    description: &str,
+    metadata: Option<&serde_json::Value>,
+    ip_address: Option<&str>,
+    created_at: DateTime<Utc>,
+) -> String {
+    format!(
+        "{org}|{user}|{event}|{desc}|{meta}|{ip}|{ts}",
+        org = org_id,
+        user = user_id.map(|u| u.to_string()).unwrap_or_default(),
+        event = event_type.as_str(),
+        desc = description,
+        meta = metadata.map(|m| m.to_string()).unwrap_or_default(),
+        ip = ip_address.unwrap_or_default(),
+        // RFC3339 with nanos — matches what Postgres TIMESTAMPTZ round-trips
+        // back into chrono, so recomputation in verify_chain is byte-identical.
+        ts = created_at.to_rfc3339_opts(chrono::SecondsFormat::Micros, true),
+    )
+}
+
+/// Truncate a timestamp to microsecond resolution to match Postgres
+/// `TIMESTAMPTZ` storage precision (see [`AuditLog::create`]).
+#[cfg(feature = "postgres")]
+fn truncate_to_micros(ts: DateTime<Utc>) -> DateTime<Utc> {
+    use chrono::SubsecRound;
+    ts.trunc_subsecs(6)
+}
+
+/// Compute `sha256_hex(prev_hash_or_empty || "|" || canonical(...))`.
+#[cfg(feature = "postgres")]
+fn chain_hash(prev_hash: Option<&str>, canonical: &str) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(prev_hash.unwrap_or("").as_bytes());
+    hasher.update(b"|");
+    hasher.update(canonical.as_bytes());
+    let digest = hasher.finalize();
+    hex::encode(digest)
+}
+
+/// Minimal projection used to recompute the hash chain in [`AuditLog::verify_chain`].
+/// Mirrors the fields fed into [`canonical_entry`] plus the stored chain hashes.
+#[cfg(feature = "postgres")]
+#[derive(FromRow)]
+struct AuditChainRow {
+    org_id: Uuid,
+    user_id: Option<Uuid>,
+    event_type: AuditEventType,
+    description: String,
+    metadata: Option<serde_json::Value>,
+    ip_address: Option<String>,
+    created_at: DateTime<Utc>,
+    prev_hash: Option<String>,
+    entry_hash: Option<String>,
+}
+
 #[cfg(feature = "postgres")]
 impl AuditLog {
-    /// Create a new audit log entry
+    /// Create a new audit log entry, extending the org's tamper-evident hash
+    /// chain (#872).
+    ///
+    /// The whole operation runs in a transaction: we take a `FOR UPDATE` lock
+    /// on the org's current latest row so two concurrent inserts can't both
+    /// read the same `prev_hash` and fork the chain. `entry_hash` commits to
+    /// `prev_hash` plus the canonical row contents, so any later mutation,
+    /// deletion, or reordering is detectable by [`Self::verify_chain`].
+    ///
+    /// The first row of each org's chain has `prev_hash = NULL`.
     #[allow(clippy::too_many_arguments)]
     pub async fn create(
         pool: &sqlx::PgPool,
@@ -265,22 +357,120 @@ impl AuditLog {
         ip_address: Option<&str>,
         user_agent: Option<&str>,
     ) -> sqlx::Result<Self> {
-        sqlx::query_as::<_, Self>(
+        let mut tx = pool.begin().await?;
+
+        // Lock + read the previous entry's hash for this org. FOR UPDATE
+        // serializes concurrent inserts on the same org chain.
+        let prev_hash: Option<String> = sqlx::query_scalar(
             r#"
-            INSERT INTO audit_logs (org_id, user_id, event_type, description, metadata, ip_address, user_agent)
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            RETURNING *
+            SELECT entry_hash FROM audit_logs
+            WHERE org_id = $1
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1
+            FOR UPDATE
+            "#,
+        )
+        .bind(org_id)
+        .fetch_optional(&mut *tx)
+        .await?
+        .flatten();
+
+        // created_at is generated here (not by the DB DEFAULT) so it is part of
+        // the hashed canonical form. Truncate to microseconds *before* hashing:
+        // Postgres TIMESTAMPTZ has microsecond resolution, so a nanosecond-
+        // precision `Utc::now()` would be truncated on store and the read-back
+        // value in verify_chain would no longer match what we hashed. Truncating
+        // up-front keeps insert-time and verify-time canonical bytes identical.
+        let created_at = truncate_to_micros(Utc::now());
+        let canonical = canonical_entry(
+            org_id,
+            user_id,
+            event_type,
+            &description,
+            metadata.as_ref(),
+            ip_address,
+            created_at,
+        );
+        let entry_hash = chain_hash(prev_hash.as_deref(), &canonical);
+
+        let row = sqlx::query_as::<_, Self>(
+            r#"
+            INSERT INTO audit_logs
+                (org_id, user_id, event_type, description, metadata,
+                 ip_address, user_agent, created_at, prev_hash, entry_hash)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+            RETURNING id, org_id, user_id, event_type, description, metadata,
+                      ip_address, user_agent, created_at
             "#,
         )
         .bind(org_id)
         .bind(user_id)
         .bind(event_type)
-        .bind(description)
+        .bind(&description)
         .bind(metadata)
         .bind(ip_address)
         .bind(user_agent)
-        .fetch_one(pool)
-        .await
+        .bind(created_at)
+        .bind(prev_hash)
+        .bind(&entry_hash)
+        .fetch_one(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+        Ok(row)
+    }
+
+    /// Recompute the per-org hash chain and report whether it is intact.
+    ///
+    /// Returns `Ok(true)` when every row's stored `entry_hash` matches a fresh
+    /// recomputation from its predecessor, and `Ok(false)` on the first break
+    /// (mutated field, deleted row, reordered row, or forged hash). Rows whose
+    /// `entry_hash` is NULL (pre-#872 history) are treated as a fresh chain
+    /// start: the chain is validated from the first hashed row onward.
+    pub async fn verify_chain(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<bool> {
+        let rows = sqlx::query_as::<_, AuditChainRow>(
+            r#"
+            SELECT org_id, user_id, event_type, description, metadata,
+                   ip_address, created_at, prev_hash, entry_hash
+            FROM audit_logs
+            WHERE org_id = $1
+            ORDER BY created_at ASC, id ASC
+            "#,
+        )
+        .bind(org_id)
+        .fetch_all(pool)
+        .await?;
+
+        let mut prev_hash: Option<String> = None;
+        for row in rows {
+            // Skip un-chained historical rows but keep walking forward.
+            let Some(stored) = row.entry_hash.as_deref() else {
+                prev_hash = None;
+                continue;
+            };
+
+            // The stored prev_hash must match the running chain head.
+            if row.prev_hash.as_deref() != prev_hash.as_deref() {
+                return Ok(false);
+            }
+
+            let canonical = canonical_entry(
+                row.org_id,
+                row.user_id,
+                row.event_type,
+                &row.description,
+                row.metadata.as_ref(),
+                row.ip_address.as_deref(),
+                row.created_at,
+            );
+            let recomputed = chain_hash(row.prev_hash.as_deref(), &canonical);
+            if recomputed != stored {
+                return Ok(false);
+            }
+            prev_hash = Some(stored.to_string());
+        }
+
+        Ok(true)
     }
 
     /// Get audit logs for an organization, optionally filtered to one or more event types.
@@ -339,14 +529,17 @@ impl AuditLog {
         query.build_query_as::<Self>().fetch_all(pool).await
     }
 
-    /// Clean up old audit logs (older than N days)
-    pub async fn cleanup_old(pool: &sqlx::PgPool, days: i64) -> sqlx::Result<u64> {
-        let cutoff = Utc::now() - chrono::Duration::days(days);
-        let result = sqlx::query("DELETE FROM audit_logs WHERE created_at < $1")
-            .bind(cutoff)
-            .execute(pool)
-            .await?;
-        Ok(result.rows_affected())
+    /// Audit-log retention is disabled for tamper-evidence (#872).
+    ///
+    /// `audit_logs` is append-only at the DB level (a trigger raises on any
+    /// DELETE/UPDATE — see migration `20250101000080_audit_log_integrity.sql`),
+    /// and deleting rows would also break the per-org hash chain. SOC2 / ISO
+    /// retention is "keep", not "prune", so this is intentionally a no-op that
+    /// logs a warning and reports 0 rows removed. The `_pool`/`_days` arguments
+    /// are kept so the call sites and trait shape are unchanged.
+    pub async fn cleanup_old(_pool: &sqlx::PgPool, _days: i64) -> sqlx::Result<u64> {
+        tracing::warn!("audit retention disabled for immutability (#872)");
+        Ok(0)
     }
 }
 
@@ -418,10 +611,14 @@ mod tests {
             AuditEventType::PublisherKeyCreated,
             AuditEventType::PublisherKeyRevoked,
             AuditEventType::PublisherKeyRotated,
+            AuditEventType::LoginSucceeded,
+            AuditEventType::LoginFailed,
+            AuditEventType::Logout,
             AuditEventType::PasswordChanged,
             AuditEventType::EmailChanged,
             AuditEventType::TwoFactorEnabled,
             AuditEventType::TwoFactorDisabled,
+            AuditEventType::DataExported,
             AuditEventType::FederationCreated,
             AuditEventType::FederationUpdated,
             AuditEventType::FederationDeleted,
