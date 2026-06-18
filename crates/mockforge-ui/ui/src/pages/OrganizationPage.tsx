@@ -93,6 +93,12 @@ interface SSOConfig {
   saml_sso_url?: string;
   saml_slo_url?: string;
   saml_name_id_format?: string;
+  // OIDC fields (provider === 'oidc'). The client secret is intentionally absent:
+  // the backend never returns it (write-only).
+  oidc_issuer_url?: string;
+  oidc_client_id?: string;
+  // Email domain that pre-login discovery maps to this org.
+  email_domain?: string;
   attribute_mapping: Record<string, unknown>;
   require_signed_assertions: boolean;
   require_signed_responses: boolean;
@@ -241,6 +247,10 @@ const saveSSOConfig = (data: {
   saml_sso_url?: string;
   saml_slo_url?: string;
   saml_x509_cert?: string;
+  oidc_issuer_url?: string;
+  oidc_client_id?: string;
+  oidc_client_secret?: string;
+  email_domain?: string;
 }) => apiFetch<SSOConfig>(`${API_BASE}/sso/config`, { method: 'POST', body: JSON.stringify(data) });
 const deleteSSOConfig = () => apiFetch<void>(`${API_BASE}/sso/config`, { method: 'DELETE' });
 const enableSSO = () => apiFetch<void>(`${API_BASE}/sso/enable`, { method: 'POST' });
@@ -1269,10 +1279,25 @@ function DomainVerificationCard() {
 function SSOTab({ org }: { org: Organization }) {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
+
+  // Provider selector: 'saml' | 'oidc'
+  const [provider, setProvider] = useState<'saml' | 'oidc'>('saml');
+
+  // SAML fields
   const [entityId, setEntityId] = useState('');
   const [ssoUrl, setSsoUrl] = useState('');
   const [sloUrl, setSloUrl] = useState('');
   const [x509Cert, setX509Cert] = useState('');
+
+  // OIDC fields
+  const [oidcIssuerUrl, setOidcIssuerUrl] = useState('');
+  const [oidcClientId, setOidcClientId] = useState('');
+  // oidcClientSecret is write-only: never pre-populated from the server response
+  const [oidcClientSecret, setOidcClientSecret] = useState('');
+
+  // Email domain (shown for both providers; routes pre-login discovery to this org)
+  const [emailDomain, setEmailDomain] = useState('');
+
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const { data: ssoConfig, isLoading } = useQuery({
@@ -1283,23 +1308,39 @@ function SSOTab({ org }: { org: Organization }) {
 
   useEffect(() => {
     if (ssoConfig) {
+      setProvider(ssoConfig.provider === 'oidc' ? 'oidc' : 'saml');
       setEntityId(ssoConfig.saml_entity_id || '');
       setSsoUrl(ssoConfig.saml_sso_url || '');
       setSloUrl(ssoConfig.saml_slo_url || '');
+      setOidcIssuerUrl(ssoConfig.oidc_issuer_url || '');
+      setOidcClientId(ssoConfig.oidc_client_id || '');
+      setEmailDomain(ssoConfig.email_domain || '');
     }
   }, [ssoConfig]);
 
   const saveMutation = useMutation({
-    mutationFn: () => saveSSOConfig({
-      provider: 'saml',
-      saml_entity_id: entityId,
-      saml_sso_url: ssoUrl,
-      saml_slo_url: sloUrl || undefined,
-      saml_x509_cert: x509Cert || undefined,
-    }),
+    mutationFn: () => {
+      const base = { provider, email_domain: emailDomain || undefined };
+      if (provider === 'saml') {
+        return saveSSOConfig({
+          ...base,
+          saml_entity_id: entityId,
+          saml_sso_url: ssoUrl,
+          saml_slo_url: sloUrl || undefined,
+          saml_x509_cert: x509Cert || undefined,
+        });
+      }
+      return saveSSOConfig({
+        ...base,
+        oidc_issuer_url: oidcIssuerUrl,
+        oidc_client_id: oidcClientId,
+        oidc_client_secret: oidcClientSecret || undefined,
+      });
+    },
     onSuccess: () => {
       showToast('success', 'SSO configuration saved');
       setX509Cert('');
+      setOidcClientSecret('');
       queryClient.invalidateQueries({ queryKey: ['sso-config', org.id] });
     },
     onError: (err: Error) => showToast('error', 'Failed to save SSO config', err.message),
@@ -1322,6 +1363,9 @@ function SSOTab({ org }: { org: Organization }) {
       setEntityId('');
       setSsoUrl('');
       setSloUrl('');
+      setOidcIssuerUrl('');
+      setOidcClientId('');
+      setEmailDomain('');
       queryClient.invalidateQueries({ queryKey: ['sso-config', org.id] });
     },
     onError: (err: Error) => showToast('error', 'Failed to delete SSO config', err.message),
@@ -1333,7 +1377,7 @@ function SSOTab({ org }: { org: Organization }) {
         <Lock className="w-8 h-8 mx-auto text-muted-foreground mb-3" />
         <h4 className="font-semibold mb-1">SSO requires Team plan</h4>
         <p className="text-sm text-muted-foreground">
-          Upgrade to the Team plan to configure SAML-based Single Sign-On for your organization.
+          Upgrade to the Team plan to configure Single Sign-On for your organization.
         </p>
       </div>
     );
@@ -1342,6 +1386,12 @@ function SSOTab({ org }: { org: Organization }) {
   if (isLoading) {
     return <div className="text-center py-4 text-muted-foreground">Loading SSO configuration...</div>;
   }
+
+  // Save button enabled: require the provider-specific required fields.
+  const isSaveEnabled =
+    provider === 'saml'
+      ? Boolean(entityId.trim() && ssoUrl.trim())
+      : Boolean(oidcIssuerUrl.trim() && oidcClientId.trim());
 
   return (
     <div className="space-y-6">
@@ -1365,38 +1415,117 @@ function SSOTab({ org }: { org: Organization }) {
         </div>
       )}
 
-      <div className="space-y-4">
-        <h4 className="text-sm font-semibold">SAML 2.0 Configuration</h4>
-        <div>
-          <Label>Entity ID (Issuer)</Label>
-          <Input value={entityId} onChange={(e) => setEntityId(e.target.value)} placeholder="https://idp.example.com/metadata" />
-        </div>
-        <div>
-          <Label>SSO URL (Login URL)</Label>
-          <Input value={ssoUrl} onChange={(e) => setSsoUrl(e.target.value)} placeholder="https://idp.example.com/sso" />
-        </div>
-        <div>
-          <Label>SLO URL (Logout URL, optional)</Label>
-          <Input value={sloUrl} onChange={(e) => setSloUrl(e.target.value)} placeholder="https://idp.example.com/slo" />
-        </div>
-        <div>
-          <Label>X.509 Certificate (paste new cert to update)</Label>
-          <textarea
-            className="w-full border rounded px-3 py-2 text-sm bg-background font-mono min-h-[100px] mt-1"
-            value={x509Cert}
-            onChange={(e) => setX509Cert(e.target.value)}
-            placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
-          />
-        </div>
+      {/* ── Provider selector ── */}
+      <div className="space-y-2">
+        <Label>SSO Provider</Label>
         <div className="flex gap-2">
-          <Button onClick={() => saveMutation.mutate()} disabled={!entityId.trim() || !ssoUrl.trim() || saveMutation.isPending}>
-            <Save className="w-4 h-4 mr-2" />
-            {saveMutation.isPending ? 'Saving...' : 'Save Configuration'}
-          </Button>
+          {(['saml', 'oidc'] as const).map((p) => (
+            <button
+              key={p}
+              type="button"
+              onClick={() => setProvider(p)}
+              className={`px-4 py-2 text-sm rounded border transition-colors ${
+                provider === p
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-background text-foreground border-border hover:bg-muted'
+              }`}
+            >
+              {p === 'saml' ? 'SAML 2.0' : 'OpenID Connect (OIDC)'}
+            </button>
+          ))}
         </div>
       </div>
 
-      {ssoConfig && (
+      {/* ── SAML fields ── */}
+      {provider === 'saml' && (
+        <div className="space-y-4">
+          <h4 className="text-sm font-semibold">SAML 2.0 Configuration</h4>
+          <div>
+            <Label>Entity ID (Issuer)</Label>
+            <Input value={entityId} onChange={(e) => setEntityId(e.target.value)} placeholder="https://idp.example.com/metadata" />
+          </div>
+          <div>
+            <Label>SSO URL (Login URL)</Label>
+            <Input value={ssoUrl} onChange={(e) => setSsoUrl(e.target.value)} placeholder="https://idp.example.com/sso" />
+          </div>
+          <div>
+            <Label>SLO URL (Logout URL, optional)</Label>
+            <Input value={sloUrl} onChange={(e) => setSloUrl(e.target.value)} placeholder="https://idp.example.com/slo" />
+          </div>
+          <div>
+            <Label>X.509 Certificate (paste new cert to update)</Label>
+            <textarea
+              className="w-full border rounded px-3 py-2 text-sm bg-background font-mono min-h-[100px] mt-1"
+              value={x509Cert}
+              onChange={(e) => setX509Cert(e.target.value)}
+              placeholder="-----BEGIN CERTIFICATE-----&#10;...&#10;-----END CERTIFICATE-----"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* ── OIDC fields ── */}
+      {provider === 'oidc' && (
+        <div className="space-y-4">
+          <h4 className="text-sm font-semibold">OpenID Connect Configuration</h4>
+          <div>
+            <Label>Issuer URL</Label>
+            <Input
+              value={oidcIssuerUrl}
+              onChange={(e) => setOidcIssuerUrl(e.target.value)}
+              placeholder="https://accounts.google.com"
+            />
+            <p className="text-xs text-muted-foreground mt-1">The OIDC provider&apos;s issuer URL (must expose a /.well-known/openid-configuration endpoint).</p>
+          </div>
+          <div>
+            <Label>Client ID</Label>
+            <Input
+              value={oidcClientId}
+              onChange={(e) => setOidcClientId(e.target.value)}
+              placeholder="your-client-id"
+            />
+          </div>
+          <div>
+            <Label>Client Secret</Label>
+            <Input
+              type="password"
+              value={oidcClientSecret}
+              onChange={(e) => setOidcClientSecret(e.target.value)}
+              placeholder="Leave blank to keep existing secret"
+              autoComplete="new-password"
+            />
+            <p className="text-xs text-muted-foreground mt-1">Write-only — the secret is never returned by the API. Leave blank to keep the stored secret unchanged.</p>
+          </div>
+        </div>
+      )}
+
+      {/* ── Email domain (always visible; routes pre-login discovery to this org) ── */}
+      <div className="space-y-2">
+        <h4 className="text-sm font-semibold">Email Domain</h4>
+        <div>
+          <Label>Domain</Label>
+          <Input
+            value={emailDomain}
+            onChange={(e) => setEmailDomain(e.target.value)}
+            placeholder="company.com"
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            Users signing in with an email from this domain will be redirected to SSO automatically.
+            Ownership of this domain must be verified below before SSO provisions accounts.
+          </p>
+        </div>
+      </div>
+
+      {/* ── Save button ── */}
+      <div className="flex gap-2">
+        <Button onClick={() => saveMutation.mutate()} disabled={!isSaveEnabled || saveMutation.isPending}>
+          <Save className="w-4 h-4 mr-2" />
+          {saveMutation.isPending ? 'Saving...' : 'Save Configuration'}
+        </Button>
+      </div>
+
+      {/* ── Service Provider details (SAML only) ── */}
+      {ssoConfig && provider === 'saml' && (
         <div className="space-y-3">
           <h4 className="text-sm font-semibold">Service Provider Details</h4>
           <div className="p-3 border rounded-lg bg-muted/50 text-sm space-y-2">

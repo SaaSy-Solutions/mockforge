@@ -21,8 +21,9 @@ interface AuthGuardProps {
 const SELF_AUTHED_PREFIXES = isCloudMode() ? [] : ['/registry-login', '/registry-admin'];
 
 // Public pages that render without any auth check — legal docs, pricing, support,
-// verification landings. These render the same shell (via AuthGuard passing through)
-// but don't require an authenticated user.
+// verification landings, and the SSO callback (user is not yet authenticated when
+// the IdP redirects back here). These render the same shell (via AuthGuard passing
+// through) but don't require an authenticated user.
 const PUBLIC_PREFIXES = [
   '/terms',
   '/privacy',
@@ -32,6 +33,7 @@ const PUBLIC_PREFIXES = [
   '/support',
   '/verify-email',
   '/waitlist',
+  '/auth/sso/callback',
 ];
 
 export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
