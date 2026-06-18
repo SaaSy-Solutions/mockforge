@@ -64,6 +64,130 @@ profiles:
 
 Run with `mockforge serve --profile flaky`.
 
+## Recipes: varied 5xx and slow responses
+
+These are the patterns most teams reach for first when exercising client
+timeout / retry behaviour. Each recipe is copy-pasteable; tune the
+probabilities to your spec.
+
+### Mix of 4xx and 5xx statuses across the whole spec
+
+Global error injection via `mockforge serve --chaos`. `--chaos-http-errors`
+takes a comma-separated list; the injector picks one at the configured
+probability:
+
+```bash
+mockforge serve --spec api.yaml --http-port 3000 \
+  --chaos --chaos-http-errors 500,502,503,504,429,408 \
+  --chaos-http-error-probability 0.10
+```
+
+`0.10` means roughly 10% of matching requests get a chaos-status response.
+The remaining 90% flow through your spec unchanged. Mix 4xx and 5xx as
+needed: clients should retry-with-backoff on 503/429/504/502 but treat
+500/400/422 as terminal.
+
+### Slow backend (every request hangs N ms)
+
+Useful for exercising the client's request-level timeout. Sleeps before
+the upstream handler runs, so the client experiences a true server-side
+hang followed by a normal 2xx (or the configured status).
+
+```bash
+mockforge serve --spec api.yaml --http-port 3000 \
+  --chaos --chaos-latency-ms 2000 --chaos-latency-probability 1.0
+```
+
+Pair with `--chaos-latency-range 500-5000` to randomise:
+
+```bash
+mockforge serve --spec api.yaml --http-port 3000 \
+  --chaos --chaos-latency-range 500-5000 --chaos-latency-probability 0.30
+```
+
+### Real timeout (server hangs, returns 504)
+
+Different from a slow response: this fires when you want the *server* to
+report timeout, not just go slow. Configure via the YAML chaos profile:
+
+```yaml
+fault_injection:
+  enabled: true
+  timeout_errors: true
+  timeout_ms: 30000             # 30 s sleep then 504 Gateway Timeout
+  timeout_probability: 0.05     # 5% of matching requests
+```
+
+Run with `mockforge serve --spec api.yaml --config chaos.yaml`.
+
+### Per-endpoint chaos (slow this route, error that one)
+
+Global flags hit every route equally. To exercise *one* endpoint's
+timeout while keeping the rest healthy, use per-route chaos:
+
+```yaml
+# routes-with-chaos.yaml
+routes:
+  - path: /api/slow-report
+    method: GET
+    response:
+      status: 200
+      body: { ok: true }
+    latency:
+      enabled: true
+      probability: 1.0
+      fixed_delay_ms: 8000        # always hang 8s on this route
+  - path: /api/flaky-write
+    method: POST
+    response:
+      status: 201
+      body: { id: 1 }
+    fault_injection:
+      enabled: true
+      probability: 0.25           # 25% of POSTs to this route fail
+      fault_types:
+        - type: http_error
+          status_code: 503
+          message: "Backend warming up"
+        - type: http_error
+          status_code: 504
+        - type: http_error
+          status_code: 429
+```
+
+Mockforge picks one `fault_types` entry uniformly when the probability
+fires, so a list of three statuses gives you ~equal weight across the
+three. Add more entries to bias toward a status (entries are picked
+uniformly, so two `503` entries plus one `504` entry gives 2:1 odds).
+
+`latency.distribution` also supports `normal { mean_ms, std_dev_ms }` and
+`exponential { lambda }` for non-uniform spreads — handy when you want
+"P95 = 8s but a long tail."
+
+### Exercise client retry / backoff behaviour
+
+Combine the two above. The pattern: ~30% of requests get a transient
+status (503 / 504 / 429), the rest succeed. A well-written client with
+exponential backoff should eventually succeed on retries; a buggy client
+either gives up immediately or hammers the server flat.
+
+```yaml
+fault_injection:
+  enabled: true
+  http_errors: true
+  http_error_codes: [503, 504, 429]
+  http_error_probability: 0.30
+  latency_ms: 250                 # mild latency baseline
+  latency_probability: 1.0
+```
+
+### Verify what fired
+
+The chaos config exposes counters at `GET /api/chaos/status` (when admin
+is enabled). The TUI Chaos screen also surfaces real-time injection
+counts. Use these to confirm your bench / test client actually saw the
+intended faults rather than guessing from the response log.
+
 ## Per-request fault matchers
 
 By default, fault probabilities apply to every request. Add a `request_matcher`

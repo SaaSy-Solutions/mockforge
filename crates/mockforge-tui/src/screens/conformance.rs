@@ -152,6 +152,84 @@ enum ViewMode {
 /// rolls up. Aliased so clippy doesn't flag the inner HashMap value.
 type DedupKey = (String, String, String, String);
 
+/// Round 16 + Round 37 (#876 follow-up) — collapse a slice of
+/// `ConformanceViolation`s into the on-disk export shape.
+///
+/// Round 16 introduced the dedup by `(method, path, category, reason)`,
+/// the occurrence count, and the first/last-seen window. Round 37
+/// extends each group with the client-side stamps so a user grepping
+/// the bench JSONL's `client_sent_at` finds the matching server-side
+/// entry, even after the dedup. Sort is count DESC then path ASC,
+/// identical to the prior behaviour so existing tooling keeps working.
+///
+/// Pulled out of `export_filtered` to keep that function focused on
+/// "stitch index -> file path" while the math sits behind a pure
+/// function the unit tests can drive directly.
+fn dedup_violations(violations: &[&ConformanceViolation]) -> Vec<DedupedViolation> {
+    let mut groups: HashMap<DedupKey, (DedupedViolation, u32, chrono::DateTime<chrono::Utc>)> =
+        HashMap::new();
+    for v in violations {
+        let key = (v.method.clone(), v.path.clone(), v.category.clone(), v.reason.clone());
+        let hits = v.occurrences.max(1);
+        match groups.get_mut(&key) {
+            Some(slot) => {
+                slot.1 = slot.1.saturating_add(hits);
+                slot.0.count = slot.0.count.saturating_add(hits);
+                if v.timestamp < slot.0.first_seen {
+                    slot.0.first_seen = v.timestamp;
+                }
+                if v.timestamp > slot.2 {
+                    slot.2 = v.timestamp;
+                    slot.0.last_seen = v.timestamp;
+                }
+                // Round 37 — fold client stamps into the group. We
+                // always keep the latest observed
+                // `client_mockforge_version` so an upgrade mid-run
+                // flips to the newer version. The min/max bracket the
+                // client-side send window across the dedup group.
+                if v.client_mockforge_version.is_some() {
+                    slot.0.client_mockforge_version = v.client_mockforge_version.clone();
+                }
+                if let Some(cs) = v.client_sent_at {
+                    slot.0.min_client_sent_at = Some(match slot.0.min_client_sent_at {
+                        Some(existing) if existing <= cs => existing,
+                        _ => cs,
+                    });
+                    slot.0.max_client_sent_at = Some(match slot.0.max_client_sent_at {
+                        Some(existing) if existing >= cs => existing,
+                        _ => cs,
+                    });
+                }
+            }
+            None => {
+                groups.insert(
+                    key,
+                    (
+                        DedupedViolation {
+                            method: v.method.clone(),
+                            path: v.path.clone(),
+                            category: v.category.clone(),
+                            reason: v.reason.clone(),
+                            status: v.status,
+                            count: hits,
+                            first_seen: v.timestamp,
+                            last_seen: v.timestamp,
+                            client_mockforge_version: v.client_mockforge_version.clone(),
+                            min_client_sent_at: v.client_sent_at,
+                            max_client_sent_at: v.client_sent_at,
+                        },
+                        hits,
+                        v.timestamp,
+                    ),
+                );
+            }
+        }
+    }
+    let mut deduped: Vec<DedupedViolation> = groups.into_iter().map(|(_, (d, _, _))| d).collect();
+    deduped.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.path.cmp(&b.path)));
+    deduped
+}
+
 /// Round 16 — JSON shape written by the export action (`e`). Same
 /// fields as `ConformanceViolation` minus `client_ip` (which is always
 /// `"unknown"` for now and just adds noise to the file), plus a `count`
@@ -167,6 +245,22 @@ struct DedupedViolation {
     count: u32,
     first_seen: chrono::DateTime<chrono::Utc>,
     last_seen: chrono::DateTime<chrono::Utc>,
+    /// Round 37 (#876 follow-up / Srikanth on 0.3.181) — client-side
+    /// stamps observed across the dedup group. `client_mockforge_version`
+    /// is the most recently observed value (in practice all dups carry
+    /// the same value because they came from the same bench run). The
+    /// `min_client_sent_at` / `max_client_sent_at` pair brackets the
+    /// time window the *client* sent these probes, which is what a
+    /// user wants to grep against the bench JSONL — not the server's
+    /// `first_seen` / `last_seen` (when the *server recorded* the
+    /// violation). Skipped when none of the group's hits carried the
+    /// headers (older bench, real proxy traffic).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    client_mockforge_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    min_client_sent_at: Option<chrono::DateTime<chrono::Utc>>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    max_client_sent_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 pub struct ConformanceScreen {
@@ -405,68 +499,9 @@ impl ConformanceScreen {
         let now = chrono::Utc::now().format("%Y%m%dT%H%M%SZ");
         let path = PathBuf::from(format!("conformance-violations-{}.json", now));
         let indices = self.filtered_indices();
-
-        // Group by (method, path, category, reason). Insertion order
-        // doesn't matter — we sort by count at the end.
-        //
-        // Round 30 — under `MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE=true`
-        // the server-side buffer ALREADY deduplicates and carries an
-        // `occurrences` field per entry. Use that as the increment
-        // instead of +1, so the TUI's headline count reflects the true
-        // server-side total instead of just "1 per unique signature".
-        // FIFO mode (the default) sends `occurrences: 1` per entry,
-        // so the math reduces to the prior behaviour for that path.
-        let mut groups: HashMap<DedupKey, (DedupedViolation, u32, chrono::DateTime<chrono::Utc>)> =
-            HashMap::new();
-        for &i in &indices {
-            let Some(v) = self.violations.get(i) else {
-                continue;
-            };
-            let key = (v.method.clone(), v.path.clone(), v.category.clone(), v.reason.clone());
-            let hits = v.occurrences.max(1);
-            match groups.get_mut(&key) {
-                Some(slot) => {
-                    slot.1 = slot.1.saturating_add(hits);
-                    slot.0.count = slot.0.count.saturating_add(hits);
-                    if v.timestamp < slot.0.first_seen {
-                        slot.0.first_seen = v.timestamp;
-                    }
-                    if v.timestamp > slot.2 {
-                        slot.2 = v.timestamp;
-                        slot.0.last_seen = v.timestamp;
-                    }
-                }
-                None => {
-                    groups.insert(
-                        key,
-                        (
-                            DedupedViolation {
-                                method: v.method.clone(),
-                                path: v.path.clone(),
-                                category: v.category.clone(),
-                                reason: v.reason.clone(),
-                                status: v.status,
-                                count: hits,
-                                first_seen: v.timestamp,
-                                last_seen: v.timestamp,
-                            },
-                            hits,
-                            v.timestamp,
-                        ),
-                    );
-                }
-            }
-        }
-
-        let mut deduped: Vec<DedupedViolation> = groups
-            .into_iter()
-            .map(|(_, (mut d, n, _))| {
-                d.count = n;
-                d
-            })
-            .collect();
-        deduped.sort_by(|a, b| b.count.cmp(&a.count).then_with(|| a.path.cmp(&b.path)));
-
+        let selected: Vec<&ConformanceViolation> =
+            indices.iter().filter_map(|&i| self.violations.get(i)).collect();
+        let deduped = dedup_violations(&selected);
         let total_occurrences: u32 = deduped.iter().map(|d| d.count).sum();
         let unique_groups = deduped.len();
 
@@ -1226,11 +1261,91 @@ mod tests {
             reason: reason.into(),
             category: "request-body".into(),
             occurrences: 1,
+            client_mockforge_version: None,
+            client_sent_at: None,
         }
+    }
+
+    /// Round 37 — variant of `violation` that stamps the client-side
+    /// headers, so tests for the export's `client_mockforge_version`
+    /// and `min_client_sent_at` / `max_client_sent_at` aggregation can
+    /// construct realistic inputs without disturbing the existing
+    /// `violation` callers.
+    fn stamped_violation(
+        secs: i64,
+        path: &str,
+        reason: &str,
+        version: &str,
+        client_sent_secs: i64,
+    ) -> ConformanceViolation {
+        let mut v = violation(secs, 0, path, reason);
+        v.client_mockforge_version = Some(version.into());
+        v.client_sent_at = Some(Utc.timestamp_opt(client_sent_secs, 0).unwrap());
+        v
     }
 
     fn key(code: KeyCode) -> KeyEvent {
         KeyEvent::new(code, crossterm::event::KeyModifiers::NONE)
+    }
+
+    /// Round 37 (#876 follow-up / Srikanth on 0.3.181) — when the
+    /// server-side buffer recorded the bench's client stamps on each
+    /// violation, the TUI's export must surface them on the dedup
+    /// group so the user can correlate the export back to the bench
+    /// JSONL line that produced it. Two stamped hits with different
+    /// `client_sent_at` collapse into one group with
+    /// `min_client_sent_at` = the earlier of the two and
+    /// `max_client_sent_at` = the later; the `client_mockforge_version`
+    /// is carried verbatim (both hits share the same version in
+    /// practice).
+    #[test]
+    fn dedup_violations_aggregates_client_stamps_across_group() {
+        let a = stamped_violation(1_000, "/users", "missing email", "0.3.181", 500);
+        let b = stamped_violation(1_005, "/users", "missing email", "0.3.181", 800);
+        let result = dedup_violations(&[&a, &b]);
+        assert_eq!(result.len(), 1);
+        let g = &result[0];
+        assert_eq!(g.count, 2);
+        assert_eq!(g.client_mockforge_version.as_deref(), Some("0.3.181"));
+        assert_eq!(g.min_client_sent_at, Some(Utc.timestamp_opt(500, 0).unwrap()));
+        assert_eq!(g.max_client_sent_at, Some(Utc.timestamp_opt(800, 0).unwrap()));
+    }
+
+    /// Round 37 — older mockforge instances (pre-#876) sent the
+    /// violation payload without the new fields. The dedup must keep
+    /// `client_mockforge_version` and `min/max_client_sent_at` as
+    /// `None` so the export's `skip_serializing_if = "Option::is_none"`
+    /// suppresses them entirely, rather than writing JSON `null`s
+    /// that would clutter the output for users on the old server.
+    #[test]
+    fn dedup_violations_leaves_stamps_none_when_violations_unstamped() {
+        let a = violation(1_000, 0, "/users", "missing email");
+        let b = violation(1_005, 0, "/users", "missing email");
+        let result = dedup_violations(&[&a, &b]);
+        assert_eq!(result.len(), 1);
+        let g = &result[0];
+        assert!(g.client_mockforge_version.is_none());
+        assert!(g.min_client_sent_at.is_none());
+        assert!(g.max_client_sent_at.is_none());
+        // Serializing it should NOT emit the stamp keys at all.
+        let json = serde_json::to_string(g).unwrap();
+        assert!(!json.contains("client_mockforge_version"));
+        assert!(!json.contains("client_sent_at"));
+    }
+
+    /// Round 37 — a mid-run upgrade where the first hit came from an
+    /// older bench (0.3.180) and the second from a newer bench
+    /// (0.3.181) keeps the LATEST observed version on the group, not
+    /// the first. Lets a reader spot a version skew across hits.
+    #[test]
+    fn dedup_violations_picks_latest_version_on_mixed_group() {
+        let mut a = stamped_violation(1_000, "/users", "missing email", "0.3.180", 500);
+        a.client_mockforge_version = Some("0.3.180".into());
+        let mut b = stamped_violation(1_005, "/users", "missing email", "0.3.181", 800);
+        b.client_mockforge_version = Some("0.3.181".into());
+        let result = dedup_violations(&[&a, &b]);
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].client_mockforge_version.as_deref(), Some("0.3.181"));
     }
 
     /// Round 26 — Srikanth's reply on 0.3.169: opening the detail

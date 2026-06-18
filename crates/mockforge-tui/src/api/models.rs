@@ -60,6 +60,19 @@ pub struct ConformanceViolation {
     /// when older mockforge instances send the field-less payload.
     #[serde(default = "default_occurrences")]
     pub occurrences: u32,
+    /// Round 36 (#876) — mockforge version of the *client* that sent
+    /// the request, read off the `X-Mockforge-Client-Version` header
+    /// server-side. `None` when the inbound request didn't carry the
+    /// header (older clients, real proxy traffic).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_mockforge_version: Option<String>,
+    /// Round 36 (#876) — wall-clock moment the *client* stamped on the
+    /// request, read off the `X-Mockforge-Client-Sent-At` header
+    /// server-side. Lets a user `grep` a bench JSONL row's
+    /// `client_sent_at` and find the matching server-side violation
+    /// even when the request was retried / load-balanced.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub client_sent_at: Option<DateTime<Utc>>,
 }
 
 fn default_unknown() -> String {

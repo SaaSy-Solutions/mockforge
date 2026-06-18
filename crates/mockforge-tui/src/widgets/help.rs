@@ -14,6 +14,7 @@ const HELP_TEXT: &[(&str, &str)] = &[
     ("  q / Ctrl+C", "Quit"),
     ("  Tab / Shift+Tab", "Next / Previous tab"),
     ("  1-0", "Jump to tab 1-10"),
+    ("  Ctrl+] / Ctrl+[", "Next / Previous admin server (multi-server mode)"),
     ("  r", "Refresh current screen"),
     ("  /", "Open filter input"),
     ("  ?", "Toggle this help"),

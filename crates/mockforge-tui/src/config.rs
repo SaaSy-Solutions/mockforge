@@ -24,6 +24,14 @@ pub struct TuiConfig {
 
     /// Optional log file path.
     pub log_file: Option<String>,
+
+    /// Round 37 (Srikanth on 0.3.181) — extra admin URLs the user can
+    /// swap between with `Ctrl-]` / `Ctrl-[`. `admin_url` is always the
+    /// first server (index 0); `extra_servers` add to the rotation in
+    /// order. Empty by default — the TUI behaves exactly as before when
+    /// this is empty.
+    #[serde(default)]
+    pub extra_servers: Vec<String>,
 }
 
 impl Default for TuiConfig {
@@ -34,7 +42,25 @@ impl Default for TuiConfig {
             theme: "dark".into(),
             last_tab: None,
             log_file: None,
+            extra_servers: Vec::new(),
         }
+    }
+}
+
+impl TuiConfig {
+    /// Round 37 — flatten `admin_url` + `extra_servers` into the
+    /// ordered list of admin URLs the TUI rotates through. The
+    /// primary `admin_url` is always index 0 so existing single-server
+    /// behaviour is unchanged when `extra_servers` is empty.
+    pub fn all_admin_urls(&self) -> Vec<String> {
+        let mut urls = Vec::with_capacity(1 + self.extra_servers.len());
+        urls.push(self.admin_url.clone());
+        for u in &self.extra_servers {
+            if !u.is_empty() && !urls.iter().any(|existing| existing == u) {
+                urls.push(u.clone());
+            }
+        }
+        urls
     }
 }
 
@@ -125,6 +151,7 @@ log_file = "/tmp/tui.log"
             theme: "light".into(),
             last_tab: Some(5),
             log_file: Some("/var/log/tui.log".into()),
+            extra_servers: vec!["http://test2:8080".into()],
         };
         let serialized = toml::to_string_pretty(&cfg).unwrap();
         let deserialized: TuiConfig = toml::from_str(&serialized).unwrap();

@@ -25,8 +25,26 @@ use crate::widgets::{help, status_bar};
 /// Top-level application state.
 pub struct App {
     config: TuiConfig,
+    /// Round 37 — list of admin URLs the user can rotate through with
+    /// `Ctrl-]` / `Ctrl-[`. Always has at least one entry; `admin_url`
+    /// is its 0th element. When a user only passes one server (the
+    /// default), `servers.len() == 1` and the rotation key is a no-op
+    /// so the surface stays unchanged.
+    servers: Vec<String>,
+    /// Index into `servers` of the currently-active admin URL. The
+    /// header tab bar renders an indicator (`[2/3]`) when
+    /// `servers.len() > 1`; on a single server the indicator is hidden.
+    active_server: usize,
+    /// The active server's admin URL (mirrors `servers[active_server]`
+    /// to keep existing render code untouched).
     admin_url: String,
     client: MockForgeClient,
+    /// Optional auth token, threaded into each per-server client.
+    /// `MockForgeClient::new` panics on a malformed base URL, but our
+    /// inputs come from clap (already validated as `String`) so this is
+    /// safe in practice. Stored so a server swap rebuilds the client
+    /// with the same token.
+    token: Option<String>,
     screens: Vec<Box<dyn Screen>>,
     active_tab: usize,
     show_help: bool,
@@ -45,10 +63,16 @@ impl App {
     pub fn new(config: TuiConfig, token: Option<String>) -> Self {
         Theme::init(config.is_light_theme());
 
-        let client =
-            MockForgeClient::new(config.admin_url.clone(), token).expect("failed to build client");
+        // Round 37 — resolve the server rotation list from config.
+        // `all_admin_urls()` always returns at least one URL (the
+        // primary `admin_url`), so subsequent indexing is safe.
+        let servers = config.all_admin_urls();
+        let active_server = 0;
+        let admin_url = servers[active_server].clone();
 
-        let admin_url = config.admin_url.clone();
+        let client =
+            MockForgeClient::new(admin_url.clone(), token.clone()).expect("failed to build client");
+
         let initial_tab = config.last_tab.unwrap_or(0);
 
         let screens: Vec<Box<dyn Screen>> = vec![
@@ -102,8 +126,11 @@ impl App {
 
         Self {
             config,
+            servers,
+            active_server,
             admin_url,
             client,
+            token,
             screens,
             active_tab,
             show_help: false,
@@ -116,6 +143,104 @@ impl App {
         }
     }
 
+    /// Round 37 — cycle to the next configured admin server. No-op
+    /// when only one server is in the rotation. The screens are NOT
+    /// reset on switch: each screen's next `tick()` will re-fetch
+    /// from the new admin URL, so the user sees the prior server's
+    /// cached data for up to one refresh-interval, then fresh data.
+    /// `step` is `+1` for next, `-1` for previous; any non-zero step
+    /// works (rotation is modular).
+    fn rotate_server(&mut self, step: isize) {
+        let n = self.servers.len();
+        if n <= 1 {
+            return;
+        }
+        let next = (self.active_server as isize + step).rem_euclid(n as isize) as usize;
+        self.active_server = next;
+        self.admin_url = self.servers[next].clone();
+        // Rebuild the client; MockForgeClient is cheap to construct
+        // (just stores the URL + token + reqwest::Client) and we want
+        // the rest of the app to keep treating `self.client` as the
+        // single active client without holding a Vec.
+        if let Ok(new_client) = MockForgeClient::new(self.admin_url.clone(), self.token.clone()) {
+            self.client = new_client;
+        }
+        // Force a re-ping on the new server so the header indicator
+        // updates without waiting for the next health-check tick.
+        self.connected = false;
+        // Backdate the last health check so the next tick re-pings the
+        // new server immediately instead of waiting for the next
+        // scheduled interval.
+        let one_hour = Duration::from_secs(3600);
+        self.last_health_check = std::time::Instant::now()
+            .checked_sub(one_hour)
+            .unwrap_or_else(std::time::Instant::now);
+    }
+}
+
+#[cfg(test)]
+mod server_rotation_tests {
+    use super::*;
+
+    fn cfg_with(extras: &[&str]) -> TuiConfig {
+        TuiConfig {
+            admin_url: "http://primary:9080".into(),
+            extra_servers: extras.iter().map(|s| s.to_string()).collect(),
+            ..TuiConfig::default()
+        }
+    }
+
+    #[test]
+    fn all_admin_urls_keeps_primary_first_and_dedupes() {
+        let cfg = cfg_with(&["http://b:9080", "http://primary:9080", "http://c:9080"]);
+        let urls = cfg.all_admin_urls();
+        assert_eq!(urls, vec!["http://primary:9080", "http://b:9080", "http://c:9080"]);
+    }
+
+    #[test]
+    fn all_admin_urls_drops_empty_entries() {
+        let cfg = cfg_with(&["", "http://b:9080", ""]);
+        let urls = cfg.all_admin_urls();
+        assert_eq!(urls, vec!["http://primary:9080", "http://b:9080"]);
+    }
+
+    #[test]
+    fn rotate_server_cycles_in_both_directions() {
+        let cfg = cfg_with(&["http://b:9080", "http://c:9080"]);
+        let mut app = App::new(cfg, None);
+        assert_eq!(app.active_server, 0);
+        assert_eq!(app.admin_url, "http://primary:9080");
+
+        app.rotate_server(1);
+        assert_eq!(app.active_server, 1);
+        assert_eq!(app.admin_url, "http://b:9080");
+
+        app.rotate_server(1);
+        assert_eq!(app.active_server, 2);
+        assert_eq!(app.admin_url, "http://c:9080");
+
+        // Wrap forward.
+        app.rotate_server(1);
+        assert_eq!(app.active_server, 0);
+
+        // Wrap backward.
+        app.rotate_server(-1);
+        assert_eq!(app.active_server, 2);
+        assert_eq!(app.admin_url, "http://c:9080");
+    }
+
+    #[test]
+    fn rotate_server_is_noop_on_single_server() {
+        let cfg = cfg_with(&[]);
+        let mut app = App::new(cfg, None);
+        let before = app.admin_url.clone();
+        app.rotate_server(1);
+        assert_eq!(app.admin_url, before);
+        assert_eq!(app.active_server, 0);
+    }
+}
+
+impl App {
     /// Run the terminal UI event loop.
     pub async fn run(mut self) -> Result<()> {
         let mut terminal = tui::init()?;
@@ -242,6 +367,8 @@ impl App {
                 Action::Refresh => {
                     self.screens[self.active_tab].force_refresh();
                 }
+                Action::NextServer => self.rotate_server(1),
+                Action::PrevServer => self.rotate_server(-1),
                 _ => {}
             }
         }
@@ -421,12 +548,21 @@ impl App {
         } else {
             Theme::error()
         };
+        // Round 37 — when more than one server is in the rotation,
+        // surface the active index (`[2/3]`) before the URL so the
+        // user always sees which server's data they are looking at.
+        // Single-server runs keep the original layout.
+        let server_indicator = if self.servers.len() > 1 {
+            format!("  [{}/{}] {}", self.active_server + 1, self.servers.len(), self.admin_url)
+        } else {
+            format!("  {}", self.admin_url)
+        };
         let title = Line::from(vec![
             Span::styled(" MockForge TUI ", Theme::title()),
             Span::styled(format!("v{}", env!("CARGO_PKG_VERSION")), Theme::dim()),
             Span::raw("  "),
             Span::styled(conn_status, conn_style),
-            Span::styled(format!("  {}", self.admin_url), Theme::dim()),
+            Span::styled(server_indicator, Theme::dim()),
         ]);
         frame.render_widget(Paragraph::new(title).style(Theme::surface()), chunks[0]);
 
