@@ -15,6 +15,7 @@ pub mod cloud_services;
 pub mod cloud_workspaces;
 pub mod consistency;
 pub mod contract_verification;
+pub mod entitlements;
 pub mod faq;
 pub mod federations;
 pub mod flows;

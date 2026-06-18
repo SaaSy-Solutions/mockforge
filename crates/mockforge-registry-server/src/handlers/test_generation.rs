@@ -32,13 +32,16 @@ use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::{
+    ai::{provider::pick_provider, quota::check_ai_quota},
     error::{ApiError, ApiResult},
+    handlers::{ai_studio::load_byok_config, entitlements::effective_plan},
     middleware::{resolve_org_context, AuthUser},
     AppState,
 };
 use mockforge_registry_core::models::{
+    organization::Plan,
     test_generation_job::{CreateTestGenerationJob, TestGenerationJob},
-    CloudWorkspace,
+    CloudWorkspace, Organization,
 };
 
 /// Hard cap on the list page size. The TestGeneratorPage is a poll-based
@@ -70,6 +73,16 @@ pub struct CreateJobRequest {
 /// `MAX_PROMPT_BYTES` — anything larger is almost certainly abuse and
 /// would never round-trip through Phase 2's worker anyway.
 const MAX_FILTER_BYTES: usize = 16 * 1024;
+
+/// Cap on in-flight (queued + running) jobs per org (#865). Each dequeued
+/// job burns platform AI tokens up to the moment the quota counter crosses
+/// the limit, and there's no per-org queue-depth bound in the worker. Without
+/// this cap a single org could enqueue thousands of jobs in a burst; even
+/// with the per-job quota check the worker would still drain a large backlog
+/// before the counter catches up. 20 is generous for the interactive UI
+/// (the TestGeneratorPage queues one job at a time) while bounding cost
+/// exposure and DB-scan depth.
+const MAX_PENDING_JOBS_PER_ORG: i64 = 20;
 
 // --- POST /jobs -----------------------------------------------------------
 
@@ -104,6 +117,18 @@ pub async fn create_job(
     } else {
         body.captures_filter
     };
+
+    // --- Pre-enqueue gates (#865) -----------------------------------------
+    //
+    // The worker (`workers::test_generation_worker::process_job`) runs a
+    // per-job `check_ai_quota` before each LLM call. But that check only
+    // fires *after* a job is dequeued — `create_job` historically enqueued
+    // with no gate at all, so a user could queue unlimited jobs and each one
+    // would burn platform tokens up to the moment the counter crossed the
+    // limit. We replicate the worker's pre-call check here so a doomed job
+    // never gets persisted, and cap pending depth so a burst can't flood the
+    // queue. The worker keeps its own check as defense in depth.
+    enforce_pre_enqueue_gates(&state, workspace.org_id).await?;
 
     let row = TestGenerationJob::create(
         state.db.pool(),
@@ -323,6 +348,47 @@ async fn advance_job_stream(
 
 // --- helpers --------------------------------------------------------------
 
+/// Enforce the per-org gates that must pass before an AI test-generation job
+/// is persisted (#865):
+///
+///   1. **Pending-job cap** — reject if the org already has
+///      [`MAX_PENDING_JOBS_PER_ORG`] queued/running jobs, so a burst can't
+///      flood the queue (429-style: `RateLimitExceeded`).
+///   2. **AI quota / availability** — replicate the worker's pre-call check
+///      (`pick_provider` → `check_ai_quota`) so a job that the worker would
+///      immediately fail (Disabled provider, i.e. Free without BYOK; or
+///      Platform quota exhausted) is never enqueued in the first place
+///      (403-style: `ResourceLimitExceeded`, via `QuotaCheck::into_error`).
+///
+/// Uses the *effective* plan (#870) so a canceled/past-due Team or Pro org is
+/// gated as Free here too. BYOK orgs pass the quota check (they pay their own
+/// provider bill); the pending cap still applies to bound queue depth.
+async fn enforce_pre_enqueue_gates(state: &AppState, org_id: Uuid) -> ApiResult<()> {
+    // 1. Pending-job cap.
+    let pending = TestGenerationJob::count_pending_for_org(state.db.pool(), org_id).await?;
+    if pending >= MAX_PENDING_JOBS_PER_ORG {
+        return Err(ApiError::RateLimitExceeded(format!(
+            "Too many pending test-generation jobs ({pending}/{MAX_PENDING_JOBS_PER_ORG}). \
+             Wait for in-flight jobs to finish or cancel some before queuing more."
+        )));
+    }
+
+    // 2. AI quota / provider availability — mirror the worker's pre-call gate.
+    let org = Organization::find_by_id(state.db.pool(), org_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Organization not found".into()))?;
+    let effective = effective_plan(state, &org).await?;
+    let is_paid_plan = matches!(effective, Plan::Pro | Plan::Team);
+    let byok = load_byok_config(state, org_id).await?;
+    let provider = pick_provider(is_paid_plan, byok);
+    let quota = check_ai_quota(state, &org, provider.selection()).await?;
+    if !quota.allowed {
+        // Disabled (Free w/o BYOK) or Platform quota exhausted → don't enqueue.
+        return Err(quota.into_error());
+    }
+    Ok(())
+}
+
 /// Resolve `workspace_id` and check the caller's org owns it. Returns
 /// the workspace so callers can read `workspace.org_id` without a second
 /// fetch. Mirrors the helper in `handlers::captures` but returns the
@@ -385,5 +451,13 @@ mod tests {
         // once produces noisy UI and unbounded scans without a useful
         // value.
         assert_eq!(LIST_LIMIT, 100);
+    }
+
+    #[test]
+    fn pending_jobs_cap_is_20() {
+        // #865: guards against an accidental "let's set it to 10000" change
+        // that would reopen the queue-flooding cost exposure. Keep it modest
+        // — the UI queues one job at a time.
+        assert_eq!(MAX_PENDING_JOBS_PER_ORG, 20);
     }
 }

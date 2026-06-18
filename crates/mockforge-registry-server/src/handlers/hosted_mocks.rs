@@ -154,7 +154,15 @@ pub async fn create_deployment(
     if !enabled_protocols.contains(&crate::models::Protocol::Http) {
         enabled_protocols.insert(0, crate::models::Protocol::Http);
     }
-    let plan = org_ctx.org.plan.clone();
+    // Gate protocols on the *effective* plan (#870): a canceled/past-due/
+    // unpaid Team org is treated as Free here, so a dropped Stripe webhook
+    // can't keep Team-only brokers (and Pro-only gRPC) deployable. This
+    // aligns the protocol gate with the past-due deploy block above and with
+    // the SSO/AI/RBAC gates. `protocols_allowed_on_plan` takes the plan as a
+    // string, so render the effective plan back to its wire form.
+    let effective_plan =
+        crate::handlers::entitlements::effective_plan(&state, &org_ctx.org).await?;
+    let plan = effective_plan.to_string();
     if !crate::models::protocols_allowed_on_plan(&enabled_protocols, &plan) {
         let blocked: Vec<String> = enabled_protocols
             .iter()

@@ -353,7 +353,12 @@ pub async fn initiate_oidc_login(
         .find_organization_by_slug(&org_slug)
         .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".into()))?;
-    if org.plan() != Plan::Team {
+    // Gate on the *effective* plan (#870): a Team org whose subscription is
+    // canceled/past-due/unpaid is treated as Free, so a dropped Stripe
+    // webhook can't keep OIDC login working indefinitely.
+    if org.plan() != Plan::Team
+        || crate::handlers::entitlements::effective_plan(&state, &org).await? != Plan::Team
+    {
         return Err(ApiError::InvalidRequest("SSO is only available for Team plans".into()));
     }
     let config = state

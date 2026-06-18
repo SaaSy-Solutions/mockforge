@@ -173,8 +173,13 @@ pub async fn create_sso_config(
         .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    // Check if organization is on Team plan
-    if org.plan() != Plan::Team {
+    // Check if organization is on Team plan. Gate on the *effective* plan
+    // (#870): a Team org whose subscription is canceled/past-due/unpaid is
+    // treated as Free here, so a dropped Stripe webhook can't leave SSO
+    // enabled indefinitely. Trials and active subs keep Team.
+    if org.plan() != Plan::Team
+        || crate::handlers::entitlements::effective_plan(&state, &org).await? != Plan::Team
+    {
         return Err(ApiError::InvalidRequest(
             "SSO is only available for Team plans. Please upgrade to Team plan to enable SSO."
                 .to_string(),
@@ -431,8 +436,10 @@ pub async fn enable_sso(
         .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    // Check if organization is on Team plan
-    if org.plan() != Plan::Team {
+    // Check if organization is on Team plan (effective plan; see #870).
+    if org.plan() != Plan::Team
+        || crate::handlers::entitlements::effective_plan(&state, &org).await? != Plan::Team
+    {
         return Err(ApiError::InvalidRequest("SSO is only available for Team plans".to_string()));
     }
 
@@ -652,8 +659,11 @@ pub async fn initiate_saml_login(
         .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    // Check if organization is on Team plan
-    if org.plan() != Plan::Team {
+    // Check if organization is on Team plan (effective plan; see #870). A
+    // canceled/past-due Team org can no longer start a SAML login.
+    if org.plan() != Plan::Team
+        || crate::handlers::entitlements::effective_plan(&state, &org).await? != Plan::Team
+    {
         return Err(ApiError::InvalidRequest("SSO is only available for Team plans".to_string()));
     }
 
