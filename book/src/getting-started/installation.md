@@ -118,6 +118,42 @@ MockForge supports:
 - **Windows** (x86_64)
 - **Docker** (any platform with Docker support)
 
+### Windows install path
+
+The published release artefacts and the Docker image are Linux-only
+today. Windows users install from source via `cargo install`:
+
+1. Install [Rustup](https://rustup.rs/) (the standard Rust installer for
+   Windows). Pick the default `x86_64-pc-windows-msvc` toolchain when
+   prompted; if you do not already have the Visual Studio Build Tools,
+   Rustup will offer to download them.
+2. Open **PowerShell** (or `cmd`) and install:
+
+   ```powershell
+   cargo install mockforge-cli --locked
+   ```
+
+3. The binary lands at `%USERPROFILE%\.cargo\bin\mockforge.exe`, which
+   `cargo` already added to `%PATH%`. Verify:
+
+   ```powershell
+   mockforge --version
+   ```
+
+`--locked` pins the `Cargo.lock` shipped on crates.io, which avoids
+build breaks from later dependency drift.
+
+If you would rather not compile locally, the Docker image runs on
+Windows under Docker Desktop / WSL2:
+
+```powershell
+docker run --rm -p 3000:3000 -v ${PWD}:/work ghcr.io/saasy-solutions/mockforge:latest serve --spec /work/api.yaml --http-port 3000
+```
+
+We track first-class signed Windows binaries (no compile step,
+auto-update) at [#884](https://github.com/SaaSy-Solutions/mockforge/issues/884);
+contributions welcome.
+
 ## Troubleshooting Installation
 
 ### Cargo installation fails

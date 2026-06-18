@@ -25,14 +25,23 @@ pub enum Action {
     Toggle,
     Delete,
     Sort,
+    /// Round 37 — cycle to the next admin server in the rotation
+    /// (`Ctrl-]`). No-op when only one server is configured.
+    NextServer,
+    /// Round 37 — cycle to the previous admin server (`Ctrl-[`).
+    PrevServer,
 }
 
 /// Map a key event to an [`Action`].
 pub fn resolve(key: KeyEvent) -> Option<Action> {
-    // Ctrl+C / Ctrl+Q always quit
+    // Ctrl+C / Ctrl+Q always quit. Ctrl-] / Ctrl-[ rotate through the
+    // configured admin servers (round 37). Other Ctrl-combos fall
+    // through unchanged.
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         return match key.code {
             KeyCode::Char('c' | 'q') => Some(Action::Quit),
+            KeyCode::Char(']') => Some(Action::NextServer),
+            KeyCode::Char('[') => Some(Action::PrevServer),
             _ => None,
         };
     }

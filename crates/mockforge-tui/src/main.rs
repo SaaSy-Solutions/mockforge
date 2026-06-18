@@ -11,9 +11,16 @@ use tracing_appender::non_blocking::WorkerGuard;
 #[command(about = "Terminal UI dashboard for MockForge")]
 #[command(version = env!("CARGO_PKG_VERSION"))]
 struct Cli {
-    /// Admin server URL (overrides config file)
-    #[arg(long)]
-    admin_url: Option<String>,
+    /// Admin server URL (overrides config file). The first occurrence
+    /// becomes the active server; additional occurrences (round 37 #876
+    /// follow-up / Srikanth on 0.3.181: "Can I connect Mockforge tui to
+    /// multiple Server IPs and see Logs at the same time by switching
+    /// Tabs based on Server IPs") are added to the rotation. Inside the
+    /// TUI, `Ctrl-]` / `Ctrl-[` cycle between them.
+    ///
+    /// Example: `mockforge-tui --admin-url http://h1:9080 --admin-url http://h2:9080`
+    #[arg(long, num_args = 0..)]
+    admin_url: Vec<String>,
 
     /// Authentication token
     #[arg(long)]
@@ -54,8 +61,11 @@ async fn main() -> Result<()> {
     // Load config file, then overlay CLI args.
     let mut cfg = TuiConfig::load();
 
-    if let Some(url) = cli.admin_url {
-        cfg.admin_url = url;
+    if let Some((first, rest)) = cli.admin_url.split_first() {
+        cfg.admin_url = first.clone();
+        // CLI takes precedence over config: the rotation is exactly
+        // what was passed, not a merge with `~/.config/mockforge/tui.toml`.
+        cfg.extra_servers = rest.to_vec();
     }
     if let Some(interval) = cli.refresh_interval {
         cfg.refresh_interval = interval;
