@@ -123,6 +123,7 @@ pub struct DeleteResponse {
 pub async fn export_data(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
+    headers: axum::http::HeaderMap,
 ) -> ApiResult<Json<DataExportResponse>> {
     // Get user
     let user = state
@@ -225,6 +226,39 @@ pub async fn export_data(
                 .collect(),
         });
     }
+
+    // Audit the bulk personal-data egress (#872). Attribute to the user's first
+    // organization if any (export is user-scoped but the audit log is
+    // org-partitioned); fall back to the nil UUID otherwise. Best-effort: the
+    // export must not fail if the audit write does.
+    let audit_org_id = org_data
+        .first()
+        .and_then(|o| Uuid::parse_str(&o.id).ok())
+        .unwrap_or_else(Uuid::nil);
+    let source_ip = {
+        use crate::middleware::trusted_proxy::extract_client_ip_from_headers;
+        let ip = extract_client_ip_from_headers(&headers);
+        if ip == "unknown" {
+            None
+        } else {
+            Some(ip)
+        }
+    };
+    state
+        .store
+        .record_audit_event(
+            audit_org_id,
+            Some(user.id),
+            AuditEventType::DataExported,
+            "GDPR data export performed".to_string(),
+            Some(serde_json::json!({
+                "action": "gdpr_data_export",
+                "organizations_exported": org_data.len(),
+            })),
+            source_ip.as_deref(),
+            None,
+        )
+        .await;
 
     Ok(Json(DataExportResponse {
         user: UserData {

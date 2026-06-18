@@ -105,6 +105,17 @@ pub async fn check_ai_quota(
 
 /// Record post-call token usage. Only billed for `Platform` requests —
 /// BYOK requests don't consume the platform's token quota.
+///
+/// The increment is now a single atomic `UPDATE ... RETURNING` (#867), so the
+/// counter can no longer be clobbered by concurrent writers. Note that the
+/// pre-call [`check_ai_quota`] read and this post-call increment still form a
+/// check-then-act window: many in-flight Platform requests can each pass the
+/// pre-call check and then push `ai_tokens_used` past the limit. That is an
+/// acceptable, bounded overshoot for a *post-call accounting* model (tokens are
+/// only known after the LLM responds) — the next [`check_ai_quota`] sees the
+/// now-correct total and denies. The atomic increment guarantees no usage is
+/// *lost*; eliminating the overshoot entirely would require pre-reserving an
+/// upper-bound token budget before the call, which is out of scope here.
 pub async fn record_ai_usage(
     state: &AppState,
     org_id: Uuid,
@@ -114,7 +125,7 @@ pub async fn record_ai_usage(
     if tokens <= 0 || !matches!(selection, ProviderSelection::Platform) {
         return Ok(());
     }
-    UsageCounter::increment_ai_tokens(state.db.pool(), org_id, tokens)
+    let _new_total = UsageCounter::increment_ai_tokens(state.db.pool(), org_id, tokens)
         .await
         .map_err(ApiError::Database)?;
     Ok(())
