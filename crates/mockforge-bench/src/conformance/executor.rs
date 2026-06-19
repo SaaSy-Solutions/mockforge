@@ -57,6 +57,96 @@ pub enum CheckBody {
         content: String,
         content_type: String,
     },
+    /// Round 38 (#79) — multipart/form-data with file attachments.
+    /// Bytes are read from disk at request time so a YAML can name a
+    /// 50 MiB `.docx` without inflating the config. Use one entry per
+    /// part; the executor builds a single `reqwest::multipart::Form`
+    /// containing all of them so multi-file uploads land in one
+    /// request.
+    Multipart { parts: Vec<MultipartPart> },
+}
+
+/// Round 38 (#79) — one part of a multipart/form-data request body.
+#[derive(Debug, Clone)]
+pub struct MultipartPart {
+    /// Bytes that go on the wire as the part body.
+    pub bytes: Vec<u8>,
+    /// `Content-Type` for this part (e.g. `image/jpeg`,
+    /// `application/octet-stream`, `application/json`).
+    pub content_type: String,
+    /// Multipart form field name (the key on the receiving server).
+    pub field_name: String,
+    /// Filename announced in this part's `Content-Disposition` header.
+    pub filename: String,
+}
+
+/// Round 38 (#79) — chain metadata stored alongside a custom
+/// `ConformanceCheck`. Tells the executor how to substitute captured
+/// values into the request, how to capture values from the response,
+/// and how to repeat the check.
+#[derive(Debug, Clone, Default)]
+struct ChainMeta {
+    /// What to capture from the response on success. Empty when the
+    /// check declared no `extract` rules.
+    extract: super::custom::ExtractRules,
+    /// How many times to fire this check within one outer
+    /// `chain_iterations` pass, sequentially or in parallel.
+    repeat: super::custom::Repeat,
+}
+
+/// Round 38 (#79) — values captured during a chain run, keyed by the
+/// name the YAML asked for them under. `cookies` is kept separate so
+/// `${cookie:session}` and `${var:session}` substitute different
+/// things even if they happen to share a name.
+#[derive(Debug, Default, Clone)]
+struct ChainContext {
+    vars: std::collections::HashMap<String, String>,
+    cookies: std::collections::HashMap<String, String>,
+}
+
+impl ChainContext {
+    /// Substitute every `${var:NAME}`, `${cookie:NAME}`, and
+    /// `${header:NAME}` token in `text` with the corresponding
+    /// captured value. Unknown tokens are left in place verbatim so a
+    /// missing capture is obvious in the request log rather than
+    /// silently sending an empty string.
+    fn substitute(&self, text: &str) -> String {
+        let mut out = String::with_capacity(text.len());
+        let mut rest = text;
+        while let Some(start) = rest.find("${") {
+            out.push_str(&rest[..start]);
+            let after = &rest[start + 2..];
+            if let Some(end) = after.find('}') {
+                let token = &after[..end];
+                let replaced = if let Some(name) = token.strip_prefix("var:") {
+                    self.vars.get(name).cloned()
+                } else if let Some(name) = token.strip_prefix("cookie:") {
+                    self.cookies.get(name).cloned()
+                } else {
+                    // Round 38 — `${header:...}` aliases `${var:...}` for
+                    // captures recorded under the `headers` extraction
+                    // block. Same map, just a more readable token shape.
+                    token.strip_prefix("header:").and_then(|name| self.vars.get(name).cloned())
+                };
+                if let Some(value) = replaced {
+                    out.push_str(&value);
+                } else {
+                    // Preserve the original `${...}` so a missing
+                    // capture is visible in failure detail / logs.
+                    out.push_str("${");
+                    out.push_str(token);
+                    out.push('}');
+                }
+                rest = &after[end + 1..];
+            } else {
+                out.push_str("${");
+                rest = after;
+                break;
+            }
+        }
+        out.push_str(rest);
+        out
+    }
 }
 
 /// How to validate a conformance check response
@@ -130,6 +220,16 @@ pub struct NativeConformanceExecutor {
     config: ConformanceConfig,
     client: Client,
     checks: Vec<ConformanceCheck>,
+    /// Round 38 (#79) — per-check chain metadata. Keyed by the index
+    /// in `checks`. Entries are only present for custom checks that
+    /// declared a non-default `extract` block or `repeat` config in
+    /// the YAML.
+    chain_meta: std::collections::HashMap<usize, ChainMeta>,
+    /// Round 38 (#79) — how many times to repeat the entire chain
+    /// of custom checks. Built-in spec checks always run once. Reset
+    /// to a fresh `ChainContext` at the start of each iteration so
+    /// captures from iteration K do not leak into K+1.
+    chain_iterations: u32,
 }
 
 impl NativeConformanceExecutor {
@@ -151,6 +251,8 @@ impl NativeConformanceExecutor {
             config,
             client,
             checks: Vec::new(),
+            chain_meta: std::collections::HashMap::new(),
+            chain_iterations: 1,
         })
     }
 
@@ -560,6 +662,10 @@ impl NativeConformanceExecutor {
 
         let mut included = 0usize;
         let total = custom_config.custom_checks.len();
+        // Round 38 — propagate the chain-iteration count from the YAML
+        // into the executor. Saturates to `1` when the YAML omits the
+        // field, matching the existing single-pass behaviour.
+        self.chain_iterations = custom_config.chain_iterations.max(1);
         for check in &custom_config.custom_checks {
             if let Some(ref re) = filter_re {
                 if !re.is_match(&check.name) && !re.is_match(&check.path) {
@@ -584,14 +690,26 @@ impl NativeConformanceExecutor {
 
     /// Execute all checks and return a `ConformanceReport`
     pub async fn execute(&self) -> Result<ConformanceReport> {
-        let mut results = Vec::with_capacity(self.checks.len());
+        let chain_iters = self.chain_iterations.max(1);
+        let mut results = Vec::with_capacity(self.checks.len() * chain_iters as usize);
         let delay = self.config.request_delay_ms;
 
-        for (i, check) in self.checks.iter().enumerate() {
-            if delay > 0 && i > 0 {
-                tokio::time::sleep(Duration::from_millis(delay)).await;
+        for _iter in 0..chain_iters {
+            // Round 38 (#79) — every iteration starts with a fresh
+            // chain context so captures from iteration K do not leak
+            // into K+1. This is what Srikanth wants for repeated
+            // login + work + logout cycles.
+            let mut ctx = ChainContext::default();
+            for (i, check) in self.checks.iter().enumerate() {
+                if delay > 0 && i > 0 {
+                    tokio::time::sleep(Duration::from_millis(delay)).await;
+                }
+                if let Some(meta) = self.chain_meta.get(&i).cloned() {
+                    results.extend(self.execute_chain_check(check, &meta, &mut ctx).await);
+                } else {
+                    results.push(self.execute_check(check).await);
+                }
             }
-            results.push(self.execute_check(check).await);
         }
 
         // Write request log if --export-requests was set
@@ -639,7 +757,8 @@ impl NativeConformanceExecutor {
         &self,
         tx: mpsc::Sender<ConformanceProgress>,
     ) -> Result<ConformanceReport> {
-        let total = self.checks.len();
+        let chain_iters = self.chain_iterations.max(1);
+        let total = self.checks.len() * chain_iters as usize;
         let delay = self.config.request_delay_ms;
         let _ = tx
             .send(ConformanceProgress::Started {
@@ -649,22 +768,30 @@ impl NativeConformanceExecutor {
 
         let mut results = Vec::with_capacity(total);
 
-        for (i, check) in self.checks.iter().enumerate() {
-            if delay > 0 && i > 0 {
-                tokio::time::sleep(Duration::from_millis(delay)).await;
+        for _iter in 0..chain_iters {
+            let mut ctx = ChainContext::default();
+            for (i, check) in self.checks.iter().enumerate() {
+                if delay > 0 && i > 0 {
+                    tokio::time::sleep(Duration::from_millis(delay)).await;
+                }
+                let new_results = if let Some(meta) = self.chain_meta.get(&i).cloned() {
+                    self.execute_chain_check(check, &meta, &mut ctx).await
+                } else {
+                    vec![self.execute_check(check).await]
+                };
+                for result in new_results {
+                    let passed = result.passed;
+                    let name = result.name.clone();
+                    results.push(result);
+                    let _ = tx
+                        .send(ConformanceProgress::CheckCompleted {
+                            name,
+                            passed,
+                            checks_done: results.len(),
+                        })
+                        .await;
+                }
             }
-            let result = self.execute_check(check).await;
-            let passed = result.passed;
-            let name = result.name.clone();
-            results.push(result);
-
-            let _ = tx
-                .send(ConformanceProgress::CheckCompleted {
-                    name,
-                    passed,
-                    checks_done: i + 1,
-                })
-                .await;
         }
 
         let _ = tx.send(ConformanceProgress::Finished).await;
@@ -710,6 +837,28 @@ impl NativeConformanceExecutor {
                         request.header("Content-Type", content_type.as_str()).body(content.clone());
                 }
             }
+            // Round 38 (#79) — file-upload via multipart/form-data.
+            // One reqwest `Part` per declared upload, all merged into a
+            // single `Form`. `mime_str` rejects malformed Content-Types
+            // (e.g. "application / json" with spaces); fall back to
+            // octet-stream so the request still goes out and the
+            // server can decide what to do with the bytes.
+            Some(CheckBody::Multipart { parts }) => {
+                let mut form = reqwest::multipart::Form::new();
+                for part_spec in parts {
+                    let mut part = reqwest::multipart::Part::bytes(part_spec.bytes.clone())
+                        .file_name(part_spec.filename.clone());
+                    part = match part.mime_str(&part_spec.content_type) {
+                        Ok(p) => p,
+                        Err(_) => reqwest::multipart::Part::bytes(part_spec.bytes.clone())
+                            .file_name(part_spec.filename.clone())
+                            .mime_str("application/octet-stream")
+                            .expect("application/octet-stream is a valid MIME type"),
+                    };
+                    form = form.part(part_spec.field_name.clone(), part);
+                }
+                request = request.multipart(form);
+            }
             None => {}
         }
 
@@ -719,6 +868,21 @@ impl NativeConformanceExecutor {
                 f.iter().map(|(k, v)| format!("{}={}", k, v)).collect::<Vec<_>>().join("&")
             }
             Some(CheckBody::Raw { content, .. }) => content.clone(),
+            // Round 38 — for `--export-requests`, write a brief
+            // multipart summary (`<N files: a.jpg (image/jpeg, 1234
+            // bytes), b.json (application/json, 56 bytes)>`) instead
+            // of the raw multipart envelope (which would be megabytes
+            // for real file uploads and not useful in a JSON capture
+            // anyway).
+            Some(CheckBody::Multipart { parts }) => {
+                let summary: Vec<String> = parts
+                    .iter()
+                    .map(|p| {
+                        format!("{} ({}, {} bytes)", p.filename, p.content_type, p.bytes.len())
+                    })
+                    .collect();
+                format!("<{} file(s): {}>", parts.len(), summary.join(", "))
+            }
             None => String::new(),
         };
 
@@ -760,8 +924,14 @@ impl NativeConformanceExecutor {
         let (passed, schema_violations) =
             self.validate_response(&check.validation, status, &resp_headers, &resp_body);
 
-        // Always capture the exchange when export_requests is enabled
-        let captured = if self.config.export_requests {
+        // Capture the exchange when export_requests is on OR when any
+        // check in this run declared chain semantics (extract /
+        // repeat). The chain executor needs the response headers and
+        // body to extract captured values — without `captured` the
+        // chain context can't populate `${cookie:...}` /
+        // `${var:...}`. Round 38 (#79).
+        let need_capture = self.config.export_requests || !self.chain_meta.is_empty();
+        let captured = if need_capture {
             Some(CapturedExchange {
                 method: check.method.to_string(),
                 url: url.clone(),
@@ -794,6 +964,12 @@ impl NativeConformanceExecutor {
                             .collect::<Vec<_>>()
                             .join("&"),
                         Some(CheckBody::Raw { content, .. }) => content.clone(),
+                        // Round 38 — same brief summary used by the
+                        // export path; keeps failure detail readable
+                        // without dumping multi-MB upload bytes.
+                        Some(CheckBody::Multipart { parts }) => {
+                            format!("<{} multipart file(s)>", parts.len())
+                        }
                         None => String::new(),
                     },
                 },
@@ -819,6 +995,59 @@ impl NativeConformanceExecutor {
             failure_detail,
             captured,
         }
+    }
+
+    /// Round 38 (#79) — execute a custom check with chain semantics:
+    /// substitute captured values from `ctx` into the request, run
+    /// the configured repeat (sequential or parallel), and pour any
+    /// `extract`-matched response data back into `ctx` for the next
+    /// check to use. The first response's data is the one that
+    /// becomes visible to extract; under `parallel` repeat the
+    /// captures from the racing requests would be ambiguous so we
+    /// pull only from the first to finish.
+    ///
+    /// Returns a vector because a `repeat.count > 1` produces N
+    /// `CheckResult`s, all of which need to flow through the aggregate.
+    async fn execute_chain_check(
+        &self,
+        check: &ConformanceCheck,
+        meta: &ChainMeta,
+        ctx: &mut ChainContext,
+    ) -> Vec<CheckResult> {
+        let substituted = apply_chain_context(check, ctx);
+        let count = meta.repeat.count.max(1);
+        let results = match meta.repeat.mode {
+            super::custom::RepeatMode::Sequential => {
+                let mut out = Vec::with_capacity(count as usize);
+                for _ in 0..count {
+                    out.push(self.execute_check(&substituted).await);
+                }
+                out
+            }
+            super::custom::RepeatMode::Parallel => {
+                let futs = (0..count).map(|_| self.execute_check(&substituted));
+                futures::future::join_all(futs).await
+            }
+        };
+
+        // Extract from the first response. Under sequential repeat
+        // this is the first request fired; under parallel it's the
+        // first slot in the result array, which join_all preserves
+        // by input order (not completion order), so the extraction
+        // is at least deterministic.
+        if !meta.extract.is_empty() {
+            if let Some(first) = results.first() {
+                if let Some(captured) = &first.captured {
+                    extract_into_context(
+                        &meta.extract,
+                        &captured.response_headers,
+                        &captured.response_body,
+                        ctx,
+                    );
+                }
+            }
+        }
+        results
     }
 
     /// Validate a response against the check's validation rules.
@@ -1340,11 +1569,62 @@ impl NativeConformanceExecutor {
             headers.push(("Content-Type".to_string(), "application/json".to_string()));
         }
 
-        // Body
-        let body = check
-            .body
-            .as_ref()
-            .and_then(|b| serde_json::from_str::<serde_json::Value>(b).ok().map(CheckBody::Json));
+        // Body. Round 38 (#79) — `body` wins over `upload` /
+        // `uploads` when both are set; the YAML is a misconfiguration
+        // and we warn rather than silently picking one. When `body`
+        // is absent and `upload` / `uploads` is set, every file is
+        // read off disk at construction time and folded into a
+        // `CheckBody::Multipart`. The file read is *eager* (not at
+        // request time) so the executor's send path stays purely
+        // synchronous to the network and a missing file is surfaced
+        // here, not mid-run.
+        let upload_specs: Vec<&super::custom::UploadFile> =
+            check.upload.as_ref().into_iter().chain(check.uploads.iter()).collect();
+        let body = if check.body.is_some() {
+            if !upload_specs.is_empty() {
+                eprintln!(
+                    "warning: custom check '{}' has both `body` and `upload`/`uploads`; ignoring uploads",
+                    check.name
+                );
+            }
+            check.body.as_ref().and_then(|b| {
+                serde_json::from_str::<serde_json::Value>(b).ok().map(CheckBody::Json)
+            })
+        } else if !upload_specs.is_empty() {
+            let mut parts = Vec::with_capacity(upload_specs.len());
+            for spec in upload_specs {
+                match std::fs::read(&spec.path) {
+                    Ok(bytes) => {
+                        let filename = spec.filename.clone().unwrap_or_else(|| {
+                            std::path::Path::new(&spec.path)
+                                .file_name()
+                                .and_then(|n| n.to_str())
+                                .unwrap_or("upload.bin")
+                                .to_string()
+                        });
+                        parts.push(MultipartPart {
+                            bytes,
+                            content_type: spec.content_type.clone(),
+                            field_name: spec.field_name.clone(),
+                            filename,
+                        });
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "warning: custom check '{}' could not read upload '{}': {}",
+                            check.name, spec.path, e
+                        );
+                    }
+                }
+            }
+            if parts.is_empty() {
+                None
+            } else {
+                Some(CheckBody::Multipart { parts })
+            }
+        } else {
+            None
+        };
 
         // Build expected headers for validation
         let expected_headers: Vec<(String, String)> =
@@ -1356,6 +1636,22 @@ impl NativeConformanceExecutor {
             .iter()
             .map(|f| (f.name.clone(), f.field_type.clone()))
             .collect();
+
+        // Round 38 (#79) — register chain metadata when the YAML
+        // asked for capture / replay. Only non-default extract or
+        // repeat blocks reach the chain map so the steady-state
+        // (single-shot custom check) still skips the chain path.
+        let needs_chain = !check.extract.is_empty() || !check.repeat.is_default();
+        let next_index = self.checks.len();
+        if needs_chain {
+            self.chain_meta.insert(
+                next_index,
+                ChainMeta {
+                    extract: check.extract.clone(),
+                    repeat: check.repeat.clone(),
+                },
+            );
+        }
 
         // Primary status check
         self.checks.push(ConformanceCheck {
@@ -1371,6 +1667,128 @@ impl NativeConformanceExecutor {
             },
         });
     }
+}
+
+/// Round 38 (#79) — return a clone of `check` with every
+/// `${var:...}` / `${cookie:...}` / `${header:...}` token in `path`,
+/// header values, and string bodies replaced by the corresponding
+/// captured value. Free function (not `&self`) so unit tests can
+/// drive it directly. JSON bodies are substituted by walking each
+/// string leaf; non-string JSON values are left untouched.
+fn apply_chain_context(check: &ConformanceCheck, ctx: &ChainContext) -> ConformanceCheck {
+    let path = ctx.substitute(&check.path);
+    let headers = check.headers.iter().map(|(k, v)| (k.clone(), ctx.substitute(v))).collect();
+    let body = check.body.as_ref().map(|b| match b {
+        CheckBody::Json(v) => CheckBody::Json(substitute_in_json(v, ctx)),
+        CheckBody::FormUrlencoded(fields) => CheckBody::FormUrlencoded(
+            fields.iter().map(|(k, v)| (k.clone(), ctx.substitute(v))).collect(),
+        ),
+        CheckBody::Raw {
+            content,
+            content_type,
+        } => CheckBody::Raw {
+            content: ctx.substitute(content),
+            content_type: content_type.clone(),
+        },
+        // Multipart bytes are not text and are not template-targets;
+        // pass-through unchanged so binary uploads are byte-identical
+        // across iterations.
+        CheckBody::Multipart { parts } => CheckBody::Multipart {
+            parts: parts.clone(),
+        },
+    });
+    ConformanceCheck {
+        name: check.name.clone(),
+        method: check.method.clone(),
+        path,
+        headers,
+        body,
+        validation: check.validation.clone(),
+    }
+}
+
+fn substitute_in_json(value: &serde_json::Value, ctx: &ChainContext) -> serde_json::Value {
+    use serde_json::Value;
+    match value {
+        Value::String(s) => Value::String(ctx.substitute(s)),
+        Value::Array(arr) => Value::Array(arr.iter().map(|v| substitute_in_json(v, ctx)).collect()),
+        Value::Object(obj) => Value::Object(
+            obj.iter().map(|(k, v)| (k.clone(), substitute_in_json(v, ctx))).collect(),
+        ),
+        other => other.clone(),
+    }
+}
+
+/// Round 38 (#79) — read captured cookies / headers / body fields off
+/// a response and store them in the chain context for subsequent
+/// requests to reference. Unknown extractions (e.g. a cookie name the
+/// server didn't set) are silently skipped so a partially-met
+/// extract block doesn't fail the whole chain.
+fn extract_into_context(
+    rules: &super::custom::ExtractRules,
+    response_headers: &HashMap<String, String>,
+    response_body: &str,
+    ctx: &mut ChainContext,
+) {
+    // Cookies: every Set-Cookie header is parsed for `name=value`
+    // (the cookie's own attributes after the value are dropped).
+    // Multi-Set-Cookie responses (different `Set-Cookie` values
+    // each with the same header name) are coalesced into one
+    // comma-separated string when reqwest collects the headers,
+    // so we split on commas and try each candidate.
+    for cookie_name in &rules.cookies {
+        if let Some(raw) = response_headers
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case("set-cookie"))
+            .map(|(_, v)| v)
+        {
+            // Each Set-Cookie entry looks like `name=value; attr=...`.
+            // Multiple cookies in one header are comma-separated.
+            for entry in raw.split(',') {
+                let head = entry.split(';').next().unwrap_or(entry).trim();
+                if let Some((name, value)) = head.split_once('=') {
+                    if name.trim().eq_ignore_ascii_case(cookie_name) {
+                        ctx.cookies.insert(cookie_name.clone(), value.trim().to_string());
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    // Headers: case-insensitive lookup.
+    for (var_name, header_name) in &rules.headers {
+        if let Some((_, value)) =
+            response_headers.iter().find(|(k, _)| k.eq_ignore_ascii_case(header_name))
+        {
+            ctx.vars.insert(var_name.clone(), value.clone());
+        }
+    }
+    // Body fields via simple dotted lookup. Empty / non-JSON bodies
+    // simply contribute nothing rather than failing the chain.
+    if !rules.body_fields.is_empty() {
+        if let Ok(json) = serde_json::from_str::<serde_json::Value>(response_body) {
+            for (var_name, field_path) in &rules.body_fields {
+                if let Some(value) = lookup_json_path(&json, field_path) {
+                    let stringified = match value {
+                        serde_json::Value::String(s) => s.clone(),
+                        other => other.to_string(),
+                    };
+                    ctx.vars.insert(var_name.clone(), stringified);
+                }
+            }
+        }
+    }
+}
+
+fn lookup_json_path<'a>(value: &'a serde_json::Value, path: &str) -> Option<&'a serde_json::Value> {
+    let mut current = value;
+    for segment in path.split('.') {
+        current = match current {
+            serde_json::Value::Object(obj) => obj.get(segment)?,
+            _ => return None,
+        };
+    }
+    Some(current)
 }
 
 /// Convert an `openapiv3::Schema` to a JSON Schema `serde_json::Value`
@@ -1435,6 +1853,94 @@ fn openapi_schema_to_json_schema(schema: &openapiv3::Schema) -> serde_json::Valu
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Round 38 (#79) — substitution replaces `${var:...}`,
+    /// `${cookie:...}`, and `${header:...}` tokens with the matching
+    /// captured value. Unknown tokens are preserved verbatim so a
+    /// missing capture is visible in the request log.
+    #[test]
+    fn chain_context_substitutes_all_token_kinds() {
+        let mut ctx = ChainContext::default();
+        ctx.vars.insert("csrf".to_string(), "abc123".to_string());
+        ctx.vars.insert("trace".to_string(), "xyz".to_string());
+        ctx.cookies.insert("session".to_string(), "deadbeef".to_string());
+        assert_eq!(ctx.substitute("plain"), "plain");
+        assert_eq!(ctx.substitute("X-CSRF: ${var:csrf}"), "X-CSRF: abc123");
+        assert_eq!(ctx.substitute("Cookie: session=${cookie:session}"), "Cookie: session=deadbeef");
+        // header: aliases var: so the same map is used.
+        assert_eq!(ctx.substitute("X-Trace: ${header:trace}"), "X-Trace: xyz");
+        // Unknown name preserved verbatim (no silent empty string).
+        assert_eq!(ctx.substitute("missing: ${var:nope}"), "missing: ${var:nope}");
+    }
+
+    /// Round 38 — extraction pulls cookies, headers, and body fields
+    /// off a response and stores them in the chain context under the
+    /// caller-named keys.
+    #[test]
+    fn extract_into_context_captures_cookies_headers_and_body_fields() {
+        let mut headers = HashMap::new();
+        headers.insert("Set-Cookie".to_string(), "session=abc123; Path=/; HttpOnly".to_string());
+        headers.insert("X-CSRF-Token".to_string(), "csrf-token-xyz".to_string());
+        let body = r#"{"data":{"token":"body-token-456"},"id":42}"#;
+        let mut rules = super::super::custom::ExtractRules::default();
+        rules.cookies.push("session".to_string());
+        rules.headers.insert("csrf".to_string(), "X-CSRF-Token".to_string());
+        rules.body_fields.insert("nested_token".to_string(), "data.token".to_string());
+        rules.body_fields.insert("user_id".to_string(), "id".to_string());
+        let mut ctx = ChainContext::default();
+        extract_into_context(&rules, &headers, body, &mut ctx);
+        assert_eq!(ctx.cookies.get("session").map(|s| s.as_str()), Some("abc123"));
+        assert_eq!(ctx.vars.get("csrf").map(|s| s.as_str()), Some("csrf-token-xyz"));
+        assert_eq!(ctx.vars.get("nested_token").map(|s| s.as_str()), Some("body-token-456"));
+        // Numeric body field stringifies to "42".
+        assert_eq!(ctx.vars.get("user_id").map(|s| s.as_str()), Some("42"));
+    }
+
+    /// Round 38 — a missing cookie name doesn't poison subsequent
+    /// extractions; the cookie pull silently no-ops and the header /
+    /// body extractions still happen.
+    #[test]
+    fn extract_into_context_skips_missing_captures_gracefully() {
+        let mut headers = HashMap::new();
+        headers.insert("X-CSRF-Token".to_string(), "csrf-value".to_string());
+        let body = r#"{"id":1}"#;
+        let mut rules = super::super::custom::ExtractRules::default();
+        rules.cookies.push("never-set".to_string());
+        rules.headers.insert("csrf".to_string(), "X-CSRF-Token".to_string());
+        let mut ctx = ChainContext::default();
+        extract_into_context(&rules, &headers, body, &mut ctx);
+        assert!(ctx.cookies.is_empty(), "missing cookie should not insert anything");
+        assert_eq!(ctx.vars.get("csrf").map(|s| s.as_str()), Some("csrf-value"));
+    }
+
+    /// Round 38 — substitution into a ConformanceCheck flows through
+    /// path, headers, raw bodies, JSON bodies, and form-urlencoded
+    /// fields. Multipart bodies are pass-through (binary uploads
+    /// shouldn't be touched by string templating).
+    #[test]
+    fn apply_chain_context_substitutes_path_headers_and_body() {
+        let mut ctx = ChainContext::default();
+        ctx.vars.insert("user".to_string(), "alice".to_string());
+        ctx.cookies.insert("sid".to_string(), "deadbeef".to_string());
+        let check = ConformanceCheck {
+            name: "custom:t".into(),
+            method: Method::POST,
+            path: "/users/${var:user}".into(),
+            headers: vec![("Cookie".into(), "sid=${cookie:sid}".into())],
+            body: Some(CheckBody::Json(serde_json::json!({"by": "${var:user}", "ts": 1}))),
+            validation: CheckValidation::ExactStatus(200),
+        };
+        let substituted = apply_chain_context(&check, &ctx);
+        assert_eq!(substituted.path, "/users/alice");
+        assert_eq!(substituted.headers[0].1, "sid=deadbeef");
+        match substituted.body {
+            Some(CheckBody::Json(v)) => {
+                assert_eq!(v["by"], "alice");
+                assert_eq!(v["ts"], 1);
+            }
+            _ => panic!("expected json body"),
+        }
+    }
 
     #[test]
     fn test_reference_check_count() {
@@ -1763,6 +2269,10 @@ custom_checks:
             expected_headers: HashMap::new(),
             expected_body_fields: vec![],
             headers: HashMap::new(),
+            upload: None,
+            uploads: vec![],
+            extract: crate::conformance::custom::ExtractRules::default(),
+            repeat: crate::conformance::custom::Repeat::default(),
         };
 
         executor.add_custom_check(&custom);

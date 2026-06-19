@@ -527,6 +527,21 @@ struct ServeCliArgs {
     #[arg(long, help_heading = "Admin & UI")]
     pub admin_port: Option<u16>,
 
+    /// Bind the admin UI on this host instead of the safe loopback default
+    /// (`127.0.0.1`). Pass `0.0.0.0` to expose the admin port on every
+    /// interface so the mockforge-tui on another machine can connect
+    /// (Issue #79 round 38 / Srikanth on 0.3.182: "admin ports are
+    /// opening only on 127.0.0.1 so I am able to open the mockforge tui
+    /// UI on the Server locally but when I access the server from some
+    /// other machine via mockforge TUI connections are getting refused").
+    /// Pass `::` to dual-stack bind on IPv6 + IPv4-mapped-IPv6.
+    ///
+    /// SECURITY NOTE: `0.0.0.0` exposes the admin API on every interface
+    /// in your network. Pair with `--admin-auth-required` when binding
+    /// publicly.
+    #[arg(long, help_heading = "Admin & UI")]
+    pub admin_host: Option<String>,
+
     /// Validate configuration and check port availability without starting servers
     #[arg(long, help_heading = "Validation")]
     pub dry_run: bool,
@@ -2579,6 +2594,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 tcp_port: args.ports.tcp_port,
                 admin: args.admin,
                 admin_port: args.admin_port,
+                admin_host: args.admin_host,
                 metrics: args.observability.metrics,
                 metrics_port: args.observability.metrics_port,
                 tracing: args.observability.tracing,

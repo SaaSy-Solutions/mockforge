@@ -30,6 +30,10 @@ pub(crate) struct ServeArgs {
     pub(crate) tcp_port: Option<u16>,
     pub(crate) admin: bool,
     pub(crate) admin_port: Option<u16>,
+    /// Round 38 (#79) — bind host for the admin UI / API. `None` falls
+    /// back to the config-file value (loopback by default; `::` inside
+    /// containers per the AdminConfig::default heuristic).
+    pub(crate) admin_host: Option<String>,
     pub(crate) metrics: bool,
     pub(crate) metrics_port: Option<u16>,
     pub(crate) tracing: bool,
@@ -133,6 +137,7 @@ impl Default for ServeArgs {
             tcp_port: None,
             admin: false,
             admin_port: None,
+            admin_host: None,
             metrics: false,
             metrics_port: None,
             tracing: false,
@@ -348,6 +353,13 @@ pub(crate) async fn build_server_config_from_cli(serve_args: &ServeArgs) -> Serv
     }
     if let Some(admin_port) = serve_args.admin_port {
         config.admin.port = admin_port;
+    }
+    // Round 38 (#79) — Srikanth on 0.3.182: admin port was only
+    // listening on 127.0.0.1 when he ran mockforge in a VM, so a TUI
+    // on another machine could not connect. `--admin-host 0.0.0.0`
+    // (or `::` for dual-stack) overrides the loopback default.
+    if let Some(ref host) = serve_args.admin_host {
+        config.admin.host = host.clone();
     }
 
     // Prometheus metrics configuration

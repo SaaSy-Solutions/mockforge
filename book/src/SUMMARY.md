@@ -158,6 +158,7 @@
 - [Request Chaining](reference/chaining.md)
 - [Fixtures and Smoke Testing](reference/fixtures.md)
 - [Conformance Self-Test Probes](reference/conformance-self-test-probes.md)
+- [Bench Custom Checks (Uploads + Chains)](reference/bench-custom-checks.md)
 - [Bench Capacity Sizing](reference/bench-capacity-sizing.md)
 - [Troubleshooting](reference/troubleshooting.md)
 - [Common Issues & Solutions](reference/common-issues.md)

@@ -145,6 +145,33 @@ mockforge serve --spec examples/openapi-demo.json \
 
 Access the admin interface at: http://localhost:9080
 
+### Accessing the admin port from another machine
+
+By default the admin port binds to `127.0.0.1` so it is only reachable
+from the same host. When mockforge runs in a VM or remote box and you
+want to point a `mockforge-tui` (or the admin UI in a browser) at it
+from another machine, use `--admin-host 0.0.0.0` to bind on every
+interface:
+
+```bash
+mockforge serve --spec examples/openapi-demo.json \
+  --admin --admin-port 9080 --admin-host 0.0.0.0 \
+  --http-port 3000
+```
+
+Then on the other machine:
+
+```bash
+mockforge-tui --admin-url http://<vm-ip>:9080
+```
+
+Use `--admin-host ::` to dual-stack bind on IPv6 + IPv4-mapped-IPv6.
+
+**Security note**: `0.0.0.0` exposes the admin API on every interface in
+your network. The admin API is auth-less by default; pair the bind with
+`auth_required: true` in your config when the host has any untrusted
+network. Inside an air-gapped lab / docker network this is fine.
+
 ## Step 7: Using Configuration Files
 
 Instead of environment variables, you can use a configuration file:
