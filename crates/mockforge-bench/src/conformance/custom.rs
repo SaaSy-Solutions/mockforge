@@ -13,6 +13,18 @@ use std::path::Path;
 pub struct CustomConformanceConfig {
     /// List of custom checks to run
     pub custom_checks: Vec<CustomCheck>,
+    /// Round 38 (#79) — Srikanth on 0.3.182. Repeat the entire
+    /// `custom_checks` sequence N times so a "log in, do work,
+    /// log out" chain can be exercised under load. The
+    /// `${var:...}` / `${cookie:...}` substitution context is
+    /// reset at the start of each iteration; values captured in
+    /// iteration K are NOT visible to iteration K+1. Defaults to 1.
+    #[serde(default = "default_iterations")]
+    pub chain_iterations: u32,
+}
+
+fn default_iterations() -> u32 {
+    1
 }
 
 /// A single custom conformance check
@@ -38,6 +50,31 @@ pub struct CustomCheck {
     /// Optional request headers
     #[serde(default)]
     pub headers: std::collections::HashMap<String, String>,
+
+    /// Round 38 (#79) — file upload support. When set, the request
+    /// is sent as `multipart/form-data` with one part per file. Each
+    /// file's bytes come from a local path (so the YAML can name a
+    /// `.exe`, `.jpg`, `.json`, `.docx`, `.xml`, etc. without
+    /// embedding the bytes). `body` wins over `upload`/`uploads`.
+    #[serde(default)]
+    pub upload: Option<UploadFile>,
+    #[serde(default)]
+    pub uploads: Vec<UploadFile>,
+
+    /// Round 38 (#79) — capture values from the response into the
+    /// chain context so subsequent checks can reference them via
+    /// `${var:NAME}`, `${cookie:NAME}`, `${header:NAME}` in path /
+    /// headers / body.
+    #[serde(default)]
+    pub extract: ExtractRules,
+
+    /// Round 38 (#79) — repeat the check N times within an
+    /// iteration. `mode: parallel` fires N concurrent requests
+    /// (Srikanth's Sequence 1: "Use that cookie and csrf token in 16
+    /// subsequent requests that should be sent in parallel").
+    /// `mode: sequential` runs them one after another (Sequence 2).
+    #[serde(default)]
+    pub repeat: Repeat,
 }
 
 /// Expected field in the response body with type checking
@@ -48,6 +85,92 @@ pub struct ExpectedBodyField {
     /// Expected JSON type: "string", "integer", "number", "boolean", "array", "object"
     #[serde(rename = "type")]
     pub field_type: String,
+}
+
+/// Round 38 (#79) — a single file to upload as a multipart form part.
+#[derive(Debug, Clone, Deserialize)]
+pub struct UploadFile {
+    /// Local path to the file; bytes are read at request time.
+    pub path: String,
+    /// `Content-Type` for this part. Common values:
+    /// `application/octet-stream`, `image/jpeg`, `application/json`,
+    /// `application/xml`.
+    #[serde(default = "default_upload_content_type")]
+    pub content_type: String,
+    /// Multipart form field name. Defaults to `"file"`.
+    #[serde(default = "default_upload_field_name")]
+    pub field_name: String,
+    /// Filename announced to the server. Defaults to the basename
+    /// of `path`.
+    #[serde(default)]
+    pub filename: Option<String>,
+}
+
+fn default_upload_content_type() -> String {
+    "application/octet-stream".to_string()
+}
+fn default_upload_field_name() -> String {
+    "file".to_string()
+}
+
+/// Round 38 (#79) — what to capture from a check's response.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub struct ExtractRules {
+    /// Cookie names to capture from `Set-Cookie`. Stored under
+    /// `${cookie:NAME}`.
+    #[serde(default)]
+    pub cookies: Vec<String>,
+    /// Response headers to capture (var_name -> header_name). Header
+    /// name is case-insensitive. Stored under `${var:VAR_NAME}`.
+    #[serde(default)]
+    pub headers: std::collections::HashMap<String, String>,
+    /// JSON body fields by simple dotted path. Stored under
+    /// `${var:VAR_NAME}`.
+    #[serde(default)]
+    pub body_fields: std::collections::HashMap<String, String>,
+}
+
+impl ExtractRules {
+    pub fn is_empty(&self) -> bool {
+        self.cookies.is_empty() && self.headers.is_empty() && self.body_fields.is_empty()
+    }
+}
+
+/// Round 38 (#79) — repeat semantics for a single custom check.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Repeat {
+    #[serde(default = "default_repeat_count")]
+    pub count: u32,
+    #[serde(default)]
+    pub mode: RepeatMode,
+}
+
+impl Default for Repeat {
+    fn default() -> Self {
+        Self {
+            count: 1,
+            mode: RepeatMode::default(),
+        }
+    }
+}
+
+impl Repeat {
+    pub fn is_default(&self) -> bool {
+        self.count == 1 && matches!(self.mode, RepeatMode::Sequential)
+    }
+}
+
+fn default_repeat_count() -> u32 {
+    1
+}
+
+/// Round 38 (#79) — sequential vs parallel repeat.
+#[derive(Debug, Clone, Default, Deserialize, PartialEq)]
+#[serde(rename_all = "lowercase")]
+pub enum RepeatMode {
+    #[default]
+    Sequential,
+    Parallel,
 }
 
 impl CustomConformanceConfig {
@@ -293,7 +416,12 @@ custom_checks:
                 expected_headers: std::collections::HashMap::new(),
                 expected_body_fields: vec![],
                 headers: std::collections::HashMap::new(),
+                upload: None,
+                uploads: vec![],
+                extract: ExtractRules::default(),
+                repeat: Repeat::default(),
             }],
+            chain_iterations: 1,
         };
 
         let script = config.generate_k6_group("BASE_URL", &[]);
@@ -317,7 +445,12 @@ custom_checks:
                     field_type: "integer".to_string(),
                 }],
                 headers: std::collections::HashMap::new(),
+                upload: None,
+                uploads: vec![],
+                extract: ExtractRules::default(),
+                repeat: Repeat::default(),
             }],
+            chain_iterations: 1,
         };
 
         let script = config.generate_k6_group("BASE_URL", &[]);
@@ -342,7 +475,12 @@ custom_checks:
                 expected_headers,
                 expected_body_fields: vec![],
                 headers: std::collections::HashMap::new(),
+                upload: None,
+                uploads: vec![],
+                extract: ExtractRules::default(),
+                repeat: Repeat::default(),
             }],
+            chain_iterations: 1,
         };
 
         let script = config.generate_k6_group("BASE_URL", &[]);
@@ -362,7 +500,12 @@ custom_checks:
                 expected_headers: std::collections::HashMap::new(),
                 expected_body_fields: vec![],
                 headers: std::collections::HashMap::new(),
+                upload: None,
+                uploads: vec![],
+                extract: ExtractRules::default(),
+                repeat: Repeat::default(),
             }],
+            chain_iterations: 1,
         };
 
         let custom_headers = vec![("Authorization".to_string(), "Bearer token123".to_string())];
@@ -389,7 +532,12 @@ custom_checks:
                     field_type: "integer".to_string(),
                 }],
                 headers: std::collections::HashMap::new(),
+                upload: None,
+                uploads: vec![],
+                extract: ExtractRules::default(),
+                repeat: Repeat::default(),
             }],
+            chain_iterations: 1,
         };
 
         let script = config.generate_k6_group("BASE_URL", &[]);
@@ -430,7 +578,12 @@ custom_checks:
                 expected_headers: std::collections::HashMap::new(),
                 expected_body_fields: vec![],
                 headers: std::collections::HashMap::new(),
+                upload: None,
+                uploads: vec![],
+                extract: ExtractRules::default(),
+                repeat: Repeat::default(),
             }],
+            chain_iterations: 1,
         };
 
         let script = config.generate_k6_group("BASE_URL", &[]);
@@ -482,7 +635,12 @@ custom_checks:
                     },
                 ],
                 headers: std::collections::HashMap::new(),
+                upload: None,
+                uploads: vec![],
+                extract: ExtractRules::default(),
+                repeat: Repeat::default(),
             }],
+            chain_iterations: 1,
         };
 
         let script = config.generate_k6_group("BASE_URL", &[]);
