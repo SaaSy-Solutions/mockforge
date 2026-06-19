@@ -755,7 +755,13 @@ async fn handle_subscription_event(
 
     tracing::info!("Subscription updated: org_id={}, plan={:?}", org_id, plan);
 
-    // Record audit log (webhook event, so no user_id or IP)
+    // Record audit log (webhook event, so no user_id or IP).
+    //
+    // #873 note: `OrgPlanChanged` is intentionally NOT emitted here. Every
+    // plan transition on this webhook path is already logged as the more
+    // specific `BillingUpgrade` / `BillingDowngrade` below, so adding
+    // `OrgPlanChanged` would double-log the same event. `OrgPlanChanged`
+    // remains available for non-billing plan mutations should any ever exist.
     if old_plan != plan {
         // Determine if this is an upgrade or downgrade based on plan ordering
         // Free < Pro < Team
@@ -960,12 +966,15 @@ async fn handle_payment_failed(pool: &sqlx::PgPool, invoice: &Invoice) -> Result
 
     tracing::info!("Payment failed: org_id={}", subscription.org_id);
 
-    // Record audit log (webhook event, so no user_id or IP)
+    // Record audit log (webhook event, so no user_id or IP).
+    // #873: use the dedicated PaymentFailed event instead of reusing
+    // BillingCanceled — a failed payment puts the sub in `past_due` dunning,
+    // which is distinct from an actual cancellation.
     crate::models::record_audit_event(
         pool,
         subscription.org_id,
-        None,                            // Webhook event, no user context
-        AuditEventType::BillingCanceled, // Using canceled as closest match
+        None, // Webhook event, no user context
+        AuditEventType::PaymentFailed,
         format!("Payment failed for subscription: {}", invoice.id),
         Some(serde_json::json!({
             "invoice_id": invoice.id.to_string(),

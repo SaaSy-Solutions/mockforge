@@ -21,6 +21,7 @@ use crate::{
 pub async fn create_organization(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
+    headers: HeaderMap,
     Json(request): Json<CreateOrganizationRequest>,
 ) -> ApiResult<Json<OrganizationResponse>> {
     // Validate input
@@ -62,6 +63,30 @@ pub async fn create_organization(
         .store
         .create_organization(&request.name, &request.slug, user_id, Plan::Free)
         .await?;
+
+    // Record audit event (#873): OrgCreated existed but was never emitted.
+    let ip_address = headers
+        .get("x-forwarded-for")
+        .or_else(|| headers.get("x-real-ip"))
+        .and_then(|h| h.to_str().ok())
+        .map(|s| s.to_string());
+    let user_agent = headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
+
+    state
+        .store
+        .record_audit_event(
+            org.id,
+            Some(user_id),
+            AuditEventType::OrgCreated,
+            format!("Created organization {} ({})", org.name, org.slug),
+            Some(serde_json::json!({
+                "slug": org.slug,
+                "plan": org.plan().to_string(),
+            })),
+            ip_address.as_deref(),
+            user_agent.as_deref(),
+        )
+        .await;
 
     Ok(Json(OrganizationResponse {
         id: org.id,
@@ -558,9 +583,7 @@ pub async fn update_organization(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
     Path(org_id): Path<Uuid>,
-    // `headers` is retained for the axum extractor signature only; the plan
-    // mutation that previously logged an audit event from here was removed (#733).
-    _headers: HeaderMap,
+    headers: HeaderMap,
     Json(request): Json<UpdateOrganizationRequest>,
 ) -> ApiResult<Json<OrganizationResponse>> {
     // Get organization
@@ -575,12 +598,16 @@ pub async fn update_organization(
         return Err(ApiError::PermissionDenied);
     }
 
+    // Track which fields changed so the audit row records them (#873).
+    let mut changed_fields: Vec<&str> = Vec::new();
+
     // Update name if provided
     if let Some(name) = &request.name {
         if name.is_empty() {
             return Err(ApiError::InvalidRequest("Organization name cannot be empty".to_string()));
         }
         state.store.update_organization_name(org_id, name).await?;
+        changed_fields.push("name");
     }
 
     // Update slug if provided
@@ -606,6 +633,7 @@ pub async fn update_organization(
         }
 
         state.store.update_organization_slug(org_id, slug).await?;
+        changed_fields.push("slug");
     }
 
     // The plan is server-authoritative (#733): it is managed exclusively by the
@@ -624,6 +652,35 @@ pub async fn update_organization(
         .find_organization_by_id(org_id)
         .await?
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
+
+    // Record audit event (#873): OrgUpdated existed but was never emitted.
+    // Only log when a field actually changed (a no-op PATCH shouldn't audit).
+    if !changed_fields.is_empty() {
+        let ip_address = headers
+            .get("x-forwarded-for")
+            .or_else(|| headers.get("x-real-ip"))
+            .and_then(|h| h.to_str().ok())
+            .map(|s| s.to_string());
+        let user_agent =
+            headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
+
+        state
+            .store
+            .record_audit_event(
+                org_id,
+                Some(user_id),
+                AuditEventType::OrgUpdated,
+                format!("Updated organization fields: {}", changed_fields.join(", ")),
+                Some(serde_json::json!({
+                    "changed_fields": changed_fields,
+                    "name": updated_org.name,
+                    "slug": updated_org.slug,
+                })),
+                ip_address.as_deref(),
+                user_agent.as_deref(),
+            )
+            .await;
+    }
 
     Ok(Json(OrganizationResponse {
         id: updated_org.id,

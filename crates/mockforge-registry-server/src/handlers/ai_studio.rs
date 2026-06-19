@@ -13,7 +13,7 @@
 //! See `docs/cloud/CLOUD_AI_STUDIO_DESIGN.md` for the full design.
 
 use axum::{extract::State, http::HeaderMap, Json};
-use mockforge_registry_core::models::{BYOKConfig, Plan};
+use mockforge_registry_core::models::{AuditEventType, BYOKConfig, Plan};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -496,6 +496,30 @@ pub(crate) async fn run_completion_for_org(
     let total_tokens = result.total_tokens();
     record_ai_usage(state, org.id, selection, total_tokens as i64).await?;
 
+    // 6b. Audit the AI usage (#866) for SOC2 cost-attribution / abuse
+    //     forensics. Best-effort: never fails the user's request. No user_id
+    //     here — `run_completion_for_org` is the org-scoped shared path used by
+    //     internal callers without a user session; the user-driven wrapper
+    //     `run_completion` records the same row at the org level.
+    state
+        .store
+        .record_audit_event(
+            org.id,
+            None,
+            AuditEventType::AiUsage,
+            format!("AI completion via {} provider", provider_label(selection)),
+            Some(serde_json::json!({
+                "handler": "ai_studio.run_completion_for_org",
+                "provider": provider_label(selection),
+                "prompt_tokens": result.prompt_tokens,
+                "completion_tokens": result.completion_tokens,
+                "total_tokens": total_tokens,
+            })),
+            None,
+            None,
+        )
+        .await;
+
     // 7. Build response metadata.
     let billed_now = if matches!(selection, ProviderSelection::Platform) {
         total_tokens as i64
@@ -515,6 +539,16 @@ pub(crate) async fn run_completion_for_org(
     };
 
     Ok((result.content, meta))
+}
+
+/// Stable wire label for a provider selection, shared by the response
+/// metadata and the `ai_usage` audit row so they never drift.
+fn provider_label(selection: ProviderSelection) -> &'static str {
+    match selection {
+        ProviderSelection::Byok => "byok",
+        ProviderSelection::Platform => "platform",
+        ProviderSelection::Disabled => "disabled",
+    }
 }
 
 /// Read the org's BYOK config, returning `None` if missing or disabled.
