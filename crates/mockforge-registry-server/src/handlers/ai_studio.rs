@@ -262,7 +262,9 @@ pub async fn quota(
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
     let byok = load_byok_config(&state, org_ctx.org_id).await?;
-    let is_paid_plan = matches!(org_ctx.org.plan(), Plan::Pro | Plan::Team);
+    // Effective plan (#870) so the quota banner reflects a lapsed subscription.
+    let effective = crate::handlers::entitlements::effective_plan(&state, &org_ctx.org).await?;
+    let is_paid_plan = matches!(effective, Plan::Pro | Plan::Team);
     let provider = pick_provider(is_paid_plan, byok);
     let selection = provider.selection();
     let q = check_ai_quota(&state, &org_ctx.org, selection).await?;
@@ -470,8 +472,11 @@ pub(crate) async fn run_completion_for_org(
     // 1. BYOK lookup.
     let byok = load_byok_config(state, org.id).await?;
 
-    // 2. Provider routing (pure).
-    let is_paid_plan = matches!(org.plan(), Plan::Pro | Plan::Team);
+    // 2. Provider routing (pure). Use the *effective* plan (#870) so a
+    //    canceled/past-due org loses platform-credit AI access (it falls back
+    //    to Disabled without BYOK), instead of keeping it on a stale `plan`.
+    let effective = crate::handlers::entitlements::effective_plan(state, org).await?;
+    let is_paid_plan = matches!(effective, Plan::Pro | Plan::Team);
     let provider = pick_provider(is_paid_plan, byok);
 
     // 3. Pre-call quota check.
@@ -513,7 +518,14 @@ pub(crate) async fn run_completion_for_org(
 }
 
 /// Read the org's BYOK config, returning `None` if missing or disabled.
-async fn load_byok_config(state: &AppState, org_id: uuid::Uuid) -> ApiResult<Option<BYOKConfig>> {
+///
+/// `pub(crate)` so the test-generation create-job handler (#865) can reuse the
+/// exact BYOK resolution the AI pipeline uses when running its pre-enqueue
+/// quota gate.
+pub(crate) async fn load_byok_config(
+    state: &AppState,
+    org_id: uuid::Uuid,
+) -> ApiResult<Option<BYOKConfig>> {
     let setting = state.store.get_org_setting(org_id, "byok").await?;
     let Some(setting) = setting else {
         return Ok(None);

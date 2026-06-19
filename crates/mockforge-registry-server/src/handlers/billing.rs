@@ -850,6 +850,13 @@ async fn handle_subscription_deleted(
         .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
     let old_plan = org.plan();
 
+    // TODO(#870-followup): cancellation fairness. This downgrades the org to
+    // Free immediately on `customer.subscription.deleted`, ignoring
+    // `cancel_at_period_end` / `current_period_end` — a user who cancels
+    // mid-period loses paid features before the period they already paid for
+    // ends. The fix is to keep the paid plan until period end, then downgrade.
+    // Tracked separately from the entitlement-integrity work (#870); out of
+    // scope for the effective-plan gating change.
     // Downgrade org to free plan
     Organization::update_plan(pool, subscription_record.org_id, Plan::Free)
         .await

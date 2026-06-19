@@ -236,6 +236,25 @@ impl TestGenerationJob {
         .rows_affected();
         Ok(rows > 0)
     }
+
+    /// Count the org's in-flight (queued + running) jobs. Used by the
+    /// create-job handler (#865) to cap pending AI jobs per org and prevent
+    /// queue flooding — each dequeued job burns platform tokens, so an
+    /// unbounded queue is a cost-exposure even with a per-job quota check.
+    pub async fn count_pending_for_org(pool: &PgPool, org_id: Uuid) -> sqlx::Result<i64> {
+        let count: i64 = sqlx::query_scalar(
+            r#"
+            SELECT COUNT(*)
+            FROM cloud_test_generation_jobs
+            WHERE org_id = $1
+              AND status IN ('queued', 'running')
+            "#,
+        )
+        .bind(org_id)
+        .fetch_one(pool)
+        .await?;
+        Ok(count)
+    }
 }
 
 #[cfg(test)]

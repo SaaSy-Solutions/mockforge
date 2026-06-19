@@ -315,8 +315,11 @@ pub async fn add_organization_member(
         }
     };
 
-    // RBAC entitlement: Admin role is Team-only (#749).
-    require_role_allowed_on_plan(role, org.plan())?;
+    // RBAC entitlement: Admin role is Team-only (#749). Gate on the
+    // *effective* plan (#870) so a canceled/past-due Team org can't mint new
+    // Admin grants while its subscription is lapsed.
+    let effective = crate::handlers::entitlements::effective_plan(&state, &org).await?;
+    require_role_allowed_on_plan(role, effective)?;
 
     // Add member
     let member = state.store.create_org_member(org_id, target_user.id, role).await?;
@@ -490,8 +493,10 @@ pub async fn update_organization_member_role(
         }
     };
 
-    // RBAC entitlement: promoting to Admin is Team-only (#749).
-    require_role_allowed_on_plan(new_role, org.plan())?;
+    // RBAC entitlement: promoting to Admin is Team-only (#749). Effective
+    // plan (#870) so a lapsed subscription blocks the promotion.
+    let effective = crate::handlers::entitlements::effective_plan(&state, &org).await?;
+    require_role_allowed_on_plan(new_role, effective)?;
 
     // Update role
     state.store.update_org_member_role(org_id, member_user_id, new_role).await?;
@@ -840,8 +845,10 @@ pub async fn create_invitation(
     require_org_admin(&state, &org, user_id).await?;
 
     // RBAC entitlement: don't let lower plans mint Admin invitations (#749).
+    // Effective plan (#870) so a lapsed Team subscription blocks the invite.
     if role == "admin" {
-        require_role_allowed_on_plan(OrgRole::Admin, org.plan())?;
+        let effective = crate::handlers::entitlements::effective_plan(&state, &org).await?;
+        require_role_allowed_on_plan(OrgRole::Admin, effective)?;
     }
 
     use base64::Engine;
