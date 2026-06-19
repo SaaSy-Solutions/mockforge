@@ -788,7 +788,8 @@ pub async fn saml_acs(
     }
 
     // Find or create user
-    let user = find_or_create_user_from_saml(&state, &user_info, &org).await?;
+    let ProvisionedUser { user, jit_created } =
+        find_or_create_user_from_saml(&state, &user_info, &org).await?;
 
     // Record assertion ID to prevent replay attacks
     if let Some(assertion_id) = &user_info.assertion_id {
@@ -840,6 +841,28 @@ pub async fn saml_acs(
     // with this token to get a proper token pair for ongoing sessions.
     let token = crate::auth::create_token(&user.id.to_string(), &state.config.jwt_secret)
         .map_err(ApiError::Internal)?;
+
+    // Audit the successful SSO login (#871). The domain-ownership gate
+    // (`assert_email_in_verified_domain`, enforced inside `provision_sso_user`)
+    // has already passed by the time we reach here, so every audited row
+    // corresponds to a provisioning decision that cleared the #746/#778 gate.
+    state
+        .store
+        .record_audit_event(
+            org.id,
+            Some(user.id),
+            AuditEventType::LoginSucceeded,
+            format!("SSO login via SAML for {}", user.email),
+            Some(serde_json::json!({
+                "method": "saml",
+                "jit_created": jit_created,
+                "name_id": user_info.name_id,
+                "email": user.email,
+            })),
+            None, // ACS is an IdP POST; no meaningful end-user IP/UA here.
+            None,
+        )
+        .await;
 
     // Redirect to app with token
     let app_base_url =
@@ -1356,7 +1379,7 @@ async fn find_or_create_user_from_saml(
     state: &AppState,
     user_info: &SAMLUserInfo,
     org: &Organization,
-) -> Result<User, ApiError> {
+) -> Result<ProvisionedUser, ApiError> {
     let email = user_info
         .email
         .as_deref()
@@ -1379,7 +1402,7 @@ pub(crate) async fn provision_sso_user(
     org: &Organization,
     email: &str,
     username_hint: Option<&str>,
-) -> Result<User, ApiError> {
+) -> Result<ProvisionedUser, ApiError> {
     use crate::models::organization::OrgRole;
 
     let verifier = crate::sso_domain::DnsDomainVerifier;
@@ -1392,7 +1415,10 @@ pub(crate) async fn provision_sso_user(
             crate::sso_domain::assert_email_in_verified_domain(&verifier, org.id, email).await?;
             state.store.create_org_member(org.id, user.id, OrgRole::Member).await?;
         }
-        return Ok(user);
+        return Ok(ProvisionedUser {
+            user,
+            jit_created: false,
+        });
     }
 
     // JIT-provision a new user; gated on domain ownership.
@@ -1406,7 +1432,20 @@ pub(crate) async fn provision_sso_user(
     let user = state.store.create_user(&username, email, &password_hash).await?;
     state.store.mark_user_verified(user.id).await?;
     state.store.create_org_member(org.id, user.id, OrgRole::Member).await?;
-    Ok(user)
+    Ok(ProvisionedUser {
+        user,
+        jit_created: true,
+    })
+}
+
+/// Result of [`provision_sso_user`]: the resolved/created user plus whether
+/// this call JIT-created the account (vs. logging in / attaching an existing
+/// one). The flag feeds the `login_succeeded` audit event's `jit_created`
+/// metadata (#871) so account-provisioning is distinguishable from re-login in
+/// the forensic trail.
+pub(crate) struct ProvisionedUser {
+    pub user: User,
+    pub jit_created: bool,
 }
 
 /// Validate SAML assertion timestamps (NotBefore/NotOnOrAfter)

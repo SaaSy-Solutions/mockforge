@@ -117,3 +117,35 @@ async fn chain_verifies_and_is_tamper_evident_and_append_only() {
         "verify_chain must detect the tampered description"
     );
 }
+
+/// PR 2 (#866 / #873): the new `ai_usage` + `payment_failed` enum values must
+/// be present in the Postgres `audit_event_type` enum (added by migration
+/// 20250101000081). If migration ...081 were missing or the values mismatched
+/// the Rust `as_str()` literals, `AuditLog::create` would fail the enum bind
+/// here. This also confirms the rows extend the tamper-evident chain normally.
+#[tokio::test]
+#[ignore = "requires DATABASE_URL Postgres"]
+async fn new_event_types_insert_and_extend_chain() {
+    let pool = pool().await;
+    let org_id = Uuid::new_v4();
+
+    for event_type in [AuditEventType::AiUsage, AuditEventType::PaymentFailed] {
+        AuditLog::create(
+            &pool,
+            org_id,
+            None,
+            event_type,
+            format!("pr2 event {}", event_type.as_str()),
+            Some(serde_json::json!({ "event": event_type.as_str() })),
+            None,
+            None,
+        )
+        .await
+        .unwrap_or_else(|e| panic!("create {} failed: {e}", event_type.as_str()));
+    }
+
+    assert!(
+        AuditLog::verify_chain(&pool, org_id).await.expect("verify_chain"),
+        "chain with ai_usage + payment_failed rows must verify"
+    );
+}

@@ -522,7 +522,7 @@ pub async fn oidc_callback(
     let username_hint = claims.preferred_username.clone().or_else(|| claims.name.clone());
 
     // Domain-ownership gate + provisioning, identical to the SAML path (#833).
-    let user =
+    let super::sso::ProvisionedUser { user, jit_created } =
         super::sso::provision_sso_user(&state, &org, &email, username_hint.as_deref()).await?;
 
     // Mirror saml_acs: create an SSO session and mint a short-lived app token.
@@ -540,6 +540,27 @@ pub async fn oidc_callback(
 
     let token = crate::auth::create_token(&user.id.to_string(), &state.config.jwt_secret)
         .map_err(ApiError::Internal)?;
+
+    // Audit the successful SSO login (#871). The domain-ownership gate
+    // (`assert_email_in_verified_domain`, enforced inside `provision_sso_user`)
+    // has already passed for this user, identical to the SAML path.
+    state
+        .store
+        .record_audit_event(
+            org.id,
+            Some(user.id),
+            crate::models::AuditEventType::LoginSucceeded,
+            format!("SSO login via OIDC for {}", email),
+            Some(serde_json::json!({
+                "method": "oidc",
+                "jit_created": jit_created,
+                "email": email,
+            })),
+            None, // IdP redirect callback; no meaningful end-user IP/UA here.
+            None,
+        )
+        .await;
+
     let redirect_url =
         format!("{}/auth/sso/callback?token={}&org_slug={}", app_base_url(), token, org_slug);
 

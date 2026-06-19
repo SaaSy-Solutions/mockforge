@@ -49,7 +49,8 @@ use crate::{
     AppState,
 };
 use mockforge_registry_core::models::{
-    organization::Plan, test_generation_job::TestGenerationJob, BYOKConfig, Organization,
+    organization::Plan, test_generation_job::TestGenerationJob, AuditEventType, BYOKConfig,
+    Organization,
 };
 
 /// Default poll cadence. Test-generation jobs are interactive (user
@@ -244,6 +245,29 @@ async fn process_job(state: &AppState, job: TestGenerationJob) -> Result<Value, 
             "test_generation_worker: usage metering failed",
         );
     }
+
+    // Audit the AI usage (#866), mirroring the ai_studio metered path.
+    // Best-effort: never fails the job. `created_by` is the user who queued
+    // the job (when present).
+    state
+        .store
+        .record_audit_event(
+            org.id,
+            job.created_by,
+            AuditEventType::AiUsage,
+            format!("AI test-generation completion via {} provider", provider_label),
+            Some(json!({
+                "handler": "test_generation_worker.process_job",
+                "job_id": job.id,
+                "provider": provider_label,
+                "prompt_tokens": llm_result.prompt_tokens,
+                "completion_tokens": llm_result.completion_tokens,
+                "total_tokens": llm_result.total_tokens(),
+            })),
+            None,
+            None,
+        )
+        .await;
 
     // 8. Parse + assemble the persisted result.
     let scenarios = parse_scenarios(&llm_result.content);

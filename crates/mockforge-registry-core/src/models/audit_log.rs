@@ -28,6 +28,10 @@ pub enum AuditEventType {
     BillingUpgrade,
     BillingDowngrade,
     BillingCanceled,
+    // Payment failure (#873) — distinct from cancellation. The Stripe
+    // `invoice.payment_failed` webhook previously reused `BillingCanceled`,
+    // which conflated a past-due dunning state with a real cancellation.
+    PaymentFailed,
     // API tokens
     ApiTokenCreated,
     ApiTokenDeleted,
@@ -62,6 +66,9 @@ pub enum AuditEventType {
     TwoFactorDisabled,
     // GDPR / data egress (#872) — bulk personal-data export.
     DataExported,
+    // AI usage (#866) — every metered platform LLM call is logged for
+    // SOC2 cost-attribution / abuse forensics.
+    AiUsage,
     // Federation
     FederationCreated,
     FederationUpdated,
@@ -122,6 +129,7 @@ impl AuditEventType {
             "billing_upgrade" => Some(Self::BillingUpgrade),
             "billing_downgrade" => Some(Self::BillingDowngrade),
             "billing_canceled" => Some(Self::BillingCanceled),
+            "payment_failed" => Some(Self::PaymentFailed),
             "api_token_created" => Some(Self::ApiTokenCreated),
             "api_token_deleted" => Some(Self::ApiTokenDeleted),
             "api_token_rotated" => Some(Self::ApiTokenRotated),
@@ -148,6 +156,7 @@ impl AuditEventType {
             "two_factor_enabled" => Some(Self::TwoFactorEnabled),
             "two_factor_disabled" => Some(Self::TwoFactorDisabled),
             "data_exported" => Some(Self::DataExported),
+            "ai_usage" => Some(Self::AiUsage),
             "federation_created" => Some(Self::FederationCreated),
             "federation_updated" => Some(Self::FederationUpdated),
             "federation_deleted" => Some(Self::FederationDeleted),
@@ -197,6 +206,7 @@ impl AuditEventType {
             Self::BillingUpgrade => "billing_upgrade",
             Self::BillingDowngrade => "billing_downgrade",
             Self::BillingCanceled => "billing_canceled",
+            Self::PaymentFailed => "payment_failed",
             Self::ApiTokenCreated => "api_token_created",
             Self::ApiTokenDeleted => "api_token_deleted",
             Self::ApiTokenRotated => "api_token_rotated",
@@ -223,6 +233,7 @@ impl AuditEventType {
             Self::TwoFactorEnabled => "two_factor_enabled",
             Self::TwoFactorDisabled => "two_factor_disabled",
             Self::DataExported => "data_exported",
+            Self::AiUsage => "ai_usage",
             Self::FederationCreated => "federation_created",
             Self::FederationUpdated => "federation_updated",
             Self::FederationDeleted => "federation_deleted",
@@ -593,6 +604,7 @@ mod tests {
             AuditEventType::BillingUpgrade,
             AuditEventType::BillingDowngrade,
             AuditEventType::BillingCanceled,
+            AuditEventType::PaymentFailed,
             AuditEventType::ApiTokenCreated,
             AuditEventType::ApiTokenDeleted,
             AuditEventType::ApiTokenRotated,
@@ -619,6 +631,7 @@ mod tests {
             AuditEventType::TwoFactorEnabled,
             AuditEventType::TwoFactorDisabled,
             AuditEventType::DataExported,
+            AuditEventType::AiUsage,
             AuditEventType::FederationCreated,
             AuditEventType::FederationUpdated,
             AuditEventType::FederationDeleted,
@@ -656,5 +669,14 @@ mod tests {
         assert_eq!(AuditEventType::ApiTokenCreated.as_str(), "api_token_created");
         assert_eq!(AuditEventType::OrgUpdated.as_str(), "org_updated");
         assert_eq!(AuditEventType::MemberRoleChanged.as_str(), "member_role_changed");
+    }
+
+    #[test]
+    fn audit_event_type_new_variants_round_trip() {
+        // New in PR 2 (#866 / #873): AI usage + dedicated payment-failure event.
+        assert_eq!(AuditEventType::AiUsage.as_str(), "ai_usage");
+        assert_eq!(AuditEventType::from_str("ai_usage"), Some(AuditEventType::AiUsage));
+        assert_eq!(AuditEventType::PaymentFailed.as_str(), "payment_failed");
+        assert_eq!(AuditEventType::from_str("payment_failed"), Some(AuditEventType::PaymentFailed));
     }
 }
