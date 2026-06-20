@@ -100,8 +100,8 @@ struct ChainMeta {
 /// things even if they happen to share a name.
 #[derive(Debug, Default, Clone)]
 struct ChainContext {
-    vars: std::collections::HashMap<String, String>,
-    cookies: std::collections::HashMap<String, String>,
+    vars: HashMap<String, String>,
+    cookies: HashMap<String, String>,
 }
 
 impl ChainContext {
@@ -224,7 +224,7 @@ pub struct NativeConformanceExecutor {
     /// in `checks`. Entries are only present for custom checks that
     /// declared a non-default `extract` block or `repeat` config in
     /// the YAML.
-    chain_meta: std::collections::HashMap<usize, ChainMeta>,
+    chain_meta: HashMap<usize, ChainMeta>,
     /// Round 38 (#79) — how many times to repeat the entire chain
     /// of custom checks. Built-in spec checks always run once. Reset
     /// to a fresh `ChainContext` at the start of each iteration so
@@ -251,7 +251,7 @@ impl NativeConformanceExecutor {
             config,
             client,
             checks: Vec::new(),
-            chain_meta: std::collections::HashMap::new(),
+            chain_meta: HashMap::new(),
             chain_iterations: 1,
         })
     }

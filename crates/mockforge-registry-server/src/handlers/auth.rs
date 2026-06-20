@@ -350,7 +350,7 @@ pub async fn refresh_token(
     }
 
     // Parse user ID from claims
-    let user_id = uuid::Uuid::parse_str(&claims.sub)
+    let user_id = Uuid::parse_str(&claims.sub)
         .map_err(|_| ApiError::InvalidRequest("Invalid user ID".to_string()))?;
 
     // Find user to ensure they still exist and are active
