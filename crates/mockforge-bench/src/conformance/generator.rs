@@ -81,7 +81,16 @@ impl ConformanceConfig {
     /// Generate a k6 group block for custom checks, if configured.
     /// Returns `Ok(None)` if no custom checks file is configured.
     /// Respects `custom_filter` to include only matching checks.
-    pub fn generate_custom_group(&self) -> Result<Option<String>> {
+    ///
+    /// Round 39 (#79) — returns BOTH the init-scope code (e.g.
+    /// `const __file_0 = open('/path', 'b')` for file uploads) and
+    /// the group body. The caller splices `init_code` near the top of
+    /// the script (after `BASE_URL`, before `export default
+    /// function`) and `group_body` inside the default function. k6
+    /// requires `open()` to live at init scope.
+    pub fn generate_custom_group(
+        &self,
+    ) -> Result<Option<crate::conformance::custom::K6CustomEmit>> {
         let path = match &self.custom_checks_file {
             Some(p) => p,
             None => return Ok(None),
@@ -108,7 +117,7 @@ impl ConformanceConfig {
             }
         }
 
-        Ok(Some(config.generate_k6_group_with_options(
+        Ok(Some(config.emit_k6_with_options(
             "BASE_URL",
             &self.custom_headers,
             self.export_requests,
@@ -192,6 +201,20 @@ impl ConformanceGenerator {
         // Helper: JSON headers
         script.push_str("const JSON_HEADERS = { 'Content-Type': 'application/json' };\n\n");
 
+        // Round 39 (#79) — emit init-scope code (e.g. `open()` calls
+        // for file uploads in custom checks) here, before any
+        // function declarations. k6 requires `open()` to live at
+        // script init scope; placing it inside `export default
+        // function` is a runtime ReferenceError.
+        let custom_emit = self.config.generate_custom_group()?;
+        if let Some(emit) = &custom_emit {
+            if !emit.init_code.is_empty() {
+                script.push_str("// Round 39 (#79) — preloaded upload bytes for custom checks\n");
+                script.push_str(&emit.init_code);
+                script.push('\n');
+            }
+        }
+
         // Failure detail collector — logs req/res info for failed checks via console.log
         script.push_str("function __captureFailure(checkName, res, expected) {\n");
         script.push_str("  let bodyStr = '';\n");
@@ -266,49 +289,67 @@ impl ConformanceGenerator {
             String::new()
         };
 
-        if self.config.should_include_category("Parameters") {
-            self.generate_parameters_group(&mut script);
-            script.push_str(&delay_between);
-        }
-        if self.config.should_include_category("Request Bodies") {
-            self.generate_request_bodies_group(&mut script);
-            script.push_str(&delay_between);
-        }
-        if self.config.should_include_category("Schema Types") {
-            self.generate_schema_types_group(&mut script);
-            script.push_str(&delay_between);
-        }
-        if self.config.should_include_category("Composition") {
-            self.generate_composition_group(&mut script);
-            script.push_str(&delay_between);
-        }
-        if self.config.should_include_category("String Formats") {
-            self.generate_string_formats_group(&mut script);
-            script.push_str(&delay_between);
-        }
-        if self.config.should_include_category("Constraints") {
-            self.generate_constraints_group(&mut script);
-            script.push_str(&delay_between);
-        }
-        if self.config.should_include_category("Response Codes") {
-            self.generate_response_codes_group(&mut script);
-            script.push_str(&delay_between);
-        }
-        if self.config.should_include_category("HTTP Methods") {
-            self.generate_http_methods_group(&mut script);
-            script.push_str(&delay_between);
-        }
-        if self.config.should_include_category("Content Types") {
-            self.generate_content_negotiation_group(&mut script);
-            script.push_str(&delay_between);
-        }
-        if self.config.should_include_category("Security") {
-            self.generate_security_group(&mut script);
+        // Round 39 (#79) — Srikanth on 0.3.183: "In the exported
+        // request I see it is sending request to
+        // api/conformance/params/hello and some other URLs". When the
+        // user passed `--conformance-custom` without `--spec`, the
+        // generator still emitted the 47 built-in reference checks
+        // against `/conformance/...` paths, which 404 on a real
+        // target. Skip them when custom checks are the only input —
+        // matching the native executor's `custom_only` branch.
+        let custom_only = self.config.custom_checks_file.is_some()
+            && !self.config.target_url.is_empty()
+            // Reference checks ARE the right answer when the user
+            // explicitly listed categories with --conformance-category.
+            && self.config.categories.is_none();
+        if !custom_only {
+            if self.config.should_include_category("Parameters") {
+                self.generate_parameters_group(&mut script);
+                script.push_str(&delay_between);
+            }
+            if self.config.should_include_category("Request Bodies") {
+                self.generate_request_bodies_group(&mut script);
+                script.push_str(&delay_between);
+            }
+            if self.config.should_include_category("Schema Types") {
+                self.generate_schema_types_group(&mut script);
+                script.push_str(&delay_between);
+            }
+            if self.config.should_include_category("Composition") {
+                self.generate_composition_group(&mut script);
+                script.push_str(&delay_between);
+            }
+            if self.config.should_include_category("String Formats") {
+                self.generate_string_formats_group(&mut script);
+                script.push_str(&delay_between);
+            }
+            if self.config.should_include_category("Constraints") {
+                self.generate_constraints_group(&mut script);
+                script.push_str(&delay_between);
+            }
+            if self.config.should_include_category("Response Codes") {
+                self.generate_response_codes_group(&mut script);
+                script.push_str(&delay_between);
+            }
+            if self.config.should_include_category("HTTP Methods") {
+                self.generate_http_methods_group(&mut script);
+                script.push_str(&delay_between);
+            }
+            if self.config.should_include_category("Content Types") {
+                self.generate_content_negotiation_group(&mut script);
+                script.push_str(&delay_between);
+            }
+            if self.config.should_include_category("Security") {
+                self.generate_security_group(&mut script);
+            }
         }
 
-        // Custom checks from YAML file
-        if let Some(custom_group) = self.config.generate_custom_group()? {
-            script.push_str(&custom_group);
+        // Custom checks from YAML file — round 39: we already called
+        // `generate_custom_group()` above to emit init-scope code, so
+        // here we just splice the group body inside the default
+        // function.
+        if let Some(emit) = custom_emit {
+            script.push_str(&emit.group_body);
         }
 
         script.push_str("}\n\n");

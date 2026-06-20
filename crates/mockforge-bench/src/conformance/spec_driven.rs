@@ -747,6 +747,18 @@ impl SpecDrivenConformanceGenerator {
         script.push_str(&format!("const BASE_URL = '{}';\n\n", self.config.effective_base_url()));
         script.push_str("const JSON_HEADERS = { 'Content-Type': 'application/json' };\n\n");
 
+        // Round 39 (#79) — emit init-scope code (e.g. `open()` calls
+        // for file uploads in custom checks) here, before any
+        // function declarations.
+        let custom_emit = self.config.generate_custom_group()?;
+        if let Some(emit) = &custom_emit {
+            if !emit.init_code.is_empty() {
+                script.push_str("// Round 39 (#79) — preloaded upload bytes for custom checks\n");
+                script.push_str(&emit.init_code);
+                script.push('\n');
+            }
+        }
+
         // Failure detail collector — logs req/res info for failed checks via console.log
         // (k6's handleSummary runs in a separate JS context, so we can't use module-level arrays)
         script
@@ -862,9 +874,11 @@ impl SpecDrivenConformanceGenerator {
             script.push_str("  });\n\n");
         }
 
-        // Custom checks from YAML file
-        if let Some(custom_group) = self.config.generate_custom_group()? {
-            script.push_str(&custom_group);
+        // Custom checks from YAML file — round 39: init-scope code
+        // was already emitted above; here we just splice the group
+        // body inside the default function.
+        if let Some(emit) = custom_emit {
+            script.push_str(&emit.group_body);
         }
 
         script.push_str("}\n\n");
