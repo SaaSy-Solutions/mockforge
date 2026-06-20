@@ -32,7 +32,7 @@ jobs:
           mdbook-version: '0.4.40'
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@1.96.0
 
       - name: Cache mdBook plugins
         uses: actions/cache@v5
