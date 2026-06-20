@@ -17,7 +17,7 @@ env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
   CARGO_BUILD_JOBS: "4"
-  RUSTUP_TOOLCHAIN: stable
+  RUSTUP_TOOLCHAIN: "1.96.0"
   # Reality level for mock testing (1-5, default: 3)
   # 1 = Static Stubs, 2 = Light Simulation, 3 = Moderate Realism,
   # 4 = High Realism, 5 = Production Chaos
@@ -87,7 +87,7 @@ jobs:
       fail-fast: false
       matrix:
         rust:
-          - stable
+          - "1.96.0"
 
     steps:
     - name: Set per-runner CARGO_HOME
@@ -121,7 +121,7 @@ jobs:
 
     - name: Check formatting
       run: cargo fmt --all -- --check
-      if: matrix.rust == 'stable'
+      if: matrix.rust == '1.96.0'
 
     # `-D unused_qualifications` mirrors the workspace-wide ratchet in
     # scripts/lint-warning-gate.sh, but surfaces it here in the main
@@ -133,7 +133,7 @@ jobs:
     # Static command — no untrusted input is interpolated.
     - name: Run clippy
       run: cargo clippy --workspace --exclude mockforge-desktop --lib --bins --all-features -- -D clippy::correctness -D unused_qualifications
-      if: matrix.rust == 'stable'
+      if: matrix.rust == '1.96.0'
 
     - name: Build workspace
       run: cargo build --workspace --exclude mockforge-desktop --verbose
@@ -167,12 +167,12 @@ jobs:
 
     - name: Run tests with all features
       run: cargo test --workspace --exclude mockforge-desktop --exclude mockforge-tui --all-features --verbose
-      if: matrix.rust == 'stable'
+      if: matrix.rust == '1.96.0'
       continue-on-error: true  # May fail if native libs (vosk) not installed
 
     - name: Check documentation
       run: cargo doc --workspace --exclude mockforge-desktop --no-deps
-      if: matrix.rust == 'stable'
+      if: matrix.rust == '1.96.0'
 
   ui-test:
     name: UI Tests

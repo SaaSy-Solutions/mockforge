@@ -12,7 +12,7 @@ inputs:
   toolchain:
     description: 'Rust toolchain to install (passed through to dtolnay/rust-toolchain).'
     required: false
-    default: 'stable'
+    default: '1.96.0'
   components:
     description: 'Comma-separated rustup components (clippy, rustfmt, ...). Passed through.'
     required: false
