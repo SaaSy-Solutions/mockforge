@@ -264,29 +264,55 @@ impl OpenApiSpec {
         if let Some(path_item_ref) = self.spec.paths.paths.get(path) {
             // Handle the ReferenceOr<PathItem> case
             if let Some(path_item) = path_item_ref.as_item() {
+                // Round 40 (#888 / #79) — Srikanth's Google Apigee
+                // spec puts the shared auth / format query
+                // parameters at PATH level, not on each operation.
+                // OpenAPI 3.0 §4.7.10.1: "Parameters that are
+                // included in the Operation Object inherit the
+                // parameters defined in the Path Item Object. If a
+                // parameter is already defined at the Path Item, the
+                // new definition will override it but can never
+                // remove it." We materialise that inheritance HERE
+                // (the lowest common point under both registry
+                // builders), so a request that violates a path-level
+                // `enum` or `type: boolean` reaches the validator's
+                // parameter loop instead of silently passing. We
+                // also resolve `$ref` parameters via
+                // `components.parameters` so the validator's loop
+                // (which skips `ReferenceOr::Reference` entries via
+                // `as_item()`) actually sees them.
+                let resolved_path_params: Vec<openapiv3::ReferenceOr<openapiv3::Parameter>> =
+                    path_item.parameters.iter().map(|p| self.resolve_parameter_ref(p)).collect();
+                let merge = |op: &openapiv3::Operation| -> openapiv3::Operation {
+                    // Resolve op-level refs too — same as path-level.
+                    let mut resolved_op = op.clone();
+                    resolved_op.parameters =
+                        op.parameters.iter().map(|p| self.resolve_parameter_ref(p)).collect();
+                    merge_path_params_into_operation(&resolved_op, &resolved_path_params)
+                };
                 if let Some(op) = &path_item.get {
-                    operations.insert("GET".to_string(), op.clone());
+                    operations.insert("GET".to_string(), merge(op));
                 }
                 if let Some(op) = &path_item.post {
-                    operations.insert("POST".to_string(), op.clone());
+                    operations.insert("POST".to_string(), merge(op));
                 }
                 if let Some(op) = &path_item.put {
-                    operations.insert("PUT".to_string(), op.clone());
+                    operations.insert("PUT".to_string(), merge(op));
                 }
                 if let Some(op) = &path_item.delete {
-                    operations.insert("DELETE".to_string(), op.clone());
+                    operations.insert("DELETE".to_string(), merge(op));
                 }
                 if let Some(op) = &path_item.patch {
-                    operations.insert("PATCH".to_string(), op.clone());
+                    operations.insert("PATCH".to_string(), merge(op));
                 }
                 if let Some(op) = &path_item.head {
-                    operations.insert("HEAD".to_string(), op.clone());
+                    operations.insert("HEAD".to_string(), merge(op));
                 }
                 if let Some(op) = &path_item.options {
-                    operations.insert("OPTIONS".to_string(), op.clone());
+                    operations.insert("OPTIONS".to_string(), merge(op));
                 }
                 if let Some(op) = &path_item.trace {
-                    operations.insert("TRACE".to_string(), op.clone());
+                    operations.insert("TRACE".to_string(), merge(op));
                 }
             }
         }
@@ -318,6 +344,56 @@ impl OpenApiSpec {
     /// actual schema definition, handling nested references recursively.
     pub fn resolve_schema_ref(&self, reference: &str) -> Option<Schema> {
         self.resolve_schema(reference)
+    }
+
+    /// Round 40 (#888 / #79) — resolve a parameter `$ref` (typically
+    /// `#/components/parameters/foo`) into the inline `Parameter`
+    /// item it points at. Returns the input unchanged when the
+    /// reference can't be resolved (e.g. external `$ref`) so the
+    /// validator can fall back to its prior behaviour (skip via
+    /// `as_item()`) instead of panicking. Used by
+    /// `operations_for_path` to materialise refs at registry build
+    /// time, since the validator's parameter loop skips
+    /// `ReferenceOr::Reference` entries — which was why Srikanth's
+    /// Google Apigee spec silently passed every path-level param
+    /// violation: the path-level `parameters:` list is entirely
+    /// `$ref:` to shared common params like `_.xgafv`,
+    /// `prettyPrint`, etc.
+    pub fn resolve_parameter_ref(
+        &self,
+        p_ref: &openapiv3::ReferenceOr<openapiv3::Parameter>,
+    ) -> openapiv3::ReferenceOr<openapiv3::Parameter> {
+        match p_ref {
+            openapiv3::ReferenceOr::Item(_) => p_ref.clone(),
+            openapiv3::ReferenceOr::Reference { reference } => {
+                let Some(name) = reference.strip_prefix("#/components/parameters/") else {
+                    return p_ref.clone();
+                };
+                let Some(components) = self.spec.components.as_ref() else {
+                    return p_ref.clone();
+                };
+                match components.parameters.get(name) {
+                    Some(openapiv3::ReferenceOr::Item(p)) => {
+                        openapiv3::ReferenceOr::Item(p.clone())
+                    }
+                    Some(openapiv3::ReferenceOr::Reference { reference: nested }) => {
+                        // Tail-resolve a chained ref (rare in practice
+                        // but allowed by the spec).
+                        let Some(nested_name) = nested.strip_prefix("#/components/parameters/")
+                        else {
+                            return p_ref.clone();
+                        };
+                        match components.parameters.get(nested_name) {
+                            Some(openapiv3::ReferenceOr::Item(p)) => {
+                                openapiv3::ReferenceOr::Item(p.clone())
+                            }
+                            _ => p_ref.clone(),
+                        }
+                    }
+                    None => p_ref.clone(),
+                }
+            }
+        }
     }
 
     /// Validate security requirements
@@ -510,6 +586,59 @@ impl OpenApiSpec {
         }
         None
     }
+}
+
+/// Round 40 (#888 / #79) — merge path-level parameters from a
+/// `PathItem` into an `Operation`'s own parameters per OpenAPI 3.0
+/// §4.7.10.1. Returns a cloned `Operation` whose `parameters` list
+/// contains every path-level entry, followed by every operation-level
+/// entry, with collisions on `(name, in)` resolved in favour of the
+/// operation-level definition. The original `Operation` is not
+/// mutated. Lives in `spec.rs` so every registry builder that calls
+/// `operations_for_path` benefits from the merge automatically.
+pub(crate) fn merge_path_params_into_operation(
+    operation: &openapiv3::Operation,
+    path_level_params: &[openapiv3::ReferenceOr<openapiv3::Parameter>],
+) -> openapiv3::Operation {
+    use std::collections::HashSet;
+    if path_level_params.is_empty() {
+        return operation.clone();
+    }
+    let mut op_keys: HashSet<(String, String)> = HashSet::new();
+    for p_ref in &operation.parameters {
+        if let Some(key) = parameter_key(p_ref) {
+            op_keys.insert(key);
+        }
+    }
+    let mut merged: Vec<openapiv3::ReferenceOr<openapiv3::Parameter>> =
+        Vec::with_capacity(path_level_params.len() + operation.parameters.len());
+    for p_ref in path_level_params {
+        match parameter_key(p_ref) {
+            Some(key) if op_keys.contains(&key) => {}
+            _ => merged.push(p_ref.clone()),
+        }
+    }
+    merged.extend(operation.parameters.iter().cloned());
+    let mut cloned = operation.clone();
+    cloned.parameters = merged;
+    cloned
+}
+
+fn parameter_key(p_ref: &openapiv3::ReferenceOr<openapiv3::Parameter>) -> Option<(String, String)> {
+    let p = p_ref.as_item()?;
+    let (name, in_loc) = match p {
+        openapiv3::Parameter::Path { parameter_data, .. } => (parameter_data.name.clone(), "path"),
+        openapiv3::Parameter::Query { parameter_data, .. } => {
+            (parameter_data.name.clone(), "query")
+        }
+        openapiv3::Parameter::Header { parameter_data, .. } => {
+            (parameter_data.name.clone(), "header")
+        }
+        openapiv3::Parameter::Cookie { parameter_data, .. } => {
+            (parameter_data.name.clone(), "cookie")
+        }
+    };
+    Some((name, in_loc.to_string()))
 }
 
 #[cfg(test)]
