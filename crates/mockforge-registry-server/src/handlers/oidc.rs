@@ -308,13 +308,9 @@ fn encode_flow(secret: &str, flow: &FlowState) -> Result<String, ApiError> {
 fn decode_flow(secret: &str, token: &str) -> Result<FlowState, ApiError> {
     let mut validation = Validation::new(Algorithm::HS256);
     validation.validate_exp = true;
-    jsonwebtoken::decode::<FlowState>(
-        token,
-        &DecodingKey::from_secret(secret.as_bytes()),
-        &validation,
-    )
-    .map(|d| d.claims)
-    .map_err(|_| ApiError::InvalidRequest("OIDC login session expired or invalid".into()))
+    decode::<FlowState>(token, &DecodingKey::from_secret(secret.as_bytes()), &validation)
+        .map(|d| d.claims)
+        .map_err(|_| ApiError::InvalidRequest("OIDC login session expired or invalid".into()))
 }
 
 fn set_flow_cookie(token: &str) -> String {

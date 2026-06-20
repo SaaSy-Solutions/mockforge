@@ -546,7 +546,7 @@ fn write_k6_group_body(
                 let var = format!("__file_{}", *upload_counter);
                 *upload_counter += 1;
                 let filename = spec.filename.clone().unwrap_or_else(|| {
-                    std::path::Path::new(&spec.path)
+                    Path::new(&spec.path)
                         .file_name()
                         .and_then(|n| n.to_str())
                         .unwrap_or("upload.bin")
