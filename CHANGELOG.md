@@ -1,3 +1,9 @@
+## [0.3.185] - 2026-06-20
+
+### Fixed
+
+- **[Contracts]** OpenAPI request validator now picks up path-level parameters and resolves `$ref` parameters, so query / header / cookie violations are detected on specs that follow the OpenAPI 3.0 §4.7.10.1 inheritance pattern (#888 / #79 round 40 / Srikanth on 0.3.183: "Our Proxy is detecting below Violation ... But mockforge server and client doesnt show this violation"). The Google Apigee spec he attached defines the shared auth / format query params (`$.xgafv`, `prettyPrint`, `key`, `oauth_token`, etc.) once at PATH level via `$ref` to `#/components/parameters/*`, then inherits them on every operation. v0.3.184's `spec::operations_for_path` cloned each `Operation` but ignored `path_item.parameters`, so the inherited params never reached the validator; even when they did, the validator's `p_ref.as_item()` call skipped `ReferenceOr::Reference` entries, so a path-level enum violation walked past validation silently. Two helpers in `mockforge-openapi::spec`: `merge_path_params_into_operation` (operation-wins-on-collision per the spec) and `resolve_parameter_ref` (one-level `$ref` walk with tail-resolve for chained refs). Both run once at registry build time inside `operations_for_path`, so both registry builders (`openapi_routes.rs` and `openapi_routes/registry.rs`) pick up the merged + resolved list. New unit test pins the override semantics against a minimal repro spec. Real-binary verified against Srikanth's exact spec: `POST /v1/organizations?$.xgafv=test-value&prettyPrint=test-value` went from `200 OK` (silently passed) to `400` with both violations recorded on `/__mockforge/api/conformance/violations` (`'$.xgafv' validation failed: "test-value" is not one of "1" or "2"`, `'prettyPrint' validation failed: "test-value" is not of type "boolean"`).
+
 ## [0.3.184] - 2026-06-20
 
 ### Fixed
