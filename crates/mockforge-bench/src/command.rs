@@ -2785,8 +2785,20 @@ impl BenchCommand {
 
         let mut executor = crate::conformance::executor::NativeConformanceExecutor::new(config)?;
 
+        // Round 39 (#79) — when the user passed `--conformance-custom`
+        // WITHOUT `--spec` and without `--conformance-self-test`, fire
+        // only the YAML's checks. The built-in 47 reference checks
+        // (`param:path:string`, etc.) hit `/conformance/...` paths that
+        // do not exist on a real target, so a custom-only run against
+        // a remote API produced a flood of irrelevant 404s in the
+        // request log. Srikanth on 0.3.183: "In the exported request I
+        // see it is sending request to api/conformance/params/hello
+        // and some other URLs".
+        let custom_only = annotated_ops.is_none() && self.conformance_custom.is_some();
         executor = if let Some(annotated) = &annotated_ops {
             executor.with_spec_driven_checks(annotated)
+        } else if custom_only {
+            executor
         } else {
             executor.with_reference_checks()
         };
@@ -3069,8 +3081,13 @@ impl BenchCommand {
                 let mut executor =
                     crate::conformance::executor::NativeConformanceExecutor::new(config)?;
 
+                // Round 39 (#79) — see custom_only comment above; same
+                // logic applied to the multi-target branch.
+                let custom_only = annotated_ops.is_none() && self.conformance_custom.is_some();
                 executor = if let Some(ref annotated) = annotated_ops {
                     executor.with_spec_driven_checks(annotated)
+                } else if custom_only {
+                    executor
                 } else {
                     executor.with_reference_checks()
                 };
