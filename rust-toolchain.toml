@@ -1,0 +1,14 @@
+# Pin the Rust toolchain so clippy/rustc lint behavior and local builds stay
+# deterministic instead of silently drifting whenever the runner's "stable"
+# advances. This is what caused ci.yml's `-D unused_qualifications` clippy gate
+# to go red when stable moved to 1.96.0.
+#
+# Keep this in sync with the toolchain pinned in CI:
+#   - .github/actions/rust-toolchain/action.yml (default input)
+#   - .github/workflows/ci.yml (RUSTUP_TOOLCHAIN, matrix.rust, `== '1.96.0'` guards)
+#   - .github/workflows/registry-e2e.yml (RUSTUP_TOOLCHAIN, `rustup default`)
+# Bump deliberately. The MSRV (1.91) is enforced separately by the dedicated
+# CI job and is intentionally NOT changed by this pin.
+[toolchain]
+channel = "1.96.0"
+components = ["clippy", "rustfmt"]

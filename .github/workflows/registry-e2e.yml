@@ -25,7 +25,7 @@ env:
   # `CARGO_HOME` is set per-job (not here) — it must reference `runner.name`,
   # which the workflow parser only resolves once a runner is assigned.
   CARGO_BUILD_JOBS: "4"
-  RUSTUP_TOOLCHAIN: stable
+  RUSTUP_TOOLCHAIN: "1.96.0"
 
 concurrency:
   group: registry-e2e-${{ github.ref }}
@@ -128,8 +128,8 @@ jobs:
       - name: Install Rust toolchain
         uses: ./.github/actions/rust-toolchain
 
-      - name: Ensure rustup default = stable
-        run: rustup default stable
+      - name: Ensure rustup default = 1.96.0
+        run: rustup default 1.96.0
 
       - name: Install protoc
         run: 'dpkg -s protobuf-compiler > /dev/null 2>&1 || { echo "::error::protobuf-compiler missing on self-hosted runner. Run: sudo apt-get install -y protobuf-compiler"; exit 1; }'
