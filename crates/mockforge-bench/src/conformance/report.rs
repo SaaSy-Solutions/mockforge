@@ -118,6 +118,7 @@ where
 /// Extract the base name of a custom check.
 /// Custom sub-checks have format "custom:name:header:..." or "custom:name:body:..."
 /// The base name is just the primary check (e.g., "custom:pets-returns-200").
+#[allow(dead_code)]
 fn extract_custom_base_name(check_name: &str) -> String {
     // "custom:" prefix is 7 chars. Find the next colon after that.
     let after_prefix = &check_name[7..];
@@ -126,6 +127,20 @@ fn extract_custom_base_name(check_name: &str) -> String {
     } else {
         check_name.to_string()
     }
+}
+
+/// Round 41 (#79) — `true` when `check_name` is the PRIMARY status
+/// check for a custom YAML entry, not a header / body sub-check.
+/// Sub-checks have the form `custom:name:header:<header>` or
+/// `custom:name:body:<field>:<type>`; we only count primaries in the
+/// "Custom" category total so a check with N header assertions
+/// doesn't appear as N+1 requests.
+fn is_primary_custom_check(check_name: &str) -> bool {
+    if !check_name.starts_with("custom:") {
+        return false;
+    }
+    let after_prefix = &check_name[7..];
+    !after_prefix.contains(":header:") && !after_prefix.contains(":body:")
 }
 
 /// Conformance test report
@@ -337,24 +352,31 @@ impl ConformanceReport {
             }
         }
 
-        // Aggregate custom checks (check names starting with "custom:")
+        // Aggregate custom checks (check names starting with "custom:").
+        //
+        // Round 41 (#79) — Srikanth on 0.3.185: with
+        // `chain_iterations: 3` and a chain of `custom:get` +
+        // `custom:post (repeat: 16 parallel)`, the bench fired 3 + 48
+        // = 51 requests and the per-request log records each one,
+        // but the summary table collapsed the row to `Custom: 2 / 0
+        // / 2 / 100%` because the prior implementation deduped by
+        // top-level check name and added 1 pass/fail per unique
+        // name. Now we sum the per-occurrence counts so the summary
+        // matches what actually went on the wire.
+        //
+        // Only the PRIMARY check (the status assertion that uses the
+        // bare `custom:name`) is added to the category total —
+        // sub-checks like `custom:name:header:X` and
+        // `custom:name:body:Y` are still counted toward total
+        // pass/fail at the report level via `check_results`, but
+        // each sub-check is a property of the SAME request, not an
+        // extra one, so adding them here would double-count requests
+        // that have header / body assertions.
         let custom_entry = categories.entry("Custom").or_default();
-        // Track which top-level custom check names we've already counted
-        let mut counted_custom: HashSet<String> = HashSet::new();
         for (name, (passes, fails)) in &self.check_results {
-            if name.starts_with("custom:") {
-                // Only count the primary check (status), not sub-checks (header/body)
-                // Sub-checks have format "custom:name:header:..." or "custom:name:body:..."
-                // Primary checks are just "custom:something" with exactly one colon after "custom"
-                // We count each unique top-level custom check once
-                let base_name = extract_custom_base_name(name);
-                if counted_custom.insert(base_name) {
-                    if *fails == 0 && *passes > 0 {
-                        custom_entry.passed += 1;
-                    } else {
-                        custom_entry.failed += 1;
-                    }
-                }
+            if name.starts_with("custom:") && is_primary_custom_check(name) {
+                custom_entry.passed += *passes as usize;
+                custom_entry.failed += *fails as usize;
             }
         }
 
@@ -792,6 +814,41 @@ fn suggest_conformance_category_for_owasp(owasp_id: &str) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Round 41 (#79) — Srikanth on 0.3.185: with `chain_iterations:
+    /// 3` and a chain of `custom:get` + `custom:post` (repeat 16
+    /// parallel), the bench logs 51 requests but the summary table
+    /// previously printed `Custom: 2 / 0 / 2 / 100%` because each
+    /// unique top-level check name was added with `+1` instead of
+    /// `+N`. Now the row sums the per-check `(passes, fails)`
+    /// counts.
+    #[test]
+    fn custom_category_sums_per_check_executions_not_unique_names() {
+        let mut check_results = HashMap::new();
+        // 3 iters x 1 GET = 3
+        check_results.insert("custom:get".to_string(), (3u64, 0u64));
+        // 3 iters x 16 parallel POSTs = 48
+        check_results.insert("custom:post".to_string(), (48u64, 0u64));
+        // Plus a sub-check (header assertion) that should NOT inflate
+        // the request count: same request just has an extra
+        // assertion.
+        check_results.insert("custom:get:header:X-Trace".to_string(), (3u64, 0u64));
+        let report = ConformanceReport::from_results(check_results, Vec::new());
+        let by_cat = report.by_category();
+        let custom = by_cat.get("Custom").expect("Custom category present");
+        assert_eq!(custom.passed, 51, "primary check passes summed (3 + 48)");
+        assert_eq!(custom.failed, 0);
+    }
+
+    /// Round 41 — primary-vs-sub-check classifier.
+    #[test]
+    fn primary_custom_check_classifier_skips_header_and_body_sub_checks() {
+        assert!(is_primary_custom_check("custom:get"));
+        assert!(is_primary_custom_check("custom:do-work-parallel"));
+        assert!(!is_primary_custom_check("custom:get:header:X-Trace"));
+        assert!(!is_primary_custom_check("custom:get:body:user_id:string"));
+        assert!(!is_primary_custom_check("not:custom"));
+    }
 
     /// Round 18.4 — every OWASP category that the suggestion helper
     /// is asked about should return a non-empty hint, so the footer
