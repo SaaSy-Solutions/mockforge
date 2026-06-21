@@ -281,7 +281,7 @@ impl OpenApiRouteRegistry {
         method: &str,
         path: &str,
         operation: &openapiv3::Operation,
-        path_level_params: &[openapiv3::ReferenceOr<openapiv3::Parameter>],
+        path_level_params: &[ReferenceOr<openapiv3::Parameter>],
         spec: &Arc<OpenApiSpec>,
         base_paths: &[String],
     ) {
