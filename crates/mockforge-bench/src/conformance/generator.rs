@@ -253,8 +253,22 @@ impl ConformanceGenerator {
             script.push_str(
                 "  if (res.request && res.request.headers) { reqHeaders = res.request.headers; }\n",
             );
+            // Round 41 (#79) — Srikanth on 0.3.185: "When run without
+            // Spec the export request file has blank entry". k6's
+            // `res.request.body` is empty for multipart uploads (k6
+            // serialises the form internally and the JS-side body
+            // string is null). Fall back to a content-type-derived
+            // summary so the export at least surfaces "multipart/form-data; N parts"
+            // instead of an empty string. Real bodies still surface
+            // unchanged.
             script.push_str("  let reqBody = '';\n");
             script.push_str("  if (res.request && res.request.body) { try { reqBody = res.request.body.substring(0, 2000); } catch(e) {} }\n");
+            script.push_str(
+                "  if (!reqBody) {\n\
+                 \x20\x20\x20\x20const ct = (reqHeaders['Content-Type'] || reqHeaders['content-type'] || '').toString();\n\
+                 \x20\x20\x20\x20if (ct.startsWith('multipart/')) reqBody = '<multipart upload; body bytes not surfaced by k6 res.request.body>';\n\
+                 \x20\x20}\n",
+            );
             script.push_str("  console.log('MOCKFORGE_EXCHANGE:' + JSON.stringify({\n");
             script.push_str("    check: checkName,\n");
             script.push_str("    request: {\n");

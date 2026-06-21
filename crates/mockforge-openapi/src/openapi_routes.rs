@@ -2380,29 +2380,56 @@ static LAST_ERRORS: Lazy<Mutex<VecDeque<Value>>> =
 ///
 /// Issue #79 round 12.
 pub fn classify_validation_reason(reason: &str) -> String {
+    // Round 41 (#79) — Srikanth on 0.3.185: violations on GET requests
+    // (which carry no body) AND query-only violations on POST requests
+    // were both being categorised as "request-body" because the older
+    // matcher checked `r.contains("schema")` before the per-location
+    // checks. The validator's error payload embeds a structured
+    // `"path":"<location>.<name>"` per violation; classify on the
+    // FIRST such path so the category reflects the actual failure
+    // location instead of the validator's prose.
     let r = reason.to_ascii_lowercase();
+
+    // Cheap structured pull from the validator's `"path":"<loc>.<name>"` fields.
+    let path_starts_with = |prefix: &str| r.contains(&format!("\"path\":\"{}", prefix));
+    if path_starts_with("query.") {
+        return "query".into();
+    }
+    if path_starts_with("header.") {
+        return "headers".into();
+    }
+    if path_starts_with("cookie.") {
+        return "cookies".into();
+    }
+    if path_starts_with("path.") {
+        return "parameters".into();
+    }
+    if path_starts_with("body") {
+        return "request-body".into();
+    }
+
+    // Content-type mismatches are surfaced separately, BEFORE the
+    // schema validator runs.
+    if r.contains("content-type") || r.contains("content type") {
+        return "content-types".into();
+    }
+
+    // Fallback: the older heuristics for callers that don't embed a
+    // structured path field (e.g. malformed JSON, missing body
+    // entirely, security-scheme mismatches).
     if r.contains("required")
         && (r.contains("param") || r.contains("query") || r.contains("header"))
     {
         return "parameters".into();
     }
-    if r.contains("schema") || r.contains("body") || r.contains("json") {
-        return "request-body".into();
-    }
-    if r.contains("content-type") || r.contains("content type") {
-        return "content-types".into();
-    }
-    if r.contains("header") {
-        return "headers".into();
-    }
-    if r.contains("cookie") {
-        return "cookies".into();
+    if r.contains("auth") || r.contains("security") {
+        return "security".into();
     }
     if r.contains("method") {
         return "http-methods".into();
     }
-    if r.contains("auth") || r.contains("security") {
-        return "security".into();
+    if r.contains("schema") || r.contains("body") || r.contains("json") {
+        return "request-body".into();
     }
     if r.contains("enum") || r.contains("min") || r.contains("max") || r.contains("pattern") {
         return "constraints".into();
@@ -2915,6 +2942,38 @@ mod tests {
     use super::*;
     use serde_json::json;
     use tempfile::TempDir;
+
+    /// Round 41 (#79) — Srikanth on 0.3.185: GET requests carry no
+    /// body, so a query-only violation on GET should be categorised
+    /// as `query`, not `request-body`. POST requests with both query
+    /// AND body validators should also be classified by where the
+    /// first detail's `"path":...` lives rather than the validator's
+    /// generic "schema_validation" prose. The new classifier looks
+    /// for `"path":"query.<name>"` / `"path":"header.<name>"` etc.
+    /// first.
+    #[test]
+    fn classify_validation_reason_uses_structured_path_field_first() {
+        // Real shape from the Google Apigee /v1/organizations report
+        // — query-only enum/boolean violations.
+        let query_only = r#"{"details":[{"code":"schema_validation","message":"Validation error","path":"query.$.xgafv"}]}"#;
+        assert_eq!(classify_validation_reason(query_only), "query");
+
+        let header_only = r#"{"details":[{"code":"schema_validation","message":"missing required X-Trace","path":"header.X-Trace"}]}"#;
+        assert_eq!(classify_validation_reason(header_only), "headers");
+
+        let cookie_only = r#"{"details":[{"code":"schema_validation","message":"missing session","path":"cookie.session"}]}"#;
+        assert_eq!(classify_validation_reason(cookie_only), "cookies");
+
+        // Body-only violation stays `request-body`.
+        let body_only = r#"{"details":[{"code":"schema_validation","message":"name required","path":"body.name"}]}"#;
+        assert_eq!(classify_validation_reason(body_only), "request-body");
+
+        // Content-type mismatch keeps its own category.
+        assert_eq!(
+            classify_validation_reason("Content-Type application/xml not allowed"),
+            "content-types"
+        );
+    }
 
     #[tokio::test]
     async fn test_registry_creation() {

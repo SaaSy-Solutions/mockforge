@@ -470,6 +470,34 @@ fn write_k6_group_body(
     init_code: &mut String,
     upload_counter: &mut usize,
 ) {
+    // Round 41 (#79) — Srikanth on 0.3.185: with `extract.cookies` and
+    // `${cookie:NAME}` substitution working, k6's per-VU cookie jar
+    // ALSO auto-collected the response's `Set-Cookie` and re-injected
+    // it on every subsequent request — so the POST went out with TWO
+    // copies of `albsessid` in its `Cookie:` header (one from our
+    // explicit substitution, one from the jar). Disable the auto-jar
+    // for custom checks by passing a fresh empty `jar` per request.
+    // The explicit `Cookie:` header set by `${cookie:NAME}`
+    // substitution becomes the only source of truth. Also addresses
+    // Srikanth's round-41 ask "have ... without Cookie in GET": with
+    // no jar, the GET in iteration K+1 does not inherit cookies from
+    // iteration K's responses unless the user explicitly forwards
+    // them via `${cookie:NAME}`. The `http.CookieJar` constructor
+    // exists in k6 1.0+ (k6 wraps the underlying `cookiejar` Go type
+    // as a JS class — `new http.CookieJar()` creates an empty one
+    // with no shared state with the VU default jar).
+    let uses_cookie_substitution = config.custom_checks.iter().any(|c| {
+        !c.extract.cookies.is_empty()
+            || c.headers.values().any(|v| v.contains("${cookie:") || v.contains("${var:"))
+    });
+    if uses_cookie_substitution {
+        init_code.push_str(
+            "// Round 41 (#79) — declared once so every chain request can reuse it;\n\
+             // a fresh empty jar suppresses k6's auto-injected Set-Cookie that would\n\
+             // otherwise duplicate the explicit `${cookie:NAME}` substitution.\n\
+             const __custom_jar_factory = () => new http.CookieJar();\n",
+        );
+    }
     group_body.push_str("  group('Custom', function () {\n");
     let iters = config.chain_iterations.max(1);
     if iters > 1 {
@@ -525,6 +553,15 @@ fn write_k6_group_body(
         }
 
         let headers_js = build_headers_object_js(&all_headers, needs_ctx);
+        // Round 41 (#79) — wrap headers + jar into a `params` object
+        // so each request can carry its own fresh CookieJar and the
+        // VU's shared jar can't double up cookies that the user is
+        // already injecting via `${cookie:NAME}`.
+        let params_js = if uses_cookie_substitution {
+            format!("{{ headers: {}, jar: __custom_jar_factory() }}", headers_js)
+        } else {
+            format!("{{ headers: {} }}", headers_js)
+        };
         let method = check.method.to_uppercase();
         // Round 39 — substitute_chain_tokens already returns
         // template-literal-safe text; don't escape it again.
@@ -572,6 +609,41 @@ fn write_k6_group_body(
                 form_name,
                 form_entries.join(", ")
             ));
+            // Round 41 (#79) — Srikanth on 0.3.185: PCAP only showed
+            // 5 of his 9 multi-file upload parts and he asked "Is
+            // there a way from Logs I can confirm all the files in
+            // multiple upload are sent from mockforge client". Emit a
+            // single tagged log line per request listing every part,
+            // so the user can grep `MOCKFORGE_UPLOAD_PARTS` in the
+            // k6 stdout and confirm all parts left mockforge even
+            // when their proxy / capture tool drops some. We do this
+            // here (NOT inside the repeat loop) because the form is
+            // identical across repeats; the count from `repeat` tells
+            // the user how many requests will go out.
+            let summary_entries: Vec<String> = upload_specs
+                .iter()
+                .map(|spec| {
+                    let filename = spec.filename.clone().unwrap_or_else(|| {
+                        Path::new(&spec.path)
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or("upload.bin")
+                            .to_string()
+                    });
+                    format!(
+                        "'{}':'{}' ({})",
+                        js_escape_sq(&spec.field_name),
+                        js_escape_sq(&filename),
+                        js_escape_sq(&spec.content_type)
+                    )
+                })
+                .collect();
+            group_body.push_str(&format!(
+                "      console.log('MOCKFORGE_UPLOAD_PARTS: {} {} files: {}');\n",
+                js_escape_sq(&check.name),
+                upload_specs.len(),
+                js_escape_sq(&summary_entries.join(", ")),
+            ));
             Some(form_name)
         } else {
             None
@@ -602,8 +674,8 @@ fn write_k6_group_body(
             // Parallel uploads: emit http.batch with multipart entries.
             if is_parallel {
                 group_body.push_str(&format!(
-                    "      let __batch_{} = []; for (let __r = 0; __r < {}; __r++) {{ __batch_{}.push({{ method: 'POST', url: `{}`, body: {}, params: {{ headers: {} }} }}); }}\n",
-                    check_idx, count, check_idx, url, form_name, headers_js
+                    "      let __batch_{} = []; for (let __r = 0; __r < {}; __r++) {{ __batch_{}.push({{ method: 'POST', url: `{}`, body: {}, params: {} }}); }}\n",
+                    check_idx, count, check_idx, url, form_name, params_js
                 ));
                 group_body.push_str(&format!(
                     "      let __responses_{} = http.batch(__batch_{});\n",
@@ -621,15 +693,15 @@ fn write_k6_group_body(
                 group_body
                     .push_str(&format!("      for (let __r = 0; __r < {}; __r++) {{\n", count));
                 group_body.push_str(&format!(
-                    "        let res = http.post(`{}`, {}, {{ headers: {} }});\n",
-                    url, form_name, headers_js
+                    "        let res = http.post(`{}`, {}, {});\n",
+                    url, form_name, params_js
                 ));
                 emit_check_assertions(group_body, &escaped_name, check, export_requests);
                 group_body.push_str("      }\n");
             } else {
                 group_body.push_str(&format!(
-                    "      let res = http.post(`{}`, {}, {{ headers: {} }});\n",
-                    url, form_name, headers_js
+                    "      let res = http.post(`{}`, {}, {});\n",
+                    url, form_name, params_js
                 ));
                 emit_check_assertions(group_body, &escaped_name, check, export_requests);
             }
@@ -640,15 +712,17 @@ fn write_k6_group_body(
                 other => other.to_lowercase(),
             };
             let body_method = !matches!(method.as_str(), "GET" | "HEAD" | "OPTIONS" | "DELETE");
+            // Round 41 — always pass `params_js` (which carries the
+            // jar) when chain-context substitution is in play, even
+            // on requests that have no headers of their own. This is
+            // how the GET in the user's chain gets `jar: empty` so
+            // k6 doesn't accumulate Set-Cookie into the VU jar.
             let request_call = if body_method {
-                format!(
-                    "http.{}(`{}`, {}, {{ headers: {} }})",
-                    k6_method, url, body_expr, headers_js
-                )
-            } else if all_headers.is_empty() {
+                format!("http.{}(`{}`, {}, {})", k6_method, url, body_expr, params_js)
+            } else if all_headers.is_empty() && !uses_cookie_substitution {
                 format!("http.{}(`{}`)", k6_method, url)
             } else {
-                format!("http.{}(`{}`, {{ headers: {} }})", k6_method, url, headers_js)
+                format!("http.{}(`{}`, {})", k6_method, url, params_js)
             };
 
             if is_parallel {
@@ -668,8 +742,8 @@ fn write_k6_group_body(
                     String::new()
                 };
                 group_body.push_str(&format!(
-                    "      let __batch_{} = []; for (let __r = 0; __r < {}; __r++) {{ __batch_{}.push({{ method: '{}', url: `{}`, {}params: {{ headers: {} }} }}); }}\n",
-                    check_idx, count, check_idx, entry_method, url, body_field, headers_js
+                    "      let __batch_{} = []; for (let __r = 0; __r < {}; __r++) {{ __batch_{}.push({{ method: '{}', url: `{}`, {}params: {} }}); }}\n",
+                    check_idx, count, check_idx, entry_method, url, body_field, params_js
                 ));
                 group_body.push_str(&format!(
                     "      let __responses_{} = http.batch(__batch_{});\n",
