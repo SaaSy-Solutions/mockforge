@@ -281,7 +281,7 @@ impl OpenApiSpec {
                 // `components.parameters` so the validator's loop
                 // (which skips `ReferenceOr::Reference` entries via
                 // `as_item()`) actually sees them.
-                let resolved_path_params: Vec<openapiv3::ReferenceOr<openapiv3::Parameter>> =
+                let resolved_path_params: Vec<ReferenceOr<openapiv3::Parameter>> =
                     path_item.parameters.iter().map(|p| self.resolve_parameter_ref(p)).collect();
                 let merge = |op: &openapiv3::Operation| -> openapiv3::Operation {
                     // Resolve op-level refs too — same as path-level.
@@ -361,11 +361,11 @@ impl OpenApiSpec {
     /// `prettyPrint`, etc.
     pub fn resolve_parameter_ref(
         &self,
-        p_ref: &openapiv3::ReferenceOr<openapiv3::Parameter>,
-    ) -> openapiv3::ReferenceOr<openapiv3::Parameter> {
+        p_ref: &ReferenceOr<openapiv3::Parameter>,
+    ) -> ReferenceOr<openapiv3::Parameter> {
         match p_ref {
-            openapiv3::ReferenceOr::Item(_) => p_ref.clone(),
-            openapiv3::ReferenceOr::Reference { reference } => {
+            ReferenceOr::Item(_) => p_ref.clone(),
+            ReferenceOr::Reference { reference } => {
                 let Some(name) = reference.strip_prefix("#/components/parameters/") else {
                     return p_ref.clone();
                 };
@@ -373,10 +373,8 @@ impl OpenApiSpec {
                     return p_ref.clone();
                 };
                 match components.parameters.get(name) {
-                    Some(openapiv3::ReferenceOr::Item(p)) => {
-                        openapiv3::ReferenceOr::Item(p.clone())
-                    }
-                    Some(openapiv3::ReferenceOr::Reference { reference: nested }) => {
+                    Some(ReferenceOr::Item(p)) => ReferenceOr::Item(p.clone()),
+                    Some(ReferenceOr::Reference { reference: nested }) => {
                         // Tail-resolve a chained ref (rare in practice
                         // but allowed by the spec).
                         let Some(nested_name) = nested.strip_prefix("#/components/parameters/")
@@ -384,9 +382,7 @@ impl OpenApiSpec {
                             return p_ref.clone();
                         };
                         match components.parameters.get(nested_name) {
-                            Some(openapiv3::ReferenceOr::Item(p)) => {
-                                openapiv3::ReferenceOr::Item(p.clone())
-                            }
+                            Some(ReferenceOr::Item(p)) => ReferenceOr::Item(p.clone()),
                             _ => p_ref.clone(),
                         }
                     }
@@ -598,7 +594,7 @@ impl OpenApiSpec {
 /// `operations_for_path` benefits from the merge automatically.
 pub(crate) fn merge_path_params_into_operation(
     operation: &openapiv3::Operation,
-    path_level_params: &[openapiv3::ReferenceOr<openapiv3::Parameter>],
+    path_level_params: &[ReferenceOr<openapiv3::Parameter>],
 ) -> openapiv3::Operation {
     use std::collections::HashSet;
     if path_level_params.is_empty() {
@@ -610,7 +606,7 @@ pub(crate) fn merge_path_params_into_operation(
             op_keys.insert(key);
         }
     }
-    let mut merged: Vec<openapiv3::ReferenceOr<openapiv3::Parameter>> =
+    let mut merged: Vec<ReferenceOr<openapiv3::Parameter>> =
         Vec::with_capacity(path_level_params.len() + operation.parameters.len());
     for p_ref in path_level_params {
         match parameter_key(p_ref) {
@@ -624,7 +620,7 @@ pub(crate) fn merge_path_params_into_operation(
     cloned
 }
 
-fn parameter_key(p_ref: &openapiv3::ReferenceOr<openapiv3::Parameter>) -> Option<(String, String)> {
+fn parameter_key(p_ref: &ReferenceOr<openapiv3::Parameter>) -> Option<(String, String)> {
     let p = p_ref.as_item()?;
     let (name, in_loc) = match p {
         openapiv3::Parameter::Path { parameter_data, .. } => (parameter_data.name.clone(), "path"),
