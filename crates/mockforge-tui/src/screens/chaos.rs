@@ -532,7 +532,7 @@ impl ChaosScreen {
         if let Some(map) = by_type {
             let mut entries: Vec<(&String, u64)> =
                 map.iter().filter_map(|(k, v)| v.as_u64().map(|n| (k, n))).collect();
-            entries.sort_by(|a, b| b.1.cmp(&a.1));
+            entries.sort_by_key(|b| std::cmp::Reverse(b.1));
             if entries.is_empty() {
                 lines.push(Line::from(""));
                 lines.push(Line::from(Span::styled("  No faults injected yet.", Theme::dim())));

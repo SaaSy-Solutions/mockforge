@@ -474,7 +474,7 @@ impl Dataset {
             // Get most common values (top 5)
             let mut most_common: Vec<(serde_json::Value, usize)> =
                 temp_stats.frequency.into_iter().collect();
-            most_common.sort_by(|a, b| b.1.cmp(&a.1));
+            most_common.sort_by_key(|b| std::cmp::Reverse(b.1));
             most_common.truncate(5);
 
             field_stats.insert(

@@ -1936,8 +1936,56 @@ impl OpenApiRouteRegistry {
                     // see it. We deliberately don't fail on JSON parse
                     // errors here — the body validator below produces
                     // the right shape of error message in that case.
+                    //
+                    // Round 42 (#79) — Srikanth on 0.3.186: a multipart
+                    // upload (Content-Type: `multipart/form-data; ...`)
+                    // returns `400 body: Request body is required but
+                    // not provided` because the JSON parse silently
+                    // returns None and the validator treats that as
+                    // "no body present". For multipart requests, parse
+                    // the form parts into a synthetic JSON object (one
+                    // entry per field name, file parts contribute their
+                    // tmpfile path) so the validator sees the body
+                    // exists. Schema validation then runs against that
+                    // synthetic object the same way it would for a
+                    // regular `application/json` body.
+                    let is_multipart_req = headers
+                        .get(axum::http::header::CONTENT_TYPE)
+                        .and_then(|v| v.to_str().ok())
+                        .map(|ct| ct.starts_with("multipart/form-data"))
+                        .unwrap_or(false);
                     let body: Option<Json<Value>> = if body_bytes.is_empty() {
                         None
+                    } else if is_multipart_req {
+                        match extract_multipart_from_bytes(&body_bytes, &headers).await {
+                            Ok((fields, _files)) => {
+                                let mut obj = Map::new();
+                                for (k, v) in fields {
+                                    obj.insert(k, v);
+                                }
+                                if obj.is_empty() {
+                                    // Non-empty multipart body that yielded
+                                    // zero fields (malformed envelope or
+                                    // files only with no Content-Disposition
+                                    // name); still signal "body present" so
+                                    // the validator doesn't 400 with "body
+                                    // required". Schema mismatches downstream
+                                    // surface as their own validation errors.
+                                    Some(Json(Value::Object(Map::new())))
+                                } else {
+                                    Some(Json(Value::Object(obj)))
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "multipart parse failed for {} {}: {}",
+                                    route.method,
+                                    route.path,
+                                    e
+                                );
+                                Some(Json(Value::Object(Map::new())))
+                            }
+                        }
                     } else {
                         serde_json::from_slice::<Value>(&body_bytes).ok().map(Json)
                     };

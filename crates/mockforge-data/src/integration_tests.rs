@@ -14,7 +14,6 @@ mod tests {
     use crate::persona::{PersonaProfile, PersonaRegistry};
     use crate::persona_templates::PersonaTemplateRegistry;
     use crate::schema::SchemaDefinition;
-    use serde_json::json;
 
     /// Test that the same user ID generates the same data pattern across multiple requests
     #[test]
@@ -339,7 +338,6 @@ mod tests {
     #[test]
     fn test_entity_id_extraction() {
         use crate::consistency::EntityIdExtractor;
-        use serde_json::json;
 
         // Test field name extraction
         assert_eq!(EntityIdExtractor::from_field_name("user_id"), Some("user_id".to_string()));
@@ -353,7 +351,7 @@ mod tests {
         );
 
         // Test JSON value extraction
-        let json = json!({
+        let json = serde_json::json!({
             "user_id": "user123",
             "name": "John Doe"
         });

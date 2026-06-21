@@ -38,7 +38,7 @@ impl BehavioralEconomicsEngine {
 
         // Sort rules by priority (highest first)
         let mut rules = config.rules.clone();
-        rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+        rules.sort_by_key(|b| std::cmp::Reverse(b.priority));
 
         Ok(Self {
             config,
@@ -102,7 +102,7 @@ impl BehavioralEconomicsEngine {
         rule.validate()?;
         self.rules.push(rule);
         // Re-sort by priority
-        self.rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+        self.rules.sort_by_key(|b| std::cmp::Reverse(b.priority));
         Ok(())
     }
 
@@ -127,7 +127,7 @@ impl BehavioralEconomicsEngine {
 
         // Sort rules by priority
         let mut rules = config.rules.clone();
-        rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+        rules.sort_by_key(|b| std::cmp::Reverse(b.priority));
 
         self.config = config;
         self.rules = rules;
