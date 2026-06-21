@@ -250,7 +250,7 @@ impl TextPreprocessor {
 
         // Sort by frequency and take top keywords
         let mut sorted_words: Vec<(String, usize)> = word_counts.into_iter().collect();
-        sorted_words.sort_by(|a, b| b.1.cmp(&a.1));
+        sorted_words.sort_by_key(|b| std::cmp::Reverse(b.1));
 
         sorted_words.into_iter().take(max_keywords).map(|(word, _)| word).collect()
     }

@@ -103,7 +103,7 @@ impl BehaviorModel {
 
         // Sort rules by priority (highest first)
         let mut rules = self.rules.consistency_rules.clone();
-        rules.sort_by(|a, b| b.priority.cmp(&a.priority));
+        rules.sort_by_key(|b| std::cmp::Reverse(b.priority));
 
         for rule in &rules {
             if rule.matches(method, path) {

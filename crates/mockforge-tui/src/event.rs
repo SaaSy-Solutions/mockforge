@@ -58,10 +58,10 @@ impl EventHandler {
                                 return;
                             }
                         }
-                        Ok(TermEvent::Resize(w, h)) => {
-                            if event_tx.send(Event::Resize(w, h)).is_err() {
-                                return;
-                            }
+                        Ok(TermEvent::Resize(w, h))
+                            if event_tx.send(Event::Resize(w, h)).is_err() =>
+                        {
+                            return;
                         }
                         _ => {}
                     }

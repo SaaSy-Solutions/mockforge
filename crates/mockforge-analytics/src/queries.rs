@@ -248,7 +248,7 @@ impl AnalyticsDatabase {
             })
             .collect();
 
-        result.sort_by(|a, b| b.data.len().cmp(&a.data.len()));
+        result.sort_by_key(|b| std::cmp::Reverse(b.data.len()));
         Ok(result)
     }
 
@@ -352,7 +352,7 @@ impl AnalyticsDatabase {
             })
             .collect();
 
-        summaries.sort_by(|a, b| b.count.cmp(&a.count));
+        summaries.sort_by_key(|b| std::cmp::Reverse(b.count));
         #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
         summaries.truncate(limit as usize);
 

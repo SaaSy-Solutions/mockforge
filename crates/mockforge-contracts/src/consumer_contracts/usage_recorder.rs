@@ -110,11 +110,9 @@ impl UsageRecorder {
                     paths.extend(Self::extract_field_paths(val, &path));
                 }
             }
-            Value::Array(arr) => {
-                if !arr.is_empty() {
-                    // For arrays, extract paths from first element
-                    paths.extend(Self::extract_field_paths(&arr[0], prefix));
-                }
+            Value::Array(arr) if !arr.is_empty() => {
+                // For arrays, extract paths from first element
+                paths.extend(Self::extract_field_paths(&arr[0], prefix));
             }
             _ => {
                 // Primitive value - path is already added

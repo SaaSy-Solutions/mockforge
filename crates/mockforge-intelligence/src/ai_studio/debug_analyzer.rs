@@ -548,17 +548,11 @@ Provide 3-5 specific suggestions for fixing this test failure. Include linked ar
                     uc.reality.level_name.as_ref().unwrap_or(&"Unknown".to_string())
                 ));
             }
-            if uc.scenario.active_scenario.is_some() {
-                configs.push(format!(
-                    "Active Scenario: {}",
-                    uc.scenario.active_scenario.as_ref().unwrap()
-                ));
+            if let Some(active_scenario) = uc.scenario.active_scenario.as_ref() {
+                configs.push(format!("Active Scenario: {}", active_scenario));
             }
-            if uc.persona.active_persona_id.is_some() {
-                configs.push(format!(
-                    "Active Persona: {}",
-                    uc.persona.active_persona_id.as_ref().unwrap()
-                ));
+            if let Some(active_persona_id) = uc.persona.active_persona_id.as_ref() {
+                configs.push(format!("Active Persona: {}", active_persona_id));
             }
             if !uc.contract.active_contracts.is_empty() {
                 configs
