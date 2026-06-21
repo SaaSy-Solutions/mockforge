@@ -618,6 +618,93 @@ impl OpenApiRoute {
         }
         lowest_other.unwrap_or(200)
     }
+
+    /// Synthesize response headers declared in `responses.<code>.headers`.
+    ///
+    /// Round 43 (#79) — round 41's cookie chain work surfaced that a spec
+    /// that declares `responses.200.headers.Set-Cookie` returns 200 OK from
+    /// `mockforge serve` with no `Set-Cookie` header on the wire. The
+    /// validator's `validate_response_headers` even knows the shape, but
+    /// the synthesiser was never wired up. Returns a list of
+    /// `(header_name, value)` pairs for the given status code, suitable
+    /// for injecting straight into the axum response. The value is
+    /// schema-aware where the lift is cheap:
+    /// - `Set-Cookie`: a cookie-shaped placeholder (`<sanitized-name>=mockforge-session; Path=/`)
+    /// - `string`, `format: uuid`: a stable nil UUID so downstream parsing succeeds
+    /// - `string`, `format: date-time`: an RFC-3339 zero timestamp
+    /// - `integer` / `number` / `boolean`: minimal valid literals
+    /// - everything else (plain string, no schema, ref): the literal `mockforge-mock-value`
+    ///
+    /// `default` response headers are NOT included; only the explicitly
+    /// matched status's headers are emitted. The caller is expected to
+    /// merge these into the response after status + body.
+    pub fn mock_response_headers_for_status(&self, status_code: u16) -> Vec<(String, String)> {
+        use openapiv3::{
+            ParameterSchemaOrContent, ReferenceOr, SchemaKind, StatusCode, Type,
+            VariantOrUnknownOrEmpty,
+        };
+
+        let response_ref =
+            self.operation.responses.responses.iter().find_map(|(code, r)| match code {
+                StatusCode::Code(c) if *c == status_code => Some(r),
+                _ => None,
+            });
+        let Some(response_ref) = response_ref else {
+            return Vec::new();
+        };
+        let Some(response_item) = response_ref.as_item() else {
+            return Vec::new();
+        };
+
+        let mut out = Vec::new();
+        for (name, header_ref) in &response_item.headers {
+            let Some(header) = header_ref.as_item() else {
+                out.push((name.clone(), "mockforge-mock-value".to_string()));
+                continue;
+            };
+
+            let value = match &header.format {
+                ParameterSchemaOrContent::Schema(ReferenceOr::Item(schema)) => {
+                    match &schema.schema_kind {
+                        SchemaKind::Type(Type::Integer(_)) => "0".to_string(),
+                        SchemaKind::Type(Type::Number(_)) => "0".to_string(),
+                        SchemaKind::Type(Type::Boolean(_)) => "true".to_string(),
+                        SchemaKind::Type(Type::String(s)) => match &s.format {
+                            VariantOrUnknownOrEmpty::Item(openapiv3::StringFormat::DateTime) => {
+                                "1970-01-01T00:00:00Z".to_string()
+                            }
+                            VariantOrUnknownOrEmpty::Item(openapiv3::StringFormat::Date) => {
+                                "1970-01-01".to_string()
+                            }
+                            VariantOrUnknownOrEmpty::Unknown(fmt) if fmt == "uuid" => {
+                                "00000000-0000-0000-0000-000000000000".to_string()
+                            }
+                            _ => synthesize_string_header_value(name),
+                        },
+                        _ => synthesize_string_header_value(name),
+                    }
+                }
+                _ => synthesize_string_header_value(name),
+            };
+            out.push((name.clone(), value));
+        }
+        out
+    }
+}
+
+/// Pick a placeholder value for a generic string header, with a
+/// cookie-shaped fallback for `Set-Cookie`. Lives at module scope so it
+/// can be shared between `mock_response_headers_for_status` paths and
+/// any future overrides; keeping it free of schema state keeps it cheap.
+fn synthesize_string_header_value(header_name: &str) -> String {
+    if header_name.eq_ignore_ascii_case("set-cookie") {
+        // Use a fixed cookie name + value so downstream chains (the
+        // round-41 `${cookie:NAME}` substitution) can grep for it
+        // deterministically. The `Path=/` keeps it valid across paths.
+        "mockforge_session=mockforge-synthetic; Path=/".to_string()
+    } else {
+        "mockforge-mock-value".to_string()
+    }
 }
 
 /// OpenAPI operation wrapper with path context
@@ -804,5 +891,61 @@ mod status_code_selection_tests {
             "404": {"description": "err"},
         }));
         assert_eq!(r.find_first_available_status_code(), 404);
+    }
+
+    #[test]
+    fn synthesises_set_cookie_when_declared_in_spec() {
+        // Round 43 (#79) — spec declares `responses.200.headers.Set-Cookie`;
+        // synthesiser must surface a cookie-shaped value instead of skipping
+        // the header. The exact value is opaque from the caller's view; we
+        // only assert it's a `name=value` cookie line so future changes to
+        // the placeholder text don't break the test.
+        let r = route_from_responses(json!({
+            "200": {
+                "description": "ok",
+                "headers": {
+                    "Set-Cookie": {"schema": {"type": "string"}}
+                }
+            }
+        }));
+        let headers = r.mock_response_headers_for_status(200);
+        let (_, value) = headers
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("Set-Cookie"))
+            .expect("Set-Cookie header should be synthesised");
+        assert!(
+            value.contains('=') && value.contains("Path="),
+            "expected cookie shape `name=value; Path=...`, got: {value:?}"
+        );
+    }
+
+    #[test]
+    fn synthesises_uuid_format_value_for_string_header() {
+        let r = route_from_responses(json!({
+            "200": {
+                "description": "ok",
+                "headers": {
+                    "X-Request-Id": {"schema": {"type": "string", "format": "uuid"}}
+                }
+            }
+        }));
+        let headers = r.mock_response_headers_for_status(200);
+        let (_, value) = headers
+            .iter()
+            .find(|(name, _)| name.eq_ignore_ascii_case("X-Request-Id"))
+            .expect("X-Request-Id header should be synthesised");
+        assert_eq!(value, "00000000-0000-0000-0000-000000000000");
+    }
+
+    #[test]
+    fn omits_headers_for_unmatched_status() {
+        // Spec declares headers on 200 only; asking for a 404 should produce nothing.
+        let r = route_from_responses(json!({
+            "200": {
+                "description": "ok",
+                "headers": {"Set-Cookie": {"schema": {"type": "string"}}}
+            }
+        }));
+        assert!(r.mock_response_headers_for_status(404).is_empty());
     }
 }

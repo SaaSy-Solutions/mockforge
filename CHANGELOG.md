@@ -1,3 +1,9 @@
+## [0.3.188] - 2026-06-21
+
+### Fixed
+
+- **[Contracts]** `mockforge serve` now emits response headers declared in `responses.<code>.headers` instead of silently dropping them (#79 round 43, surfaced during the round-42 bench-vs-serve sweep). A spec like `responses.200.headers.Set-Cookie: { schema: { type: string } }` would return `200 OK` from `mockforge serve` with the cookie missing — the validator's `validate_response_headers` already understood the shape but the synthesiser was never wired up, so any contract test or k6 chain that relied on the server issuing a `Set-Cookie` would skip the cookie-based path entirely. New `OpenApiRoute::mock_response_headers_for_status` walks the matched response's `headers` map and produces schema-aware placeholder values: cookie-shaped (`mockforge_session=mockforge-synthetic; Path=/`) for `Set-Cookie`, the nil UUID for `format: uuid` strings, RFC-3339 epoch for `format: date-time`, `0` / `true` for integer / boolean, generic placeholder for plain strings, and `mockforge-mock-value` for any unresolved `$ref`. Both router builders (`build_router_with_context` and `build_router_with_mockai`) merge the synthesised list into the response via `inject_spec_response_headers`, preserving axum's existing `content-type` / `vary` / `x-rate-limit-*` headers (never overwrites). Three new unit tests pin the contract: cookie shape, UUID format, and the unmatched-status no-op. Real-binary verified: `GET /login` with the test spec returns `set-cookie: mockforge_session=mockforge-synthetic; Path=/` and `x-request-id: 00000000-0000-0000-0000-000000000000`; `POST /auth/login` (MockAI router path) likewise emits `set-cookie`.
+
 ## [0.3.187] - 2026-06-21
 
 ### Fixed

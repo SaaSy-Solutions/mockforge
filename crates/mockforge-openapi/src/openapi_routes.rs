@@ -999,6 +999,7 @@ impl OpenApiRouteRegistry {
                     response.extensions_mut().insert(trace);
                     *response.status_mut() = axum::http::StatusCode::from_u16(selected_status)
                         .unwrap_or(axum::http::StatusCode::OK);
+                    inject_spec_response_headers(&mut response, &route_clone, selected_status);
                     return response;
                 }
 
@@ -1006,6 +1007,7 @@ impl OpenApiRouteRegistry {
                 let mut response = Json(final_response).into_response();
                 *response.status_mut() = axum::http::StatusCode::from_u16(selected_status)
                     .unwrap_or(axum::http::StatusCode::OK);
+                inject_spec_response_headers(&mut response, &route_clone, selected_status);
                 response
             };
 
@@ -1927,7 +1929,8 @@ impl OpenApiRouteRegistry {
                                     "error": "content_type_not_allowed",
                                     "message": ct_err,
                                 })),
-                            );
+                            )
+                                .into_response();
                         }
                     }
 
@@ -2006,7 +2009,7 @@ impl OpenApiRouteRegistry {
                     ) {
                         let status = axum::http::StatusCode::from_u16(status_code)
                             .unwrap_or(axum::http::StatusCode::BAD_REQUEST);
-                        return (status, Json(payload));
+                        return (status, Json(payload)).into_response();
                     }
 
                     tracing::info!(
@@ -2118,7 +2121,7 @@ impl OpenApiRouteRegistry {
                                         .unwrap_or(axum::http::StatusCode::OK);
 
                                 // Return as tuple (StatusCode, Json) to match handler signature
-                                return (status, Json(json_value));
+                                return (status, Json(json_value)).into_response();
                             } else {
                                 tracing::warn!(
                                     "[FIXTURE DEBUG] ❌ No fixture match found for {} {} (fingerprint.path='{}', normalized='{}')",
@@ -2205,11 +2208,16 @@ impl OpenApiRouteRegistry {
                                             spec_status,
                                             mockai_response.status_code
                                         );
-                                        return (
-                                            axum::http::StatusCode::from_u16(spec_status)
-                                                .unwrap_or(axum::http::StatusCode::OK),
-                                            Json(mockai_response.body),
+                                        let status = axum::http::StatusCode::from_u16(spec_status)
+                                            .unwrap_or(axum::http::StatusCode::OK);
+                                        let mut resp =
+                                            (status, Json(mockai_response.body)).into_response();
+                                        inject_spec_response_headers(
+                                            &mut resp,
+                                            &route,
+                                            spec_status,
                                         );
+                                        return resp;
                                     }
                                 }
                                 Err(e) => {
@@ -2250,11 +2258,11 @@ impl OpenApiRouteRegistry {
                             scenario.as_deref(),
                             status_override,
                         );
-                    (
-                        axum::http::StatusCode::from_u16(status)
-                            .unwrap_or(axum::http::StatusCode::OK),
-                        Json(response),
-                    )
+                    let status_code = axum::http::StatusCode::from_u16(status)
+                        .unwrap_or(axum::http::StatusCode::OK);
+                    let mut resp = (status_code, Json(response)).into_response();
+                    inject_spec_response_headers(&mut resp, &route, status);
+                    resp
                 }
             };
 
@@ -2264,6 +2272,42 @@ impl OpenApiRouteRegistry {
         // Issue #79 — see `build_router_with_context`; same body-limit raise
         // for the MockAI router.
         router.layer(DefaultBodyLimit::max(openapi_body_limit_bytes()))
+    }
+}
+
+/// Inject response headers declared in `responses.<code>.headers` from
+/// the spec into an axum response, after the body and status have been
+/// set. No-op when the route's operation has no headers for that status.
+///
+/// Round 43 (#79) — the validator already knew about declared response
+/// headers (`validation::validate_response_headers`) but the synthesiser
+/// never emitted them, so `mockforge serve` returned 200 with no
+/// `Set-Cookie` even when the spec promised one. Existing headers stay
+/// (so axum's content-type / vary / rate-limit headers aren't clobbered)
+/// — we only insert if absent. Invalid HeaderName / HeaderValue bytes
+/// are silently skipped so a typo in the spec doesn't take the response
+/// down.
+fn inject_spec_response_headers(
+    response: &mut axum::response::Response,
+    route: &crate::route::OpenApiRoute,
+    status_code: u16,
+) {
+    let synthesized = route.mock_response_headers_for_status(status_code);
+    if synthesized.is_empty() {
+        return;
+    }
+    let response_headers = response.headers_mut();
+    for (name, value) in synthesized {
+        let Ok(header_name) = axum::http::HeaderName::from_bytes(name.as_bytes()) else {
+            continue;
+        };
+        if response_headers.contains_key(&header_name) {
+            continue;
+        }
+        let Ok(header_value) = axum::http::HeaderValue::from_str(&value) else {
+            continue;
+        };
+        response_headers.insert(header_name, header_value);
     }
 }
 
