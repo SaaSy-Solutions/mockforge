@@ -504,6 +504,7 @@ impl OpenApiRoute {
                         // discovery, not a wire-level conformance issue).
                         client_mockforge_version: None,
                         client_sent_at: None,
+                        summary: String::new(),
                     },
                 );
             }
