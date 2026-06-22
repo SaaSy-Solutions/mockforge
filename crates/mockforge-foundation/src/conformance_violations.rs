@@ -67,6 +67,19 @@ pub struct ServerConformanceViolation {
     /// records of the same probe.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_sent_at: Option<DateTime<Utc>>,
+    /// Round 44 (#79) — short human-readable summary of `reason`, for
+    /// dashboards / report tables that don't want to display the full
+    /// JSON-shaped validator error. Built once at insertion time from
+    /// `reason` via `summarize_reason`; empty when the caller didn't
+    /// supply one. Older payloads without this field deserialise as
+    /// empty so consumers can fall back to `reason`.
+    ///
+    /// Srikanth on 0.3.188: "What is the difference between
+    /// Validation error: and errors both the content seems similar
+    /// with few differences here and there... The reason I am asking
+    /// is both the errors are overwhelming to view."
+    #[serde(default)]
+    pub summary: String,
 }
 
 /// Header set by the bench client (round 36, #876) carrying the
@@ -227,6 +240,9 @@ pub fn total_ok() -> u64 {
 /// steady state.
 pub fn record(mut violation: ServerConformanceViolation) {
     TOTAL_SEEN.fetch_add(1, Ordering::Relaxed);
+    if violation.summary.is_empty() {
+        violation.summary = summarize_reason(&violation.reason);
+    }
     let cap = effective_buffer_size();
     if unique_mode_enabled() {
         UNIQUE_VIOLATIONS.lock().record(violation, cap);
@@ -240,6 +256,126 @@ pub fn record(mut violation: ServerConformanceViolation) {
         buf.pop_front();
     }
     buf.push_back(violation);
+}
+
+/// Build a short, human-readable summary of a validator-error `reason`
+/// string. Round 44 (#79) — Srikanth on 0.3.188: the full `reason`
+/// embeds both a `details` array AND a redundant `errors` string array
+/// of the same content with slightly different prose, which made the
+/// violations table hard to scan. The summary collapses the violator
+/// list to a single line shaped `<N> <category> violation(s): <name>
+/// (<rule>), <name> (<rule>)...` so the table can show that at a
+/// glance and keep the full `reason` JSON only for tooling that needs
+/// the structured form. Empty when the reason doesn't carry a parsable
+/// `"details": [...]` payload (the older heuristic fallback path).
+pub fn summarize_reason(reason: &str) -> String {
+    use serde_json::Value;
+
+    // Pull out the `{...}` JSON the validator embeds inside the reason
+    // prose (e.g. `Validation error: {"details":[...],"errors":[...]}`).
+    let json_start = reason.find('{');
+    let parsed: Option<Value> = json_start
+        .and_then(|i| serde_json::from_str(reason[i..].trim()).ok())
+        .or_else(|| serde_json::from_str(reason).ok());
+
+    let details = parsed
+        .as_ref()
+        .and_then(|v| v.get("details"))
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    if details.is_empty() {
+        return String::new();
+    }
+
+    // Bucket details by their `path` prefix (query / body / header /
+    // cookie / parameters) so we report a sensible category even when a
+    // request has violations across multiple locations.
+    let mut by_loc: std::collections::BTreeMap<String, Vec<(String, String)>> =
+        std::collections::BTreeMap::new();
+
+    for d in &details {
+        let path = d.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let code = d.get("code").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let (loc, name) = match path.split_once('.') {
+            Some((l, n)) => (l.to_string(), n.to_string()),
+            None if !path.is_empty() => (path.clone(), String::new()),
+            _ => ("body".to_string(), String::new()),
+        };
+        let rule = match code.as_str() {
+            "schema_validation" => infer_rule(d),
+            "required" => "required".to_string(),
+            other => other.to_string(),
+        };
+        by_loc.entry(loc).or_default().push((name, rule));
+    }
+
+    let total = details.len();
+    let primary_loc = by_loc.keys().next().cloned().unwrap_or_else(|| "validation".to_string());
+    let primary_label = match primary_loc.as_str() {
+        "query" => "query",
+        "header" => "header",
+        "cookie" => "cookie",
+        "path" => "path parameter",
+        "body" => "request-body",
+        other => other,
+    };
+
+    let mut items: Vec<String> = Vec::new();
+    for (loc, names) in &by_loc {
+        for (name, rule) in names {
+            let head = if name.is_empty() {
+                loc.clone()
+            } else {
+                format!("{}.{}", loc, name)
+            };
+            if rule.is_empty() {
+                items.push(head);
+            } else {
+                items.push(format!("{} ({})", head, rule));
+            }
+        }
+    }
+
+    // Cap the visible items so the summary stays scannable; the full
+    // detail list still lives in `reason` for tooling.
+    const MAX_VISIBLE: usize = 5;
+    let visible: Vec<String> = items.iter().take(MAX_VISIBLE).cloned().collect();
+    let suffix = if items.len() > MAX_VISIBLE {
+        format!(", +{} more", items.len() - MAX_VISIBLE)
+    } else {
+        String::new()
+    };
+
+    format!("{} {} violation(s): {}{}", total, primary_label, visible.join(", "), suffix)
+}
+
+/// Read a single `details[]` entry and produce a short rule label like
+/// `enum` / `type` / `min` / `max` / `pattern` for the summary. Falls
+/// back to the validator's own `message` prose when no rule is
+/// recognisable (defensive against future validator wording).
+fn infer_rule(detail: &serde_json::Value) -> String {
+    let msg = detail.get("message").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+    if msg.contains("is not one of") {
+        return "enum".to_string();
+    }
+    if msg.contains("not of type") || msg.contains("expected type") {
+        return "type".to_string();
+    }
+    if msg.contains("less than") || msg.contains("minimum") {
+        return "min".to_string();
+    }
+    if msg.contains("greater than") || msg.contains("maximum") {
+        return "max".to_string();
+    }
+    if msg.contains("pattern") {
+        return "pattern".to_string();
+    }
+    if msg.contains("required") {
+        return "required".to_string();
+    }
+    "schema".to_string()
 }
 
 /// Snapshot of the buffered violations, newest first.
@@ -292,6 +428,7 @@ mod tests {
             occurrences: 1,
             client_mockforge_version: None,
             client_sent_at: None,
+            summary: String::new(),
         }
     }
 

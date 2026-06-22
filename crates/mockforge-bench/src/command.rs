@@ -2777,6 +2777,31 @@ impl BenchCommand {
                 );
             }
 
+            // Round 44 (#79) — Srikanth on 0.3.188: "Any reason why
+            // validate-requests in mockforge client are not catching
+            // all this query param or body params or path params
+            // violation issues and record in conformance-request-
+            // failure logs?" The custom-YAML validator only checks
+            // the YAML shape at config time. Now, when both
+            // `--validate-requests` and `--export-requests` are set,
+            // also walk the emitted `conformance-requests.json` and
+            // validate each actual wire-level request against the
+            // spec. Violations are appended to
+            // `conformance-request-violations.json`.
+            if self.validate_requests && self.export_requests && !self.spec.is_empty() {
+                let n = crate::conformance::request_validator::validate_emitted_requests(
+                    &self.spec,
+                    &self.output,
+                )
+                .await?;
+                if n > 0 {
+                    TerminalReporter::print_warning(&format!(
+                        "{} emitted request(s) violated the spec — see conformance-request-violations.json",
+                        n
+                    ));
+                }
+            }
+
             return Ok(());
         }
 

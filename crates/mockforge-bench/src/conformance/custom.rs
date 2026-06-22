@@ -500,31 +500,44 @@ fn write_k6_group_body(
     }
     group_body.push_str("  group('Custom', function () {\n");
     let iters = config.chain_iterations.max(1);
-    if iters > 1 {
-        group_body
-            .push_str(&format!("    for (let __iter = 0; __iter < {}; __iter++) {{\n", iters));
-    }
 
     // Declare every chain-context variable referenced by any check's
-    // path / headers / body / extract rules at the top of the
-    // iteration. k6 throws `ReferenceError: __ctx_cookie_X is not
+    // path / headers / body / extract rules.
+    //
+    // Round 39 (#79) — k6 throws `ReferenceError: __ctx_cookie_X is not
     // defined` if a `${cookie:X}` substitution lands before the
-    // capturing extract has fired — common when a chain's first
-    // check itself reads a value the second check is supposed to
-    // capture (defensive substitution against a prior iteration's
-    // state). `let undefined` resolves to the literal string
-    // "undefined" inside a template literal, which is at least
-    // visible to the user reading the request log.
+    // capturing extract has fired (e.g. a chain's first check reads a
+    // value the second check is supposed to capture, or a defensive
+    // substitution against a prior iteration's state). The empty
+    // string resolves to the literal "" inside a template literal so
+    // the request log shows a missing capture as `Cookie: NAME=` not
+    // a runtime crash.
+    //
+    // Round 44 (#79) — Srikanth on 0.3.188: with `chain_iterations: 3`
+    // and a `${cookie:albsessid}` on the GET, all 3 GETs sent an
+    // EMPTY cookie value even though the POST extract was capturing
+    // albsessid correctly. v0.3.186 hoisted the `let __ctx_cookie_*`
+    // declarations INSIDE the `for (let __iter ...) {}` loop, so each
+    // iteration created a fresh `__ctx_cookie_albsessid = ''` that
+    // shadowed whatever the previous iteration had captured. Lifted
+    // them ABOVE the for-loop now so a single binding persists across
+    // every iteration and capture in iteration N is visible to GET in
+    // iteration N+1.
     let (ctx_vars, ctx_cookies) = collect_referenced_ctx_idents(config);
     let needs_ctx = iters > 1 || !ctx_vars.is_empty() || !ctx_cookies.is_empty();
     if needs_ctx {
-        group_body.push_str("      // Round 39 chain context — pre-declared so ${var:X}/${cookie:X} substitutions never ReferenceError\n");
+        group_body.push_str("    // Round 44 chain context — pre-declared at GROUP scope (outside the iter loop) so captures from iteration N persist into iteration N+1\n");
         for var in &ctx_vars {
-            group_body.push_str(&format!("      let __ctx_var_{} = '';\n", var));
+            group_body.push_str(&format!("    let __ctx_var_{} = '';\n", var));
         }
         for cookie in &ctx_cookies {
-            group_body.push_str(&format!("      let __ctx_cookie_{} = '';\n", cookie));
+            group_body.push_str(&format!("    let __ctx_cookie_{} = '';\n", cookie));
         }
+    }
+
+    if iters > 1 {
+        group_body
+            .push_str(&format!("    for (let __iter = 0; __iter < {}; __iter++) {{\n", iters));
     }
 
     for (check_idx, check) in config.custom_checks.iter().enumerate() {

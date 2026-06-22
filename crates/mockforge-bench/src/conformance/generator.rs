@@ -245,13 +245,27 @@ impl ConformanceGenerator {
         // Request/response capture for --export-requests (uses console.log since
         // k6's handleSummary runs in a separate JS context with no access to
         // module-level variables — the CLI parses the output log after k6 exits).
+        //
+        // Round 44 (#79) — Srikanth on 0.3.188: he reported `MOCKFORGE_UPLOAD_PARTS`
+        // appearing in k6-output.log but `MOCKFORGE_EXCHANGE` for the same check
+        // missing entirely from `conformance-requests.json` / `-failure-details.json`.
+        // The most likely failure mode is an exception inside `JSON.stringify`
+        // (multipart bodies can include bytes that produce surrogate-half strings
+        // k6's stringifier chokes on; very large request URLs can also bust k6's
+        // console-line length). Wrap the entire payload build + stringify in a
+        // try/catch and ALWAYS emit a fallback `MOCKFORGE_EXCHANGE` line — even
+        // when stringify fails — so the request never silently disappears from
+        // the export. The fallback carries `check`, method, URL, status, and an
+        // `_export_error` flag so a downstream consumer can tell a degraded
+        // entry from a clean one.
         if self.config.export_requests {
             script.push_str("function __captureExchange(checkName, res) {\n");
-            script.push_str("  let bodyStr = '';\n");
-            script.push_str("  try { bodyStr = res.body ? res.body.substring(0, 2000) : ''; } catch(e) { bodyStr = '<unreadable>'; }\n");
-            script.push_str("  let reqHeaders = {};\n");
+            script.push_str("  try {\n");
+            script.push_str("    let bodyStr = '';\n");
+            script.push_str("    try { bodyStr = res.body ? res.body.substring(0, 2000) : ''; } catch(e) { bodyStr = '<unreadable>'; }\n");
+            script.push_str("    let reqHeaders = {};\n");
             script.push_str(
-                "  if (res.request && res.request.headers) { reqHeaders = res.request.headers; }\n",
+                "    if (res.request && res.request.headers) { reqHeaders = res.request.headers; }\n",
             );
             // Round 41 (#79) — Srikanth on 0.3.185: "When run without
             // Spec the export request file has blank entry". k6's
@@ -261,28 +275,57 @@ impl ConformanceGenerator {
             // summary so the export at least surfaces "multipart/form-data; N parts"
             // instead of an empty string. Real bodies still surface
             // unchanged.
-            script.push_str("  let reqBody = '';\n");
-            script.push_str("  if (res.request && res.request.body) { try { reqBody = res.request.body.substring(0, 2000); } catch(e) {} }\n");
+            script.push_str("    let reqBody = '';\n");
+            script.push_str("    if (res.request && res.request.body) { try { reqBody = res.request.body.substring(0, 2000); } catch(e) {} }\n");
             script.push_str(
-                "  if (!reqBody) {\n\
-                 \x20\x20\x20\x20const ct = (reqHeaders['Content-Type'] || reqHeaders['content-type'] || '').toString();\n\
-                 \x20\x20\x20\x20if (ct.startsWith('multipart/')) reqBody = '<multipart upload; body bytes not surfaced by k6 res.request.body>';\n\
-                 \x20\x20}\n",
+                "    if (!reqBody) {\n\
+                 \x20\x20\x20\x20\x20\x20const ct = (reqHeaders['Content-Type'] || reqHeaders['content-type'] || '').toString();\n\
+                 \x20\x20\x20\x20\x20\x20if (ct.startsWith('multipart/')) reqBody = '<multipart upload; body bytes not surfaced by k6 res.request.body>';\n\
+                 \x20\x20\x20\x20}\n",
             );
-            script.push_str("  console.log('MOCKFORGE_EXCHANGE:' + JSON.stringify({\n");
-            script.push_str("    check: checkName,\n");
-            script.push_str("    request: {\n");
-            script.push_str("      method: res.request ? res.request.method : 'unknown',\n");
-            script.push_str("      url: res.request ? res.request.url : res.url || 'unknown',\n");
-            script.push_str("      headers: reqHeaders,\n");
-            script.push_str("      body: reqBody,\n");
-            script.push_str("    },\n");
-            script.push_str("    response: {\n");
-            script.push_str("      status: res.status,\n");
-            script.push_str("      headers: res.headers ? Object.fromEntries(Object.entries(res.headers).slice(0, 30)) : {},\n");
-            script.push_str("      body: bodyStr,\n");
-            script.push_str("    },\n");
-            script.push_str("  }));\n");
+            script.push_str("    console.log('MOCKFORGE_EXCHANGE:' + JSON.stringify({\n");
+            script.push_str("      check: checkName,\n");
+            script.push_str("      request: {\n");
+            script.push_str("        method: res.request ? res.request.method : 'unknown',\n");
+            script.push_str("        url: res.request ? res.request.url : res.url || 'unknown',\n");
+            script.push_str("        headers: reqHeaders,\n");
+            script.push_str("        body: reqBody,\n");
+            script.push_str("      },\n");
+            script.push_str("      response: {\n");
+            script.push_str("        status: res.status,\n");
+            script.push_str("        headers: res.headers ? Object.fromEntries(Object.entries(res.headers).slice(0, 30)) : {},\n");
+            script.push_str("        body: bodyStr,\n");
+            script.push_str("      },\n");
+            script.push_str("    }));\n");
+            script.push_str("  } catch (e) {\n");
+            // Fallback path: still emit SOMETHING the parser can pick up
+            // so the request doesn't vanish from the export. Stays short
+            // on purpose — bigger payload was what tripped the primary
+            // path.
+            script.push_str("    try {\n");
+            script.push_str("      console.log('MOCKFORGE_EXCHANGE:' + JSON.stringify({\n");
+            script.push_str("        check: checkName,\n");
+            script.push_str("        request: {\n");
+            script.push_str(
+                "          method: (res && res.request) ? res.request.method : 'unknown',\n",
+            );
+            script.push_str("          url: (res && res.request) ? res.request.url : (res && res.url) || 'unknown',\n");
+            script.push_str("          headers: {},\n");
+            script.push_str("          body: '<exchange capture failed: ' + (e && e.message ? e.message : 'unknown error') + '>',\n");
+            script.push_str("        },\n");
+            script.push_str("        response: {\n");
+            script.push_str("          status: (res && res.status) || 0,\n");
+            script.push_str("          headers: {},\n");
+            script.push_str("          body: '',\n");
+            script.push_str("        },\n");
+            script.push_str("        _export_error: (e && e.message) ? e.message : String(e),\n");
+            script.push_str("      }));\n");
+            script.push_str("    } catch (e2) {\n");
+            // Last-resort: a hand-rolled JSON string so even if a
+            // second stringify fails, we still flag the failure.
+            script.push_str("      console.log('MOCKFORGE_EXCHANGE:{\"check\":\"' + checkName + '\",\"request\":{\"method\":\"unknown\",\"url\":\"unknown\",\"headers\":{},\"body\":\"\"},\"response\":{\"status\":0,\"headers\":{},\"body\":\"\"},\"_export_error\":\"double-fault\"}');\n");
+            script.push_str("    }\n");
+            script.push_str("  }\n");
             script.push_str("}\n\n");
         }
 

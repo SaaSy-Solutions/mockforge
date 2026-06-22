@@ -736,6 +736,7 @@ impl OpenApiRouteRegistry {
                                 occurrences: 1,
                                 client_mockforge_version,
                                 client_sent_at,
+                                summary: String::new(),
                             },
                         );
                         let status = axum::http::StatusCode::from_u16(status_code)
@@ -848,6 +849,7 @@ impl OpenApiRouteRegistry {
                                 occurrences: 1,
                                 client_mockforge_version,
                                 client_sent_at,
+                                summary: String::new(),
                             },
                         );
 
@@ -1302,6 +1304,7 @@ impl OpenApiRouteRegistry {
                 occurrences: 1,
                 client_mockforge_version,
                 client_sent_at,
+                summary: String::new(),
             },
         );
 
@@ -1919,6 +1922,7 @@ impl OpenApiRouteRegistry {
                                     occurrences: 1,
                                     client_mockforge_version,
                                     client_sent_at,
+                                    summary: String::new(),
                                 },
                             );
                             let status = axum::http::StatusCode::from_u16(status_code)
