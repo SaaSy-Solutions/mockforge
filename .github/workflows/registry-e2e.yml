@@ -43,7 +43,7 @@ jobs:
       registry: ${{ steps.filter.outputs.registry }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Determine whether registry files changed
@@ -123,7 +123,7 @@ jobs:
         run: echo "CARGO_HOME=/tmp/cargo-mockforge-e2e-${{ runner.name }}" >> "$GITHUB_ENV"
 
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Install Rust toolchain
         uses: ./.github/actions/rust-toolchain
