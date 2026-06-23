@@ -165,6 +165,116 @@ type DedupKey = (String, String, String, String);
 /// Pulled out of `export_filtered` to keep that function focused on
 /// "stitch index -> file path" while the math sits behind a pure
 /// function the unit tests can drive directly.
+/// Round 45 (#79) — local mirror of `mockforge_foundation::conformance_violations::summarize_reason`
+/// for TUI builds. The TUI doesn't depend on mockforge-foundation (it's
+/// the standalone admin client), so we re-implement the collapse here
+/// to keep the dedup export self-contained. The logic stays in lock-
+/// step with the foundation copy; both produce the same one-line
+/// `<N> <category> violation(s): <name> (<rule>), ...` string built
+/// from the validator's `details[]` payload. Empty when `reason`
+/// doesn't carry a parseable `{"details":[...]}` envelope (e.g. the
+/// older heuristic fallback path or content-type rejections).
+fn summarize_reason_local(reason: &str) -> String {
+    use serde_json::Value;
+
+    let json_start = reason.find('{');
+    let parsed: Option<Value> = json_start
+        .and_then(|i| serde_json::from_str(reason[i..].trim()).ok())
+        .or_else(|| serde_json::from_str(reason).ok());
+
+    let details = parsed
+        .as_ref()
+        .and_then(|v| v.get("details"))
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    if details.is_empty() {
+        return String::new();
+    }
+
+    let mut by_loc: std::collections::BTreeMap<String, Vec<(String, String)>> =
+        std::collections::BTreeMap::new();
+
+    for d in &details {
+        let path = d.get("path").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let code = d.get("code").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let msg = d.get("message").and_then(|v| v.as_str()).unwrap_or("").to_lowercase();
+        let (loc, name) = match path.split_once('.') {
+            Some((l, n)) => (l.to_string(), n.to_string()),
+            None if !path.is_empty() => (path.clone(), String::new()),
+            _ => ("body".to_string(), String::new()),
+        };
+        let rule = match code.as_str() {
+            "schema_validation" => {
+                if msg.contains("is not one of") {
+                    "enum".to_string()
+                } else if msg.contains("not of type") || msg.contains("expected type") {
+                    "type".to_string()
+                } else if msg.contains("less than") || msg.contains("minimum") {
+                    "min".to_string()
+                } else if msg.contains("greater than") || msg.contains("maximum") {
+                    "max".to_string()
+                } else if msg.contains("pattern") {
+                    "pattern".to_string()
+                } else if msg.contains("required") {
+                    "required".to_string()
+                } else {
+                    "schema".to_string()
+                }
+            }
+            "required" => "required".to_string(),
+            other => other.to_string(),
+        };
+        by_loc.entry(loc).or_default().push((name, rule));
+    }
+
+    let total = details.len();
+    // Round 45 — keep in lock-step with foundation's `summarize_reason`:
+    // pick the loc category by the classifier's priority order
+    // (query > header > cookie > path > body), not BTreeMap alphabetical.
+    let primary_loc = ["query", "header", "cookie", "path", "body"]
+        .iter()
+        .find(|loc| by_loc.contains_key(**loc))
+        .map(|s| s.to_string())
+        .or_else(|| by_loc.keys().next().cloned())
+        .unwrap_or_else(|| "validation".to_string());
+    let primary_label = match primary_loc.as_str() {
+        "query" => "query",
+        "header" => "header",
+        "cookie" => "cookie",
+        "path" => "path parameter",
+        "body" => "request-body",
+        other => other,
+    };
+
+    let mut items: Vec<String> = Vec::new();
+    for (loc, names) in &by_loc {
+        for (name, rule) in names {
+            let head = if name.is_empty() {
+                loc.clone()
+            } else {
+                format!("{}.{}", loc, name)
+            };
+            if rule.is_empty() {
+                items.push(head);
+            } else {
+                items.push(format!("{} ({})", head, rule));
+            }
+        }
+    }
+
+    const MAX_VISIBLE: usize = 5;
+    let visible: Vec<String> = items.iter().take(MAX_VISIBLE).cloned().collect();
+    let suffix = if items.len() > MAX_VISIBLE {
+        format!(", +{} more", items.len() - MAX_VISIBLE)
+    } else {
+        String::new()
+    };
+
+    format!("{} {} violation(s): {}{}", total, primary_label, visible.join(", "), suffix)
+}
+
 fn dedup_violations(violations: &[&ConformanceViolation]) -> Vec<DedupedViolation> {
     let mut groups: HashMap<DedupKey, (DedupedViolation, u32, chrono::DateTime<chrono::Utc>)> =
         HashMap::new();
@@ -202,6 +312,16 @@ fn dedup_violations(violations: &[&ConformanceViolation]) -> Vec<DedupedViolatio
                 }
             }
             None => {
+                // Round 45 (#79) — populate `summary` for this group.
+                // Older mockforge versions don't send the field, so
+                // build it locally from `reason` when the wire payload
+                // didn't carry one. Saves the TUI from re-running the
+                // parser on every render.
+                let summary = if v.summary.is_empty() {
+                    summarize_reason_local(&v.reason)
+                } else {
+                    v.summary.clone()
+                };
                 groups.insert(
                     key,
                     (
@@ -210,6 +330,7 @@ fn dedup_violations(violations: &[&ConformanceViolation]) -> Vec<DedupedViolatio
                             path: v.path.clone(),
                             category: v.category.clone(),
                             reason: v.reason.clone(),
+                            summary,
                             status: v.status,
                             count: hits,
                             first_seen: v.timestamp,
@@ -241,6 +362,16 @@ struct DedupedViolation {
     path: String,
     category: String,
     reason: String,
+    /// Round 45 (#79) — Srikanth on 0.3.189: "I am not seeing any
+    /// summary info" in his TUI export. v0.3.189 added `summary` to
+    /// `ServerConformanceViolation` but the TUI dedup wrapper
+    /// (`DedupedViolation`) didn't propagate it, so every TUI-exported
+    /// JSON file dropped the field on the floor. Now persisted on
+    /// every group; identical across all rows of a single signature
+    /// (`reason` is part of the dedup key) so we can just lift it
+    /// from the first observed hit. Empty when the underlying
+    /// validator didn't supply a parseable `details` payload.
+    summary: String,
     status: u16,
     count: u32,
     first_seen: chrono::DateTime<chrono::Utc>,
@@ -1251,6 +1382,39 @@ mod tests {
     use chrono::{TimeZone, Utc};
     use crossterm::event::KeyCode;
 
+    /// Round 45 (#79) — Srikanth's TUI export on 0.3.189 was missing
+    /// the `summary` field that v0.3.189's server-side
+    /// `ServerConformanceViolation` shipped. The TUI dedup wrapper
+    /// (`DedupedViolation`) had to learn the field and either lift the
+    /// server's pre-built summary or build one locally from `reason`.
+    /// This test pins both branches: when the server already supplied
+    /// a `summary`, dedup keeps it verbatim; when `summary` is empty,
+    /// dedup falls back to `summarize_reason_local` so older mockforge
+    /// servers still get a populated export.
+    #[test]
+    fn dedup_violations_carries_summary_or_rebuilds_from_reason() {
+        let reason = r#"Validation error: {"details":[{"code":"schema_validation","message":"Validation error: \"zzz\" is not one of \"en\" or \"fr\"","path":"query.lang"}],"errors":["..."]}"#;
+
+        // Case A: server already supplied a summary — keep verbatim.
+        let mut v_with = violation(1000, 0, "/x", reason);
+        v_with.summary = "1 query violation(s): query.lang (enum)".into();
+        let out_a = dedup_violations(&[&v_with]);
+        assert_eq!(out_a.len(), 1);
+        assert_eq!(out_a[0].summary, "1 query violation(s): query.lang (enum)");
+
+        // Case B: server didn't (older mockforge) — rebuild locally.
+        let v_without = violation(2000, 0, "/x", reason);
+        let out_b = dedup_violations(&[&v_without]);
+        assert_eq!(out_b.len(), 1);
+        assert_eq!(out_b[0].summary, "1 query violation(s): query.lang (enum)");
+
+        // Case C: reason carries no parseable details — summary stays empty.
+        let v_empty = violation(3000, 0, "/x", "raw text, no JSON envelope");
+        let out_c = dedup_violations(&[&v_empty]);
+        assert_eq!(out_c.len(), 1);
+        assert_eq!(out_c[0].summary, "");
+    }
+
     fn violation(secs: i64, nanos: u32, path: &str, reason: &str) -> ConformanceViolation {
         ConformanceViolation {
             timestamp: Utc.timestamp_opt(secs, nanos).unwrap(),
@@ -1263,6 +1427,7 @@ mod tests {
             occurrences: 1,
             client_mockforge_version: None,
             client_sent_at: None,
+            summary: String::new(),
         }
     }
 

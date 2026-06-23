@@ -218,13 +218,13 @@ impl ConformanceGenerator {
         // Failure detail collector — logs req/res info for failed checks via console.log
         script.push_str("function __captureFailure(checkName, res, expected) {\n");
         script.push_str("  let bodyStr = '';\n");
-        script.push_str("  try { bodyStr = res.body ? res.body.substring(0, 2000) : ''; } catch(e) { bodyStr = '<unreadable>'; }\n");
+        script.push_str("  try { if (res.body) { const __n = res.body.length; bodyStr = res.body.substring(0, 65536); if (__n > 65536) bodyStr = bodyStr + ' <truncated at 65536 bytes; full body was ' + __n + ' bytes>'; } else { bodyStr = ''; } } catch(e) { bodyStr = '<unreadable>'; }\n");
         script.push_str("  let reqHeaders = {};\n");
         script.push_str(
             "  if (res.request && res.request.headers) { reqHeaders = res.request.headers; }\n",
         );
         script.push_str("  let reqBody = '';\n");
-        script.push_str("  if (res.request && res.request.body) { try { reqBody = res.request.body.substring(0, 2000); } catch(e) {} }\n");
+        script.push_str("  if (res.request && res.request.body) { try { const __m = res.request.body.length; reqBody = res.request.body.substring(0, 65536); if (__m > 65536) reqBody = reqBody + ' <truncated at 65536 bytes; full body was ' + __m + ' bytes>'; } catch(e) {} }\n");
         script.push_str("  console.log('MOCKFORGE_FAILURE:' + JSON.stringify({\n");
         script.push_str("    check: checkName,\n");
         script.push_str("    request: {\n");
@@ -262,7 +262,7 @@ impl ConformanceGenerator {
             script.push_str("function __captureExchange(checkName, res) {\n");
             script.push_str("  try {\n");
             script.push_str("    let bodyStr = '';\n");
-            script.push_str("    try { bodyStr = res.body ? res.body.substring(0, 2000) : ''; } catch(e) { bodyStr = '<unreadable>'; }\n");
+            script.push_str("    try { if (res.body) { const __n = res.body.length; bodyStr = res.body.substring(0, 65536); if (__n > 65536) bodyStr = bodyStr + ' <truncated at 65536 bytes; full body was ' + __n + ' bytes>'; } else { bodyStr = ''; } } catch(e) { bodyStr = '<unreadable>'; }\n");
             script.push_str("    let reqHeaders = {};\n");
             script.push_str(
                 "    if (res.request && res.request.headers) { reqHeaders = res.request.headers; }\n",
@@ -276,7 +276,7 @@ impl ConformanceGenerator {
             // instead of an empty string. Real bodies still surface
             // unchanged.
             script.push_str("    let reqBody = '';\n");
-            script.push_str("    if (res.request && res.request.body) { try { reqBody = res.request.body.substring(0, 2000); } catch(e) {} }\n");
+            script.push_str("    if (res.request && res.request.body) { try { const __m = res.request.body.length; reqBody = res.request.body.substring(0, 65536); if (__m > 65536) reqBody = reqBody + ' <truncated at 65536 bytes; full body was ' + __m + ' bytes>'; } catch(e) {} }\n");
             script.push_str(
                 "    if (!reqBody) {\n\
                  \x20\x20\x20\x20\x20\x20const ct = (reqHeaders['Content-Type'] || reqHeaders['content-type'] || '').toString();\n\

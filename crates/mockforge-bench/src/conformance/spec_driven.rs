@@ -764,13 +764,13 @@ impl SpecDrivenConformanceGenerator {
         script
             .push_str("function __captureFailure(checkName, res, expected, schemaViolations) {\n");
         script.push_str("  let bodyStr = '';\n");
-        script.push_str("  try { bodyStr = res.body ? res.body.substring(0, 2000) : ''; } catch(e) { bodyStr = '<unreadable>'; }\n");
+        script.push_str("  try { if (res.body) { const __n = res.body.length; bodyStr = res.body.substring(0, 65536); if (__n > 65536) bodyStr = bodyStr + ' <truncated at 65536 bytes; full body was ' + __n + ' bytes>'; } else { bodyStr = ''; } } catch(e) { bodyStr = '<unreadable>'; }\n");
         script.push_str("  let reqHeaders = {};\n");
         script.push_str(
             "  if (res.request && res.request.headers) { reqHeaders = res.request.headers; }\n",
         );
         script.push_str("  let reqBody = '';\n");
-        script.push_str("  if (res.request && res.request.body) { try { reqBody = res.request.body.substring(0, 2000); } catch(e) {} }\n");
+        script.push_str("  if (res.request && res.request.body) { try { const __m = res.request.body.length; reqBody = res.request.body.substring(0, 65536); if (__m > 65536) reqBody = reqBody + ' <truncated at 65536 bytes; full body was ' + __m + ' bytes>'; } catch(e) {} }\n");
         script.push_str("  let payload = {\n");
         script.push_str("    check: checkName,\n");
         script.push_str("    request: {\n");
@@ -802,13 +802,13 @@ impl SpecDrivenConformanceGenerator {
             script.push_str("function __captureExchange(checkName, res) {\n");
             script.push_str("  try {\n");
             script.push_str("    let bodyStr = '';\n");
-            script.push_str("    try { bodyStr = res.body ? res.body.substring(0, 2000) : ''; } catch(e) { bodyStr = '<unreadable>'; }\n");
+            script.push_str("    try { if (res.body) { const __n = res.body.length; bodyStr = res.body.substring(0, 65536); if (__n > 65536) bodyStr = bodyStr + ' <truncated at 65536 bytes; full body was ' + __n + ' bytes>'; } else { bodyStr = ''; } } catch(e) { bodyStr = '<unreadable>'; }\n");
             script.push_str("    let reqHeaders = {};\n");
             script.push_str(
                 "    if (res.request && res.request.headers) { reqHeaders = res.request.headers; }\n",
             );
             script.push_str("    let reqBody = '';\n");
-            script.push_str("    if (res.request && res.request.body) { try { reqBody = res.request.body.substring(0, 2000); } catch(e) {} }\n");
+            script.push_str("    if (res.request && res.request.body) { try { const __m = res.request.body.length; reqBody = res.request.body.substring(0, 65536); if (__m > 65536) reqBody = reqBody + ' <truncated at 65536 bytes; full body was ' + __m + ' bytes>'; } catch(e) {} }\n");
             // Round 44 — same multipart-body fallback as the custom-
             // checks generator. Without this, a self-test probe that
             // happens to upload a file would log an empty body string

@@ -2789,9 +2789,10 @@ impl BenchCommand {
             // spec. Violations are appended to
             // `conformance-request-violations.json`.
             if self.validate_requests && self.export_requests && !self.spec.is_empty() {
-                let n = crate::conformance::request_validator::validate_emitted_requests(
+                let n = crate::conformance::request_validator::validate_emitted_requests_with_base_path(
                     &self.spec,
                     &self.output,
+                    self.base_path.as_deref(),
                 )
                 .await?;
                 if n > 0 {
@@ -2859,6 +2860,32 @@ impl BenchCommand {
         TerminalReporter::print_success(&format!("Report saved to: {}", report_path.display()));
 
         self.save_conformance_report(&report, &report_path)?;
+
+        // Round 45 (#79) — Srikanth on 0.3.189: "I am still not seeing
+        // any conformance failure logs or conformance-request logs are
+        // also not capturing any failures info." His command does NOT
+        // pass `--use-k6`, so the round-44 wiring (which only ran on
+        // the k6 branch) never fired. Mirror the same retrospective
+        // pass here: when both `--validate-requests` and
+        // `--export-requests` are set, walk the native executor's
+        // freshly-written `conformance-requests.json` and validate
+        // each emitted request against the spec. Violations are
+        // appended to `conformance-request-violations.json`.
+        if self.validate_requests && self.export_requests && !self.spec.is_empty() {
+            let n =
+                crate::conformance::request_validator::validate_emitted_requests_with_base_path(
+                    &self.spec,
+                    &self.output,
+                    self.base_path.as_deref(),
+                )
+                .await?;
+            if n > 0 {
+                TerminalReporter::print_warning(&format!(
+                    "{} emitted request(s) violated the spec — see conformance-request-violations.json",
+                    n
+                ));
+            }
+        }
 
         Ok(())
     }
@@ -3162,6 +3189,29 @@ impl BenchCommand {
                 let details_path = target_dir.join("conformance-failure-details.json");
                 if let Ok(json) = serde_json::to_string_pretty(&failure_details) {
                     let _ = std::fs::write(&details_path, json);
+                }
+            }
+
+            // Round 45 (#79) — Srikanth on 0.3.189: `conformance-request-
+            // violations.json` was never being written in his
+            // multi-target self-test run. The round-44 wiring sat on
+            // the single-target branch only. Mirror it here, per
+            // target_dir, so the multi-target case (his typical
+            // workflow) actually surfaces wire-level violations.
+            if self.validate_requests && self.export_requests && !self.spec.is_empty() {
+                let n = crate::conformance::request_validator::validate_emitted_requests_with_base_path(
+                    &self.spec,
+                    &target_dir,
+                    self.base_path.as_deref(),
+                )
+                .await?;
+                if n > 0 {
+                    TerminalReporter::print_warning(&format!(
+                        "Target {}: {} emitted request(s) violated the spec — see {}/conformance-request-violations.json",
+                        target.url,
+                        n,
+                        target_dir.display()
+                    ));
                 }
             }
 
