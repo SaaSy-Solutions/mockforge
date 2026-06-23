@@ -14,6 +14,12 @@ ignore = [
     # version published yet as of 2026-04.
     { id = "RUSTSEC-2026-0037", reason = "quinn-proto DoS — transitive dep, no patched version available" },
 
+    # quinn-proto remote memory exhaustion (published 2026-06-22, fixed
+    # in >=0.11.15). Reaches mockforge-desktop only via Tauri's reqwest
+    # stack; no production server uses HTTP/3/QUIC. Clears once Tauri
+    # bumps its reqwest pin.
+    { id = "RUSTSEC-2026-0185", reason = "quinn-proto memory exhaustion — reaches only mockforge-desktop via Tauri reqwest; no server-side QUIC use" },
+
     # wasmtime 36.x is pinned by mockforge-plugin-loader's current API
     # surface. Every one of these needs a major-version bump to resolve,
     # which is a tracked follow-up (see plugin-loader).

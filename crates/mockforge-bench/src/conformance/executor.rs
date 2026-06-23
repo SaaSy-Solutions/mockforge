@@ -936,11 +936,30 @@ impl NativeConformanceExecutor {
                 method: check.method.to_string(),
                 url: url.clone(),
                 request_headers: check.headers.iter().cloned().collect(),
-                request_body: req_body_str,
+                // Round 45 (#79) — Srikanth on 0.3.189: showed a 13MB
+                // multipart upload getting cut mid-PEM at the 2000-byte
+                // cap. Bump to 64KB so a single PEM cert + headers fits
+                // inline and we still get the boundary chain for visual
+                // confirmation. Append a marker reporting the original
+                // size so a downstream consumer can tell a truncation
+                // from a full payload.
+                request_body: if req_body_str.len() > 65536 {
+                    format!(
+                        "{}\n<truncated at 65536 bytes; full body was {} bytes>",
+                        &req_body_str[..65536],
+                        req_body_str.len()
+                    )
+                } else {
+                    req_body_str
+                },
                 response_status: status,
                 response_headers: resp_headers.clone(),
-                response_body: if resp_body.len() > 2000 {
-                    format!("{}...(truncated)", &resp_body[..2000])
+                response_body: if resp_body.len() > 65536 {
+                    format!(
+                        "{}\n<truncated at 65536 bytes; full body was {} bytes>",
+                        &resp_body[..65536],
+                        resp_body.len()
+                    )
                 } else {
                     resp_body.clone()
                 },

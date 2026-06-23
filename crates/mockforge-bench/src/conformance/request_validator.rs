@@ -510,6 +510,32 @@ pub async fn validate_emitted_requests(
     spec_files: &[std::path::PathBuf],
     output_dir: &Path,
 ) -> Result<usize> {
+    validate_emitted_requests_with_base_path(spec_files, output_dir, None).await
+}
+
+/// Round 45 (#79) — same as `validate_emitted_requests` but accepts an
+/// explicit `base_path` (e.g. Srikanth's `--base-path /api` for the
+/// Apigee spec where every operation lives under `/api/v1/...` on the
+/// wire but `/v1/...` in the spec). Without it the emitted URL doesn't
+/// match the spec path and every request silently skips validation.
+///
+/// Also broadened in r45 to:
+/// - extract path params from the URL and validate their values
+///   against the spec's path-parameter schemas (enum / type)
+/// - parse the request body when content-type is JSON and walk it
+///   against the requestBody schema's `required: [...]` and enum
+///   constraints on top-level properties
+///
+/// Body and path-param coverage is INTENTIONALLY shallow (top-level
+/// `required` + `enum`/`type` on direct properties only) — the
+/// authoritative validator is the OpenAPI server's; this is the
+/// client-side cross-check that mirrors the server's view on the
+/// wire-level requests the bench actually sent.
+pub async fn validate_emitted_requests_with_base_path(
+    spec_files: &[std::path::PathBuf],
+    output_dir: &Path,
+    base_path: Option<&str>,
+) -> Result<usize> {
     use serde_json::Value;
 
     if spec_files.is_empty() {
@@ -563,7 +589,26 @@ pub async fn validate_emitted_requests(
             path_only
         };
 
-        let spec_path = match find_matching_spec_path(&path_only, &spec_ops, None) {
+        // Round 45 — strip base_path BEFORE matching so an Apigee-style
+        // `/api/v1/organizations` on the wire matches `/v1/organizations`
+        // in the spec when `--base-path /api` was passed.
+        let lookup_path = if let Some(bp) = base_path {
+            let bp = bp.trim_end_matches('/');
+            if !bp.is_empty() && path_only.starts_with(bp) {
+                let stripped = &path_only[bp.len()..];
+                if stripped.is_empty() {
+                    "/".to_string()
+                } else {
+                    stripped.to_string()
+                }
+            } else {
+                path_only.clone()
+            }
+        } else {
+            path_only.clone()
+        };
+
+        let spec_path = match find_matching_spec_path(&lookup_path, &spec_ops, None) {
             Some(p) => p,
             None => continue,
         };
@@ -601,6 +646,26 @@ pub async fn validate_emitted_requests(
             })
             .collect();
 
+        // Round 45 — bind path parameters by zipping the concrete URL
+        // path against the spec's template path. `/v1/{name}` ←
+        // `/v1/projects/abc` produces `{ "name": "projects/abc" }`.
+        // Used below to value-check each path-param against its
+        // declared schema (enum / type).
+        let path_params: HashMap<String, String> = {
+            let mut out = HashMap::new();
+            let concrete_parts: Vec<&str> = lookup_path.split('/').collect();
+            let template_parts: Vec<&str> = spec_path.split('/').collect();
+            if concrete_parts.len() == template_parts.len() {
+                for (c, t) in concrete_parts.iter().zip(template_parts.iter()) {
+                    if t.starts_with('{') && t.ends_with('}') {
+                        let name = &t[1..t.len() - 1];
+                        out.insert(name.to_string(), (*c).to_string());
+                    }
+                }
+            }
+            out
+        };
+
         let mut all_params: Vec<&openapiv3::Parameter> = Vec::new();
         for p in &path_item.parameters {
             if let Some(param) = resolve_parameter(p, spec) {
@@ -614,31 +679,75 @@ pub async fn validate_emitted_requests(
         }
 
         for param in &all_params {
-            let openapiv3::Parameter::Query { parameter_data, .. } = param else {
-                continue;
+            let (loc_str, name, schema_ref) = match param {
+                openapiv3::Parameter::Query { parameter_data, .. } => {
+                    let openapiv3::ParameterSchemaOrContent::Schema(sref) = &parameter_data.format
+                    else {
+                        continue;
+                    };
+                    let Some(v) = sent_query.get(&parameter_data.name) else {
+                        continue;
+                    };
+                    ("query", &parameter_data.name, (sref, v.clone()))
+                }
+                openapiv3::Parameter::Path { parameter_data, .. } => {
+                    let openapiv3::ParameterSchemaOrContent::Schema(sref) = &parameter_data.format
+                    else {
+                        continue;
+                    };
+                    let Some(v) = path_params.get(&parameter_data.name) else {
+                        continue;
+                    };
+                    ("path", &parameter_data.name, (sref, v.clone()))
+                }
+                _ => continue,
             };
-            let value = match sent_query.get(&parameter_data.name) {
-                Some(v) => v,
-                None => continue,
-            };
-            // Resolve the parameter's schema. Only inline schemas are
-            // walked here — a referenced schema is best validated by
-            // the existing server-side validator, not duplicated.
-            let openapiv3::ParameterSchemaOrContent::Schema(schema_ref) = &parameter_data.format
-            else {
-                continue;
-            };
+            let (schema_ref, value) = schema_ref;
             let Some(schema) = schema_ref.as_item() else {
                 continue;
             };
-            if let Some(msg) = check_value_against_schema(value, schema) {
+            if let Some(msg) = check_value_against_schema(&value, schema) {
                 emitted_violations.push(RequestViolation {
                     check_name: check.clone(),
                     method: method.clone(),
                     path: url.clone(),
-                    violation_type: "query_value_mismatch".to_string(),
-                    message: format!("query.{}: {}", parameter_data.name, msg),
+                    violation_type: format!("{}_value_mismatch", loc_str),
+                    message: format!("{}.{}: {}", loc_str, name, msg),
                 });
+            }
+        }
+
+        // Round 45 — request-body cross-check. Only kicks in when the
+        // sent body parses as JSON and the operation declares a JSON
+        // requestBody schema. Shallow: missing required top-level
+        // fields + enum/type mismatches on direct properties. Deeper
+        // schema walks (nested objects, oneOf/anyOf) are the server-
+        // side validator's job; we just want to surface the obvious
+        // wire-level breaks the bench actually fired.
+        let body_str = req.get("body").and_then(|v| v.as_str()).unwrap_or("");
+        if !body_str.is_empty() {
+            if let Ok(body_json) = serde_json::from_str::<serde_json::Value>(body_str) {
+                if let Some(req_body) = operation.request_body.as_ref().and_then(|r| r.as_item()) {
+                    for (ct, media) in &req_body.content {
+                        if !ct.contains("json") {
+                            continue;
+                        }
+                        let Some(schema_ref) = &media.schema else {
+                            continue;
+                        };
+                        let Some(schema) = schema_ref.as_item() else {
+                            continue;
+                        };
+                        check_body_against_schema(
+                            &check,
+                            &method,
+                            &url,
+                            &body_json,
+                            schema,
+                            &mut emitted_violations,
+                        );
+                    }
+                }
             }
         }
     }
@@ -670,6 +779,63 @@ pub async fn validate_emitted_requests(
         }
     }
     Ok(emitted_violations.len())
+}
+
+/// Round 45 (#79) — shallow body-vs-schema check for the retroactive
+/// emitted-request validator. Pushes a [`RequestViolation`] for each
+/// missing top-level `required` field and for each direct property
+/// that fails an `enum` / type check. Intentionally does NOT recurse
+/// into nested objects or follow `$ref` — the server-side validator is
+/// authoritative there; this client-side pass only mirrors the obvious
+/// wire-level breaks the bench actually fired.
+fn check_body_against_schema(
+    check: &str,
+    method: &str,
+    url: &str,
+    body: &serde_json::Value,
+    schema: &openapiv3::Schema,
+    violations: &mut Vec<RequestViolation>,
+) {
+    use openapiv3::{SchemaKind, Type};
+
+    let SchemaKind::Type(Type::Object(obj_type)) = &schema.schema_kind else {
+        return;
+    };
+    let Some(body_obj) = body.as_object() else {
+        return;
+    };
+
+    for required in &obj_type.required {
+        if !body_obj.contains_key(required) {
+            violations.push(RequestViolation {
+                check_name: check.to_string(),
+                method: method.to_string(),
+                path: url.to_string(),
+                violation_type: "body_missing_required".to_string(),
+                message: format!("body.{}: required field missing", required),
+            });
+        }
+    }
+
+    for (prop_name, prop_ref) in &obj_type.properties {
+        let Some(value) = body_obj.get(prop_name) else {
+            continue;
+        };
+        let Some(prop_schema) = prop_ref.as_item() else {
+            continue;
+        };
+        if let Some(value_str) = value.as_str() {
+            if let Some(msg) = check_value_against_schema(value_str, prop_schema) {
+                violations.push(RequestViolation {
+                    check_name: check.to_string(),
+                    method: method.to_string(),
+                    path: url.to_string(),
+                    violation_type: "body_value_mismatch".to_string(),
+                    message: format!("body.{}: {}", prop_name, msg),
+                });
+            }
+        }
+    }
 }
 
 /// Round 44 (#79) — minimal value-vs-schema check for the retroactive

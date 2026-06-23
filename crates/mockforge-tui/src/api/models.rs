@@ -73,6 +73,14 @@ pub struct ConformanceViolation {
     /// even when the request was retried / load-balanced.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub client_sent_at: Option<DateTime<Utc>>,
+    /// Round 44 (#79) — short human-readable line collapsing the
+    /// validator's nested `details[]`/`errors[]` into one row, shaped
+    /// `"<N> <category> violation(s): <name> (<rule>), ..."`. Empty
+    /// when the underlying `reason` didn't carry a parseable `details`
+    /// payload. Defaults to empty for older servers that don't ship
+    /// the field, so the TUI continues to render with just `reason`.
+    #[serde(default)]
+    pub summary: String,
 }
 
 fn default_unknown() -> String {

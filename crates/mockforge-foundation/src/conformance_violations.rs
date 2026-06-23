@@ -312,7 +312,17 @@ pub fn summarize_reason(reason: &str) -> String {
     }
 
     let total = details.len();
-    let primary_loc = by_loc.keys().next().cloned().unwrap_or_else(|| "validation".to_string());
+    // Round 45 (#79) — match `classify_validation_reason`'s priority
+    // order (query > header > cookie > path > body) so the summary's
+    // `<category>` label agrees with the violation's `category` field.
+    // BTreeMap's alphabetical order was producing "request-body
+    // violation(s)" when category was actually "query".
+    let primary_loc = ["query", "header", "cookie", "path", "body"]
+        .iter()
+        .find(|loc| by_loc.contains_key(**loc))
+        .map(|s| s.to_string())
+        .or_else(|| by_loc.keys().next().cloned())
+        .unwrap_or_else(|| "validation".to_string());
     let primary_label = match primary_loc.as_str() {
         "query" => "query",
         "header" => "header",
