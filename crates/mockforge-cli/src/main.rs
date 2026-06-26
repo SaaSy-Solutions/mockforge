@@ -2063,9 +2063,32 @@ enum Commands {
         ///
         /// Format: username:password
         ///
+        /// Works for HTTP Basic AND for LDAP gateways that accept the same
+        /// `Authorization: Basic <base64(user:pass)>` envelope (most do).
+        ///
         /// Example: --conformance-basic-auth "admin:secret"
         #[arg(long)]
         conformance_basic_auth: Option<String>,
+
+        /// Round 46 (#79) — Bearer / JWT token shortcut. Sends every
+        /// request with `Authorization: Bearer <token>`.
+        ///
+        /// Use for: JWT (mint the token out-of-band with your IdP, paste
+        /// it here), opaque bearer tokens, and most OAuth2 access tokens.
+        /// For SAML, exchange the SAML assertion for a session cookie at
+        /// your IdP first, then forward it via `--conformance-header
+        /// "Cookie: <session>"` since SAML itself doesn't ride on every
+        /// request.
+        ///
+        /// Equivalent to `--conformance-header "Authorization: Bearer
+        /// <token>"`; this flag is just the ergonomic shortcut. The
+        /// long-form is still available when you need to send a
+        /// non-Bearer scheme like `Token`, `OAuth`, `AWS4-HMAC-SHA256`,
+        /// etc.
+        ///
+        /// Example: --auth-bearer "eyJhbGciOiJSUzI1NiIs..."
+        #[arg(long, value_name = "TOKEN")]
+        auth_bearer: Option<String>,
 
         /// Conformance report output file
         ///
@@ -3138,6 +3161,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             conformance,
             conformance_api_key,
             conformance_basic_auth,
+            auth_bearer,
             conformance_report,
             conformance_categories,
             conformance_report_format,
@@ -3240,7 +3264,28 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 conformance_report,
                 conformance_categories,
                 conformance_report_format,
-                conformance_headers,
+                // Round 46 (#79) — fold the ergonomic --auth-bearer shortcut
+                // into the existing `--conformance-header` plumbing so it
+                // flows through every conformance / self-test / multi-target
+                // path without separate wiring at each call site.
+                conformance_headers: {
+                    let mut h = conformance_headers;
+                    if let Some(token) = auth_bearer.as_ref() {
+                        // De-dup: don't overwrite a user-supplied Authorization
+                        // header if they passed one explicitly via
+                        // `--conformance-header`.
+                        let already_set = h.iter().any(|line| {
+                            line.split(':')
+                                .next()
+                                .map(|name| name.trim().eq_ignore_ascii_case("Authorization"))
+                                .unwrap_or(false)
+                        });
+                        if !already_set {
+                            h.push(format!("Authorization: Bearer {}", token));
+                        }
+                    }
+                    h
+                },
                 conformance_all_operations,
                 conformance_custom,
                 conformance_delay_ms: conformance_delay,

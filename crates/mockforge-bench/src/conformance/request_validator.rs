@@ -778,7 +778,70 @@ pub async fn validate_emitted_requests_with_base_path(
             );
         }
     }
+
+    // Round 46 (#79) — Srikanth on 0.3.190: "I see three different
+    // messages, is this message for 3 different requests or for 1
+    // request. if it is 1 request can we have 1 line item mentioning
+    // violation 1 = message1, violation2 = message2 etc". Emit a
+    // sibling file grouped by (check_name, method, path) so each
+    // wire-level request shows up as a single row carrying every
+    // violation it raised. The per-violation file stays as-is for
+    // tooling that wants the flat shape.
+    let grouped_dst = output_dir.join("conformance-request-violations-by-request.json");
+    let grouped_value = group_violations_by_request(&all);
+    if let Ok(json) = serde_json::to_string_pretty(&grouped_value) {
+        let _ = std::fs::write(&grouped_dst, json);
+    }
     Ok(emitted_violations.len())
+}
+
+/// Round 46 (#79) — collapse the flat list of [`RequestViolation`]-shaped
+/// JSON values into one entry per (check_name, method, path), with each
+/// row carrying an indexed `violations` array (`violation_1`,
+/// `violation_2`, ...). Preserves insertion order so a downstream
+/// consumer reads requests in the same order the bench fired them.
+fn group_violations_by_request(flat: &[serde_json::Value]) -> serde_json::Value {
+    use serde_json::{Map, Value};
+    let mut order: Vec<(String, String, String)> = Vec::new();
+    let mut grouped: std::collections::HashMap<(String, String, String), Vec<(String, String)>> =
+        std::collections::HashMap::new();
+
+    for v in flat {
+        let check = v.get("check_name").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let method = v.get("method").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let path = v.get("path").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let vt = v.get("violation_type").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let msg = v.get("message").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let key = (check, method, path);
+        if !grouped.contains_key(&key) {
+            order.push(key.clone());
+        }
+        grouped.entry(key).or_default().push((vt, msg));
+    }
+
+    let mut rows: Vec<Value> = Vec::with_capacity(order.len());
+    for key in &order {
+        let (check, method, path) = key;
+        let entries = grouped.get(key).cloned().unwrap_or_default();
+        let mut row = Map::new();
+        row.insert("check_name".into(), Value::String(check.clone()));
+        row.insert("method".into(), Value::String(method.clone()));
+        row.insert("path".into(), Value::String(path.clone()));
+        row.insert(
+            "violation_count".into(),
+            Value::Number(serde_json::Number::from(entries.len())),
+        );
+        // Numbered violation_1 / violation_2 / ... keys so the JSON
+        // reads naturally as "this one request had these violations".
+        for (i, (vt, msg)) in entries.iter().enumerate() {
+            let mut entry = Map::new();
+            entry.insert("violation_type".into(), Value::String(vt.clone()));
+            entry.insert("message".into(), Value::String(msg.clone()));
+            row.insert(format!("violation_{}", i + 1), Value::Object(entry));
+        }
+        rows.push(Value::Object(row));
+    }
+    Value::Array(rows)
 }
 
 /// Round 45 (#79) — shallow body-vs-schema check for the retroactive

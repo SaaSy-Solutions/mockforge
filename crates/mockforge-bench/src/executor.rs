@@ -8,46 +8,104 @@ use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command as TokioCommand;
 
-/// Extract `MOCKFORGE_EXCHANGE:` JSON payload from a k6 output line (--export-requests).
-fn extract_exchange_json(line: &str) -> Option<String> {
-    let marker = "MOCKFORGE_EXCHANGE:";
+/// Extract a `MOCKFORGE_<KIND>:` JSON payload from a k6 output line.
+///
+/// k6 emits these via `console.log`, which goes through one of two paths
+/// depending on the runner config:
+/// - **Raw**: `MOCKFORGE_EXCHANGE:{"check":"...", ...}` straight to stdout.
+/// - **Logfmt**: `time="..." level=info msg="MOCKFORGE_EXCHANGE:{...}" source=console`
+///   where the JSON's `"` are escaped as `\"` and `\` as `\\` so it fits
+///   inside the `msg="..."` field.
+///
+/// Round 46 (#79) — Srikanth on 0.3.190: a multipart upload landed `[]`
+/// in `conformance-requests.json` even though `MOCKFORGE_EXCHANGE:` was
+/// present in the k6 log. Root cause: the previous parser used a naive
+/// `replace("\\\\", "\\").replace("\\\"", "\"")` chain. With binary
+/// multipart bytes the JSON content includes sequences like `\\"`
+/// (literal backslash followed by literal quote inside a JSON string),
+/// which logfmt-escapes to `\\\\\"`. The replace chain processed `\\`
+/// → `\` first, leaving `\\\"`, then `\"` → `"`, mangling the JSON.
+/// Replaced with a single character walk that consumes one logfmt
+/// escape at a time. Also rewrote the suffix-strip to scan for the
+/// matching closing `"` of the `msg="..."` field instead of a
+/// fixed-string suffix so we tolerate any trailing logfmt fields k6
+/// might add.
+fn extract_mockforge_marker_json(line: &str, marker: &str) -> Option<String> {
     let start = line.find(marker)?;
     let json_start = start + marker.len();
-    let json_str = &line[json_start..];
-    let json_str = json_str.strip_suffix("\" source=console").unwrap_or(json_str).trim();
-    if json_str.is_empty() {
-        return None;
-    }
-    if json_str.starts_with('{') && json_str.contains("\\\"") {
-        Some(json_str.replace("\\\\", "\\").replace("\\\"", "\""))
+    let rest = &line[json_start..];
+
+    // Is this the logfmt-wrapped form? The `msg="` opener sits 5 bytes
+    // before the marker. (Plain `msg=MOCKFORGE_...` would also be valid
+    // logfmt for a value with no spaces, but k6 always quote-wraps.)
+    let is_logfmt = start >= 5 && line.as_bytes().get(start - 5..start) == Some(b"msg=\"");
+    if is_logfmt {
+        // Walk forward until the unescaped closing `"` of msg=. Inside
+        // the field, `\\` is one escaped backslash and `\"` is one
+        // escaped quote — those bytes belong to the JSON content. Any
+        // unescaped `"` is the field terminator.
+        let bytes = rest.as_bytes();
+        let mut i = 0;
+        let mut out = String::with_capacity(rest.len());
+        while i < bytes.len() {
+            let b = bytes[i];
+            if b == b'"' {
+                // End of msg= field.
+                return Some(out);
+            }
+            if b == b'\\' && i + 1 < bytes.len() {
+                let next = bytes[i + 1];
+                match next {
+                    b'"' => out.push('"'),
+                    b'\\' => out.push('\\'),
+                    // Other escapes (`\n`, `\r`, `\t`, `\uXXXX`) are
+                    // PART of the JSON content — keep them verbatim so
+                    // serde_json::from_str interprets them.
+                    other => {
+                        out.push('\\');
+                        out.push(other as char);
+                    }
+                }
+                i += 2;
+                continue;
+            }
+            // Non-ASCII multi-byte UTF-8 codepoint or plain ASCII char.
+            // `rest` is a `&str` so we can rely on UTF-8 boundaries.
+            let ch_start = i;
+            // Advance i past the codepoint.
+            i += 1;
+            while i < bytes.len() && (bytes[i] & 0b1100_0000) == 0b1000_0000 {
+                i += 1;
+            }
+            out.push_str(&rest[ch_start..i]);
+        }
+        // Reached EOL without a closing quote — return what we have so
+        // the downstream parser can decide whether to keep it.
+        if out.is_empty() {
+            None
+        } else {
+            Some(out)
+        }
     } else {
-        Some(json_str.to_string())
+        // Raw form: rest of the line is the JSON, possibly with trailing
+        // whitespace. No escape processing needed.
+        let trimmed = rest.trim();
+        if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        }
     }
 }
 
+/// Extract `MOCKFORGE_EXCHANGE:` JSON payload from a k6 output line (--export-requests).
+fn extract_exchange_json(line: &str) -> Option<String> {
+    extract_mockforge_marker_json(line, "MOCKFORGE_EXCHANGE:")
+}
+
 /// Extract `MOCKFORGE_FAILURE:` JSON payload from a k6 output line.
-///
-/// k6 may format console.log lines differently depending on output mode:
-/// - Raw: `MOCKFORGE_FAILURE:{...}`
-/// - Logfmt: `time="..." level=info msg="MOCKFORGE_FAILURE:{...}" source=console`
 fn extract_failure_json(line: &str) -> Option<String> {
-    let marker = "MOCKFORGE_FAILURE:";
-    let start = line.find(marker)?;
-    let json_start = start + marker.len();
-    let json_str = &line[json_start..];
-    // Trim trailing `" source=console` if present (k6 logfmt)
-    let json_str = json_str.strip_suffix("\" source=console").unwrap_or(json_str).trim();
-    if json_str.is_empty() {
-        return None;
-    }
-    // k6 logfmt wraps msg in quotes and escapes inner quotes as \" and
-    // backslashes as \\. Unescape in order: backslashes first, then quotes.
-    // Only unescape if the raw string doesn't parse as JSON (raw mode output).
-    if json_str.starts_with('{') && json_str.contains("\\\"") {
-        Some(json_str.replace("\\\\", "\\").replace("\\\"", "\""))
-    } else {
-        Some(json_str.to_string())
-    }
+    extract_mockforge_marker_json(line, "MOCKFORGE_FAILURE:")
 }
 
 /// k6 executor
@@ -520,5 +578,58 @@ mod tests {
     #[test]
     fn test_extract_failure_json_no_marker() {
         assert!(extract_failure_json("just a regular log line").is_none());
+    }
+
+    /// Round 46 (#79) — regression: Srikanth's multipart upload landed
+    /// `[]` in `conformance-requests.json` because the old
+    /// `replace("\\\\","\\").replace("\\\"","\"")` chain misparsed
+    /// adjacent backslashes inside the JSON body (binary multipart
+    /// bytes encoded as `\\u00XX` etc.). Pin both shapes here.
+    #[test]
+    fn test_extract_exchange_logfmt_with_backslash_escapes() {
+        // A JSON body that contains a JSON-encoded `` (one escape
+        // sequence the validator survives). Logfmt wraps it: each `\`
+        // becomes `\\`, each `"` becomes `\"`.
+        let line = r#"time="2026-06-26T10:00:00Z" level=info msg="MOCKFORGE_EXCHANGE:{\"check\":\"u\",\"request\":{\"body\":\"--bnd\\r\\n\\u001a\"}}" source=console"#;
+        let result = extract_exchange_json(line).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["check"], "u");
+        // The unescape preserves the JSON's `\r\n` and `` so the
+        // downstream consumer can interpret them as JSON escapes.
+        assert_eq!(parsed["request"]["body"], "--bnd\r\n\u{001a}");
+    }
+
+    #[test]
+    fn test_extract_exchange_raw_no_logfmt_wrapping() {
+        let line =
+            r#"MOCKFORGE_EXCHANGE:{"check":"x","request":{"body":""},"response":{"status":200}}"#;
+        let result = extract_exchange_json(line).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["check"], "x");
+        assert_eq!(parsed["response"]["status"], 200);
+    }
+
+    /// The end of `msg="..."` is a single unescaped `"`, not the old
+    /// fixed-string `" source=console`. If k6 ever appends another
+    /// logfmt field (or omits source=), we still get the JSON out.
+    #[test]
+    fn test_extract_exchange_logfmt_tolerates_extra_trailing_fields() {
+        let line = r#"msg="MOCKFORGE_EXCHANGE:{\"check\":\"t\"}" source=console vu=1 iter=0"#;
+        let result = extract_exchange_json(line).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["check"], "t");
+    }
+
+    /// Round 46 — JSON-encoded backslash inside a JSON string (`\\u00XX`
+    /// in the JSON, `\\\\u00XX` in logfmt) must round-trip cleanly.
+    /// The naive `.replace` chain choked on this exact pattern.
+    #[test]
+    fn test_extract_exchange_double_backslash_followed_by_quote() {
+        // JSON content: `\\"x"` is `\` then `"x"`. Logfmt:
+        // `\\\\\"x\"` (4 backslashes + escaped quote + x + escaped quote).
+        let line = r#"msg="MOCKFORGE_EXCHANGE:{\"k\":\"a\\\\\\\"x\\\"\"}" source=console"#;
+        let result = extract_exchange_json(line).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
+        assert_eq!(parsed["k"], r#"a\"x""#);
     }
 }

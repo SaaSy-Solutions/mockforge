@@ -174,6 +174,65 @@ type DedupKey = (String, String, String, String);
 /// from the validator's `details[]` payload. Empty when `reason`
 /// doesn't carry a parseable `{"details":[...]}` envelope (e.g. the
 /// older heuristic fallback path or content-type rejections).
+/// Round 46 (#79) — local mirror of
+/// `mockforge_foundation::conformance_violations::infer_got_expected`.
+/// Pulls the (got, expected) pair out of the validator's `message`
+/// text so the summary can show actual + expected values inline. Kept
+/// in lock-step with the foundation copy.
+fn infer_got_expected_local(msg: &str, rule: &str) -> Option<String> {
+    if msg.is_empty() {
+        return None;
+    }
+    let extract_quoted = |s: &str| -> Vec<String> {
+        let mut out = Vec::new();
+        let bytes = s.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'"' {
+                let start = i + 1;
+                let mut j = start;
+                while j < bytes.len() && bytes[j] != b'"' {
+                    j += 1;
+                }
+                if j < bytes.len() {
+                    out.push(s[start..j].to_string());
+                    i = j + 1;
+                    continue;
+                }
+            }
+            i += 1;
+        }
+        out
+    };
+    let quoted = extract_quoted(msg);
+
+    match rule {
+        "enum" => {
+            if quoted.len() < 2 {
+                return None;
+            }
+            let got = &quoted[0];
+            let expected: Vec<String> = quoted[1..].iter().map(|s| format!("\"{}\"", s)).collect();
+            Some(format!("got \"{}\", expected one of {}", got, expected.join(", ")))
+        }
+        "type" => {
+            if quoted.len() < 2 {
+                return None;
+            }
+            Some(format!("got \"{}\", expected type \"{}\"", quoted[0], quoted[1]))
+        }
+        "required" => quoted.first().map(|name| format!("missing required field \"{}\"", name)),
+        "pattern" => {
+            if quoted.len() >= 2 {
+                Some(format!("got \"{}\", expected pattern \"{}\"", quoted[0], quoted[1]))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
+}
+
 fn summarize_reason_local(reason: &str) -> String {
     use serde_json::Value;
 
@@ -226,7 +285,15 @@ fn summarize_reason_local(reason: &str) -> String {
             "required" => "required".to_string(),
             other => other.to_string(),
         };
-        by_loc.entry(loc).or_default().push((name, rule));
+        // Round 46 (#79) — keep in lock-step with foundation's
+        // `infer_got_expected`. Surface actual/expected inline.
+        let raw_msg = d.get("message").and_then(|v| v.as_str()).unwrap_or("");
+        let detail = infer_got_expected_local(raw_msg, &rule);
+        let labelled_rule = match detail {
+            Some(d) => format!("{}: {}", rule, d),
+            None => rule,
+        };
+        by_loc.entry(loc).or_default().push((name, labelled_rule));
     }
 
     let total = details.len();
@@ -1403,10 +1470,18 @@ mod tests {
         assert_eq!(out_a[0].summary, "1 query violation(s): query.lang (enum)");
 
         // Case B: server didn't (older mockforge) — rebuild locally.
+        // Round 46 (#79) — the local rebuild now also surfaces the
+        // got/expected pair inline, so the summary is richer than what
+        // a pre-r46 server would have shipped. Case A above pins the
+        // verbatim-passthrough behaviour for newer servers; this case
+        // pins the locally-built shape.
         let v_without = violation(2000, 0, "/x", reason);
         let out_b = dedup_violations(&[&v_without]);
         assert_eq!(out_b.len(), 1);
-        assert_eq!(out_b[0].summary, "1 query violation(s): query.lang (enum)");
+        assert_eq!(
+            out_b[0].summary,
+            "1 query violation(s): query.lang (enum: got \"zzz\", expected one of \"en\", \"fr\")"
+        );
 
         // Case C: reason carries no parseable details — summary stays empty.
         let v_empty = violation(3000, 0, "/x", "raw text, no JSON envelope");

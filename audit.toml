@@ -20,6 +20,12 @@ ignore = [
     # bumps its reqwest pin.
     { id = "RUSTSEC-2026-0185", reason = "quinn-proto memory exhaustion — reaches only mockforge-desktop via Tauri reqwest; no server-side QUIC use" },
 
+    # lopdf stack overflow on deeply nested PDF objects (published
+    # 2026-06-21). Pulled in only through `printpdf` for mockforge-
+    # reporting's PDF export; we don't parse untrusted PDFs server-
+    # side, only emit them. Clears once printpdf bumps its lopdf pin.
+    { id = "RUSTSEC-2026-0187", reason = "lopdf stack overflow on deeply nested PDFs — only on the mockforge-reporting PDF emit path; we don't parse untrusted PDFs" },
+
     # wasmtime 36.x is pinned by mockforge-plugin-loader's current API
     # surface. Every one of these needs a major-version bump to resolve,
     # which is a tracked follow-up (see plugin-loader).

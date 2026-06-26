@@ -2486,6 +2486,22 @@ pub fn classify_validation_reason(reason: &str) -> String {
     // location instead of the validator's prose.
     let r = reason.to_ascii_lowercase();
 
+    // Round 46 (#79) — Srikanth on 0.3.190: "In the classifier order
+    // you mentioned: query > header > cookie > path > body  -- Where
+    // is http method violation coming?" Method-not-allowed rejections
+    // run BEFORE the schema validator (axum's `MethodNotAllowed`
+    // never hits this code), but the spec-level check that catches
+    // POST-on-a-GET-only operation runs at validator entry and emits
+    // a "method ... is not allowed" prose without a structured
+    // `"path"` field. So `method` sits AHEAD of the per-loc checks
+    // when we see the method keyword in the reason, and BEHIND
+    // content-type because content-type mismatches surface first in
+    // the request lifecycle. Updated priority: content-type > method
+    // > query > header > cookie > path > body.
+    if r.contains("method") && (r.contains("not allowed") || r.contains("unsupported")) {
+        return "http-methods".into();
+    }
+
     // Cheap structured pull from the validator's `"path":"<loc>.<name>"` fields.
     let path_starts_with = |prefix: &str| r.contains(&format!("\"path\":\"{}", prefix));
     if path_starts_with("query.") {

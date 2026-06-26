@@ -308,7 +308,17 @@ pub fn summarize_reason(reason: &str) -> String {
             "required" => "required".to_string(),
             other => other.to_string(),
         };
-        by_loc.entry(loc).or_default().push((name, rule));
+        // Round 46 (#79) — Srikanth on 0.3.189: "Here Not able to
+        // understand what is actual value in the request and what is
+        // expected." Pull the got/expected pair out of the validator's
+        // message text so the summary becomes self-explaining instead
+        // of a one-word rule label.
+        let detail = infer_got_expected(d, &rule);
+        let labelled_rule = match detail {
+            Some(d) => format!("{}: {}", rule, d),
+            None => rule,
+        };
+        by_loc.entry(loc).or_default().push((name, labelled_rule));
     }
 
     let total = details.len();
@@ -359,6 +369,91 @@ pub fn summarize_reason(reason: &str) -> String {
     };
 
     format!("{} {} violation(s): {}{}", total, primary_label, visible.join(", "), suffix)
+}
+
+/// Round 46 (#79) — pull the (got, expected) pair out of the validator's
+/// freeform `message` text so the summary can show actual + expected
+/// values inline instead of just a bare rule name. Examples:
+/// - `"test-value" is not one of "1" or "2"` → `got "test-value", expected one of "1", "2"`
+/// - `"abc" is not of type "boolean"` → `got "abc", expected type "boolean"`
+/// - `"name" is a required property` → `expected property "name"`
+/// - Returns None when the message doesn't match any known shape; the
+///   summary then falls back to the bare rule label.
+fn infer_got_expected(detail: &serde_json::Value, rule: &str) -> Option<String> {
+    let msg = detail.get("message").and_then(|v| v.as_str()).unwrap_or("");
+    if msg.is_empty() {
+        return None;
+    }
+    let extract_quoted = |s: &str| -> Vec<String> {
+        let mut out = Vec::new();
+        let bytes = s.as_bytes();
+        let mut i = 0;
+        while i < bytes.len() {
+            if bytes[i] == b'"' {
+                let start = i + 1;
+                let mut j = start;
+                while j < bytes.len() && bytes[j] != b'"' {
+                    j += 1;
+                }
+                if j < bytes.len() {
+                    out.push(s[start..j].to_string());
+                    i = j + 1;
+                    continue;
+                }
+            }
+            i += 1;
+        }
+        out
+    };
+    let quoted = extract_quoted(msg);
+
+    match rule {
+        "enum" => {
+            if quoted.len() < 2 {
+                return None;
+            }
+            let got = &quoted[0];
+            let expected: Vec<String> = quoted[1..].iter().map(|s| format!("\"{}\"", s)).collect();
+            Some(format!("got \"{}\", expected one of {}", got, expected.join(", ")))
+        }
+        "type" => {
+            if quoted.len() < 2 {
+                return None;
+            }
+            Some(format!("got \"{}\", expected type \"{}\"", quoted[0], quoted[1]))
+        }
+        "required" => {
+            // `"<field>" is a required property` — the only quoted string is the field name.
+            quoted.first().map(|name| format!("missing required field \"{}\"", name))
+        }
+        "min" | "max" => {
+            // Bound shapes like `<N> is less than minimum <M>`. The
+            // numbers are usually unquoted, so try a regex-style
+            // extraction on the prose.
+            let lower = msg.to_lowercase();
+            let kw = if rule == "min" {
+                ["less than minimum", "less than"]
+            } else {
+                ["greater than maximum", "greater than"]
+            };
+            for k in kw {
+                if let Some(idx) = lower.find(k) {
+                    let head = msg[..idx].trim();
+                    let tail = msg[idx + k.len()..].trim();
+                    return Some(format!("got {}, {} {}", head, k, tail));
+                }
+            }
+            None
+        }
+        "pattern" => {
+            if quoted.len() >= 2 {
+                Some(format!("got \"{}\", expected pattern \"{}\"", quoted[0], quoted[1]))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
 }
 
 /// Read a single `details[]` entry and produce a short rule label like
