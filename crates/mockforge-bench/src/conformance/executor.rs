@@ -230,6 +230,34 @@ pub struct NativeConformanceExecutor {
     /// to a fresh `ChainContext` at the start of each iteration so
     /// captures from iteration K do not leak into K+1.
     chain_iterations: u32,
+    /// Round 46 (#79) — Srikanth on 0.3.190 Q3: append-only sink for
+    /// network-level wire errors that fell short of an HTTP response
+    /// (connect refused, TLS reject, request timeout, etc). Drained
+    /// at the end of the run into `conformance-network-events.json`
+    /// so the user can see WHEN traffic stopped landing and WHY,
+    /// without having to grep through reqwest's debug logs.
+    network_events: std::sync::Mutex<Vec<NetworkEvent>>,
+}
+
+/// Round 46 (#79) — one wire-level error captured by the native
+/// executor (no HTTP response from the target). Persisted to
+/// `conformance-network-events.json` so the user has a grep-able log
+/// of when the target stopped responding and the classified reason.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct NetworkEvent {
+    /// When the failure was observed by the bench client.
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// Check name (e.g. `body:json:/v1/organizations` or `custom:get`).
+    pub check: String,
+    /// HTTP method we attempted.
+    pub method: String,
+    /// Full target URL (post-substitution) we tried to reach.
+    pub url: String,
+    /// Classified error kind: `connect` (TCP refused / no route),
+    /// `timeout`, `tls`, `body`, `decode`, `request`, `other`.
+    pub kind: String,
+    /// Verbatim error string from reqwest for context.
+    pub message: String,
 }
 
 impl NativeConformanceExecutor {
@@ -253,7 +281,18 @@ impl NativeConformanceExecutor {
             checks: Vec::new(),
             chain_meta: HashMap::new(),
             chain_iterations: 1,
+            network_events: std::sync::Mutex::new(Vec::new()),
         })
+    }
+
+    /// Round 46 (#79) — push one wire-level failure into the
+    /// `conformance-network-events.json` sink. Best-effort; if the
+    /// mutex is poisoned the event is dropped silently rather than
+    /// crashing the run mid-bench.
+    fn record_network_event(&self, ev: NetworkEvent) {
+        if let Ok(mut guard) = self.network_events.lock() {
+            guard.push(ev);
+        }
     }
 
     /// Populate checks from hardcoded reference endpoints (`/conformance/*`).
@@ -749,6 +788,27 @@ impl NativeConformanceExecutor {
             }
         }
 
+        // Round 46 (#79) — drain the wire-level network-events sink
+        // into `conformance-network-events.json` so the user can see
+        // every connect / timeout / TLS failure with a timestamp + the
+        // classified `kind` field. Empty file when the run had no
+        // wire failures (cleanest signal that connectivity stayed up).
+        if let Some(ref output_dir) = self.config.output_dir {
+            if let Ok(guard) = self.network_events.lock() {
+                if !guard.is_empty() {
+                    let path = output_dir.join("conformance-network-events.json");
+                    if let Ok(json) = serde_json::to_string_pretty(&*guard) {
+                        let _ = std::fs::write(&path, json);
+                        tracing::warn!(
+                            "Recorded {} wire-level network event(s) to {} — see file for timestamps and classified reasons",
+                            guard.len(),
+                            path.display()
+                        );
+                    }
+                }
+            }
+        }
+
         Ok(Self::aggregate(results))
     }
 
@@ -889,6 +949,39 @@ impl NativeConformanceExecutor {
         let response = match request.send().await {
             Ok(resp) => resp,
             Err(e) => {
+                // Round 46 (#79) — Srikanth on 0.3.190 Q3: "Is there a
+                // way or logs in mockforge client to understand
+                // timestamp range of traffic drops and client reason
+                // for traffic drop (network reachability, duplicate
+                // ip, choking, congestion etc)". Classify the
+                // reqwest::Error into a coarse `kind` (connect /
+                // timeout / tls / decode / body / other) and push it
+                // to the run's network-events sink so the user can
+                // grep `conformance-network-events.json` for what
+                // went wrong on the wire and when.
+                let kind = if e.is_connect() {
+                    "connect"
+                } else if e.is_timeout() {
+                    "timeout"
+                } else if e.is_request() {
+                    "request"
+                } else if e.is_body() {
+                    "body"
+                } else if e.is_decode() {
+                    "decode"
+                } else if format!("{}", e).to_ascii_lowercase().contains("tls") {
+                    "tls"
+                } else {
+                    "other"
+                };
+                self.record_network_event(NetworkEvent {
+                    timestamp: chrono::Utc::now(),
+                    check: check.name.clone(),
+                    method: check.method.to_string(),
+                    url: url.clone(),
+                    kind: kind.to_string(),
+                    message: format!("{}", e),
+                });
                 return CheckResult {
                     name: check.name.clone(),
                     passed: false,
@@ -903,7 +996,7 @@ impl NativeConformanceExecutor {
                         response: FailureResponse {
                             status: 0,
                             headers: HashMap::new(),
-                            body: format!("Request failed: {}", e),
+                            body: format!("Request failed ({}): {}", kind, e),
                         },
                         expected: format!("{:?}", check.validation),
                         schema_violations: Vec::new(),

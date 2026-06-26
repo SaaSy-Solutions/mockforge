@@ -807,16 +807,55 @@ impl SpecDrivenConformanceGenerator {
             script.push_str(
                 "    if (res.request && res.request.headers) { reqHeaders = res.request.headers; }\n",
             );
+            // Round 46 (#79) — mirror the structured multipart summary
+            // from `generator.rs`. See the long comment there; same
+            // rationale (k6 logfmt mangling on raw binary bytes).
             script.push_str("    let reqBody = '';\n");
-            script.push_str("    if (res.request && res.request.body) { try { const __m = res.request.body.length; reqBody = res.request.body.substring(0, 65536); if (__m > 65536) reqBody = reqBody + ' <truncated at 65536 bytes; full body was ' + __m + ' bytes>'; } catch(e) {} }\n");
-            // Round 44 — same multipart-body fallback as the custom-
-            // checks generator. Without this, a self-test probe that
-            // happens to upload a file would log an empty body string
-            // here even after r41's fallback elsewhere.
+            script.push_str("    {\n");
             script.push_str(
-                "    if (!reqBody) {\n\
-                 \x20\x20\x20\x20\x20\x20const ct = (reqHeaders['Content-Type'] || reqHeaders['content-type'] || '').toString();\n\
-                 \x20\x20\x20\x20\x20\x20if (ct.startsWith('multipart/')) reqBody = '<multipart upload; body bytes not surfaced by k6 res.request.body>';\n\
+                "      const ct = (reqHeaders['Content-Type'] || reqHeaders['content-type'] || '').toString();\n",
+            );
+            script.push_str("      const isMultipart = ct.startsWith('multipart/');\n");
+            script.push_str(
+                "      if (isMultipart && res.request && res.request.body) {\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20try {\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  const raw = res.request.body;\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  const totalBytes = raw.length;\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  const boundaryMatch = ct.match(/boundary=([^;]+)/);\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  const boundary = boundaryMatch ? boundaryMatch[1].replace(/^\"|\"$/g, '') : '';\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  const parts = [];\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  if (boundary) {\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20    const sep = '--' + boundary;\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20    let cursor = raw.indexOf(sep);\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20    while (cursor !== -1 && parts.length < 100) {\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      const next = raw.indexOf(sep, cursor + sep.length);\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      if (next === -1) break;\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      const slice = raw.substring(cursor + sep.length, next);\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      const headerEnd = slice.indexOf('\\r\\n\\r\\n');\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      const partHeaders = headerEnd === -1 ? slice : slice.substring(0, headerEnd);\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      const partBody = headerEnd === -1 ? '' : slice.substring(headerEnd + 4);\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      const nameMatch = partHeaders.match(/name=\"([^\"]+)\"/);\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      const filenameMatch = partHeaders.match(/filename=\"([^\"]+)\"/);\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      const partCtMatch = partHeaders.match(/Content-Type:\\s*([^\\r\\n]+)/i);\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      parts.push({\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20        name: nameMatch ? nameMatch[1] : '',\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20        filename: filenameMatch ? filenameMatch[1] : '',\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20        contentType: partCtMatch ? partCtMatch[1].trim() : '',\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20        bytes: Math.max(0, partBody.length - 2),\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      });\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      cursor = next;\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20    }\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  }\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  const summary = parts.map(function (p) { return '\\'' + p.name + '\\':\\'' + p.filename + '\\' (' + p.contentType + ', ' + p.bytes + ' bytes)'; }).join(', ');\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  reqBody = '<multipart/form-data; boundary=' + boundary + '; ' + parts.length + ' part(s); total ' + totalBytes + ' bytes: ' + summary + '>';\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20} catch (e) {\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  reqBody = '<multipart upload; summary failed: ' + (e && e.message ? e.message : 'unknown') + '>';\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20}\n\
+                 \x20\x20\x20\x20\x20\x20} else if (isMultipart) {\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20reqBody = '<multipart upload; body bytes not surfaced by k6 res.request.body>';\n\
+                 \x20\x20\x20\x20\x20\x20} else if (res.request && res.request.body) {\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20try { const __m = res.request.body.length; reqBody = res.request.body.substring(0, 65536); if (__m > 65536) reqBody = reqBody + ' <truncated at 65536 bytes; full body was ' + __m + ' bytes>'; } catch (e) {}\n\
+                 \x20\x20\x20\x20\x20\x20}\n\
                  \x20\x20\x20\x20}\n",
             );
             script.push_str("    console.log('MOCKFORGE_EXCHANGE:' + JSON.stringify({\n");
