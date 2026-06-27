@@ -795,17 +795,26 @@ pub async fn validate_emitted_requests_with_base_path(
     Ok(emitted_violations.len())
 }
 
-/// Round 46 (#79) — collapse the flat list of [`RequestViolation`]-shaped
-/// JSON values into one entry per (check_name, method, path), with each
-/// row carrying an indexed `violations` array (`violation_1`,
-/// `violation_2`, ...). Preserves insertion order so a downstream
-/// consumer reads requests in the same order the bench fired them.
+/// Round 46 / Round 47 (#79) — collapse the flat list of
+/// [`RequestViolation`]-shaped JSON values into one entry per
+/// `(method, path)` regardless of `check_name`. Round 46 keyed on
+/// `(check_name, method, path)`; Srikanth on 0.3.191 then showed three
+/// identical groups appearing under `method:POST`, `param:query:string`,
+/// and `response:200` because mockforge bench fires the same probe
+/// under multiple check labels and the validator sees the same URL +
+/// violations each time. Now we dedup by `(method, path)` AND by
+/// violation list, then list every contributing `check_name` in a
+/// `checks: [...]` array on the row so the user can still see which
+/// probes the violation surfaced under. Preserves first-seen order.
 fn group_violations_by_request(flat: &[serde_json::Value]) -> serde_json::Value {
     use serde_json::{Map, Value};
-    let mut order: Vec<(String, String, String)> = Vec::new();
-    let mut grouped: std::collections::HashMap<(String, String, String), Vec<(String, String)>> =
-        std::collections::HashMap::new();
 
+    // Step 1: bucket flat list by (check_name, method, path) so each
+    // (check, method, url) row aggregates ALL its violations before we
+    // collapse identical violation sets across check names.
+    let mut by_check_order: Vec<(String, String, String)> = Vec::new();
+    let mut by_check: std::collections::HashMap<(String, String, String), Vec<(String, String)>> =
+        std::collections::HashMap::new();
     for v in flat {
         let check = v.get("check_name").and_then(|x| x.as_str()).unwrap_or("").to_string();
         let method = v.get("method").and_then(|x| x.as_str()).unwrap_or("").to_string();
@@ -813,27 +822,53 @@ fn group_violations_by_request(flat: &[serde_json::Value]) -> serde_json::Value 
         let vt = v.get("violation_type").and_then(|x| x.as_str()).unwrap_or("").to_string();
         let msg = v.get("message").and_then(|x| x.as_str()).unwrap_or("").to_string();
         let key = (check, method, path);
-        if !grouped.contains_key(&key) {
-            order.push(key.clone());
+        if !by_check.contains_key(&key) {
+            by_check_order.push(key.clone());
         }
-        grouped.entry(key).or_default().push((vt, msg));
+        by_check.entry(key).or_default().push((vt, msg));
     }
 
-    let mut rows: Vec<Value> = Vec::with_capacity(order.len());
-    for key in &order {
+    // Step 2: collapse rows with identical `(method, path)` AND
+    // identical violation set into one entry carrying a `checks` array.
+    // The violation-set signature is a sorted vec of (vt, msg) tuples so
+    // ordering of probes can't accidentally split otherwise-equal rows.
+    let mut collapsed_order: Vec<(String, String, Vec<(String, String)>)> = Vec::new();
+    let mut collapsed: std::collections::HashMap<
+        (String, String, Vec<(String, String)>),
+        Vec<String>,
+    > = std::collections::HashMap::new();
+    for key in &by_check_order {
         let (check, method, path) = key;
-        let entries = grouped.get(key).cloned().unwrap_or_default();
+        let entries = by_check.get(key).cloned().unwrap_or_default();
+        let mut signature = entries.clone();
+        signature.sort();
+        let combo = (method.clone(), path.clone(), signature.clone());
+        if !collapsed.contains_key(&combo) {
+            collapsed_order.push(combo.clone());
+        }
+        collapsed.entry(combo).or_default().push(check.clone());
+    }
+
+    let mut rows: Vec<Value> = Vec::with_capacity(collapsed_order.len());
+    for combo in &collapsed_order {
+        let (method, path, signature) = combo;
+        let checks = collapsed.get(combo).cloned().unwrap_or_default();
         let mut row = Map::new();
-        row.insert("check_name".into(), Value::String(check.clone()));
+        row.insert(
+            "checks".into(),
+            Value::Array(checks.iter().map(|s| Value::String(s.clone())).collect()),
+        );
+        // Keep `check_name` populated with the FIRST contributing
+        // check so older tooling that reads the round-46 field still
+        // sees something useful.
+        row.insert("check_name".into(), Value::String(checks.first().cloned().unwrap_or_default()));
         row.insert("method".into(), Value::String(method.clone()));
         row.insert("path".into(), Value::String(path.clone()));
         row.insert(
             "violation_count".into(),
-            Value::Number(serde_json::Number::from(entries.len())),
+            Value::Number(serde_json::Number::from(signature.len())),
         );
-        // Numbered violation_1 / violation_2 / ... keys so the JSON
-        // reads naturally as "this one request had these violations".
-        for (i, (vt, msg)) in entries.iter().enumerate() {
+        for (i, (vt, msg)) in signature.iter().enumerate() {
             let mut entry = Map::new();
             entry.insert("violation_type".into(), Value::String(vt.clone()));
             entry.insert("message".into(), Value::String(msg.clone()));

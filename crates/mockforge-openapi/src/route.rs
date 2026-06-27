@@ -505,6 +505,7 @@ impl OpenApiRoute {
                         client_mockforge_version: None,
                         client_sent_at: None,
                         summary: String::new(),
+                        categories: Vec::new(),
                     },
                 );
             }

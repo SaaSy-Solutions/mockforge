@@ -762,6 +762,8 @@ fn default_bench_command(output_dir: &Path) -> BenchCommand {
         validate_requests: false,
         conformance_self_test: false,
         conformance_self_test_capture: false,
+        conformance_self_test_iterations: 1,
+        conformance_self_test_duration: None,
         validate_response_schemas: false,
         source_ips: Vec::new(),
         geo_source_ips: Vec::new(),

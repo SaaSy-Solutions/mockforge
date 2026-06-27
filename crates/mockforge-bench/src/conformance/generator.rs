@@ -326,6 +326,11 @@ impl ConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20\x20\x20      cursor = next;\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20    }\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  }\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // Round 47 #79 — overlay accurate on-disk byte counts from\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // the per-check size map written at init scope; falls back\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // to the JS-string-derived bytes when no entry exists.\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  const __mfSizes = (globalThis.__mfUploadSizes || {})[checkName] || {};\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  parts.forEach(function (p) { if (typeof __mfSizes[p.name] === 'number') p.bytes = __mfSizes[p.name]; });\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const summary = parts.map(function (p) { return '\\'' + p.name + '\\':\\'' + p.filename + '\\' (' + p.contentType + ', ' + p.bytes + ' bytes)'; }).join(', ');\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  reqBody = '<multipart/form-data; boundary=' + boundary + '; ' + parts.length + ' part(s); total ' + totalBytes + ' bytes: ' + summary + '>';\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20} catch (e) {\n\
@@ -336,6 +341,35 @@ impl ConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20} else if (res.request && res.request.body) {\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20try { const __m = res.request.body.length; reqBody = res.request.body.substring(0, 65536); if (__m > 65536) reqBody = reqBody + ' <truncated at 65536 bytes; full body was ' + __m + ' bytes>'; } catch (e) {}\n\
                  \x20\x20\x20\x20\x20\x20}\n\
+                 \x20\x20\x20\x20}\n",
+            );
+            // Round 47 (#79) — emit a separate MOCKFORGE_NETWORK_EVENT
+            // line when the request never completed (k6 returns
+            // status=0 with an error_code/error string for connect /
+            // tls / timeout failures). The CLI executor harvests these
+            // into `conformance-network-events.json` for the k6 path,
+            // matching the native + self-test paths.
+            script.push_str(
+                "    if (res && res.status === 0) {\n\
+                 \x20\x20\x20\x20\x20\x20const ec = (res.error_code != null) ? res.error_code : 0;\n\
+                 \x20\x20\x20\x20\x20\x20const em = (res.error != null) ? String(res.error) : '';\n\
+                 \x20\x20\x20\x20\x20\x20// k6 error_code ranges: 1200s = TCP/DNS, 1300s = TLS, 1400s = timeout, 1500s = HTTP/2, others. Map coarsely.\n\
+                 \x20\x20\x20\x20\x20\x20let kind = 'other';\n\
+                 \x20\x20\x20\x20\x20\x20if (ec >= 1200 && ec < 1300) kind = 'connect';\n\
+                 \x20\x20\x20\x20\x20\x20else if (ec >= 1300 && ec < 1400) kind = 'tls';\n\
+                 \x20\x20\x20\x20\x20\x20else if (ec >= 1400 && ec < 1500) kind = 'timeout';\n\
+                 \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('timeout') !== -1) kind = 'timeout';\n\
+                 \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('tls') !== -1) kind = 'tls';\n\
+                 \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('connect') !== -1 || em.toLowerCase().indexOf('refused') !== -1) kind = 'connect';\n\
+                 \x20\x20\x20\x20\x20\x20console.log('MOCKFORGE_NETWORK_EVENT:' + JSON.stringify({\n\
+                 \x20\x20\x20\x20\x20\x20  timestamp: new Date().toISOString(),\n\
+                 \x20\x20\x20\x20\x20\x20  check: checkName,\n\
+                 \x20\x20\x20\x20\x20\x20  method: res.request ? res.request.method : 'unknown',\n\
+                 \x20\x20\x20\x20\x20\x20  url: res.request ? res.request.url : res.url || 'unknown',\n\
+                 \x20\x20\x20\x20\x20\x20  kind: kind,\n\
+                 \x20\x20\x20\x20\x20\x20  error_code: ec,\n\
+                 \x20\x20\x20\x20\x20\x20  message: em,\n\
+                 \x20\x20\x20\x20\x20\x20}));\n\
                  \x20\x20\x20\x20}\n",
             );
             script.push_str("    console.log('MOCKFORGE_EXCHANGE:' + JSON.stringify({\n");

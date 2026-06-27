@@ -122,6 +122,28 @@ pub struct SelfTestConfig {
     /// multi-spec / multi-target benches. `None` when the bench didn't
     /// track a spec path.
     pub spec_label: Option<String>,
+    /// Round 47 (#79) — Srikanth on 0.3.191: "I did not see network
+    /// logs in the mockforge bench and conformance traffic if used
+    /// the [self-test] command". The r46 wire-level event sink only
+    /// existed on the native conformance executor; this matches it on
+    /// the self-test side. When `Some`, every `reqwest::Error` from
+    /// `send().await` is classified and pushed to this sink; caller
+    /// drains it into `conformance-network-events.json` next to the
+    /// JSONL capture. None → no extra allocations on the hot path.
+    pub network_events: Option<Arc<Mutex<Vec<NetworkEvent>>>>,
+}
+
+/// Round 47 (#79) — wire-level network event captured by the self-test
+/// driver. Same shape as the native executor's `NetworkEvent` so
+/// downstream tooling can consume one file across executor variants.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct NetworkEvent {
+    pub timestamp: chrono::DateTime<chrono::Utc>,
+    pub check: String,
+    pub method: String,
+    pub url: String,
+    pub kind: String,
+    pub message: String,
 }
 
 /// Round 23 (c-iii) — one captured request/response pair, one per
@@ -204,6 +226,7 @@ impl Default for SelfTestConfig {
             capture: None,
             validate_response_schemas: false,
             spec_label: None,
+            network_events: None,
         }
     }
 }
@@ -304,6 +327,27 @@ impl SelfTestReport {
             }
         }
         seen
+    }
+
+    /// Round 47 (#79) — fold a second iteration of the self-test into
+    /// this report so multi-iteration runs aggregate counters across
+    /// passes. Per-category caught / missed counters sum; positive
+    /// counters sum; the `operations` vec records every probe outcome
+    /// so the iteration-N misconfiguration detector still works. Used
+    /// by command.rs's `--conformance-self-test-iterations` /
+    /// `--conformance-self-test-duration` loop.
+    pub fn merge_iteration(&mut self, other: SelfTestReport) {
+        self.positive_pass = self.positive_pass.saturating_add(other.positive_pass);
+        self.positive_fail = self.positive_fail.saturating_add(other.positive_fail);
+        for (k, v) in other.negative_caught {
+            let slot = self.negative_caught.entry(k).or_insert(0);
+            *slot = slot.saturating_add(v);
+        }
+        for (k, v) in other.negative_missed {
+            let slot = self.negative_missed.entry(k).or_insert(0);
+            *slot = slot.saturating_add(v);
+        }
+        self.operations.extend(other.operations);
     }
 
     /// Human-readable summary string. One line for positives, one per
@@ -1624,6 +1668,37 @@ async fn send_case_with_extra(
         }
         Err(e) => {
             let err_str = e.to_string();
+            // Round 47 (#79) — classify + push to the wire-level
+            // network-events sink (when present) so the user has a
+            // grep-able log of connect/timeout/tls failures during
+            // self-test, matching the r46 native-executor behaviour.
+            if let Some(sink) = &config.network_events {
+                let kind = if e.is_connect() {
+                    "connect"
+                } else if e.is_timeout() {
+                    "timeout"
+                } else if e.is_request() {
+                    "request"
+                } else if e.is_body() {
+                    "body"
+                } else if e.is_decode() {
+                    "decode"
+                } else if err_str.to_ascii_lowercase().contains("tls") {
+                    "tls"
+                } else {
+                    "other"
+                };
+                if let Ok(mut guard) = sink.lock() {
+                    guard.push(NetworkEvent {
+                        timestamp: chrono::Utc::now(),
+                        check: label.to_string(),
+                        method: method.to_string(),
+                        url: build_query_url(url, &query),
+                        kind: kind.to_string(),
+                        message: err_str.clone(),
+                    });
+                }
+            }
             if let Some(sink) = &config.capture {
                 (0, Some((None, BTreeMap::new(), Some(err_str), sink.clone())))
             } else {
