@@ -223,6 +223,16 @@ pub struct BenchCommand {
     /// because validation reads the captured body. No effect outside
     /// `--conformance-self-test`.
     pub validate_response_schemas: bool,
+    /// Round 47 (#79) — repeat the full self-test probe matrix this
+    /// many times in sequence. Defaults to 1. Combines with
+    /// `--conformance-delay` to keep a steady probe rate for network-
+    /// failure simulation.
+    pub conformance_self_test_iterations: u32,
+    /// Round 47 (#79) — alternative to iterations: keep firing the
+    /// probe matrix until this duration elapses. Overrides
+    /// `conformance_self_test_iterations` when present (iterations
+    /// becomes the floor — at least one matrix is always fired).
+    pub conformance_self_test_duration: Option<String>,
 
     /// Round 18.5 — local source IPs to bind self-test requests to.
     /// Each entry must be a valid `IpAddr` and already assigned to
@@ -1008,6 +1018,8 @@ impl BenchCommand {
                 validate_requests: false,
                 conformance_self_test: false,
                 conformance_self_test_capture: false,
+                conformance_self_test_iterations: 1,
+                conformance_self_test_duration: None,
                 validate_response_schemas: false,
                 source_ips: Vec::new(),
                 geo_source_ips: Vec::new(),
@@ -1164,7 +1176,59 @@ impl BenchCommand {
 
     /// Parse headers from the repeated `--headers "Key:Value"` flags.
     pub fn parse_headers(&self) -> Result<HashMap<String, String>> {
-        parse_header_string(&self.headers)
+        let mut headers = parse_header_string(&self.headers)?;
+
+        // Round 47 (#79) — Srikanth on 0.3.191 tried
+        // `mockforge bench --conformance-basic-auth user:pass --spec ...`
+        // (no `--conformance` flag) and the auth never landed because
+        // the bench path only reads `self.headers`. Fold the
+        // conformance auth shortcuts (basic, api-key, the round-46
+        // --auth-bearer collected in `conformance_headers`) into the
+        // shared header map so the SAME auth flags work whether the
+        // run is plain bench, conformance, or self-test. De-dup
+        // case-insensitively on header name; explicit
+        // `--header "Authorization: ..."` keeps priority.
+        let already_has = |hs: &HashMap<String, String>, name: &str| -> bool {
+            hs.keys().any(|k| k.eq_ignore_ascii_case(name))
+        };
+
+        if !already_has(&headers, "Authorization") {
+            if let Some(b) = self.conformance_basic_auth.as_ref().filter(|s| !s.is_empty()) {
+                use base64::Engine as _;
+                let encoded = base64::engine::general_purpose::STANDARD.encode(b.as_bytes());
+                headers.insert("Authorization".to_string(), format!("Basic {}", encoded));
+            }
+        }
+
+        // `--conformance-headers "Name: value"` was already conformance-
+        // only; reuse the same flag for bench. Round 46's --auth-bearer
+        // injects `Authorization: Bearer ...` into this list at CLI
+        // dispatch time, so this single pass also picks up the bearer
+        // token for plain bench.
+        for line in &self.conformance_headers {
+            let Some((name, value)) = line.split_once(':') else {
+                continue;
+            };
+            let name = name.trim();
+            let value = value.trim();
+            if name.is_empty() || already_has(&headers, name) {
+                continue;
+            }
+            headers.insert(name.to_string(), value.to_string());
+        }
+
+        // `--conformance-api-key` is conformance-test-specific (probe
+        // pattern over multiple header names). Forwarding it to plain
+        // bench as a simple header would mislead a user expecting the
+        // probe behaviour, so we leave that path conformance-only and
+        // surface a one-line note when it's set without `--conformance`.
+        if !self.conformance && self.conformance_api_key.is_some() {
+            TerminalReporter::print_warning(
+                "--conformance-api-key only fires under --conformance. For plain bench use --header 'X-API-Key: ...'.",
+            );
+        }
+
+        Ok(headers)
     }
 
     fn parse_extracted_values(output_dir: &Path) -> Result<ExtractedValues> {
@@ -2544,15 +2608,57 @@ impl BenchCommand {
                         .map(|s| s.to_string_lossy().into_owned())
                         .unwrap_or_else(|| p.to_string_lossy().into_owned())
                 }),
+                // Round 47 (#79) — always allocate the network-events
+                // sink for self-test so the file is always written
+                // (empty array when nothing failed — the cleanest
+                // possible signal that connectivity stayed up). Caller
+                // pays one Arc clone per probe, which is in the noise
+                // next to the HTTP round-trip.
+                network_events: Some(std::sync::Arc::new(std::sync::Mutex::new(Vec::new()))),
             };
             let capture_sink = cfg.capture.clone();
+            let network_events_sink = cfg.network_events.clone();
             TerminalReporter::print_progress(&format!(
                 "Self-test mode: driving {} operations with positive + per-category negative cases",
                 ops.len()
             ));
-            let report = crate::conformance::self_test::run_self_test(&ops, &cfg)
+            // Round 47 (#79) — repeat the matrix per --conformance-
+            // self-test-iterations / --conformance-self-test-duration.
+            // Duration wins when both are set; iterations becomes the
+            // floor so the matrix always runs at least the configured
+            // number of times. Reports from each iteration are merged
+            // by the per-category counter sum on the report itself.
+            let target_iterations = self.conformance_self_test_iterations.max(1);
+            let duration_budget = self
+                .conformance_self_test_duration
+                .as_ref()
+                .map(|s| Self::parse_duration(s))
+                .transpose()?
+                .map(std::time::Duration::from_secs);
+            let start = std::time::Instant::now();
+            let mut report = crate::conformance::self_test::run_self_test(&ops, &cfg)
                 .await
                 .map_err(|e| BenchError::Other(format!("self-test client error: {e}")))?;
+            let mut iter_done: u32 = 1;
+            loop {
+                let by_iter = iter_done >= target_iterations;
+                let by_dur = duration_budget.map(|d| start.elapsed() >= d).unwrap_or(true);
+                if by_iter && by_dur {
+                    break;
+                }
+                let next = crate::conformance::self_test::run_self_test(&ops, &cfg)
+                    .await
+                    .map_err(|e| BenchError::Other(format!("self-test client error: {e}")))?;
+                report.merge_iteration(next);
+                iter_done = iter_done.saturating_add(1);
+            }
+            if iter_done > 1 {
+                TerminalReporter::print_progress(&format!(
+                    "Self-test repeated {} iteration(s) ({:.1?} elapsed)",
+                    iter_done,
+                    start.elapsed(),
+                ));
+            }
             // Round 23 (c-iii) — drain the capture sink into a JSONL
             // file next to the JSON/HTML report. One CaseCapture per
             // line so the file is grep-able / streamable. Round 24
@@ -2611,6 +2717,31 @@ impl BenchCommand {
                 per_endpoint_summary = Vec::new();
             }
             TerminalReporter::print_progress(&report.render_summary());
+            // Round 47 (#79) — drain the self-test wire-level
+            // network-events sink into `conformance-network-events.json`
+            // so the user has the same grep-able file the native
+            // executor's r46 path produces. Empty array when nothing
+            // failed (the cleanest signal that connectivity stayed up
+            // throughout the run).
+            if let Some(sink) = network_events_sink {
+                if let Ok(guard) = sink.lock() {
+                    let path = self.output.join("conformance-network-events.json");
+                    if let Ok(json) = serde_json::to_string_pretty(&*guard) {
+                        let _ = std::fs::write(&path, json);
+                        if guard.is_empty() {
+                            TerminalReporter::print_progress(
+                                "No wire-level network failures during self-test (file written empty)",
+                            );
+                        } else {
+                            TerminalReporter::print_warning(&format!(
+                                "Recorded {} wire-level network event(s) to {}",
+                                guard.len(),
+                                path.display()
+                            ));
+                        }
+                    }
+                }
+            }
             // Persist the JSON report alongside the regular conformance
             // report so it's grep-able next to the buffer dump from the
             // admin endpoint.
@@ -3695,6 +3826,8 @@ mod tests {
             validate_requests: false,
             conformance_self_test: false,
             conformance_self_test_capture: false,
+            conformance_self_test_iterations: 1,
+            conformance_self_test_duration: None,
             validate_response_schemas: false,
             source_ips: Vec::new(),
             geo_source_ips: Vec::new(),
@@ -3796,6 +3929,8 @@ mod tests {
             validate_requests: false,
             conformance_self_test: false,
             conformance_self_test_capture: false,
+            conformance_self_test_iterations: 1,
+            conformance_self_test_duration: None,
             validate_response_schemas: false,
             source_ips: Vec::new(),
             geo_source_ips: Vec::new(),
@@ -3877,6 +4012,8 @@ mod tests {
             validate_requests: false,
             conformance_self_test: false,
             conformance_self_test_capture: false,
+            conformance_self_test_iterations: 1,
+            conformance_self_test_duration: None,
             validate_response_schemas: false,
             source_ips: Vec::new(),
             geo_source_ips: Vec::new(),

@@ -2227,6 +2227,33 @@ enum Commands {
         #[arg(long)]
         validate_response_schemas: bool,
 
+        /// Round 47 (#79) — Srikanth on 0.3.191: "Is there a way I
+        /// can run conformance-self-test for longer duration or the
+        /// duration I specify to simulate and test all the network
+        /// related problems. Currently for some of the specs it runs
+        /// and finishes quickly cant even try to do any network
+        /// triggers".
+        ///
+        /// Repeat the full self-test probe matrix `N` times in
+        /// sequence. Defaults to 1 (the existing round-13 behaviour).
+        /// Combine with `--conformance-delay` to space probes apart
+        /// so you can pull/push wires mid-run. No effect without
+        /// `--conformance-self-test`.
+        #[arg(long, value_name = "N", default_value = "1")]
+        conformance_self_test_iterations: u32,
+
+        /// Round 47 (#79) — alternative to `--conformance-self-test-
+        /// iterations`: keep firing the probe matrix until the
+        /// specified duration elapses. Mutually convenient with
+        /// `--conformance-delay` for keeping a controlled probe rate
+        /// over the window. Accepts the same shorthand as `--duration`
+        /// (e.g. `120s`, `5m`, `1h`). When both `--conformance-self-
+        /// test-iterations` and `--conformance-self-test-duration` are
+        /// set, duration wins (iterations becomes the floor). No
+        /// effect without `--conformance-self-test`.
+        #[arg(long, value_name = "DURATION")]
+        conformance_self_test_duration: Option<String>,
+
         /// Issue #79 round 18.5 — local source IPs to bind self-test
         /// requests to. Each IP must already be assigned to an
         /// interface on this host (sub-interface, aliased address,
@@ -3176,6 +3203,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             conformance_self_test,
             conformance_self_test_capture,
             validate_response_schemas,
+            conformance_self_test_iterations,
+            conformance_self_test_duration,
             source_ips,
             geo_source_ips,
             geo_source_headers,
@@ -3296,6 +3325,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 conformance_self_test,
                 conformance_self_test_capture,
                 validate_response_schemas,
+                conformance_self_test_iterations,
+                conformance_self_test_duration,
                 source_ips,
                 geo_source_ips,
                 geo_source_headers,

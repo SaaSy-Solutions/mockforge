@@ -633,6 +633,20 @@ fn write_k6_group_body(
             // here (NOT inside the repeat loop) because the form is
             // identical across repeats; the count from `repeat` tells
             // the user how many requests will go out.
+            // Round 47 (#79) — Srikanth on 0.3.191: "Only thing is file
+            // bytes are incorrect" — the captureExchange summary was
+            // deriving byte counts from `partBody.length`, which is JS
+            // UTF-16 code units rather than the original on-disk byte
+            // count. For binary content (PDF / mp4 / docx etc) k6's
+            // `res.request.body` lossy-decodes bytes into a UTF-16
+            // string where multi-byte sequences collapse to single
+            // code units, undercounting by ~3-4%. The accurate fix is
+            // to NOT derive from the JS string at all: Rust knows the
+            // exact on-disk size, so emit a side-channel JS map keyed
+            // by check name + field name. captureExchange looks the
+            // size up when summarising. ASCII-only files (json / zip
+            // header / text) round-tripped fine before, but binary
+            // files were the visible miss.
             let summary_entries: Vec<String> = upload_specs
                 .iter()
                 .map(|spec| {
@@ -651,6 +665,29 @@ fn write_k6_group_body(
                     )
                 })
                 .collect();
+            // Stat each file at script-gen time so the size map lives
+            // at init scope, NOT inside the per-request capture path.
+            // Best-effort: if metadata fails, fall through with `null`
+            // and captureExchange falls back to the JS-string length.
+            let mut size_map_entries: Vec<String> = Vec::with_capacity(upload_specs.len());
+            for spec in &upload_specs {
+                let bytes = std::fs::metadata(&spec.path).map(|m| m.len()).ok();
+                let bytes_js = bytes.map(|b| b.to_string()).unwrap_or_else(|| "null".to_string());
+                size_map_entries.push(format!(
+                    "'{}': {}",
+                    js_escape_sq(&spec.field_name),
+                    bytes_js
+                ));
+            }
+            // Hoist the per-check map into init scope so it survives
+            // VU lifecycle without any extra wiring; captureExchange
+            // looks up by `checkName`.
+            init_code.push_str(&format!(
+                "// Round 47 #79 — on-disk byte sizes for upload check `{}`\nif (typeof globalThis.__mfUploadSizes === 'undefined') globalThis.__mfUploadSizes = {{}};\nglobalThis.__mfUploadSizes['{}'] = {{ {} }};\n",
+                check.name,
+                js_escape_sq(&check.name),
+                size_map_entries.join(", "),
+            ));
             group_body.push_str(&format!(
                 "      console.log('MOCKFORGE_UPLOAD_PARTS: {} {} files: {}');\n",
                 js_escape_sq(&check.name),

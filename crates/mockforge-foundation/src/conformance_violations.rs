@@ -80,6 +80,20 @@ pub struct ServerConformanceViolation {
     /// is both the errors are overwhelming to view."
     #[serde(default)]
     pub summary: String,
+    /// Round 47 (#79) — Srikanth on 0.3.191: "I will not know other
+    /// violations until previous ones are fixed. Is it possible to
+    /// give a option to show all the violation irrespective of the
+    /// order both on client request logs and mockforge tui logs".
+    /// `category` already records the priority-winning location for
+    /// dashboards that filter by single category; `categories` lists
+    /// EVERY distinct location the validator's `details[]` payload
+    /// surfaced (e.g. `["query","request-body"]` for a POST that
+    /// failed both a query enum AND a required body field). Empty
+    /// when the validator didn't embed a structured `details` map.
+    /// Older clients deserialise this as empty and fall back to
+    /// `category` alone.
+    #[serde(default)]
+    pub categories: Vec<String>,
 }
 
 /// Header set by the bench client (round 36, #876) carrying the
@@ -242,6 +256,13 @@ pub fn record(mut violation: ServerConformanceViolation) {
     TOTAL_SEEN.fetch_add(1, Ordering::Relaxed);
     if violation.summary.is_empty() {
         violation.summary = summarize_reason(&violation.reason);
+    }
+    // Round 47 (#79) — derive the full list of distinct categories
+    // from the validator's `details[]` payload at insertion time so
+    // consumers can show "what ALL is broken" at once. Empty array
+    // when the reason has no structured payload to walk.
+    if violation.categories.is_empty() {
+        violation.categories = all_categories_from_reason(&violation.reason);
     }
     let cap = effective_buffer_size();
     if unique_mode_enabled() {
@@ -456,6 +477,54 @@ fn infer_got_expected(detail: &serde_json::Value, rule: &str) -> Option<String> 
     }
 }
 
+/// Round 47 (#79) — walk the validator's `details[]` payload embedded
+/// in `reason` and emit ALL distinct location categories. Used to
+/// populate `ServerConformanceViolation::categories` at record time so
+/// consumers can show every category at once instead of just the
+/// priority winner (`category` field). Order is the same priority
+/// chain the classifier uses (query > header > cookie > path > body)
+/// for stable rendering, but every category is included.
+pub fn all_categories_from_reason(reason: &str) -> Vec<String> {
+    use serde_json::Value;
+    let json_start = reason.find('{');
+    let parsed: Option<Value> = json_start
+        .and_then(|i| serde_json::from_str(reason[i..].trim()).ok())
+        .or_else(|| serde_json::from_str(reason).ok());
+    let details = parsed
+        .as_ref()
+        .and_then(|v| v.get("details"))
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let mut seen = std::collections::BTreeSet::new();
+    for d in &details {
+        let path = d.get("path").and_then(|v| v.as_str()).unwrap_or("");
+        let loc = match path.split_once('.') {
+            Some((l, _)) => l,
+            None if !path.is_empty() => path,
+            _ => continue,
+        };
+        let canonical = match loc {
+            "query" => "query",
+            "header" => "headers",
+            "cookie" => "cookies",
+            "path" => "parameters",
+            "body" => "request-body",
+            _ => continue,
+        };
+        seen.insert(canonical.to_string());
+    }
+    let order = ["query", "headers", "cookies", "parameters", "request-body"];
+    let mut out = Vec::new();
+    for cat in order {
+        if seen.remove(cat) {
+            out.push(cat.to_string());
+        }
+    }
+    out.extend(seen);
+    out
+}
+
 /// Read a single `details[]` entry and produce a short rule label like
 /// `enum` / `type` / `min` / `max` / `pattern` for the summary. Falls
 /// back to the validator's own `message` prose when no rule is
@@ -534,6 +603,7 @@ mod tests {
             client_mockforge_version: None,
             client_sent_at: None,
             summary: String::new(),
+            categories: Vec::new(),
         }
     }
 

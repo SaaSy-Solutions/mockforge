@@ -108,6 +108,13 @@ fn extract_failure_json(line: &str) -> Option<String> {
     extract_mockforge_marker_json(line, "MOCKFORGE_FAILURE:")
 }
 
+/// Round 47 (#79) — extract `MOCKFORGE_NETWORK_EVENT:` JSON payload.
+/// Emitted by the k6 captureExchange when `res.status === 0`, capturing
+/// the wire-level failure with a classified `kind`.
+fn extract_network_event_json(line: &str) -> Option<String> {
+    extract_mockforge_marker_json(line, "MOCKFORGE_NETWORK_EVENT:")
+}
+
 /// k6 executor
 pub struct K6Executor {
     k6_path: String,
@@ -266,13 +273,22 @@ impl K6Executor {
         let ex_stdout = Arc::clone(&exchange_details);
         let ex_stderr = Arc::clone(&exchange_details);
 
+        // Round 47 (#79) — collect wire-level network events the
+        // k6 script emits on status=0 (connect / tls / timeout). Same
+        // shape as the native + self-test sinks so we can write a
+        // unified `conformance-network-events.json`.
+        let network_events: Arc<tokio::sync::Mutex<Vec<String>>> =
+            Arc::new(tokio::sync::Mutex::new(Vec::new()));
+        let ne_stdout = Arc::clone(&network_events);
+        let ne_stderr = Arc::clone(&network_events);
+
         // Collect all k6 output for saving to a log file
         let log_lines: Arc<tokio::sync::Mutex<Vec<String>>> =
             Arc::new(tokio::sync::Mutex::new(Vec::new()));
         let log_stdout = Arc::clone(&log_lines);
         let log_stderr = Arc::clone(&log_lines);
 
-        // Read stdout lines, capturing MOCKFORGE_FAILURE and MOCKFORGE_EXCHANGE markers
+        // Read stdout lines, capturing MOCKFORGE_FAILURE / MOCKFORGE_EXCHANGE / MOCKFORGE_NETWORK_EVENT markers
         let stdout_handle = tokio::spawn(async move {
             while let Ok(Some(line)) = stdout_lines.next_line().await {
                 log_stdout.lock().await.push(format!("[stdout] {}", line));
@@ -280,6 +296,8 @@ impl K6Executor {
                     fd_stdout.lock().await.push(json_str);
                 } else if let Some(json_str) = extract_exchange_json(&line) {
                     ex_stdout.lock().await.push(json_str);
+                } else if let Some(json_str) = extract_network_event_json(&line) {
+                    ne_stdout.lock().await.push(json_str);
                 } else {
                     spinner.set_message(line.clone());
                     if !line.is_empty() && !line.contains("running") && !line.contains("default") {
@@ -290,7 +308,7 @@ impl K6Executor {
             spinner.finish_and_clear();
         });
 
-        // Read stderr lines, capturing MOCKFORGE_FAILURE and MOCKFORGE_EXCHANGE markers
+        // Read stderr lines, capturing MOCKFORGE_FAILURE / MOCKFORGE_EXCHANGE / MOCKFORGE_NETWORK_EVENT markers
         let stderr_handle = tokio::spawn(async move {
             while let Ok(Some(line)) = stderr_lines.next_line().await {
                 if !line.is_empty() {
@@ -299,6 +317,8 @@ impl K6Executor {
                         fd_stderr.lock().await.push(json_str);
                     } else if let Some(json_str) = extract_exchange_json(&line) {
                         ex_stderr.lock().await.push(json_str);
+                    } else if let Some(json_str) = extract_network_event_json(&line) {
+                        ne_stderr.lock().await.push(json_str);
                     } else {
                         eprintln!("{}", line);
                     }
@@ -351,6 +371,25 @@ impl K6Executor {
                         "Exported {} request/response pairs to {}",
                         parsed.len(),
                         exchange_path.display()
+                    );
+                }
+            }
+
+            // Round 47 (#79) — write the wire-level events sink. We
+            // ALWAYS write the file (empty array when nothing failed)
+            // so a caller can tell "everything succeeded" from "nobody
+            // looked" at a glance.
+            let net_events = network_events.lock().await;
+            let net_path = dir.join("conformance-network-events.json");
+            let parsed: Vec<serde_json::Value> =
+                net_events.iter().filter_map(|s| serde_json::from_str(s).ok()).collect();
+            if let Ok(json) = serde_json::to_string_pretty(&parsed) {
+                let _ = std::fs::write(&net_path, json);
+                if !parsed.is_empty() {
+                    tracing::warn!(
+                        "Recorded {} wire-level network event(s) to {}",
+                        parsed.len(),
+                        net_path.display()
                     );
                 }
             }
