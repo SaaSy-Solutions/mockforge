@@ -253,6 +253,37 @@ export default function () {
     {{/if}}
     {{/if}}
 
+    // Round 48 (#79) — Srikanth on 0.3.192 saw 18 `Request Failed
+    // error=EOF` warnings in his k6 log but `conformance-network-events.json`
+    // came back empty because the round-47 marker only fires for the
+    // /conformance/ generator, not the plain-bench template. Emit the
+    // same MOCKFORGE_NETWORK_EVENT marker whenever k6 returns
+    // status=0 (transport-level failure: EOF, connection refused,
+    // TLS reject, timeout, etc). k6's `error_code` is in the 1200-1599
+    // range; coarse-classify into the same kind labels the native
+    // executor uses so all three paths produce identical shapes.
+    if (res && res.status === 0) {
+      const ec = (res.error_code != null) ? res.error_code : 0;
+      const em = (res.error != null) ? String(res.error) : '';
+      let kind = 'other';
+      if (ec >= 1200 && ec < 1300) kind = 'connect';
+      else if (ec >= 1300 && ec < 1400) kind = 'tls';
+      else if (ec >= 1400 && ec < 1500) kind = 'timeout';
+      else if (em.toLowerCase().indexOf('eof') !== -1) kind = 'connect';
+      else if (em.toLowerCase().indexOf('timeout') !== -1) kind = 'timeout';
+      else if (em.toLowerCase().indexOf('tls') !== -1) kind = 'tls';
+      else if (em.toLowerCase().indexOf('connect') !== -1 || em.toLowerCase().indexOf('refused') !== -1) kind = 'connect';
+      console.log('MOCKFORGE_NETWORK_EVENT:' + JSON.stringify({
+        timestamp: new Date().toISOString(),
+        check: '{{this.display_name}}',
+        method: res.request ? res.request.method : 'unknown',
+        url: res.request ? res.request.url : (res.url || 'unknown'),
+        kind: kind,
+        error_code: ec,
+        message: em,
+      }));
+    }
+
     // Pick up MockForge-injected chaos signals before counting check success
     // so the trends/counter populate even on injected error paths.
     recordMockForgeChaosHeaders(res);
