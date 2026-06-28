@@ -792,7 +792,75 @@ pub async fn validate_emitted_requests_with_base_path(
     if let Ok(json) = serde_json::to_string_pretty(&grouped_value) {
         let _ = std::fs::write(&grouped_dst, json);
     }
+
+    // Round 48 (#79) — Srikanth on 0.3.192: "Can I assume all this
+    // checks has some violation either in the incoming request or
+    // outgoing response if yes then how can I see all this violation
+    // individually? Do we have any other Logs pointing each of those
+    // so that I can fix in one go?" New per-probe drill-down file
+    // emits one row per (check_name, method, path) carrying its full
+    // flat violation list. Lets the user see EXACTLY what each probe
+    // pattern (body:json, schema:string, constraint:enum, etc.)
+    // surfaced rather than just the deduped union the
+    // by-request file shows.
+    let drill_dst = output_dir.join("conformance-request-violations-by-probe.json");
+    let drill_value = group_violations_by_probe(&all);
+    if let Ok(json) = serde_json::to_string_pretty(&drill_value) {
+        let _ = std::fs::write(&drill_dst, json);
+    }
     Ok(emitted_violations.len())
+}
+
+/// Round 48 (#79) — emit one entry per (check_name, method, path)
+/// with its full violation list. Unlike `group_violations_by_request`,
+/// this preserves the per-probe view so the user can see WHICH spec-
+/// probing pattern (body:json / schema:string / constraint:enum /
+/// method:POST / etc.) surfaced WHICH violation. Sorted by check_name
+/// within the same (method, path) so probes group together visually.
+fn group_violations_by_probe(flat: &[serde_json::Value]) -> serde_json::Value {
+    use serde_json::{Map, Value};
+
+    let mut by_probe_order: Vec<(String, String, String)> = Vec::new();
+    let mut by_probe: std::collections::HashMap<(String, String, String), Vec<(String, String)>> =
+        std::collections::HashMap::new();
+
+    for v in flat {
+        let check = v.get("check_name").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let method = v.get("method").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let path = v.get("path").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let vt = v.get("violation_type").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let msg = v.get("message").and_then(|x| x.as_str()).unwrap_or("").to_string();
+        let key = (check, method, path);
+        if !by_probe.contains_key(&key) {
+            by_probe_order.push(key.clone());
+        }
+        by_probe.entry(key).or_default().push((vt, msg));
+    }
+
+    // Sort within same (method, path) by check_name for visual grouping.
+    by_probe_order.sort_by(|a, b| a.1.cmp(&b.1).then(a.2.cmp(&b.2)).then(a.0.cmp(&b.0)));
+
+    let mut rows: Vec<Value> = Vec::with_capacity(by_probe_order.len());
+    for key in &by_probe_order {
+        let (check, method, path) = key;
+        let entries = by_probe.get(key).cloned().unwrap_or_default();
+        let mut row = Map::new();
+        row.insert("check_name".into(), Value::String(check.clone()));
+        row.insert("method".into(), Value::String(method.clone()));
+        row.insert("path".into(), Value::String(path.clone()));
+        row.insert(
+            "violation_count".into(),
+            Value::Number(serde_json::Number::from(entries.len())),
+        );
+        for (i, (vt, msg)) in entries.iter().enumerate() {
+            let mut entry = Map::new();
+            entry.insert("violation_type".into(), Value::String(vt.clone()));
+            entry.insert("message".into(), Value::String(msg.clone()));
+            row.insert(format!("violation_{}", i + 1), Value::Object(entry));
+        }
+        rows.push(Value::Object(row));
+    }
+    Value::Array(rows)
 }
 
 /// Round 46 / Round 47 (#79) — collapse the flat list of
@@ -858,10 +926,39 @@ fn group_violations_by_request(flat: &[serde_json::Value]) -> serde_json::Value 
             "checks".into(),
             Value::Array(checks.iter().map(|s| Value::String(s.clone())).collect()),
         );
-        // Keep `check_name` populated with the FIRST contributing
-        // check so older tooling that reads the round-46 field still
-        // sees something useful.
-        row.insert("check_name".into(), Value::String(checks.first().cloned().unwrap_or_default()));
+        // Round 48 (#79) — Srikanth on 0.3.192: "check_name body:json
+        // but for the violation it is showing some issue with query
+        // parameters. Little misleading". Pick the contributing check
+        // whose name prefix matches the dominant violation_type
+        // rather than the alphabetically first one. Falls back to
+        // first when nothing matches.
+        let dominant_prefix: &str = signature
+            .first()
+            .map(|(vt, _)| {
+                if vt.starts_with("query_") {
+                    "param:query"
+                } else if vt.starts_with("body_") {
+                    "body:"
+                } else if vt.starts_with("path_") {
+                    "param:path"
+                } else if vt.starts_with("header_") {
+                    "param:header"
+                } else {
+                    ""
+                }
+            })
+            .unwrap_or("");
+        let best_check = if !dominant_prefix.is_empty() {
+            checks
+                .iter()
+                .find(|c| c.starts_with(dominant_prefix))
+                .cloned()
+                .or_else(|| checks.first().cloned())
+                .unwrap_or_default()
+        } else {
+            checks.first().cloned().unwrap_or_default()
+        };
+        row.insert("check_name".into(), Value::String(best_check));
         row.insert("method".into(), Value::String(method.clone()));
         row.insert("path".into(), Value::String(path.clone()));
         row.insert(

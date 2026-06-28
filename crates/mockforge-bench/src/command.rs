@@ -577,6 +577,17 @@ impl BenchCommand {
 
         // Check if we're in multi-target mode
         if let Some(targets_file) = &self.targets_file {
+            // Round 48 (#79) — Srikanth on 0.3.192: --conformance-self-test
+            // with --targets-file silently ignored both the self-test
+            // driver AND the round-47 iterations/duration knobs because
+            // the dispatch above returned into `execute_multi_target_conformance`
+            // which runs the regular k6 conformance flow. Now route to
+            // a dedicated multi-target self-test path that runs the
+            // self-test driver against EACH target with the same
+            // iteration/duration loop the single-target path got in r47.
+            if self.conformance && self.conformance_self_test {
+                return self.execute_multi_target_self_test(targets_file).await;
+            }
             if self.conformance {
                 return self.execute_multi_target_conformance(targets_file).await;
             }
@@ -3041,6 +3052,167 @@ impl BenchCommand {
                 self.conformance_report.display()
             ));
         }
+        Ok(())
+    }
+
+    /// Round 48 (#79) — Srikanth on 0.3.192: "I ran following commands
+    /// to test conformance-sef-test duration, but the test ended
+    /// immediately" with `--targets-file vs_list1.json`. The multi-
+    /// target dispatch returned before reaching the round-47 self-test
+    /// iteration loop. This helper runs the self-test driver against
+    /// every target listed in `targets_file` honouring the same
+    /// `--conformance-self-test-iterations` and `--conformance-self-
+    /// test-duration` knobs the single-target path got. One self-test
+    /// report file per target plus a `conformance-network-events.json`
+    /// per target so a user can attribute wire failures back to the
+    /// target they happened against.
+    async fn execute_multi_target_self_test(&self, targets_file: &Path) -> Result<()> {
+        use crate::conformance::self_test::{run_self_test, SelfTestConfig};
+
+        TerminalReporter::print_progress("Multi-target conformance self-test mode");
+        let targets = parse_targets_file(targets_file)?;
+        if targets.is_empty() {
+            return Err(BenchError::Other("No targets found in file".to_string()));
+        }
+        TerminalReporter::print_success(&format!("Loaded {} target(s)", targets.len()));
+
+        // Spec is shared across targets — load once.
+        let annotated_ops = if !self.spec.is_empty() {
+            let parser = SpecParser::from_file(&self.spec[0]).await?;
+            let operations = parser.get_operations();
+            Some(
+                crate::conformance::spec_driven::SpecDrivenConformanceGenerator::annotate_operations(
+                    &operations,
+                    parser.spec(),
+                ),
+            )
+        } else {
+            return Err(BenchError::Other("--conformance-self-test requires --spec".to_string()));
+        };
+        let Some(ops) = annotated_ops else {
+            unreachable!()
+        };
+
+        std::fs::create_dir_all(&self.output)?;
+        let resolved_base_path = self.base_path.clone();
+        let target_iterations = self.conformance_self_test_iterations.max(1);
+        let duration_budget = self
+            .conformance_self_test_duration
+            .as_ref()
+            .map(|s| Self::parse_duration(s))
+            .transpose()?
+            .map(std::time::Duration::from_secs);
+
+        for (idx, target) in targets.iter().enumerate() {
+            let target_dir = self.output.join(format!("target_{}", idx));
+            std::fs::create_dir_all(&target_dir)?;
+            TerminalReporter::print_progress(&format!(
+                "[target {}/{}] {}",
+                idx + 1,
+                targets.len(),
+                target.url
+            ));
+
+            let merged_headers: Vec<(String, String)> = self
+                .conformance_headers
+                .iter()
+                .filter_map(|h| {
+                    let (n, v) = h.split_once(':')?;
+                    Some((n.trim().to_string(), v.trim().to_string()))
+                })
+                .collect();
+
+            let cfg = SelfTestConfig {
+                target_url: target.url.clone(),
+                skip_tls_verify: self.skip_tls_verify,
+                timeout: std::time::Duration::from_secs(30),
+                extra_headers: merged_headers,
+                delay_between_requests: std::time::Duration::from_millis(self.conformance_delay_ms),
+                base_path: resolved_base_path.clone(),
+                source_ips: parse_ip_list(&self.source_ips, "source-ip"),
+                geo_source_ips: parse_ip_list(&self.geo_source_ips, "geo-source-ip"),
+                geo_source_headers: if self.geo_source_headers.is_empty() {
+                    crate::conformance::self_test::default_geo_source_headers()
+                } else {
+                    self.geo_source_headers.clone()
+                },
+                capture: if self.conformance_self_test_capture || self.validate_response_schemas {
+                    Some(std::sync::Arc::new(std::sync::Mutex::new(Vec::new())))
+                } else {
+                    None
+                },
+                validate_response_schemas: self.validate_response_schemas,
+                spec_label: self.spec.first().map(|p| {
+                    p.file_name()
+                        .map(|s| s.to_string_lossy().into_owned())
+                        .unwrap_or_else(|| p.to_string_lossy().into_owned())
+                }),
+                network_events: Some(std::sync::Arc::new(std::sync::Mutex::new(Vec::new()))),
+            };
+            let capture_sink = cfg.capture.clone();
+            let network_events_sink = cfg.network_events.clone();
+
+            let start = std::time::Instant::now();
+            let mut report = run_self_test(&ops, &cfg)
+                .await
+                .map_err(|e| BenchError::Other(format!("self-test client error: {e}")))?;
+            let mut iter_done: u32 = 1;
+            loop {
+                let by_iter = iter_done >= target_iterations;
+                let by_dur = duration_budget.map(|d| start.elapsed() >= d).unwrap_or(true);
+                if by_iter && by_dur {
+                    break;
+                }
+                let next = run_self_test(&ops, &cfg)
+                    .await
+                    .map_err(|e| BenchError::Other(format!("self-test client error: {e}")))?;
+                report.merge_iteration(next);
+                iter_done = iter_done.saturating_add(1);
+            }
+            if iter_done > 1 {
+                TerminalReporter::print_progress(&format!(
+                    "  ran {} iteration(s) in {:.1?}",
+                    iter_done,
+                    start.elapsed(),
+                ));
+            }
+
+            // Drain the per-target sinks.
+            if let Some(sink) = capture_sink {
+                if let Ok(guard) = sink.lock() {
+                    let jsonl = target_dir.join("conformance-self-test-requests.jsonl");
+                    let mut lines = String::with_capacity(guard.len() * 256);
+                    for entry in guard.iter() {
+                        if let Ok(line) = serde_json::to_string(entry) {
+                            lines.push_str(&line);
+                            lines.push('\n');
+                        }
+                    }
+                    let _ = std::fs::write(&jsonl, lines);
+                }
+            }
+            if let Some(sink) = network_events_sink {
+                if let Ok(guard) = sink.lock() {
+                    let path = target_dir.join("conformance-network-events.json");
+                    if let Ok(json) = serde_json::to_string_pretty(&*guard) {
+                        let _ = std::fs::write(&path, json);
+                        if !guard.is_empty() {
+                            TerminalReporter::print_warning(&format!(
+                                "  recorded {} wire-level network event(s)",
+                                guard.len()
+                            ));
+                        }
+                    }
+                }
+            }
+
+            let json_path = target_dir.join("conformance-self-test.json");
+            if let Ok(json) = serde_json::to_string_pretty(&report) {
+                let _ = std::fs::write(&json_path, json);
+            }
+            TerminalReporter::print_progress(&report.render_summary());
+        }
+
         Ok(())
     }
 

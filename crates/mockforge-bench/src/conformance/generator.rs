@@ -300,7 +300,7 @@ impl ConformanceGenerator {
                 "      if (isMultipart && res.request && res.request.body) {\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20try {\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const raw = res.request.body;\n\
-                 \x20\x20\x20\x20\x20\x20\x20\x20  const totalBytes = raw.length;\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  let totalBytes = raw.length;\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const boundaryMatch = ct.match(/boundary=([^;]+)/);\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const boundary = boundaryMatch ? boundaryMatch[1].replace(/^\"|\"$/g, '') : '';\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const parts = [];\n\
@@ -329,8 +329,18 @@ impl ConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20\x20\x20  // Round 47 #79 — overlay accurate on-disk byte counts from\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  // the per-check size map written at init scope; falls back\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  // to the JS-string-derived bytes when no entry exists.\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // Round 48 #79 — Srikanth on 0.3.192: per-file counts were\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // exact but the total was still off because we kept using\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // raw.length (UTF-16 code units). Recompute totalBytes as\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // the SUM of per-part bytes once they've been overlaid; only\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // every part's true byte count came from disk does the sum\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // equal the actual upload size (the multipart envelope\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // overhead bytes stay reported as the raw.length delta).\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const __mfSizes = (globalThis.__mfUploadSizes || {})[checkName] || {};\n\
-                 \x20\x20\x20\x20\x20\x20\x20\x20  parts.forEach(function (p) { if (typeof __mfSizes[p.name] === 'number') p.bytes = __mfSizes[p.name]; });\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  let __allKnown = parts.length > 0;\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  parts.forEach(function (p) { if (typeof __mfSizes[p.name] === 'number') { p.bytes = __mfSizes[p.name]; } else { __allKnown = false; } });\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  const partsTotal = parts.reduce(function (acc, p) { return acc + p.bytes; }, 0);\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  if (__allKnown) totalBytes = partsTotal;\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const summary = parts.map(function (p) { return '\\'' + p.name + '\\':\\'' + p.filename + '\\' (' + p.contentType + ', ' + p.bytes + ' bytes)'; }).join(', ');\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  reqBody = '<multipart/form-data; boundary=' + boundary + '; ' + parts.length + ' part(s); total ' + totalBytes + ' bytes: ' + summary + '>';\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20} catch (e) {\n\
@@ -358,7 +368,7 @@ impl ConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20if (ec >= 1200 && ec < 1300) kind = 'connect';\n\
                  \x20\x20\x20\x20\x20\x20else if (ec >= 1300 && ec < 1400) kind = 'tls';\n\
                  \x20\x20\x20\x20\x20\x20else if (ec >= 1400 && ec < 1500) kind = 'timeout';\n\
-                 \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('timeout') !== -1) kind = 'timeout';\n\
+                 \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('eof') !== -1) kind = 'connect';\n                 \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('timeout') !== -1) kind = 'timeout';\n\
                  \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('tls') !== -1) kind = 'tls';\n\
                  \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('connect') !== -1 || em.toLowerCase().indexOf('refused') !== -1) kind = 'connect';\n\
                  \x20\x20\x20\x20\x20\x20console.log('MOCKFORGE_NETWORK_EVENT:' + JSON.stringify({\n\

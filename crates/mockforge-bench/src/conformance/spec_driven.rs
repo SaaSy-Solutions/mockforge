@@ -820,7 +820,7 @@ impl SpecDrivenConformanceGenerator {
                 "      if (isMultipart && res.request && res.request.body) {\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20try {\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const raw = res.request.body;\n\
-                 \x20\x20\x20\x20\x20\x20\x20\x20  const totalBytes = raw.length;\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  let totalBytes = raw.length;\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const boundaryMatch = ct.match(/boundary=([^;]+)/);\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const boundary = boundaryMatch ? boundaryMatch[1].replace(/^\"|\"$/g, '') : '';\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const parts = [];\n\
@@ -870,7 +870,7 @@ impl SpecDrivenConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20if (ec >= 1200 && ec < 1300) kind = 'connect';\n\
                  \x20\x20\x20\x20\x20\x20else if (ec >= 1300 && ec < 1400) kind = 'tls';\n\
                  \x20\x20\x20\x20\x20\x20else if (ec >= 1400 && ec < 1500) kind = 'timeout';\n\
-                 \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('timeout') !== -1) kind = 'timeout';\n\
+                 \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('eof') !== -1) kind = 'connect';\n                 \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('timeout') !== -1) kind = 'timeout';\n\
                  \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('tls') !== -1) kind = 'tls';\n\
                  \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('connect') !== -1 || em.toLowerCase().indexOf('refused') !== -1) kind = 'connect';\n\
                  \x20\x20\x20\x20\x20\x20console.log('MOCKFORGE_NETWORK_EVENT:' + JSON.stringify({\n\
