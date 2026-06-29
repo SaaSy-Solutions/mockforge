@@ -307,6 +307,7 @@ mod tests {
             spec_label: None,
             mockforge_version: String::new(),
             client_sent_at: String::new(),
+            iteration: 1,
         }
     }
 

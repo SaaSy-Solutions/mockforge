@@ -542,16 +542,59 @@ pub async fn validate_emitted_requests_with_base_path(
         return Ok(0);
     }
     let requests_path = output_dir.join("conformance-requests.json");
-    if !requests_path.exists() {
+    let self_test_jsonl_path = output_dir.join("conformance-self-test-requests.jsonl");
+
+    // Round 49 (#79) — Srikanth on 0.3.193: self-test + --targets-file
+    // produced no violation logs because validate_emitted_requests
+    // only reads `conformance-requests.json` (the bench export
+    // shape), and self-test writes `conformance-self-test-
+    // requests.jsonl` (the CaseCapture shape). Now read whichever
+    // exists, converting the JSONL shape into the same `{check,
+    // method, url, request.body}` structure the validator below
+    // expects. If both exist, the bench export wins (a deliberate
+    // bench run shouldn't be overridden by stale self-test output).
+    let entries: Vec<Value> = if requests_path.exists() {
+        let bytes = match std::fs::read(&requests_path) {
+            Ok(b) => b,
+            Err(_) => return Ok(0),
+        };
+        match serde_json::from_slice(&bytes) {
+            Ok(v) => v,
+            Err(_) => return Ok(0),
+        }
+    } else if self_test_jsonl_path.exists() {
+        let bytes = match std::fs::read(&self_test_jsonl_path) {
+            Ok(b) => b,
+            Err(_) => return Ok(0),
+        };
+        let text = String::from_utf8_lossy(&bytes);
+        text.lines()
+            .filter(|l| !l.is_empty())
+            .filter_map(|l| serde_json::from_str::<Value>(l).ok())
+            .map(|case| {
+                let label = case.get("label").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let method = case.get("method").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let url = case.get("url").and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let body = case.get("request_body").cloned().unwrap_or(Value::Null);
+                let mut req = serde_json::Map::new();
+                req.insert("method".into(), Value::String(method));
+                req.insert("url".into(), Value::String(url));
+                req.insert(
+                    "body".into(),
+                    match body {
+                        Value::String(s) => Value::String(s),
+                        Value::Null => Value::String(String::new()),
+                        other => other,
+                    },
+                );
+                let mut out = serde_json::Map::new();
+                out.insert("check".into(), Value::String(label));
+                out.insert("request".into(), Value::Object(req));
+                Value::Object(out)
+            })
+            .collect()
+    } else {
         return Ok(0);
-    }
-    let bytes = match std::fs::read(&requests_path) {
-        Ok(b) => b,
-        Err(_) => return Ok(0),
-    };
-    let entries: Vec<Value> = match serde_json::from_slice(&bytes) {
-        Ok(v) => v,
-        Err(_) => return Ok(0),
     };
     if entries.is_empty() {
         return Ok(0);

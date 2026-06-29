@@ -416,6 +416,7 @@ mod tests {
                 spec_label: None,
                 mockforge_version: String::new(),
                 client_sent_at: String::new(),
+                iteration: 1,
             },
             CaseCapture {
                 label: "owasp:sqli".to_string(),
@@ -435,6 +436,7 @@ mod tests {
                 spec_label: None,
                 mockforge_version: String::new(),
                 client_sent_at: String::new(),
+                iteration: 1,
             },
         ]
     }
@@ -475,6 +477,7 @@ mod tests {
                 spec_label: None,
                 mockforge_version: String::new(),
                 client_sent_at: String::new(),
+                iteration: 1,
             });
         }
         let html = render_capture_html(&entries);
@@ -528,6 +531,7 @@ mod tests {
             spec_label: None,
             mockforge_version: String::new(),
             client_sent_at: String::new(),
+            iteration: 1,
         }
     }
 
@@ -616,6 +620,7 @@ mod tests {
             spec_label: None,
             mockforge_version: String::new(),
             client_sent_at: String::new(),
+            iteration: 1,
         };
         let html = render_capture_html(&[entry]);
         assert!(

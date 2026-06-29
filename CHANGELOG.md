@@ -1,3 +1,15 @@
+## [0.3.194] - 2026-06-29
+
+### Fixed
+
+- **[Contracts]** Violation logs (flat + by-request + by-probe) now write per target in multi-target self-test mode (#79 round 49 / Srikanth on 0.3.193: "I am not seeing any violation requests logs when running [self-test + --targets-file]"). Root cause: `validate_emitted_requests` only read `conformance-requests.json` (the bench export shape), but self-test writes the `CaseCapture` shape to `conformance-self-test-requests.jsonl` instead. Validator now reads whichever file exists, converting JSONL entries into the `{check, method, url, request.body}` shape the rest of the pipeline expects. Plus `execute_multi_target_self_test` calls `validate_emitted_requests_with_base_path` per target after the JSONL is written. Real-binary verified against `mockforge serve` with self-test + `--targets-file`: each target now writes `conformance-request-violations{,-by-request,-by-probe}.json` next to the JSONL.
+- **[Contracts]** `--conformance-self-test-duration` no longer overshoots by a full iteration (#79 round 49 / Srikanth on 0.3.193: "the test ran more than 5 min (or 46 seconds more)"). The round-47 outer loop only checked the deadline AFTER each matrix pass completed, so a 5m budget on a 6m matrix ran 6m total. New `run_self_test_with_deadline` accepts an absolute `Instant`; the per-operation loop checks it before each probe and breaks out mid-iteration when the budget elapses. Real-binary verified: 5s budget with `--conformance-delay 200` ran exactly 5.1s (was minutes of overshoot before).
+
+### Added
+
+- **[Contracts]** Every captured self-test probe now carries an `iteration` counter (#79 round 49 / Srikanth on 0.3.193: "Is it possible to differentiate in the logs what is the iteration count that way I will know how many requests are sent with that violation"). `SelfTestConfig.current_iteration` is stamped on `CaseCapture` so the JSONL line carries the loop counter (1-indexed). command.rs bumps it before each `run_self_test_with_deadline` call. Defaults to 1 for older clients / single-iteration runs so existing JSONL deserialises unchanged.
+- **[Contracts]** Multipart summary now surfaces both `total` (disk-sum payload) and `wire` (total + multipart envelope) byte counts (#79 round 49 / Srikanth on 0.3.193: "Our Proxy shows Total Byte Length as 57998271 Bytes, Where as mockforge shows ... 57996316 Bytes which is correct. I see a diff of 1955 bytes"). The diff is the multipart envelope (boundary lines, per-part `Content-Disposition` / `Content-Type` headers, CRLFs, final closing boundary), not a bug. New format: `<multipart/form-data; boundary=...; N part(s); total <disk-sum> bytes (wire <disk-sum + envelope> bytes w/ envelope): ...>`. Real-binary verified with a 256000 + 18 byte upload pair: `total 256018 bytes (wire 256434 bytes w/ envelope)`. The 416-byte delta matches the actual k6-emitted envelope size.
+
 ## [0.3.193] - 2026-06-28
 
 ### Fixed
