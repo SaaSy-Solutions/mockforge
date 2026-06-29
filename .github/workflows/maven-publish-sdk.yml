@@ -46,7 +46,7 @@ jobs:
     env:
       DRY_RUN: ${{ github.event.inputs.dry_run }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Set up JDK 17 + Maven Central credentials
         uses: actions/setup-java@v6
