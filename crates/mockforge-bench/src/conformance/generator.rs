@@ -341,8 +341,17 @@ impl ConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20\x20\x20  parts.forEach(function (p) { if (typeof __mfSizes[p.name] === 'number') { p.bytes = __mfSizes[p.name]; } else { __allKnown = false; } });\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const partsTotal = parts.reduce(function (acc, p) { return acc + p.bytes; }, 0);\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  if (__allKnown) totalBytes = partsTotal;\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // Round 49 #79 — Srikanth on 0.3.193 asked why our proxy\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // counted 57998271 bytes vs mockforge's 57996316 (disk\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // sum). The diff is the multipart envelope (boundaries,\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // per-part Content-Disposition / Content-Type lines,\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // CRLFs, the final closing boundary). Surface both:\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // `total` stays the disk-sum payload (what a receiver\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // writes back to disk); `wire` adds the envelope so\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // packet captures / proxy byte counters match.\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  const wireBytes = (typeof raw === 'string' && raw.length) ? raw.length : totalBytes;\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const summary = parts.map(function (p) { return '\\'' + p.name + '\\':\\'' + p.filename + '\\' (' + p.contentType + ', ' + p.bytes + ' bytes)'; }).join(', ');\n\
-                 \x20\x20\x20\x20\x20\x20\x20\x20  reqBody = '<multipart/form-data; boundary=' + boundary + '; ' + parts.length + ' part(s); total ' + totalBytes + ' bytes: ' + summary + '>';\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  reqBody = '<multipart/form-data; boundary=' + boundary + '; ' + parts.length + ' part(s); total ' + totalBytes + ' bytes (wire ' + wireBytes + ' bytes w/ envelope): ' + summary + '>';\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20} catch (e) {\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  reqBody = '<multipart upload; summary failed: ' + (e && e.message ? e.message : 'unknown') + '>';\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20}\n\

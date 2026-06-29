@@ -2626,6 +2626,7 @@ impl BenchCommand {
                 // pays one Arc clone per probe, which is in the noise
                 // next to the HTTP round-trip.
                 network_events: Some(std::sync::Arc::new(std::sync::Mutex::new(Vec::new()))),
+                current_iteration: 1,
             };
             let capture_sink = cfg.capture.clone();
             let network_events_sink = cfg.network_events.clone();
@@ -2647,9 +2648,24 @@ impl BenchCommand {
                 .transpose()?
                 .map(std::time::Duration::from_secs);
             let start = std::time::Instant::now();
-            let mut report = crate::conformance::self_test::run_self_test(&ops, &cfg)
-                .await
-                .map_err(|e| BenchError::Other(format!("self-test client error: {e}")))?;
+            // Round 49 (#79) — Srikanth on 0.3.193: a 5m budget ran
+            // 5:46 because the loop only checked the deadline AFTER a
+            // full iteration completed. Pass the absolute deadline
+            // into `run_self_test_with_deadline` so the runner can
+            // break out mid-iteration the moment the budget elapses.
+            // Iterations bound stays inclusive (so a duration-only run
+            // doesn't loop forever on a fast spec) but stops EARLY when
+            // the deadline hits first.
+            let deadline = duration_budget.map(|d| start + d);
+            // Round 49 — stamp `current_iteration` on cfg before each
+            // pass so CaseCapture's `iteration` field carries the
+            // loop counter (1-indexed).
+            let mut cfg = cfg;
+            cfg.current_iteration = 1;
+            let mut report =
+                crate::conformance::self_test::run_self_test_with_deadline(&ops, &cfg, deadline)
+                    .await
+                    .map_err(|e| BenchError::Other(format!("self-test client error: {e}")))?;
             let mut iter_done: u32 = 1;
             loop {
                 let by_iter = iter_done >= target_iterations;
@@ -2657,9 +2673,12 @@ impl BenchCommand {
                 if by_iter && by_dur {
                     break;
                 }
-                let next = crate::conformance::self_test::run_self_test(&ops, &cfg)
-                    .await
-                    .map_err(|e| BenchError::Other(format!("self-test client error: {e}")))?;
+                cfg.current_iteration = iter_done.saturating_add(1);
+                let next = crate::conformance::self_test::run_self_test_with_deadline(
+                    &ops, &cfg, deadline,
+                )
+                .await
+                .map_err(|e| BenchError::Other(format!("self-test client error: {e}")))?;
                 report.merge_iteration(next);
                 iter_done = iter_done.saturating_add(1);
             }
@@ -3067,7 +3086,7 @@ impl BenchCommand {
     /// per target so a user can attribute wire failures back to the
     /// target they happened against.
     async fn execute_multi_target_self_test(&self, targets_file: &Path) -> Result<()> {
-        use crate::conformance::self_test::{run_self_test, SelfTestConfig};
+        use crate::conformance::self_test::SelfTestConfig;
 
         TerminalReporter::print_progress("Multi-target conformance self-test mode");
         let targets = parse_targets_file(targets_file)?;
@@ -3148,14 +3167,25 @@ impl BenchCommand {
                         .unwrap_or_else(|| p.to_string_lossy().into_owned())
                 }),
                 network_events: Some(std::sync::Arc::new(std::sync::Mutex::new(Vec::new()))),
+                current_iteration: 1,
             };
             let capture_sink = cfg.capture.clone();
             let network_events_sink = cfg.network_events.clone();
 
             let start = std::time::Instant::now();
-            let mut report = run_self_test(&ops, &cfg)
-                .await
-                .map_err(|e| BenchError::Other(format!("self-test client error: {e}")))?;
+            // Round 49 — pass an absolute deadline down so the loop
+            // can break out mid-iteration once the budget elapses
+            // instead of overshooting by a full pass.
+            let deadline = duration_budget.map(|d| start + d);
+            // Round 49 — stamp `current_iteration` on cfg before each
+            // pass so CaseCapture's `iteration` field carries the
+            // loop counter (1-indexed).
+            let mut cfg = cfg;
+            cfg.current_iteration = 1;
+            let mut report =
+                crate::conformance::self_test::run_self_test_with_deadline(&ops, &cfg, deadline)
+                    .await
+                    .map_err(|e| BenchError::Other(format!("self-test client error: {e}")))?;
             let mut iter_done: u32 = 1;
             loop {
                 let by_iter = iter_done >= target_iterations;
@@ -3163,9 +3193,12 @@ impl BenchCommand {
                 if by_iter && by_dur {
                     break;
                 }
-                let next = run_self_test(&ops, &cfg)
-                    .await
-                    .map_err(|e| BenchError::Other(format!("self-test client error: {e}")))?;
+                cfg.current_iteration = iter_done.saturating_add(1);
+                let next = crate::conformance::self_test::run_self_test_with_deadline(
+                    &ops, &cfg, deadline,
+                )
+                .await
+                .map_err(|e| BenchError::Other(format!("self-test client error: {e}")))?;
                 report.merge_iteration(next);
                 iter_done = iter_done.saturating_add(1);
             }
@@ -3211,6 +3244,30 @@ impl BenchCommand {
                 let _ = std::fs::write(&json_path, json);
             }
             TerminalReporter::print_progress(&report.render_summary());
+
+            // Round 49 (#79) — Srikanth on 0.3.193: "I am not seeing
+            // any violation requests logs when running [self-test
+            // + --targets-file]". `validate_emitted_requests` was
+            // only wired into the bench-export path; self-test
+            // writes its captures to `conformance-self-test-
+            // requests.jsonl` instead. The validator now reads that
+            // file too (see the JSONL branch in request_validator.rs),
+            // so we just need to invoke it here per-target.
+            if self.validate_requests {
+                let n = crate::conformance::request_validator::validate_emitted_requests_with_base_path(
+                    &self.spec,
+                    &target_dir,
+                    self.base_path.as_deref(),
+                )
+                .await?;
+                if n > 0 {
+                    TerminalReporter::print_warning(&format!(
+                        "  {} emitted request(s) violated the spec — see {}/conformance-request-violations.json",
+                        n,
+                        target_dir.display(),
+                    ));
+                }
+            }
         }
 
         Ok(())

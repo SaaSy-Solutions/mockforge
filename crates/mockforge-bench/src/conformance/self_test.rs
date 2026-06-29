@@ -131,6 +131,11 @@ pub struct SelfTestConfig {
     /// drains it into `conformance-network-events.json` next to the
     /// JSONL capture. None → no extra allocations on the hot path.
     pub network_events: Option<Arc<Mutex<Vec<NetworkEvent>>>>,
+    /// Round 49 (#79) — current iteration number (1-indexed). The
+    /// runner stamps it on every CaseCapture so the JSONL line and
+    /// violation rows carry the iteration counter. Defaults to 1
+    /// for non-looping runs.
+    pub current_iteration: u32,
 }
 
 /// Round 47 (#79) — wire-level network event captured by the self-test
@@ -209,6 +214,20 @@ pub struct CaseCapture {
     /// value. Empty string when the capture pre-dates this field.
     #[serde(default)]
     pub client_sent_at: String,
+    /// Round 49 (#79) — Srikanth on 0.3.193: "Is it possible to
+    /// differentiate in the logs what is the iteration count that
+    /// way I will know how many requests are sent with that
+    /// violation." Stamped from the
+    /// `SelfTestConfig::current_iteration` field by the outer loop
+    /// in command.rs before each call to `run_self_test_with_deadline`.
+    /// 1-indexed; defaults to 1 for single-iteration runs so an older
+    /// JSONL that didn't carry the field deserialises as iteration 1.
+    #[serde(default = "default_iteration")]
+    pub iteration: u32,
+}
+
+fn default_iteration() -> u32 {
+    1
 }
 
 impl Default for SelfTestConfig {
@@ -227,6 +246,7 @@ impl Default for SelfTestConfig {
             validate_response_schemas: false,
             spec_label: None,
             network_events: None,
+            current_iteration: 1,
         }
     }
 }
@@ -384,6 +404,22 @@ pub async fn run_self_test(
     operations: &[AnnotatedOperation],
     config: &SelfTestConfig,
 ) -> Result<SelfTestReport, reqwest::Error> {
+    run_self_test_with_deadline(operations, config, None).await
+}
+
+/// Round 49 (#79) — Srikanth on 0.3.193: `--conformance-self-test-
+/// duration 5m` ran 5:46 because the outer iteration loop in
+/// command.rs only checks the deadline AFTER a full matrix pass
+/// completes. For long iterations this can overshoot by minutes,
+/// which breaks automation that relies on a fixed wall-clock budget.
+/// New optional `deadline` parameter lets the runner break out
+/// mid-iteration once the deadline elapses; returns the partial
+/// report with whatever operations finished before the deadline.
+pub async fn run_self_test_with_deadline(
+    operations: &[AnnotatedOperation],
+    config: &SelfTestConfig,
+    deadline: Option<std::time::Instant>,
+) -> Result<SelfTestReport, reqwest::Error> {
     // Round 18.5 — build a client pool when `source_ips` is set,
     // one reqwest::Client per IP, each bound to its local address.
     // Operations round-robin through the pool. Empty pool → single
@@ -394,6 +430,15 @@ pub async fn run_self_test(
 
     let mut report = SelfTestReport::default();
     for op in operations {
+        // Round 49 — mid-iteration deadline check. Breaks out of the
+        // per-operation loop the moment the wall-clock budget
+        // elapses, so a 5m budget never overshoots by more than one
+        // probe's round-trip.
+        if let Some(d) = deadline {
+            if std::time::Instant::now() >= d {
+                break;
+            }
+        }
         let client_idx = client_cursor.fetch_add(1, Ordering::Relaxed) % clients.len();
         let client = &clients[client_idx];
         let geo_ip = if config.geo_source_ips.is_empty() {
@@ -1755,6 +1800,7 @@ async fn send_case_with_extra(
             // the JSONL line byte-for-byte.
             mockforge_version: mockforge_version.clone(),
             client_sent_at: client_sent_at.clone(),
+            iteration: config.current_iteration.max(1),
         };
         if let Ok(mut guard) = sink.lock() {
             guard.push(entry);
@@ -1959,6 +2005,7 @@ mod tests {
             spec_label: None,
             mockforge_version: "0.3.183".into(),
             client_sent_at: "2026-06-17T12:34:56+00:00".into(),
+            iteration: 1,
         };
         let json = serde_json::to_string(&stamped).unwrap();
         assert!(json.contains("\"mockforge_version\":\"0.3.183\""));

@@ -848,9 +848,14 @@ impl SpecDrivenConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20\x20\x20  }\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  // Round 47 #79 — overlay on-disk byte counts (see generator.rs).\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const __mfSizes = (globalThis.__mfUploadSizes || {})[checkName] || {};\n\
-                 \x20\x20\x20\x20\x20\x20\x20\x20  parts.forEach(function (p) { if (typeof __mfSizes[p.name] === 'number') p.bytes = __mfSizes[p.name]; });\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  let __allKnown = parts.length > 0;\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  parts.forEach(function (p) { if (typeof __mfSizes[p.name] === 'number') { p.bytes = __mfSizes[p.name]; } else { __allKnown = false; } });\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  const partsTotal = parts.reduce(function (acc, p) { return acc + p.bytes; }, 0);\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  if (__allKnown) totalBytes = partsTotal;\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // Round 49 #79 — total = disk-sum payload; wire = total + multipart envelope.\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  const wireBytes = (typeof raw === 'string' && raw.length) ? raw.length : totalBytes;\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const summary = parts.map(function (p) { return '\\'' + p.name + '\\':\\'' + p.filename + '\\' (' + p.contentType + ', ' + p.bytes + ' bytes)'; }).join(', ');\n\
-                 \x20\x20\x20\x20\x20\x20\x20\x20  reqBody = '<multipart/form-data; boundary=' + boundary + '; ' + parts.length + ' part(s); total ' + totalBytes + ' bytes: ' + summary + '>';\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  reqBody = '<multipart/form-data; boundary=' + boundary + '; ' + parts.length + ' part(s); total ' + totalBytes + ' bytes (wire ' + wireBytes + ' bytes w/ envelope): ' + summary + '>';\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20} catch (e) {\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  reqBody = '<multipart upload; summary failed: ' + (e && e.message ? e.message : 'unknown') + '>';\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20}\n\
