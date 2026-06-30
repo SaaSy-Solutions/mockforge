@@ -1,5 +1,12 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.196] - 2026-06-30
+
+### Added
+
+- **[AI]** Mock LLM endpoint: `mockforge serve --llm-mock` mounts OpenAI-compatible `POST /v1/chat/completions` + `GET /v1/models` and Anthropic-compatible `POST /v1/messages` with SSE streaming, so an agent can point its base URL at MockForge for scale/offline/failure testing (#912 / #79 Srikanth).
+- **[AI]** Mock MCP server: `mockforge serve --mcp-mock` mounts a JSON-RPC 2.0 endpoint at `POST /mcp` answering `initialize` / `tools/list` / `tools/call` / `resources/list` / `prompts/list`, so an agent acting as an MCP client can talk to MockForge (#913 / #79 Srikanth).
+
 ## [0.3.195] - 2026-06-30
 
 ### Fixed

@@ -113,6 +113,12 @@ pub(crate) struct ServeArgs {
     pub(crate) bulkhead_max_concurrent: u32,
     pub(crate) bulkhead_max_queue: u32,
     pub(crate) bulkhead_queue_timeout_ms: u64,
+    /// `--llm-mock` (#912): mount OpenAI/Anthropic-compatible mock LLM
+    /// endpoints (`/v1/chat/completions`, `/v1/messages`, `/v1/models`).
+    pub(crate) llm_mock: bool,
+    /// `--mcp-mock` (#913): mount the mock MCP server (JSON-RPC over HTTP at
+    /// `/mcp`).
+    pub(crate) mcp_mock: bool,
     /// `--conformance-buffer-size` (round 31). Mirrors
     /// `MOCKFORGE_CONFORMANCE_BUFFER_SIZE`. None = honour env or default 256.
     pub(crate) conformance_buffer_size: Option<usize>,
@@ -204,6 +210,8 @@ impl Default for ServeArgs {
             bulkhead_max_concurrent: 100,
             bulkhead_max_queue: 10,
             bulkhead_queue_timeout_ms: 5000,
+            llm_mock: false,
+            mcp_mock: false,
             conformance_buffer_size: None,
             conformance_buffer_unique: false,
             inject_response_violations: false,
@@ -1988,6 +1996,29 @@ pub async fn handle_serve(
                 tracing::warn!("Failed to build GraphQL router; skipping: {}", e);
             }
         }
+    }
+
+    // Mount the mock LLM endpoint (#912) so an agent can point its base URL
+    // at MockForge and get OpenAI/Anthropic-shaped completions (with SSE
+    // streaming) for scale / offline / failure testing. Opt-in via --llm-mock.
+    if serve_args.llm_mock {
+        http_app = http_app.merge(mockforge_http::llm_mock::router(
+            mockforge_http::llm_mock::LlmMockConfig::default(),
+        ));
+        println!(
+            "✅ Mock LLM endpoint available at POST /v1/chat/completions, POST /v1/messages, GET /v1/models (OpenAI + Anthropic shapes, SSE streaming)"
+        );
+    }
+
+    // Mount the mock MCP server (#913) so an agent acting as an MCP client can
+    // talk to MockForge over JSON-RPC. Opt-in via --mcp-mock.
+    if serve_args.mcp_mock {
+        http_app = http_app.merge(mockforge_http::mcp_mock::router(
+            mockforge_http::mcp_mock::McpMockConfig::default(),
+        ));
+        println!(
+            "✅ Mock MCP server available at POST /mcp (JSON-RPC: initialize, tools/list, tools/call, resources/list, prompts/list)"
+        );
     }
 
     // Mount the recorder API on the public HTTP app so callers can list,

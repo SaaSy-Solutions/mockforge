@@ -523,6 +523,21 @@ struct ServeCliArgs {
     #[arg(long, help_heading = "Admin & UI")]
     pub admin: bool,
 
+    /// Enable the mock LLM endpoint: OpenAI-compatible
+    /// `POST /v1/chat/completions` + `GET /v1/models` and Anthropic-compatible
+    /// `POST /v1/messages` (with SSE streaming when `stream:true`), so an agent
+    /// can point its base URL at MockForge. Returns deterministic canned
+    /// completions with realistic envelopes (#912).
+    #[arg(long, help_heading = "AI Features")]
+    pub llm_mock: bool,
+
+    /// Enable the mock MCP server: JSON-RPC 2.0 at `POST /mcp` answering
+    /// `initialize` / `tools/list` / `tools/call` / `resources/list` /
+    /// `prompts/list` with a configurable tool catalog, so an agent acting as
+    /// an MCP client can talk to MockForge (#913).
+    #[arg(long, help_heading = "AI Features")]
+    pub mcp_mock: bool,
+
     /// Admin UI port (defaults to config or 9080)
     #[arg(long, help_heading = "Admin & UI")]
     pub admin_port: Option<u16>,
@@ -2648,6 +2663,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 admin: args.admin,
                 admin_port: args.admin_port,
                 admin_host: args.admin_host,
+                llm_mock: args.llm_mock,
+                mcp_mock: args.mcp_mock,
                 metrics: args.observability.metrics,
                 metrics_port: args.observability.metrics_port,
                 tracing: args.observability.tracing,

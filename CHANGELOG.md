@@ -1,3 +1,10 @@
+## [0.3.196] - 2026-06-30
+
+### Added
+
+- **[AI]** Mock LLM endpoint for agent testing (#912 / #79 Srikanth: "Agent Traffic to LLM ... LLM Simulation using MockForge Server"). `mockforge serve --llm-mock` mounts OpenAI-compatible `POST /v1/chat/completions` + `GET /v1/models` and Anthropic-compatible `POST /v1/messages`, so an agent (Cursor, Claude Code, ChatGPT clients, custom agents) can point its base URL at MockForge and receive correctly-shaped, deterministic completions. Responses carry realistic envelopes (ids, `usage`/token counts, `finish_reason`/`stop_reason`) and **SSE streaming** when the caller sets `stream: true` (OpenAI `chat.completion.chunk` deltas + `[DONE]`; Anthropic `message_start`/`content_block_delta`/`message_stop` events). Pure mock (no external model call); echoes the prompt by default so wiring is easy to confirm. Real-binary verified against `mockforge serve`: non-streaming + streaming OpenAI, Anthropic messages, and model list all return spec-shaped payloads.
+- **[AI]** Mock MCP (Model Context Protocol) server for agent-as-MCP-client testing (#913 / #79 Srikanth: "Agent (Acting as MCP Client) Traffic to MCP Servers"). `mockforge serve --mcp-mock` mounts a JSON-RPC 2.0 endpoint at `POST /mcp` answering `initialize`, `tools/list`, `tools/call`, `resources/list`, `prompts/list`, and the `notifications/initialized` notification, with a configurable tool catalog returning canned (or, via an error tool, failing) results. Real-binary verified against `mockforge serve`: `initialize` returns `serverInfo` + capabilities, `tools/list` returns the catalog, and `tools/call echo` reflects its argument.
+
 ## [0.3.195] - 2026-06-30
 
 ### Fixed
