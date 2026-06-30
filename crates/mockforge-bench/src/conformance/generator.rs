@@ -301,6 +301,7 @@ impl ConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20\x20\x20try {\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const raw = res.request.body;\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  let totalBytes = raw.length;\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  let envelopeBytes = 0;\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const boundaryMatch = ct.match(/boundary=([^;]+)/);\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const boundary = boundaryMatch ? boundaryMatch[1].replace(/^\"|\"$/g, '') : '';\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const parts = [];\n\
@@ -314,6 +315,12 @@ impl ConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20\x20\x20      const headerEnd = slice.indexOf('\\r\\n\\r\\n');\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20      const partHeaders = headerEnd === -1 ? slice : slice.substring(0, headerEnd);\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20      const partBody = headerEnd === -1 ? '' : slice.substring(headerEnd + 4);\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      // Round 50 #79 — the envelope (sep + part headers + the\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      // header/body CRLFs + the trailing CRLF) is pure ASCII, so\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      // its .length equals its byte count even when binary part\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      // bodies mangle raw.length. sep=--boundary; +4 = header\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      // separator CRLFCRLF; +2 = trailing CRLF after the body.\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      envelopeBytes += sep.length + partHeaders.length + 6;\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20      const nameMatch = partHeaders.match(/name=\"([^\"]+)\"/);\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20      const filenameMatch = partHeaders.match(/filename=\"([^\"]+)\"/);\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20      const partCtMatch = partHeaders.match(/Content-Type:\\s*([^\\r\\n]+)/i);\n\
@@ -325,6 +332,8 @@ impl ConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20\x20\x20      });\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20      cursor = next;\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20    }\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20    // Closing boundary: --boundary--CRLF.\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20    if (parts.length) { envelopeBytes += sep.length + 4; }\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  }\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  // Round 47 #79 — overlay accurate on-disk byte counts from\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  // the per-check size map written at init scope; falls back\n\
@@ -349,7 +358,13 @@ impl ConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20\x20\x20  // `total` stays the disk-sum payload (what a receiver\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  // writes back to disk); `wire` adds the envelope so\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  // packet captures / proxy byte counters match.\n\
-                 \x20\x20\x20\x20\x20\x20\x20\x20  const wireBytes = (typeof raw === 'string' && raw.length) ? raw.length : totalBytes;\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // Round 50 #79 — Srikanth on 0.3.194 saw wire (56344432)\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // come out SMALLER than total (57996316). raw.length is a\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // UTF-8-decoded JS string, so binary part bytes collapse\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // and it UNDERcounts. The envelope is only ~2KB for 9\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // parts, so wire can never be less than total. Compute it\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // from the disk-accurate payload plus the ASCII envelope.\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  const wireBytes = __allKnown ? (partsTotal + envelopeBytes) : ((typeof raw === 'string' && raw.length) ? raw.length : totalBytes);\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const summary = parts.map(function (p) { return '\\'' + p.name + '\\':\\'' + p.filename + '\\' (' + p.contentType + ', ' + p.bytes + ' bytes)'; }).join(', ');\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  reqBody = '<multipart/form-data; boundary=' + boundary + '; ' + parts.length + ' part(s); total ' + totalBytes + ' bytes (wire ' + wireBytes + ' bytes w/ envelope): ' + summary + '>';\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20} catch (e) {\n\

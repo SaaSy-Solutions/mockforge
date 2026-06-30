@@ -810,6 +810,27 @@ pub async fn validate_emitted_requests_with_base_path(
             all.push(val);
         }
     }
+    // Round 50 (#79) — dedup byte-identical violations. A multi-iteration
+    // self-test captures one probe per iteration, so a 22x duration run
+    // produced 22 copies of every violation in the flat file (and, before
+    // the grouping fixes below, 22 copies inside each grouped row). Keep
+    // the first occurrence of each (check_name, method, path,
+    // violation_type, message) tuple; re-runs that merged the on-disk file
+    // are collapsed too. Preserves first-seen order.
+    {
+        let mut seen: std::collections::HashSet<(String, String, String, String, String)> =
+            std::collections::HashSet::new();
+        all.retain(|v| {
+            let f = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").to_string();
+            seen.insert((
+                f("check_name"),
+                f("method"),
+                f("path"),
+                f("violation_type"),
+                f("message"),
+            ))
+        });
+    }
     if !all.is_empty() {
         if let Ok(json) = serde_json::to_string_pretty(&all) {
             let _ = std::fs::write(&dst, json);
@@ -867,17 +888,28 @@ fn group_violations_by_probe(flat: &[serde_json::Value]) -> serde_json::Value {
     let mut by_probe: std::collections::HashMap<(String, String, String), Vec<(String, String)>> =
         std::collections::HashMap::new();
 
+    // Round 50 (#79) — Srikanth on 0.3.194: "I see same violation is
+    // getting printed in logs for 22 times" on a multi-iteration run.
+    // The self-test capture holds one probe per iteration, so a 22x
+    // duration run feeds 22 byte-identical violations per probe into
+    // this flat list and we used to append all 22. Dedup identical
+    // (violation_type, message) pairs WITHIN a probe so each unique
+    // violation shows exactly once regardless of iteration count.
+    let mut seen_in_probe: std::collections::HashSet<(String, String, String, String)> =
+        std::collections::HashSet::new();
     for v in flat {
         let check = v.get("check_name").and_then(|x| x.as_str()).unwrap_or("").to_string();
         let method = v.get("method").and_then(|x| x.as_str()).unwrap_or("").to_string();
         let path = v.get("path").and_then(|x| x.as_str()).unwrap_or("").to_string();
         let vt = v.get("violation_type").and_then(|x| x.as_str()).unwrap_or("").to_string();
         let msg = v.get("message").and_then(|x| x.as_str()).unwrap_or("").to_string();
-        let key = (check, method, path);
+        let key = (check.clone(), method.clone(), path.clone());
         if !by_probe.contains_key(&key) {
             by_probe_order.push(key.clone());
         }
-        by_probe.entry(key).or_default().push((vt, msg));
+        if seen_in_probe.insert((check, method, path, format!("{vt}\u{0}{msg}"))) {
+            by_probe.entry(key).or_default().push((vt, msg));
+        }
     }
 
     // Sort within same (method, path) by check_name for visual grouping.
@@ -906,76 +938,74 @@ fn group_violations_by_probe(flat: &[serde_json::Value]) -> serde_json::Value {
     Value::Array(rows)
 }
 
-/// Round 46 / Round 47 (#79) — collapse the flat list of
-/// [`RequestViolation`]-shaped JSON values into one entry per
-/// `(method, path)` regardless of `check_name`. Round 46 keyed on
-/// `(check_name, method, path)`; Srikanth on 0.3.191 then showed three
-/// identical groups appearing under `method:POST`, `param:query:string`,
-/// and `response:200` because mockforge bench fires the same probe
-/// under multiple check labels and the validator sees the same URL +
-/// violations each time. Now we dedup by `(method, path)` AND by
-/// violation list, then list every contributing `check_name` in a
-/// `checks: [...]` array on the row so the user can still see which
-/// probes the violation surfaced under. Preserves first-seen order.
+/// Round 46–50 (#79) — collapse the flat list of
+/// [`RequestViolation`]-shaped JSON values into exactly ONE entry per
+/// `(method, path)`.
+///
+/// History: Round 46 keyed on `(check_name, method, path)` (too many
+/// duplicate rows). Round 47 collapsed by `(method, path)` AND the
+/// violation set, listing contributing checks in a `checks: [...]`
+/// array. But that re-split a single URL whenever two probe families
+/// produced DIFFERENT violation sets for it — Srikanth on 0.3.194:
+/// `owasp:ldap-injection` (query violations) landed in a different
+/// by-request row than the `request-body:*` checks for the very same
+/// URL, so his triage flow ("find the URL with the most violations
+/// here, then drill into by-probe") missed half the picture.
+///
+/// Round 50 makes this file the authoritative per-URL overview: one row
+/// per `(method, path)` carrying the DEDUPED UNION of every violation
+/// and every contributing `check_name`. The per-probe attribution
+/// ("which check surfaced which violation") lives in the sibling
+/// `conformance-request-violations-by-probe.json`. First-seen order is
+/// preserved for both checks and violations so the output is stable.
 fn group_violations_by_request(flat: &[serde_json::Value]) -> serde_json::Value {
     use serde_json::{Map, Value};
 
-    // Step 1: bucket flat list by (check_name, method, path) so each
-    // (check, method, url) row aggregates ALL its violations before we
-    // collapse identical violation sets across check names.
-    let mut by_check_order: Vec<(String, String, String)> = Vec::new();
-    let mut by_check: std::collections::HashMap<(String, String, String), Vec<(String, String)>> =
+    let mut order: Vec<(String, String)> = Vec::new();
+    let mut checks_by_key: std::collections::HashMap<(String, String), Vec<String>> =
         std::collections::HashMap::new();
+    let mut viols_by_key: std::collections::HashMap<(String, String), Vec<(String, String)>> =
+        std::collections::HashMap::new();
+    // Per-(method,path) dedup sets so a check fired across 22 iterations,
+    // or the same (vt,msg) surfaced by several checks, is counted once.
+    let mut seen_check: std::collections::HashSet<(String, String, String)> =
+        std::collections::HashSet::new();
+    let mut seen_viol: std::collections::HashSet<(String, String, String)> =
+        std::collections::HashSet::new();
+
     for v in flat {
         let check = v.get("check_name").and_then(|x| x.as_str()).unwrap_or("").to_string();
         let method = v.get("method").and_then(|x| x.as_str()).unwrap_or("").to_string();
         let path = v.get("path").and_then(|x| x.as_str()).unwrap_or("").to_string();
         let vt = v.get("violation_type").and_then(|x| x.as_str()).unwrap_or("").to_string();
         let msg = v.get("message").and_then(|x| x.as_str()).unwrap_or("").to_string();
-        let key = (check, method, path);
-        if !by_check.contains_key(&key) {
-            by_check_order.push(key.clone());
+        let key = (method.clone(), path.clone());
+        if !checks_by_key.contains_key(&key) && !viols_by_key.contains_key(&key) {
+            order.push(key.clone());
         }
-        by_check.entry(key).or_default().push((vt, msg));
+        if !check.is_empty() && seen_check.insert((method.clone(), path.clone(), check.clone())) {
+            checks_by_key.entry(key.clone()).or_default().push(check);
+        }
+        if seen_viol.insert((method.clone(), path.clone(), format!("{vt}\u{0}{msg}"))) {
+            viols_by_key.entry(key).or_default().push((vt, msg));
+        }
     }
 
-    // Step 2: collapse rows with identical `(method, path)` AND
-    // identical violation set into one entry carrying a `checks` array.
-    // The violation-set signature is a sorted vec of (vt, msg) tuples so
-    // ordering of probes can't accidentally split otherwise-equal rows.
-    let mut collapsed_order: Vec<(String, String, Vec<(String, String)>)> = Vec::new();
-    let mut collapsed: std::collections::HashMap<
-        (String, String, Vec<(String, String)>),
-        Vec<String>,
-    > = std::collections::HashMap::new();
-    for key in &by_check_order {
-        let (check, method, path) = key;
-        let entries = by_check.get(key).cloned().unwrap_or_default();
-        let mut signature = entries.clone();
-        signature.sort();
-        let combo = (method.clone(), path.clone(), signature.clone());
-        if !collapsed.contains_key(&combo) {
-            collapsed_order.push(combo.clone());
-        }
-        collapsed.entry(combo).or_default().push(check.clone());
-    }
-
-    let mut rows: Vec<Value> = Vec::with_capacity(collapsed_order.len());
-    for combo in &collapsed_order {
-        let (method, path, signature) = combo;
-        let checks = collapsed.get(combo).cloned().unwrap_or_default();
+    let mut rows: Vec<Value> = Vec::with_capacity(order.len());
+    for key in &order {
+        let (method, path) = key;
+        let checks = checks_by_key.get(key).cloned().unwrap_or_default();
+        let viols = viols_by_key.get(key).cloned().unwrap_or_default();
         let mut row = Map::new();
         row.insert(
             "checks".into(),
             Value::Array(checks.iter().map(|s| Value::String(s.clone())).collect()),
         );
-        // Round 48 (#79) — Srikanth on 0.3.192: "check_name body:json
-        // but for the violation it is showing some issue with query
-        // parameters. Little misleading". Pick the contributing check
-        // whose name prefix matches the dominant violation_type
-        // rather than the alphabetically first one. Falls back to
-        // first when nothing matches.
-        let dominant_prefix: &str = signature
+        // Round 48 (#79) — keep a single representative `check_name`
+        // pointing at the check whose family matches the FIRST violation,
+        // so the headline check isn't misleading. The full set is in
+        // `checks[]`; per-violation attribution is in the by-probe file.
+        let dominant_prefix: &str = viols
             .first()
             .map(|(vt, _)| {
                 if vt.starts_with("query_") {
@@ -1004,11 +1034,8 @@ fn group_violations_by_request(flat: &[serde_json::Value]) -> serde_json::Value 
         row.insert("check_name".into(), Value::String(best_check));
         row.insert("method".into(), Value::String(method.clone()));
         row.insert("path".into(), Value::String(path.clone()));
-        row.insert(
-            "violation_count".into(),
-            Value::Number(serde_json::Number::from(signature.len())),
-        );
-        for (i, (vt, msg)) in signature.iter().enumerate() {
+        row.insert("violation_count".into(), Value::Number(serde_json::Number::from(viols.len())));
+        for (i, (vt, msg)) in viols.iter().enumerate() {
             let mut entry = Map::new();
             entry.insert("violation_type".into(), Value::String(vt.clone()));
             entry.insert("message".into(), Value::String(msg.clone()));
@@ -1123,5 +1150,129 @@ fn check_value_against_schema(value: &str, schema: &openapiv3::Schema) -> Option
             _ => Some(format!("value \"{}\" is not of type \"boolean\"", value)),
         },
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod grouping_tests {
+    use super::{group_violations_by_probe, group_violations_by_request};
+    use serde_json::json;
+
+    /// Build a flat violation value the way `validate_emitted_requests` does.
+    fn viol(check: &str, method: &str, path: &str, vt: &str, msg: &str) -> serde_json::Value {
+        json!({
+            "check_name": check,
+            "method": method,
+            "path": path,
+            "violation_type": vt,
+            "message": msg,
+        })
+    }
+
+    /// Round 50 (#79) — reproduces Srikanth's 0.3.194 report: a single URL
+    /// whose query violations come from `owasp:ldap-injection` while its
+    /// body violations come from `request-body:*` checks must collapse into
+    /// ONE by-request row that lists BOTH check families and the UNION of
+    /// every violation. Previously these split into two separate rows, so
+    /// the owasp check was invisible from the body row he was reading.
+    #[test]
+    fn by_request_unions_all_checks_for_a_url() {
+        let path = "https://host/v1/organizations?alt=test-value&prettyPrint=test-value";
+        let flat = vec![
+            viol(
+                "request-body:type-mismatch:billingType",
+                "POST",
+                path,
+                "body_type_mismatch",
+                "body.billingType: expected string",
+            ),
+            viol(
+                "owasp:ldap-injection",
+                "POST",
+                path,
+                "query_value_mismatch",
+                "query.alt: value \"test-value\" is not one of \"json\" or \"media\"",
+            ),
+            viol(
+                "owasp:ldap-injection",
+                "POST",
+                path,
+                "query_value_mismatch",
+                "query.prettyPrint: value \"test-value\" is not of type \"boolean\"",
+            ),
+        ];
+
+        let out = group_violations_by_request(&flat);
+        let rows = out.as_array().expect("array");
+        // Exactly one row for the URL — no fragmentation.
+        assert_eq!(rows.len(), 1, "expected a single by-request row per URL");
+        let row = &rows[0];
+        assert_eq!(row["violation_count"], 3);
+        let checks: Vec<&str> =
+            row["checks"].as_array().unwrap().iter().map(|c| c.as_str().unwrap()).collect();
+        assert!(checks.contains(&"owasp:ldap-injection"), "owasp check must appear: {checks:?}");
+        assert!(
+            checks.iter().any(|c| c.starts_with("request-body:")),
+            "body check must appear: {checks:?}"
+        );
+    }
+
+    /// Round 50 (#79) — "I see same violation is getting printed in logs for
+    /// 22 times." A multi-iteration run feeds N identical violations per
+    /// probe; the by-probe drill-down must show each unique violation once.
+    #[test]
+    fn by_probe_dedups_repeated_iterations() {
+        let path = "https://host/v1/organizations?alt=test-value";
+        let mut flat = Vec::new();
+        for _ in 0..22 {
+            flat.push(viol(
+                "owasp:ldap-injection",
+                "POST",
+                path,
+                "query_value_mismatch",
+                "query.alt: value \"test-value\" is not one of \"json\" or \"media\"",
+            ));
+        }
+
+        let out = group_violations_by_probe(&flat);
+        let rows = out.as_array().expect("array");
+        assert_eq!(rows.len(), 1, "one probe row");
+        assert_eq!(rows[0]["violation_count"], 1, "22 identical iterations collapse to 1");
+        assert!(rows[0].get("violation_1").is_some());
+        assert!(rows[0].get("violation_2").is_none(), "no duplicate violation_2");
+    }
+
+    /// The by-request union must also collapse the 22x duplicates, not just
+    /// dedup across checks.
+    #[test]
+    fn by_request_dedups_repeated_iterations() {
+        let path = "https://host/v1/widgets";
+        let mut flat = Vec::new();
+        for _ in 0..22 {
+            flat.push(viol(
+                "request-body:type-mismatch:name",
+                "POST",
+                path,
+                "body_type_mismatch",
+                "body.name: expected string",
+            ));
+        }
+        let out = group_violations_by_request(&flat);
+        let rows = out.as_array().unwrap();
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0]["violation_count"], 1, "duplicate iterations collapse");
+        let checks = rows[0]["checks"].as_array().unwrap();
+        assert_eq!(checks.len(), 1, "the same check listed once");
+    }
+
+    /// Distinct URLs stay distinct.
+    #[test]
+    fn by_request_keeps_distinct_urls_separate() {
+        let flat = vec![
+            viol("c1", "POST", "https://host/a", "body_type_mismatch", "a"),
+            viol("c2", "GET", "https://host/b", "query_value_mismatch", "b"),
+        ];
+        let out = group_violations_by_request(&flat);
+        assert_eq!(out.as_array().unwrap().len(), 2);
     }
 }

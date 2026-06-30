@@ -1930,8 +1930,11 @@ enum Commands {
 
         /// Security test categories (comma-separated)
         ///
-        /// Options: sqli, xss, command-injection, path-traversal, ssti, ldap
-        /// Example: --security-categories "sqli,xss"
+        /// Options: sqli, xss, command-injection, path-traversal, ssti, ldap,
+        /// xxe, llm-prompt-injection (OWASP LLM01: prompt-injection/jailbreak
+        /// payloads for agent->LLM paths), dlp (synthetic PII canaries: test
+        /// card PANs, SSN/AWS-key shapes for data-loss-prevention egress tests)
+        /// Example: --security-categories "sqli,xss,llm-prompt-injection,dlp"
         #[arg(long)]
         security_categories: Option<String>,
 

@@ -6,8 +6,6 @@ use crate::request_gen::RequestTemplate;
 use crate::scenarios::LoadScenario;
 use handlebars::Handlebars;
 use serde::Serialize;
-#[cfg(test)]
-use serde_json::json;
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 

@@ -821,6 +821,7 @@ impl SpecDrivenConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20\x20\x20try {\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const raw = res.request.body;\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  let totalBytes = raw.length;\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  let envelopeBytes = 0;\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const boundaryMatch = ct.match(/boundary=([^;]+)/);\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const boundary = boundaryMatch ? boundaryMatch[1].replace(/^\"|\"$/g, '') : '';\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const parts = [];\n\
@@ -834,6 +835,8 @@ impl SpecDrivenConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20\x20\x20      const headerEnd = slice.indexOf('\\r\\n\\r\\n');\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20      const partHeaders = headerEnd === -1 ? slice : slice.substring(0, headerEnd);\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20      const partBody = headerEnd === -1 ? '' : slice.substring(headerEnd + 4);\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      // Round 50 #79 — ASCII envelope is byte-accurate (see generator.rs).\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20      envelopeBytes += sep.length + partHeaders.length + 6;\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20      const nameMatch = partHeaders.match(/name=\"([^\"]+)\"/);\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20      const filenameMatch = partHeaders.match(/filename=\"([^\"]+)\"/);\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20      const partCtMatch = partHeaders.match(/Content-Type:\\s*([^\\r\\n]+)/i);\n\
@@ -845,6 +848,7 @@ impl SpecDrivenConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20\x20\x20      });\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20      cursor = next;\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20    }\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20    if (parts.length) { envelopeBytes += sep.length + 4; }\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  }\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  // Round 47 #79 — overlay on-disk byte counts (see generator.rs).\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const __mfSizes = (globalThis.__mfUploadSizes || {})[checkName] || {};\n\
@@ -852,8 +856,10 @@ impl SpecDrivenConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20\x20\x20  parts.forEach(function (p) { if (typeof __mfSizes[p.name] === 'number') { p.bytes = __mfSizes[p.name]; } else { __allKnown = false; } });\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const partsTotal = parts.reduce(function (acc, p) { return acc + p.bytes; }, 0);\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  if (__allKnown) totalBytes = partsTotal;\n\
-                 \x20\x20\x20\x20\x20\x20\x20\x20  // Round 49 #79 — total = disk-sum payload; wire = total + multipart envelope.\n\
-                 \x20\x20\x20\x20\x20\x20\x20\x20  const wireBytes = (typeof raw === 'string' && raw.length) ? raw.length : totalBytes;\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // Round 49/50 #79 — total = disk-sum payload; wire = total +\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // ASCII envelope. raw.length UNDERcounts binary bodies, so\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // never use it for wire when part sizes are known.\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  const wireBytes = __allKnown ? (partsTotal + envelopeBytes) : ((typeof raw === 'string' && raw.length) ? raw.length : totalBytes);\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const summary = parts.map(function (p) { return '\\'' + p.name + '\\':\\'' + p.filename + '\\' (' + p.contentType + ', ' + p.bytes + ' bytes)'; }).join(', ');\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  reqBody = '<multipart/form-data; boundary=' + boundary + '; ' + parts.length + ' part(s); total ' + totalBytes + ' bytes (wire ' + wireBytes + ' bytes w/ envelope): ' + summary + '>';\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20} catch (e) {\n\
