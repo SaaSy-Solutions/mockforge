@@ -230,10 +230,16 @@ pub mod health;
 pub mod http_tracing_middleware;
 /// Latency profile configuration for HTTP request simulation
 pub mod latency_profiles;
+
+/// Mock LLM endpoint (OpenAI/Anthropic-compatible) for agent testing (#912).
+pub mod llm_mock;
+
 /// Management API for server control and monitoring
 pub mod management;
 /// WebSocket-based management API for real-time updates
 pub mod management_ws;
+/// Mock MCP (Model Context Protocol) server for agent-as-MCP-client testing (#913).
+pub mod mcp_mock;
 pub mod metrics_middleware;
 pub mod middleware;
 /// Standalone MockAI HTTP API

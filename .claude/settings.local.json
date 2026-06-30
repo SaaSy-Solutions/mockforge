@@ -1,6 +1,14 @@
 {
+  "permissions": {
+    "allow": [
+      "Bash(grep --line-buffered -E \"Published mockforge-cli|=== mockforge-cli ===|error: failed|No space left|publish failed$|all .* at 0.3.195|remain stale\")",
+      "Read(//tmp/**)",
+      "Bash(curl -sL \"https://crates.io/api/v1/crates/mockforge-cli\" -H 'User-Agent: mockforge-release \\(ray@saasysolutionsllc.com\\)')",
+      "Bash(python3 -c \"import sys,json; print\\(json.load\\(sys.stdin\\)['crate']['max_version']\\)\")"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "playwright"
-  ],
-  "enableAllProjectMcpServers": true
+  ]
 }
