@@ -1,5 +1,17 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.195] - 2026-06-30
+
+### Fixed
+
+- **[Contracts]** Multipart `wire` byte count no longer comes out smaller than `total`; computed as disk-sum payload + ASCII multipart envelope instead of the UTF-8-undercounting `raw.length` (#79 round 50 / Srikanth on 0.3.194).
+- **[Contracts]** `conformance-request-violations-by-request.json` emits one row per URL with the deduped union of all violations and contributing checks, so a URL's owasp/query checks no longer hide in a separate row from its body checks (#79 round 50 / Srikanth on 0.3.194).
+- **[Contracts]** Repeated self-test iterations no longer duplicate the same violation N times in the flat and grouped violation files (#79 round 50 / Srikanth on 0.3.194).
+
+### Added
+
+- **[Contracts][AI]** New `--security-categories` values `llm-prompt-injection` (OWASP LLM01 prompt-injection/jailbreak) and `dlp` (synthetic PII canaries) for agent-driven AI-attack and data-loss-prevention testing (#79 round 50 / Srikanth on 0.3.194).
+
 ## [0.3.181] - 2026-06-17
 
 ### Fixed
