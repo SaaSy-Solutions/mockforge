@@ -531,6 +531,27 @@ struct ServeCliArgs {
     #[arg(long, help_heading = "AI Features")]
     pub llm_mock: bool,
 
+    /// Mock LLM reply source (#915): `mock` (canned, default), `proxy` (forward
+    /// every request to `--llm-mock-upstream`), `record` (forward on cassette
+    /// miss and save, replay on hit), or `replay` (cassette only, offline).
+    #[arg(long, default_value = "mock", help_heading = "AI Features")]
+    pub llm_mock_mode: String,
+
+    /// Upstream OpenAI/Anthropic-compatible base URL for `proxy`/`record` modes,
+    /// e.g. `https://api.openai.com` or `http://localhost:11434` (#915).
+    #[arg(long, help_heading = "AI Features")]
+    pub llm_mock_upstream: Option<String>,
+
+    /// API key forwarded to the upstream (Bearer for OpenAI, `x-api-key` for
+    /// Anthropic). Falls back to `$OPENAI_API_KEY` / `$ANTHROPIC_API_KEY` (#915).
+    #[arg(long, help_heading = "AI Features")]
+    pub llm_mock_api_key: Option<String>,
+
+    /// Cassette file for `record`/`replay` modes (JSON). Created on first
+    /// record; loaded at startup for replay (#915).
+    #[arg(long, help_heading = "AI Features")]
+    pub llm_mock_cassette: Option<PathBuf>,
+
     /// Enable the mock MCP server: JSON-RPC 2.0 at `POST /mcp` answering
     /// `initialize` / `tools/list` / `tools/call` / `resources/list` /
     /// `prompts/list` with a configurable tool catalog, so an agent acting as
@@ -2664,6 +2685,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 admin_port: args.admin_port,
                 admin_host: args.admin_host,
                 llm_mock: args.llm_mock,
+                llm_mock_mode: args.llm_mock_mode,
+                llm_mock_upstream: args.llm_mock_upstream,
+                llm_mock_api_key: args.llm_mock_api_key,
+                llm_mock_cassette: args.llm_mock_cassette,
                 mcp_mock: args.mcp_mock,
                 metrics: args.observability.metrics,
                 metrics_port: args.observability.metrics_port,

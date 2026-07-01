@@ -1,3 +1,9 @@
+## [0.3.197] - 2026-07-01
+
+### Added
+
+- **[AI]** Mock LLM endpoint gains real-model modes via `--llm-mock-mode` (#915, follow-up to #912). The default stays a pure offline `mock`, and three new opt-in modes let it work with a real OpenAI/Anthropic-compatible upstream: `proxy` forwards every request to `--llm-mock-upstream` and returns the real response (combine with `--latency`/`--failures` for chaos on live traffic); `record` forwards on a cassette miss and saves the response to `--llm-mock-cassette`, replaying from the cassette on a hit (real content, deterministic after warm-up); `replay` serves only from the cassette (fully offline), falling back to the canned reply on a miss. New flags: `--llm-mock-mode`, `--llm-mock-upstream`, `--llm-mock-api-key` (or `$OPENAI_API_KEY`/`$ANTHROPIC_API_KEY`), `--llm-mock-cassette`. Upstream/cassette failures degrade to the canned reply so the endpoint never hard-fails a caller. Reuses the existing reqwest client; upstream calls forward the model + messages verbatim (always non-streaming) and streaming clients get the resolved text re-chunked locally. Real-binary verified against `mockforge serve` by pointing one `--llm-mock` instance at another as the upstream (no API key needed): record captured to the cassette then replayed with the upstream stopped; pure `replay` served hits offline and fell back to canned on a miss; `proxy` live-forwarded both OpenAI and Anthropic dialects.
+
 ## [0.3.196] - 2026-06-30
 
 ### Added

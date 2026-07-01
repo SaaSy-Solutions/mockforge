@@ -1,5 +1,11 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.197] - 2026-07-01
+
+### Added
+
+- **[AI]** Mock LLM endpoint real-model modes via `--llm-mock-mode` (#915): `proxy` (forward to `--llm-mock-upstream`), `record` (forward on cassette miss + save, replay on hit), `replay` (cassette only, offline; canned fallback). Default stays pure offline `mock`. New flags `--llm-mock-upstream` / `--llm-mock-api-key` / `--llm-mock-cassette`. Verified against `mockforge serve` by pointing one `--llm-mock` instance at another (no API key).
+
 ## [0.3.196] - 2026-06-30
 
 ### Added
