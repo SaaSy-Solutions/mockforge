@@ -116,6 +116,14 @@ pub(crate) struct ServeArgs {
     /// `--llm-mock` (#912): mount OpenAI/Anthropic-compatible mock LLM
     /// endpoints (`/v1/chat/completions`, `/v1/messages`, `/v1/models`).
     pub(crate) llm_mock: bool,
+    /// `--llm-mock-mode` (#915): `mock` | `proxy` | `record` | `replay`.
+    pub(crate) llm_mock_mode: String,
+    /// `--llm-mock-upstream` (#915): upstream base URL for proxy/record.
+    pub(crate) llm_mock_upstream: Option<String>,
+    /// `--llm-mock-api-key` (#915): key forwarded to the upstream.
+    pub(crate) llm_mock_api_key: Option<String>,
+    /// `--llm-mock-cassette` (#915): cassette file for record/replay.
+    pub(crate) llm_mock_cassette: Option<PathBuf>,
     /// `--mcp-mock` (#913): mount the mock MCP server (JSON-RPC over HTTP at
     /// `/mcp`).
     pub(crate) mcp_mock: bool,
@@ -211,6 +219,10 @@ impl Default for ServeArgs {
             bulkhead_max_queue: 10,
             bulkhead_queue_timeout_ms: 5000,
             llm_mock: false,
+            llm_mock_mode: "mock".to_string(),
+            llm_mock_upstream: None,
+            llm_mock_api_key: None,
+            llm_mock_cassette: None,
             mcp_mock: false,
             conformance_buffer_size: None,
             conformance_buffer_unique: false,
@@ -2001,12 +2013,34 @@ pub async fn handle_serve(
     // Mount the mock LLM endpoint (#912) so an agent can point its base URL
     // at MockForge and get OpenAI/Anthropic-shaped completions (with SSE
     // streaming) for scale / offline / failure testing. Opt-in via --llm-mock.
+    // #915 adds proxy/record/replay modes over a real upstream.
     if serve_args.llm_mock {
-        http_app = http_app.merge(mockforge_http::llm_mock::router(
-            mockforge_http::llm_mock::LlmMockConfig::default(),
-        ));
+        let mode = serve_args
+            .llm_mock_mode
+            .parse::<mockforge_http::llm_mock::LlmMockMode>()
+            .unwrap_or_else(|e| {
+                tracing::warn!(target: "mockforge::serve", "{e}; defaulting to mock");
+                mockforge_http::llm_mock::LlmMockMode::Mock
+            });
+        // API key: explicit flag wins, else fall back to the conventional env
+        // vars so `proxy`/`record` against a real provider needs no secret on
+        // the command line.
+        let api_key = serve_args.llm_mock_api_key.clone().or_else(|| {
+            std::env::var("OPENAI_API_KEY")
+                .ok()
+                .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
+        });
+        let llm_cfg = mockforge_http::llm_mock::LlmMockConfig {
+            mode,
+            upstream_base_url: serve_args.llm_mock_upstream.clone(),
+            upstream_api_key: api_key,
+            cassette_path: serve_args.llm_mock_cassette.clone(),
+            ..Default::default()
+        };
+        http_app = http_app.merge(mockforge_http::llm_mock::router(llm_cfg));
         println!(
-            "✅ Mock LLM endpoint available at POST /v1/chat/completions, POST /v1/messages, GET /v1/models (OpenAI + Anthropic shapes, SSE streaming)"
+            "✅ Mock LLM endpoint available at POST /v1/chat/completions, POST /v1/messages, GET /v1/models (OpenAI + Anthropic shapes, SSE streaming; mode={})",
+            mode
         );
     }
 
