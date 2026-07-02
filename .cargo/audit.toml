@@ -10,4 +10,9 @@ ignore = [
     "RUSTSEC-2026-0047",
     "RUSTSEC-2026-0048",
     "RUSTSEC-2026-0049",
+    # quick-xml < 0.41.0 DoS (published 2026-07-02); direct SAML bump tracked
+    # in #919. Root audit.toml is the CI source of truth; kept here for local
+    # `cargo audit` runs.
+    "RUSTSEC-2026-0194",
+    "RUSTSEC-2026-0195",
 ]
