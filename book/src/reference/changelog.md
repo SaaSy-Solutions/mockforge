@@ -1,5 +1,16 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.198] - 2026-07-02
+
+### Fixed
+
+- **[Contracts]** Self-test baseline probe filler is now spec-VALID (enum -> first member, boolean -> `true`, string body enums -> a valid member), so a `request-body:*` probe no longer trips spurious `query_value_mismatch` violations on `alt`/`prettyPrint` and body probes no longer show `test-string` enum noise (#79 round 51 / Srikanth on 0.3.196). Verified against `mockforge serve`: by-probe violations dropped 32 -> 12, `request-body:*` query violations now 0.
+- **[Contracts]** Multipart `wire` byte count now prefers k6's `Content-Length` (the exact wire body size a proxy sees) over the reconstructed envelope, closing the 264-byte gap Srikanth reported on 0.3.196 (#79 round 51).
+
+### Added
+
+- **[AI][DevX]** New "Agent / LLM / MCP Traffic (Packet-Level)" reference page documenting Agent<->LLM, Agent<->Agent, and MCP interactions at the HTTP-packet level with real captures and PCAP-recording recipes (#79 / Srikanth on 0.3.196).
+
 ## [0.3.197] - 2026-07-01
 
 ### Added

@@ -375,14 +375,15 @@ impl SpecDrivenConformanceGenerator {
         let is_integer = Self::param_schema_is_integer(data, spec);
         let is_array = Self::param_schema_is_array(data, spec);
 
-        // Generate sample value
-        let sample = if is_integer {
-            "42".to_string()
-        } else if is_array {
-            "a,b".to_string()
-        } else {
-            "test-value".to_string()
-        };
+        // Round 51 (#79) — generate a spec-VALID sample so the baseline probe
+        // doesn't trip spurious query/path violations on every probe (Srikanth
+        // on 0.3.196: a `request-body:content-type-mismatch:multipart` probe
+        // reported `query_value_mismatch` on `alt`/`prettyPrint` because every
+        // param was filled with the invalid literal "test-value"). Enum ->
+        // first member; boolean -> "true"; integer/number -> a valid number;
+        // array -> "a,b"; string formats -> a plausible valid value. Negative
+        // probes still override the specific param they attack.
+        let sample = Self::param_sample_value(data, spec);
 
         match location {
             "path" => {
@@ -441,6 +442,65 @@ impl SpecDrivenConformanceGenerator {
             }
         }
         false
+    }
+
+    /// Round 51 (#79) — a spec-VALID sample value for a parameter, used as the
+    /// baseline (positive) filler so a probe that isn't attacking a given
+    /// param doesn't trip a spurious violation on it. Falls back to the generic
+    /// "test-value" only when the schema doesn't constrain the value.
+    fn param_sample_value(data: &openapiv3::ParameterData, spec: &OpenAPI) -> String {
+        if let ParameterSchemaOrContent::Schema(schema_ref) = &data.format {
+            if let Some(schema) = ref_resolver::resolve_schema(schema_ref, spec) {
+                return Self::schema_sample_value(schema);
+            }
+        }
+        "test-value".to_string()
+    }
+
+    /// Produce a value that satisfies `schema`'s type / enum / format so the
+    /// server-side (and client-side) validator accepts it.
+    fn schema_sample_value(schema: &Schema) -> String {
+        match &schema.schema_kind {
+            SchemaKind::Type(Type::String(s)) => {
+                if let Some(first) = s.enumeration.iter().flatten().next() {
+                    return first.clone();
+                }
+                match &s.format {
+                    VariantOrUnknownOrEmpty::Item(StringFormat::Date) => "2024-01-01".to_string(),
+                    VariantOrUnknownOrEmpty::Item(StringFormat::DateTime) => {
+                        "2024-01-01T00:00:00Z".to_string()
+                    }
+                    VariantOrUnknownOrEmpty::Unknown(fmt) => match fmt.as_str() {
+                        "email" => "user@example.com".to_string(),
+                        "uuid" => "00000000-0000-0000-0000-000000000000".to_string(),
+                        "uri" | "url" => "https://example.com".to_string(),
+                        "ipv4" => "192.0.2.1".to_string(),
+                        "ipv6" => "2001:db8::1".to_string(),
+                        "hostname" => "example.com".to_string(),
+                        "byte" => "dGVzdA==".to_string(),
+                        _ => "test-value".to_string(),
+                    },
+                    _ => "test-value".to_string(),
+                }
+            }
+            SchemaKind::Type(Type::Integer(i)) => i
+                .enumeration
+                .iter()
+                .flatten()
+                .next()
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "42".to_string()),
+            SchemaKind::Type(Type::Number(n)) => n
+                .enumeration
+                .iter()
+                .flatten()
+                .next()
+                .map(|v| v.to_string())
+                .unwrap_or_else(|| "42".to_string()),
+            SchemaKind::Type(Type::Boolean(_)) => "true".to_string(),
+            SchemaKind::Type(Type::Array(_)) => "a,b".to_string(),
+            _ => "test-value".to_string(),
+        }
     }
 
     /// Annotate schema-level features (types, composition, formats, constraints)
@@ -859,7 +919,10 @@ impl SpecDrivenConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20\x20\x20  // Round 49/50 #79 — total = disk-sum payload; wire = total +\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  // ASCII envelope. raw.length UNDERcounts binary bodies, so\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  // never use it for wire when part sizes are known.\n\
-                 \x20\x20\x20\x20\x20\x20\x20\x20  const wireBytes = __allKnown ? (partsTotal + envelopeBytes) : ((typeof raw === 'string' && raw.length) ? raw.length : totalBytes);\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // Round 51 #79 — prefer k6's Content-Length (exact wire body\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // size, matches the proxy) over the reconstructed envelope.\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  const __clHdr = parseInt((reqHeaders['Content-Length'] || reqHeaders['content-length'] || ''), 10);\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  const wireBytes = (!isNaN(__clHdr) && __clHdr > 0) ? __clHdr : (__allKnown ? (partsTotal + envelopeBytes) : ((typeof raw === 'string' && raw.length) ? raw.length : totalBytes));\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const summary = parts.map(function (p) { return '\\'' + p.name + '\\':\\'' + p.filename + '\\' (' + p.contentType + ', ' + p.bytes + ' bytes)'; }).join(', ');\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  reqBody = '<multipart/form-data; boundary=' + boundary + '; ' + parts.length + ' part(s); total ' + totalBytes + ' bytes (wire ' + wireBytes + ' bytes w/ envelope): ' + summary + '>';\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20} catch (e) {\n\
@@ -1936,5 +1999,65 @@ mod tests {
         assert_eq!(effective[1], ("X-Other".to_string(), "keep-this".to_string()));
         // Cookie should be appended
         assert_eq!(effective[2], ("Cookie".to_string(), "session=abc".to_string()));
+    }
+
+    // Round 51 (#79) — baseline param filler must be spec-VALID so a probe that
+    // isn't attacking a given param doesn't trip a spurious violation on it.
+    #[test]
+    fn param_sample_value_respects_enum_boolean_and_type() {
+        use openapiv3::{BooleanType, IntegerType, NumberType, VariantOrUnknownOrEmpty};
+
+        // Enum string (like Apigee's `alt`: json|media|proto) -> first member.
+        let st = StringType {
+            enumeration: vec![Some("json".into()), Some("media".into())],
+            ..Default::default()
+        };
+        let enum_schema = Schema {
+            schema_data: SchemaData::default(),
+            schema_kind: SchemaKind::Type(Type::String(st)),
+        };
+        assert_eq!(SpecDrivenConformanceGenerator::schema_sample_value(&enum_schema), "json");
+
+        // Boolean (like `prettyPrint`) -> "true", not "test-value".
+        let bool_schema = Schema {
+            schema_data: SchemaData::default(),
+            schema_kind: SchemaKind::Type(Type::Boolean(BooleanType::default())),
+        };
+        assert_eq!(SpecDrivenConformanceGenerator::schema_sample_value(&bool_schema), "true");
+
+        // Integer -> a number.
+        let int_schema = Schema {
+            schema_data: SchemaData::default(),
+            schema_kind: SchemaKind::Type(Type::Integer(IntegerType::default())),
+        };
+        assert_eq!(SpecDrivenConformanceGenerator::schema_sample_value(&int_schema), "42");
+
+        // Number -> a number.
+        let num_schema = Schema {
+            schema_data: SchemaData::default(),
+            schema_kind: SchemaKind::Type(Type::Number(NumberType::default())),
+        };
+        assert_eq!(SpecDrivenConformanceGenerator::schema_sample_value(&num_schema), "42");
+
+        // Plain string with no constraints -> the generic filler.
+        let plain = Schema {
+            schema_data: SchemaData::default(),
+            schema_kind: SchemaKind::Type(Type::String(StringType::default())),
+        };
+        assert_eq!(SpecDrivenConformanceGenerator::schema_sample_value(&plain), "test-value");
+
+        // String with a known format -> a value valid for that format.
+        let email = StringType {
+            format: VariantOrUnknownOrEmpty::Unknown("email".into()),
+            ..Default::default()
+        };
+        let email_schema = Schema {
+            schema_data: SchemaData::default(),
+            schema_kind: SchemaKind::Type(Type::String(email)),
+        };
+        assert_eq!(
+            SpecDrivenConformanceGenerator::schema_sample_value(&email_schema),
+            "user@example.com"
+        );
     }
 }

@@ -243,8 +243,20 @@ impl RequestGenerator {
                 json!([])
             }
             SchemaKind::Type(Type::String(_)) => Self::generate_string_value(schema),
-            SchemaKind::Type(Type::Number(_)) => json!(42.0),
-            SchemaKind::Type(Type::Integer(_)) => json!(42),
+            SchemaKind::Type(Type::Number(n)) => n
+                .enumeration
+                .iter()
+                .flatten()
+                .next()
+                .map(|v| json!(v))
+                .unwrap_or_else(|| json!(42.0)),
+            SchemaKind::Type(Type::Integer(i)) => i
+                .enumeration
+                .iter()
+                .flatten()
+                .next()
+                .map(|v| json!(v))
+                .unwrap_or_else(|| json!(42)),
             SchemaKind::Type(Type::Boolean(_)) => json!(true),
             _ => json!(null),
         }
@@ -255,6 +267,15 @@ impl RequestGenerator {
         // Use example if available
         if let Some(example) = &schema.schema_data.example {
             return example.clone();
+        }
+        // Round 51 (#79) — respect an enum so the positive body is spec-VALID
+        // (Srikanth on 0.3.196: `billingType` was filled with the invalid
+        // literal "test-string", tripping a body enum violation on every
+        // probe). Negative body probes still override the value they attack.
+        if let SchemaKind::Type(Type::String(s)) = &schema.schema_kind {
+            if let Some(first) = s.enumeration.iter().flatten().next() {
+                return json!(first);
+            }
         }
 
         json!("test-string")
@@ -276,6 +297,29 @@ impl RequestGenerator {
 mod tests {
     use super::*;
     use openapiv3::Operation;
+
+    // Round 51 (#79) — a string property with an enum must generate a VALID
+    // member, not the invalid literal "test-string".
+    #[test]
+    fn generate_string_value_uses_enum_member() {
+        use openapiv3::{Schema, SchemaData, SchemaKind, StringType, Type};
+        let st = StringType {
+            enumeration: vec![Some("EVALUATION".into()), Some("PAYG".into())],
+            ..Default::default()
+        };
+        let schema = Schema {
+            schema_data: SchemaData::default(),
+            schema_kind: SchemaKind::Type(Type::String(st)),
+        };
+        assert_eq!(RequestGenerator::generate_string_value(&schema), json!("EVALUATION"));
+
+        // No enum -> the generic filler is fine.
+        let plain = Schema {
+            schema_data: SchemaData::default(),
+            schema_kind: SchemaKind::Type(Type::String(StringType::default())),
+        };
+        assert_eq!(RequestGenerator::generate_string_value(&plain), json!("test-string"));
+    }
 
     #[test]
     fn test_generate_path() {

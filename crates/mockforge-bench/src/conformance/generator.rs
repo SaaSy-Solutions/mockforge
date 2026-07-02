@@ -364,7 +364,12 @@ impl ConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20\x20\x20  // and it UNDERcounts. The envelope is only ~2KB for 9\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  // parts, so wire can never be less than total. Compute it\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  // from the disk-accurate payload plus the ASCII envelope.\n\
-                 \x20\x20\x20\x20\x20\x20\x20\x20  const wireBytes = __allKnown ? (partsTotal + envelopeBytes) : ((typeof raw === 'string' && raw.length) ? raw.length : totalBytes);\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // Round 51 #79 — Srikanth on 0.3.196: the reconstructed\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // envelope was 264 bytes short of his proxy's 1955. k6 sets\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // Content-Length to the EXACT wire body size (what the proxy\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // counts); prefer it, fall back to the reconstruction.\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  const __clHdr = parseInt((reqHeaders['Content-Length'] || reqHeaders['content-length'] || ''), 10);\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  const wireBytes = (!isNaN(__clHdr) && __clHdr > 0) ? __clHdr : (__allKnown ? (partsTotal + envelopeBytes) : ((typeof raw === 'string' && raw.length) ? raw.length : totalBytes));\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const summary = parts.map(function (p) { return '\\'' + p.name + '\\':\\'' + p.filename + '\\' (' + p.contentType + ', ' + p.bytes + ' bytes)'; }).join(', ');\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  reqBody = '<multipart/form-data; boundary=' + boundary + '; ' + parts.length + ' part(s); total ' + totalBytes + ' bytes (wire ' + wireBytes + ' bytes w/ envelope): ' + summary + '>';\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20} catch (e) {\n\

@@ -1,3 +1,14 @@
+## [0.3.198] - 2026-07-02
+
+### Fixed
+
+- **[Contracts]** Self-test probes no longer trip spurious query/body violations that get attributed to the wrong check (#79 round 51 / Srikanth on 0.3.196: a `request-body:content-type-mismatch:multipart` probe reported `query_value_mismatch` on `alt`/`prettyPrint`, "incorrect and confusing"). Root cause: the baseline probe filled every query/path param with the literal `test-value` and every string body property with `test-string`, both invalid against enum/boolean/type constraints, so every probe tripped the same incidental violations regardless of what it was testing. The baseline filler is now spec-VALID: enum -> first member, boolean -> `true`, integer/number -> a valid number, string formats (email/uuid/date/...) -> a plausible value, and enum body properties -> a valid member. Negative probes still override the specific param/body they attack. Real-binary verified against `mockforge serve`: on the Apigee-style spec the by-probe violation count dropped from 32 to 12, every `request-body:*` probe now shows `query_viols=0`, and the `content-type-mismatch` probes are clean. (This also makes the SQLi/OWASP probes truthful: they now show the violation for the param they actually injected, not unrelated filler noise.)
+- **[Contracts]** Multipart `wire` byte count now matches a proxy's observed body length exactly (#79 round 51 / Srikanth on 0.3.196: the r50 reconstructed envelope was 264 bytes short of his proxy's 1955). The k6-side reconstruction from `res.request.body` can drift from the real socket bytes, so `wire` now prefers the request's `Content-Length` header (the exact wire body size k6 puts on the socket, which is what a proxy counts), falling back to the reconstructed envelope only when the header is absent. Fixed in both render paths (`generator.rs` + `spec_driven.rs`).
+
+### Added
+
+- **[AI][DevX]** New reference page "Agent / LLM / MCP Traffic (Packet-Level)" (#79 / Srikanth on 0.3.196 asked for a document explaining Agent<->LLM, Agent<->Agent, and MCP-Agent<->MCP-Server interactions at the HTTP-packet level with PCAP guidance). Documents the wire structure (methods, headers, request/response bodies, SSE streaming, JSON-RPC envelopes) for OpenAI, Anthropic, and MCP using real captures taken against `mockforge serve --llm-mock --mcp-mock`, plus copy-paste `tcpdump`/`tshark`/`mitmproxy`/`SSLKEYLOGFILE` recipes for recording true `.pcap` files.
+
 ## [0.3.197] - 2026-07-01
 
 ### Added
