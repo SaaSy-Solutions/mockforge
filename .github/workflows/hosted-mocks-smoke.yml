@@ -60,7 +60,7 @@ jobs:
 
     steps:
       - name: Checkout (for issue-creation script)
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Pre-flight — required tooling and secrets
         id: preflight
