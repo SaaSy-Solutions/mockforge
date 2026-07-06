@@ -82,6 +82,7 @@ CRATES=(
   mockforge-plugin-sdk
   mockforge-contracts
   mockforge-openapi
+  mockforge-intelligence
   mockforge-core
   mockforge-amqp
   mockforge-federation
@@ -89,7 +90,6 @@ CRATES=(
   mockforge-graphql
   mockforge-grpc
   mockforge-import
-  mockforge-intelligence
   mockforge-kafka
   mockforge-mqtt
   mockforge-performance
