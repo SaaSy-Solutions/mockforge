@@ -762,35 +762,35 @@ pub async fn validate_emitted_requests_with_base_path(
 
         // Round 45 — request-body cross-check. Only kicks in when the
         // sent body parses as JSON and the operation declares a JSON
-        // requestBody schema. Shallow: missing required top-level
-        // fields + enum/type mismatches on direct properties. Deeper
-        // schema walks (nested objects, oneOf/anyOf) are the server-
-        // side validator's job; we just want to surface the obvious
-        // wire-level breaks the bench actually fired.
+        // requestBody schema.
+        //
+        // Round 52 (#79) — Srikanth on 0.3.198: a self-test +
+        // `--targets-file` run reported "2700 request-body caught" but
+        // the by-request / by-probe violation files came out EMPTY. The
+        // old shallow check here only fired when the requestBody media
+        // schema was an inline `ReferenceOr::Item`; the Apigee spec (and
+        // most real specs) declares
+        // `schema.$ref = #/components/schemas/GoogleCloudApigeeV1Organization`,
+        // so `schema_ref.as_item()` returned `None` and every body probe
+        // was silently skipped. It also only type-checked STRING values,
+        // so a `{"analyticsRegion":12345}` (number-where-string) probe
+        // never surfaced even when the schema resolved. We now resolve
+        // the requestBody + schema `$ref`s and reuse the same full JSON
+        // Schema validator `validate_custom_checks` uses (round 18.3's
+        // `build_validator`), so nested `$ref`s, root-type mismatches,
+        // and non-string type mismatches are all caught.
         let body_str = req.get("body").and_then(|v| v.as_str()).unwrap_or("");
         if !body_str.is_empty() {
             if let Ok(body_json) = serde_json::from_str::<serde_json::Value>(body_str) {
-                if let Some(req_body) = operation.request_body.as_ref().and_then(|r| r.as_item()) {
-                    for (ct, media) in &req_body.content {
-                        if !ct.contains("json") {
-                            continue;
-                        }
-                        let Some(schema_ref) = &media.schema else {
-                            continue;
-                        };
-                        let Some(schema) = schema_ref.as_item() else {
-                            continue;
-                        };
-                        check_body_against_schema(
-                            &check,
-                            &method,
-                            &url,
-                            &body_json,
-                            schema,
-                            &mut emitted_violations,
-                        );
-                    }
-                }
+                validate_emitted_body(
+                    &check,
+                    &method,
+                    &url,
+                    &body_json,
+                    operation,
+                    spec,
+                    &mut emitted_violations,
+                );
             }
         }
     }
@@ -1046,60 +1046,84 @@ fn group_violations_by_request(flat: &[serde_json::Value]) -> serde_json::Value 
     Value::Array(rows)
 }
 
-/// Round 45 (#79) — shallow body-vs-schema check for the retroactive
-/// emitted-request validator. Pushes a [`RequestViolation`] for each
-/// missing top-level `required` field and for each direct property
-/// that fails an `enum` / type check. Intentionally does NOT recurse
-/// into nested objects or follow `$ref` — the server-side validator is
-/// authoritative there; this client-side pass only mirrors the obvious
-/// wire-level breaks the bench actually fired.
-fn check_body_against_schema(
+/// Round 52 (#79) — validate an emitted request body against the
+/// operation's requestBody schema, resolving `$ref` at both the
+/// requestBody and schema level and delegating to the same full JSON
+/// Schema validator (`build_validator`) the custom-checks path uses.
+///
+/// This replaced a shallow, `$ref`-unaware check that only fired for
+/// inline schemas and only type-checked string values — which is why a
+/// self-test run against the Apigee spec (whose request bodies are all
+/// `$ref`s to component schemas) produced empty violation logs even
+/// though the summary reported thousands of caught request-body
+/// negatives. We cap at 5 errors per body so a deeply-broken probe
+/// can't flood the log; the by-probe file still gets one row per probe.
+fn validate_emitted_body(
     check: &str,
     method: &str,
     url: &str,
     body: &serde_json::Value,
-    schema: &openapiv3::Schema,
+    operation: &openapiv3::Operation,
+    spec: &OpenAPI,
     violations: &mut Vec<RequestViolation>,
 ) {
-    use openapiv3::{SchemaKind, Type};
-
-    let SchemaKind::Type(Type::Object(obj_type)) = &schema.schema_kind else {
+    // Resolve the requestBody (may itself be a $ref into components).
+    let Some(request_body_ref) = &operation.request_body else {
         return;
     };
-    let Some(body_obj) = body.as_object() else {
-        return;
-    };
-
-    for required in &obj_type.required {
-        if !body_obj.contains_key(required) {
-            violations.push(RequestViolation {
-                check_name: check.to_string(),
-                method: method.to_string(),
-                path: url.to_string(),
-                violation_type: "body_missing_required".to_string(),
-                message: format!("body.{}: required field missing", required),
-            });
-        }
-    }
-
-    for (prop_name, prop_ref) in &obj_type.properties {
-        let Some(value) = body_obj.get(prop_name) else {
-            continue;
-        };
-        let Some(prop_schema) = prop_ref.as_item() else {
-            continue;
-        };
-        if let Some(value_str) = value.as_str() {
-            if let Some(msg) = check_value_against_schema(value_str, prop_schema) {
-                violations.push(RequestViolation {
-                    check_name: check.to_string(),
-                    method: method.to_string(),
-                    path: url.to_string(),
-                    violation_type: "body_value_mismatch".to_string(),
-                    message: format!("body.{}: {}", prop_name, msg),
-                });
+    let request_body = match request_body_ref {
+        ReferenceOr::Item(rb) => rb,
+        ReferenceOr::Reference { reference } => {
+            let name = reference.strip_prefix("#/components/requestBodies/").unwrap_or(reference);
+            match spec.components.as_ref().and_then(|c| c.request_bodies.get(name)) {
+                Some(ReferenceOr::Item(rb)) => rb,
+                _ => return,
             }
         }
+    };
+
+    // Only cross-check JSON bodies — other media types (multipart,
+    // urlencoded) are handled elsewhere / by the server validator.
+    let json_media = request_body
+        .content
+        .get("application/json")
+        .or_else(|| request_body.content.iter().find(|(k, _)| k.contains("json")).map(|(_, v)| v));
+    let Some(media) = json_media else {
+        return;
+    };
+    let Some(schema_ref) = &media.schema else {
+        return;
+    };
+
+    // Resolve the immediate schema $ref (one level) to the root schema,
+    // then hand it to the resolver so nested $refs resolve against the
+    // full document (round 18.3's fix for vCenter's nested components).
+    let root_schema = match schema_ref {
+        ReferenceOr::Item(s) => s.clone(),
+        ReferenceOr::Reference { reference } => {
+            let name = reference.strip_prefix("#/components/schemas/").unwrap_or(reference);
+            match spec.components.as_ref().and_then(|c| c.schemas.get(name)) {
+                Some(ReferenceOr::Item(s)) => s.clone(),
+                _ => return,
+            }
+        }
+    };
+
+    let Ok(validator) = mockforge_openapi::schema_ref_resolver::build_validator(&root_schema, spec)
+    else {
+        // Schema itself is unbuildable — skip rather than false-positive.
+        return;
+    };
+    for err in validator.iter_errors(body).take(5) {
+        let loc = err.instance_path.to_string();
+        let loc = if loc.is_empty() { "$".to_string() } else { loc };
+        violations.push(RequestViolation {
+            check_name: check.to_string(),
+            method: method.to_string(),
+            path: url.to_string(),
+            violation_type: "body_schema_violation".to_string(),
+            message: format!("body{}: {}", loc, err),
+        });
     }
 }
 
@@ -1274,5 +1298,129 @@ mod grouping_tests {
         ];
         let out = group_violations_by_request(&flat);
         assert_eq!(out.as_array().unwrap().len(), 2);
+    }
+}
+
+#[cfg(test)]
+mod emitted_body_tests {
+    use super::validate_emitted_requests_with_base_path;
+    use std::io::Write;
+
+    /// Round 52 (#79) — Srikanth on 0.3.198: a `--conformance-self-test
+    /// --targets-file` run reported "2700 request-body caught" in the
+    /// summary but wrote EMPTY `conformance-request-violations-by-request.json`
+    /// and `-by-probe.json`. Root cause: the emitted-request validator's
+    /// body check (`check_body_against_schema`) only fired when the
+    /// requestBody media schema was an inline `ReferenceOr::Item`. The
+    /// Apigee spec (like most real specs) declares
+    /// `requestBody.content.application/json.schema.$ref =
+    /// #/components/schemas/GoogleCloudApigeeV1Organization`, so
+    /// `schema_ref.as_item()` returned `None` and every body probe was
+    /// skipped. It also only type-checked STRING property values, so a
+    /// `{"analyticsRegion":12345}` (number where string expected) probe
+    /// produced no violation even when the schema resolved.
+    ///
+    /// This reproduces the multi-target self-test shape: a JSONL of
+    /// captured probes, a spec whose requestBody is a `$ref`, and the
+    /// exact negative labels the self-test generator emits.
+    #[tokio::test]
+    async fn emitted_requests_validate_ref_bodied_negatives() {
+        let dir = tempfile::tempdir().expect("tempdir");
+
+        // Spec: /v1/organizations POST, requestBody is a $ref to a
+        // component schema (the real-world shape). No `required` fields
+        // so the positive `{}` probe stays clean (no false positive).
+        let spec_json = serde_json::json!({
+            "openapi": "3.0.0",
+            "info": { "title": "apigee-min", "version": "1.0.0" },
+            "paths": {
+                "/v1/organizations": {
+                    "post": {
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    "schema": { "$ref": "#/components/schemas/Organization" }
+                                }
+                            }
+                        },
+                        "responses": { "200": { "description": "ok" } }
+                    }
+                }
+            },
+            "components": {
+                "schemas": {
+                    "Organization": {
+                        "type": "object",
+                        "properties": {
+                            "analyticsRegion": { "type": "string" },
+                            "displayName": { "type": "string" }
+                        }
+                    }
+                }
+            }
+        });
+        let spec_path = dir.path().join("apigee-min.json");
+        std::fs::write(&spec_path, serde_json::to_vec_pretty(&spec_json).unwrap()).unwrap();
+
+        // JSONL of captured probes, mirroring the self-test capture shape
+        // (label / method / url / request_body). One positive, two
+        // negatives (a type-mismatch on a $ref'd property, and a
+        // wrong-root-type body).
+        let jsonl_path = dir.path().join("conformance-self-test-requests.jsonl");
+        let mut f = std::fs::File::create(&jsonl_path).unwrap();
+        let base = "https://172.22.232.2:443/v1/organizations?alt=json";
+        for line in [
+            serde_json::json!({
+                "label": "positive", "method": "POST", "url": base, "request_body": "{}"
+            }),
+            serde_json::json!({
+                "label": "request-body:type-mismatch:analyticsRegion",
+                "method": "POST", "url": base,
+                "request_body": "{\"analyticsRegion\":12345}"
+            }),
+            serde_json::json!({
+                "label": "request-body:wrong-type",
+                "method": "POST", "url": base, "request_body": "[]"
+            }),
+        ] {
+            writeln!(f, "{}", serde_json::to_string(&line).unwrap()).unwrap();
+        }
+        drop(f);
+
+        let n = validate_emitted_requests_with_base_path(
+            std::slice::from_ref(&spec_path),
+            dir.path(),
+            None,
+        )
+        .await
+        .expect("validation runs");
+
+        assert!(n >= 2, "expected the two request-body negatives to be flagged, got {n}");
+
+        // The grouped files the user actually reads must be non-empty.
+        let by_request = std::fs::read_to_string(
+            dir.path().join("conformance-request-violations-by-request.json"),
+        )
+        .unwrap();
+        let by_request: serde_json::Value = serde_json::from_str(&by_request).unwrap();
+        assert!(
+            !by_request.as_array().unwrap().is_empty(),
+            "by-request file must not be empty for a spec with $ref request bodies"
+        );
+
+        let by_probe = std::fs::read_to_string(
+            dir.path().join("conformance-request-violations-by-probe.json"),
+        )
+        .unwrap();
+        let by_probe: serde_json::Value = serde_json::from_str(&by_probe).unwrap();
+        assert!(!by_probe.as_array().unwrap().is_empty(), "by-probe file must not be empty");
+
+        // The type-mismatch probe must surface as a violation naming the field.
+        let flat = std::fs::read_to_string(dir.path().join("conformance-request-violations.json"))
+            .unwrap();
+        assert!(
+            flat.contains("analyticsRegion"),
+            "the number-where-string probe must be reported: {flat}"
+        );
     }
 }
