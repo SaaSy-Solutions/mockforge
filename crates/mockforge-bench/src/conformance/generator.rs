@@ -370,8 +370,28 @@ impl ConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20\x20\x20  // counts); prefer it, fall back to the reconstruction.\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const __clHdr = parseInt((reqHeaders['Content-Length'] || reqHeaders['content-length'] || ''), 10);\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const wireBytes = (!isNaN(__clHdr) && __clHdr > 0) ? __clHdr : (__allKnown ? (partsTotal + envelopeBytes) : ((typeof raw === 'string' && raw.length) ? raw.length : totalBytes));\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // Round 52 #79 — Srikanth on 0.3.198 still saw a fixed 264-byte gap\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // (proxy 57998271 vs our 57998007). Those 264 bytes are the top-level\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // HTTP request preface (request-line + Host + the script-visible\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // headers + the transport-managed Content-Length + the blank line):\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // his proxy meters the whole request, we reported only the multipart\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // entity body (Content-Length). Reconstruct the header block so\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  // `request` reconciles with a full-request byte counter.\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  let __hdrBytes = 0;\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  try {\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20    const __method = (res.request && res.request.method) ? res.request.method : 'POST';\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20    const __url = (res.request && res.request.url) ? res.request.url : '';\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20    let __rest = __url; const __sch = __rest.indexOf('://'); if (__sch !== -1) __rest = __rest.substring(__sch + 3);\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20    const __slash = __rest.indexOf('/'); const __host = __slash === -1 ? __rest : __rest.substring(0, __slash); const __pathq = __slash === -1 ? '/' : __rest.substring(__slash);\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20    __hdrBytes += (__method + ' ' + __pathq + ' HTTP/1.1').length + 2;\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20    if (__host) __hdrBytes += ('Host: ' + __host).length + 2;\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20    for (const __hn in reqHeaders) { let __hv = reqHeaders[__hn]; if (Array.isArray(__hv)) __hv = __hv.join(', '); __hdrBytes += (__hn + ': ' + String(__hv)).length + 2; }\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20    if (!('Content-Length' in reqHeaders) && !('content-length' in reqHeaders)) { __hdrBytes += ('Content-Length: ' + wireBytes).length + 2; }\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20    __hdrBytes += 2;\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  } catch (e) { __hdrBytes = 0; }\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  const requestBytes = wireBytes + __hdrBytes;\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  const summary = parts.map(function (p) { return '\\'' + p.name + '\\':\\'' + p.filename + '\\' (' + p.contentType + ', ' + p.bytes + ' bytes)'; }).join(', ');\n\
-                 \x20\x20\x20\x20\x20\x20\x20\x20  reqBody = '<multipart/form-data; boundary=' + boundary + '; ' + parts.length + ' part(s); total ' + totalBytes + ' bytes (wire ' + wireBytes + ' bytes w/ envelope): ' + summary + '>';\n\
+                 \x20\x20\x20\x20\x20\x20\x20\x20  reqBody = '<multipart/form-data; boundary=' + boundary + '; ' + parts.length + ' part(s); total ' + totalBytes + ' bytes (wire ' + wireBytes + ' bytes w/ envelope' + (__hdrBytes > 0 ? ('; request ' + requestBytes + ' bytes incl ' + __hdrBytes + '-byte header block') : '') + '): ' + summary + '>';\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20} catch (e) {\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20  reqBody = '<multipart upload; summary failed: ' + (e && e.message ? e.message : 'unknown') + '>';\n\
                  \x20\x20\x20\x20\x20\x20\x20\x20}\n\
