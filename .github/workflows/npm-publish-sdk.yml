@@ -44,7 +44,7 @@ jobs:
     env:
       DRY_RUN: ${{ github.event.inputs.dry_run }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v6
         with:
