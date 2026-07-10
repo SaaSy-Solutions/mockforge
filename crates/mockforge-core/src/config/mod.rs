@@ -359,7 +359,125 @@ pub async fn load_config<P: AsRef<Path>>(path: P) -> Result<ServerConfig> {
         })?
     };
 
+    let mut config = config;
+    resolve_config_relative_paths(path.as_ref(), &mut config);
+    // Whether the user literally wrote `http.validation` — the struct default
+    // is `Some(enforce)`, so we can't tell "explicitly set" from "defaulted"
+    // off the parsed struct alone (#927).
+    let validation_explicit = raw_http_key_present(&content, "validation");
+    reconcile_unknown_http_keys(&mut config, validation_explicit);
+
     Ok(config)
+}
+
+/// Best-effort check for whether `http.<key>` was literally present in the
+/// config source. Parses the raw text generically (YAML or JSON) so it works
+/// regardless of how the typed struct defaults the field.
+fn raw_http_key_present(content: &str, key: &str) -> bool {
+    if let Ok(doc) = serde_yaml::from_str::<serde_yaml::Value>(content) {
+        return doc.get("http").and_then(|h| h.get(key)).is_some();
+    }
+    if let Ok(doc) = serde_json::from_str::<serde_json::Value>(content) {
+        return doc.get("http").and_then(|h| h.get(key)).is_some();
+    }
+    false
+}
+
+/// Surface (and where possible honour) `http:` keys MockForge doesn't know.
+///
+/// Issue #927 — `http.request_validation: "off"` was silently ignored; the real
+/// key is `http.validation.mode`. Serde dropped it without a word, so the user
+/// had no signal their config was inert. We now capture leftovers in
+/// `HttpConfig::unknown_keys` and:
+///
+///   * honour `request_validation` as an alias for `validation.mode` (only when
+///     `validation` wasn't given explicitly, which always wins), and
+///   * warn about every other unrecognised key so typos are visible.
+fn reconcile_unknown_http_keys(config: &mut ServerConfig, validation_explicit: bool) {
+    if config.http.unknown_keys.is_empty() {
+        return;
+    }
+
+    // Legacy alias: `request_validation: off|warn|enforce`.
+    if let Some(value) = config.http.unknown_keys.remove("request_validation") {
+        let mode = match &value {
+            serde_json::Value::String(s) => Some(s.clone()),
+            serde_json::Value::Bool(false) => Some("off".to_string()),
+            serde_json::Value::Bool(true) => Some("enforce".to_string()),
+            _ => None,
+        };
+        match mode {
+            Some(mode) if !validation_explicit => {
+                tracing::warn!(
+                    "`http.request_validation` is deprecated; use `http.validation.mode: {}`. \
+                     Honouring it for now.",
+                    mode
+                );
+                config.http.validation = Some(HttpValidationConfig { mode });
+            }
+            Some(_) => {
+                tracing::warn!(
+                    "`http.request_validation` is deprecated and was ignored because \
+                     `http.validation.mode` is also set (that one wins)."
+                );
+            }
+            None => {
+                tracing::warn!(
+                    "`http.request_validation` must be a string (off|warn|enforce); ignoring."
+                );
+            }
+        }
+    }
+
+    for key in config.http.unknown_keys.keys() {
+        tracing::warn!(
+            "Unknown `http` config key `{}` was ignored. Run `mockforge schema` to see valid keys.",
+            key
+        );
+    }
+}
+
+/// Resolve file paths declared in the config that were given as relative paths.
+///
+/// Issue #928 — `openapi_spec: "abb-rws-openapi.yaml"` was resolved against the
+/// process working directory (`/app` in the Docker image), not against the
+/// directory holding the config file (`/config`), so a config + spec mounted
+/// side by side could not reference each other relatively.
+///
+/// Backwards compatible on purpose: a path that already resolves from the CWD
+/// keeps winning, so existing setups are untouched. Only when the CWD-relative
+/// path does NOT exist do we fall back to the config file's directory. If
+/// neither exists the value is left alone so the loader's error names the path
+/// the user actually wrote.
+fn resolve_config_relative_paths(config_path: &Path, config: &mut ServerConfig) {
+    let Some(config_dir) = config_path.parent() else {
+        return;
+    };
+    if config_dir.as_os_str().is_empty() {
+        return;
+    }
+    resolve_relative_to(config_dir, &mut config.http.openapi_spec);
+}
+
+/// Rewrite `value` to `config_dir/value` when it is a relative path that does
+/// not resolve from the CWD but does resolve from the config file's directory.
+fn resolve_relative_to(config_dir: &Path, value: &mut Option<String>) {
+    let Some(raw) = value.as_deref() else {
+        return;
+    };
+    let candidate = Path::new(raw);
+    if candidate.is_absolute() || candidate.exists() {
+        return;
+    }
+    let relocated = config_dir.join(candidate);
+    if relocated.exists() {
+        tracing::debug!(
+            "Resolved relative config path {:?} against config directory {:?}",
+            raw,
+            config_dir
+        );
+        *value = Some(relocated.to_string_lossy().into_owned());
+    }
 }
 
 /// Save configuration to file
@@ -1095,5 +1213,104 @@ const config: Config = {
         assert!(!stripped.contains("interface"));
         assert!(!stripped.contains(": Config"));
         assert!(!stripped.contains("as Config"));
+    }
+
+    /// Issue #928 — a relative `openapi_spec` must resolve against the config
+    /// file's directory when it does not resolve from the process CWD. This is
+    /// the Docker case: config + spec both mounted at `/config`, CWD `/app`.
+    #[tokio::test]
+    async fn openapi_spec_relative_path_resolves_against_config_dir() {
+        let dir = tempfile::tempdir().unwrap();
+        let spec_path = dir.path().join("api.yaml");
+        std::fs::write(&spec_path, "openapi: 3.0.0\n").unwrap();
+
+        let config_path = dir.path().join("mockforge.yaml");
+        std::fs::write(&config_path, "http:\n  openapi_spec: api.yaml\n").unwrap();
+
+        let config = load_config(&config_path).await.expect("config loads");
+        let resolved = config.http.openapi_spec.expect("spec path present");
+        assert_eq!(
+            std::path::Path::new(&resolved).canonicalize().unwrap(),
+            spec_path.canonicalize().unwrap(),
+            "relative spec must resolve next to the config file, got {resolved}"
+        );
+    }
+
+    /// An absolute `openapi_spec` is never rewritten.
+    #[tokio::test]
+    async fn openapi_spec_absolute_path_is_untouched() {
+        let dir = tempfile::tempdir().unwrap();
+        let spec_path = dir.path().join("api.yaml");
+        std::fs::write(&spec_path, "openapi: 3.0.0\n").unwrap();
+
+        let config_path = dir.path().join("mockforge.yaml");
+        std::fs::write(&config_path, format!("http:\n  openapi_spec: {}\n", spec_path.display()))
+            .unwrap();
+
+        let config = load_config(&config_path).await.expect("config loads");
+        assert_eq!(config.http.openapi_spec.as_deref(), Some(spec_path.to_str().unwrap()));
+    }
+
+    /// Issue #927 — `http.request_validation` used to be dropped silently.
+    /// It is now honoured as an alias for `http.validation.mode`.
+    #[tokio::test]
+    async fn request_validation_alias_is_honoured() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("mockforge.yaml");
+        std::fs::write(&config_path, "http:\n  request_validation: \"off\"\n").unwrap();
+
+        let config = load_config(&config_path).await.expect("config loads");
+        assert_eq!(
+            config.http.validation.as_ref().map(|v| v.mode.as_str()),
+            Some("off"),
+            "request_validation must map onto validation.mode"
+        );
+        // Consumed, so it is not also reported as an unknown key.
+        assert!(!config.http.unknown_keys.contains_key("request_validation"));
+    }
+
+    /// An explicit `validation.mode` always beats the legacy alias.
+    #[tokio::test]
+    async fn explicit_validation_mode_beats_alias() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("mockforge.yaml");
+        std::fs::write(
+            &config_path,
+            "http:\n  request_validation: \"off\"\n  validation:\n    mode: \"enforce\"\n",
+        )
+        .unwrap();
+
+        let config = load_config(&config_path).await.expect("config loads");
+        assert_eq!(config.http.validation.as_ref().map(|v| v.mode.as_str()), Some("enforce"));
+    }
+
+    /// Issue #927 — a genuinely unknown key is captured so we can warn, rather
+    /// than being silently discarded by serde.
+    #[tokio::test]
+    async fn unknown_http_key_is_captured_for_warning() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("mockforge.yaml");
+        std::fs::write(&config_path, "http:\n  porrt: 8080\n").unwrap();
+
+        let config = load_config(&config_path).await.expect("config loads");
+        assert!(
+            config.http.unknown_keys.contains_key("porrt"),
+            "typo'd key must be captured so load_config can warn"
+        );
+        // And the real port keeps its default.
+        assert_eq!(config.http.port, 3000);
+    }
+
+    /// A path that resolves from the CWD keeps winning (backwards compatible).
+    #[tokio::test]
+    async fn openapi_spec_missing_path_is_left_alone_for_a_clear_error() {
+        let dir = tempfile::tempdir().unwrap();
+        let config_path = dir.path().join("mockforge.yaml");
+        std::fs::write(&config_path, "http:\n  openapi_spec: nowhere.yaml\n").unwrap();
+
+        let config = load_config(&config_path).await.expect("config loads");
+        // Neither CWD nor config-dir resolve it; leave the user's literal value
+        // so the loader's error message names what they actually wrote.
+        assert_eq!(config.http.openapi_spec.as_deref(), Some("nowhere.yaml"));
     }
 }

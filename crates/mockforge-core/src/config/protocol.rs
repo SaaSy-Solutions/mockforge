@@ -75,6 +75,17 @@ pub struct HttpConfig {
     /// TLS/HTTPS configuration
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tls: Option<HttpTlsConfig>,
+
+    /// Keys under `http:` that MockForge does not recognise.
+    ///
+    /// Issue #927 — `http.request_validation: "off"` was dropped on the floor
+    /// with no warning (the real key is `http.validation.mode`), so users had
+    /// no signal their config was inert. Capturing the leftovers lets
+    /// `load_config` warn about each one, and lets us honour known legacy
+    /// spellings as aliases.
+    #[serde(flatten, default, skip_serializing_if = "HashMap::is_empty")]
+    #[cfg_attr(feature = "schema", schemars(skip))]
+    pub unknown_keys: HashMap<String, serde_json::Value>,
 }
 
 impl Default for HttpConfig {
@@ -110,6 +121,7 @@ impl Default for HttpConfig {
             skip_admin_validation: true,
             auth: None,
             tls: None,
+            unknown_keys: HashMap::new(),
         }
     }
 }

@@ -760,7 +760,10 @@ impl OpenApiRouteRegistry {
                             });
                     }
 
-                    if let Err(e) = validator.validate_request_with_all(
+                    // Issue #925 — pass real wire presence, not "did it parse as
+                    // JSON". A non-empty octet-stream / XML / urlencoded body
+                    // is present even though `body_json` is `None`.
+                    if let Err(e) = validator.validate_request_with_all_ex(
                         &path_template,
                         &method,
                         &path_map,
@@ -768,6 +771,7 @@ impl OpenApiRouteRegistry {
                         &header_map,
                         &cookie_map,
                         body_json.as_ref(),
+                        !body.is_empty(),
                     ) {
                         // Choose status: prefer options.validation_status, fallback to env, else 400
                         let status_code =
@@ -1203,7 +1207,8 @@ impl OpenApiRouteRegistry {
         cookie_map: &Map<String, Value>,
         body: Option<&Value>,
     ) -> std::result::Result<(), (u16, Value)> {
-        let e = match self.validate_request_with_all(
+        let body_present = body.is_some();
+        self.run_validation_with_recording_ex(
             path_template,
             method,
             path_params,
@@ -1211,6 +1216,34 @@ impl OpenApiRouteRegistry {
             header_map,
             cookie_map,
             body,
+            body_present,
+        )
+    }
+
+    /// Same as [`Self::run_validation_with_recording`], but with an explicit
+    /// body-presence flag so a non-JSON body isn't mistaken for a missing one
+    /// (issue #925).
+    #[allow(clippy::too_many_arguments)]
+    pub fn run_validation_with_recording_ex(
+        &self,
+        path_template: &str,
+        method: &str,
+        path_params: &Map<String, Value>,
+        query_params: &Map<String, Value>,
+        header_map: &Map<String, Value>,
+        cookie_map: &Map<String, Value>,
+        body: Option<&Value>,
+        body_present: bool,
+    ) -> std::result::Result<(), (u16, Value)> {
+        let e = match self.validate_request_with_all_ex(
+            path_template,
+            method,
+            path_params,
+            query_params,
+            header_map,
+            cookie_map,
+            body,
+            body_present,
         ) {
             Ok(()) => {
                 // Round 17.1 — track conformant requests alongside
@@ -1324,7 +1357,12 @@ impl OpenApiRouteRegistry {
         Err((status_code, payload))
     }
 
-    /// Validate request against OpenAPI spec with path/query/header/cookie params
+    /// Validate request against OpenAPI spec with path/query/header/cookie params.
+    ///
+    /// `body` is the request body parsed as JSON, or `None` when it was absent
+    /// OR could not be parsed as JSON. Because those two cases are
+    /// indistinguishable here, prefer [`Self::validate_request_with_all_ex`],
+    /// which takes an explicit body-presence flag (see issue #925).
     #[allow(clippy::too_many_arguments)]
     pub fn validate_request_with_all(
         &self,
@@ -1335,6 +1373,42 @@ impl OpenApiRouteRegistry {
         header_params: &Map<String, Value>,
         cookie_params: &Map<String, Value>,
         body: Option<&Value>,
+    ) -> Result<()> {
+        let body_present = body.is_some();
+        self.validate_request_with_all_ex(
+            path,
+            method,
+            path_params,
+            query_params,
+            header_params,
+            cookie_params,
+            body,
+            body_present,
+        )
+    }
+
+    /// Same as [`Self::validate_request_with_all`], but the caller states
+    /// explicitly whether a request body was present on the wire.
+    ///
+    /// Issue #925 — the handlers used to derive body presence from
+    /// `serde_json::from_slice(&bytes).ok()`, so ANY non-JSON body
+    /// (`application/octet-stream` file uploads, `application/xml`,
+    /// `application/x-www-form-urlencoded`, raw text) collapsed to `None` and
+    /// the validator reported `body: Request body is required but not
+    /// provided`. Every PUT carrying a file body 400'd while JSON POSTs passed,
+    /// which is why the bug looked method-specific. `body_present` lets us tell
+    /// "absent" apart from "present but not JSON".
+    #[allow(clippy::too_many_arguments)]
+    pub fn validate_request_with_all_ex(
+        &self,
+        path: &str,
+        method: &str,
+        path_params: &Map<String, Value>,
+        query_params: &Map<String, Value>,
+        header_params: &Map<String, Value>,
+        cookie_params: &Map<String, Value>,
+        body: Option<&Value>,
+        body_present: bool,
     ) -> Result<()> {
         // Skip validation for any configured admin prefixes
         for pref in &self.options.admin_skip_prefixes {
@@ -1389,25 +1463,26 @@ impl OpenApiRouteRegistry {
             let mut details: Vec<Value> = Vec::new();
             // Validate request body if required
             if let Some(schema) = &route.operation.request_body {
-                if let Some(value) = body {
-                    // First resolve the request body reference if it's a reference
-                    let request_body = match schema {
-                        openapiv3::ReferenceOr::Item(rb) => Some(rb),
-                        openapiv3::ReferenceOr::Reference { reference } => {
-                            // Try to resolve request body reference through spec
-                            self.spec
-                                .spec
-                                .components
-                                .as_ref()
-                                .and_then(|components| {
-                                    components.request_bodies.get(
-                                        reference.trim_start_matches("#/components/requestBodies/"),
-                                    )
-                                })
-                                .and_then(|rb_ref| rb_ref.as_item())
-                        }
-                    };
+                // Resolve the request body reference up front so we can read
+                // `required` regardless of whether a body was sent (#925).
+                let request_body = match schema {
+                    openapiv3::ReferenceOr::Item(rb) => Some(rb),
+                    openapiv3::ReferenceOr::Reference { reference } => {
+                        // Try to resolve request body reference through spec
+                        self.spec
+                            .spec
+                            .components
+                            .as_ref()
+                            .and_then(|components| {
+                                components.request_bodies.get(
+                                    reference.trim_start_matches("#/components/requestBodies/"),
+                                )
+                            })
+                            .and_then(|rb_ref| rb_ref.as_item())
+                    }
+                };
 
+                if let Some(value) = body {
                     if let Some(rb) = request_body {
                         if let Some(content) = rb.content.get("application/json") {
                             if let Some(schema_ref) = &content.schema {
@@ -1470,11 +1545,25 @@ impl OpenApiRouteRegistry {
                             details.push(serde_json::json!({"path":"body","code":"reference_error","message":"Could not resolve request body reference"}));
                         }
                     }
-                } else {
+                } else if body_present {
+                    // Issue #925 — a body WAS sent, it just isn't JSON
+                    // (octet-stream upload, XML, urlencoded, raw text). There
+                    // is no JSON Schema to check it against, and the
+                    // content-type gate above already enforced the media types
+                    // the spec declares. Treating this as "missing" is what
+                    // made every PUT file upload 400.
+                    tracing::debug!(
+                        "Non-JSON request body present; skipping JSON schema validation"
+                    );
+                } else if request_body.map(|rb| rb.required).unwrap_or(false) {
+                    // Issue #925 — only complain when the spec actually marks
+                    // the body `required: true`. Previously the mere presence
+                    // of a `requestBody` block triggered this, so an operation
+                    // declaring `required: false` still 400'd on an empty body.
                     errors.push("body: Request body is required but not provided".to_string());
                     details.push(serde_json::json!({"path":"body","code":"required","message":"Request body is required"}));
                 }
-            } else if body.is_some() {
+            } else if body_present {
                 // No body expected but provided — not an error by default, but log it
                 tracing::debug!("Body provided for operation without requestBody; accepting");
             }
@@ -1712,12 +1801,26 @@ impl OpenApiRouteRegistry {
                 HashMap<String, String>,
             >,
                                 headers: HeaderMap,
-                                body: Option<Json<Value>>| {
+                                body_bytes: axum::body::Bytes| {
                 let route = route_clone.clone();
                 let ai_generator = ai_generator_clone.clone();
                 let validator = validator_clone.clone();
 
                 async move {
+                    // Issue #925 — this handler used to take
+                    // `body: Option<Json<Value>>`, which axum resolves to
+                    // `None` for any request whose Content-Type isn't
+                    // `application/json`. A PUT carrying an octet-stream /
+                    // XML / urlencoded body therefore looked bodyless and the
+                    // validator rejected it as "required but not provided".
+                    // Take the raw bytes and track presence separately, the
+                    // same way the MockAI handler does.
+                    let body_present = !body_bytes.is_empty();
+                    let body: Option<Json<Value>> = if body_bytes.is_empty() {
+                        None
+                    } else {
+                        serde_json::from_slice::<Value>(&body_bytes).ok().map(Json)
+                    };
                     // (a-pre) Run request validation against the spec
                     // before AI response synthesis. On failure this
                     // also records to the foundation conformance ring
@@ -1737,7 +1840,7 @@ impl OpenApiRouteRegistry {
                         }
                     }
                     let body_val: Option<&Value> = body.as_ref().map(|Json(b)| b);
-                    if let Err((status_code, payload)) = validator.run_validation_with_recording(
+                    if let Err((status_code, payload)) = validator.run_validation_with_recording_ex(
                         &route.path,
                         &route.method,
                         &path_map,
@@ -1745,6 +1848,7 @@ impl OpenApiRouteRegistry {
                         &header_map,
                         &Map::new(),
                         body_val,
+                        body_present,
                     ) {
                         let status = axum::http::StatusCode::from_u16(status_code)
                             .unwrap_or(axum::http::StatusCode::BAD_REQUEST);
@@ -2006,7 +2110,8 @@ impl OpenApiRouteRegistry {
                     // also records to the foundation conformance ring
                     // buffer surfaced by the TUI Conformance tab.
                     let body_val: Option<&Value> = body.as_ref().map(|Json(b)| b);
-                    if let Err((status_code, payload)) = validator.run_validation_with_recording(
+                    // Issue #925 — real wire presence, not JSON-parseability.
+                    if let Err((status_code, payload)) = validator.run_validation_with_recording_ex(
                         &route.path,
                         &route.method,
                         &path_map,
@@ -2014,6 +2119,7 @@ impl OpenApiRouteRegistry {
                         &header_map,
                         &Map::new(),
                         body_val,
+                        !body_bytes.is_empty(),
                     ) {
                         let status = axum::http::StatusCode::from_u16(status_code)
                             .unwrap_or(axum::http::StatusCode::BAD_REQUEST);
@@ -4867,5 +4973,156 @@ mod tests {
         );
         // Should not error on style handling
         assert!(result.is_ok() || result.is_err()); // Either is fine, just testing the path
+    }
+
+    /// Build a spec with a PUT whose requestBody is a non-JSON media type.
+    fn octet_stream_put_spec(required: bool) -> Value {
+        json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Files API", "version": "1.0.0" },
+            "paths": {
+                "/files/{name}": {
+                    "put": {
+                        "parameters": [
+                            {"name": "name", "in": "path", "required": true,
+                             "schema": {"type": "string"}}
+                        ],
+                        "requestBody": {
+                            "required": required,
+                            "content": {
+                                "application/octet-stream": {
+                                    "schema": {"type": "string", "format": "binary"}
+                                }
+                            }
+                        },
+                        "responses": {"200": {"description": "ok"}}
+                    }
+                }
+            }
+        })
+    }
+
+    /// Issue #925 — a PUT carrying a non-JSON body (octet-stream file upload)
+    /// must NOT be rejected as "Request body is required but not provided".
+    /// The body never parses as JSON, so `body` is `None`; only `body_present`
+    /// can tell "absent" from "present but not JSON".
+    #[tokio::test]
+    async fn non_json_request_body_is_not_reported_missing() {
+        let registry = create_registry_from_json(octet_stream_put_spec(true)).unwrap();
+        let mut path_params = Map::new();
+        path_params.insert("name".to_string(), json!("test.mod"));
+
+        // body_present = true, parsed JSON = None  →  the real PUT upload case.
+        let res = registry.validate_request_with_all_ex(
+            "/files/{name}",
+            "PUT",
+            &path_params,
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            None,
+            true,
+        );
+        assert!(res.is_ok(), "non-JSON PUT body must pass, got {res:?}");
+    }
+
+    /// A genuinely absent body against `required: true` still errors.
+    #[tokio::test]
+    async fn absent_body_against_required_still_errors() {
+        let registry = create_registry_from_json(octet_stream_put_spec(true)).unwrap();
+        let mut path_params = Map::new();
+        path_params.insert("name".to_string(), json!("test.mod"));
+
+        let res = registry.validate_request_with_all_ex(
+            "/files/{name}",
+            "PUT",
+            &path_params,
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            None,
+            false,
+        );
+        let err = res.expect_err("absent required body must error");
+        assert!(err.to_string().contains("Request body is required"), "unexpected error: {err}");
+    }
+
+    /// Issue #925 — `requestBody.required: false` with no body must not error.
+    /// Previously the mere presence of a `requestBody` block triggered the
+    /// "required but not provided" message regardless of the `required` flag.
+    #[tokio::test]
+    async fn absent_body_against_optional_request_body_is_ok() {
+        let registry = create_registry_from_json(octet_stream_put_spec(false)).unwrap();
+        let mut path_params = Map::new();
+        path_params.insert("name".to_string(), json!("test.mod"));
+
+        let res = registry.validate_request_with_all_ex(
+            "/files/{name}",
+            "PUT",
+            &path_params,
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            None,
+            false,
+        );
+        assert!(res.is_ok(), "optional body may be omitted, got {res:?}");
+    }
+
+    /// A JSON body still schema-validates as before (no regression).
+    #[tokio::test]
+    async fn json_request_body_still_schema_validates() {
+        let spec = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Users API", "version": "1.0.0" },
+            "paths": {
+                "/users": {
+                    "post": {
+                        "requestBody": {
+                            "required": true,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {"age": {"type": "integer"}},
+                                        "required": ["age"]
+                                    }
+                                }
+                            }
+                        },
+                        "responses": {"200": {"description": "ok"}}
+                    }
+                }
+            }
+        });
+        let registry = create_registry_from_json(spec).unwrap();
+
+        let good = json!({"age": 30});
+        assert!(registry
+            .validate_request_with_all_ex(
+                "/users",
+                "POST",
+                &Map::new(),
+                &Map::new(),
+                &Map::new(),
+                &Map::new(),
+                Some(&good),
+                true
+            )
+            .is_ok());
+
+        let bad = json!({"age": "thirty"});
+        assert!(registry
+            .validate_request_with_all_ex(
+                "/users",
+                "POST",
+                &Map::new(),
+                &Map::new(),
+                &Map::new(),
+                &Map::new(),
+                Some(&bad),
+                true
+            )
+            .is_err());
     }
 }

@@ -427,6 +427,40 @@ fn resolve_parameter<'a>(
     }
 }
 
+/// Round 53 (#79) — percent-decode a query key/value or a path segment.
+///
+/// The spec declares parameters by their decoded name (`$.xgafv`), but the
+/// wire carries them encoded (`%24.xgafv`). Matching the raw wire key against
+/// the spec name silently skipped every parameter whose name needs escaping,
+/// which is why all of Srikanth's `owasp:*` probes (they all inject into
+/// `$.xgafv`) produced zero violations. Decoding the value as well keeps the
+/// reported message readable.
+///
+/// Falls back to the input unchanged when it isn't valid percent-encoded
+/// UTF-8, so a malformed probe can never panic or drop the parameter.
+fn pct_decode(s: &str) -> String {
+    urlencoding::decode(s).map(|c| c.into_owned()).unwrap_or_else(|_| s.to_string())
+}
+
+/// Round 53 (#79) — resolve a parameter's schema, following a single
+/// `#/components/schemas/...` reference. Mirrors the request-body resolution
+/// added in r52; without it a `$ref`'d parameter schema is silently skipped.
+fn resolve_param_schema<'a>(
+    schema_ref: &'a ReferenceOr<openapiv3::Schema>,
+    spec: &'a OpenAPI,
+) -> Option<&'a openapiv3::Schema> {
+    match schema_ref {
+        ReferenceOr::Item(s) => Some(s),
+        ReferenceOr::Reference { reference } => {
+            let name = reference.strip_prefix("#/components/schemas/")?;
+            match spec.components.as_ref()?.schemas.get(name)? {
+                ReferenceOr::Item(s) => Some(s),
+                _ => None,
+            }
+        }
+    }
+}
+
 /// Resolve a schema reference to a serde_json::Value for validation.
 /// Reserved for round 21.3 (response-body shape validation against the
 /// spec's response schema). Not yet wired into a call site.
@@ -675,12 +709,20 @@ pub async fn validate_emitted_requests_with_base_path(
         // sent query field, check it against the parameter's schema enum
         // and type. This is what catches Srikanth's `?$.xgafv=test-value`
         // case where the value isn't `"1"` or `"2"`.
+        //
+        // Round 53 (#79) — percent-decode BOTH the key and the value. The
+        // spec declares the parameter as `$.xgafv`, but it reaches the wire
+        // as `%24.xgafv`, so matching the raw key against the spec name
+        // missed every time and silently skipped the parameter. That hid all
+        // 7602 of Srikanth's `owasp:*` probes, which all inject into
+        // `$.xgafv`. Decoding the value too keeps the violation message
+        // readable (`' OR '1'='1` rather than `%27%20OR%20%271%27%3D%271`).
         let sent_query: HashMap<String, String> = query_string
             .split('&')
             .filter_map(|kv| {
                 let mut it = kv.splitn(2, '=');
-                let k = it.next()?.to_string();
-                let v = it.next().unwrap_or("").to_string();
+                let k = pct_decode(it.next()?);
+                let v = pct_decode(it.next().unwrap_or(""));
                 if k.is_empty() {
                     None
                 } else {
@@ -702,7 +744,8 @@ pub async fn validate_emitted_requests_with_base_path(
                 for (c, t) in concrete_parts.iter().zip(template_parts.iter()) {
                     if t.starts_with('{') && t.ends_with('}') {
                         let name = &t[1..t.len() - 1];
-                        out.insert(name.to_string(), (*c).to_string());
+                        // Round 53 — path segments arrive percent-encoded too.
+                        out.insert(name.to_string(), pct_decode(c));
                     }
                 }
             }
@@ -729,6 +772,23 @@ pub async fn validate_emitted_requests_with_base_path(
                         continue;
                     };
                     let Some(v) = sent_query.get(&parameter_data.name) else {
+                        // Round 53 (#79) — a REQUIRED query param that never
+                        // reached the wire is itself a spec violation. The
+                        // loop previously only inspected params that were
+                        // sent, so `parameters:missing-query` probes (which
+                        // drop a required param on purpose) produced nothing.
+                        if parameter_data.required {
+                            emitted_violations.push(RequestViolation {
+                                check_name: check.clone(),
+                                method: method.clone(),
+                                path: url.clone(),
+                                violation_type: "query_missing_required".to_string(),
+                                message: format!(
+                                    "query.{}: required parameter missing",
+                                    parameter_data.name
+                                ),
+                            });
+                        }
                         continue;
                     };
                     ("query", &parameter_data.name, (sref, v.clone()))
@@ -746,7 +806,10 @@ pub async fn validate_emitted_requests_with_base_path(
                 _ => continue,
             };
             let (schema_ref, value) = schema_ref;
-            let Some(schema) = schema_ref.as_item() else {
+            // Round 53 — resolve `$ref` parameter schemas too; the same
+            // `as_item()` blind spot that hid `$ref` request bodies in r52
+            // applies to parameters whose schema is a component reference.
+            let Some(schema) = resolve_param_schema(schema_ref, spec) else {
                 continue;
             };
             if let Some(msg) = check_value_against_schema(&value, schema) {
@@ -1421,6 +1484,119 @@ mod emitted_body_tests {
         assert!(
             flat.contains("analyticsRegion"),
             "the number-where-string probe must be reported: {flat}"
+        );
+    }
+
+    /// Round 53 (#79) — Srikanth on 0.3.199: body violations now populate,
+    /// but the logs contain ONLY `request-body:*` rows. His console reported
+    /// 7602 missed `owasp` and 3248 missed `parameters` negatives, yet not a
+    /// single `owasp:*` row or query/path violation appeared.
+    ///
+    /// Two distinct causes, both reproduced here against the real wire shape:
+    ///
+    /// 1. Every owasp probe injects into `$.xgafv`, which reaches the wire
+    ///    percent-encoded as `%24.xgafv`. The validator built `sent_query`
+    ///    from the RAW query string, then looked the parameter up by the
+    ///    spec's DECODED name (`$.xgafv`), so the lookup missed and all 7602
+    ///    probes were silently skipped. (Round 45's test used a plain `alt`
+    ///    param, which needs no encoding, so this stayed latent.)
+    ///
+    /// 2. `parameters:missing-query` DROPS a required query param. The loop
+    ///    only inspected params that were actually sent, so a missing
+    ///    required param could never be reported.
+    #[tokio::test]
+    async fn emitted_requests_flag_encoded_query_and_missing_required() {
+        let dir = tempfile::tempdir().expect("tempdir");
+
+        // Spec mirrors the Apigee shape: a param whose name needs percent
+        // encoding (`$.xgafv`, enum 1/2), a plain enum param, and a REQUIRED
+        // param that the missing-query probe drops.
+        let spec_json = serde_json::json!({
+            "openapi": "3.0.0",
+            "info": { "title": "apigee-min", "version": "1.0.0" },
+            "paths": {
+                "/v1/organizations": {
+                    "post": {
+                        "parameters": [
+                            { "name": "$.xgafv", "in": "query",
+                              "schema": { "type": "string", "enum": ["1", "2"] } },
+                            { "name": "alt", "in": "query",
+                              "schema": { "type": "string", "enum": ["json", "media"] } },
+                            { "name": "parent", "in": "query", "required": true,
+                              "schema": { "type": "string" } }
+                        ],
+                        "responses": { "200": { "description": "ok" } }
+                    }
+                }
+            }
+        });
+        let spec_path = dir.path().join("apigee-min.json");
+        std::fs::write(&spec_path, serde_json::to_vec_pretty(&spec_json).unwrap()).unwrap();
+
+        let jsonl_path = dir.path().join("conformance-self-test-requests.jsonl");
+        let mut f = std::fs::File::create(&jsonl_path).unwrap();
+        let base = "https://172.22.232.2:443/v1/organizations";
+        for line in [
+            // Valid baseline: nothing should be reported.
+            serde_json::json!({
+                "label": "positive", "method": "POST",
+                "url": format!("{base}?%24.xgafv=1&alt=json&parent=test-value"),
+                "request_body": ""
+            }),
+            // owasp:sqli injects `' OR '1'='1` into the ENCODED `%24.xgafv`.
+            serde_json::json!({
+                "label": "owasp:sqli", "method": "POST",
+                "url": format!("{base}?%24.xgafv=%27%20OR%20%271%27%3D%271&alt=json&parent=test-value"),
+                "request_body": ""
+            }),
+            // parameters:missing-query drops the required `parent`.
+            serde_json::json!({
+                "label": "parameters:missing-query", "method": "POST",
+                "url": format!("{base}?%24.xgafv=1&alt=json"),
+                "request_body": ""
+            }),
+        ] {
+            writeln!(f, "{}", serde_json::to_string(&line).unwrap()).unwrap();
+        }
+        drop(f);
+
+        let n = validate_emitted_requests_with_base_path(
+            std::slice::from_ref(&spec_path),
+            dir.path(),
+            None,
+        )
+        .await
+        .expect("validation runs");
+        assert!(n >= 2, "expected owasp + missing-required to be flagged, got {n}");
+
+        let flat = std::fs::read_to_string(dir.path().join("conformance-request-violations.json"))
+            .unwrap();
+        let flat: serde_json::Value = serde_json::from_str(&flat).unwrap();
+        let rows = flat.as_array().unwrap();
+
+        // The owasp probe must surface as a query violation on the DECODED
+        // param name, with the DECODED value in the message (not `%27%20OR...`).
+        let owasp = rows
+            .iter()
+            .find(|r| r["check_name"] == "owasp:sqli")
+            .expect("owasp:sqli must produce a violation");
+        assert_eq!(owasp["violation_type"], "query_value_mismatch");
+        let msg = owasp["message"].as_str().unwrap();
+        assert!(msg.contains("$.xgafv"), "decoded param name expected: {msg}");
+        assert!(msg.contains("' OR '1'='1"), "decoded value expected: {msg}");
+
+        // The missing required param must be reported.
+        let missing = rows
+            .iter()
+            .find(|r| r["check_name"] == "parameters:missing-query")
+            .expect("missing-query must produce a violation");
+        assert_eq!(missing["violation_type"], "query_missing_required");
+        assert!(missing["message"].as_str().unwrap().contains("parent"));
+
+        // The positive probe must stay clean (no false positives).
+        assert!(
+            !rows.iter().any(|r| r["check_name"] == "positive"),
+            "positive probe must not be flagged: {rows:?}"
         );
     }
 }

@@ -79,14 +79,29 @@ RUN apt-get update && apt-get install -y \
     libssl3 \
     && rm -rf /var/lib/apt/lists/*
 
-# Create a non-root user
-RUN groupadd -r mockforge && useradd -r -g mockforge mockforge
+# Create a non-root user WITH a real home directory.
+#
+# Issue #931 — `useradd -r` records `/home/mockforge` in /etc/passwd but does
+# not create it, and `/home` is root-owned. `ScenarioStorage::new()` resolves
+# `~/.mockforge/scenarios`, so the non-root process could not create its own
+# home and every start logged "Failed to create scenarios directory:
+# Permission denied". Create + own the home (and the scenarios dirs) up front.
+RUN groupadd -r mockforge \
+    && useradd -r -g mockforge -m -d /home/mockforge mockforge \
+    && mkdir -p /home/mockforge/.mockforge/scenarios \
+                /home/mockforge/.mockforge/scenario-metadata \
+    && chown -R mockforge:mockforge /home/mockforge
 
 # Set the working directory
 WORKDIR /app
 
 # Copy the built binary from the builder stage
 COPY --from=builder /app/target/release/mockforge /usr/local/bin/mockforge
+
+# Entrypoint shim (issue #930) — makes `command: serve ...` work while still
+# tolerating the old `command: mockforge serve ...` workaround.
+COPY docker/entrypoint.sh /usr/local/bin/mockforge-entrypoint
+RUN chmod +x /usr/local/bin/mockforge-entrypoint
 
 # Copy example files and configuration
 COPY --from=builder /app/examples/ ./examples/
@@ -123,6 +138,17 @@ ENV DOCKER_CONTAINER=true
 # port reachable on Fly 6PN where private traffic is IPv6-only (#468).
 ENV MOCKFORGE_ADMIN_HOST=::
 
-# Default command
-# Use full path to ensure binary is found regardless of PATH
-CMD ["/usr/local/bin/mockforge", "serve", "--admin"]
+# Home for the non-root user, so `~/.mockforge` resolves to a writable path
+# (issue #931). Docker would otherwise leave HOME unset for USER mockforge.
+ENV HOME=/home/mockforge
+
+# Issue #930 — the entrypoint is the binary (via a small shim that also
+# tolerates the old `command: mockforge serve ...` workaround) and the
+# subcommand is the CMD, so the documented compose form works:
+#     command: serve --config /config/mockforge.yaml
+# Previously the image only set CMD, so a user-supplied `command:` replaced the
+# whole vector and Docker tried to exec `serve` as a binary:
+#     exec: "serve": executable file not found in $PATH
+# To get a shell in the image, override with `--entrypoint /bin/sh`.
+ENTRYPOINT ["/usr/local/bin/mockforge-entrypoint"]
+CMD ["serve", "--admin"]
