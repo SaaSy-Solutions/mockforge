@@ -1,3 +1,20 @@
+## [0.3.200] - 2026-07-10
+
+### Fixed
+
+- **[Contracts]** Emitted-request validation now reports `owasp:*` and parameter violations, not just request-body ones (#79 round 53 / Srikanth on 0.3.199: the by-request / by-probe logs showed only `request-body:*` rows even though the console reported 7602 missed owasp and 3248 missed parameter negatives). Two causes: (1) every OWASP probe injects into `$.xgafv`, which reaches the wire percent-encoded as `%24.xgafv`; the validator built its query map from the raw query string then looked each parameter up by the spec's DECODED name, so the lookup missed and all 7602 probes were skipped silently. Query keys/values and path segments are now percent-decoded (and `$ref` parameter schemas resolved). (2) A `parameters:missing-query` probe that drops a REQUIRED parameter now surfaces as `query.<name>: required parameter missing`; before, the loop only inspected parameters that were actually sent. Real-binary verified against `mockforge serve`: all seven OWASP checks now appear as e.g. `owasp:sqli => query.$.xgafv: value "' OR '1'='1" is not one of "1" or "2"`.
+- **[Reality]** PUT (and any) request bodies that are not JSON are no longer rejected as missing (#925: every `PUT` with an `application/octet-stream` / XML / urlencoded body returned `400 body: Request body is required but not provided`, while JSON POSTs passed). The handlers derived body presence from `serde_json::from_slice(&bytes).ok()`, so a non-JSON body collapsed to `None` and looked absent. Body presence is now tracked from the raw bytes, `requestBody.required` is honored, and the AI handler no longer uses `Option<Json<Value>>` (which axum yields as `None` for non-JSON). Real-binary verified: PUT octet-stream -> 200, empty body against `required: true` -> 400, JSON schema validation unchanged.
+- **[DevX]** A relative `openapi_spec` config value now resolves from the config file's directory when it does not resolve from the working directory (#928: in Docker, a relative path resolved from `/app` (CWD) instead of `/config` and silently failed to load). Absolute and CWD-resolvable paths are untouched. Verified from a foreign CWD.
+- **[DevX]** `serve` fails fast when a configured OpenAPI spec cannot be loaded, instead of starting "healthy" with zero routes (#929). Clear error names the path; set `MOCKFORGE_ALLOW_MISSING_SPEC=1` to start anyway. Verified against a config-driven bad path.
+- **[DevX]** `http.request_validation` is honored as a deprecated alias for `http.validation.mode`, and unknown `http:` config keys now log a warning instead of being dropped silently (#927).
+- **[DevX]** The Docker image now uses an entrypoint shim so the documented `command: serve --config ...` works (#930: the image only set CMD, so a user `command:` execed `serve` as a binary). The old `command: mockforge serve ...` workaround still works.
+- **[DevX]** The container user now has a real, owned home directory, so `~/.mockforge/scenarios` is writable and the startup "Failed to create scenarios directory: Permission denied" warning is gone (#931).
+- **[Cloud]** Bumped `crossbeam-epoch` to 0.9.20 (RUSTSEC-2026-0204, invalid pointer dereference) and `quinn-proto` to 0.11.15 (RUSTSEC-2026-0185/-0037); both were transitive. Merged the dependabot cargo patch/minor group (14 updates incl. `rustls` 0.23.41, `anyhow` 1.0.103, `tauri` 2.11.5) and the GitHub Actions bump group.
+
+### Note
+
+- **[Contracts]** #926 (stale Content-Type allowlist after a spec change) is addressed by the #928 / #929 fixes: MockForge reads the allowlist fresh from the loaded spec per request with no static cache, so the reported persistence was the relative-path failure silently loading a stale spec. Srikanth's QoS / L3-L4 traffic-generation request is tracked in #933.
+
 ## [0.3.199] - 2026-07-06
 
 ### Fixed
