@@ -1853,7 +1853,7 @@ pub async fn handle_serve(
 
     // Issue #929 — fail fast on a broken OpenAPI spec instead of silently
     // starting with zero routes and reporting `healthy`. If a spec path is
-    // configured but the file is missing or unparseable, the HTTP builder used
+    // configured but the file is missing or unparsable, the HTTP builder used
     // to log a single WARN and start "without OpenAPI integration", so every
     // spec route 404'd while /health still said healthy — very hard to debug.
     // We pre-flight the load here and refuse to start. Operators who genuinely
