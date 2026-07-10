@@ -1851,6 +1851,37 @@ pub async fn handle_serve(
         final_spec_path
     };
 
+    // Issue #929 — fail fast on a broken OpenAPI spec instead of silently
+    // starting with zero routes and reporting `healthy`. If a spec path is
+    // configured but the file is missing or unparseable, the HTTP builder used
+    // to log a single WARN and start "without OpenAPI integration", so every
+    // spec route 404'd while /health still said healthy — very hard to debug.
+    // We pre-flight the load here and refuse to start. Operators who genuinely
+    // want to boot without the spec can set MOCKFORGE_ALLOW_MISSING_SPEC=1.
+    if let Some(ref spec) = final_spec_path {
+        let allow_missing = std::env::var("MOCKFORGE_ALLOW_MISSING_SPEC")
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false);
+        if let Err(e) = OpenApiSpec::from_file(spec).await {
+            if allow_missing {
+                tracing::error!(
+                    "OpenAPI spec '{}' failed to load: {}. Continuing without it \
+                     (MOCKFORGE_ALLOW_MISSING_SPEC is set) — spec routes will 404.",
+                    spec,
+                    e
+                );
+            } else {
+                return Err(format!(
+                    "OpenAPI spec '{spec}' is configured but failed to load: {e}\n\
+                     The server would otherwise start with no spec routes while /health \
+                     still reports healthy (issue #929). Fix the path/spec, or set \
+                     MOCKFORGE_ALLOW_MISSING_SPEC=1 to start anyway."
+                )
+                .into());
+            }
+        }
+    }
+
     // Configure traffic shaping for HTTP middleware when enabled
     let traffic_shaping_enabled = config.core.traffic_shaping_enabled;
     let traffic_shaper = if traffic_shaping_enabled {
