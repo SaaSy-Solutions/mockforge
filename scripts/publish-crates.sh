@@ -95,8 +95,8 @@ CRATES=(
   mockforge-performance
   mockforge-proxy
   mockforge-route-chaos
-  mockforge-runtime-daemon
   mockforge-scenarios
+  mockforge-runtime-daemon
   mockforge-smtp
   mockforge-tcp
   mockforge-workspace
