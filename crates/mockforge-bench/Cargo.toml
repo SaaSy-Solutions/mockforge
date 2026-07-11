@@ -71,6 +71,13 @@ urlencoding = "2.1"
 # URL parsing for base path extraction from OpenAPI servers
 url = "2.5"
 
+# Socket-level control for the QoS/DSCP traffic-class generator (#933):
+# set IP_TOS / TCP_MAXSEG on the TCP socket before connect. `all` pulls in
+# the platform setsockopt wrappers (set_tos / tos / set_mss).
+socket2 = { workspace = true }
+# EINPROGRESS constant for the non-blocking connect in the QoS generator.
+libc = "0.2"
+
 # OWASP API testing dependencies
 uuid = { version = "1.23", features = ["v4"] }
 chrono = { version = "0.4", features = ["serde"] }
