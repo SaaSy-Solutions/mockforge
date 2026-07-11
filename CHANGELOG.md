@@ -1,3 +1,9 @@
+## [0.3.201] - 2026-07-10
+
+### Added
+
+- **[Reality]** New `mockforge bench-qos` command: a native QoS / DSCP traffic-class load generator (#933 / Srikanth on #79 asked whether bench can emit Voice / Video / Background / Best-Effort traffic in one run to exercise a path's QoS handling). k6 is an application-layer client with no L3/L4 knobs, so this uses raw `socket2` sockets and sets the IPv4 `IP_TOS` (DSCP) byte on each TCP connection BEFORE connect, so the SYN and every segment carry the marking. Presets `voice` (EF/46 → 0xB8), `video` (AF41/34 → 0x88), `best-effort` (0x00), `background` (CS1/8 → 0x20), or `dscpNN` for a raw code point; `--class NAME[:WEIGHT]` is repeatable and mixes classes by relative weight in a single run. `--mss` clamps `TCP_MAXSEG` to approximate small-MTU behavior. Prints a per-class table (dscp, tos byte, requests, ok, p50/p95) and warns if the kernel rejected the marking. Jumbo frames and IP fragmentation are NIC/kernel-level (not socket options), so the command prints the `ip link` / `tc netem` recipes for those; IPv6 `IPV6_TCLASS` is a follow-up. Verified: a unit test reads `IP_TOS` back with getsockopt off the exact generator socket for every preset (the kernel stamps that into outbound IP headers, so it's the wire guarantee), and a real run sent 62,115 successful DSCP-marked requests split across classes, with weighted mixing and the custom-DSCP / MSS options confirmed.
+
 ## [0.3.200] - 2026-07-10
 
 ### Fixed
