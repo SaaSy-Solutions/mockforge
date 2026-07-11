@@ -2460,6 +2460,56 @@ enum Commands {
         output: PathBuf,
     },
 
+    /// Generate HTTP load marked with QoS / DSCP traffic classes (#933)
+    ///
+    /// A native (non-k6) generator that sets the IPv4 IP_TOS (DSCP) byte on
+    /// each TCP connection before connect, so you can drive Voice / Video /
+    /// Best-Effort / Background traffic (mixed in one run) at a path under test
+    /// and observe its QoS handling. Presets: voice (EF/46), video (AF41/34),
+    /// best-effort (0), background (CS1/8); or `dscpNN` for a raw code point.
+    /// `--class NAME[:WEIGHT]` is repeatable and weights are relative.
+    ///
+    /// Plain http:// targets only (the point is raw socket control, not TLS).
+    /// Jumbo frames and IP fragmentation are NIC/kernel-level and are not
+    /// socket knobs; see `--help` output for the tc/netem/ip-link recipes.
+    ///
+    /// Examples:
+    ///   mockforge bench-qos --target http://localhost:3000/ \
+    ///     --class voice:40 --class video:30 --class best-effort:30 \
+    ///     --duration 10s --concurrency 20
+    ///   mockforge bench-qos --target http://host:8080/health \
+    ///     --class dscp46 --mss 536 --duration 30s
+    #[cfg(feature = "bench")]
+    #[command(verbatim_doc_comment)]
+    BenchQos {
+        /// Target URL (plain http:// only), e.g. `http://localhost:3000/`.
+        #[arg(short, long)]
+        target: String,
+
+        /// Traffic class to send: `NAME[:WEIGHT]`. NAME is a preset
+        /// (voice, video, best-effort, background) or `dscpNN` (NN=0-63).
+        /// Repeat to mix classes; WEIGHT (default 1) is the relative share.
+        #[arg(long = "class", value_name = "NAME[:WEIGHT]", action = clap::ArgAction::Append, required = true)]
+        classes: Vec<String>,
+
+        /// HTTP method (GET/HEAD/POST/...). Body is empty.
+        #[arg(short, long, default_value = "GET")]
+        method: String,
+
+        /// Number of concurrent workers.
+        #[arg(short, long, default_value = "10")]
+        concurrency: u32,
+
+        /// Duration (e.g. 10s, 5m, or bare seconds like 30).
+        #[arg(short, long, default_value = "10s")]
+        duration: String,
+
+        /// Optional TCP_MAXSEG (MSS) clamp, in bytes, applied to every
+        /// connection. Forces smaller segments (approximates a small MTU).
+        #[arg(long)]
+        mss: Option<u32>,
+    },
+
     /// Convert a HAR file to conformance custom-checks YAML
     ///
     /// Reads a recorded HTTP Archive (.har) file and generates a YAML config
@@ -3748,6 +3798,67 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                         eprintln!("Chunked bench failed: {}", e);
                         std::process::exit(1);
                     }
+                }
+            }
+        }
+
+        #[cfg(feature = "bench")]
+        Commands::BenchQos {
+            target,
+            classes,
+            method,
+            concurrency,
+            duration,
+            mss,
+        } => {
+            use mockforge_bench::command::BenchCommand;
+            use mockforge_bench::qos_bench::{parse_class, render_report, run, QosBenchConfig};
+
+            let duration_secs = match BenchCommand::parse_duration(&duration) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("Invalid --duration {duration:?}: {e}. Examples: 10s, 5m, 30");
+                    std::process::exit(1);
+                }
+            };
+
+            let mut parsed = Vec::with_capacity(classes.len());
+            for c in &classes {
+                match parse_class(c) {
+                    Ok(tc) => parsed.push(tc),
+                    Err(e) => {
+                        eprintln!("Invalid --class {c:?}: {e}");
+                        std::process::exit(1);
+                    }
+                }
+            }
+
+            let cfg = QosBenchConfig {
+                target_url: target,
+                method,
+                classes: parsed,
+                concurrency,
+                duration: std::time::Duration::from_secs(duration_secs),
+                mss,
+            };
+            match run(cfg).await {
+                Ok(r) => {
+                    print!("{}", render_report(&r));
+                    // Jumbo frames and IP fragmentation are NIC/kernel-level,
+                    // not socket knobs, so they live at the OS layer. Point the
+                    // user at the tools that do control them (#933).
+                    println!(
+                        "\nJumbo frames / IP fragmentation are interface/kernel-level (not a \
+                         socket option). To shape those on the sending host:\n  \
+                         jumbo frames:   sudo ip link set dev <iface> mtu 9000\n  \
+                         force small MTU: sudo ip link set dev <iface> mtu 1280   (or use --mss)\n  \
+                         fragmentation / loss / delay: sudo tc qdisc add dev <iface> root netem \
+                         delay 20ms loss 1%%\nDSCP marking above is applied per connection via IP_TOS."
+                    );
+                }
+                Err(e) => {
+                    eprintln!("QoS bench failed: {e}");
+                    std::process::exit(1);
                 }
             }
         }
