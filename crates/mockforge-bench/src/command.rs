@@ -1032,9 +1032,13 @@ impl BenchCommand {
                 conformance_self_test_iterations: 1,
                 conformance_self_test_duration: None,
                 validate_response_schemas: false,
-                source_ips: Vec::new(),
-                geo_source_ips: Vec::new(),
-                geo_source_headers: Vec::new(),
+                // Issue #79 r54 (Srikanth on 0.3.200): these were hardcoded to
+                // empty, so `--source-ip` / `--geo-source-ip` were silently
+                // dropped in multi-target (`--targets-file`) mode. Carry them
+                // through to the ParallelExecutor so k6 gets `--local-ips`.
+                source_ips: self.source_ips.clone(),
+                geo_source_ips: self.geo_source_ips.clone(),
+                geo_source_headers: self.geo_source_headers.clone(),
                 report_missed_cap: None,
             },
             targets,

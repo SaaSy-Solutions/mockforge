@@ -201,6 +201,49 @@ fn find_matching_spec_path(
     None
 }
 
+/// Match a single templated path segment against a concrete one and, on
+/// success, return the bound `(param_name, value)` when the segment carries a
+/// `{param}` placeholder.
+///
+/// Handles a plain `{name}`, a literal segment (`v1`), AND — Round 54 (#79) —
+/// a single `{name}` wrapped in literals, i.e. Google's custom-verb form
+/// `{instance}:reportStatus` (also `prefix-{name}`). Multi-placeholder
+/// segments (`{a}-{b}`) fall back to plain equality. Returns:
+///   - `Some(None)` when the segment matches with no bound param (literal),
+///   - `Some(Some((name, value)))` when it matches and binds a param,
+///   - `None` when it does not match.
+fn match_path_segment<'a>(
+    template_seg: &'a str,
+    concrete_seg: &str,
+) -> Option<Option<(&'a str, String)>> {
+    let open = template_seg.find('{');
+    let close = template_seg.find('}');
+    match (open, close) {
+        (Some(o), Some(c)) if c > o && !template_seg[c + 1..].contains('{') => {
+            let prefix = &template_seg[..o];
+            let name = &template_seg[o + 1..c];
+            let suffix = &template_seg[c + 1..];
+            if concrete_seg.starts_with(prefix)
+                && concrete_seg.ends_with(suffix)
+                && concrete_seg.len() >= prefix.len() + suffix.len()
+            {
+                let value = &concrete_seg[prefix.len()..concrete_seg.len() - suffix.len()];
+                Some(Some((name, value.to_string())))
+            } else {
+                None
+            }
+        }
+        // No single clean placeholder — require literal equality.
+        _ => {
+            if template_seg == concrete_seg {
+                Some(None)
+            } else {
+                None
+            }
+        }
+    }
+}
+
 /// Check if a concrete path matches a path template with {param} segments
 fn path_matches_template(concrete: &str, template: &str) -> bool {
     let concrete_parts: Vec<&str> = concrete.split('/').collect();
@@ -213,7 +256,7 @@ fn path_matches_template(concrete: &str, template: &str) -> bool {
     concrete_parts
         .iter()
         .zip(template_parts.iter())
-        .all(|(c, t)| t.starts_with('{') && t.ends_with('}') || c == t)
+        .all(|(c, t)| match_path_segment(t, c).is_some())
 }
 
 /// Validate request body against the spec's requestBody schema
@@ -742,10 +785,11 @@ pub async fn validate_emitted_requests_with_base_path(
             let template_parts: Vec<&str> = spec_path.split('/').collect();
             if concrete_parts.len() == template_parts.len() {
                 for (c, t) in concrete_parts.iter().zip(template_parts.iter()) {
-                    if t.starts_with('{') && t.ends_with('}') {
-                        let name = &t[1..t.len() - 1];
-                        // Round 53 — path segments arrive percent-encoded too.
-                        out.insert(name.to_string(), pct_decode(c));
+                    // Round 54 — reuse the segment matcher so custom-verb path
+                    // params (`{instance}:reportStatus`) bind too, not just bare
+                    // `{name}` segments. Round 53 — path values arrive encoded.
+                    if let Some(Some((name, value))) = match_path_segment(t, c) {
+                        out.insert(name.to_string(), pct_decode(&value));
                     }
                 }
             }
@@ -1216,6 +1260,30 @@ fn check_value_against_schema(value: &str, schema: &openapiv3::Schema) -> Option
                     ));
                 }
             }
+            // Round 54 (#79) — string length + pattern constraints. Without
+            // these a `bad-path-param` / bad-query probe against a param that
+            // declares `pattern` / `minLength` / `maxLength` produced no
+            // violation even though the value clearly breaks the contract.
+            let len = value.chars().count();
+            if let Some(min) = s.min_length {
+                if len < min {
+                    return Some(format!("value \"{value}\" is shorter than minLength {min}"));
+                }
+            }
+            if let Some(max) = s.max_length {
+                if len > max {
+                    return Some(format!("value \"{value}\" is longer than maxLength {max}"));
+                }
+            }
+            if let Some(pat) = &s.pattern {
+                // Best-effort: an uncompilable pattern is skipped rather than
+                // reported as a false positive.
+                if let Ok(re) = regex::Regex::new(pat) {
+                    if !re.is_match(value) {
+                        return Some(format!("value \"{value}\" does not match pattern /{pat}/"));
+                    }
+                }
+            }
             None
         }
         Type::Integer(_) => {
@@ -1598,5 +1666,91 @@ mod emitted_body_tests {
             !rows.iter().any(|r| r["check_name"] == "positive"),
             "positive probe must not be flagged: {rows:?}"
         );
+    }
+
+    /// Round 54 (#79) — the segment matcher must bind custom-verb path params
+    /// (`{instance}:reportStatus`), not just bare `{name}` segments.
+    #[test]
+    fn segment_matcher_handles_custom_verbs() {
+        use super::match_path_segment;
+        // Bare placeholder.
+        assert_eq!(match_path_segment("{name}", "abc"), Some(Some(("name", "abc".to_string()))));
+        // Custom verb suffix — Google style.
+        assert_eq!(
+            match_path_segment("{instance}:reportStatus", "self-test-invalid-id:reportStatus"),
+            Some(Some(("instance", "self-test-invalid-id".to_string())))
+        );
+        // Wrong verb -> no match.
+        assert_eq!(match_path_segment("{instance}:reportStatus", "x:other"), None);
+        // Literal segment matches only itself.
+        assert_eq!(match_path_segment("v1", "v1"), Some(None));
+        assert_eq!(match_path_segment("v1", "v2"), None);
+    }
+
+    /// Round 54 (#79) — Srikanth on 0.3.200: OWASP violations now appear but
+    /// parameter probes didn't. A `parameters:bad-path-param` probe hits a
+    /// custom-verb path (`/v1/{instance}:reportStatus`); the path never matched
+    /// the template (so validation was skipped entirely), and even when it did
+    /// only enum/type were checked, not `pattern`/`maxLength`. This reproduces
+    /// the probe against a constrained path param and asserts the violation.
+    #[tokio::test]
+    async fn emitted_requests_flag_bad_custom_verb_path_param() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let spec_json = serde_json::json!({
+            "openapi": "3.0.0",
+            "info": { "title": "apigee-min", "version": "1.0.0" },
+            "paths": {
+                "/v1/{instance}:reportStatus": {
+                    "post": {
+                        "parameters": [
+                            { "name": "instance", "in": "path", "required": true,
+                              "schema": { "type": "string", "maxLength": 8 } }
+                        ],
+                        "responses": { "200": { "description": "ok" } }
+                    }
+                }
+            }
+        });
+        let spec_path = dir.path().join("apigee-min.json");
+        std::fs::write(&spec_path, serde_json::to_vec_pretty(&spec_json).unwrap()).unwrap();
+
+        let jsonl_path = dir.path().join("conformance-self-test-requests.jsonl");
+        std::fs::write(
+            &jsonl_path,
+            serde_json::to_string(&serde_json::json!({
+                "label": "parameters:bad-path-param",
+                "method": "POST",
+                // 20-char instance value > maxLength 8, on the custom-verb path.
+                "url": "https://172.22.232.2:443/v1/self-test-invalid-id:reportStatus",
+                "request_body": ""
+            }))
+            .unwrap()
+                + "\n",
+        )
+        .unwrap();
+
+        let n = validate_emitted_requests_with_base_path(
+            std::slice::from_ref(&spec_path),
+            dir.path(),
+            None,
+        )
+        .await
+        .expect("validation runs");
+        assert!(n >= 1, "the bad custom-verb path param must be flagged, got {n}");
+
+        let flat: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(dir.path().join("conformance-request-violations.json"))
+                .unwrap(),
+        )
+        .unwrap();
+        let row = flat
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|r| r["check_name"] == "parameters:bad-path-param")
+            .expect("bad-path-param violation present");
+        assert_eq!(row["violation_type"], "path_value_mismatch");
+        let msg = row["message"].as_str().unwrap();
+        assert!(msg.contains("instance") && msg.contains("maxLength"), "unexpected: {msg}");
     }
 }
