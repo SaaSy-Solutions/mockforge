@@ -1,3 +1,10 @@
+## [0.3.202] - 2026-07-11
+
+### Fixed
+
+- **[Contracts]** Parameter violations now surface in the by-request / by-probe logs, not just OWASP and request-body ones (#79 round 54 / Srikanth on 0.3.200: `parameters` negatives were missed in the console but absent from the violation files). Two gaps: (1) a `parameters:bad-path-param` probe targets a custom-verb path like `/v1/{instance}:reportStatus`, whose templated segment `{instance}:reportStatus` never matched the path template, so the whole request was skipped before any parameter check ran; (2) parameter value validation only covered enum/integer/number/boolean, not string `pattern` / `minLength` / `maxLength`. A new segment matcher binds `{name}`, `{name}:verb`, and `prefix{name}` forms (used by both the path matcher and the path-param extractor), and string length/pattern constraints are now checked. Real-binary verified: a self-test against a spec with a custom-verb path and a `maxLength`-constrained param now writes `parameters:bad-path-param => path.instance: value "self-test-invalid-id" is longer than maxLength 8`. (Probes that drop an OPTIONAL query param or add an extra param stay spec-valid by construction and correctly produce no client-side violation; the full negative-probe record is in `conformance-self-test.json`.)
+- **[Reality]** `--source-ip` now takes effect with `--targets-file` (#79 round 54 / Srikanth on 0.3.200: source-ip was a silent no-op in multi-target mode). The per-target `BenchCommand` clone in `execute_multi_target` hardcoded `source_ips: Vec::new()`, and the `ParallelExecutor` built `K6Executor::new()` without `.with_local_ips`. The source IPs (and geo variants) now flow through the clone and `--local-ips` is passed to each target's k6. Real-binary verified: `bench --targets-file --source-ip 10.99.99.99` now makes k6 fail with `bind: cannot assign requested address` (proving the source IP is applied), where before it connected from the default address.
+
 ## [0.3.201] - 2026-07-10
 
 ### Added
