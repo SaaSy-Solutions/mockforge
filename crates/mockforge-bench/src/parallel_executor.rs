@@ -386,6 +386,15 @@ impl ParallelExecutor {
             let chunked_request_bodies = self.base_command.chunked_request_bodies;
             let target_rps = self.base_command.target_rps;
             let no_keep_alive = self.base_command.no_keep_alive;
+            // Issue #79 r54 (Srikanth on 0.3.200): `--source-ip` was silently
+            // dropped in multi-target (`--targets-file`) mode because this
+            // executor built `K6Executor::new()` without `.with_local_ips` and
+            // the per-target BenchCommand clone zeroed `source_ips`. Thread the
+            // source IPs (as the k6 `--local-ips` list) and geo config through
+            // to each target's run.
+            let local_ips = self.base_command.source_ips.join(",");
+            let geo_source_ips = self.base_command.geo_source_ips.clone();
+            let geo_source_headers = self.base_command.geo_source_headers.clone();
 
             // Select per-target templates/base_path if this target has a custom spec
             let (templates, base_path) = if let Some(spec_path) = &target.spec {
@@ -442,6 +451,9 @@ impl ParallelExecutor {
                     target_rps,
                     no_keep_alive,
                     &enhancement_code,
+                    &local_ips,
+                    &geo_source_ips,
+                    &geo_source_headers,
                 )
                 .await;
 
@@ -546,6 +558,9 @@ impl ParallelExecutor {
         target_rps: Option<u32>,
         no_keep_alive: bool,
         enhancement_code: &str,
+        local_ips: &str,
+        geo_source_ips: &[String],
+        geo_source_headers: &[String],
     ) -> Result<TargetResult> {
         // Merge target-specific headers with base headers
         let mut custom_headers = base_headers.clone();
@@ -573,8 +588,8 @@ impl ParallelExecutor {
             chunked_request_bodies,
             target_rps,
             no_keep_alive,
-            geo_source_ips: Vec::new(),
-            geo_source_headers: Vec::new(),
+            geo_source_ips: geo_source_ips.to_vec(),
+            geo_source_headers: geo_source_headers.to_vec(),
         };
 
         // Generate k6 script
@@ -609,7 +624,10 @@ impl ParallelExecutor {
         // Execute k6 with a unique API server port per target to avoid port conflicts.
         // k6 defaults to localhost:6565 for its REST API; parallel instances collide.
         let api_port = 6565 + (target_index as u16) + 1; // 6566, 6567, ...
-        let executor = K6Executor::new()?;
+                                                         // Issue #79 r54 — forward `--source-ip` (as k6 `--local-ips`) so each
+                                                         // target's VUs rotate through the configured source IP pool. Without
+                                                         // this, `--source-ip` was a silent no-op in multi-target mode.
+        let executor = K6Executor::new()?.with_local_ips(local_ips.to_string());
         let results = executor
             .execute_with_port(&script_path, Some(&output_dir), verbose, Some(api_port))
             .await;
