@@ -554,17 +554,9 @@ async fn test_operation(
     // leading `/` auto-added, trailing `/` stripped, empty
     // base_path → no prefix at all.
     let path_template = {
-        let prefix = match config.base_path.as_deref() {
-            Some(bp) if !bp.is_empty() => {
-                let trimmed = bp.trim_end_matches('/');
-                if trimmed.starts_with('/') {
-                    trimmed.to_string()
-                } else {
-                    format!("/{}", trimmed)
-                }
-            }
-            _ => String::new(),
-        };
+        // Round 55 — shared with build_url_with_base so `--base-path /`
+        // resolves to no prefix instead of a `//path` double slash.
+        let prefix = base_path_prefix(config.base_path.as_deref());
         let path = if op.path.starts_with('/') {
             op.path.clone()
         } else {
@@ -1893,11 +1885,38 @@ fn build_url(target: &str, path_template: &str, path_params: &[(String, String)]
     build_url_with_base(target, None, path_template, path_params)
 }
 
+/// Round 55 (#79) — normalise a `--base-path` into a URL path prefix.
+///
+/// `Some("/api")` / `Some("api")` / `Some("/api/")` all become `/api`;
+/// `Some("/")`, `Some("")`, and `None` all become `""` (root, no prefix).
+///
+/// Srikanth on 0.3.202 ran with `--base-path /` and got ZERO violations even
+/// though the console reported thousands of misses. The old logic did
+/// `"/".trim_end_matches('/')` = `""`, decided `"".starts_with('/')` was
+/// false, and produced the prefix `"/"`. Combined with the leading `/` on the
+/// spec path that yielded `<target>//v1/organizations` (double slash), which
+/// never matched the spec's `/v1/organizations`, so every emitted request was
+/// skipped by the validator and no violations were logged. Trimming slashes
+/// from BOTH ends and treating the empty result as "no prefix" fixes it.
+fn base_path_prefix(base_path: Option<&str>) -> String {
+    match base_path {
+        Some(bp) => {
+            let trimmed = bp.trim_matches('/');
+            if trimmed.is_empty() {
+                String::new()
+            } else {
+                format!("/{trimmed}")
+            }
+        }
+        None => String::new(),
+    }
+}
+
 /// Round 18.1 — variant of `build_url` that takes a `base_path`
 /// (e.g. `Some("/api")`). When set, prepends it to the spec path so a
 /// spec declaring `/users` against a target served behind `/api`
-/// resolves to `<target>/api/users`. `base_path` is normalised: leading
-/// `/` is auto-added, trailing `/` is stripped.
+/// resolves to `<target>/api/users`. `base_path` is normalised via
+/// [`base_path_prefix`] (both ends trimmed; `/` means root/no prefix).
 fn build_url_with_base(
     target: &str,
     base_path: Option<&str>,
@@ -1912,17 +1931,7 @@ fn build_url_with_base(
         }
     }
     let target = target.trim_end_matches('/');
-    let prefix = match base_path {
-        Some(bp) if !bp.is_empty() => {
-            let trimmed = bp.trim_end_matches('/');
-            if trimmed.starts_with('/') {
-                trimmed.to_string()
-            } else {
-                format!("/{}", trimmed)
-            }
-        }
-        _ => String::new(),
-    };
+    let prefix = base_path_prefix(base_path);
     let path = if url.starts_with('/') {
         url
     } else {
@@ -2102,6 +2111,25 @@ mod tests {
         assert_eq!(empty, "https://t/x");
         let none = build_url_with_base("https://t", None, "/x", &[]);
         assert_eq!(none, "https://t/x");
+    }
+
+    /// Round 55 (#79) — Srikanth on 0.3.202 passed `--base-path /` and got a
+    /// `//v1/organizations` double slash, which broke all validation. `/`
+    /// (and `//`) must be treated as root, i.e. no prefix.
+    #[test]
+    fn base_path_slash_is_root_no_double_slash() {
+        assert_eq!(base_path_prefix(Some("/")), "");
+        assert_eq!(base_path_prefix(Some("//")), "");
+        assert_eq!(base_path_prefix(Some("")), "");
+        assert_eq!(base_path_prefix(None), "");
+        assert_eq!(base_path_prefix(Some("/api")), "/api");
+        assert_eq!(base_path_prefix(Some("api/")), "/api");
+        assert_eq!(base_path_prefix(Some("/api/v1")), "/api/v1");
+        // The end-to-end URL no longer double-slashes.
+        assert_eq!(
+            build_url_with_base("https://t", Some("/"), "/v1/organizations", &[]),
+            "https://t/v1/organizations"
+        );
     }
 
     #[test]

@@ -244,6 +244,26 @@ fn match_path_segment<'a>(
     }
 }
 
+/// Collapse runs of `/` into a single `/` (preserving a leading slash).
+/// `//v1//x` -> `/v1/x`. Round 55 (#79) — guards path matching against the
+/// `--base-path /` double-slash regression.
+fn collapse_slashes(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    let mut prev_slash = false;
+    for ch in path.chars() {
+        if ch == '/' {
+            if !prev_slash {
+                out.push(ch);
+            }
+            prev_slash = true;
+        } else {
+            out.push(ch);
+            prev_slash = false;
+        }
+    }
+    out
+}
+
 /// Check if a concrete path matches a path template with {param} segments
 fn path_matches_template(concrete: &str, template: &str) -> bool {
     let concrete_parts: Vec<&str> = concrete.split('/').collect();
@@ -708,6 +728,14 @@ pub async fn validate_emitted_requests_with_base_path(
         } else {
             path_only
         };
+
+        // Round 55 (#79) — collapse accidental double slashes so a request
+        // that reached the wire as `//v1/organizations` (e.g. an older
+        // `--base-path /` that prefixed a `/` onto an already-rooted path)
+        // still matches the spec's `/v1/organizations`. Belt-and-suspenders:
+        // the generator no longer produces the `//`, but stale captures /
+        // hand-built URLs might.
+        let path_only = collapse_slashes(&path_only);
 
         // Round 45 — strip base_path BEFORE matching so an Apigee-style
         // `/api/v1/organizations` on the wire matches `/v1/organizations`
@@ -1666,6 +1694,78 @@ mod emitted_body_tests {
             !rows.iter().any(|r| r["check_name"] == "positive"),
             "positive probe must not be flagged: {rows:?}"
         );
+    }
+
+    /// Round 55 (#79) — double slashes collapse so a `//v1/x` request (from a
+    /// stray `--base-path /`) still matches the spec's `/v1/x`.
+    #[test]
+    fn collapse_slashes_normalises_double_slashes() {
+        use super::collapse_slashes;
+        assert_eq!(collapse_slashes("//v1/organizations"), "/v1/organizations");
+        assert_eq!(collapse_slashes("/v1//x///y"), "/v1/x/y");
+        assert_eq!(collapse_slashes("/v1/organizations"), "/v1/organizations");
+        assert_eq!(collapse_slashes("/"), "/");
+    }
+
+    /// Round 55 (#79) — Srikanth on 0.3.202: `--base-path /` produced
+    /// `//v1/organizations` emitted URLs, which never matched the spec's
+    /// `/v1/organizations`, so EVERY owasp/param/body violation vanished.
+    /// The validator now collapses the double slash and still flags the
+    /// body probe.
+    #[tokio::test]
+    async fn double_slashed_url_still_validates() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let spec_json = serde_json::json!({
+            "openapi": "3.0.0",
+            "info": { "title": "apigee-min", "version": "1.0.0" },
+            "paths": {
+                "/v1/organizations": {
+                    "post": {
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": { "analyticsRegion": { "type": "string" } }
+                                    }
+                                }
+                            }
+                        },
+                        "responses": { "200": { "description": "ok" } }
+                    }
+                }
+            }
+        });
+        let spec_path = dir.path().join("apigee-min.json");
+        std::fs::write(&spec_path, serde_json::to_vec_pretty(&spec_json).unwrap()).unwrap();
+
+        let jsonl_path = dir.path().join("conformance-self-test-requests.jsonl");
+        std::fs::write(
+            &jsonl_path,
+            serde_json::to_string(&serde_json::json!({
+                "label": "request-body:type-mismatch:analyticsRegion",
+                "method": "POST",
+                // Note the DOUBLE slash after the host — the `--base-path /` bug.
+                "url": "https://172.22.232.2:443//v1/organizations",
+                "request_body": "{\"analyticsRegion\":12345}"
+            }))
+            .unwrap()
+                + "\n",
+        )
+        .unwrap();
+
+        let n = validate_emitted_requests_with_base_path(
+            std::slice::from_ref(&spec_path),
+            dir.path(),
+            // The exact combination Srikanth used: base_path = "/".
+            Some("/"),
+        )
+        .await
+        .expect("validation runs");
+        assert!(n >= 1, "double-slashed URL must still match and flag the body, got {n}");
+        let flat = std::fs::read_to_string(dir.path().join("conformance-request-violations.json"))
+            .unwrap();
+        assert!(flat.contains("analyticsRegion"), "body probe must be reported: {flat}");
     }
 
     /// Round 54 (#79) — the segment matcher must bind custom-verb path params
