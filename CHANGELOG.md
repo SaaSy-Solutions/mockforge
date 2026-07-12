@@ -1,3 +1,9 @@
+## [0.3.203] - 2026-07-12
+
+### Fixed
+
+- **[Contracts]** `--base-path /` no longer voids all conformance validation (#79 round 55 / Srikanth on 0.3.202: a self-test with `--base-path /` wrote an empty violation file even though the console reported thousands of owasp/parameter/request-body misses). Root cause: the self-test URL builder computed the prefix as `"/".trim_end_matches('/')` = `""`, decided `"".starts_with('/')` was false, and produced the prefix `"/"`; prepended to the already-rooted spec path that yielded `<target>//v1/organizations` (double slash), whose template `//v1/organizations` never matched the spec's `/v1/organizations`, so the validator skipped every emitted request and logged nothing (even the OWASP/request-body probes that worked in prior rounds). A shared `base_path_prefix()` now trims slashes from BOTH ends and treats the empty result (`/`, `//`, ``) as no prefix (root), used by both prefix sites; the validator also collapses stray double slashes before matching. Real-binary verified with Srikanth's exact command: the emitted URL is now `.../v1/organizations` (single slash) and the logs populate again (7 owasp + 6 request-body), where 0.3.202 wrote `[]`.
+
 ## [0.3.202] - 2026-07-11
 
 ### Fixed
