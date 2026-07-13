@@ -52,27 +52,63 @@ jobs:
             exit 1
           }
 
+          # Run curl up to 3 times, absorbing transient curl-LEVEL failures
+          # (timeout, connection reset, TLS hiccup) that would otherwise page
+          # on a single blip. Prints the final HTTP status; "000" means curl
+          # never completed a transfer (NOT an HTTP status). Only safe for
+          # idempotent requests — register regenerates creds per attempt below.
+          #
+          # Replaces the old `curl ... || echo "000"` idiom: on a failed
+          # transfer, `-w '%{http_code}'` already prints "000", and the `||
+          # echo "000"` appended a second one, so a transient blip surfaced as
+          # the confusing "000000" that opened issues #924 / #944.
+          http_retry() {
+            local outfile="$1" maxtime="$2"; shift 2
+            local code rc attempt
+            for attempt in 1 2 3; do
+              code=$(curl -sS -o "$outfile" -w '%{http_code}' --max-time "$maxtime" "$@")
+              rc=$?
+              if [ "$rc" -eq 0 ]; then printf '%s' "$code"; return 0; fi
+              echo "  (curl exit $rc on attempt $attempt; retrying in 3s)" >&2
+              sleep 3
+            done
+            printf '000'
+          }
+
           # 1) Health endpoint — fastest signal, runs first.
-          HEALTH=$(curl -sS -o /tmp/health.json -w '%{http_code}' --max-time 10 "$BASE_URL/metrics/health" || echo "000")
+          HEALTH=$(http_retry /tmp/health.json 10 "$BASE_URL/metrics/health")
           if [ "$HEALTH" != "200" ]; then
             fail "health" "GET /metrics/health returned $HEALTH; body: $(cat /tmp/health.json 2>/dev/null | head -c 200)"
           fi
           echo "OK health -> $HEALTH"
 
-          # 2) Register a throwaway smoke user. Tag with the run id so each
-          # invocation has a unique account that won't collide.
-          TS=$(date +%s)
-          USERNAME="smoke_${TS}_${GITHUB_RUN_ID}"
-          EMAIL="smoke_${TS}_${GITHUB_RUN_ID}@smoke.mockforge.dev"
-          PASSWORD="Smoke-$(openssl rand -hex 8)"
-
-          REG=$(curl -sS -o /tmp/reg.json -w '%{http_code}' --max-time 15 \
-            -X POST "$BASE_URL/api/v1/auth/register" \
-            -H 'Content-Type: application/json' \
-            -d "{\"username\":\"$USERNAME\",\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" \
-            || echo "000")
+          # 2) Register a throwaway smoke user. Fresh creds PER ATTEMPT so a
+          # retry after a partial success can't collide on username/email.
+          # register does bcrypt + a DB insert, and a cold Fly machine can blow
+          # past a tight timeout, so give it 25s and up to 3 tries.
+          REG="000"
+          for attempt in 1 2 3; do
+            TS=$(date +%s%N)
+            # SMOKE_USER, not USERNAME: `USERNAME` is a special parameter in
+            # zsh (reflects the OS login name), so a maintainer testing this
+            # block in zsh would see the assignment silently ignored. bash (the
+            # Actions default shell here) treats it as normal, but the neutral
+            # name avoids the trap entirely.
+            SMOKE_USER="smoke_${TS}_${GITHUB_RUN_ID}"
+            EMAIL="smoke_${TS}_${GITHUB_RUN_ID}@smoke.mockforge.dev"
+            PASSWORD="Smoke-$(openssl rand -hex 8)"
+            REG=$(curl -sS -o /tmp/reg.json -w '%{http_code}' --max-time 25 \
+              -X POST "$BASE_URL/api/v1/auth/register" \
+              -H 'Content-Type: application/json' \
+              -d "{\"username\":\"$SMOKE_USER\",\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")
+            rc=$?
+            [ "$rc" -ne 0 ] && REG="000"
+            if [ "$REG" = "200" ] || [ "$REG" = "201" ]; then break; fi
+            echo "  register attempt $attempt -> status=$REG (curl exit $rc); retrying in 3s" >&2
+            sleep 3
+          done
           if [ "$REG" != "200" ] && [ "$REG" != "201" ]; then
-            fail "register" "POST /api/v1/auth/register returned $REG; body: $(cat /tmp/reg.json 2>/dev/null | head -c 300)"
+            fail "register" "POST /api/v1/auth/register returned $REG after 3 attempts (000 = curl-level failure, not an HTTP status); body: $(cat /tmp/reg.json 2>/dev/null | head -c 300)"
           fi
           ACCESS_TOKEN=$(jq -r '.access_token // .token // empty' /tmp/reg.json)
           if [ -z "$ACCESS_TOKEN" ]; then
@@ -80,12 +116,12 @@ jobs:
           fi
           echo "OK register -> $REG"
 
-          # 3) Login with the just-registered user — proves bcrypt verify + JWT issue path.
-          LOGIN=$(curl -sS -o /tmp/login.json -w '%{http_code}' --max-time 15 \
+          # 3) Login with the just-registered user — proves bcrypt verify + JWT
+          # issue path. Same creds each retry, so it's safe to re-send.
+          LOGIN=$(http_retry /tmp/login.json 15 \
             -X POST "$BASE_URL/api/v1/auth/login" \
             -H 'Content-Type: application/json' \
-            -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}" \
-            || echo "000")
+            -d "{\"email\":\"$EMAIL\",\"password\":\"$PASSWORD\"}")
           if [ "$LOGIN" != "200" ]; then
             fail "login" "POST /api/v1/auth/login returned $LOGIN; body: $(cat /tmp/login.json 2>/dev/null | head -c 300)"
           fi
@@ -95,10 +131,9 @@ jobs:
           # Empty list (200) is success; we don't actually deploy a mock from
           # the smoke because that costs Fly compute and leaves dangling state.
           # If/when there's a cheap deploy+teardown path, fold it in here.
-          LIST=$(curl -sS -o /tmp/list.json -w '%{http_code}' --max-time 15 \
+          LIST=$(http_retry /tmp/list.json 15 \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
-            "$BASE_URL/api/v1/hosted-mocks" \
-            || echo "000")
+            "$BASE_URL/api/v1/hosted-mocks")
           if [ "$LIST" != "200" ]; then
             fail "hosted-mocks-list" "GET /api/v1/hosted-mocks returned $LIST; body: $(cat /tmp/list.json 2>/dev/null | head -c 300)"
           fi
@@ -106,10 +141,9 @@ jobs:
 
           # 5) Subscription info — touches the billing handler path so a regression
           # in the Stripe glue surfaces here, not at the first customer signup.
-          SUB=$(curl -sS -o /tmp/sub.json -w '%{http_code}' --max-time 15 \
+          SUB=$(http_retry /tmp/sub.json 15 \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
-            "$BASE_URL/api/v1/billing/subscription" \
-            || echo "000")
+            "$BASE_URL/api/v1/billing/subscription")
           # 404 is acceptable here (no subscription yet for a fresh free user, depending on impl).
           if [ "$SUB" != "200" ] && [ "$SUB" != "404" ]; then
             fail "billing-subscription" "GET /api/v1/billing/subscription returned $SUB; body: $(cat /tmp/sub.json 2>/dev/null | head -c 300)"
@@ -175,6 +209,46 @@ jobs:
                 labels: ['production-smoke', 'bug'],
               });
               console.log(`Opened issue #${created.data.number}`);
+            }
+
+      - name: Auto-close recovered smoke issues on success
+        # When the smoke passes end-to-end, close any lingering
+        # `production-smoke` issues so a recovered blip clears the tracker
+        # automatically. Before this, the "close when the next run passes"
+        # note was manual and never actioned, so transient-failure issues
+        # (#924, #944, ...) piled up. A sustained outage keeps failing, so the
+        # open-issue path above keeps re-commenting and this never fires.
+        if: steps.smoke.outputs.failure_step == ''
+        uses: actions/github-script@v9
+        env:
+          RUN_URL: ${{ format('{0}/{1}/actions/runs/{2}', github.server_url, github.repository, github.run_id) }}
+        with:
+          script: |
+            const runUrl = process.env.RUN_URL;
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'production-smoke',
+              per_page: 50,
+            });
+            for (const issue of open.data) {
+              // listForRepo returns PRs too; issues carry no pull_request field.
+              if (issue.pull_request) continue;
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                body: `Smoke passed on ${runUrl}; the endpoint recovered. Auto-closing this alert.`,
+              });
+              await github.rest.issues.update({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issue.number,
+                state: 'closed',
+                state_reason: 'completed',
+              });
+              console.log(`Auto-closed #${issue.number}`);
             }
 
       - name: Fail job if smoke detected a problem
