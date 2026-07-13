@@ -2602,12 +2602,20 @@ impl BenchCommand {
                 // Round 23 (c-iii) — opt-in request/response capture.
                 // Constructed here so the sink Arc outlives the run and
                 // we can drain it for the JSONL write below.
-                capture: if self.conformance_self_test_capture || self.validate_response_schemas {
+                capture: if self.conformance_self_test_capture
+                    || self.validate_response_schemas
+                    || self.validate_requests
+                {
                     // Schema validation reads the captured response
                     // body, so opt the user into capture implicitly
                     // when they ask for validation. The on-disk
                     // JSONL/HTML files only get written if the user
                     // also passed `--conformance-self-test-capture`.
+                    // Round 56 (#79) — `--validate-requests` reads the
+                    // captured *request* the same way, so enable capture
+                    // for it too. Without this, `--validate-requests` on
+                    // a self-test run had no in-memory requests to walk
+                    // and silently wrote no violations file.
                     Some(std::sync::Arc::new(std::sync::Mutex::new(Vec::new())))
                 } else {
                     None
@@ -2860,6 +2868,32 @@ impl BenchCommand {
                     "HTML report written to {}",
                     html_path.display()
                 ));
+            }
+
+            // Round 56 (#79) — Srikanth on 0.3.203: "parameter violations
+            // are still absent from the logs." Root cause: the SINGLE-target
+            // self-test returned here without ever walking the emitted
+            // requests. Only the r49 multi-target self-test path (the
+            // `--targets-file` workflow) called the validator. Mirror that
+            // wiring here so a plain single-target self-test also writes
+            // `conformance-request-violations.json`. The validator reads the
+            // capture we just drained to the JSONL; my r56 change to
+            // `request_validator.rs` records each `parameters:*` negative as
+            // a `parameter_negative_probe` even when the emitted request is
+            // spec-valid (so the three parameter probes stop being silent).
+            if self.validate_requests && !self.spec.is_empty() {
+                let n = crate::conformance::request_validator::validate_emitted_requests_with_base_path(
+                    &self.spec,
+                    &self.output,
+                    self.base_path.as_deref(),
+                )
+                .await?;
+                if n > 0 {
+                    TerminalReporter::print_warning(&format!(
+                        "{} emitted request(s) recorded against the spec — see conformance-request-violations.json",
+                        n
+                    ));
+                }
             }
             return Ok(());
         }
@@ -3159,7 +3193,13 @@ impl BenchCommand {
                 } else {
                     self.geo_source_headers.clone()
                 },
-                capture: if self.conformance_self_test_capture || self.validate_response_schemas {
+                capture: if self.conformance_self_test_capture
+                    || self.validate_response_schemas
+                    || self.validate_requests
+                {
+                    // Round 56 (#79) — mirror the single-target path: the
+                    // per-target request validator needs the captured
+                    // requests, so `--validate-requests` implies capture.
                     Some(std::sync::Arc::new(std::sync::Mutex::new(Vec::new())))
                 } else {
                     None

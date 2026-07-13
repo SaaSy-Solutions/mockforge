@@ -627,7 +627,13 @@ impl ParallelExecutor {
                                                          // Issue #79 r54 — forward `--source-ip` (as k6 `--local-ips`) so each
                                                          // target's VUs rotate through the configured source IP pool. Without
                                                          // this, `--source-ip` was a silent no-op in multi-target mode.
-        let executor = K6Executor::new()?.with_local_ips(local_ips.to_string());
+                                                         // Issue #79 r56 — plain multi-target load only checks status codes, so
+                                                         // discard response bodies to keep k6's RSS bounded on long, high-VU runs.
+                                                         // Without this, 10+ targets * 10 VUs * 70 min buffered every body and the
+                                                         // kernel OOM-killer sent k6 `signal: 9 (SIGKILL)`.
+        let executor = K6Executor::new()?
+            .with_local_ips(local_ips.to_string())
+            .with_discard_response_bodies(true);
         let results = executor
             .execute_with_port(&script_path, Some(&output_dir), verbose, Some(api_port))
             .await;
