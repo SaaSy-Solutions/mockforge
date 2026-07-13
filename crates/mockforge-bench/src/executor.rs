@@ -124,6 +124,13 @@ pub struct K6Executor {
     /// bound interfaces (k6 supports this natively, contrary to my
     /// round-22 warning).
     local_ips: String,
+    /// Round 56 (#79) — when true, set `K6_DISCARD_RESPONSE_BODIES=true` so k6
+    /// does not buffer every response body in memory. On long, high-concurrency
+    /// multi-target runs (Srikanth on 0.3.203 saw `k6 ... signal: 9 (SIGKILL)`,
+    /// i.e. the OOM killer) the buffered bodies plus k6's own metric
+    /// accumulation exhaust RAM. Plain load only checks status codes, so
+    /// dropping the bodies is safe there.
+    discard_response_bodies: bool,
 }
 
 impl K6Executor {
@@ -137,6 +144,7 @@ impl K6Executor {
         Ok(Self {
             k6_path,
             local_ips: String::new(),
+            discard_response_bodies: false,
         })
     }
 
@@ -145,6 +153,14 @@ impl K6Executor {
     /// and/or CIDRs (`192.168.0.0/24`) - same syntax k6 expects.
     pub fn with_local_ips(mut self, local_ips: impl Into<String>) -> Self {
         self.local_ips = local_ips.into();
+        self
+    }
+
+    /// Round 56 (#79) — enable `K6_DISCARD_RESPONSE_BODIES` so k6 does not hold
+    /// response bodies in memory. Use for plain load runs (status-only checks);
+    /// do NOT use where the script inspects/extracts response bodies.
+    pub fn with_discard_response_bodies(mut self, discard: bool) -> Self {
+        self.discard_response_bodies = discard;
         self
     }
 
@@ -208,6 +224,12 @@ impl K6Executor {
         // self-test driver's `--source-ip`.
         if !self.local_ips.is_empty() {
             cmd.arg("--local-ips").arg(&self.local_ips);
+        }
+
+        // Round 56 (#79) — drop response bodies to bound k6's memory on long,
+        // high-concurrency runs (guards against the SIGKILL/OOM Srikanth hit).
+        if self.discard_response_bodies {
+            cmd.env("K6_DISCARD_RESPONSE_BODIES", "true");
         }
 
         // summary.json is written by the k6 script's handleSummary() function
@@ -595,6 +617,21 @@ mod tests {
     fn test_k6_results_zero_requests() {
         let results = K6Results::default();
         assert_eq!(results.error_rate(), 0.0);
+    }
+
+    #[test]
+    fn discard_response_bodies_defaults_off_and_builder_flips_it() {
+        // Round 56 (#79) — guards the OOM fix for multi-target load runs.
+        // Default must stay off so body-inspecting paths (extract/conformance)
+        // are unaffected; the builder opts a run in.
+        let exec = K6Executor {
+            k6_path: "k6".to_string(),
+            local_ips: String::new(),
+            discard_response_bodies: false,
+        };
+        assert!(!exec.discard_response_bodies);
+        let exec = exec.with_discard_response_bodies(true);
+        assert!(exec.discard_response_bodies);
     }
 
     #[test]

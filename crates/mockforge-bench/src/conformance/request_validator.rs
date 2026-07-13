@@ -244,6 +244,32 @@ fn match_path_segment<'a>(
     }
 }
 
+/// Round 56 (#79) — human-readable note for a `parameters:*` negative probe
+/// that produced no hard spec breach, so the log explains WHY it isn't a
+/// schema violation while still recording that the probe was fired.
+fn describe_parameter_probe(check: &str) -> String {
+    if check.starts_with("parameters:missing-query") {
+        "negative probe omitted a query parameter; not a contract breach when the \
+         parameter is optional (a required one is reported as query_missing_required). \
+         The target should still validate it."
+            .to_string()
+    } else if check.starts_with("parameters:uri-too-long") {
+        "negative probe added an oversized / undeclared query parameter; OpenAPI does \
+         not constrain URI length or forbid extra query params, so this is not a schema \
+         breach. Exercises the target's URI-length / unknown-param handling."
+            .to_string()
+    } else if check.starts_with("parameters:bad-path-param") {
+        "negative probe injected an invalid-looking path parameter value; it satisfied \
+         the declared schema (no enum/pattern/length constraint to violate), so it is not \
+         a schema breach (a constrained one is reported as path_value_mismatch)."
+            .to_string()
+    } else {
+        "parameter negative probe emitted; no client-side schema breach detected (the \
+         mutation is permitted by the contract, so rejection is the target's responsibility)."
+            .to_string()
+    }
+}
+
 /// Collapse runs of `/` into a single `/` (preserving a leading slash).
 /// `//v1//x` -> `/v1/x`. Round 55 (#79) — guards path matching against the
 /// `--base-path /` double-slash regression.
@@ -714,6 +740,10 @@ pub async fn validate_emitted_requests_with_base_path(
         if method.is_empty() || url.is_empty() {
             continue;
         }
+        // Round 56 (#79) — remember how many violations existed before this
+        // probe so a parameter negative that produced no hard breach can still
+        // be recorded (see the block at the end of the loop).
+        let viol_before = emitted_violations.len();
         let (path_only, query_string) = match url.find('?') {
             Some(i) => (url[..i].to_string(), url[i + 1..].to_string()),
             None => (url.clone(), String::new()),
@@ -927,6 +957,27 @@ pub async fn validate_emitted_requests_with_base_path(
                     &mut emitted_violations,
                 );
             }
+        }
+
+        // Round 56 (#79) — Srikanth on 0.3.203: the console reported thousands
+        // of missed `parameters` negatives but the logs showed only owasp and
+        // request-body rows. For his Apigee spec the parameter probes don't
+        // breach the contract at all (dropping the OPTIONAL `$.xgafv`, adding an
+        // undeclared oversized query param, or an unconstrained `{instance}`
+        // path value are all spec-VALID), so the validator had nothing to flag.
+        // Record each parameter negative probe explicitly so every probe the
+        // self-test fired is visible, clearly typed so it is not mistaken for a
+        // hard schema breach. `query_missing_required` / `path_value_mismatch`
+        // (added in r53/r54) still fire first for genuinely-constrained params;
+        // this only covers the ones the contract permits.
+        if check.starts_with("parameters:") && emitted_violations.len() == viol_before {
+            emitted_violations.push(RequestViolation {
+                check_name: check.clone(),
+                method: method.clone(),
+                path: url.clone(),
+                violation_type: "parameter_negative_probe".to_string(),
+                message: describe_parameter_probe(&check),
+            });
         }
     }
 
@@ -1852,5 +1903,83 @@ mod emitted_body_tests {
         assert_eq!(row["violation_type"], "path_value_mismatch");
         let msg = row["message"].as_str().unwrap();
         assert!(msg.contains("instance") && msg.contains("maxLength"), "unexpected: {msg}");
+    }
+
+    /// Round 56 (#79) — Srikanth on 0.3.203: parameter negatives never appeared
+    /// in the logs because for his Apigee spec they don't breach the contract.
+    /// The three probe types (missing OPTIONAL query, oversized extra query,
+    /// unconstrained path value) are now recorded as `parameter_negative_probe`
+    /// so every probe is visible, while a probe that DOES breach the contract
+    /// still produces its hard violation (not the probe record).
+    #[tokio::test]
+    async fn parameter_negatives_are_recorded_even_when_spec_valid() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let spec_json = serde_json::json!({
+            "openapi": "3.0.0",
+            "info": { "title": "apigee-min", "version": "1.0.0" },
+            "paths": {
+                "/v1/organizations": {
+                    "post": {
+                        "parameters": [
+                            { "name": "$.xgafv", "in": "query",
+                              "schema": { "type": "string", "enum": ["1", "2"] } }
+                        ],
+                        "responses": { "200": { "description": "ok" } }
+                    }
+                }
+            }
+        });
+        let spec_path = dir.path().join("apigee-min.json");
+        std::fs::write(&spec_path, serde_json::to_vec_pretty(&spec_json).unwrap()).unwrap();
+
+        let base = "https://172.22.232.2:443/v1/organizations";
+        let jsonl_path = dir.path().join("conformance-self-test-requests.jsonl");
+        let mut f = std::fs::File::create(&jsonl_path).unwrap();
+        use std::io::Write as _;
+        for line in [
+            // Drops the OPTIONAL $.xgafv — spec-valid, but should be recorded.
+            serde_json::json!({ "label": "parameters:missing-query", "method": "POST",
+                "url": base, "request_body": "" }),
+            // Adds an oversized extra param — spec-valid, but recorded.
+            serde_json::json!({ "label": "parameters:uri-too-long", "method": "POST",
+                "url": format!("{base}?p=xxxxxxxxxxxxxxxxxxxx"), "request_body": "" }),
+            // owasp injects a BAD $.xgafv value — a real query breach, NOT a probe record.
+            serde_json::json!({ "label": "owasp:sqli", "method": "POST",
+                "url": format!("{base}?%24.xgafv=%27%20OR%201%3D1"), "request_body": "" }),
+        ] {
+            writeln!(f, "{}", serde_json::to_string(&line).unwrap()).unwrap();
+        }
+        drop(f);
+
+        validate_emitted_requests_with_base_path(
+            std::slice::from_ref(&spec_path),
+            dir.path(),
+            None,
+        )
+        .await
+        .expect("runs");
+        let flat: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(dir.path().join("conformance-request-violations.json"))
+                .unwrap(),
+        )
+        .unwrap();
+        let rows = flat.as_array().unwrap();
+
+        // Both parameter negatives are recorded as probe records.
+        let param_probes: Vec<&serde_json::Value> = rows
+            .iter()
+            .filter(|r| r["violation_type"] == "parameter_negative_probe")
+            .collect();
+        assert!(
+            param_probes.iter().any(|r| r["check_name"] == "parameters:missing-query"),
+            "missing-query probe must be recorded: {rows:?}"
+        );
+        assert!(
+            param_probes.iter().any(|r| r["check_name"] == "parameters:uri-too-long"),
+            "uri-too-long probe must be recorded"
+        );
+        // The owasp probe is a REAL query breach, not a probe record.
+        let owasp = rows.iter().find(|r| r["check_name"] == "owasp:sqli").expect("owasp present");
+        assert_eq!(owasp["violation_type"], "query_value_mismatch");
     }
 }
