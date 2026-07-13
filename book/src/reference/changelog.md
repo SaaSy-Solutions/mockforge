@@ -1,5 +1,12 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.204] - 2026-07-13
+
+### Fixed
+
+- **[Contracts]** `parameters:*` negative probes are now recorded in `conformance-request-violations.json`, and the single-target self-test writes that file at all (#79 round 56 / Srikanth on 0.3.203: parameter violations were still absent from the logs). For his Apigee spec the parameter probes are all spec-VALID by construction (dropping the OPTIONAL `$.xgafv` query, adding an oversized/undeclared query param, or an unconstrained `{instance}` path value violate no schema), so the emitted-request validator found nothing to flag and stayed silent. Each `parameters:*` negative that produces no hard breach is now recorded as a typed `parameter_negative_probe` row explaining why it is not a schema violation; the single-target self-test calls the validator too (previously only the multi-target `--targets-file` path did); and `--validate-requests` now implies request capture. Real-binary verified against `mockforge serve` with a custom-verb Apigee spec: the violations file carries all three parameter probes (`uri-too-long`, `bad-path-param`, `missing-query`) alongside the genuine `body_schema_violation` / `query_value_mismatch` rows, in both single-target and `--targets-file` modes.
+- **[Reality]** k6 no longer gets OOM-killed (`signal: 9 (SIGKILL)`) during long, high-concurrency multi-target load runs (#79 round 56 / Srikanth on 0.3.203). The plain-load k6 only checks status codes but was buffering every response body in memory; over a multi-hour run at 10 VUs across 10+ targets the buffered bodies plus k6's metric accumulation exhausted RAM and the kernel OOM-killer sent SIGKILL. The multi-target plain-load path now runs k6 with `K6_DISCARD_RESPONSE_BODIES=true` (safe there because bodies are never inspected). Real-binary verified: the launched k6 child process carries `K6_DISCARD_RESPONSE_BODIES=true` in its environment and `data_received` stays at header-only levels. The flag defaults off and is opt-in per executor; body-inspecting paths (conformance, extraction) are untouched.
+
 ## [0.3.198] - 2026-07-02
 
 ### Fixed
