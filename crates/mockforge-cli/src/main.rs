@@ -2336,6 +2336,17 @@ enum Commands {
         /// browser-choking file by default.
         #[arg(long = "report-missed-cap", value_name = "N")]
         report_missed_cap: Option<u32>,
+
+        /// Issue #79 round 57 — run k6 with `K6_DISCARD_RESPONSE_BODIES=true`
+        /// so it does not buffer response bodies in memory. For scale / stress
+        /// load runs where you only care about status codes and latency: keeps
+        /// k6's RSS bounded on long, high-VU runs (guards the OOM / SIGKILL
+        /// failure mode). This is the first-class flag for the env var wired in
+        /// 0.3.204. Multi-target load already discards by default; this enables
+        /// it for single-target load runs too. No effect on conformance /
+        /// self-test / CRUD-extraction runs, which need the response body.
+        #[arg(long = "discard-response-bodies")]
+        discard_response_bodies: bool,
     },
 
     /// Native Rust chunked-encoding traffic generator.
@@ -3304,6 +3315,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             geo_source_ips,
             geo_source_headers,
             report_missed_cap,
+            discard_response_bodies,
         } => {
             // Validate that either --target or --targets-file is provided, but not both
             match (&target, &targets_file) {
@@ -3426,6 +3438,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 geo_source_ips,
                 geo_source_headers,
                 report_missed_cap,
+                discard_response_bodies,
             };
 
             if let Err(e) = bench_cmd.execute().await {

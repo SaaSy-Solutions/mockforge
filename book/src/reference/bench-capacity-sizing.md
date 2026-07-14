@@ -101,6 +101,28 @@ number to ~32 on a single client.
 **Symptoms of over-provisioning:** none worth worrying about. Extra
 CPU/RAM costs are tiny compared to the cost of a failed run.
 
+## `--discard-response-bodies` for long load runs
+
+Plain load runs only check status codes and latency, but k6 still buffers
+every response body in memory by default. On a long, high-VU or many-target
+run this accumulates until the kernel OOM-killer sends k6 `signal: 9
+(SIGKILL)`. Pass `--discard-response-bodies` so k6 runs with
+`K6_DISCARD_RESPONSE_BODIES=true` and drops the bodies it never inspects:
+
+```bash
+mockforge bench --spec api.yaml --target https://api.example.com \
+  --duration 1h --vus 50 --discard-response-bodies
+```
+
+Notes:
+
+- Multi-target load (`--targets-file`) already discards bodies by default;
+  the flag additionally covers single-target load runs.
+- It has no effect on conformance / self-test / CRUD-extraction runs, which
+  need the response body to validate or extract fields.
+- If OOM persists on a very large fan-out, also lower `--max-concurrency`
+  (each target is a separate k6 process) and shorten `--duration` / `--vus`.
+
 ## Sharding past 50 targets
 
 For 50+ targets at 100+ RPS, split the work across N clients:

@@ -205,15 +205,42 @@ intentionally separate knobs from request-body conformance.
 Negatives [security]: 739 caught / 1812 missed  ⚠
 ```
 
-- **caught** = the server correctly rejected with a 4xx.
-- **missed** = the server accepted (`2xx-3xx`) or crashed (`5xx`)
-  when it shouldn't have.
+A **negative** is a deliberately-bad request that *should* draw a `4xx`
+from the **target** (the service you are benching), not from MockForge.
+The two buckets are about the target's behaviour:
 
-A category that's all-missed is the spec telling you that whole
+- **caught** = the target rejected it with a `4xx` (its validation held).
+- **missed** = the target accepted it (`2xx-3xx`) or crashed (`5xx`)
+  when the probe expected a rejection.
+
+A category that's all-missed is often the spec telling you that whole
 validator class isn't enforced. A category that's all-caught with no
 missed is the server doing its job. The interesting reads are
 partial-misses (some routes enforce, others don't) — those are
 usually middleware ordering bugs.
+
+### A high "missed" is not automatically a bug
+
+Many probes are **spec-valid by construction**, so the contract itself
+permits them and a correct target is *right* to accept them (counted as
+"missed" only because the probe hoped for a rejection). Examples:
+
+- a `string` field accepts any string, so an `owasp:sqli` payload like
+  `' OR '1'='1` satisfies the schema — only an app-layer WAF, not the
+  contract, would reject it;
+- an *optional* query parameter can be dropped (`parameters:missing-query`);
+- an unconstrained `{id}` path segment accepts any value
+  (`parameters:bad-path-param`).
+
+These land in `conformance-request-violations.json` as typed
+`parameter_negative_probe` (or equivalent) rows with a note explaining
+why they are not a schema breach and that rejecting them is the target's
+responsibility. So when `parameters` or `owasp` shows `0 caught / N
+missed`, read it as "the contract permits these, and the target chose to
+accept them" — check the per-probe rows to see which are genuinely
+unenforced validations versus spec-permitted inputs. The same summary is
+printed inline under each `Negatives [...]` line so you don't have to
+come back to this page.
 
 ## HTML drill-down cap
 

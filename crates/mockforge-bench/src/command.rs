@@ -256,6 +256,14 @@ pub struct BenchCommand {
     /// browser-choking HTML file by default.
     pub report_missed_cap: Option<u32>,
 
+    /// Round 57 (#79) — when true, run k6 load with
+    /// `K6_DISCARD_RESPONSE_BODIES=true` so it does not buffer response bodies
+    /// in memory. Exposes the r56 env var as a first-class flag for scale /
+    /// stress runs. Only affects the plain (status-only) load paths; the
+    /// conformance / self-test / CRUD-extraction paths that read the body
+    /// ignore it. Multi-target load already discards by default (r56).
+    pub discard_response_bodies: bool,
+
     // === OWASP API Security Top 10 Testing ===
     /// Enable OWASP API Security Top 10 testing mode
     pub owasp_api_top10: bool,
@@ -911,7 +919,12 @@ impl BenchCommand {
 
         // Execute k6
         TerminalReporter::print_progress("Executing load test...");
-        let executor = K6Executor::new()?.with_local_ips(self.source_ips.join(","));
+        // Round 57 (#79) — `--discard-response-bodies` opts a single-target
+        // load run into K6_DISCARD_RESPONSE_BODIES. Safe here: this is the
+        // plain load path (status/latency only), not conformance/extraction.
+        let executor = K6Executor::new()?
+            .with_local_ips(self.source_ips.join(","))
+            .with_discard_response_bodies(self.discard_response_bodies);
 
         std::fs::create_dir_all(&self.output)?;
 
@@ -1040,6 +1053,10 @@ impl BenchCommand {
                 geo_source_ips: self.geo_source_ips.clone(),
                 geo_source_headers: self.geo_source_headers.clone(),
                 report_missed_cap: None,
+                // Round 57 (#79) — carry the flag through; the multi-target
+                // plain-load path already discards by default (r56), so this
+                // keeps the per-target command faithful to the parent.
+                discard_response_bodies: self.discard_response_bodies,
             },
             targets,
             max_concurrency,
@@ -2088,7 +2105,11 @@ impl BenchCommand {
         std::fs::write(&script_path, &script)?;
 
         if !self.generate_only {
-            let executor = K6Executor::new()?.with_local_ips(self.source_ips.join(","));
+            // Round 57 (#79) — honour `--discard-response-bodies` on the
+            // standard (status-only) load path too.
+            let executor = K6Executor::new()?
+                .with_local_ips(self.source_ips.join(","))
+                .with_discard_response_bodies(self.discard_response_bodies);
             let output_dir = self.output.join(format!("{}_results", spec_name.replace('.', "_")));
             std::fs::create_dir_all(&output_dir)?;
 
@@ -4106,6 +4127,7 @@ mod tests {
             geo_source_ips: Vec::new(),
             geo_source_headers: Vec::new(),
             report_missed_cap: None,
+            discard_response_bodies: false,
         };
 
         let headers = cmd.parse_headers().unwrap();
@@ -4209,6 +4231,7 @@ mod tests {
             geo_source_ips: Vec::new(),
             geo_source_headers: Vec::new(),
             report_missed_cap: None,
+            discard_response_bodies: false,
         };
 
         assert_eq!(cmd.get_spec_display_name(), "test.yaml");
@@ -4292,6 +4315,7 @@ mod tests {
             geo_source_ips: Vec::new(),
             geo_source_headers: Vec::new(),
             report_missed_cap: None,
+            discard_response_bodies: false,
         };
 
         assert_eq!(cmd_multi.get_spec_display_name(), "2 spec files");
