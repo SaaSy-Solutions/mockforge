@@ -383,6 +383,18 @@ impl SelfTestReport {
             self.negative_caught.keys().chain(self.negative_missed.keys()).collect();
         keys.sort();
         keys.dedup();
+        // Round 57 (#79) — Srikanth asked what "caught" vs "missed" mean.
+        // Spell it out once, inline, so the console output is self-explanatory.
+        if !keys.is_empty() {
+            out.push_str(
+                "  (negatives are deliberately-bad requests that SHOULD draw a 4xx from the TARGET: \
+                 \"caught\" = the target rejected it, \"missed\" = the target accepted it. \
+                 A high \"missed\" is not automatically a target bug: many probes are spec-valid by \
+                 construction, e.g. a string field accepts any string or an optional query param can \
+                 be dropped, so the contract permits them; those are the parameter_negative_probe / \
+                 informational rows in conformance-request-violations.json.)\n",
+            );
+        }
         for cat in keys {
             let caught = self.negative_caught.get(cat).copied().unwrap_or(0);
             let missed = self.negative_missed.get(cat).copied().unwrap_or(0);
@@ -2151,7 +2163,26 @@ mod tests {
         assert!(summary.contains("Positives: 3 pass / 0 fail"));
         assert!(summary.contains("Negatives [request-body]: 2 caught / 1 missed"));
         assert!(summary.contains("⚠"));
+        // Round 57 (#79) — the caught/missed legend is printed once when there
+        // are negatives, so the console explains the terms inline.
+        assert!(summary.contains("\"caught\" = the target rejected it"));
+        assert!(summary.contains("spec-valid by construction"));
         assert!(!r.all_passed());
+    }
+
+    #[test]
+    fn report_summary_omits_legend_when_no_negatives() {
+        // Round 57 (#79) — a positives-only report has no Negatives lines, so
+        // the legend would be noise; it must not appear.
+        let r = SelfTestReport {
+            positive_pass: 1,
+            positive_fail: 0,
+            negative_caught: BTreeMap::new(),
+            negative_missed: BTreeMap::new(),
+            operations: Vec::new(),
+        };
+        let summary = r.render_summary();
+        assert!(!summary.contains("deliberately-bad requests"));
     }
 
     #[test]

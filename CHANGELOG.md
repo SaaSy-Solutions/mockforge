@@ -1,3 +1,13 @@
+## [0.3.205] - 2026-07-14
+
+### Added
+
+- **[DevX]** New `mockforge bench --discard-response-bodies` flag exposes `K6_DISCARD_RESPONSE_BODIES=true` as a first-class option (#79 round 57 / Srikanth on 0.3.204 asked for a flag instead of setting the env var for scale/stress runs). Plain load runs only check status codes but k6 buffers every response body by default, which OOM-kills k6 on long, high-VU runs. The flag opts a single-target load run into discarding bodies (multi-target load already discards by default since 0.3.204); it is a no-op on conformance / self-test / CRUD-extraction runs, which need the body. Verified with the real binary: passing the flag makes the launched k6 child carry `K6_DISCARD_RESPONSE_BODIES=true` and keeps `data_received` at header-only levels, while omitting it leaves the env unset.
+
+### Changed
+
+- **[DevX]** The self-test console summary now prints a one-line legend under the `Negatives [...]` lines explaining that "caught" means the target rejected a deliberately-bad request with a 4xx and "missed" means the target accepted it, and that a high "missed" is not automatically a bug because many probes are spec-valid by construction (#79 round 57 / Srikanth on 0.3.204 asked how to read caught vs missed). The self-test-probes reference page gains the same spec-valid nuance (a `string` field accepts any string so an `owasp:sqli` payload is a valid string; an optional query param can be dropped; an unconstrained `{id}` accepts any value), and the capacity-sizing page documents the new flag.
+
 ## [0.3.204] - 2026-07-13
 
 ### Fixed

@@ -769,6 +769,7 @@ fn default_bench_command(output_dir: &Path) -> BenchCommand {
         geo_source_ips: Vec::new(),
         geo_source_headers: Vec::new(),
         report_missed_cap: None,
+        discard_response_bodies: false,
         owasp_api_top10: false,
         owasp_categories: None,
         owasp_auth_header: "Authorization".to_string(),

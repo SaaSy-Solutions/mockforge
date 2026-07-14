@@ -1,5 +1,15 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.205] - 2026-07-14
+
+### Added
+
+- **[DevX]** New `mockforge bench --discard-response-bodies` flag exposes `K6_DISCARD_RESPONSE_BODIES=true` as a first-class option (#79 round 57 / Srikanth on 0.3.204 asked for a flag instead of the env var for scale/stress runs). Opts a single-target load run into discarding response bodies (multi-target load already discards by default); no-op on conformance / self-test / extraction runs, which need the body. Real-binary verified: the launched k6 child carries the env var and `data_received` stays at header-only levels.
+
+### Changed
+
+- **[DevX]** The self-test console summary prints a one-line legend under the `Negatives [...]` lines explaining "caught" (target rejected a deliberately-bad request with a 4xx) vs "missed" (target accepted it), and that a high "missed" is not automatically a bug because many probes are spec-valid by construction (#79 round 57 / Srikanth on 0.3.204 asked how to read caught vs missed). The self-test-probes and capacity-sizing reference pages gain the same nuance and document the new flag.
+
 ## [0.3.204] - 2026-07-13
 
 ### Fixed
