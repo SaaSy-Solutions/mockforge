@@ -313,11 +313,82 @@ pub struct SelfTestReport {
     pub operations: Vec<OperationResult>,
 }
 
+/// Round 58 (#79) — an unambiguous, no-analysis-needed problem surfaced by the
+/// self-test. Srikanth on 0.3.205: "Is it possible to give another option ...
+/// that should say for sure this is an issue. Currently both caught and missed
+/// needs manual intervention and deep analysis ... very time consuming."
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct DefiniteIssue {
+    pub method: String,
+    pub path: String,
+    /// `valid_request_rejected` (target refused a spec-valid request) or
+    /// `server_error` (target returned 5xx / crashed instead of a clean reply).
+    pub kind: String,
+    pub status: u16,
+    pub detail: String,
+}
+
 impl SelfTestReport {
     /// All-pass means every positive case got 2xx-3xx and every
     /// negative case got 4xx.
     pub fn all_passed(&self) -> bool {
         self.positive_fail == 0 && self.negative_missed.values().sum::<usize>() == 0
+    }
+
+    /// Round 58 (#79) — the subset of findings that are unambiguously wrong, so
+    /// a user does not have to eyeball every caught/missed row across every API.
+    /// Two classes need no judgement:
+    ///   1. a POSITIVE (spec-valid) request the target REJECTED (4xx) — it broke
+    ///      a legitimate call;
+    ///   2. ANY probe, positive or negative, that drew a 5xx — the target
+    ///      crashed instead of replying cleanly (a bad request should get a
+    ///      clean 4xx, never a 500).
+    /// Deliberately EXCLUDES "missed" negatives on spec-valid probes: those are
+    /// the ones that genuinely need per-probe analysis (see the caught/missed
+    /// legend), so keeping them out is the whole point of this view.
+    pub fn definite_issues(&self) -> Vec<DefiniteIssue> {
+        let mut issues = Vec::new();
+        for op in &self.operations {
+            if let Some(pos) = &op.positive {
+                if !pos.passed {
+                    let (kind, detail) = if pos.actual_status >= 500 {
+                        (
+                            "server_error",
+                            "target returned 5xx for a spec-valid request (crashed instead of serving it)"
+                                .to_string(),
+                        )
+                    } else {
+                        (
+                            "valid_request_rejected",
+                            "target refused a spec-valid request (a legitimate call it should accept)"
+                                .to_string(),
+                        )
+                    };
+                    issues.push(DefiniteIssue {
+                        method: op.method.clone(),
+                        path: op.path.clone(),
+                        kind: kind.to_string(),
+                        status: pos.actual_status,
+                        detail,
+                    });
+                }
+            }
+            for neg in &op.negatives {
+                if neg.actual_status >= 500 {
+                    issues.push(DefiniteIssue {
+                        method: op.method.clone(),
+                        path: op.path.clone(),
+                        kind: "server_error".to_string(),
+                        status: neg.actual_status,
+                        detail: format!(
+                            "target returned 5xx for the '{}' negative probe (should reject a bad request with a clean 4xx, not crash)",
+                            neg.label
+                        ),
+                    });
+                }
+            }
+        }
+        issues
     }
 
     /// Round 18.1 — detect the "self-test target is misconfigured"
@@ -403,6 +474,30 @@ impl SelfTestReport {
                 "Negatives [{}]: {} caught / {} missed  {}\n",
                 cat, caught, missed, mark
             ));
+        }
+        // Round 58 (#79) — surface the unambiguous problems up front so they
+        // don't have to be dug out of the caught/missed rollup. Capped in the
+        // console; the full set is in conformance-definite-issues.json.
+        let issues = self.definite_issues();
+        if issues.is_empty() {
+            out.push_str(
+                "Definite issues: none (no spec-valid request was rejected and no probe drew a 5xx)\n",
+            );
+        } else {
+            out.push_str(&format!(
+                "Definite issues ({}) — unambiguous, no per-probe analysis needed (full list in conformance-definite-issues.json):\n",
+                issues.len()
+            ));
+            const CAP: usize = 20;
+            for iss in issues.iter().take(CAP) {
+                out.push_str(&format!(
+                    "  {} {} -> {} [{}]: {}\n",
+                    iss.method, iss.path, iss.status, iss.kind, iss.detail
+                ));
+            }
+            if issues.len() > CAP {
+                out.push_str(&format!("  ... and {} more\n", issues.len() - CAP));
+            }
         }
         out
     }
@@ -2183,6 +2278,96 @@ mod tests {
         };
         let summary = r.render_summary();
         assert!(!summary.contains("deliberately-bad requests"));
+    }
+
+    #[test]
+    fn definite_issues_flags_rejected_positives_and_5xx_but_not_spec_valid_misses() {
+        // Round 58 (#79) — the "for sure this is an issue" view.
+        let mut r = SelfTestReport::default();
+        // (1) valid request the target rejected with 4xx -> definite issue.
+        r.operations.push(OperationResult {
+            method: "POST".into(),
+            path: "/v1/organizations".into(),
+            positive: Some(CaseOutcome {
+                label: "positive".into(),
+                expected_4xx: false,
+                actual_status: 400,
+                passed: false,
+            }),
+            negatives: vec![],
+        });
+        // (2) negative probe that crashed the target with 5xx -> definite issue.
+        r.operations.push(OperationResult {
+            method: "GET".into(),
+            path: "/v1/items".into(),
+            positive: Some(CaseOutcome {
+                label: "positive".into(),
+                expected_4xx: false,
+                actual_status: 200,
+                passed: true,
+            }),
+            negatives: vec![CaseOutcome {
+                label: "owasp:sqli".into(),
+                expected_4xx: true,
+                actual_status: 500,
+                passed: false,
+            }],
+        });
+        // (3) spec-valid negative the target accepted (2xx) -> NOT a definite
+        // issue (this is a "missed" that needs judgement, must be excluded).
+        r.operations.push(OperationResult {
+            method: "GET".into(),
+            path: "/v1/ok".into(),
+            positive: Some(CaseOutcome {
+                label: "positive".into(),
+                expected_4xx: false,
+                actual_status: 200,
+                passed: true,
+            }),
+            negatives: vec![CaseOutcome {
+                label: "parameters:missing-query".into(),
+                expected_4xx: true,
+                actual_status: 200,
+                passed: false,
+            }],
+        });
+
+        let issues = r.definite_issues();
+        assert_eq!(issues.len(), 2, "only the rejected-positive and the 5xx");
+        assert!(issues.iter().any(|i| i.kind == "valid_request_rejected"
+            && i.path == "/v1/organizations"
+            && i.status == 400));
+        assert!(issues
+            .iter()
+            .any(|i| i.kind == "server_error" && i.path == "/v1/items" && i.status == 500));
+        // The spec-valid missed negative is not present.
+        assert!(!issues.iter().any(|i| i.path == "/v1/ok"));
+
+        let summary = r.render_summary();
+        assert!(summary.contains("Definite issues (2)"));
+    }
+
+    #[test]
+    fn definite_issues_empty_renders_none_line() {
+        let r = SelfTestReport {
+            positive_pass: 1,
+            positive_fail: 0,
+            negative_caught: BTreeMap::from([("owasp".into(), 3)]),
+            negative_missed: BTreeMap::new(),
+            operations: vec![OperationResult {
+                method: "GET".into(),
+                path: "/v1/ok".into(),
+                positive: Some(CaseOutcome {
+                    label: "positive".into(),
+                    expected_4xx: false,
+                    actual_status: 200,
+                    passed: true,
+                }),
+                negatives: vec![],
+            }],
+        };
+        assert!(r.definite_issues().is_empty());
+        assert!(r.render_summary().contains("Definite issues: none"));
     }
 
     #[test]

@@ -242,6 +242,26 @@ unenforced validations versus spec-permitted inputs. The same summary is
 printed inline under each `Negatives [...]` line so you don't have to
 come back to this page.
 
+## Definite issues
+
+Because "missed" needs interpretation, the self-test also prints a
+`Definite issues (N)` section and writes a `conformance-definite-issues.json`
+sidecar containing ONLY the unambiguous problems, so you can triage many
+APIs by reading one short list:
+
+- **`valid_request_rejected`** — the target refused a spec-valid (positive)
+  request. It broke a legitimate call; this is always a real problem.
+- **`server_error`** — a probe (positive or negative) drew a 5xx. Even a
+  deliberately-bad request should get a clean 4xx, never a crash.
+
+Spec-valid "missed" negatives are deliberately excluded from this view:
+those are the ones the caught/missed rollup exists to help you judge. A
+"caught" 4xx is never listed here — a caught negative means the target did
+its job (rejected a bad request), so it is not a violation even if that
+exact error status isn't enumerated in the spec (use
+`--validate-response-schemas` if you want to check error bodies against
+the spec separately).
+
 ## HTML drill-down cap
 
 The "Missed negatives" table in `conformance-report.html` caps at 200

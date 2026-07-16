@@ -1,3 +1,13 @@
+## [0.3.206] - 2026-07-16
+
+### Fixed
+
+- **[Reality]** Multi-target load no longer fails to start with `k6 exited with status: exit status: 106` and zero requests (#79 round 58 / Srikanth on 0.3.205: all 10 targets failed this way, so no traffic ran and `--discard-response-bodies` appeared to "not help"). Exit 106 is k6's `CannotStartRESTAPI`: each parallel k6 was pinned to a FIXED REST API port (`6565 + index` → 6566, 6567, ...), which collides whenever those ports are already taken (orphaned k6 from a previous OOM-killed run, a second concurrent bench, or any local service). Each k6 instance now binds an OS-assigned ephemeral port (`--address localhost:0`) for its REST API, so it can never collide; MockForge never queries that API (results come from `summary.json` on disk). Real-binary verified: with ports 6566 and 6567 deliberately occupied, a multi-target load that previously exited 106 on every target now starts cleanly and generates traffic on all targets.
+
+### Added
+
+- **[Contracts]** New "Definite issues" view in the conformance self-test (#79 round 58 / Srikanth on 0.3.205 asked for a way to say "for sure this is an issue" without eyeballing every caught/missed row across all APIs). A `Definite issues (N)` section is printed under the `Negatives [...]` summary and a `conformance-definite-issues.json` sidecar is written next to the report. It surfaces only the unambiguous problems that need no per-probe analysis: (1) a spec-valid request the target rejected, and (2) any probe that drew a 5xx (the target crashed instead of replying cleanly). Spec-valid "missed" negatives (which genuinely need judgement) are deliberately excluded. Real-binary verified: a clean target prints "Definite issues: none"; a target that 404s a valid request surfaces it as a `valid_request_rejected` row in both the console and the JSON. Also clarified in the docs that a "caught" 4xx is the target doing its job (rejecting a bad request), not a violation.
+
 ## [0.3.205] - 2026-07-14
 
 ### Added

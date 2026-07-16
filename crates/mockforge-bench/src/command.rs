@@ -2816,6 +2816,20 @@ impl BenchCommand {
                     json_path.display()
                 ));
             }
+            // Round 58 (#79) — write the "definite issues" sidecar so the
+            // unambiguous problems are grep-able / automatable without eyeballing
+            // the caught/missed rollup.
+            let issues = report.definite_issues();
+            let issues_path = self.output.join("conformance-definite-issues.json");
+            if let Ok(json) = serde_json::to_string_pretty(&issues) {
+                if std::fs::write(&issues_path, json).is_ok() && !issues.is_empty() {
+                    TerminalReporter::print_warning(&format!(
+                        "{} definite issue(s) — see {}",
+                        issues.len(),
+                        issues_path.display()
+                    ));
+                }
+            }
             // Round 18.1 — surface the "every positive failed with
             // the same status" case loudly. Without this, a user
             // who forgot `--base-path /api` saw 404 for every
@@ -3307,6 +3321,19 @@ impl BenchCommand {
             let json_path = target_dir.join("conformance-self-test.json");
             if let Ok(json) = serde_json::to_string_pretty(&report) {
                 let _ = std::fs::write(&json_path, json);
+            }
+            // Round 58 (#79) — per-target "definite issues" sidecar (mirror of
+            // the single-target path).
+            let issues = report.definite_issues();
+            if let Ok(json) = serde_json::to_string_pretty(&issues) {
+                let issues_path = target_dir.join("conformance-definite-issues.json");
+                if std::fs::write(&issues_path, json).is_ok() && !issues.is_empty() {
+                    TerminalReporter::print_warning(&format!(
+                        "  {} definite issue(s) — see {}",
+                        issues.len(),
+                        issues_path.display()
+                    ));
+                }
             }
             TerminalReporter::print_progress(&report.render_summary());
 
