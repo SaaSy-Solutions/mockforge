@@ -27,12 +27,17 @@ ignore = [
     { id = "RUSTSEC-2026-0187", reason = "lopdf stack overflow on deeply nested PDFs — only on the mockforge-reporting PDF emit path; we don't parse untrusted PDFs" },
 
     # quick-xml < 0.41.0 DoS advisories (published 2026-07-02, fixed in
-    # >=0.41.0). Four versions in the tree: one direct (registry-server SAML,
-    # 0.31, feature-gated) plus three transitive (0.37/0.38/0.39) that can't
-    # reach 0.41 without upstream releases. Tracked in #919; the direct SAML
-    # dep (the only untrusted-XML path) is the priority upgrade.
-    { id = "RUSTSEC-2026-0194", reason = "quick-xml quadratic runtime on duplicate attrs (DoS) — transitive versions have no 0.41 upstream yet; direct SAML bump tracked in #919" },
-    { id = "RUSTSEC-2026-0195", reason = "quick-xml unbounded namespace allocation (DoS) — transitive versions have no 0.41 upstream yet; direct SAML bump tracked in #919" },
+    # >=0.41.0). #919 assumed the only <0.41 path was registry-server's direct
+    # SAML dep parsing untrusted XML, but that turned out wrong on two counts:
+    # (1) the SAML code parses via regex (`extract_xml_value`), not quick-xml,
+    # so the direct dep was UNUSED — now bumped to 0.41 anyway so any future
+    # use is safe; (2) the vulnerable 0.31 in the tree is really pulled by
+    # `azure_core` 0.21 (the feature-gated Azure blob-storage SDK), which
+    # parses TRUSTED Azure responses, not untrusted user input. That plus the
+    # transitive 0.37/0.38/0.39 can't reach 0.41 without an azure-SDK / upstream
+    # bump, so these stay ignored. DoS-only (not RCE), no untrusted-XML path.
+    { id = "RUSTSEC-2026-0194", reason = "quick-xml quadratic runtime on duplicate attrs (DoS) — remaining <0.41 copies are azure-SDK (trusted XML) + transitive; no untrusted-XML path (#919)" },
+    { id = "RUSTSEC-2026-0195", reason = "quick-xml unbounded namespace allocation (DoS) — remaining <0.41 copies are azure-SDK (trusted XML) + transitive; no untrusted-XML path (#919)" },
 
     # wasmtime 36.x is pinned by mockforge-plugin-loader's current API
     # surface. Every one of these needs a major-version bump to resolve,

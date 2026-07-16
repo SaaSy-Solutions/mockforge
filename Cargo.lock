@@ -9057,7 +9057,7 @@ dependencies = [
  "prometheus",
  "prost 0.14.4",
  "qrcode",
- "quick-xml 0.31.0",
+ "quick-xml 0.41.0",
  "rand 0.9.4",
  "redis",
  "regex",
@@ -12152,6 +12152,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e660451e55124f798a69a5af3f49ccfbefbd41910eefd25caf2393e1f3473ec1"
 dependencies = [
  "memchr",
+ "serde",
 ]
 
 [[package]]
