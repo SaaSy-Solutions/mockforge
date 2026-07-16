@@ -621,16 +621,30 @@ impl ParallelExecutor {
         let script_path = output_dir.join("k6-script.js");
         std::fs::write(&script_path, script)?;
 
-        // Execute k6 with a unique API server port per target to avoid port conflicts.
-        // k6 defaults to localhost:6565 for its REST API; parallel instances collide.
-        let api_port = 6565 + (target_index as u16) + 1; // 6566, 6567, ...
-                                                         // Issue #79 r54 — forward `--source-ip` (as k6 `--local-ips`) so each
-                                                         // target's VUs rotate through the configured source IP pool. Without
-                                                         // this, `--source-ip` was a silent no-op in multi-target mode.
-                                                         // Issue #79 r56 — plain multi-target load only checks status codes, so
-                                                         // discard response bodies to keep k6's RSS bounded on long, high-VU runs.
-                                                         // Without this, 10+ targets * 10 VUs * 70 min buffered every body and the
-                                                         // kernel OOM-killer sent k6 `signal: 9 (SIGKILL)`.
+        // Execute k6 with its own REST API server port per target. k6 defaults
+        // to localhost:6565 and parallel instances collide on it.
+        //
+        // Issue #79 r58 — Srikanth on 0.3.205: every one of 10 targets failed
+        // with `exit status: 106` (k6 `CannotStartRESTAPI`) and 0 requests, so
+        // NO load ran at all (which read as "--discard-response-bodies isn't
+        // helping"). The old scheme pinned each k6 to a FIXED port
+        // (6565 + index → 6566, 6567, ...), which collides whenever those
+        // ports are already taken — e.g. orphaned k6 processes left behind by
+        // a previous run that was OOM-killed (his r56/r57 SIGKILL), a second
+        // concurrent bench, or any local service. Bind an OS-assigned
+        // ephemeral port (`:0`) instead: k6 asks the kernel for a free port at
+        // start, so it can never be "already in use". We never query the REST
+        // API (results come from summary.json on disk), so a random port is
+        // fine. Verified: two concurrent k6 with `--address localhost:0` both
+        // start cleanly where the fixed port yields exit 106.
+        let api_port = 0; // ephemeral: kernel picks a free port, no collision
+                          // Issue #79 r54 — forward `--source-ip` (as k6 `--local-ips`) so each
+                          // target's VUs rotate through the configured source IP pool. Without
+                          // this, `--source-ip` was a silent no-op in multi-target mode.
+                          // Issue #79 r56 — plain multi-target load only checks status codes, so
+                          // discard response bodies to keep k6's RSS bounded on long, high-VU runs.
+                          // Without this, 10+ targets * 10 VUs * 70 min buffered every body and the
+                          // kernel OOM-killer sent k6 `signal: 9 (SIGKILL)`.
         let executor = K6Executor::new()?
             .with_local_ips(local_ips.to_string())
             .with_discard_response_bodies(true);

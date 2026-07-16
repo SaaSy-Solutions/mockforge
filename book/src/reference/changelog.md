@@ -1,5 +1,15 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.206] - 2026-07-16
+
+### Fixed
+
+- **[Reality]** Multi-target load no longer fails to start with `exit status: 106` (k6 `CannotStartRESTAPI`) and zero requests (#79 round 58 / Srikanth on 0.3.205). Each parallel k6 was pinned to a fixed REST API port (`6565 + index`) that collides when already taken (orphaned k6 from a prior OOM-killed run, a second bench, a local service). k6 now binds an ephemeral port (`--address localhost:0`) instead; MockForge reads results from `summary.json` on disk, never the API. Real-binary verified with ports 6566/6567 occupied: a load that used to exit 106 on every target now runs.
+
+### Added
+
+- **[Contracts]** New "Definite issues" view in the self-test (#79 round 58 / Srikanth on 0.3.205 asked for a "for sure this is an issue" filter). A `Definite issues (N)` console section plus a `conformance-definite-issues.json` sidecar surface only unambiguous problems: a spec-valid request the target rejected, or any probe that drew a 5xx. Spec-valid "missed" negatives are excluded. Clarified that a "caught" 4xx is the target correctly rejecting a bad request, not a violation.
+
 ## [0.3.205] - 2026-07-14
 
 ### Added

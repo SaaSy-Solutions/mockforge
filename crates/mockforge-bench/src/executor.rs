@@ -189,7 +189,10 @@ impl K6Executor {
     /// `api_port` — when set, overrides k6's default API server address (`localhost:6565`)
     /// to `localhost:<api_port>`. This prevents "address already in use" errors when
     /// running multiple k6 instances in parallel (e.g., multi-target bench).
-    /// Pass `None` for single-target runs (uses k6's default).
+    /// Pass `Some(0)` to bind an OS-assigned ephemeral port — the collision-proof
+    /// choice for parallel runs, since the kernel never hands out a busy port
+    /// (see the k6 `CannotStartRESTAPI` / exit-106 fix in `parallel_executor`).
+    /// Pass `None` for single-target runs (uses k6's default `localhost:6565`).
     pub async fn execute(
         &self,
         script_path: &Path,
