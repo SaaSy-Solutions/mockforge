@@ -152,8 +152,11 @@ governor = "0.6"
 redis = { version = "0.24", features = ["tokio-comp", "connection-manager"], optional = true }
 
 # SAML 2.0 for SSO (feature: `saml`)
-# Using quick-xml for parsing and ring/rustls for signature verification
-quick-xml = { version = "0.31", features = ["serialize", "overlapped-lists"], optional = true }
+# Pulled in for the `saml` feature; the current SAML parse/emit path uses
+# regex + `format!` templates, so quick-xml is not yet called (kept for the
+# planned move to a real XML parser). Held at >= 0.41 to clear the
+# RUSTSEC-2026-0194 / -0195 DoS advisories on the direct dep (#919).
+quick-xml = { version = "0.41", features = ["serialize", "overlapped-lists"], optional = true }
 regex = "1.10"
 url = { workspace = true }
 urlencoding = "2.1"
