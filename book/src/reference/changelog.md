@@ -1,5 +1,11 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.207] - 2026-07-19
+
+### Added
+
+- **[Contracts]** New "Security probes (owasp injection)" view in the self-test (#79 round 59 / Srikanth on 0.3.206 was WAF-testing and saw `owasp: 0 caught / 8127 missed` but `Definite issues: none`). The self-test now prints a per-injection-family breakdown of how many OWASP payloads the target accepted (status < 400) vs blocked (4xx), plus a `conformance-owasp-accepted.json` sidecar listing every accepted payload with method + URL. For a WAF each accepted payload is one it did NOT block; for a plain API it is expected (a string field accepts any string). Kept out of "Definite issues" (spec violations only) but surfaced on its own line. Verified against Srikanth's capture (all 8127 payloads across 7 families accepted) and real-binary against `mockforge serve`.
+
 ## [0.3.206] - 2026-07-16
 
 ### Fixed

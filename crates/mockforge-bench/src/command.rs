@@ -2830,6 +2830,21 @@ impl BenchCommand {
                     ));
                 }
             }
+            // Round 59 (#79) — owasp injection payloads the target accepted, so
+            // a WAF tester can grep which URLs let which payloads through.
+            let owasp_accepted = report.owasp_accepted_probes();
+            if !owasp_accepted.is_empty() {
+                let owasp_path = self.output.join("conformance-owasp-accepted.json");
+                if let Ok(json) = serde_json::to_string_pretty(&owasp_accepted) {
+                    if std::fs::write(&owasp_path, json).is_ok() {
+                        TerminalReporter::print_warning(&format!(
+                            "{} owasp injection probe(s) accepted by the target — see {}",
+                            owasp_accepted.len(),
+                            owasp_path.display()
+                        ));
+                    }
+                }
+            }
             // Round 18.1 — surface the "every positive failed with
             // the same status" case loudly. Without this, a user
             // who forgot `--base-path /api` saw 404 for every
@@ -3333,6 +3348,20 @@ impl BenchCommand {
                         issues.len(),
                         issues_path.display()
                     ));
+                }
+            }
+            // Round 59 (#79) — per-target owasp-accepted sidecar (mirror).
+            let owasp_accepted = report.owasp_accepted_probes();
+            if !owasp_accepted.is_empty() {
+                if let Ok(json) = serde_json::to_string_pretty(&owasp_accepted) {
+                    let owasp_path = target_dir.join("conformance-owasp-accepted.json");
+                    if std::fs::write(&owasp_path, json).is_ok() {
+                        TerminalReporter::print_warning(&format!(
+                            "  {} owasp injection probe(s) accepted by the target — see {}",
+                            owasp_accepted.len(),
+                            owasp_path.display()
+                        ));
+                    }
                 }
             }
             TerminalReporter::print_progress(&report.render_summary());
