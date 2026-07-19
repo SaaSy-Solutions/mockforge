@@ -1,3 +1,9 @@
+## [0.3.207] - 2026-07-19
+
+### Added
+
+- **[Contracts]** New "Security probes (owasp injection)" view in the conformance self-test (#79 round 59 / Srikanth on 0.3.206 was testing a WAF and saw `owasp: 0 caught / 8127 missed` but `Definite issues: none`, and asked whether real issues were being hidden). The self-test now prints a per-injection-family breakdown of how many OWASP payloads the target accepted (status < 400) vs blocked (4xx), and writes a `conformance-owasp-accepted.json` sidecar listing every accepted payload with its method + URL. For a WAF / security proxy, each accepted payload is one it did NOT block; for a plain API this is expected (a `string` field accepts any string, so an SQLi string is spec-valid). It is deliberately kept out of "Definite issues" (which is for spec violations), but surfaced on its own line so a security tester sees it without eyeballing the caught/missed rollup. Verified against Srikanth's own capture: the summary reports the target accepted all 8127 injection payloads across all 7 families (sqli / xss / command-injection / path-traversal / ssti / ldap-injection / xxe), and real-binary verified against `mockforge serve` that the section and sidecar render.
+
 ## [0.3.206] - 2026-07-16
 
 ### Fixed

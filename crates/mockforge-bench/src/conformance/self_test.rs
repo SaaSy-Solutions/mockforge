@@ -328,6 +328,36 @@ pub struct DefiniteIssue {
     pub detail: String,
 }
 
+/// Round 59 (#79) — per-injection-type tally of OWASP probes. Srikanth on
+/// 0.3.206 was testing a WAF (`waaptest.net` targets): "owasp: 0 caught / 8127
+/// missed" but "Definite issues: none", and asked whether real issues were
+/// being hidden. They are not hidden from the CONTRACT view (an SQLi string in
+/// a string field is spec-valid, so it is correctly not a schema violation),
+/// but for a WAF each ACCEPTED injection payload is one it did not block. This
+/// surfaces that count so a security tester sees it without eyeballing rows.
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct SecurityProbeStat {
+    /// Injection family, e.g. `sqli`, `xss`, `command-injection`.
+    pub injection: String,
+    /// Probes the target let through (status < 400): for a WAF, NOT blocked.
+    pub accepted: usize,
+    /// Probes the target blocked with a `4xx`.
+    pub blocked: usize,
+    /// Probes that made the target return a `5xx` (also a Definite issue).
+    pub errored: usize,
+}
+
+/// Round 59 (#79) — a single OWASP injection probe the target ACCEPTED, for the
+/// `conformance-owasp-accepted.json` sidecar so a WAF tester can grep which URLs
+/// let which payloads through (matching their proxy's own logs).
+#[derive(Debug, Clone, serde::Serialize)]
+pub struct AcceptedOwaspProbe {
+    pub method: String,
+    pub path: String,
+    pub injection: String,
+    pub status: u16,
+}
+
 impl SelfTestReport {
     /// All-pass means every positive case got 2xx-3xx and every
     /// negative case got 4xx.
@@ -389,6 +419,65 @@ impl SelfTestReport {
             }
         }
         issues
+    }
+
+    /// Round 59 (#79) — split the `owasp:*` injection probes by family and count
+    /// how many the target accepted (status < 400), blocked (4xx), or errored on
+    /// (5xx). Empty when the run fired no owasp probes. Labels are `owasp:<fam>`
+    /// (optionally `owasp:<fam>:<scope>`).
+    pub fn owasp_summary(&self) -> Vec<SecurityProbeStat> {
+        // (accepted, blocked, errored) per injection family, name-sorted.
+        let mut by_type: BTreeMap<String, (usize, usize, usize)> = BTreeMap::new();
+        for op in &self.operations {
+            for neg in &op.negatives {
+                let mut parts = neg.label.splitn(3, ':');
+                if parts.next() != Some("owasp") {
+                    continue;
+                }
+                let injection = parts.next().unwrap_or("other").to_string();
+                let slot = by_type.entry(injection).or_insert((0, 0, 0));
+                if neg.actual_status >= 500 {
+                    slot.2 += 1;
+                } else if neg.actual_status >= 400 {
+                    slot.1 += 1;
+                } else {
+                    slot.0 += 1;
+                }
+            }
+        }
+        by_type
+            .into_iter()
+            .map(|(injection, (accepted, blocked, errored))| SecurityProbeStat {
+                injection,
+                accepted,
+                blocked,
+                errored,
+            })
+            .collect()
+    }
+
+    /// Round 59 (#79) — the individual `owasp:*` probes the target ACCEPTED
+    /// (status < 400), for the grep-able sidecar. For a WAF, each row is an
+    /// injection payload that reached the origin unblocked.
+    pub fn owasp_accepted_probes(&self) -> Vec<AcceptedOwaspProbe> {
+        let mut out = Vec::new();
+        for op in &self.operations {
+            for neg in &op.negatives {
+                let mut parts = neg.label.splitn(3, ':');
+                if parts.next() != Some("owasp") {
+                    continue;
+                }
+                if neg.actual_status < 400 {
+                    out.push(AcceptedOwaspProbe {
+                        method: op.method.clone(),
+                        path: op.path.clone(),
+                        injection: parts.next().unwrap_or("other").to_string(),
+                        status: neg.actual_status,
+                    });
+                }
+            }
+        }
+        out
     }
 
     /// Round 18.1 — detect the "self-test target is misconfigured"
@@ -497,6 +586,37 @@ impl SelfTestReport {
             }
             if issues.len() > CAP {
                 out.push_str(&format!("  ... and {} more\n", issues.len() - CAP));
+            }
+        }
+        // Round 59 (#79) — OWASP injection breakdown. For a WAF / security
+        // proxy this is the headline: how many injection payloads the target
+        // let through. It is deliberately NOT folded into "Definite issues"
+        // because an injection string is spec-valid (a string field accepts
+        // any string), so whether "accepted" is a bug depends on whether you
+        // expect a WAF to block it.
+        let owasp = self.owasp_summary();
+        if !owasp.is_empty() {
+            let total_accepted: usize = owasp.iter().map(|s| s.accepted).sum();
+            let total: usize = owasp.iter().map(|s| s.accepted + s.blocked + s.errored).sum();
+            out.push_str(&format!(
+                "Security probes (owasp injection): target ACCEPTED {}/{} payloads (status < 400). \
+                 For a WAF/security proxy each accepted payload is one it did NOT block (review it); \
+                 for a plain API this is expected (the schema permits arbitrary strings). \
+                 Accepted payloads + URLs are in conformance-owasp-accepted.json.\n",
+                total_accepted, total
+            ));
+            for s in &owasp {
+                out.push_str(&format!(
+                    "  owasp:{}: {} accepted / {} blocked{}\n",
+                    s.injection,
+                    s.accepted,
+                    s.blocked,
+                    if s.errored > 0 {
+                        format!(" / {} 5xx", s.errored)
+                    } else {
+                        String::new()
+                    }
+                ));
             }
         }
         out
@@ -2368,6 +2488,79 @@ mod tests {
         };
         assert!(r.definite_issues().is_empty());
         assert!(r.render_summary().contains("Definite issues: none"));
+    }
+
+    #[test]
+    fn owasp_summary_splits_by_injection_and_counts_accepted_vs_blocked() {
+        // Round 59 (#79) — a WAF that lets SQLi through (200) but blocks XSS (403).
+        let neg = |label: &str, status: u16| CaseOutcome {
+            label: label.into(),
+            expected_4xx: true,
+            actual_status: status,
+            passed: status >= 400 && status < 500,
+        };
+        let mut r = SelfTestReport::default();
+        r.operations.push(OperationResult {
+            method: "POST".into(),
+            path: "/v1/orgs".into(),
+            positive: None,
+            negatives: vec![
+                neg("owasp:sqli", 200),               // accepted (not blocked)
+                neg("owasp:xss", 403),                // blocked
+                neg("owasp:command-injection", 500),  // errored (5xx)
+                neg("parameters:missing-query", 200), // not owasp -> ignored here
+            ],
+        });
+        r.operations.push(OperationResult {
+            method: "GET".into(),
+            path: "/v1/items".into(),
+            positive: None,
+            negatives: vec![neg("owasp:sqli", 200)], // second accepted sqli
+        });
+
+        let s = r.owasp_summary();
+        let sqli = s.iter().find(|x| x.injection == "sqli").unwrap();
+        assert_eq!((sqli.accepted, sqli.blocked, sqli.errored), (2, 0, 0));
+        let xss = s.iter().find(|x| x.injection == "xss").unwrap();
+        assert_eq!((xss.accepted, xss.blocked, xss.errored), (0, 1, 0));
+        let cmd = s.iter().find(|x| x.injection == "command-injection").unwrap();
+        assert_eq!((cmd.accepted, cmd.blocked, cmd.errored), (0, 0, 1));
+        // parameters:* must not appear in the owasp summary.
+        assert!(!s.iter().any(|x| x.injection.contains("query")));
+
+        // Accepted-probes sidecar lists only the two accepted sqli (URLs).
+        let accepted = r.owasp_accepted_probes();
+        assert_eq!(accepted.len(), 2);
+        assert!(accepted.iter().all(|p| p.injection == "sqli" && p.status == 200));
+
+        // Console section renders with the WAF framing.
+        let summary = r.render_summary();
+        assert!(summary.contains("Security probes (owasp injection)"));
+        assert!(summary.contains("target ACCEPTED 2/4 payloads"));
+        assert!(summary.contains("owasp:sqli: 2 accepted / 0 blocked"));
+    }
+
+    #[test]
+    fn owasp_summary_empty_when_no_owasp_probes() {
+        let r = SelfTestReport {
+            positive_pass: 1,
+            positive_fail: 0,
+            negative_caught: BTreeMap::new(),
+            negative_missed: BTreeMap::from([("parameters".into(), 2)]),
+            operations: vec![OperationResult {
+                method: "GET".into(),
+                path: "/x".into(),
+                positive: None,
+                negatives: vec![CaseOutcome {
+                    label: "parameters:missing-query".into(),
+                    expected_4xx: true,
+                    actual_status: 200,
+                    passed: false,
+                }],
+            }],
+        };
+        assert!(r.owasp_summary().is_empty());
+        assert!(!r.render_summary().contains("Security probes (owasp"));
     }
 
     #[test]
