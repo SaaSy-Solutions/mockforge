@@ -83,7 +83,18 @@ export const options = {
   },
   thresholds: {
     'http_req_duration': ['{{threshold_percentile}}<{{threshold_ms}}'],
-    'http_req_failed': ['rate<{{max_error_rate}}'],
+    // Round 60 (#79) — the pass/fail error threshold, plus a memory safety
+    // valve. If a target rejects or times out >=95% of requests after a 60s
+    // grace period, abort THIS k6 run instead of hammering a dead target for
+    // the full duration. Srikanth's unreachable IPv6 targets failed ~100% of
+    // requests and k6 accumulated per-request metric/error memory over a
+    // 70-minute run until the OS OOM-killed it (signal 9). Aborting a
+    // ~fully-failing target at 60s bounds that. Legitimate runs (even heavily
+    // degraded ones under 95% failure) are unaffected.
+    'http_req_failed': [
+      'rate<{{max_error_rate}}',
+      { threshold: 'rate<0.95', abortOnFail: true, delayAbortEval: '60s' },
+    ],
   },
 };
 
