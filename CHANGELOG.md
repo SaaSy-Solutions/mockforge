@@ -1,3 +1,9 @@
+## [0.3.208] - 2026-07-21
+
+### Fixed
+
+- **[Reality]** k6 no longer gets OOM-killed (`signal: 9 (SIGKILL)`) when a load target rejects or times out nearly every request (#79 round 60 / Srikanth on 0.3.207: an IPv6 run where the targets were unreachable ran the full 4200s and k6 climbed to an OOM). The generated k6 load scripts now carry an `abortOnFail` safety valve on `http_req_failed`: if a target fails `>=95%` of requests after a 60s grace period, that target's k6 run aborts (exit 99) instead of hammering a dead endpoint for the whole duration and accumulating per-request metric/error memory. Legitimate runs, even heavily degraded ones under 95% failure, are unaffected (the existing pass/fail error threshold is unchanged). Real-binary verified against a dead target (connection refused, 100% failure): k6 now stops at ~60s with "thresholds ... abortOnFail enabled, stopping test prematurely" instead of running the full 180s scenario. Applies to both the standard load and CRUD-flow k6 templates. Separately, the accompanying diagnosis on #79 covers the IPv6 dial failures behind the OOM (source-IP address-family mismatch on hostname targets, TLS/connection refusals on the `:443` targets), which are network/target-side, not memory.
+
 ## [0.3.207] - 2026-07-19
 
 ### Added

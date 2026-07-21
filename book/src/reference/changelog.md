@@ -1,5 +1,11 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.208] - 2026-07-21
+
+### Fixed
+
+- **[Reality]** k6 no longer OOM-kills (`signal: 9`) when a load target rejects/times-out ~every request (#79 round 60 / Srikanth on 0.3.207). The generated k6 load scripts now carry an `abortOnFail` safety valve on `http_req_failed`: a target failing `>=95%` of requests after a 60s grace period aborts (exit 99) instead of hammering a dead endpoint for the full duration and accumulating per-request memory. Legitimate runs under 95% failure are unaffected. Real-binary verified against a dead target: k6 stops at ~60s instead of running the full scenario. Applies to the standard-load and CRUD-flow templates.
+
 ## [0.3.207] - 2026-07-19
 
 ### Added
