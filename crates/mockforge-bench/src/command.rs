@@ -264,6 +264,13 @@ pub struct BenchCommand {
     /// ignore it. Multi-target load already discards by default (r56).
     pub discard_response_bodies: bool,
 
+    /// Round 61 (#79) — k6 DNS resolution policy (`preferIPv6`, `onlyIPv6`,
+    /// `preferIPv4`, `onlyIPv4`, `any`). `None` → k6 default (`preferIPv4`).
+    /// Passed to k6 as `--dns "policy=<value>"`. Lets a GEODB IPv6 test pin
+    /// hostname targets to their AAAA record while keeping the hostname on the
+    /// wire (Srikanth's WAF routes by Host/SNI, so the target must be a name).
+    pub dns_policy: Option<String>,
+
     // === OWASP API Security Top 10 Testing ===
     /// Enable OWASP API Security Top 10 testing mode
     pub owasp_api_top10: bool,
@@ -924,6 +931,7 @@ impl BenchCommand {
         // plain load path (status/latency only), not conformance/extraction.
         let executor = K6Executor::new()?
             .with_local_ips(self.source_ips.join(","))
+            .with_dns_policy(self.dns_policy.clone().unwrap_or_default())
             .with_discard_response_bodies(self.discard_response_bodies);
 
         std::fs::create_dir_all(&self.output)?;
@@ -1057,6 +1065,9 @@ impl BenchCommand {
                 // plain-load path already discards by default (r56), so this
                 // keeps the per-target command faithful to the parent.
                 discard_response_bodies: self.discard_response_bodies,
+                // Round 61 (#79) — carry the DNS policy so per-target k6 runs
+                // resolve hostnames with the same IPv6/IPv4 preference.
+                dns_policy: self.dns_policy.clone(),
             },
             targets,
             max_concurrency,
@@ -1996,7 +2007,9 @@ impl BenchCommand {
         std::fs::write(&script_path, &script)?;
 
         if !self.generate_only {
-            let executor = K6Executor::new()?.with_local_ips(self.source_ips.join(","));
+            let executor = K6Executor::new()?
+                .with_local_ips(self.source_ips.join(","))
+                .with_dns_policy(self.dns_policy.clone().unwrap_or_default());
             std::fs::create_dir_all(&output_dir)?;
 
             executor.execute(&script_path, Some(&output_dir), self.verbose).await?;
@@ -2109,6 +2122,7 @@ impl BenchCommand {
             // standard (status-only) load path too.
             let executor = K6Executor::new()?
                 .with_local_ips(self.source_ips.join(","))
+                .with_dns_policy(self.dns_policy.clone().unwrap_or_default())
                 .with_discard_response_bodies(self.discard_response_bodies);
             let output_dir = self.output.join(format!("{}_results", spec_name.replace('.', "_")));
             std::fs::create_dir_all(&output_dir)?;
@@ -2435,7 +2449,9 @@ impl BenchCommand {
 
         // Execute k6
         TerminalReporter::print_progress("Executing CRUD flow test...");
-        let executor = K6Executor::new()?.with_local_ips(self.source_ips.join(","));
+        let executor = K6Executor::new()?
+            .with_local_ips(self.source_ips.join(","))
+            .with_dns_policy(self.dns_policy.clone().unwrap_or_default());
         std::fs::create_dir_all(&self.output)?;
 
         let results = executor.execute(&script_path, Some(&self.output), self.verbose).await?;
@@ -3012,7 +3028,9 @@ impl BenchCommand {
             }
 
             TerminalReporter::print_progress("Running conformance tests via k6...");
-            let executor = K6Executor::new()?.with_local_ips(self.source_ips.join(","));
+            let executor = K6Executor::new()?
+                .with_local_ips(self.source_ips.join(","))
+                .with_dns_policy(self.dns_policy.clone().unwrap_or_default());
             executor.execute(&script_path, Some(&self.output), self.verbose).await?;
 
             let report_path = self.output.join("conformance-report.json");
@@ -3594,7 +3612,9 @@ impl BenchCommand {
                     "Running conformance tests via k6 against {}...",
                     target.url
                 ));
-                let k6 = K6Executor::new()?.with_local_ips(self.source_ips.join(","));
+                let k6 = K6Executor::new()?
+                    .with_local_ips(self.source_ips.join(","))
+                    .with_dns_policy(self.dns_policy.clone().unwrap_or_default());
                 // Unique k6 API port per target to avoid collisions.
                 let api_port = 6565u16.saturating_add(idx as u16);
                 k6.execute_with_port(&script_path, Some(&target_dir), self.verbose, Some(api_port))
@@ -3963,7 +3983,9 @@ impl BenchCommand {
 
         // Execute k6
         TerminalReporter::print_progress("Executing OWASP security tests...");
-        let executor = K6Executor::new()?.with_local_ips(self.source_ips.join(","));
+        let executor = K6Executor::new()?
+            .with_local_ips(self.source_ips.join(","))
+            .with_dns_policy(self.dns_policy.clone().unwrap_or_default());
         std::fs::create_dir_all(&self.output)?;
 
         let results = executor.execute(&script_path, Some(&self.output), self.verbose).await?;
@@ -4184,6 +4206,7 @@ mod tests {
             geo_source_headers: Vec::new(),
             report_missed_cap: None,
             discard_response_bodies: false,
+            dns_policy: None,
         };
 
         let headers = cmd.parse_headers().unwrap();
@@ -4288,6 +4311,7 @@ mod tests {
             geo_source_headers: Vec::new(),
             report_missed_cap: None,
             discard_response_bodies: false,
+            dns_policy: None,
         };
 
         assert_eq!(cmd.get_spec_display_name(), "test.yaml");
@@ -4372,6 +4396,7 @@ mod tests {
             geo_source_headers: Vec::new(),
             report_missed_cap: None,
             discard_response_bodies: false,
+            dns_policy: None,
         };
 
         assert_eq!(cmd_multi.get_spec_display_name(), "2 spec files");

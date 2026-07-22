@@ -131,6 +131,14 @@ pub struct K6Executor {
     /// accumulation exhaust RAM. Plain load only checks status codes, so
     /// dropping the bodies is safe there.
     discard_response_bodies: bool,
+    /// Round 61 (#79) — value for `k6 run --dns "policy=<...>"`. Empty → flag
+    /// omitted (k6 default `preferIPv4`). Srikanth on 0.3.208 GEODB-tests a WAF
+    /// via hostnames (his proxy routes by Host/SNI, so he can't pass bracket
+    /// IPs), but needs those hostnames resolved to their AAAA/IPv6 record;
+    /// k6/Go default to IPv4, which then can't be dialed from his IPv6
+    /// `--local-ips` source ("no suitable address found"). `preferIPv6` /
+    /// `onlyIPv6` fix that while keeping the hostname on the wire.
+    dns_policy: String,
 }
 
 impl K6Executor {
@@ -145,6 +153,7 @@ impl K6Executor {
             k6_path,
             local_ips: String::new(),
             discard_response_bodies: false,
+            dns_policy: String::new(),
         })
     }
 
@@ -161,6 +170,14 @@ impl K6Executor {
     /// do NOT use where the script inspects/extracts response bodies.
     pub fn with_discard_response_bodies(mut self, discard: bool) -> Self {
         self.discard_response_bodies = discard;
+        self
+    }
+
+    /// Round 61 (#79) — set the `--dns` resolution policy (e.g. `preferIPv6`,
+    /// `onlyIPv6`, `preferIPv4`, `onlyIPv4`, `any`). Empty string → flag omitted
+    /// (k6 default). Passed to k6 as `--dns "policy=<value>"`.
+    pub fn with_dns_policy(mut self, policy: impl Into<String>) -> Self {
+        self.dns_policy = policy.into();
         self
     }
 
@@ -233,6 +250,14 @@ impl K6Executor {
         // high-concurrency runs (guards against the SIGKILL/OOM Srikanth hit).
         if self.discard_response_bodies {
             cmd.env("K6_DISCARD_RESPONSE_BODIES", "true");
+        }
+
+        // Round 61 (#79) — force a DNS resolution policy so hostname targets can
+        // be pinned to IPv6 (or IPv4). Needed for GEODB IPv6 tests where the
+        // proxy routes by Host/SNI (so the target must stay a hostname) but the
+        // dial has to use the AAAA record to match an IPv6 `--local-ips` source.
+        if !self.dns_policy.is_empty() {
+            cmd.arg("--dns").arg(format!("policy={}", self.dns_policy));
         }
 
         // summary.json is written by the k6 script's handleSummary() function
@@ -631,10 +656,27 @@ mod tests {
             k6_path: "k6".to_string(),
             local_ips: String::new(),
             discard_response_bodies: false,
+            dns_policy: String::new(),
         };
         assert!(!exec.discard_response_bodies);
         let exec = exec.with_discard_response_bodies(true);
         assert!(exec.discard_response_bodies);
+    }
+
+    #[test]
+    fn dns_policy_defaults_empty_and_builder_sets_it() {
+        // Round 61 (#79) — empty default → k6's `--dns` flag is omitted; the
+        // builder records the policy string the executor turns into
+        // `--dns "policy=<value>"`.
+        let exec = K6Executor {
+            k6_path: "k6".to_string(),
+            local_ips: String::new(),
+            discard_response_bodies: false,
+            dns_policy: String::new(),
+        };
+        assert!(exec.dns_policy.is_empty());
+        let exec = exec.with_dns_policy("preferIPv6");
+        assert_eq!(exec.dns_policy, "preferIPv6");
     }
 
     #[test]

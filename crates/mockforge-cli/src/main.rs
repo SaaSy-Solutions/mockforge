@@ -2347,6 +2347,17 @@ enum Commands {
         /// self-test / CRUD-extraction runs, which need the response body.
         #[arg(long = "discard-response-bodies")]
         discard_response_bodies: bool,
+
+        /// Issue #79 round 61 — DNS resolution policy passed to k6 as
+        /// `--dns "policy=<value>"`. Use `preferIPv6` (or `onlyIPv6`) to make a
+        /// GEODB IPv6 test dial hostname targets over their AAAA record while
+        /// keeping the hostname on the wire (needed when the proxy routes by
+        /// Host/SNI so the target must be a name, not a bracket IP). Without it
+        /// k6/Go default to IPv4, which then can't be dialed from an IPv6
+        /// `--source-ip` ("no suitable address found"). Values: preferIPv4
+        /// (default when unset), preferIPv6, onlyIPv4, onlyIPv6, any.
+        #[arg(long = "dns-policy")]
+        dns_policy: Option<String>,
     },
 
     /// Native Rust chunked-encoding traffic generator.
@@ -3316,6 +3327,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             geo_source_headers,
             report_missed_cap,
             discard_response_bodies,
+            dns_policy,
         } => {
             // Validate that either --target or --targets-file is provided, but not both
             match (&target, &targets_file) {
@@ -3439,6 +3451,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 geo_source_headers,
                 report_missed_cap,
                 discard_response_bodies,
+                dns_policy,
             };
 
             if let Err(e) = bench_cmd.execute().await {
