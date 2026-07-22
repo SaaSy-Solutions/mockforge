@@ -1,5 +1,11 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.209] - 2026-07-22
+
+### Added
+
+- **[Reality]** New `mockforge bench --dns-policy <policy>` flag → k6 `--dns "policy=<value>"` (#79 round 61 / Srikanth on 0.3.208). Values: `preferIPv4` (default), `preferIPv6`, `onlyIPv4`, `onlyIPv6`, `any`. Unblocks GEODB IPv6 tests where the target must stay a hostname (proxy routes by Host/SNI) but must be dialed over its AAAA record; k6/Go default to IPv4, which can't be dialed from an IPv6 `--source-ip` (`no suitable address found`). `preferIPv6` picks the AAAA record while keeping the hostname on the wire. Wired through single- and multi-target k6 paths; real-binary verified the launched k6 runs with `--dns policy=preferIPv6`.
+
 ## [0.3.208] - 2026-07-21
 
 ### Fixed

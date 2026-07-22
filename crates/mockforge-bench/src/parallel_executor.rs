@@ -393,6 +393,7 @@ impl ParallelExecutor {
             // source IPs (as the k6 `--local-ips` list) and geo config through
             // to each target's run.
             let local_ips = self.base_command.source_ips.join(",");
+            let dns_policy = self.base_command.dns_policy.clone().unwrap_or_default();
             let geo_source_ips = self.base_command.geo_source_ips.clone();
             let geo_source_headers = self.base_command.geo_source_headers.clone();
 
@@ -452,6 +453,7 @@ impl ParallelExecutor {
                     no_keep_alive,
                     &enhancement_code,
                     &local_ips,
+                    &dns_policy,
                     &geo_source_ips,
                     &geo_source_headers,
                 )
@@ -559,6 +561,7 @@ impl ParallelExecutor {
         no_keep_alive: bool,
         enhancement_code: &str,
         local_ips: &str,
+        dns_policy: &str,
         geo_source_ips: &[String],
         geo_source_headers: &[String],
     ) -> Result<TargetResult> {
@@ -647,6 +650,7 @@ impl ParallelExecutor {
                           // kernel OOM-killer sent k6 `signal: 9 (SIGKILL)`.
         let executor = K6Executor::new()?
             .with_local_ips(local_ips.to_string())
+            .with_dns_policy(dns_policy.to_string())
             .with_discard_response_bodies(true);
         let results = executor
             .execute_with_port(&script_path, Some(&output_dir), verbose, Some(api_port))

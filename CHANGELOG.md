@@ -1,3 +1,9 @@
+## [0.3.209] - 2026-07-22
+
+### Added
+
+- **[Reality]** New `mockforge bench --dns-policy <policy>` flag that passes k6's DNS resolution policy through as `--dns "policy=<value>"` (#79 round 61 / Srikanth on 0.3.208). Values: `preferIPv4` (k6's default when unset), `preferIPv6`, `onlyIPv4`, `onlyIPv6`, `any`. This unblocks GEODB IPv6 load tests where the target must stay a hostname (the proxy routes by Host/SNI, so a bracket IP can't be used) but the dial has to use the AAAA record: k6/Go default to the A (IPv4) record, which then can't be dialed from an IPv6 `--source-ip` and fails with `no suitable address found`. `--dns-policy preferIPv6` makes k6 pick the AAAA record while keeping the hostname on the wire. Wired through the single-target and multi-target (`--targets-file`) k6 paths. Real-binary verified: `--dns-policy preferIPv6` makes the launched k6 child run with `--dns policy=preferIPv6` in its argv.
+
 ## [0.3.208] - 2026-07-21
 
 ### Fixed
