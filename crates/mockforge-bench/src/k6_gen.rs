@@ -22,6 +22,14 @@ pub struct K6ScriptTemplateData {
     pub threshold_percentile: String,
     pub threshold_ms: u64,
     pub max_error_rate: f64,
+    /// Round 62 (#79) — when true, emit the `abortOnFail` memory safety valve
+    /// on `http_req_failed`. `--no-abort-on-error` sets this false so a stress
+    /// run against a high-rejection WAF/proxy executes its full duration.
+    pub abort_on_error: bool,
+    /// Round 62 (#79) — failure-rate threshold (0.0-1.0) for the abort valve
+    /// above. Default 0.95 (preserves round 60). Only rendered when
+    /// `abort_on_error` is true.
+    pub abort_on_error_rate: f64,
     pub scenario_name: String,
     pub skip_tls_verify: bool,
     pub has_dynamic_values: bool,
@@ -183,12 +191,41 @@ pub struct K6Config {
 pub struct K6ScriptGenerator {
     config: K6Config,
     templates: Vec<RequestTemplate>,
+    /// Round 62 (#79) — emit the `abortOnFail` valve on `http_req_failed`.
+    /// Defaults to true (round-60 behaviour); `--no-abort-on-error` clears it.
+    abort_on_error: bool,
+    /// Round 62 (#79) — failure-rate threshold for the abort valve. Default
+    /// 0.95. Tunable via `--abort-on-error-rate`.
+    abort_on_error_rate: f64,
 }
 
 impl K6ScriptGenerator {
-    /// Create a new k6 script generator
+    /// Create a new k6 script generator.
+    ///
+    /// The abort-on-error safety valve defaults to on at a 0.95 failure rate
+    /// (round 60). Use [`with_abort_valve`](Self::with_abort_valve) to opt out
+    /// or retune it.
     pub fn new(config: K6Config, templates: Vec<RequestTemplate>) -> Self {
-        Self { config, templates }
+        Self {
+            config,
+            templates,
+            abort_on_error: true,
+            abort_on_error_rate: 0.95,
+        }
+    }
+
+    /// Configure the k6 abort-on-error memory safety valve (round 62 / #79).
+    ///
+    /// `abort_on_error = false` drops the `abortOnFail` threshold entirely so
+    /// the run executes its full duration regardless of error rate — required
+    /// for stress tests against a WAF/proxy that legitimately rejects most
+    /// requests. `abort_on_error_rate` tunes the failure rate (0.0-1.0) above
+    /// which a target aborts after the 60s grace period.
+    #[must_use]
+    pub fn with_abort_valve(mut self, abort_on_error: bool, abort_on_error_rate: f64) -> Self {
+        self.abort_on_error = abort_on_error;
+        self.abort_on_error_rate = abort_on_error_rate;
+        self
     }
 
     /// Generate the k6 script
@@ -396,6 +433,8 @@ impl K6ScriptGenerator {
             threshold_percentile: self.config.threshold_percentile.clone(),
             threshold_ms: self.config.threshold_ms,
             max_error_rate: self.config.max_error_rate,
+            abort_on_error: self.abort_on_error,
+            abort_on_error_rate: self.abort_on_error_rate,
             scenario_name: format!("{:?}", self.config.scenario).to_lowercase(),
             skip_tls_verify: self.config.skip_tls_verify,
             has_dynamic_values,
@@ -770,6 +809,69 @@ mod tests {
         assert!(
             errors.is_empty(),
             "validate_script returned errors for long operationId: {errors:#?}"
+        );
+    }
+
+    /// Round 62 (#79) — the abort-on-error valve must default on (round 60),
+    /// drop out entirely under `--no-abort-on-error`, and honour a tuned rate.
+    /// Srikanth's WAF stress runs sat at ~95.2% rejections, just over the
+    /// hard-coded 0.95, so the valve stopped legitimate stress tests at ~2min.
+    #[test]
+    fn test_abort_valve_opt_out_and_rate() {
+        fn base_config() -> K6Config {
+            K6Config {
+                target_url: "https://api.example.com".to_string(),
+                base_path: None,
+                scenario: LoadScenario::Constant,
+                duration_secs: 30,
+                max_vus: 5,
+                threshold_percentile: "p(95)".to_string(),
+                threshold_ms: 500,
+                max_error_rate: 0.05,
+                auth_header: None,
+                custom_headers: HashMap::new(),
+                skip_tls_verify: false,
+                security_testing_enabled: false,
+                chunked_request_bodies: false,
+                target_rps: None,
+                no_keep_alive: false,
+                geo_source_ips: Vec::new(),
+                geo_source_headers: Vec::new(),
+            }
+        }
+
+        // Default: valve on at 0.95 (unchanged round-60 behaviour).
+        let default_script = K6ScriptGenerator::new(base_config(), vec![])
+            .generate()
+            .expect("script generates");
+        assert!(
+            default_script.contains("abortOnFail: true") && default_script.contains("rate<0.95"),
+            "default script must keep the 0.95 abort valve"
+        );
+
+        // --no-abort-on-error: the abortOnFail object is omitted entirely so a
+        // stress run executes its full duration regardless of error rate.
+        let stress_script = K6ScriptGenerator::new(base_config(), vec![])
+            .with_abort_valve(false, 0.95)
+            .generate()
+            .expect("script generates");
+        // Match the threshold object (`abortOnFail: true`), not the word alone:
+        // the template comment legitimately mentions "abortOnFail".
+        assert!(
+            !stress_script.contains("abortOnFail: true"),
+            "--no-abort-on-error must drop the abortOnFail threshold"
+        );
+        // The pass/fail threshold still records the failure rate.
+        assert!(stress_script.contains("rate<0.05"));
+
+        // --abort-on-error-rate 0.99: valve on, but only fires above 99%.
+        let tuned_script = K6ScriptGenerator::new(base_config(), vec![])
+            .with_abort_valve(true, 0.99)
+            .generate()
+            .expect("script generates");
+        assert!(
+            tuned_script.contains("abortOnFail: true") && tuned_script.contains("rate<0.99"),
+            "--abort-on-error-rate must retune the valve threshold"
         );
     }
 

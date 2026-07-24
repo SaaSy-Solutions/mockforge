@@ -1,3 +1,9 @@
+## [0.3.210] - 2026-07-24
+
+### Added
+
+- **[Reality]** New `mockforge bench --no-abort-on-error` and `--abort-on-error-rate <rate>` flags to control the round-60 k6 memory safety valve (#79 round 62 / Srikanth on 0.3.209). The round-60 valve aborts a k6 run whose `http_req_failed` rate crosses 0.95 for 60s, which prevented an OOM against dead targets but also stopped legitimate stress tests: Srikanth's WAF/proxy targets legitimately reject ~95.2% of the generated probe traffic (fast non-2xx responses, zero transport failures), which crossed 0.95 and aborted every run at ~2 minutes. `--no-abort-on-error` drops the `abortOnFail` threshold entirely so the run executes its full duration regardless of error rate; `--abort-on-error-rate` retunes the threshold (default 0.95) to, for example, keep the dead-target guard but only fire above 99%. Wired through the single-target and multi-target (`--targets-file`) k6 paths; default behaviour is unchanged. Real-binary verified: the generated k6 script drops the `abortOnFail` object under `--no-abort-on-error` and renders `rate<0.99` under `--abort-on-error-rate 0.99`.
+
 ## [0.3.209] - 2026-07-22
 
 ### Added

@@ -1838,6 +1838,21 @@ enum Commands {
         #[arg(long, default_value = "0.05")]
         max_error_rate: f64,
 
+        /// Disable the k6 abort-on-error safety valve so the load test runs its
+        /// full duration even when most requests fail. Use for stress tests
+        /// against a WAF/proxy that legitimately rejects most traffic (#79).
+        /// By default a target that fails >= --abort-on-error-rate of requests
+        /// for 60s is aborted to avoid an out-of-memory k6 run against a dead
+        /// endpoint.
+        #[arg(long = "no-abort-on-error")]
+        no_abort_on_error: bool,
+
+        /// Failure rate (0.0-1.0) above which the abort-on-error safety valve
+        /// stops a target after a 60s grace period. Default 0.95. Ignored when
+        /// --no-abort-on-error is set (#79).
+        #[arg(long = "abort-on-error-rate", default_value = "0.95")]
+        abort_on_error_rate: f64,
+
         /// Enable verbose output
         #[arg(short = 'V', long)]
         verbose: bool,
@@ -3272,6 +3287,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             threshold_percentile,
             threshold_ms,
             max_error_rate,
+            no_abort_on_error,
+            abort_on_error_rate,
             verbose,
             insecure,
             chunked_request_bodies,
@@ -3374,6 +3391,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 threshold_percentile,
                 threshold_ms,
                 max_error_rate,
+                abort_on_error: !no_abort_on_error,
+                abort_on_error_rate,
                 verbose,
                 skip_tls_verify: insecure,
                 chunked_request_bodies,
