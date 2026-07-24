@@ -46,12 +46,15 @@ export const options = {
   },
   thresholds: {
     'http_req_duration': ['{{threshold_percentile}}<{{threshold_ms}}'],
-    // Round 60 (#79) — memory safety valve, mirrors k6_script.hbs: abort a
-    // ~fully-failing target (>=95% errors after 60s) instead of OOMing over
-    // the full run.
+    // Round 60/62 (#79) — memory safety valve, mirrors k6_script.hbs: abort a
+    // ~fully-failing target (>={{abort_on_error_rate}} errors after 60s) instead of OOMing
+    // over the full run. Opt-out via `--no-abort-on-error` (omits the object so
+    // stress runs go the full duration); threshold via `--abort-on-error-rate`.
     'http_req_failed': [
       'rate<{{max_error_rate}}',
-      { threshold: 'rate<0.95', abortOnFail: true, delayAbortEval: '60s' },
+{{#if abort_on_error}}
+      { threshold: 'rate<{{abort_on_error_rate}}', abortOnFail: true, delayAbortEval: '60s' },
+{{/if}}
     ],
     'flow_success_rate': ['rate>0.95'],
   },

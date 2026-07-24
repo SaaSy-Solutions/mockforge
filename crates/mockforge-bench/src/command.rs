@@ -107,6 +107,15 @@ pub struct BenchCommand {
     pub threshold_percentile: String,
     pub threshold_ms: u64,
     pub max_error_rate: f64,
+    /// Round 62 (#79) — emit the k6 `abortOnFail` memory safety valve. Default
+    /// true (round-60 behaviour). `--no-abort-on-error` sets this false so a
+    /// stress run against a high-rejection WAF/proxy runs its full duration
+    /// instead of aborting when the error rate crosses `abort_on_error_rate`.
+    pub abort_on_error: bool,
+    /// Round 62 (#79) — failure-rate threshold (0.0-1.0) for the abort valve.
+    /// Default 0.95. Tunable via `--abort-on-error-rate`; ignored when
+    /// `abort_on_error` is false.
+    pub abort_on_error_rate: f64,
     pub verbose: bool,
     pub skip_tls_verify: bool,
     /// When true, set `Transfer-Encoding: chunked` on every k6 request body so
@@ -855,7 +864,8 @@ impl BenchCommand {
             },
         };
 
-        let generator = K6ScriptGenerator::new(k6_config, templates);
+        let generator = K6ScriptGenerator::new(k6_config, templates)
+            .with_abort_valve(self.abort_on_error, self.abort_on_error_rate);
         let mut script = generator.generate()?;
         TerminalReporter::print_success("k6 script generated");
 
@@ -1002,6 +1012,8 @@ impl BenchCommand {
                 threshold_percentile: self.threshold_percentile.clone(),
                 threshold_ms: self.threshold_ms,
                 max_error_rate: self.max_error_rate,
+                abort_on_error: self.abort_on_error,
+                abort_on_error_rate: self.abort_on_error_rate,
                 verbose: self.verbose,
                 skip_tls_verify: self.skip_tls_verify,
                 chunked_request_bodies: self.chunked_request_bodies,
@@ -1981,6 +1993,8 @@ impl BenchCommand {
             "threshold_percentile": self.threshold_percentile,
             "threshold_ms": self.threshold_ms,
             "max_error_rate": self.max_error_rate,
+            "abort_on_error": self.abort_on_error,
+            "abort_on_error_rate": self.abort_on_error_rate,
             "headers": headers_json,
             "dynamic_imports": required_imports,
             "dynamic_globals": required_globals,
@@ -2097,7 +2111,8 @@ impl BenchCommand {
             },
         };
 
-        let generator = K6ScriptGenerator::new(k6_config, templates);
+        let generator = K6ScriptGenerator::new(k6_config, templates)
+            .with_abort_valve(self.abort_on_error, self.abort_on_error_rate);
         let mut script = generator.generate()?;
 
         // Enhance script with advanced features (security testing, etc.)
@@ -2387,6 +2402,8 @@ impl BenchCommand {
             "threshold_percentile": self.threshold_percentile,
             "threshold_ms": self.threshold_ms,
             "max_error_rate": self.max_error_rate,
+            "abort_on_error": self.abort_on_error,
+            "abort_on_error_rate": self.abort_on_error_rate,
             "headers": headers_json,
             "dynamic_imports": required_imports,
             "dynamic_globals": required_globals,
@@ -4148,6 +4165,8 @@ mod tests {
             threshold_percentile: "p(95)".to_string(),
             threshold_ms: 500,
             max_error_rate: 0.05,
+            abort_on_error: true,
+            abort_on_error_rate: 0.95,
             verbose: false,
             skip_tls_verify: false,
             chunked_request_bodies: false,
@@ -4253,6 +4272,8 @@ mod tests {
             threshold_percentile: "p(95)".to_string(),
             threshold_ms: 500,
             max_error_rate: 0.05,
+            abort_on_error: true,
+            abort_on_error_rate: 0.95,
             verbose: false,
             skip_tls_verify: false,
             chunked_request_bodies: false,
@@ -4338,6 +4359,8 @@ mod tests {
             threshold_percentile: "p(95)".to_string(),
             threshold_ms: 500,
             max_error_rate: 0.05,
+            abort_on_error: true,
+            abort_on_error_rate: 0.95,
             verbose: false,
             skip_tls_verify: false,
             chunked_request_bodies: false,

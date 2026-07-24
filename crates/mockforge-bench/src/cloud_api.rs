@@ -723,6 +723,8 @@ fn default_bench_command(output_dir: &Path) -> BenchCommand {
         threshold_percentile: "p(95)".to_string(),
         threshold_ms: 1000,
         max_error_rate: 0.01,
+        abort_on_error: true,
+        abort_on_error_rate: 0.95,
         verbose: false,
         skip_tls_verify: false,
         chunked_request_bodies: false,

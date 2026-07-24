@@ -381,6 +381,12 @@ impl ParallelExecutor {
             let threshold_percentile = self.base_command.threshold_percentile.clone();
             let threshold_ms = self.base_command.threshold_ms;
             let max_error_rate = self.base_command.max_error_rate;
+            // Issue #79 r62 (Srikanth on 0.3.209): the round-60 abort valve
+            // stopped his WAF stress runs at ~2min because a legitimate high
+            // rejection rate crossed 0.95. Thread the opt-out/threshold through
+            // the per-target path so `--no-abort-on-error` reaches the k6 script.
+            let abort_on_error = self.base_command.abort_on_error;
+            let abort_on_error_rate = self.base_command.abort_on_error_rate;
             let verbose = self.base_command.verbose;
             let skip_tls_verify = self.base_command.skip_tls_verify;
             let chunked_request_bodies = self.base_command.chunked_request_bodies;
@@ -437,6 +443,8 @@ impl ParallelExecutor {
                     &threshold_percentile,
                     threshold_ms,
                     max_error_rate,
+                    abort_on_error,
+                    abort_on_error_rate,
                     verbose,
                     skip_tls_verify,
                     base_path.as_ref(),
@@ -545,6 +553,8 @@ impl ParallelExecutor {
         threshold_percentile: &str,
         threshold_ms: u64,
         max_error_rate: f64,
+        abort_on_error: bool,
+        abort_on_error_rate: f64,
         verbose: bool,
         skip_tls_verify: bool,
         base_path: Option<&String>,
@@ -596,7 +606,8 @@ impl ParallelExecutor {
         };
 
         // Generate k6 script
-        let generator = K6ScriptGenerator::new(k6_config, templates.to_vec());
+        let generator = K6ScriptGenerator::new(k6_config, templates.to_vec())
+            .with_abort_valve(abort_on_error, abort_on_error_rate);
         let mut script = generator.generate()?;
 
         // Apply pre-computed enhancement code (security definitions, etc.)
