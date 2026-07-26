@@ -671,17 +671,26 @@ pub async fn redeploy_deployment(
         param_count += 1;
         query.push_str(&format!(" WHERE id = ${}", param_count));
 
-        let mut q = sqlx::query(&query);
-        if let Some(ref config) = request.config_json {
-            q = q.bind(config);
-        }
-        if let Some(ref spec_url) = request.openapi_spec_url {
-            q = q.bind(spec_url);
-        }
-        q = q.bind(deployment_id);
-        q.execute(pool).await.map_err(|e| {
-            ApiError::Internal(anyhow::anyhow!("Failed to update deployment: {}", e))
-        })?;
+        // #832: run under the org GUC so the hosted_mocks RLS policy scopes
+        // this UPDATE-by-id to the caller's org even though the WHERE omits
+        // org_id. Clone the bound values so the closure owns them.
+        let config_json = request.config_json.clone();
+        let openapi_spec_url = request.openapi_spec_url.clone();
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move {
+                let mut q = sqlx::query(&query);
+                if let Some(ref config) = config_json {
+                    q = q.bind(config);
+                }
+                if let Some(ref spec_url) = openapi_spec_url {
+                    q = q.bind(spec_url);
+                }
+                q = q.bind(deployment_id);
+                q.execute(&mut **tx).await.map(|_| ()).map_err(Into::into)
+            })
+        })
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update deployment: {}", e)))?;
     }
 
     // Update status to deploying
@@ -2706,8 +2715,15 @@ pub async fn set_domain(
     // endpoints below — `deployment_url` alone is ambiguous (it could be a
     // MOCKFORGE_MOCKS_DOMAIN-based default).
     let new_url = format!("https://{}", hostname);
-    sqlx::query(
-        r#"
+    // #832: UPDATE-by-id under the org GUC so the hosted_mocks RLS policy
+    // scopes it to the caller's org. Clone the bound values (both are reused
+    // in the response below).
+    let new_url_c = new_url.clone();
+    let hostname_c = hostname.clone();
+    crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+        Box::pin(async move {
+            sqlx::query(
+                r#"
         UPDATE hosted_mocks
         SET deployment_url = $1,
             metadata_json = jsonb_set(
@@ -2718,11 +2734,16 @@ pub async fn set_domain(
             updated_at = NOW()
         WHERE id = $3
         "#,
-    )
-    .bind(&new_url)
-    .bind(&hostname)
-    .bind(deployment_id)
-    .execute(pool)
+            )
+            .bind(&new_url_c)
+            .bind(&hostname_c)
+            .bind(deployment_id)
+            .execute(&mut **tx)
+            .await
+            .map(|_| ())
+            .map_err(Into::into)
+        })
+    })
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update deployment URL: {}", e)))?;
 
@@ -2799,18 +2820,28 @@ pub async fn clear_custom_domain(
         format!("https://{}.fly.dev", app_name)
     };
 
-    sqlx::query(
-        r#"
+    // #832: UPDATE-by-id under the org GUC so the hosted_mocks RLS policy
+    // scopes it to the caller's org. Clone default_url (reused in the response).
+    let default_url_c = default_url.clone();
+    crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+        Box::pin(async move {
+            sqlx::query(
+                r#"
         UPDATE hosted_mocks
         SET deployment_url = $1,
             metadata_json = COALESCE(metadata_json, '{}'::jsonb) - 'custom_domain',
             updated_at = NOW()
         WHERE id = $2
         "#,
-    )
-    .bind(&default_url)
-    .bind(deployment_id)
-    .execute(pool)
+            )
+            .bind(&default_url_c)
+            .bind(deployment_id)
+            .execute(&mut **tx)
+            .await
+            .map(|_| ())
+            .map_err(Into::into)
+        })
+    })
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to clear custom domain: {}", e)))?;
 

@@ -120,7 +120,10 @@ pub async fn get_dashboard(
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
 ) -> ApiResult<Json<CloudDashboardResponse>> {
-    let pool = state.db.pool();
+    // #832: the dashboard's count/metric helpers query RLS-covered tables
+    // (hosted_mocks) alongside non-covered ones, all org-scoped. Run them on
+    // the runtime pool; each helper binds the org GUC via with_org_context.
+    let pool = state.db.runtime_pool();
 
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -262,20 +265,34 @@ pub async fn get_logs(
 }
 
 async fn count_table(pool: &sqlx::PgPool, table: &str, org_id: Uuid) -> i64 {
+    // #832: run under the org GUC so any covered table (e.g. hosted_mocks) is
+    // RLS-enforced; harmless for non-covered tables. `pool` is the runtime pool.
     let query = format!("SELECT COUNT(*) FROM {} WHERE org_id = $1", table);
-    sqlx::query_scalar::<_, i64>(&query)
-        .bind(org_id)
-        .fetch_one(pool)
-        .await
-        .unwrap_or(0)
+    crate::store::with_org_context(pool, org_id, move |tx| {
+        Box::pin(async move {
+            sqlx::query_scalar::<_, i64>(&query)
+                .bind(org_id)
+                .fetch_one(&mut **tx)
+                .await
+                .map_err(Into::into)
+        })
+    })
+    .await
+    .unwrap_or(0)
 }
 
 async fn count_active_deployments(pool: &sqlx::PgPool, org_id: Uuid) -> i64 {
-    sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM hosted_mocks WHERE org_id = $1 AND status = 'active' AND deleted_at IS NULL",
-    )
-    .bind(org_id)
-    .fetch_one(pool)
+    crate::store::with_org_context(pool, org_id, move |tx| {
+        Box::pin(async move {
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM hosted_mocks WHERE org_id = $1 AND status = 'active' AND deleted_at IS NULL",
+            )
+            .bind(org_id)
+            .fetch_one(&mut **tx)
+            .await
+            .map_err(Into::into)
+        })
+    })
     .await
     .unwrap_or(0)
 }
@@ -285,8 +302,11 @@ async fn count_active_deployments(pool: &sqlx::PgPool, org_id: Uuid) -> i64 {
 /// a quiet one. Unavailable until #232 lands the in-container log shipper, so
 /// expect zeros for orgs without Fly Managed Prometheus configured.
 async fn aggregate_deployment_metrics(pool: &sqlx::PgPool, org_id: Uuid) -> AggregatedMetrics {
-    sqlx::query_as::<_, AggregatedMetrics>(
-        r#"
+    // #832: joins hosted_mocks (RLS-covered), so run under the org GUC.
+    crate::store::with_org_context(pool, org_id, move |tx| {
+        Box::pin(async move {
+            sqlx::query_as::<_, AggregatedMetrics>(
+                r#"
         SELECT
             COALESCE(SUM(dm.requests), 0)::BIGINT AS total_requests,
             COALESCE(SUM(dm.requests_2xx), 0)::BIGINT AS requests_2xx,
@@ -302,9 +322,13 @@ async fn aggregate_deployment_metrics(pool: &sqlx::PgPool, org_id: Uuid) -> Aggr
         JOIN hosted_mocks hm ON hm.id = dm.hosted_mock_id
         WHERE hm.org_id = $1 AND hm.deleted_at IS NULL
         "#,
-    )
-    .bind(org_id)
-    .fetch_optional(pool)
+            )
+            .bind(org_id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(Into::into)
+        })
+    })
     .await
     .ok()
     .flatten()
@@ -322,8 +346,11 @@ async fn aggregate_deployment_metrics(pool: &sqlx::PgPool, org_id: Uuid) -> Aggr
 /// ServerTable expects. Each deployment becomes one "server" row with its
 /// public URL as the address and the current period's request count.
 async fn list_active_deployment_servers(pool: &sqlx::PgPool, org_id: Uuid) -> Vec<ServerStatus> {
-    let rows = sqlx::query_as::<_, ActiveDeployment>(
-        r#"
+    // #832: lists hosted_mocks (RLS-covered), so run under the org GUC.
+    let rows = crate::store::with_org_context(pool, org_id, move |tx| {
+        Box::pin(async move {
+            sqlx::query_as::<_, ActiveDeployment>(
+                r#"
         SELECT
             hm.name,
             hm.deployment_url,
@@ -341,9 +368,13 @@ async fn list_active_deployment_servers(pool: &sqlx::PgPool, org_id: Uuid) -> Ve
         ORDER BY hm.created_at DESC
         LIMIT 25
         "#,
-    )
-    .bind(org_id)
-    .fetch_all(pool)
+            )
+            .bind(org_id)
+            .fetch_all(&mut **tx)
+            .await
+            .map_err(Into::into)
+        })
+    })
     .await
     .unwrap_or_default();
 
