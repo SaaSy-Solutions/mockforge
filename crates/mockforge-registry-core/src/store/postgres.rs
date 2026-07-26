@@ -51,13 +51,38 @@ use crate::models::waitlist::WaitlistSubscriber;
 /// Postgres-backed [`RegistryStore`] implementation.
 #[derive(Clone)]
 pub struct PgRegistryStore {
+    /// Request-path pool. When the binary wires a `NOBYPASSRLS` runtime role
+    /// (via `APP_DATABASE_URL`), the #832 RLS policies enforce org scoping on
+    /// queries run here. Org-scoped reads route through `with_org_context` so
+    /// `app.current_org_id` is bound.
     pool: PgPool,
+    /// Elevated pool for the handful of legitimately cross-org queries (e.g.
+    /// platform-admin analytics that count every tenant). This is the owner
+    /// role, which bypasses RLS. Defaults to `pool` unless
+    /// [`with_owner_pool`](Self::with_owner_pool) is called, so single-role
+    /// deployments and tests are unchanged.
+    owner_pool: PgPool,
 }
 
 impl PgRegistryStore {
     /// Wrap an existing [`PgPool`] in a registry store.
+    ///
+    /// The elevated (cross-org) pool defaults to the same pool; call
+    /// [`with_owner_pool`](Self::with_owner_pool) to supply a distinct owner
+    /// role when the request-path pool is a `NOBYPASSRLS` role (#832).
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        let owner_pool = pool.clone();
+        Self { pool, owner_pool }
+    }
+
+    /// Supply the elevated (RLS-bypassing) owner pool used for legitimately
+    /// cross-org queries. When `APP_DATABASE_URL` puts request-path queries on
+    /// a `NOBYPASSRLS` role, cross-org admin analytics would otherwise
+    /// fail-closed to zero; routing them here keeps them working (#832).
+    #[must_use]
+    pub fn with_owner_pool(mut self, owner_pool: PgPool) -> Self {
+        self.owner_pool = owner_pool;
+        self
     }
 
     /// Borrow the underlying pool. Exposed so the binary bootstrap can still
@@ -341,20 +366,29 @@ impl RegistryStore for PgRegistryStore {
         org_id: Uuid,
         event_types: &[AuditEventType],
     ) -> StoreResult<i64> {
-        let mut query = sqlx::QueryBuilder::new("SELECT COUNT(*) FROM audit_logs WHERE org_id = ");
-        query.push_bind(org_id);
+        // #832: run under the org GUC so the audit_logs RLS policy enforces
+        // isolation. The `WHERE org_id` stays as defense-in-depth.
+        let event_types = event_types.to_vec();
+        crate::store::with_org_context(&self.pool, org_id, move |tx| {
+            Box::pin(async move {
+                let mut query =
+                    sqlx::QueryBuilder::new("SELECT COUNT(*) FROM audit_logs WHERE org_id = ");
+                query.push_bind(org_id);
 
-        if !event_types.is_empty() {
-            query.push(" AND event_type IN (");
-            let mut sep = query.separated(", ");
-            for et in event_types {
-                sep.push_bind(*et);
-            }
-            query.push(")");
-        }
+                if !event_types.is_empty() {
+                    query.push(" AND event_type IN (");
+                    let mut sep = query.separated(", ");
+                    for et in &event_types {
+                        sep.push_bind(*et);
+                    }
+                    query.push(")");
+                }
 
-        let count: (i64,) = query.build_query_as().fetch_one(&self.pool).await?;
-        Ok(count.0)
+                let count: (i64,) = query.build_query_as().fetch_one(&mut **tx).await?;
+                Ok(count.0)
+            })
+        })
+        .await
     }
 
     async fn record_feature_usage(
@@ -2457,7 +2491,10 @@ impl RegistryStore for PgRegistryStore {
     // --- Admin analytics snapshots ---
 
     async fn get_admin_analytics_snapshot(&self) -> StoreResult<AdminAnalyticsSnapshot> {
-        let pool = &self.pool;
+        // #832: platform-admin analytics count every tenant, so they run on the
+        // elevated owner pool (which bypasses RLS) rather than the RLS-enforced
+        // request pool — otherwise the covered-table counts fail-closed to 0.
+        let pool = &self.owner_pool;
 
         let (total_users,): (i64,) =
             sqlx::query_as("SELECT COUNT(*) FROM users").fetch_one(pool).await?;
@@ -2929,11 +2966,18 @@ impl RegistryStore for PgRegistryStore {
     }
 
     async fn list_org_hosted_mocks_raw(&self, org_id: Uuid) -> StoreResult<Vec<HostedMock>> {
-        sqlx::query_as::<_, HostedMock>("SELECT * FROM hosted_mocks WHERE org_id = $1")
-            .bind(org_id)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(Into::into)
+        // #832: run under the org GUC so the hosted_mocks RLS policy enforces
+        // isolation. The `WHERE org_id` stays as defense-in-depth.
+        crate::store::with_org_context(&self.pool, org_id, move |tx| {
+            Box::pin(async move {
+                sqlx::query_as::<_, HostedMock>("SELECT * FROM hosted_mocks WHERE org_id = $1")
+                    .bind(org_id)
+                    .fetch_all(&mut **tx)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn delete_user_data_cascade(&self, user_id: Uuid) -> StoreResult<usize> {

@@ -169,8 +169,12 @@ async fn main() -> Result<()> {
     // pool — the NOBYPASSRLS role when APP_DATABASE_URL is set (RLS-enforced),
     // otherwise the owner pool (unchanged). Migrations and cross-org workers
     // below keep using db.pool() (the owner role).
-    let store: Arc<dyn mockforge_registry_server::store::RegistryStore> =
-        Arc::new(PgRegistryStore::new(db.runtime_pool().clone()));
+    let store: Arc<dyn mockforge_registry_server::store::RegistryStore> = Arc::new(
+        PgRegistryStore::new(db.runtime_pool().clone())
+            // Cross-org admin queries (analytics snapshot) run on the owner
+            // pool; org-scoped queries stay on the RLS-enforced runtime pool.
+            .with_owner_pool(db.pool().clone()),
+    );
 
     // HSM-backed platform-signing controller (Issue #568). Off by default;
     // boots only when MOCKFORGE_PLATFORM_SIGNING_KMS_KEY_ID is set on a
