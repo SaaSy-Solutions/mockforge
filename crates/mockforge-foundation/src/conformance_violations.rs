@@ -590,6 +590,16 @@ pub fn clear() {
 mod tests {
     use super::*;
 
+    /// Serializes the tests that mutate the process-wide `VIOLATIONS`
+    /// buffer via the module-level `clear`/`record`/`len`/`snapshot`
+    /// functions. Under the default multi-threaded test runner these
+    /// otherwise race — one test's `clear()` interleaves with another's
+    /// `record()`, so `len()`/`snapshot()` observe a corrupted count.
+    /// The release workflow's full `cargo test` run flaked on
+    /// `buffer_drops_oldest_at_capacity` for exactly this reason. Tests
+    /// that only touch a local `UniqueBuffer` do not need this guard.
+    static GLOBAL_BUFFER_GUARD: Mutex<()> = Mutex::new(());
+
     fn v(method: &str, status: u16) -> ServerConformanceViolation {
         ServerConformanceViolation {
             timestamp: Utc::now(),
@@ -653,6 +663,7 @@ mod tests {
 
     #[test]
     fn record_and_snapshot_in_lifo_order() {
+        let _guard = GLOBAL_BUFFER_GUARD.lock();
         clear();
         record(v("GET", 400));
         record(v("POST", 422));
@@ -665,6 +676,7 @@ mod tests {
 
     #[test]
     fn buffer_drops_oldest_at_capacity() {
+        let _guard = GLOBAL_BUFFER_GUARD.lock();
         clear();
         for i in 0..(DEFAULT_BUFFER_SIZE + 50) {
             let mut entry = v("GET", 400);
