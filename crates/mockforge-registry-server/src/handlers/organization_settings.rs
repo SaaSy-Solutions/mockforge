@@ -216,13 +216,21 @@ pub async fn get_organization_usage(
     .await
     .map_err(ApiError::Database)?;
 
-    // Get feature usage counts
+    // Get feature usage counts. #832: hosted_mocks is RLS-covered, so run this
+    // one under the org GUC on the runtime pool (the WHERE org_id stays as
+    // defense-in-depth); the other counts hit non-covered tables and stay on
+    // the shared pool.
     let hosted_mocks_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM hosted_mocks WHERE org_id = $1")
-            .bind(org_id)
-            .fetch_one(pool)
-            .await
-            .map_err(ApiError::Database)?;
+        crate::store::with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+            Box::pin(async move {
+                sqlx::query_as("SELECT COUNT(*) FROM hosted_mocks WHERE org_id = $1")
+                    .bind(org_id)
+                    .fetch_one(&mut **tx)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await?;
 
     let plugins_published: (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM plugins WHERE org_id = $1")

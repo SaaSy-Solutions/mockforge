@@ -223,32 +223,40 @@ pub async fn get_logs(
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<serde_json::Value>>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let logs: Vec<serde_json::Value> = sqlx::query_scalar(
-        r#"
-        SELECT json_build_object(
-            'id', id::text,
-            'timestamp', created_at,
-            'event_type', event_type::text,
-            'description', description,
-            'user_id', user_id::text,
-            'ip_address', ip_address
-        )
-        FROM audit_logs
-        WHERE org_id = $1
-        ORDER BY created_at DESC
-        LIMIT 50
-        "#,
-    )
-    .bind(org_ctx.org_id)
-    .fetch_all(pool)
-    .await
-    .unwrap_or_default();
+    // #832: audit_logs is RLS-covered; run under the org GUC on the runtime
+    // pool. The WHERE org_id stays as defense-in-depth.
+    let org_id = org_ctx.org_id;
+    let logs: Vec<serde_json::Value> =
+        crate::store::with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+            Box::pin(async move {
+                sqlx::query_scalar(
+                    r#"
+                SELECT json_build_object(
+                    'id', id::text,
+                    'timestamp', created_at,
+                    'event_type', event_type::text,
+                    'description', description,
+                    'user_id', user_id::text,
+                    'ip_address', ip_address
+                )
+                FROM audit_logs
+                WHERE org_id = $1
+                ORDER BY created_at DESC
+                LIMIT 50
+                "#,
+                )
+                .bind(org_id)
+                .fetch_all(&mut **tx)
+                .await
+                .map_err(Into::into)
+            })
+        })
+        .await
+        .unwrap_or_default();
 
     Ok(Json(logs))
 }
