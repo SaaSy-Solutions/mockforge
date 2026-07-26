@@ -5,7 +5,17 @@ use sqlx::{postgres::PgPoolOptions, PgPool};
 
 #[derive(Clone, Debug)]
 pub struct Database {
+    /// Owner/elevated pool. Runs migrations (only the table owner can
+    /// `ENABLE ROW LEVEL SECURITY`) and cross-org background workers that
+    /// legitimately sweep every tenant. On the current Neon setup this role
+    /// has `BYPASSRLS`, so it is NOT subject to the #832 RLS policies.
     pool: PgPool,
+    /// Request-path pool. When `APP_DATABASE_URL` is set this is a separate
+    /// `NOSUPERUSER NOBYPASSRLS` role, so the #832 RLS policies actually bite
+    /// for handler queries; when it is unset this simply aliases `pool` so
+    /// behavior is unchanged. Handlers that rely on the RLS backstop MUST run
+    /// their queries through `with_org_context` to bind `app.current_org_id`.
+    runtime_pool: PgPool,
 }
 
 impl Database {
@@ -22,7 +32,26 @@ impl Database {
             .connect(database_url)
             .await?;
 
-        Ok(Self { pool })
+        // #832 tenant-isolation role-split. `APP_DATABASE_URL`, when set, points
+        // at a NOBYPASSRLS role used only for request-path queries so the RLS
+        // policies enforce org scoping. Migrations and cross-org workers keep
+        // using the owner `pool`. Unset (or empty) => runtime aliases the owner
+        // pool, preserving the pre-#832 single-role behavior exactly.
+        let runtime_pool = match std::env::var("APP_DATABASE_URL") {
+            Ok(url) if !url.trim().is_empty() => {
+                tracing::info!(
+                    "APP_DATABASE_URL set: request-path queries will use the dedicated \
+                     runtime role (RLS-enforced); migrations/workers stay on the owner role"
+                );
+                PgPoolOptions::new()
+                    .max_connections(max_connections)
+                    .connect(url.trim())
+                    .await?
+            }
+            _ => pool.clone(),
+        };
+
+        Ok(Self { pool, runtime_pool })
     }
 
     pub async fn migrate(&self) -> Result<()> {
@@ -80,6 +109,15 @@ impl Database {
 
     pub fn pool(&self) -> &PgPool {
         &self.pool
+    }
+
+    /// Request-path pool for tenant-isolated queries (#832). Aliases
+    /// [`Self::pool`] unless `APP_DATABASE_URL` is set, in which case it is a
+    /// dedicated `NOBYPASSRLS` role the RLS policies enforce against. The
+    /// request-handling `RegistryStore` is built from this pool; migrations and
+    /// cross-org workers keep using [`Self::pool`].
+    pub fn runtime_pool(&self) -> &PgPool {
+        &self.runtime_pool
     }
 
     /// Get total number of plugins

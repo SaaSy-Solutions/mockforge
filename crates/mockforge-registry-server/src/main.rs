@@ -164,9 +164,13 @@ async fn main() -> Result<()> {
     tracing::info!("Circuit breakers initialized for external services");
 
     // Create the unified registry store (Phase 1 extraction). For the SaaS
-    // binary this is always a Postgres-backed adapter over the existing pool.
+    // binary this is always a Postgres-backed adapter over the runtime pool.
+    // #832: the store handles request-path queries, so it uses the runtime
+    // pool — the NOBYPASSRLS role when APP_DATABASE_URL is set (RLS-enforced),
+    // otherwise the owner pool (unchanged). Migrations and cross-org workers
+    // below keep using db.pool() (the owner role).
     let store: Arc<dyn mockforge_registry_server::store::RegistryStore> =
-        Arc::new(PgRegistryStore::new(db.pool().clone()));
+        Arc::new(PgRegistryStore::new(db.runtime_pool().clone()));
 
     // HSM-backed platform-signing controller (Issue #568). Off by default;
     // boots only when MOCKFORGE_PLATFORM_SIGNING_KMS_KEY_ID is set on a
