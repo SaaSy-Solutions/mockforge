@@ -1,0 +1,96 @@
+# RLS tenant-isolation: request-scoped org guard (Option 2, #832/#960)
+
+## Problem
+
+The RLS policies (migration `20250101000082`) fail-close every covered-table
+query (`projects`, `audit_logs`, `hosted_mocks`, `templates`, `scenarios`) to 0
+rows unless the connection has `app.current_org_id` set. Activating the
+`NOBYPASSRLS` runtime role therefore requires **every** query on those tables —
+in handlers, the store, and the model layer — to run with the GUC bound to the
+request's org.
+
+The per-method `with_org_context(pool, org_id, ...)` approach cannot achieve
+this: the store (`PgRegistryStore`) owns a shared pool and delegates ~20
+covered-table queries to model methods (`HostedMock::find_by_id(&self.pool, id)`
+etc.). Many store methods are id-based and carry no `org_id`, so they cannot set
+a per-request GUC. A pre-cutover audit confirmed activation as-is would fail
+`find_hosted_mock_by_id`, `list_hosted_mocks_by_org`, `list_templates_by_org`,
+`get_scenario_reviews`, and more → full outage of those surfaces.
+
+## Approach: bind the org ONCE per request, cover everything uniformly
+
+Instead of threading `org_id` through dozens of method signatures, carry it in a
+task-local set by middleware, and have every covered-table query run inside a
+transaction that sets the GUC from that task-local.
+
+### 1. Task-local org context
+
+```rust
+tokio::task_local! { pub static CURRENT_ORG: uuid::Uuid; }
+```
+
+### 2. Request middleware (`rls_org_scope`)
+
+Runs AFTER `auth_middleware` on the authenticated router. Extracts `user_id`
+from request extensions, resolves the org (`resolve_org_context`), and scopes
+the entire downstream in the task-local:
+
+```rust
+match resolve_org(...).await {
+    Ok(org_id) => CURRENT_ORG.scope(org_id, next.run(req)).await,
+    Err(_)     => next.run(req).await, // no org in scope (e.g. list-my-orgs)
+}
+```
+
+### 3. `with_current_org` helper (store/org_context.rs)
+
+Reads the task-local; when present runs `f` in a tx with the tx-local GUC set
+(reuses existing `with_org_context`); when absent runs `f` on the pool directly.
+Tx-local GUC (`set_config(..., true)`) is required by Neon's transaction pooler.
+
+### 4. Executor-generic model methods (the mechanical bulk)
+
+Convert the covered-table model methods in `hosted_mock.rs`, `project.rs`,
+`scenario.rs`, `template.rs`, `audit_log.rs` from `pool: &sqlx::PgPool` to
+`executor: impl sqlx::PgExecutor<'_>` (or `&mut PgConnection`). Backwards
+compatible: `&PgPool` already implements `PgExecutor`, so existing handler
+callers are unaffected; the store can now pass `&mut **tx`.
+
+**Caveat:** methods that issue MORE THAN ONE query (e.g. `create` with a
+`RETURNING` after an insert, or select-then-update) cannot take a
+consumed-once `impl Executor`. Take `&mut PgConnection` and reborrow, or keep an
+internal `tx`. Audit each covered-table model method for query count.
+
+### 5. Store wrapping
+
+Each `PgRegistryStore` method that queries a covered table (direct or via a
+model) wraps in `with_current_org(&self.pool, |tx| Box::pin(async move { ... }))`,
+passing `&mut **tx` to the (now executor-generic) model method. Cross-org store
+methods (`get_admin_analytics_snapshot`) stay on `self.owner_pool`.
+
+### 6. The gate: e2e suite as `NOBYPASSRLS`
+
+CI/local: run the registry server with `APP_DATABASE_URL` pointed at a
+`NOBYPASSRLS` role (migration applied) and run the existing `*_e2e.rs` suite
+against it. Any query that forgets the GUC fail-closes → the test fails. This
+makes coverage **proven and self-enforcing**, and is what would have caught the
+store→model gap automatically. Build against this failing gate.
+
+## Rollout (unchanged, reversible)
+
+Deploy (migration inert on owner role) → provision `mockforge_app` on Neon prod
+→ set `APP_DATABASE_URL` (activate) → smoke test → rollback = unset
+`APP_DATABASE_URL` (instant, back to owner/BYPASSRLS). **Only after the e2e gate
+passes.**
+
+## Scope / status
+
+This is a multi-file, auth-critical refactor:
+- ~30-40 model methods → executor-generic (watch multi-query methods).
+- ~20 store methods → wrap in `with_current_org`.
+- 1 middleware + task-local + helper + router wiring.
+- e2e-as-NOBYPASSRLS harness.
+
+Order: (a) task-local + helper + middleware [core, bounded]; (b) e2e gate
+scaffolding [failing]; (c) models executor-generic; (d) store wrapping until the
+gate passes; (e) rollout. Steps (c)/(d) are the bulk and must be driven by (b).

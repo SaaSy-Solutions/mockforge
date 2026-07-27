@@ -87,3 +87,48 @@ where
         }
     }
 }
+
+tokio::task_local! {
+    /// The org bound to the current request, set once by the `rls_org_scope`
+    /// middleware after auth/org resolution. Carried in a task-local so
+    /// [`with_current_org`] can bind the RLS GUC on every covered-table query
+    /// without threading `org_id` through the store and model signatures
+    /// (#832 / #960). Absent on unauthenticated paths and requests with no
+    /// resolved org (e.g. "list my orgs").
+    pub static CURRENT_ORG: Uuid;
+}
+
+/// Run `f` inside a transaction bound to the request's org (the [`CURRENT_ORG`]
+/// task-local), so the RLS policies enforce isolation on every covered-table
+/// query — store, model, or direct — without per-method `org_id` plumbing.
+///
+/// When no org is in scope (unauthenticated path, or a request with no resolved
+/// org), `f` runs inside a transaction with the GUC left unset. That is the
+/// correct fail-closed default under the `NOBYPASSRLS` runtime role: a
+/// covered-table query with no org context sees zero rows rather than another
+/// tenant's data. Non-covered queries are unaffected.
+pub async fn with_current_org<'a, T, F>(pool: &'a PgPool, f: F) -> StoreResult<T>
+where
+    F: for<'t> FnOnce(
+        &'t mut Transaction<'a, Postgres>,
+    ) -> Pin<Box<dyn Future<Output = StoreResult<T>> + Send + 't>>,
+{
+    match CURRENT_ORG.try_with(|org| *org) {
+        Ok(org_id) => with_org_context(pool, org_id, f).await,
+        Err(_) => {
+            // No org in scope: run in a transaction without binding the GUC.
+            let mut tx = pool.begin().await.map_err(StoreError::Database)?;
+            let result = f(&mut tx).await;
+            match result {
+                Ok(value) => {
+                    tx.commit().await.map_err(StoreError::Database)?;
+                    Ok(value)
+                }
+                Err(err) => {
+                    let _ = tx.rollback().await;
+                    Err(err)
+                }
+            }
+        }
+    }
+}
