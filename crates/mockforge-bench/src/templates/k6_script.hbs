@@ -290,6 +290,17 @@ export default function () {
       else if (em.toLowerCase().indexOf('timeout') !== -1) kind = 'timeout';
       else if (em.toLowerCase().indexOf('tls') !== -1) kind = 'tls';
       else if (em.toLowerCase().indexOf('connect') !== -1 || em.toLowerCase().indexOf('refused') !== -1) kind = 'connect';
+      // Round 63 (#79) — target-side HTTP protocol violations. Srikanth's WAF
+      // answered blocked probe URLs with a Content-Length that disagreed with
+      // the bytes it actually sent ("server replied with more than declared
+      // Content-Length; truncated"), which Go's net/http rejects. These were
+      // landing in the useless `other` bucket. Checked LAST so the eof/timeout/
+      // tls/connect rules above keep their current meaning; this only re-labels
+      // what would otherwise be `other`.
+      else if (em.toLowerCase().indexOf('declared content-length') !== -1
+            || em.toLowerCase().indexOf('malformed') !== -1
+            || em.toLowerCase().indexOf('protocol error') !== -1
+            || em.toLowerCase().indexOf('invalid header') !== -1) kind = 'protocol';
       console.log('MOCKFORGE_NETWORK_EVENT:' + JSON.stringify({
         timestamp: new Date().toISOString(),
         check: '{{this.display_name}}',

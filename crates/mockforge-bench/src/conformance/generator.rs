@@ -420,6 +420,8 @@ impl ConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('eof') !== -1) kind = 'connect';\n                 \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('timeout') !== -1) kind = 'timeout';\n\
                  \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('tls') !== -1) kind = 'tls';\n\
                  \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('connect') !== -1 || em.toLowerCase().indexOf('refused') !== -1) kind = 'connect';\n\
+                 \x20\x20\x20\x20\x20\x20// Round 63 (#79) — target-side HTTP protocol violation (e.g. more bytes than the declared Content-Length). Checked last so it only re-labels what would be 'other'.\n\
+                 \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('declared content-length') !== -1 || em.toLowerCase().indexOf('malformed') !== -1 || em.toLowerCase().indexOf('protocol error') !== -1 || em.toLowerCase().indexOf('invalid header') !== -1) kind = 'protocol';\n\
                  \x20\x20\x20\x20\x20\x20console.log('MOCKFORGE_NETWORK_EVENT:' + JSON.stringify({\n\
                  \x20\x20\x20\x20\x20\x20  timestamp: new Date().toISOString(),\n\
                  \x20\x20\x20\x20\x20\x20  check: checkName,\n\
@@ -1472,5 +1474,49 @@ mod tests {
         let js = config.custom_headers_js_object();
         assert!(js.contains("'Authorization': 'Bearer abc123'"));
         assert!(js.contains("'X-Custom': 'value'"));
+    }
+
+    /// Round 63 (#79) — the k6 network-event `kind` ladder lives in THREE
+    /// render paths (this file, `spec_driven.rs`, and `k6_script.hbs`). The
+    /// classic #79 failure is fixing one and silently leaving the others
+    /// behind, so assert every path carries the `protocol` branch that labels
+    /// target-side HTTP violations (Srikanth's WAF answering blocked probes
+    /// with a body that disagreed with its declared Content-Length, which
+    /// previously landed in the useless `other` bucket).
+    #[test]
+    fn protocol_kind_present_in_all_three_render_paths() {
+        const PATHS: [(&str, &str); 3] = [
+            ("generator.rs", include_str!("generator.rs")),
+            ("spec_driven.rs", include_str!("spec_driven.rs")),
+            ("k6_script.hbs", include_str!("../templates/k6_script.hbs")),
+        ];
+        // NOTE: this test's own source is one of the inputs (generator.rs
+        // includes itself), so every needle is assembled at runtime — a
+        // literal here would satisfy the assertion even if the real ladder
+        // were deleted.
+        let kind_of = |k: &str| format!("kind = '{k}'");
+        let cl_needle = format!("declared content-{}", "length");
+
+        for (name, src) in PATHS {
+            assert!(
+                src.contains(&kind_of("protocol")),
+                "{name} is missing the `protocol` network-event classification (#79 r63)"
+            );
+            assert!(
+                src.contains(&cl_needle),
+                "{name} is missing the declared-Content-Length match (#79 r63)"
+            );
+            // The protocol branch must stay LAST so it only re-labels what
+            // would otherwise be `other`; the eof/timeout/tls/connect rules
+            // above it keep their existing meaning.
+            let protocol_at = src.find(&kind_of("protocol")).expect("checked above");
+            for earlier in ["connect", "timeout", "tls"] {
+                let needle = kind_of(earlier);
+                assert!(
+                    src.find(&needle).expect("ladder rule present") < protocol_at,
+                    "{name}: `{needle}` must be classified before `protocol` (#79 r63)"
+                );
+            }
+        }
     }
 }
