@@ -60,19 +60,50 @@ impl Partition {
     /// is overwritten with the assigned offset before it's stored, so
     /// downstream Fetch path can compare `msg.offset` against
     /// `fetch_offset` correctly.
-    pub fn append(&mut self, mut message: KafkaMessage) -> i64 {
+    pub fn append(&mut self, message: KafkaMessage) -> i64 {
+        self.append_with_retention(message, true)
+    }
+
+    /// Append a message and optionally retain it in the in-memory log.
+    ///
+    /// When `keep_in_memory` is false we still allocate a real offset and
+    /// advance the partition watermark, but skip storing the record payload.
+    /// This lets callers acknowledge records without retaining them.
+    pub fn append_with_retention(
+        &mut self,
+        mut message: KafkaMessage,
+        keep_in_memory: bool,
+    ) -> i64 {
         let offset = self.high_watermark;
         message.offset = offset;
-        self.retained_bytes = self.retained_bytes.saturating_add(message.value.len());
-        self.ingest_times_ms.push_back(now_ms());
-        self.messages.push_back(message);
+
+        if keep_in_memory {
+            self.retained_bytes = self.retained_bytes.saturating_add(message.value.len());
+            self.ingest_times_ms.push_back(now_ms());
+            self.messages.push_back(message);
+        }
+
         self.high_watermark += 1;
+        self.sync_log_start_offset();
         offset
     }
 
+    /// Re-derive `log_start_offset` from the retained log.
+    ///
+    /// A filter can drop records, so offsets in `messages` are not necessarily
+    /// contiguous and counting evictions would drift. The earliest offset a
+    /// consumer can actually read is the front record's, or `high_watermark`
+    /// when nothing is retained.
+    fn sync_log_start_offset(&mut self) {
+        self.log_start_offset =
+            self.messages.front().map_or(self.high_watermark, |message| message.offset);
+    }
+
     /// Evict messages from the front of the log until it is within the
-    /// configured caps. Eviction advances `log_start_offset` so the Fetch
-    /// path stays consistent. This is the only place that drops retained
+    /// configured caps. Eviction re-derives `log_start_offset` from the
+    /// remaining log so the Fetch path stays consistent even when a
+    /// [`crate::MessageFilter`] has left holes in the offset sequence.
+    /// This is the only place that drops retained
     /// messages, enforcing the size/count/retention limits a mock broker
     /// would otherwise never apply (#753).
     ///
@@ -103,7 +134,7 @@ impl Partition {
             if let Some(evicted) = self.messages.pop_front() {
                 self.retained_bytes = self.retained_bytes.saturating_sub(evicted.value.len());
                 self.ingest_times_ms.pop_front();
-                self.log_start_offset += 1;
+                self.sync_log_start_offset();
             } else {
                 break;
             }
@@ -112,14 +143,10 @@ impl Partition {
 
     /// Fetch messages from a given offset
     pub fn fetch(&self, offset: i64, max_bytes: i32) -> Vec<&KafkaMessage> {
-        // A fetch targeting an offset below the current log start (because the
-        // requested records were evicted by `trim`) must not underflow the
-        // `usize` index — clamp to the start of the retained log. (#753)
-        let start_idx = offset.saturating_sub(self.log_start_offset).max(0) as usize;
         let mut result = Vec::new();
         let mut total_bytes = 0;
 
-        for message in self.messages.iter().skip(start_idx) {
+        for message in self.messages.iter().filter(|m| m.offset >= offset) {
             if total_bytes + message.value.len() as i32 > max_bytes && !result.is_empty() {
                 break;
             }
@@ -137,7 +164,7 @@ impl Partition {
 
     /// Check if partition has messages from offset
     pub fn has_offset(&self, offset: i64) -> bool {
-        offset >= self.log_start_offset && offset < self.high_watermark
+        self.messages.iter().any(|message| message.offset == offset)
     }
 }
 
@@ -383,5 +410,72 @@ mod tests {
         // The lone message stays fetchable.
         assert_eq!(partition.messages.len(), 1);
         assert_eq!(partition.log_start_offset, 0);
+    }
+
+    #[test]
+    fn test_append_with_retention_false_advances_offset_without_storage() {
+        let mut partition = Partition::new(0);
+        let offset = partition.append_with_retention(create_test_message(0, b"drop"), false);
+
+        assert_eq!(offset, 0);
+        assert_eq!(partition.high_watermark, 1);
+        assert!(partition.messages.is_empty());
+        assert!(!partition.has_offset(0));
+    }
+
+    #[test]
+    fn test_fetch_handles_sparse_offsets() {
+        let mut partition = Partition::new(0);
+        partition.append_with_retention(create_test_message(0, b"keep-1"), true);
+        partition.append_with_retention(create_test_message(0, b"drop"), false);
+        partition.append_with_retention(create_test_message(0, b"keep-2"), true);
+
+        let messages = partition.fetch(1, 1000);
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].offset, 2);
+        assert_eq!(messages[0].value, b"keep-2");
+    }
+
+    #[test]
+    fn test_log_start_offset_tracks_first_retained_offset_when_filtered() {
+        let mut partition = Partition::new(0);
+        partition.append_with_retention(create_test_message(0, b"drop"), false);
+        partition.append_with_retention(create_test_message(0, b"drop"), false);
+        partition.append_with_retention(create_test_message(0, b"keep"), true);
+
+        // Offsets 0 and 1 were never retained, so the earliest readable
+        // offset is 2 — not 0.
+        assert_eq!(partition.log_start_offset, 2);
+    }
+
+    #[test]
+    fn test_log_start_offset_is_high_watermark_when_nothing_retained() {
+        let mut partition = Partition::new(0);
+        for _ in 0..3 {
+            partition.append_with_retention(create_test_message(0, b"drop"), false);
+        }
+
+        assert!(partition.messages.is_empty());
+        assert_eq!(partition.high_watermark, 3);
+        assert_eq!(partition.log_start_offset, 3);
+    }
+
+    #[test]
+    fn test_trim_start_offset_does_not_drift_on_sparse_log() {
+        let mut partition = Partition::new(0);
+        // keep, drop, drop, keep, keep -> retained offsets [0, 3, 4].
+        partition.append_with_retention(create_test_message(0, b"a"), true);
+        partition.append_with_retention(create_test_message(0, b"b"), false);
+        partition.append_with_retention(create_test_message(0, b"c"), false);
+        partition.append_with_retention(create_test_message(0, b"d"), true);
+        partition.append_with_retention(create_test_message(0, b"e"), true);
+
+        // Cap the log at 2 messages: offset 0 is evicted.
+        partition.trim(0, 0, 2, usize::MAX);
+
+        assert_eq!(partition.messages.len(), 2);
+        assert_eq!(partition.messages.front().unwrap().offset, 3);
+        // Counting evictions would have said 1 here.
+        assert_eq!(partition.log_start_offset, 3);
     }
 }
