@@ -1,3 +1,9 @@
+## [0.3.211] - 2026-07-27
+
+### Fixed
+
+- **[Reality]** Target-side HTTP protocol violations now classify as `"kind": "protocol"` in `conformance-network-events.json` instead of the generic `"other"` (#79 round 63 / Srikanth on 0.3.210). His WAF answered blocked security probes (`1234 OR 1=1`, `waitfor delay`, ...) with a response body that disagreed with its own declared `Content-Length`, which Go's `net/http` rejects as `server replied with more than declared Content-Length; truncated`. Those 2,824 events were landing in the `other` bucket alongside genuinely unclassifiable failures, so a real protocol violation by the target (the class of defect behind request-smuggling and desync bugs) was indistinguishable from noise. The new branch also covers `malformed`, `protocol error`, and `invalid header`, and is evaluated **last** so the existing eof/timeout/tls/connect rules keep their meaning; it only re-labels what would otherwise be `other`. Applied to all three k6 script-generation paths (`generator.rs`, `spec_driven.rs`, `k6_script.hbs`) with a regression test asserting the branch exists, and stays ordered last, in every path so they cannot drift apart.
+
 ## [0.3.210] - 2026-07-24
 
 ### Added

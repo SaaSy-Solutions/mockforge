@@ -967,6 +967,8 @@ impl SpecDrivenConformanceGenerator {
                  \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('eof') !== -1) kind = 'connect';\n                 \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('timeout') !== -1) kind = 'timeout';\n\
                  \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('tls') !== -1) kind = 'tls';\n\
                  \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('connect') !== -1 || em.toLowerCase().indexOf('refused') !== -1) kind = 'connect';\n\
+                 \x20\x20\x20\x20\x20\x20// Round 63 (#79) — target-side HTTP protocol violation (e.g. more bytes than the declared Content-Length). Checked last so it only re-labels what would be 'other'.\n\
+                 \x20\x20\x20\x20\x20\x20else if (em.toLowerCase().indexOf('declared content-length') !== -1 || em.toLowerCase().indexOf('malformed') !== -1 || em.toLowerCase().indexOf('protocol error') !== -1 || em.toLowerCase().indexOf('invalid header') !== -1) kind = 'protocol';\n\
                  \x20\x20\x20\x20\x20\x20console.log('MOCKFORGE_NETWORK_EVENT:' + JSON.stringify({\n\
                  \x20\x20\x20\x20\x20\x20  timestamp: new Date().toISOString(),\n\
                  \x20\x20\x20\x20\x20\x20  check: checkName,\n\

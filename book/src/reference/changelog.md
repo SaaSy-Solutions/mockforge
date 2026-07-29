@@ -1,5 +1,11 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.211] - 2026-07-27
+
+### Fixed
+
+- **[Reality]** Target-side HTTP protocol violations classify as `"kind": "protocol"` in `conformance-network-events.json` instead of generic `"other"` (#79 round 63 / Srikanth on 0.3.210). A WAF answering blocked security probes with a body that disagreed with its declared `Content-Length` trips Go's `server replied with more than declared Content-Length; truncated`; those events previously mixed in with unclassifiable failures. Also covers `malformed`, `protocol error`, `invalid header`. Evaluated last, so eof/timeout/tls/connect keep their meaning and only `other` is re-labelled. Applied to all three k6 render paths with a regression test guarding both presence and ordering.
+
 ## [0.3.210] - 2026-07-24
 
 ### Added
