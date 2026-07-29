@@ -5,6 +5,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::RwLock;
 
 use crate::consumer_groups::ConsumerGroupManager;
+use crate::filter::MessageFilter;
 use crate::fixture_executor::FixtureRuntime;
 use crate::metrics::KafkaMetrics;
 use crate::partitions::KafkaMessage;
@@ -155,6 +156,8 @@ pub struct KafkaMockBroker {
     /// MOCKFORGE_KAFKA_RECORDING_DB (sqlite path) at construction; when
     /// unset no exchange is recorded and behaviour is unchanged.
     recorder: Option<std::sync::Arc<mockforge_recorder::Recorder>>,
+    /// Optional record-retention filter for Produce requests.
+    message_filter: Option<Arc<dyn MessageFilter>>,
 }
 
 impl KafkaMockBroker {
@@ -184,6 +187,14 @@ impl KafkaMockBroker {
     /// # }
     /// ```
     pub async fn new(config: KafkaConfig) -> Result<Self> {
+        Self::new_with_filter(config, None).await
+    }
+
+    /// Create a new Kafka mock broker with an optional message filter.
+    pub async fn new_with_filter(
+        config: KafkaConfig,
+        message_filter: Option<Arc<dyn MessageFilter>>,
+    ) -> Result<Self> {
         let topics = Arc::new(RwLock::new(HashMap::new()));
         let consumer_groups = Arc::new(RwLock::new(ConsumerGroupManager::new()));
         let spec_registry = KafkaSpecRegistry::new(config.clone(), Arc::clone(&topics)).await?;
@@ -239,6 +250,7 @@ impl KafkaMockBroker {
                 }
                 _ => None,
             },
+            message_filter,
         })
     }
 
@@ -636,6 +648,7 @@ impl KafkaMockBroker {
         };
 
         let append_time_ms = chrono::Utc::now().timestamp_millis();
+        let filter = self.message_filter.clone();
         let mut topic_results = Vec::with_capacity(parsed.topics.len());
 
         for topic_data in parsed.topics {
@@ -736,10 +749,19 @@ impl KafkaMockBroker {
                         value: rec.value,
                         headers: rec.headers,
                     };
+                    let keep_in_memory = match &filter {
+                        Some(filter) => {
+                            filter.should_keep(&topic_data.name, part.partition_index, &msg)
+                        }
+                        None => true,
+                    };
+
                     // Snapshot the record for downstream relationship
                     // fan-out. Cheap — a handful of bytes per message.
                     accepted_for_relationships.push(msg.clone());
-                    let offset = topic_entry.produce(part.partition_index, msg).await?;
+                    let offset = topic_entry
+                        .produce_with_retention_decision(part.partition_index, msg, keep_in_memory)
+                        .await?;
                     if i == 0 {
                         base_offset = offset;
                     }
@@ -2343,6 +2365,52 @@ mod tests {
         assert_eq!(size_bytes, [0, 0, 0, 0]);
     }
 
+    /// Body offset of a frame built by [`produce_v9_frame`]: the fixed part of
+    /// request header v2 (10) + the one-byte client_id "t" (1) + its tag
+    /// buffer (1).
+    const PRODUCE_V9_BODY_OFFSET: usize = 12;
+
+    /// Hand-craft a minimal but complete Produce v9 frame: request header v2
+    /// (api_key=0, api_version=9, correlation=777, client_id="t") followed by a
+    /// body carrying one record for partition 0 of `topic`.
+    fn produce_v9_frame(topic: &str, key: Option<&[u8]>, value: &[u8]) -> Vec<u8> {
+        fn push_unsigned_varint(buf: &mut Vec<u8>, mut v: u32) {
+            while (v & !0x7F) != 0 {
+                buf.push(((v & 0x7F) | 0x80) as u8);
+                v >>= 7;
+            }
+            buf.push(v as u8);
+        }
+
+        let record_batch = crate::produce_codec::one_record_batch_for_testing(key, value);
+
+        let mut msg = Vec::new();
+        // Header v2.
+        msg.extend_from_slice(&0i16.to_be_bytes()); // api_key = Produce
+        msg.extend_from_slice(&9i16.to_be_bytes()); // api_version
+        msg.extend_from_slice(&777i32.to_be_bytes()); // correlation_id
+        msg.extend_from_slice(&1i16.to_be_bytes()); // client_id len
+        msg.push(b't');
+        msg.push(0); // header tag buffer
+
+        // Body.
+        msg.push(0); // transactional_id null
+        msg.extend_from_slice(&(-1i16).to_be_bytes()); // acks
+        msg.extend_from_slice(&30_000i32.to_be_bytes()); // timeout_ms
+        msg.push(2); // topics: 1+1
+        push_unsigned_varint(&mut msg, topic.len() as u32 + 1); // compact string
+        msg.extend_from_slice(topic.as_bytes());
+        msg.push(2); // partitions: 1+1
+        msg.extend_from_slice(&0i32.to_be_bytes()); // partition_index
+        push_unsigned_varint(&mut msg, record_batch.len() as u32 + 1); // compact bytes
+        msg.extend_from_slice(&record_batch);
+        msg.push(0); // partition tag buffer
+        msg.push(0); // topic tag buffer
+        msg.push(0); // request tag buffer
+
+        msg
+    }
+
     #[tokio::test]
     async fn test_handle_produce_v9_writes_records_to_topic() {
         // Build a complete Produce v9 request over the wire, feed it through
@@ -2352,54 +2420,10 @@ mod tests {
         // The broker auto-creates topics on produce, so we can target any name.
         let broker = KafkaMockBroker::new(KafkaConfig::default()).await.expect("broker");
 
-        // Hand-craft a minimal but complete produce v9 frame.
-        let record_batch =
-            crate::produce_codec::one_record_batch_for_testing(Some(b"key-1"), b"hello-produce");
-
-        // Request header v2: api_key=0, api_version=9, correlation=777,
-        // client_id="t", flexible header tag buffer.
-        let mut msg = Vec::new();
-        msg.extend_from_slice(&0i16.to_be_bytes());
-        msg.extend_from_slice(&9i16.to_be_bytes());
-        msg.extend_from_slice(&777i32.to_be_bytes());
-        msg.extend_from_slice(&1i16.to_be_bytes());
-        msg.push(b't');
-        msg.push(0); // header tag buffer
-
-        // Body
-        msg.push(0); // transactional_id null
-        msg.extend_from_slice(&(-1i16).to_be_bytes()); // acks
-        msg.extend_from_slice(&30_000i32.to_be_bytes());
-        // topics: 1+1=2
-        msg.push(2);
-        // topic name "prod-target"
-        let topic_name = b"prod-target";
-        msg.push((topic_name.len() as u8) + 1);
-        msg.extend_from_slice(topic_name);
-        // partitions: 1+1=2
-        msg.push(2);
-        // partition_index=0
-        msg.extend_from_slice(&0i32.to_be_bytes());
-        // records compact bytes
-        let rb_len_plus_one = (record_batch.len() as u32) + 1;
-        // Varint encode rb_len_plus_one manually (small enough for test)
-        if rb_len_plus_one < 128 {
-            msg.push(rb_len_plus_one as u8);
-        } else {
-            let mut v = rb_len_plus_one;
-            while (v & !0x7F) != 0 {
-                msg.push(((v & 0x7F) | 0x80) as u8);
-                v >>= 7;
-            }
-            msg.push(v as u8);
-        }
-        msg.extend_from_slice(&record_batch);
-        msg.push(0); // partition tag buffer
-        msg.push(0); // topic tag buffer
-        msg.push(0); // request tag buffer
+        let msg = produce_v9_frame("prod-target", Some(b"key-1"), b"hello-produce");
 
         // Sanity-check the produce codec can parse our frame body.
-        let body_offset = 10 /* header fixed */ + 1 /* client_id "t" */ + 1 /* tag buffer */;
+        let body_offset = PRODUCE_V9_BODY_OFFSET;
         let parsed = parse_produce_v9(&msg[body_offset..]).expect("codec parse");
         assert_eq!(parsed.topics[0].name, "prod-target");
         assert_eq!(parsed.topics[0].partitions[0].records[0].value, b"hello-produce");
@@ -2437,6 +2461,37 @@ mod tests {
             records: vec![],
             compression_codec: 0,
         };
+    }
+
+    struct DropAllFilter;
+
+    impl MessageFilter for DropAllFilter {
+        fn should_keep(&self, _topic: &str, _partition: i32, _message: &KafkaMessage) -> bool {
+            false
+        }
+    }
+
+    #[tokio::test]
+    async fn test_handle_produce_with_filter_does_not_store_messages() {
+        let broker =
+            KafkaMockBroker::new_with_filter(KafkaConfig::default(), Some(Arc::new(DropAllFilter)))
+                .await
+                .expect("broker");
+
+        let msg = produce_v9_frame("prod-filtered", Some(b"key-1"), b"hello-produce");
+
+        let handler = KafkaProtocolHandler::new();
+        let request = handler.parse_request(&msg).expect("parse header");
+        let _ = broker.handle_produce(&msg, &request).await.expect("produce");
+
+        let topics = broker.topics.read().await;
+        let topic = topics.get("prod-filtered").expect("auto-created topic");
+        let partition = topic.get_partition(0).expect("partition");
+        assert!(partition.messages.is_empty());
+        // The record was acknowledged: it consumed an offset, and the log
+        // start advanced past it so a consumer can't stall on the hole.
+        assert_eq!(partition.high_watermark, 1);
+        assert_eq!(partition.log_start_offset, 1);
     }
 
     #[tokio::test]
