@@ -121,3 +121,15 @@ repos:
     stages: [pre-push]
     pass_filenames: false
     always_run: true
+  - id: dockerfile-rust-drift
+    name: Dockerfile rust toolchain drift guard
+    # Blocks a commit whose Dockerfile builder stage no longer matches
+    # rust-toolchain.toml. The Dockerfiles had drifted to 1.75/1.90/1.91 while
+    # the workspace moved to 1.96.0; nothing noticed until aws-smithy-types
+    # raised its MSRV to 1.94.1 and broke `flyctl deploy` for the production
+    # registry — on a change that had nothing to do with it. Stale builders fail
+    # silently and late, so this is a guard rather than a convention.
+    entry: scripts/check-dockerfile-rust-drift.sh
+    language: system
+    pass_filenames: false
+    files: '(^|/)(Dockerfile[^/]*|rust-toolchain\.toml)$'

@@ -1,5 +1,5 @@
 # Development Dockerfile for MockForge with hot reload
-FROM rust:1.75 AS development
+FROM rust:1.96 AS development
 
 # Install required dependencies
 RUN apt-get update && apt-get install -y \
