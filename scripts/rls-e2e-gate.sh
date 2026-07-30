@@ -19,8 +19,16 @@
 #   scripts/rls-e2e-gate.sh all            # up + test + down (CI shape)
 #   scripts/rls-e2e-gate.sh up             # bring the stack up, leave it running
 #   scripts/rls-e2e-gate.sh test [args..]  # run the suite against a live stack
+#   scripts/rls-e2e-gate.sh control        # re-point the server at the owner pool
+#                                          #   (RLS inert) to attribute a failure
+#   scripts/rls-e2e-gate.sh rearm          # put it back on the NOBYPASSRLS role
 #   scripts/rls-e2e-gate.sh psql-app       # psql shell as the NOBYPASSRLS role
 #   scripts/rls-e2e-gate.sh down           # tear everything down
+#
+# Attribution matters more than it sounds: several of these E2E suites are
+# `#[ignore]`d and never run in CI, so they can carry pre-existing failures.
+# `up -> test` vs `control -> test` is how you tell "RLS broke this" from
+# "this was already broken".
 #
 # `up` + `test` is the dev loop: bring the stack up once, then re-run `test`
 # after each coverage change without paying the docker/migration cost again.
