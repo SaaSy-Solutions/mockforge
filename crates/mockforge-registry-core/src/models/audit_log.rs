@@ -486,7 +486,7 @@ impl AuditLog {
 
     /// Get audit logs for an organization, optionally filtered to one or more event types.
     pub async fn get_by_org(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         limit: Option<i64>,
         offset: Option<i64>,
@@ -516,7 +516,7 @@ impl AuditLog {
             query.push_bind(offset);
         }
 
-        query.build_query_as::<Self>().fetch_all(pool).await
+        query.build_query_as::<Self>().fetch_all(executor).await
     }
 
     /// Get audit logs for a specific user within an organization

@@ -12,7 +12,7 @@
 -- line of defense, not a replacement.
 --
 -- ── HOW THE POLICY FAILS CLOSED ────────────────────────────────────────────
---   current_setting('app.current_org_id', true)::uuid
+--   nullif(current_setting('app.current_org_id', true), '')::uuid
 -- The second `true` arg ("missing_ok") makes a never-set GUC return NULL
 -- instead of raising. A NULL on either side of `org_id = <null>` yields
 -- UNKNOWN, which RLS treats as "row not visible". So a connection that never
@@ -63,25 +63,57 @@
 
 -- ===========================================================================
 -- Strictly org-scoped tables: org_id = current GUC, fail closed when unset.
+--
+-- WHY `nullif(..., '')` AND NOT A BARE `current_setting(..)::uuid`
+--
+-- `set_config('app.current_org_id', <org>, true)` is TRANSACTION-local, so it
+-- is reverted at COMMIT/ROLLBACK. Postgres does not revert a custom GUC to
+-- "unset" — it reverts it to the EMPTY STRING. Demonstrated:
+--
+--     -- fresh connection
+--     SELECT current_setting('app.current_org_id', true);   -- NULL
+--     BEGIN;
+--       SELECT set_config('app.current_org_id', '1111...', true);
+--     COMMIT;
+--     SELECT current_setting('app.current_org_id', true);   -- '' (NOT NULL)
+--     SELECT current_setting('app.current_org_id', true)::uuid;
+--     -- ERROR:  invalid input syntax for type uuid: ""
+--
+-- Without the nullif, a policy on a POOLED connection therefore behaves in two
+-- completely different ways depending on whether that physical connection has
+-- ever served an org-bound transaction:
+--
+--   * never bound  -> NULL -> `org_id = NULL` -> no rows  -> fail closed (good)
+--   * bound before -> ''   -> ''::uuid        -> ERROR 22P02 -> HTTP 500 (bad)
+--
+-- So the very first org-scoped request permanently poisons that connection for
+-- every later query that runs without an org bound (public marketplace reads,
+-- org-less endpoints, anything the coverage work missed). Under a pooler this
+-- spreads across the whole pool within seconds of activation. This was found by
+-- scripts/rls-e2e-gate.sh, which reproduced it as marketplace search 500s.
+--
+-- `nullif(..., '')` collapses both states to NULL, so an unbound connection
+-- always fails CLOSED (zero rows) instead of erroring — which is what the
+-- header above claims and what the rollout plan assumes.
 -- ===========================================================================
 
 ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE projects FORCE ROW LEVEL SECURITY;
 CREATE POLICY org_isolation ON projects
-    USING (org_id = current_setting('app.current_org_id', true)::uuid)
-    WITH CHECK (org_id = current_setting('app.current_org_id', true)::uuid);
+    USING (org_id = nullif(current_setting('app.current_org_id', true), '')::uuid)
+    WITH CHECK (org_id = nullif(current_setting('app.current_org_id', true), '')::uuid);
 
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs FORCE ROW LEVEL SECURITY;
 CREATE POLICY org_isolation ON audit_logs
-    USING (org_id = current_setting('app.current_org_id', true)::uuid)
-    WITH CHECK (org_id = current_setting('app.current_org_id', true)::uuid);
+    USING (org_id = nullif(current_setting('app.current_org_id', true), '')::uuid)
+    WITH CHECK (org_id = nullif(current_setting('app.current_org_id', true), '')::uuid);
 
 ALTER TABLE hosted_mocks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE hosted_mocks FORCE ROW LEVEL SECURITY;
 CREATE POLICY org_isolation ON hosted_mocks
-    USING (org_id = current_setting('app.current_org_id', true)::uuid)
-    WITH CHECK (org_id = current_setting('app.current_org_id', true)::uuid);
+    USING (org_id = nullif(current_setting('app.current_org_id', true), '')::uuid)
+    WITH CHECK (org_id = nullif(current_setting('app.current_org_id', true), '')::uuid);
 
 -- ===========================================================================
 -- Public/shared tables: org-owned rows are isolated, public (NULL org_id)
@@ -102,19 +134,19 @@ ALTER TABLE templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE templates FORCE ROW LEVEL SECURITY;
 CREATE POLICY org_isolation ON templates
     USING (
-        org_id = current_setting('app.current_org_id', true)::uuid
+        org_id = nullif(current_setting('app.current_org_id', true), '')::uuid
         OR org_id IS NULL
     )
-    WITH CHECK (org_id = current_setting('app.current_org_id', true)::uuid);
+    WITH CHECK (org_id = nullif(current_setting('app.current_org_id', true), '')::uuid);
 
 ALTER TABLE scenarios ENABLE ROW LEVEL SECURITY;
 ALTER TABLE scenarios FORCE ROW LEVEL SECURITY;
 CREATE POLICY org_isolation ON scenarios
     USING (
-        org_id = current_setting('app.current_org_id', true)::uuid
+        org_id = nullif(current_setting('app.current_org_id', true), '')::uuid
         OR org_id IS NULL
     )
-    WITH CHECK (org_id = current_setting('app.current_org_id', true)::uuid);
+    WITH CHECK (org_id = nullif(current_setting('app.current_org_id', true), '')::uuid);
 
 -- ===========================================================================
 -- ROLLBACK (reversible) — uncomment and run as the table owner to undo.

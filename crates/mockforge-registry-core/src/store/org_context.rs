@@ -107,6 +107,93 @@ tokio::task_local! {
 /// correct fail-closed default under the `NOBYPASSRLS` runtime role: a
 /// covered-table query with no org context sees zero rows rather than another
 /// tenant's data. Non-covered queries are unaffected.
+/// Bind the org the CALLER named, falling back to the request's task-local when
+/// the caller has none.
+///
+/// This is the right entry point for store methods, and the distinction matters:
+///
+/// * A method that already takes an `org_id` argument (`list_templates_by_org`,
+///   `search_templates(.., org_id, ..)`, `create_hosted_mock(org_id, ..)`) must
+///   bind THAT org, not the task-local. Those methods are reachable from
+///   **unauthenticated** routes — the marketplace search endpoints live in
+///   `public_routes`, so no auth middleware runs and the task-local is empty
+///   even though the handler resolved an org from the `X-Organization-Id`
+///   header and passed it in. Binding the task-local there fail-closes public
+///   marketplace search to zero results.
+/// * A method that only has an id (`find_hosted_mock_by_id`,
+///   `update_hosted_mock_status`) has nothing to bind and must fall back to the
+///   task-local set by `rls_org_scope` middleware.
+///
+/// `None` therefore means "no org named by the caller", not "no org" — the
+/// task-local is still consulted, and only if that is also absent does the
+/// query run unbound (fail-closed to public rows under `NOBYPASSRLS`).
+pub async fn with_optional_org<'a, T, F>(
+    pool: &'a PgPool,
+    org_id: Option<Uuid>,
+    f: F,
+) -> StoreResult<T>
+where
+    F: for<'t> FnOnce(
+        &'t mut Transaction<'a, Postgres>,
+    ) -> Pin<Box<dyn Future<Output = StoreResult<T>> + Send + 't>>,
+{
+    match org_id {
+        Some(org_id) => with_org_context(pool, org_id, f).await,
+        None => with_current_org(pool, f).await,
+    }
+}
+
+/// Bind the request's org when there is one; otherwise run the query on the
+/// ELEVATED (owner) pool, outside RLS.
+///
+/// This is for the public marketplace read surface — `GET /api/v1/marketplace/
+/// templates/{name}/{version}`, scenario lookup by name, and friends. Those
+/// routes are in `public_routes`: unauthenticated, no org to bind, and
+/// **intentionally cross-tenant**. A published marketplace item is org-owned
+/// (`templates.org_id` is set; `scenarios` has no visibility column at all), so
+/// the `org_id = current_org OR org_id IS NULL` policy makes every published
+/// item invisible to an unbound connection. Running these unbound on the
+/// request-path pool returns 404 for every marketplace item — which is exactly
+/// what the e2e gate reported before this existed.
+///
+/// The migration header anticipates this: publishing/browsing "runs through an
+/// elevated role / a dedicated publish flow". This is that elevated role.
+///
+/// The safety argument: when a request DOES have an org bound (every
+/// authenticated route, via `rls_org_scope`), the query stays on the
+/// RLS-enforced pool and the backstop applies as normal. Only the genuinely
+/// org-less public path escalates, and there the app-layer visibility filter
+/// (`org_id = $1 OR org_id IS NULL`, or public-only when anonymous) is the
+/// product's own access rule.
+pub async fn with_org_or_elevated<'a, T, F>(
+    pool: &'a PgPool,
+    owner_pool: &'a PgPool,
+    f: F,
+) -> StoreResult<T>
+where
+    F: for<'t> FnOnce(
+        &'t mut Transaction<'a, Postgres>,
+    ) -> Pin<Box<dyn Future<Output = StoreResult<T>> + Send + 't>>,
+{
+    match CURRENT_ORG.try_with(|org| *org) {
+        Ok(org_id) => with_org_context(pool, org_id, f).await,
+        Err(_) => {
+            let mut tx = owner_pool.begin().await.map_err(StoreError::Database)?;
+            let result = f(&mut tx).await;
+            match result {
+                Ok(value) => {
+                    tx.commit().await.map_err(StoreError::Database)?;
+                    Ok(value)
+                }
+                Err(err) => {
+                    let _ = tx.rollback().await;
+                    Err(err)
+                }
+            }
+        }
+    }
+}
+
 pub async fn with_current_org<'a, T, F>(pool: &'a PgPool, f: F) -> StoreResult<T>
 where
     F: for<'t> FnOnce(

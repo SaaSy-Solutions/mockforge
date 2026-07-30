@@ -11,6 +11,7 @@ pub mod permission_check;
 pub use mockforge_registry_core::permissions;
 pub mod rate_limit;
 pub mod request_id;
+pub mod rls_org_scope;
 // `scope_check` now lives in mockforge-registry-core. Re-exported so
 // existing `crate::middleware::scope_check::*` paths keep working.
 pub use mockforge_registry_core::scope_check;
@@ -30,8 +31,9 @@ use crate::auth::verify_token;
 use crate::middleware::api_token_auth::authenticate_api_token;
 use crate::AppState;
 
-pub use org_context::resolve_org_context;
+pub use org_context::{resolve_org_context, OrgContext};
 pub use rate_limit::rate_limit_middleware;
+pub use rls_org_scope::rls_org_scope_middleware;
 pub use scope_check::{AuthType, ScopedAuth};
 
 /// JSON error response for authentication failures

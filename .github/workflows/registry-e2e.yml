@@ -295,3 +295,76 @@ jobs:
           name: registry-server-log
           path: registry-server.log
           if-no-files-found: ignore
+
+  # ---------------------------------------------------------------------------
+  # RLS coverage gate (#832 / #960).
+  #
+  # Re-runs the same E2E suite with the request-path pool bound to a
+  # NOSUPERUSER / NOBYPASSRLS role, so the tenant-isolation policies from
+  # migration 20250101000082 are ACTIVE. Any covered-table query
+  # (projects, audit_logs, hosted_mocks, templates, scenarios) that reaches
+  # the database without `app.current_org_id` bound fail-closes to zero rows
+  # and the E2E assertion depending on it fails.
+  #
+  # This is what makes request-path RLS coverage self-enforcing: without it,
+  # a store method that forgets to route through `with_current_org` is
+  # invisible until it fail-closes a live tenant in production. A pre-cutover
+  # audit found ~20 such methods.
+  #
+  # Serialized behind registry-e2e (`needs:`) rather than run in parallel:
+  # docker-compose.e2e.yml binds fixed host ports (55432/59000) and fixed
+  # container names, so two concurrent stacks on the same self-hosted runner
+  # would collide. Running second also means it only spends runner time when
+  # the baseline suite is already green, which keeps failures attributable —
+  # a red here means RLS, not a broken test.
+  #
+  # All of the setup lives in scripts/rls-e2e-gate.sh so the local dev loop and
+  # CI exercise exactly the same provisioning, and the script self-checks that
+  # the gate is actually armed (role is NOBYPASSRLS, 5/5 tables ENABLE+FORCE
+  # RLS, unbound reads return 0 rows) before trusting a green run.
+  # ---------------------------------------------------------------------------
+  registry-e2e-rls:
+    name: Registry E2E under RLS (NOBYPASSRLS)
+    needs: [changes, registry-e2e]
+    if: ${{ needs.changes.outputs.registry == 'true' }}
+    runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 45
+    env:
+      CARGO_BUILD_JOBS: "4"
+      RUSTUP_TOOLCHAIN: "1.96.0"
+    steps:
+      - name: Set per-runner CARGO_HOME
+        run: echo "CARGO_HOME=/tmp/cargo-mockforge-e2e-${{ runner.name }}" >> "$GITHUB_ENV"
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: ./.github/actions/rust-toolchain
+
+      - name: Ensure rustup default = 1.96.0
+        run: rustup default 1.96.0
+
+      - name: Install protoc
+        run: 'dpkg -s protobuf-compiler > /dev/null 2>&1 || { echo "::error::protobuf-compiler missing on self-hosted runner. Run: sudo apt-get install -y protobuf-compiler"; exit 1; }'
+
+      - name: Ensure psql client
+        run: 'command -v psql > /dev/null 2>&1 || { echo "::error::postgresql-client missing on self-hosted runner. Run: sudo apt-get install -y postgresql-client"; exit 1; }'
+
+      - name: Cache dependencies
+        uses: Swatinem/rust-cache@v2
+        with:
+          env-vars: "CARGO_HOME"
+
+      - name: Run E2E suite with RLS active
+        env:
+          STORAGE_PATH: "${{ runner.temp }}/mf-rls-gate-storage"
+        run: scripts/rls-e2e-gate.sh all
+
+      - name: Upload server log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: registry-server-log-rls
+          path: rls-gate-registry-server.log
+          if-no-files-found: ignore

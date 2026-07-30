@@ -57,7 +57,9 @@ pub use postgres::PgRegistryStore;
 pub mod org_context;
 
 #[cfg(feature = "postgres")]
-pub use org_context::{with_current_org, with_org_context, CURRENT_ORG};
+pub use org_context::{
+    with_current_org, with_optional_org, with_org_context, with_org_or_elevated, CURRENT_ORG,
+};
 
 #[cfg(feature = "sqlite")]
 pub mod sqlite;

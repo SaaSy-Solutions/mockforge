@@ -94,3 +94,85 @@ This is a multi-file, auth-critical refactor:
 Order: (a) task-local + helper + middleware [core, bounded]; (b) e2e gate
 scaffolding [failing]; (c) models executor-generic; (d) store wrapping until the
 gate passes; (e) rollout. Steps (c)/(d) are the bulk and must be driven by (b).
+
+---
+
+# Findings from building it (2026-07-30)
+
+Three things the design above got wrong or did not anticipate. All were found by
+actually running the gate (`scripts/rls-e2e-gate.sh`), which is the argument for
+building the gate first.
+
+## 1. The reverted GUC is `''`, not unset — activation would have been an outage
+
+The migration header claimed "Unset GUC → NULL → 0 rows → fail closed". That is
+only true on a connection that has *never* bound the GUC.
+`set_config(..., is_local => true)` reverts at COMMIT to the **empty string**,
+not to unset:
+
+```
+fresh conn:      current_setting('app.current_org_id', true)  -> NULL
+after a bound tx: current_setting('app.current_org_id', true)  -> ''
+                  ''::uuid                                     -> ERROR 22P02
+```
+
+So with the original policies, the first org-scoped request permanently poisons
+that physical connection: every later covered-table query on it that runs
+without an org bound raises `invalid input syntax for type uuid: ""` → HTTP 500,
+instead of returning zero rows. Under a pooler this spreads across the pool
+within seconds of activation. It reproduced as marketplace search 500s in the
+gate.
+
+Fix: every policy now uses `nullif(current_setting('app.current_org_id', true), '')::uuid`,
+which collapses both states to NULL and restores the intended fail-closed
+behavior. Migration `20250101000082` is unreleased (PR #960 is a draft), so it
+was corrected in place.
+
+**This is the single most important reason not to have activated `APP_DATABASE_URL`
+on the strength of a code review.**
+
+## 2. Audit writes must stay on the owner pool
+
+`PgRegistryStore::record_audit_event` wrote through the request-path pool.
+`record_audit_event` is fire-and-forget (it only WARNs), so under RLS any event
+whose org differs from the request's bound org is **silently dropped** — e.g.
+`POST /api/v1/organizations`, where the GUC is still bound to the actor's
+existing org while the audit row belongs to the org being created. The gate
+surfaced this as `new row violates row-level security policy for table "audit_logs"`.
+
+The row's `org_id` is an explicit argument from an already-authorized handler,
+so the `WITH CHECK` adds no authorization — only data loss. Writes moved to the
+owner pool; reads (`list_audit_logs`, `count_audit_logs`) stay RLS-enforced,
+which is where cross-tenant exposure actually matters.
+
+## 3. The gate has a blind spot: owner-pool queries
+
+The design claims the gate makes coverage "proven and self-enforcing". It makes
+**fail-closure** self-enforcing. It cannot see a covered-table query that runs
+on the **owner** pool, because such a query neither breaks nor is protected —
+the gate stays green while the query sits outside the backstop entirely.
+
+That matters here because most handler code reaches for `state.db.pool()` (the
+owner pool) rather than the store: at the time of writing, ~330 handler call
+sites use `state.db.pool()` versus ~200 that go through `state.store`. The
+backstop only covers the store path plus the handful of handlers explicitly
+routed through `with_org_context(state.db.runtime_pool(), ..)`.
+
+So a green gate means "nothing fail-closes", NOT "everything is covered".
+
+`scripts/check_rls_coverage.py` is the other half: it classifies every
+covered-table statement as COVERED / UNCOVERED / ELEVATED and fails when the
+UNCOVERED count rises above a checked-in baseline, with an allowlist that
+requires a stated reason for each genuinely cross-org site (public data-plane
+routing, internal shared-token APIs, platform-admin aggregates).
+
+## What is still NOT done
+
+- The `templates` / `scenarios` policies allow `org_id IS NULL` public rows, so
+  public marketplace reads work unbound. Verify this holds for every public
+  browse path before activation.
+- `workspaces` and `runtime_captures` are still uncovered by any policy (noted
+  in the migration header as follow-ups); they need join-based policies.
+- Prod rollout steps 3-5 (provision `mockforge_app` on Neon, set
+  `APP_DATABASE_URL`, smoke) remain untouched. Do not activate until the gate is
+  green in CI over several runs and the coverage baseline is 0.
