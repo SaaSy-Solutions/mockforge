@@ -19,7 +19,7 @@ RUN pnpm build
 
 # Stage 1: Build the Rust application
 # Use rust:1.90-slim (Trixie/testing-based) which has GLIBC 2.39+ required by native dependencies
-FROM rust:1.90-slim AS builder
+FROM rust:1.96-slim AS builder
 
 # Install required dependencies for building (including C++ for Kafka support)
 RUN apt-get update && apt-get install -y \

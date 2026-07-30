@@ -12,7 +12,7 @@
 # See docs/cloud/CLOUD_TUNNEL_RELAY_DEPLOYMENT.md for the full
 # deployment story.
 
-FROM rust:1.91-slim AS builder
+FROM rust:1.96-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config libssl-dev protobuf-compiler build-essential g++ cmake ca-certificates \
