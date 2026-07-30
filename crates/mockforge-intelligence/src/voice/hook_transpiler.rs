@@ -6,10 +6,10 @@
 //! # Example
 //!
 //! ```rust,no_run
-//! use mockforge_core::voice::HookTranspiler;
-//! use mockforge_core::intelligent_behavior::IntelligentBehaviorConfig;
+//! use mockforge_intelligence::voice::HookTranspiler;
+//! use mockforge_intelligence::intelligent_behavior::IntelligentBehaviorConfig;
 //!
-//! # async fn example() -> mockforge_core::Result<()> {
+//! # async fn example() -> mockforge_foundation::Result<()> {
 //! let config = IntelligentBehaviorConfig::default();
 //! let transpiler = HookTranspiler::new(config);
 //!
