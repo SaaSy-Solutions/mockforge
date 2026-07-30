@@ -30,11 +30,45 @@ impl Database {
         // across multiple replicas. Lock ID 8675309 is an arbitrary but stable identifier.
         const MIGRATION_LOCK_ID: i64 = 8675309;
 
+        // Pin ONE connection for the lock/unlock pair.
+        //
+        // `pg_advisory_lock` is SESSION-scoped, but this used to run via
+        // `&self.pool`, which hands out an arbitrary pooled connection per
+        // statement. Lock and unlock could therefore land on *different*
+        // sessions. `pg_advisory_unlock` on a session that doesn't hold the lock
+        // returns `false` — it is NOT an error — so the old `if let Err(..)`
+        // never fired and the leak was logged as "Migration advisory lock
+        // released". The lock then stayed held for the life of that pooled
+        // connection, and the NEXT deploy blocked forever inside
+        // `pg_advisory_lock`, before the HTTP listener bound. Health checks
+        // failed, the deploy was rolled back, and the replacement machine hit
+        // the same wall. That took production down on 2026-07-30 (v94) until
+        // the orphaned backend was terminated by hand.
+        let mut conn = self.pool.acquire().await?;
+
+        // Fail fast instead of hanging boot forever. An unreachable lock is an
+        // operational problem that needs a human; blocking indefinitely turns it
+        // into an opaque outage where the app looks "starting" but never binds.
+        // 60s is far longer than an uncontended acquisition and far shorter than
+        // a deploy health-check budget.
+        sqlx::query("SET lock_timeout = '60s'").execute(&mut *conn).await?;
+
         tracing::info!("Acquiring advisory lock for database migrations...");
-        sqlx::query("SELECT pg_advisory_lock($1)")
+        if let Err(e) = sqlx::query("SELECT pg_advisory_lock($1)")
             .bind(MIGRATION_LOCK_ID)
-            .execute(&self.pool)
-            .await?;
+            .execute(&mut *conn)
+            .await
+        {
+            tracing::error!(
+                "Could not acquire the migration advisory lock ({MIGRATION_LOCK_ID}) within \
+                 the timeout: {e}. Another instance may be mid-migration, or a previous one \
+                 leaked the lock. Inspect with: SELECT l.pid, a.state, a.query FROM pg_locks l \
+                 JOIN pg_stat_activity a USING (pid) WHERE l.locktype = 'advisory' AND \
+                 l.objid = {MIGRATION_LOCK_ID}; and clear a confirmed-stale holder with \
+                 pg_terminate_backend(<pid>)."
+            );
+            return Err(e.into());
+        }
         tracing::info!("Advisory lock acquired, running migrations...");
 
         // Run migrations. Any error aborts boot — `sqlx::migrate!().run()` bails
@@ -64,16 +98,29 @@ impl Database {
                     e.into()
                 });
 
-        // Release the advisory lock regardless of migration outcome
-        if let Err(unlock_err) = sqlx::query("SELECT pg_advisory_unlock($1)")
+        // Release on the SAME connection that took it, and check the RETURN
+        // VALUE, not just the transport error. `pg_advisory_unlock` reports
+        // failure by returning false; treating "no error" as "released" is what
+        // let the leak go unnoticed.
+        match sqlx::query_scalar::<_, bool>("SELECT pg_advisory_unlock($1)")
             .bind(MIGRATION_LOCK_ID)
-            .execute(&self.pool)
+            .fetch_one(&mut *conn)
             .await
         {
-            tracing::error!("Failed to release migration advisory lock: {}", unlock_err);
-        } else {
-            tracing::info!("Migration advisory lock released");
+            Ok(true) => tracing::info!("Migration advisory lock released"),
+            Ok(false) => tracing::error!(
+                "pg_advisory_unlock({MIGRATION_LOCK_ID}) returned false — this session did not \
+                 hold the lock. It is now leaked and WILL block the next deploy's boot. Clear it \
+                 with pg_terminate_backend(<pid>) against the holder in pg_locks."
+            ),
+            Err(unlock_err) => {
+                tracing::error!("Failed to release migration advisory lock: {}", unlock_err)
+            }
         }
+
+        // Drop the pinned connection explicitly: returning it to the pool while
+        // it might still hold the lock is precisely the failure being fixed.
+        drop(conn);
 
         result
     }
