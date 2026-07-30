@@ -347,6 +347,10 @@ struct AuditChainRow {
 
 #[cfg(feature = "postgres")]
 impl AuditLog {
+    /// Maximum length of the `audit_logs.ip_address` column (`varchar(45)`),
+    /// sized for a full-length IPv6 literal.
+    const IP_ADDRESS_MAX_CHARS: usize = 45;
+
     /// Create a new audit log entry, extending the org's tamper-evident hash
     /// chain (#872).
     ///
@@ -368,6 +372,12 @@ impl AuditLog {
         ip_address: Option<&str>,
         user_agent: Option<&str>,
     ) -> sqlx::Result<Self> {
+        // Normalize BEFORE hashing so the canonical form and the stored column
+        // agree — otherwise `verify_chain` would recompute a different hash and
+        // report the chain broken.
+        let ip_address = normalize_client_ip(ip_address);
+        let ip_address = ip_address.as_deref();
+
         let mut tx = pool.begin().await?;
 
         // Lock + read the previous entry's hash for this org. FOR UPDATE
@@ -554,6 +564,37 @@ impl AuditLog {
     }
 }
 
+/// Reduce a client-IP header value to something the `ip_address` column can
+/// actually hold.
+///
+/// Handlers pass the raw `X-Forwarded-For` header. Behind a proxy chain that
+/// header is a comma-separated list (`"client, proxy1, proxy2"`), not a single
+/// address, and it routinely exceeds the column's 45 characters. Because
+/// [`record_audit_event`] is fire-and-forget — it logs a `WARN` and returns —
+/// the resulting
+///
+/// ```text
+/// error returned from database: value too long for type character varying(45)
+/// ```
+///
+/// was swallowed, silently dropping audit events in production. It was invisible
+/// twice over: the failure never reaches the caller, and `RUST_LOG` on the
+/// deployed registry only enables `mockforge_registry_server`, so the `WARN`
+/// from this crate was filtered out of the logs entirely.
+///
+/// Takes the first entry (the originating client, matching
+/// `middleware::trusted_proxy::extract_client_ip_from_headers`) and hard-caps
+/// the result, so no header — however long, malformed, or hostile — can cost us
+/// an audit record. Truncation counts characters, not bytes, because that is
+/// what Postgres `varchar(n)` counts.
+fn normalize_client_ip(ip: Option<&str>) -> Option<String> {
+    let first = ip?.split(',').next()?.trim();
+    if first.is_empty() {
+        return None;
+    }
+    Some(first.chars().take(AuditLog::IP_ADDRESS_MAX_CHARS).collect())
+}
+
 /// Helper function to record audit events from request context
 #[cfg(feature = "postgres")]
 #[allow(clippy::too_many_arguments)]
@@ -587,6 +628,43 @@ pub async fn record_audit_event(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The exact production failure: `X-Forwarded-For` behind a proxy chain is a
+    /// list, not an address, and the raw value overflowed `varchar(45)` — which
+    /// `record_audit_event` swallowed as a WARN, silently losing audit events.
+    #[test]
+    fn client_ip_takes_first_hop_and_fits_the_column() {
+        // Real shape of the header that broke prod on 2026-07-30.
+        let chain = "203.0.113.7, 198.51.100.22, 2001:db8:85a3:8d3:1319:8a2e:370:7348, 10.0.0.1";
+        let got = normalize_client_ip(Some(chain)).expect("should keep the client hop");
+        assert_eq!(got, "203.0.113.7");
+        assert!(chain.chars().count() > AuditLog::IP_ADDRESS_MAX_CHARS, "fixture must overflow");
+    }
+
+    #[test]
+    fn client_ip_is_capped_even_without_commas() {
+        // A single over-long token (malformed or hostile header) must still be
+        // stored rather than costing us the audit record.
+        let long = "x".repeat(300);
+        let got = normalize_client_ip(Some(&long)).expect("should truncate, not drop");
+        assert_eq!(got.chars().count(), AuditLog::IP_ADDRESS_MAX_CHARS);
+    }
+
+    #[test]
+    fn client_ip_handles_absent_and_empty() {
+        assert_eq!(normalize_client_ip(None), None);
+        assert_eq!(normalize_client_ip(Some("")), None);
+        assert_eq!(normalize_client_ip(Some("   ")), None);
+        assert_eq!(normalize_client_ip(Some(", 10.0.0.1")), None, "empty first hop is not an IP");
+    }
+
+    #[test]
+    fn client_ip_passes_through_a_plain_address() {
+        assert_eq!(normalize_client_ip(Some("198.51.100.4")).as_deref(), Some("198.51.100.4"));
+        let v6 = "2001:0db8:85a3:0000:0000:8a2e:0370:7334";
+        assert_eq!(normalize_client_ip(Some(v6)).as_deref(), Some(v6));
+        assert!(v6.chars().count() <= AuditLog::IP_ADDRESS_MAX_CHARS);
+    }
 
     /// Every variant must round-trip through as_str → from_str. A new variant
     /// added without updating either method will fail this test.
