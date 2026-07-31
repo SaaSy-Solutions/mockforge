@@ -2403,7 +2403,7 @@ impl OpenApiRouteRegistry {
 /// down.
 fn inject_spec_response_headers(
     response: &mut axum::response::Response,
-    route: &crate::route::OpenApiRoute,
+    route: &OpenApiRoute,
     status_code: u16,
 ) {
     let synthesized = route.mock_response_headers_for_status(status_code);
