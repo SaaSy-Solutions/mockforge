@@ -311,12 +311,22 @@ jobs:
   # invisible until it fail-closes a live tenant in production. A pre-cutover
   # audit found ~20 such methods.
   #
-  # Serialized behind registry-e2e (`needs:`) rather than run in parallel:
-  # docker-compose.e2e.yml binds fixed host ports (55432/59000) and fixed
-  # container names, so two concurrent stacks on the same self-hosted runner
-  # would collide. Running second also means it only spends runner time when
-  # the baseline suite is already green, which keeps failures attributable —
-  # a red here means RLS, not a broken test.
+  # Runs its OWN stack (docker-compose.rls-gate.yml: distinct host ports and
+  # distinct container names). The first cut of this job reused
+  # docker-compose.e2e.yml, which binds fixed ports 55432/59000 with fixed
+  # container names — and because the self-hosted host runs several runners
+  # side by side, this gate's stack collided with ANOTHER run's base stack and
+  # took the required check down:
+  #
+  #   failed to bind host port 0.0.0.0:55432/tcp: address already in use
+  #
+  # The base job failed before running a single test, so the PR looked broken
+  # when nothing was wrong with it. Job-level `needs:` cannot fix that — the
+  # contention is across workflow runs, not within one.
+  #
+  # `needs: registry-e2e` is kept for a different reason: it means this only
+  # spends runner time once the baseline suite is green, which keeps failures
+  # attributable — a red here then means RLS, not a broken test.
   #
   # All of the setup lives in scripts/rls-e2e-gate.sh so the local dev loop and
   # CI exercise exactly the same provisioning, and the script self-checks that

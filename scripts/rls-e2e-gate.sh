@@ -45,12 +45,19 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null && pwd)"
 cd "$REPO_ROOT" >/dev/null
 
 # ---------------------------------------------------------------------------
-# Configuration. Ports mirror docker-compose.e2e.yml / registry-e2e.yml so this
-# script and CI exercise the same shape.
+# Configuration. This gate runs its OWN stack (docker-compose.rls-gate.yml) so
+# it can never contend with the required "Registry E2E" job's stack.
 # ---------------------------------------------------------------------------
-PG_PORT="${PG_PORT:-55432}"
-MINIO_PORT="${MINIO_PORT:-59000}"
-REGISTRY_PORT="${REGISTRY_PORT:-58080}"
+# Deliberately NOT the ports in docker-compose.e2e.yml. The required
+# "Registry E2E" job binds 55432 / 59000 / 58080 with fixed container names, and
+# the self-hosted host runs several runners at once, so a shared stack lets this
+# gate knock over the check that gates every PR (it did, on #965:
+# "failed to bind host port 0.0.0.0:55432/tcp: address already in use").
+# See docker-compose.rls-gate.yml.
+COMPOSE_FILE_GATE="${COMPOSE_FILE_GATE:-docker-compose.rls-gate.yml}"
+PG_PORT="${PG_PORT:-55434}"
+MINIO_PORT="${MINIO_PORT:-59010}"
+REGISTRY_PORT="${REGISTRY_PORT:-58090}"
 
 PG_SUPERUSER="postgres"
 PG_SUPERPASS="password"
@@ -116,30 +123,30 @@ require_tools() {
 }
 
 compose_up() {
-  log "Starting Postgres + MinIO (docker-compose.e2e.yml)"
+  log "Starting Postgres + MinIO ($COMPOSE_FILE_GATE)"
   # Same leftover-state guard as registry-e2e.yml: a killed prior run can hold
   # the fixed host ports.
-  docker compose -f docker-compose.e2e.yml down --remove-orphans --volumes >/dev/null 2>&1 || true
-  docker ps -aq --filter "name=mockforge-e2e" | xargs -r docker rm -f >/dev/null 2>&1 || true
-  docker compose -f docker-compose.e2e.yml up -d
+  docker compose -f "$COMPOSE_FILE_GATE" down --remove-orphans --volumes >/dev/null 2>&1 || true
+  docker ps -aq --filter "name=mockforge-rls-gate" | xargs -r docker rm -f >/dev/null 2>&1 || true
+  docker compose -f "$COMPOSE_FILE_GATE" up -d
 
   local i
   for i in $(seq 1 60); do
-    if docker inspect --format='{{.State.Health.Status}}' mockforge-e2e-db 2>/dev/null | grep -q healthy; then
+    if docker inspect --format='{{.State.Health.Status}}' mockforge-rls-gate-db 2>/dev/null | grep -q healthy; then
       break
     fi
     sleep 1
   done
-  docker inspect --format='{{.State.Health.Status}}' mockforge-e2e-db 2>/dev/null | grep -q healthy \
+  docker inspect --format='{{.State.Health.Status}}' mockforge-rls-gate-db 2>/dev/null | grep -q healthy \
     || die "postgres never became healthy"
 
   for i in $(seq 1 60); do
-    if docker inspect --format='{{.State.Health.Status}}' mockforge-e2e-minio 2>/dev/null | grep -q healthy; then
+    if docker inspect --format='{{.State.Health.Status}}' mockforge-rls-gate-minio 2>/dev/null | grep -q healthy; then
       break
     fi
     sleep 1
   done
-  docker compose -f docker-compose.e2e.yml logs minio-init 2>/dev/null | tail -3 || true
+  docker compose -f "$COMPOSE_FILE_GATE" logs minio-init 2>/dev/null | tail -3 || true
 }
 
 build_server() {
@@ -337,7 +344,7 @@ cmd_test() {
 cmd_down() {
   log "Tearing down"
   stop_server
-  docker compose -f docker-compose.e2e.yml down -v >/dev/null 2>&1 || true
+  docker compose -f "$COMPOSE_FILE_GATE" down -v >/dev/null 2>&1 || true
   echo "done"
 }
 
