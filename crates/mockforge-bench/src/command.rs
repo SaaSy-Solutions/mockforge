@@ -1047,12 +1047,30 @@ impl BenchCommand {
                 owasp_report_format: self.owasp_report_format.clone(),
                 owasp_iterations: self.owasp_iterations,
                 conformance: false,
-                conformance_api_key: None,
-                conformance_basic_auth: None,
+                // Round 64 (#79) — Srikanth on 0.3.210 ran
+                //   mockforge bench --use-k6 --targets-file vs_list3.json \
+                //     --conformance-basic-auth user:pass ...
+                // and the credentials never reached the wire (absent from both
+                // his PCAP and his proxy). Round 47 taught `parse_headers()` to
+                // fold these auth shortcuts into the shared header map so the
+                // same flags work for plain bench, but THIS clone nulled them
+                // out before `ParallelExecutor` ever called `parse_headers()`.
+                // Single-target worked; multi-target silently sent nothing.
+                //
+                // These three must survive the clone or the fold has nothing to
+                // fold. `conformance_api_key` is still conformance-only by
+                // design (see parse_headers), but is preserved so multi-target
+                // emits the same "only fires under --conformance" warning as
+                // single-target rather than swallowing the flag.
+                conformance_api_key: self.conformance_api_key.clone(),
+                conformance_basic_auth: self.conformance_basic_auth.clone(),
                 conformance_report: PathBuf::from("conformance-report.json"),
                 conformance_categories: None,
                 conformance_report_format: "json".to_string(),
-                conformance_headers: vec![],
+                // Also carries round 46's `--auth-bearer`, which CLI dispatch
+                // injects here as `Authorization: Bearer ...`. Dropping it had
+                // the same effect as dropping --conformance-basic-auth.
+                conformance_headers: self.conformance_headers.clone(),
                 conformance_all_operations: false,
                 conformance_custom: None,
                 conformance_delay_ms: 0,
@@ -4247,6 +4265,57 @@ mod tests {
             Some(&"session=abc; expires=Thu, 01 Jan 2099 00:00:00 GMT".to_string())
         );
         assert_eq!(headers.get("X-Trace"), Some(&"1".to_string()));
+    }
+
+    /// Round 64 (#79). `execute_multi_target` hand-copies `BenchCommand` field
+    /// by field into the command it hands `ParallelExecutor`. It nulled the
+    /// conformance auth shortcuts, so `parse_headers()` — which has folded them
+    /// into the shared header map since round 47 — had nothing left to fold.
+    /// Single-target sent `Authorization`; multi-target silently sent nothing,
+    /// which is what Srikanth saw on 0.3.210: credentials absent from both his
+    /// PCAP and his proxy.
+    ///
+    /// A behavioural test cannot reach that clone (`execute_multi_target` is
+    /// async, parses a targets file and shells out to k6), so this guards the
+    /// source: every field `parse_headers()` reads must survive the clone.
+    /// Field-by-field struct literals silently drop things; this makes the drop
+    /// a test failure instead of an empty Authorization header.
+    #[test]
+    fn multi_target_clone_preserves_fields_parse_headers_reads() {
+        let src = include_str!("command.rs");
+
+        let fn_start = src
+            .find("async fn execute_multi_target(")
+            .expect("execute_multi_target should exist");
+        let block_start = src[fn_start..]
+            .find("ParallelExecutor::new(")
+            .map(|i| i + fn_start)
+            .expect("multi-target path should build a ParallelExecutor");
+        // The BenchCommand literal ends at the executor call's closing paren.
+        let block_end = src[block_start..]
+            .find("\n        );")
+            .map(|i| i + block_start)
+            .expect("ParallelExecutor::new(..) should be closed");
+        let block = &src[block_start..block_end];
+
+        // Read straight out of parse_headers' doc/body contract: these are the
+        // auth-bearing inputs it folds. Keep in sync if that fold grows.
+        for field in ["conformance_basic_auth", "conformance_headers"] {
+            for zeroed in [format!("{field}: None"), format!("{field}: vec![]")] {
+                assert!(
+                    !block.contains(&zeroed),
+                    "execute_multi_target zeroes `{zeroed}`. parse_headers() folds `{field}` \
+                     into the header map, so zeroing it here strips auth from every \
+                     multi-target run while single-target keeps working (#79 round 64)."
+                );
+            }
+            let passthrough = format!("{field}: self.{field}.clone()");
+            assert!(
+                block.contains(&passthrough),
+                "execute_multi_target must carry `{field}` through as `{passthrough}` so \
+                 parse_headers() can fold it (#79 round 64)."
+            );
+        }
     }
 
     #[test]
