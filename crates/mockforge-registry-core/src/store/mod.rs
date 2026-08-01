@@ -52,6 +52,15 @@ pub mod postgres;
 #[cfg(feature = "postgres")]
 pub use postgres::PgRegistryStore;
 
+/// Transaction-scoped tenant context for the RLS backstop (#832).
+#[cfg(feature = "postgres")]
+pub mod org_context;
+
+#[cfg(feature = "postgres")]
+pub use org_context::{
+    with_current_org, with_optional_org, with_org_context, with_org_or_elevated, CURRENT_ORG,
+};
+
 #[cfg(feature = "sqlite")]
 pub mod sqlite;
 
@@ -2024,6 +2033,19 @@ pub trait RegistryStore: Send + Sync + 'static {
     async fn list_org_settings_raw(&self, org_id: Uuid) -> StoreResult<Vec<OrgSettingRow>>;
 
     async fn list_org_projects_raw(&self, org_id: Uuid) -> StoreResult<Vec<ProjectRow>>;
+
+    /// List an org's projects through the tenant-isolation backstop (#832).
+    ///
+    /// The Postgres implementation runs the query inside a transaction bound
+    /// to `app.current_org_id`, so the Row-Level-Security policy on `projects`
+    /// enforces isolation even though the SELECT carries no `WHERE org_id`
+    /// clause. The default implementation here simply delegates to
+    /// [`Self::list_org_projects_raw`] so non-Postgres backends (SQLite, used
+    /// by the embedded OSS admin server, which is single-tenant) keep working
+    /// unchanged.
+    async fn list_org_projects_isolated(&self, org_id: Uuid) -> StoreResult<Vec<ProjectRow>> {
+        self.list_org_projects_raw(org_id).await
+    }
 
     async fn list_org_subscriptions_raw(&self, org_id: Uuid) -> StoreResult<Vec<SubscriptionRow>>;
 

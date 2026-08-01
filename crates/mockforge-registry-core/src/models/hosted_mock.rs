@@ -358,7 +358,7 @@ impl HostedMock {
     /// Create a new hosted mock deployment
     #[allow(clippy::too_many_arguments)]
     pub async fn create(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         project_id: Option<Uuid>,
         name: &str,
@@ -387,21 +387,24 @@ impl HostedMock {
         .bind(config_json)
         .bind(openapi_spec_url)
         .bind(region)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Find by ID
-    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM hosted_mocks WHERE id = $1 AND deleted_at IS NULL")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// Find by slug and org
     pub async fn find_by_slug(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         slug: &str,
     ) -> sqlx::Result<Option<Self>> {
@@ -410,7 +413,7 @@ impl HostedMock {
         )
         .bind(org_id)
         .bind(slug)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
@@ -429,12 +432,15 @@ impl HostedMock {
     }
 
     /// Find all mocks for an organization
-    pub async fn find_by_org(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn find_by_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM hosted_mocks WHERE org_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC",
         )
         .bind(org_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
@@ -450,7 +456,7 @@ impl HostedMock {
 
     /// Update deployment status
     pub async fn update_status(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         status: DeploymentStatus,
         error_message: Option<&str>,
@@ -465,14 +471,14 @@ impl HostedMock {
         .bind(status.to_string())
         .bind(error_message)
         .bind(id)
-        .execute(pool)
+        .execute(executor)
         .await?;
         Ok(())
     }
 
     /// Update deployment URLs
     pub async fn update_urls(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         deployment_url: Option<&str>,
         internal_url: Option<&str>,
@@ -487,14 +493,14 @@ impl HostedMock {
         .bind(deployment_url)
         .bind(internal_url)
         .bind(id)
-        .execute(pool)
+        .execute(executor)
         .await?;
         Ok(())
     }
 
     /// Update health status
     pub async fn update_health(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         health_status: HealthStatus,
         health_check_url: Option<&str>,
@@ -509,18 +515,18 @@ impl HostedMock {
         .bind(health_status.to_string())
         .bind(health_check_url)
         .bind(id)
-        .execute(pool)
+        .execute(executor)
         .await?;
         Ok(())
     }
 
     /// Soft delete (mark as deleted)
-    pub async fn delete(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<()> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<()> {
         sqlx::query(
             "UPDATE hosted_mocks SET deleted_at = NOW(), status = 'deleting', updated_at = NOW() WHERE id = $1",
         )
         .bind(id)
-        .execute(pool)
+        .execute(executor)
         .await?;
         Ok(())
     }

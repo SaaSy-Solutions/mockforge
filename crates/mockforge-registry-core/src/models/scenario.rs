@@ -36,7 +36,7 @@ impl Scenario {
     /// Create a new scenario
     #[allow(clippy::too_many_arguments)]
     pub async fn create(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Option<Uuid>,
         name: &str,
         slug: &str,
@@ -66,23 +66,29 @@ impl Scenario {
         .bind(category)
         .bind(license)
         .bind(manifest_json)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Find by ID
-    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM scenarios WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// Find by name
-    pub async fn find_by_name(pool: &sqlx::PgPool, name: &str) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_name(
+        executor: impl sqlx::PgExecutor<'_>,
+        name: &str,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM scenarios WHERE name = $1")
             .bind(name)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
@@ -141,7 +147,7 @@ impl Scenario {
 
     /// Count scenarios matching search criteria
     pub async fn count_search(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         query: Option<&str>,
         category: Option<&str>,
         tags: &[String],
@@ -166,14 +172,14 @@ impl Scenario {
             query_builder = query_builder.bind(q);
         }
 
-        let result = query_builder.fetch_one(pool).await?;
+        let result = query_builder.fetch_one(executor).await?;
         Ok(result.0)
     }
 
     /// Search scenarios
     #[allow(clippy::too_many_arguments)]
     pub async fn search(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         query: Option<&str>,
         category: Option<&str>,
         tags: &[String],
@@ -233,16 +239,19 @@ impl Scenario {
         }
         query_builder = query_builder.bind(limit).bind(offset);
 
-        query_builder.fetch_all(pool).await
+        query_builder.fetch_all(executor).await
     }
 
     /// Find scenarios by organization
-    pub async fn find_by_org(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn find_by_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM scenarios WHERE org_id = $1 ORDER BY created_at DESC",
         )
         .bind(org_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 }

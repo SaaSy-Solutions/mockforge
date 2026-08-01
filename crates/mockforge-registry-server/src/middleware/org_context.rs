@@ -58,6 +58,16 @@ pub async fn resolve_org_context(
     headers: &HeaderMap,
     request_extensions: Option<&axum::http::Extensions>, // Optional extensions from request
 ) -> Result<OrgContext, StatusCode> {
+    // Reuse the resolution the `rls_org_scope` middleware already performed for
+    // this request (#832). It runs right after auth on the same request, with
+    // the same headers and user, so the answer is identical — this only avoids
+    // repeating the org lookup + membership check. Absent when the middleware
+    // is not mounted on the route (e.g. admin routes) or when it could not
+    // resolve an org, in which case we fall through and resolve normally.
+    if let Some(cached) = request_extensions.and_then(|ext| ext.get::<OrgContext>()) {
+        return Ok(cached.clone());
+    }
+
     let pool = state.db.pool();
 
     // Check if org_id was set by API token auth (for faster lookup)

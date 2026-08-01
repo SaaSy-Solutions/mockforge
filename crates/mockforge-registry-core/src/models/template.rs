@@ -87,7 +87,7 @@ impl Template {
     /// Create a new template
     #[allow(clippy::too_many_arguments)]
     pub async fn create(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Option<Uuid>,
         name: &str,
         slug: &str,
@@ -122,7 +122,7 @@ impl Template {
         .bind(version)
         .bind(category.to_string())
         .bind(content_json)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
@@ -136,14 +136,14 @@ impl Template {
 
     /// Find by name and version
     pub async fn find_by_name_version(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         name: &str,
         version: &str,
     ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM templates WHERE name = $1 AND version = $2")
             .bind(name)
             .bind(version)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
@@ -200,7 +200,7 @@ impl Template {
 
     /// Count templates matching search criteria
     pub async fn count_search(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         query: Option<&str>,
         category: Option<&str>,
         tags: &[String],
@@ -225,13 +225,13 @@ impl Template {
             query_builder = query_builder.bind(q);
         }
 
-        let result = query_builder.fetch_one(pool).await?;
+        let result = query_builder.fetch_one(executor).await?;
         Ok(result.0)
     }
 
     /// Search templates
     pub async fn search(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         query: Option<&str>,
         category: Option<&str>,
         tags: &[String],
@@ -280,16 +280,19 @@ impl Template {
         }
         query_builder = query_builder.bind(limit).bind(offset);
 
-        query_builder.fetch_all(pool).await
+        query_builder.fetch_all(executor).await
     }
 
     /// Find templates by organization
-    pub async fn find_by_org(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn find_by_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM templates WHERE org_id = $1 ORDER BY created_at DESC",
         )
         .bind(org_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 }

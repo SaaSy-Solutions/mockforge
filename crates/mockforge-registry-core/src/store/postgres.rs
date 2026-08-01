@@ -51,13 +51,38 @@ use crate::models::waitlist::WaitlistSubscriber;
 /// Postgres-backed [`RegistryStore`] implementation.
 #[derive(Clone)]
 pub struct PgRegistryStore {
+    /// Request-path pool. When the binary wires a `NOBYPASSRLS` runtime role
+    /// (via `APP_DATABASE_URL`), the #832 RLS policies enforce org scoping on
+    /// queries run here. Org-scoped reads route through `with_org_context` so
+    /// `app.current_org_id` is bound.
     pool: PgPool,
+    /// Elevated pool for the handful of legitimately cross-org queries (e.g.
+    /// platform-admin analytics that count every tenant). This is the owner
+    /// role, which bypasses RLS. Defaults to `pool` unless
+    /// [`with_owner_pool`](Self::with_owner_pool) is called, so single-role
+    /// deployments and tests are unchanged.
+    owner_pool: PgPool,
 }
 
 impl PgRegistryStore {
     /// Wrap an existing [`PgPool`] in a registry store.
+    ///
+    /// The elevated (cross-org) pool defaults to the same pool; call
+    /// [`with_owner_pool`](Self::with_owner_pool) to supply a distinct owner
+    /// role when the request-path pool is a `NOBYPASSRLS` role (#832).
     pub fn new(pool: PgPool) -> Self {
-        Self { pool }
+        let owner_pool = pool.clone();
+        Self { pool, owner_pool }
+    }
+
+    /// Supply the elevated (RLS-bypassing) owner pool used for legitimately
+    /// cross-org queries. When `APP_DATABASE_URL` puts request-path queries on
+    /// a `NOBYPASSRLS` role, cross-org admin analytics would otherwise
+    /// fail-closed to zero; routing them here keeps them working (#832).
+    #[must_use]
+    pub fn with_owner_pool(mut self, owner_pool: PgPool) -> Self {
+        self.owner_pool = owner_pool;
+        self
     }
 
     /// Borrow the underlying pool. Exposed so the binary bootstrap can still
@@ -65,6 +90,55 @@ impl PgRegistryStore {
     /// worker tasks, etc.) that have not yet been migrated to the trait.
     pub fn pool(&self) -> &PgPool {
         &self.pool
+    }
+
+    // ── RLS-backed tenant-isolated reads (#832) ────────────────────────────
+    //
+    // These mirror the existing `list_org_projects_raw` / `list_scenarios_*`
+    // methods, but route through [`with_org_context`] so the query runs under
+    // the `app.current_org_id` GUC and is enforced by the Postgres RLS
+    // policies (migration 20250101000082). They are the demonstration that
+    // real handler-style queries work through the backstop.
+    //
+    // Note: the `WHERE org_id = $1` filter is INTENTIONALLY OMITTED here to
+    // prove the RLS policy is what isolates the rows. In production handlers
+    // we keep both the app filter and the GUC (defense in depth); these
+    // methods exist specifically to exercise the DB backstop in isolation.
+
+    /// List an org's scenarios through the RLS backstop.
+    ///
+    /// The `scenarios` RLS policy admits both this org's rows and public
+    /// (`org_id IS NULL`) rows, so this returns org-owned scenarios plus the
+    /// shared public marketplace scenarios — matching the product semantics
+    /// of the existing app-layer query, but enforced at the database.
+    pub async fn list_scenarios_by_org_rls(&self, org_id: Uuid) -> StoreResult<Vec<Scenario>> {
+        crate::store::with_org_context(&self.pool, org_id, |tx| {
+            Box::pin(async move {
+                let rows = sqlx::query_as::<_, Scenario>(
+                    "SELECT * FROM scenarios ORDER BY created_at DESC",
+                )
+                .fetch_all(&mut **tx)
+                .await?;
+                Ok(rows)
+            })
+        })
+        .await
+    }
+
+    /// List an org's hosted mocks through the RLS backstop.
+    ///
+    /// `hosted_mocks` is strictly org-scoped (NOT NULL `org_id`); the RLS
+    /// policy isolates the result without any `WHERE org_id` clause.
+    pub async fn list_hosted_mocks_by_org_rls(&self, org_id: Uuid) -> StoreResult<Vec<HostedMock>> {
+        crate::store::with_org_context(&self.pool, org_id, |tx| {
+            Box::pin(async move {
+                let rows = sqlx::query_as::<_, HostedMock>("SELECT * FROM hosted_mocks")
+                    .fetch_all(&mut **tx)
+                    .await?;
+                Ok(rows)
+            })
+        })
+        .await
     }
 }
 
@@ -262,8 +336,28 @@ impl RegistryStore for PgRegistryStore {
         ip_address: Option<&str>,
         user_agent: Option<&str>,
     ) {
+        // #832: audit WRITES run on the owner pool, deliberately outside RLS.
+        //
+        // The row's `org_id` is an explicit argument supplied by a handler that
+        // has already authorized the actor — it is not derived from connection
+        // state — so the RLS `WITH CHECK` adds no authorization here. What it
+        // does add is silent data loss: `record_audit_event` is fire-and-forget
+        // (it only WARNs on failure), so any event whose org differs from the
+        // request's bound org is dropped without surfacing to the caller. The
+        // e2e gate caught exactly that on `POST /api/v1/organizations`, where
+        // the GUC is still bound to the actor's existing org while the audit row
+        // belongs to the org being created:
+        //
+        //     Failed to record audit event: new row violates row-level security
+        //     policy for table "audit_logs"
+        //
+        // Losing audit events is a compliance problem, and an append-only audit
+        // log is a system-of-record that must not be suppressed by request-scoped
+        // tenancy. Writes are already constrained by the #872 append-only
+        // trigger. Audit READS (`list_audit_logs`, `count_audit_logs`) stay on
+        // the RLS-enforced pool — that is where cross-tenant exposure matters.
         record_audit_event(
-            &self.pool,
+            &self.owner_pool,
             org_id,
             user_id,
             event_type,
@@ -282,9 +376,14 @@ impl RegistryStore for PgRegistryStore {
         offset: Option<i64>,
         event_types: &[AuditEventType],
     ) -> StoreResult<Vec<AuditLog>> {
-        AuditLog::get_by_org(&self.pool, org_id, limit, offset, event_types)
-            .await
-            .map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), |tx| {
+            Box::pin(async move {
+                AuditLog::get_by_org(&mut **tx, org_id, limit, offset, event_types)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn count_audit_logs(
@@ -292,20 +391,29 @@ impl RegistryStore for PgRegistryStore {
         org_id: Uuid,
         event_types: &[AuditEventType],
     ) -> StoreResult<i64> {
-        let mut query = sqlx::QueryBuilder::new("SELECT COUNT(*) FROM audit_logs WHERE org_id = ");
-        query.push_bind(org_id);
+        // #832: run under the org GUC so the audit_logs RLS policy enforces
+        // isolation. The `WHERE org_id` stays as defense-in-depth.
+        let event_types = event_types.to_vec();
+        crate::store::with_org_context(&self.pool, org_id, move |tx| {
+            Box::pin(async move {
+                let mut query =
+                    sqlx::QueryBuilder::new("SELECT COUNT(*) FROM audit_logs WHERE org_id = ");
+                query.push_bind(org_id);
 
-        if !event_types.is_empty() {
-            query.push(" AND event_type IN (");
-            let mut sep = query.separated(", ");
-            for et in event_types {
-                sep.push_bind(*et);
-            }
-            query.push(")");
-        }
+                if !event_types.is_empty() {
+                    query.push(" AND event_type IN (");
+                    let mut sep = query.separated(", ");
+                    for et in &event_types {
+                        sep.push_bind(*et);
+                    }
+                    query.push(")");
+                }
 
-        let count: (i64,) = query.build_query_as().fetch_one(&self.pool).await?;
-        Ok(count.0)
+                let count: (i64,) = query.build_query_as().fetch_one(&mut **tx).await?;
+                Ok(count.0)
+            })
+        })
+        .await
     }
 
     async fn record_feature_usage(
@@ -1012,23 +1120,31 @@ impl RegistryStore for PgRegistryStore {
         openapi_spec_url: Option<&str>,
         region: Option<&str>,
     ) -> StoreResult<HostedMock> {
-        HostedMock::create(
-            &self.pool,
-            org_id,
-            project_id,
-            name,
-            slug,
-            description,
-            config_json,
-            openapi_spec_url,
-            region,
-        )
+        crate::store::with_optional_org(&self.pool, Some(org_id), |tx| {
+            Box::pin(async move {
+                HostedMock::create(
+                    &mut **tx,
+                    org_id,
+                    project_id,
+                    name,
+                    slug,
+                    description,
+                    config_json,
+                    openapi_spec_url,
+                    region,
+                )
+                .await
+                .map_err(Into::into)
+            })
+        })
         .await
-        .map_err(Into::into)
     }
 
     async fn find_hosted_mock_by_id(&self, id: Uuid) -> StoreResult<Option<HostedMock>> {
-        HostedMock::find_by_id(&self.pool, id).await.map_err(Into::into)
+        crate::store::with_current_org(&self.pool, |tx| {
+            Box::pin(async move { HostedMock::find_by_id(&mut **tx, id).await.map_err(Into::into) })
+        })
+        .await
     }
 
     async fn find_hosted_mock_by_slug(
@@ -1036,11 +1152,21 @@ impl RegistryStore for PgRegistryStore {
         org_id: Uuid,
         slug: &str,
     ) -> StoreResult<Option<HostedMock>> {
-        HostedMock::find_by_slug(&self.pool, org_id, slug).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), |tx| {
+            Box::pin(async move {
+                HostedMock::find_by_slug(&mut **tx, org_id, slug).await.map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn list_hosted_mocks_by_org(&self, org_id: Uuid) -> StoreResult<Vec<HostedMock>> {
-        HostedMock::find_by_org(&self.pool, org_id).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), |tx| {
+            Box::pin(
+                async move { HostedMock::find_by_org(&mut **tx, org_id).await.map_err(Into::into) },
+            )
+        })
+        .await
     }
 
     async fn update_hosted_mock_status(
@@ -1049,9 +1175,14 @@ impl RegistryStore for PgRegistryStore {
         status: DeploymentStatus,
         error_message: Option<&str>,
     ) -> StoreResult<()> {
-        HostedMock::update_status(&self.pool, id, status, error_message)
-            .await
-            .map_err(Into::into)
+        crate::store::with_current_org(&self.pool, |tx| {
+            Box::pin(async move {
+                HostedMock::update_status(&mut **tx, id, status, error_message)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn update_hosted_mock_urls(
@@ -1060,9 +1191,14 @@ impl RegistryStore for PgRegistryStore {
         deployment_url: Option<&str>,
         internal_url: Option<&str>,
     ) -> StoreResult<()> {
-        HostedMock::update_urls(&self.pool, id, deployment_url, internal_url)
-            .await
-            .map_err(Into::into)
+        crate::store::with_current_org(&self.pool, |tx| {
+            Box::pin(async move {
+                HostedMock::update_urls(&mut **tx, id, deployment_url, internal_url)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn update_hosted_mock_health(
@@ -1071,13 +1207,21 @@ impl RegistryStore for PgRegistryStore {
         health_status: HealthStatus,
         health_check_url: Option<&str>,
     ) -> StoreResult<()> {
-        HostedMock::update_health(&self.pool, id, health_status, health_check_url)
-            .await
-            .map_err(Into::into)
+        crate::store::with_current_org(&self.pool, |tx| {
+            Box::pin(async move {
+                HostedMock::update_health(&mut **tx, id, health_status, health_check_url)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn delete_hosted_mock(&self, id: Uuid) -> StoreResult<()> {
-        HostedMock::delete(&self.pool, id).await.map_err(Into::into)
+        crate::store::with_current_org(&self.pool, |tx| {
+            Box::pin(async move { HostedMock::delete(&mut **tx, id).await.map_err(Into::into) })
+        })
+        .await
     }
 
     async fn subscribe_waitlist(
@@ -1261,19 +1405,24 @@ impl RegistryStore for PgRegistryStore {
         category: TemplateCategory,
         content_json: serde_json::Value,
     ) -> StoreResult<Template> {
-        Template::create(
-            &self.pool,
-            org_id,
-            name,
-            slug,
-            description,
-            author_id,
-            version,
-            category,
-            content_json,
-        )
+        crate::store::with_optional_org(&self.pool, org_id, |tx| {
+            Box::pin(async move {
+                Template::create(
+                    &mut **tx,
+                    org_id,
+                    name,
+                    slug,
+                    description,
+                    author_id,
+                    version,
+                    category,
+                    content_json,
+                )
+                .await
+                .map_err(Into::into)
+            })
+        })
         .await
-        .map_err(Into::into)
     }
 
     async fn find_template_by_name_version(
@@ -1281,13 +1430,23 @@ impl RegistryStore for PgRegistryStore {
         name: &str,
         version: &str,
     ) -> StoreResult<Option<Template>> {
-        Template::find_by_name_version(&self.pool, name, version)
-            .await
-            .map_err(Into::into)
+        crate::store::with_org_or_elevated(&self.pool, &self.owner_pool, |tx| {
+            Box::pin(async move {
+                Template::find_by_name_version(&mut **tx, name, version)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn list_templates_by_org(&self, org_id: Uuid) -> StoreResult<Vec<Template>> {
-        Template::find_by_org(&self.pool, org_id).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), |tx| {
+            Box::pin(
+                async move { Template::find_by_org(&mut **tx, org_id).await.map_err(Into::into) },
+            )
+        })
+        .await
     }
 
     async fn search_templates(
@@ -1299,9 +1458,14 @@ impl RegistryStore for PgRegistryStore {
         limit: i64,
         offset: i64,
     ) -> StoreResult<Vec<Template>> {
-        Template::search(&self.pool, query, category, tags, org_id, limit, offset)
-            .await
-            .map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, org_id, |tx| {
+            Box::pin(async move {
+                Template::search(&mut **tx, query, category, tags, org_id, limit, offset)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn count_search_templates(
@@ -1311,9 +1475,14 @@ impl RegistryStore for PgRegistryStore {
         tags: &[String],
         org_id: Option<Uuid>,
     ) -> StoreResult<i64> {
-        Template::count_search(&self.pool, query, category, tags, org_id)
-            .await
-            .map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, org_id, |tx| {
+            Box::pin(async move {
+                Template::count_search(&mut **tx, query, category, tags, org_id)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn create_scenario(
@@ -1328,32 +1497,50 @@ impl RegistryStore for PgRegistryStore {
         license: &str,
         manifest_json: serde_json::Value,
     ) -> StoreResult<Scenario> {
-        Scenario::create(
-            &self.pool,
-            org_id,
-            name,
-            slug,
-            description,
-            author_id,
-            current_version,
-            category,
-            license,
-            manifest_json,
-        )
+        crate::store::with_optional_org(&self.pool, org_id, |tx| {
+            Box::pin(async move {
+                Scenario::create(
+                    &mut **tx,
+                    org_id,
+                    name,
+                    slug,
+                    description,
+                    author_id,
+                    current_version,
+                    category,
+                    license,
+                    manifest_json,
+                )
+                .await
+                .map_err(Into::into)
+            })
+        })
         .await
-        .map_err(Into::into)
     }
 
     async fn find_scenario_by_name(&self, name: &str) -> StoreResult<Option<Scenario>> {
-        Scenario::find_by_name(&self.pool, name).await.map_err(Into::into)
+        crate::store::with_org_or_elevated(&self.pool, &self.owner_pool, |tx| {
+            Box::pin(
+                async move { Scenario::find_by_name(&mut **tx, name).await.map_err(Into::into) },
+            )
+        })
+        .await
     }
 
     async fn find_scenario_by_id(&self, id: Uuid) -> StoreResult<Option<Scenario>> {
-        Scenario::find_by_id(&self.pool, id).await.map_err(Into::into)
+        crate::store::with_org_or_elevated(&self.pool, &self.owner_pool, |tx| {
+            Box::pin(async move { Scenario::find_by_id(&mut **tx, id).await.map_err(Into::into) })
+        })
+        .await
     }
 
     async fn list_scenarios_by_org(&self, org_id: Uuid) -> StoreResult<Vec<Scenario>> {
-        Scenario::find_by_org(&self.pool, org_id).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), |tx| {
+            Box::pin(
+                async move { Scenario::find_by_org(&mut **tx, org_id).await.map_err(Into::into) },
+            )
+        })
+        .await
     }
 
     async fn search_scenarios(
@@ -1366,9 +1553,14 @@ impl RegistryStore for PgRegistryStore {
         limit: i64,
         offset: i64,
     ) -> StoreResult<Vec<Scenario>> {
-        Scenario::search(&self.pool, query, category, tags, org_id, sort, limit, offset)
-            .await
-            .map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, org_id, |tx| {
+            Box::pin(async move {
+                Scenario::search(&mut **tx, query, category, tags, org_id, sort, limit, offset)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn count_search_scenarios(
@@ -1378,9 +1570,14 @@ impl RegistryStore for PgRegistryStore {
         tags: &[String],
         org_id: Option<Uuid>,
     ) -> StoreResult<i64> {
-        Scenario::count_search(&self.pool, query, category, tags, org_id)
-            .await
-            .map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, org_id, |tx| {
+            Box::pin(async move {
+                Scenario::count_search(&mut **tx, query, category, tags, org_id)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn search_plugins(
@@ -2408,7 +2605,10 @@ impl RegistryStore for PgRegistryStore {
     // --- Admin analytics snapshots ---
 
     async fn get_admin_analytics_snapshot(&self) -> StoreResult<AdminAnalyticsSnapshot> {
-        let pool = &self.pool;
+        // #832: platform-admin analytics count every tenant, so they run on the
+        // elevated owner pool (which bypasses RLS) rather than the RLS-enforced
+        // request pool — otherwise the covered-table counts fail-closed to 0.
+        let pool = &self.owner_pool;
 
         let (total_users,): (i64,) =
             sqlx::query_as("SELECT COUNT(*) FROM users").fetch_one(pool).await?;
@@ -2825,6 +3025,38 @@ impl RegistryStore for PgRegistryStore {
             .collect())
     }
 
+    /// RLS-backed variant of [`Self::list_org_projects_raw`] (#832).
+    ///
+    /// Runs the SELECT inside a transaction bound to `app.current_org_id` via
+    /// [`with_org_context`]. The query carries no `WHERE org_id` clause on
+    /// purpose: the Row-Level-Security policy on `projects` (migration
+    /// 20250101000082) is what isolates the result to this org. This is the
+    /// real handler-reachable demonstration that the DB backstop enforces
+    /// tenancy even when the app filter is absent.
+    async fn list_org_projects_isolated(&self, org_id: Uuid) -> StoreResult<Vec<ProjectRow>> {
+        crate::store::with_org_context(&self.pool, org_id, |tx| {
+            Box::pin(async move {
+                let rows =
+                    sqlx::query_as::<_, (Uuid, String, String, DateTime<Utc>, DateTime<Utc>)>(
+                        "SELECT id, name, visibility, created_at, updated_at FROM projects",
+                    )
+                    .fetch_all(&mut **tx)
+                    .await?;
+                Ok(rows
+                    .into_iter()
+                    .map(|(id, name, visibility, created_at, updated_at)| ProjectRow {
+                        id,
+                        name,
+                        visibility,
+                        created_at,
+                        updated_at,
+                    })
+                    .collect())
+            })
+        })
+        .await
+    }
+
     async fn list_org_subscriptions_raw(&self, org_id: Uuid) -> StoreResult<Vec<SubscriptionRow>> {
         let rows = sqlx::query_as::<
             _,
@@ -2848,11 +3080,18 @@ impl RegistryStore for PgRegistryStore {
     }
 
     async fn list_org_hosted_mocks_raw(&self, org_id: Uuid) -> StoreResult<Vec<HostedMock>> {
-        sqlx::query_as::<_, HostedMock>("SELECT * FROM hosted_mocks WHERE org_id = $1")
-            .bind(org_id)
-            .fetch_all(&self.pool)
-            .await
-            .map_err(Into::into)
+        // #832: run under the org GUC so the hosted_mocks RLS policy enforces
+        // isolation. The `WHERE org_id` stays as defense-in-depth.
+        crate::store::with_org_context(&self.pool, org_id, move |tx| {
+            Box::pin(async move {
+                sqlx::query_as::<_, HostedMock>("SELECT * FROM hosted_mocks WHERE org_id = $1")
+                    .bind(org_id)
+                    .fetch_all(&mut **tx)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn delete_user_data_cascade(&self, user_id: Uuid) -> StoreResult<usize> {

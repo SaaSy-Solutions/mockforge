@@ -8,7 +8,7 @@ use axum::{
 
 use crate::handlers;
 use crate::middleware::past_due_writes::past_due_writes_blocked_middleware;
-use crate::middleware::{auth_middleware, rate_limit_middleware};
+use crate::middleware::{auth_middleware, rate_limit_middleware, rls_org_scope_middleware};
 use crate::AppState;
 
 pub fn create_router(state: AppState) -> Router<AppState> {
@@ -1102,6 +1102,14 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // outer-to-inner application puts it strictly inside auth — auth
         // populates the user_id this gate reads.
         .route_layer(middleware::from_fn_with_state(state.clone(), past_due_writes_blocked_middleware))
+        // RLS tenant binding (#832). Resolves the request's org once and scopes
+        // the rest of the request in the CURRENT_ORG task-local, so covered-table
+        // queries bind `app.current_org_id` and the Postgres policies isolate
+        // them. Registered between past_due and auth so the execution order is
+        // rate_limit -> auth -> rls_org_scope -> past_due -> handler: it sees the
+        // user_id auth stamped, and everything downstream (including any future
+        // middleware) runs inside the org scope.
+        .route_layer(middleware::from_fn_with_state(state.clone(), rls_org_scope_middleware))
         .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
         .route_layer(middleware::from_fn(rate_limit_middleware));
 
@@ -1141,6 +1149,12 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/admin/analytics/funnel",
             get(handlers::analytics::get_conversion_funnel),
         )
+        // Deliberately NOT layered with `rls_org_scope_middleware` (#832). These
+        // are platform-admin routes whose whole job is to aggregate across every
+        // tenant. Binding the calling admin's own org here would fail-close those
+        // aggregates to a single org. Cross-org queries behind these routes must
+        // run on the owner pool (`PgRegistryStore::with_owner_pool`), which
+        // bypasses RLS by design.
         .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
         .route_layer(middleware::from_fn(rate_limit_middleware));
 

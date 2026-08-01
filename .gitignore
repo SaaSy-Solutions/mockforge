@@ -165,6 +165,13 @@ examples/test-integration/playwright/test-results/
 crates/mockforge-collab/*.db
 crates/mockforge-collab/*.db-shm
 crates/mockforge-collab/*.db-wal
+
+# Artifacts the registry-server drops in the repo root when it is run from here
+# (scripts/rls-e2e-gate.sh boots it in-place). Twice nearly committed by accident.
+/mockforge-analytics.db
+/mockforge-analytics.db-shm
+/mockforge-analytics.db-wal
+/rls-gate-registry-server.pid
 # Generated benchmark results
 bench-results/
 # Analytics SQLite databases (generated at runtime)

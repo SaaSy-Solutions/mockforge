@@ -37,19 +37,28 @@ pub async fn list_projects(
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let projects = sqlx::query_as::<_, ProjectResponse>(
-        r#"
-        SELECT id, org_id, slug, name, description, visibility, default_env,
-               created_at, updated_at
-        FROM projects
-        WHERE org_id = $1
-        ORDER BY name
-        "#,
-    )
-    .bind(org_ctx.org_id)
-    .fetch_all(state.db.pool())
-    .await
-    .map_err(ApiError::Database)?;
+    // #832: run on the runtime pool inside the org GUC so the projects RLS
+    // policy enforces isolation even though this handler queries directly
+    // (not via the store). The `WHERE org_id` stays as defense-in-depth.
+    let org_id = org_ctx.org_id;
+    let projects = crate::store::with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+        Box::pin(async move {
+            sqlx::query_as::<_, ProjectResponse>(
+                r#"
+                SELECT id, org_id, slug, name, description, visibility, default_env,
+                       created_at, updated_at
+                FROM projects
+                WHERE org_id = $1
+                ORDER BY name
+                "#,
+            )
+            .bind(org_id)
+            .fetch_all(&mut **tx)
+            .await
+            .map_err(Into::into)
+        })
+    })
+    .await?;
 
     Ok(Json(projects))
 }
