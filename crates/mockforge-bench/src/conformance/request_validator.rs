@@ -946,7 +946,7 @@ pub async fn validate_emitted_requests_with_base_path(
         // and non-string type mismatches are all caught.
         let body_str = req.get("body").and_then(|v| v.as_str()).unwrap_or("");
         if !body_str.is_empty() {
-            if let Ok(body_json) = serde_json::from_str::<serde_json::Value>(body_str) {
+            if let Ok(body_json) = serde_json::from_str::<Value>(body_str) {
                 validate_emitted_body(
                     &check,
                     &method,
@@ -1071,8 +1071,7 @@ fn group_violations_by_probe(flat: &[serde_json::Value]) -> serde_json::Value {
     use serde_json::{Map, Value};
 
     let mut by_probe_order: Vec<(String, String, String)> = Vec::new();
-    let mut by_probe: std::collections::HashMap<(String, String, String), Vec<(String, String)>> =
-        std::collections::HashMap::new();
+    let mut by_probe: HashMap<(String, String, String), Vec<(String, String)>> = HashMap::new();
 
     // Round 50 (#79) — Srikanth on 0.3.194: "I see same violation is
     // getting printed in logs for 22 times" on a multi-iteration run.
@@ -1148,10 +1147,8 @@ fn group_violations_by_request(flat: &[serde_json::Value]) -> serde_json::Value 
     use serde_json::{Map, Value};
 
     let mut order: Vec<(String, String)> = Vec::new();
-    let mut checks_by_key: std::collections::HashMap<(String, String), Vec<String>> =
-        std::collections::HashMap::new();
-    let mut viols_by_key: std::collections::HashMap<(String, String), Vec<(String, String)>> =
-        std::collections::HashMap::new();
+    let mut checks_by_key: HashMap<(String, String), Vec<String>> = HashMap::new();
+    let mut viols_by_key: HashMap<(String, String), Vec<(String, String)>> = HashMap::new();
     // Per-(method,path) dedup sets so a check fired across 22 iterations,
     // or the same (vt,msg) surfaced by several checks, is counted once.
     let mut seen_check: std::collections::HashSet<(String, String, String)> =
