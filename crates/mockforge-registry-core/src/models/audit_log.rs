@@ -347,10 +347,6 @@ struct AuditChainRow {
 
 #[cfg(feature = "postgres")]
 impl AuditLog {
-    /// Maximum length of the `audit_logs.ip_address` column (`varchar(45)`),
-    /// sized for a full-length IPv6 literal.
-    const IP_ADDRESS_MAX_CHARS: usize = 45;
-
     /// Create a new audit log entry, extending the org's tamper-evident hash
     /// chain (#872).
     ///
@@ -564,6 +560,16 @@ impl AuditLog {
     }
 }
 
+/// Maximum length of the `audit_logs.ip_address` column (`varchar(45)`), sized
+/// for a full-length IPv6 literal.
+///
+/// Module-level and deliberately NOT inside the `#[cfg(feature = "postgres")]`
+/// `impl AuditLog`: `normalize_client_ip` below is ungated (its tests run
+/// without the postgres feature), so a gated associated const would leave this
+/// crate uncompilable for default-feature consumers — which is precisely the
+/// build `cargo install mockforge-cli` performs.
+const IP_ADDRESS_MAX_CHARS: usize = 45;
+
 /// Reduce a client-IP header value to something the `ip_address` column can
 /// actually hold.
 ///
@@ -592,7 +598,7 @@ fn normalize_client_ip(ip: Option<&str>) -> Option<String> {
     if first.is_empty() {
         return None;
     }
-    Some(first.chars().take(AuditLog::IP_ADDRESS_MAX_CHARS).collect())
+    Some(first.chars().take(IP_ADDRESS_MAX_CHARS).collect())
 }
 
 /// Helper function to record audit events from request context
@@ -638,7 +644,7 @@ mod tests {
         let chain = "203.0.113.7, 198.51.100.22, 2001:db8:85a3:8d3:1319:8a2e:370:7348, 10.0.0.1";
         let got = normalize_client_ip(Some(chain)).expect("should keep the client hop");
         assert_eq!(got, "203.0.113.7");
-        assert!(chain.chars().count() > AuditLog::IP_ADDRESS_MAX_CHARS, "fixture must overflow");
+        assert!(chain.chars().count() > IP_ADDRESS_MAX_CHARS, "fixture must overflow");
     }
 
     #[test]
@@ -647,7 +653,7 @@ mod tests {
         // stored rather than costing us the audit record.
         let long = "x".repeat(300);
         let got = normalize_client_ip(Some(&long)).expect("should truncate, not drop");
-        assert_eq!(got.chars().count(), AuditLog::IP_ADDRESS_MAX_CHARS);
+        assert_eq!(got.chars().count(), IP_ADDRESS_MAX_CHARS);
     }
 
     #[test]
@@ -663,7 +669,7 @@ mod tests {
         assert_eq!(normalize_client_ip(Some("198.51.100.4")).as_deref(), Some("198.51.100.4"));
         let v6 = "2001:0db8:85a3:0000:0000:8a2e:0370:7334";
         assert_eq!(normalize_client_ip(Some(v6)).as_deref(), Some(v6));
-        assert!(v6.chars().count() <= AuditLog::IP_ADDRESS_MAX_CHARS);
+        assert!(v6.chars().count() <= IP_ADDRESS_MAX_CHARS);
     }
 
     /// Every variant must round-trip through as_str → from_str. A new variant
