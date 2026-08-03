@@ -55,9 +55,42 @@ cd "$REPO_ROOT" >/dev/null
 # "failed to bind host port 0.0.0.0:55432/tcp: address already in use").
 # See docker-compose.rls-gate.yml.
 COMPOSE_FILE_GATE="${COMPOSE_FILE_GATE:-docker-compose.rls-gate.yml}"
-PG_PORT="${PG_PORT:-55434}"
-MINIO_PORT="${MINIO_PORT:-59010}"
-REGISTRY_PORT="${REGISTRY_PORT:-58090}"
+
+# Keep concurrent runs of THIS job apart. The CI host runs several runners side
+# by side, so two PRs can be in this script at the same moment. Anything global
+# to the docker daemon (a fixed container name) or to the host (a fixed port) is
+# a collision waiting to happen — the first version of this gate used both and
+# knocked over a run with `No such container` when one teardown raced another's
+# `up`.
+# Ports are ephemeral, so `up` must hand them to the later `test` / `down`
+# invocations — otherwise each process picks different ones and `test` looks for
+# a server that isn't there. `up`/`all` allocate fresh and write this file;
+# every other subcommand reads it.
+STATE_FILE="${STATE_FILE:-$REPO_ROOT/.rls-gate-state}"
+__SUBCMD="${1:-all}"
+if [ "$__SUBCMD" != "up" ] && [ "$__SUBCMD" != "all" ] && [ -f "$STATE_FILE" ]; then
+  # shellcheck disable=SC1090
+  . "$STATE_FILE"
+fi
+
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-rlsgate-$$-${RUNNER_NAME:-local}}"
+
+# Free ephemeral ports, chosen now, rather than fixed ones. Explicit
+# PG_PORT/MINIO_PORT/REGISTRY_PORT still win so a local run can pin them.
+pick_free_port() {
+  python3 - <<'PYPORT'
+import socket
+s = socket.socket()
+s.bind(('', 0))
+print(s.getsockname()[1])
+s.close()
+PYPORT
+}
+PG_PORT="${PG_PORT:-$(pick_free_port)}"
+MINIO_PORT="${MINIO_PORT:-$(pick_free_port)}"
+MINIO_CONSOLE_PORT="${MINIO_CONSOLE_PORT:-$(pick_free_port)}"
+REGISTRY_PORT="${REGISTRY_PORT:-$(pick_free_port)}"
+export PG_PORT MINIO_PORT MINIO_CONSOLE_PORT
 
 PG_SUPERUSER="postgres"
 PG_SUPERPASS="password"
@@ -122,26 +155,44 @@ require_tools() {
   [ ${#missing[@]} -eq 0 ] || die "missing required tools: ${missing[*]}"
 }
 
+# Health of a compose SERVICE, resolved through the project rather than a fixed
+# container name.
+svc_health() {
+  local cid
+  cid="$(docker compose -f "$COMPOSE_FILE_GATE" ps -q "$1" 2>/dev/null | head -1)"
+  [ -n "$cid" ] || { echo "missing"; return; }
+  docker inspect --format='{{.State.Health.Status}}' "$cid" 2>/dev/null || echo "unknown"
+}
+
+write_state() {
+  cat >"$STATE_FILE" <<EOF
+COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME"
+PG_PORT="$PG_PORT"
+MINIO_PORT="$MINIO_PORT"
+MINIO_CONSOLE_PORT="$MINIO_CONSOLE_PORT"
+REGISTRY_PORT="$REGISTRY_PORT"
+EOF
+}
+
 compose_up() {
   log "Starting Postgres + MinIO ($COMPOSE_FILE_GATE)"
   # Same leftover-state guard as registry-e2e.yml: a killed prior run can hold
   # the fixed host ports.
+  # Scoped to THIS compose project, so it cannot reach a sibling run's stack.
   docker compose -f "$COMPOSE_FILE_GATE" down --remove-orphans --volumes >/dev/null 2>&1 || true
-  docker ps -aq --filter "name=mockforge-rls-gate" | xargs -r docker rm -f >/dev/null 2>&1 || true
   docker compose -f "$COMPOSE_FILE_GATE" up -d
 
   local i
   for i in $(seq 1 60); do
-    if docker inspect --format='{{.State.Health.Status}}' mockforge-rls-gate-db 2>/dev/null | grep -q healthy; then
+    if [ "$(svc_health db)" = "healthy" ]; then
       break
     fi
     sleep 1
   done
-  docker inspect --format='{{.State.Health.Status}}' mockforge-rls-gate-db 2>/dev/null | grep -q healthy \
-    || die "postgres never became healthy"
+  [ "$(svc_health db)" = "healthy" ] || die "postgres never became healthy"
 
   for i in $(seq 1 60); do
-    if docker inspect --format='{{.State.Health.Status}}' mockforge-rls-gate-minio 2>/dev/null | grep -q healthy; then
+    if [ "$(svc_health minio)" = "healthy" ]; then
       break
     fi
     sleep 1
@@ -159,8 +210,10 @@ stop_server() {
     kill "$(cat "$SERVER_PID_FILE")" 2>/dev/null || true
     rm -f "$SERVER_PID_FILE"
   fi
+  # Deliberately NOT a blanket `pkill -f mockforge-registry-server`: that would
+  # kill the server belonging to a concurrent run of this same gate. The recorded
+  # pid plus our (now unique) port are enough.
   fuser -k "${REGISTRY_PORT}/tcp" 2>/dev/null || true
-  pkill -f 'debug/mockforge-registry-server' 2>/dev/null || true
   sleep 1
 }
 
@@ -250,6 +303,7 @@ verify_gate_armed() {
 
 cmd_up() {
   require_tools
+  write_state
   compose_up
   build_server
 
@@ -345,6 +399,7 @@ cmd_down() {
   log "Tearing down"
   stop_server
   docker compose -f "$COMPOSE_FILE_GATE" down -v >/dev/null 2>&1 || true
+  rm -f "$STATE_FILE"
   echo "done"
 }
 

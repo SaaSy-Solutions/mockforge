@@ -24,13 +24,19 @@
 # deliberately left untouched so this change cannot regress the job that gates
 # every PR.
 #
-# Ports are still overridable (PG_PORT / MINIO_PORT) for anyone running two
-# gates at once locally.
+# There are deliberately NO `container_name:` entries. A fixed container name is
+# global to the docker daemon, so it defeats compose's project-name isolation and
+# two runs of THIS job collide on it — the host runs several runners side by
+# side. That showed up as `Error response from daemon: No such container: <id>`
+# when one run's teardown raced the other's `up`. Names are left to compose so
+# COMPOSE_PROJECT_NAME keeps concurrent runs apart; the script sets a unique one.
+#
+# Ports default to free ephemeral ports picked at runtime (see the script) and
+# stay overridable via PG_PORT / MINIO_PORT for local use.
 
 services:
   db:
     image: postgres:15-alpine
-    container_name: mockforge-rls-gate-db
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
@@ -47,7 +53,6 @@ services:
 
   minio:
     image: minio/minio:RELEASE.2024-10-13T13-34-11Z
-    container_name: mockforge-rls-gate-minio
     environment:
       MINIO_ROOT_USER: minioadmin
       MINIO_ROOT_PASSWORD: minioadmin
@@ -65,7 +70,6 @@ services:
 
   minio-init:
     image: minio/mc:RELEASE.2024-10-08T09-37-26Z
-    container_name: mockforge-rls-gate-minio-init
     depends_on:
       minio:
         condition: service_healthy
