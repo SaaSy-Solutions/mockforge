@@ -172,6 +172,7 @@ crates/mockforge-collab/*.db-wal
 /mockforge-analytics.db-shm
 /mockforge-analytics.db-wal
 /rls-gate-registry-server.pid
+/.rls-gate-state
 # Generated benchmark results
 bench-results/
 # Analytics SQLite databases (generated at runtime)
