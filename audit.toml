@@ -63,4 +63,28 @@ ignore = [
     { id = "RUSTSEC-2026-0098", reason = "rustls-webpki URI name constraints — pinned by transitive deps across 3 rustls majors" },
     { id = "RUSTSEC-2026-0099", reason = "rustls-webpki wildcard name constraints — pinned by transitive deps across 3 rustls majors" },
     { id = "RUSTSEC-2026-0104", reason = "rustls-webpki CRL parsing panic — pinned by transitive deps across 3 rustls majors" },
+
+    # rkyv 0.7.46, reached only as an UNENABLED optional feature of
+    # rust_decimal. This one is not reachable in anything we build, and
+    # unlike the entries above it is not waiting on an upstream bump —
+    # there is nothing to bump to:
+    #
+    #   * rust_decimal's `rkyv` feature is `["dep:rkyv"]`, pure opt-in. Its
+    #     defaults are ["serde", "std"].
+    #   * We depend on rust_decimal with default features and never enable
+    #     `rkyv`; sqlx-postgres pulls it with default-features = false and
+    #     only ["std"].
+    #   * rust_decimal 1.42.1 is the LATEST release and still requires
+    #     `rkyv ^0.7.46`, so the advisory's ">=0.8.17" has no path here.
+    #
+    # Cargo.lock is feature-agnostic: it records optional dependencies that
+    # no feature selection enables, and cargo-audit scans the lockfile, so
+    # it reports crates that are never compiled. Re-verify with:
+    #
+    #   cargo tree --workspace -e normal | grep -c rkyv     # expect 0
+    #   cargo tree -i rkyv                                  # expect "nothing to print"
+    #
+    # Drop this entry if either of those starts returning rkyv (someone
+    # enabled the feature), or once rust_decimal ships an rkyv 0.8 release.
+    { id = "RUSTSEC-2026-0235", reason = "rkyv OOB read — unenabled optional feature of rust_decimal, absent from the compiled graph (cargo tree -e normal finds 0); rust_decimal 1.42.1 (latest) still pins rkyv ^0.7.46 so there is no version to upgrade to" },
 ]
