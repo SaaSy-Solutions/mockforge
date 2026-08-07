@@ -62,6 +62,30 @@ pub fn parse_header_string(inputs: &[String]) -> Result<HashMap<String, String>>
     Ok(headers)
 }
 
+/// Printed whenever `--conformance` is in play (#980).
+///
+/// Conformance is a functional correctness check: 1 VU, 1 iteration per
+/// endpoint, iteration count driven by the spec's endpoints. Every load-shaping
+/// flag is discarded.
+///
+/// Two things this has to say, because the earlier wording said neither and a
+/// user acted on the gap (#79 round 64 follow-up):
+///
+/// 1. `--rps` is ignored too. `target_rps` is never read on the conformance
+///    path, but the old message named only `--vus` and `-d`, so anyone tuning
+///    throughput got no signal.
+/// 2. `--conformance` REPLACES the load run, it does not run alongside it.
+///    `BenchCommand::execute` returns into the conformance path before the load
+///    path is reached, so a command carrying a full set of load flags produces
+///    `k6-conformance.js` and no `k6-script.js`, with no load traffic at all.
+///
+/// Shared by the single-target and multi-target conformance paths so the two
+/// cannot drift; `conformance_advisory_names_every_discarded_flag` guards it.
+const CONFORMANCE_REPLACES_LOAD_ADVISORY: &str =
+    "Conformance mode REPLACES the load run: 1 VU, 1 iteration per endpoint. \
+     --vus, --rps and -d are ignored. Run bench a second time without \
+     --conformance if you also want a load test.";
+
 /// Bench command configuration
 pub struct BenchCommand {
     /// OpenAPI spec file(s) - can specify multiple
@@ -2505,11 +2529,7 @@ impl BenchCommand {
 
         TerminalReporter::print_progress("OpenAPI 3.0.0 Conformance Testing Mode");
 
-        // Conformance testing is a functional correctness check (1 VU, 1 iteration).
-        // --vus and -d flags are always ignored in this mode.
-        TerminalReporter::print_progress(
-            "Conformance mode runs 1 VU, 1 iteration per endpoint (--vus and -d are ignored)",
-        );
+        TerminalReporter::print_progress(CONFORMANCE_REPLACES_LOAD_ADVISORY);
 
         // Parse category filter
         let categories = self.conformance_categories.as_ref().map(|cats_str| {
@@ -3469,9 +3489,7 @@ impl BenchCommand {
             return Err(BenchError::Other("No targets found in file".to_string()));
         }
 
-        TerminalReporter::print_progress(
-            "Conformance mode runs 1 VU, 1 iteration per endpoint (--vus and -d are ignored)",
-        );
+        TerminalReporter::print_progress(CONFORMANCE_REPLACES_LOAD_ADVISORY);
 
         // Parse category filter (shared across all targets)
         let categories = self.conformance_categories.as_ref().map(|cats_str| {
@@ -4265,6 +4283,32 @@ mod tests {
             Some(&"session=abc; expires=Thu, 01 Jan 2099 00:00:00 GMT".to_string())
         );
         assert_eq!(headers.get("X-Trace"), Some(&"1".to_string()));
+    }
+
+    /// #980. The advisory that fires under `--conformance` must name every
+    /// load-shaping flag it discards AND say the load run is replaced.
+    ///
+    /// The previous wording named only `--vus` and `-d`. It omitted `--rps`,
+    /// and it never said the load run does not happen at all — so a command
+    /// carrying a full set of load flags looked like it would do both. That
+    /// gap is what produced the wrong advice on #79 round 64.
+    #[test]
+    fn conformance_advisory_names_every_discarded_flag() {
+        let msg = CONFORMANCE_REPLACES_LOAD_ADVISORY;
+        for flag in ["--vus", "--rps", "-d"] {
+            assert!(
+                msg.contains(flag),
+                "conformance advisory must name `{flag}` as ignored; it is discarded on that \
+                 path and silently dropping it is how users end up tuning a knob that does \
+                 nothing (#980). Message was: {msg}"
+            );
+        }
+        assert!(
+            msg.contains("REPLACES"),
+            "conformance advisory must say the load run is REPLACED, not merely that some \
+             flags are ignored — `--conformance` returns before the load path runs, so no \
+             load traffic is generated at all (#980). Message was: {msg}"
+        );
     }
 
     /// Round 64 (#79). `execute_multi_target` hand-copies `BenchCommand` field
