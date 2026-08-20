@@ -224,6 +224,157 @@ where
     deserializer.deserialize_any(StringOrVec)
 }
 
+/// A single case in the SIMPLE traffic format (#987).
+///
+/// The WAFBench document shape (`meta` + `tests` + `stages` + `input`/`output`)
+/// exists to carry CRS rule IDs and provenance. A hand-written or LLM-generated
+/// traffic file has none of that, and asking authors to synthesise it buys
+/// nothing. This is the shape people actually produce:
+///
+/// ```yaml
+/// - title: utf-7 charset blocked
+///   request:
+///     method: POST
+///     uri: /graphql
+///     headers:
+///       Content-Type: application/json; charset=utf-7
+///     body: '...'
+///   expected: 403
+/// ```
+///
+/// Reported by Srikanth on #79: `--wafbench-dir` rejected exactly this with
+/// `invalid type: sequence, expected struct WafBenchFile`.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SimpleTrafficCase {
+    /// Human-readable name for the case.
+    pub title: Option<String>,
+    /// The request to send.
+    pub request: SimpleTrafficRequest,
+    /// Expected status. Accepts `403`, `[403, 406]`, or `{ status: 403 }`.
+    pub expected: Option<serde_yaml::Value>,
+}
+
+/// The request half of a [`SimpleTrafficCase`].
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SimpleTrafficRequest {
+    /// HTTP method. Defaults to GET, matching the WAFBench input default.
+    #[serde(default = "default_method")]
+    pub method: String,
+    /// Request URI, including any payload in the query string.
+    pub uri: Option<String>,
+    /// Request headers.
+    #[serde(default)]
+    pub headers: HashMap<String, String>,
+    /// Request body. Named `body` here rather than WAFBench's `data`, because
+    /// `body` is what generators emit.
+    pub body: Option<String>,
+}
+
+/// Pull expected status codes out of the permissive `expected` field.
+///
+/// Accepts a bare integer (`403`), a sequence (`[403, 406]`), or a mapping with
+/// a `status` key holding either. Anything else yields no expectation rather
+/// than an error: an unparseable expectation should not cost the user the case,
+/// since the request itself is still perfectly valid traffic to send.
+fn extract_expected_statuses(value: Option<&serde_yaml::Value>) -> Vec<u16> {
+    fn as_status(v: &serde_yaml::Value) -> Option<u16> {
+        v.as_u64().and_then(|n| u16::try_from(n).ok())
+    }
+
+    let Some(value) = value else {
+        return Vec::new();
+    };
+
+    if let Some(one) = as_status(value) {
+        return vec![one];
+    }
+    if let Some(seq) = value.as_sequence() {
+        return seq.iter().filter_map(as_status).collect();
+    }
+    if let Some(map) = value.as_mapping() {
+        if let Some(status) = map.get(serde_yaml::Value::String("status".to_string())) {
+            if let Some(one) = as_status(status) {
+                return vec![one];
+            }
+            if let Some(seq) = status.as_sequence() {
+                return seq.iter().filter_map(as_status).collect();
+            }
+        }
+    }
+    Vec::new()
+}
+
+impl SimpleTrafficCase {
+    /// Convert into the internal WAFBench representation so the rest of the
+    /// security-test pipeline is untouched. The mapping is 1:1 except for
+    /// `body` -> `data` and the synthesised title.
+    fn into_wafbench_test(self, index: usize) -> WafBenchTest {
+        let statuses = extract_expected_statuses(self.expected.as_ref());
+        let title = self.title.unwrap_or_else(|| format!("case-{}", index + 1));
+
+        WafBenchTest {
+            desc: Some(title.clone()),
+            test_title: title,
+            stages: vec![WafBenchStage {
+                input: Some(WafBenchInput {
+                    dest_addr: None,
+                    headers: self.request.headers,
+                    method: self.request.method,
+                    port: default_port(),
+                    uri: self.request.uri,
+                    data: self.request.body,
+                    version: None,
+                }),
+                output: Some(WafBenchOutput {
+                    status: statuses,
+                    response_headers: HashMap::new(),
+                    log_contains: Vec::new(),
+                    no_log_contains: Vec::new(),
+                }),
+                stage: None,
+            }],
+        }
+    }
+}
+
+/// Parse a traffic file in either supported shape.
+///
+/// Tries the WAFBench document first, then the simple sequence. On failure the
+/// error names BOTH accepted shapes: the previous message reported only
+/// `invalid type: sequence, expected struct WafBenchFile`, which is accurate
+/// about what failed but silent about what would have worked.
+pub fn parse_traffic_file(content: &str, source: &str) -> Result<WafBenchFile> {
+    match serde_yaml::from_str::<WafBenchFile>(content) {
+        Ok(file) => Ok(file),
+        Err(wafbench_err) => match serde_yaml::from_str::<Vec<SimpleTrafficCase>>(content) {
+            Ok(cases) => {
+                tracing::info!(
+                    "{source}: parsed {} case(s) in the simple request/expected format",
+                    cases.len()
+                );
+                Ok(WafBenchFile {
+                    meta: WafBenchMeta {
+                        author: None,
+                        description: Some(format!("simple traffic file: {source}")),
+                        enabled: true,
+                        name: Some(source.to_string()),
+                    },
+                    tests: cases
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, c)| c.into_wafbench_test(i))
+                        .collect(),
+                })
+            }
+            Err(simple_err) => Err(BenchError::Other(format!(
+                "Failed to parse traffic file {source}. Two shapes are accepted:\n  \
+                 (1) WAFBench document -- a `meta:` mapping plus a `tests:` list. Parse error: {wafbench_err}\n  \
+                 (2) simple list -- `- title: .. / request: {{method, uri, headers, body}} / expected: 403`. Parse error: {simple_err}"
+            ))),
+        },
+    }
+}
+
 /// Complete WAFBench test file structure
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct WafBenchFile {
@@ -411,9 +562,7 @@ impl WafBenchLoader {
             BenchError::Other(format!("Failed to read WAFBench file {}: {}", path.display(), e))
         })?;
 
-        let wafbench_file: WafBenchFile = serde_yaml::from_str(&content).map_err(|e| {
-            BenchError::Other(format!("Failed to parse WAFBench YAML {}: {}", path.display(), e))
-        })?;
+        let wafbench_file = parse_traffic_file(&content, &path.display().to_string())?;
 
         // Skip disabled test files
         if !wafbench_file.meta.enabled {
@@ -1365,5 +1514,123 @@ tests:
         let input = stage.get_input().expect("Should have input");
         assert_eq!(input.method, "POST");
         assert_eq!(input.data.as_deref(), Some("var=1234 OR 1=1"));
+    }
+}
+
+#[cfg(test)]
+mod simple_traffic_tests {
+    use super::*;
+
+    /// Srikanth's actual file shape from #79 (r65 item b). Before #987 this
+    /// failed with `invalid type: sequence, expected struct WafBenchFile`.
+    const SRIKANTH_YAML: &str = r#"
+- title: utf-7 charset blocked
+  request:
+    method: POST
+    uri: /graphql
+    headers:
+      Content-Type: application/json; charset=utf-7
+    body: '+AHsAIgBxAHUAZQByAHkAIgA6ACIAewBfAF8AdAB5AHAAZQBuAGEAbQBlAH0AIgB9-'
+  expected: 403
+- title: utf-8 charset allowed
+  request:
+    method: POST
+    uri: /graphql
+    headers:
+      Content-Type: application/json; charset=utf-8
+    body: '{"query":"{__typename}"}'
+  expected: 200
+"#;
+
+    #[test]
+    fn simple_sequence_parses_and_maps_every_field() {
+        let file = parse_traffic_file(SRIKANTH_YAML, "test_cases.yaml").expect("should parse");
+        assert_eq!(file.tests.len(), 2);
+        assert!(file.meta.enabled, "synthesised meta must not disable the file");
+
+        let first = &file.tests[0];
+        assert_eq!(first.test_title, "utf-7 charset blocked");
+        let stage = &first.stages[0];
+        let input = stage.input.as_ref().expect("input mapped");
+        assert_eq!(input.method, "POST");
+        assert_eq!(input.uri.as_deref(), Some("/graphql"));
+        assert_eq!(
+            input.headers.get("Content-Type").map(String::as_str),
+            Some("application/json; charset=utf-7")
+        );
+        assert!(
+            input.data.as_deref().unwrap().starts_with("+AHsAIgBxAHUAZQ"),
+            "`body` must map onto WAFBench's `data`, payload intact"
+        );
+        assert_eq!(stage.output.as_ref().unwrap().status, vec![403]);
+    }
+
+    /// The WAFBench shape must keep working unchanged.
+    #[test]
+    fn wafbench_document_still_parses() {
+        let yaml = r#"
+meta:
+  author: crs
+  enabled: true
+  name: 941100
+tests:
+  - test_title: 941100-1
+    stages:
+      - stage:
+          input:
+            method: GET
+            uri: /?x=<script>alert(1)</script>
+          output:
+            status: [403]
+"#;
+        let file = parse_traffic_file(yaml, "941100.yaml").expect("should parse");
+        assert_eq!(file.tests.len(), 1);
+        assert_eq!(file.meta.author.as_deref(), Some("crs"));
+    }
+
+    /// `expected` is permissive because generators are inconsistent about it.
+    #[test]
+    fn expected_accepts_scalar_sequence_and_mapping() {
+        let scalar: serde_yaml::Value = serde_yaml::from_str("403").unwrap();
+        assert_eq!(extract_expected_statuses(Some(&scalar)), vec![403]);
+
+        let seq: serde_yaml::Value = serde_yaml::from_str("[403, 406]").unwrap();
+        assert_eq!(extract_expected_statuses(Some(&seq)), vec![403, 406]);
+
+        let map: serde_yaml::Value = serde_yaml::from_str("status: 403").unwrap();
+        assert_eq!(extract_expected_statuses(Some(&map)), vec![403]);
+
+        let map_seq: serde_yaml::Value = serde_yaml::from_str("status: [403, 406]").unwrap();
+        assert_eq!(extract_expected_statuses(Some(&map_seq)), vec![403, 406]);
+    }
+
+    /// An unparseable expectation must not cost the case: the request is still
+    /// valid traffic to send.
+    #[test]
+    fn unusable_expected_yields_no_statuses_not_an_error() {
+        let junk: serde_yaml::Value = serde_yaml::from_str("'not a status'").unwrap();
+        assert!(extract_expected_statuses(Some(&junk)).is_empty());
+        assert!(extract_expected_statuses(None).is_empty());
+
+        let yaml = "- request:\n    uri: /a\n";
+        let file = parse_traffic_file(yaml, "x.yaml").expect("case without expected still parses");
+        assert_eq!(file.tests.len(), 1);
+        assert_eq!(
+            file.tests[0].stages[0].input.as_ref().unwrap().method,
+            "GET",
+            "method defaults"
+        );
+        assert_eq!(file.tests[0].test_title, "case-1", "title is synthesised when absent");
+    }
+
+    /// The error must name BOTH accepted shapes. The old message reported only
+    /// the struct that failed, which told the user nothing about what to write.
+    #[test]
+    fn parse_error_names_both_accepted_shapes() {
+        let err = parse_traffic_file("just a string", "bad.yaml").unwrap_err().to_string();
+        assert!(err.contains("meta"), "must mention the WAFBench shape: {err}");
+        assert!(err.contains("tests"), "must mention the WAFBench shape: {err}");
+        assert!(err.contains("expected"), "must mention the simple shape: {err}");
+        assert!(err.contains("request"), "must mention the simple shape: {err}");
     }
 }
