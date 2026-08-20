@@ -13,6 +13,73 @@ use std::path::Path;
 use tokio::fs;
 use tracing;
 
+/// HTTP methods that make a `paths.<path>.<key>` entry an Operation Object.
+const OPERATION_KEYS: [&str; 8] = [
+    "get", "put", "post", "delete", "options", "head", "patch", "trace",
+];
+
+/// Insert an empty `responses` object into any operation that lacks one,
+/// returning how many were repaired.
+///
+/// OpenAPI 3.x marks `responses` as REQUIRED on an Operation Object, and the
+/// `openapiv3` crate enforces that, so a spec missing it fails to deserialize
+/// with a bare `missing field \`responses\`` and no indication of WHERE. Specs
+/// emitted by proxies and API-discovery tools routinely omit it: they observe
+/// requests, so they know paths, methods and schemas, but have nothing to say
+/// about responses.
+///
+/// Refusing those specs outright is the wrong trade for this codebase. Request
+/// generation, load testing and conformance probing all derive from paths,
+/// parameters and `requestBody`; none of them read `responses`. So a missing
+/// `responses` costs nothing we actually use, while rejecting the document
+/// costs the user their entire run.
+///
+/// Reported by Srikanth on #79: a proxy-generated spec where 63 of 70
+/// operations had no `responses` failed to load at all.
+///
+/// The repair is deliberately narrow. It only fills in a field the spec says is
+/// mandatory, never invents response *content*, and leaves every other
+/// validation error to surface normally.
+fn fill_missing_operation_responses(raw: &mut serde_json::Value) -> usize {
+    let Some(paths) = raw.get_mut("paths").and_then(|p| p.as_object_mut()) else {
+        return 0;
+    };
+
+    let mut repaired = 0;
+    for (_path, item) in paths.iter_mut() {
+        let Some(item) = item.as_object_mut() else {
+            continue;
+        };
+        for method in OPERATION_KEYS {
+            let Some(op) = item.get_mut(method).and_then(|o| o.as_object_mut()) else {
+                continue;
+            };
+            if !op.contains_key("responses") {
+                op.insert(
+                    "responses".to_string(),
+                    serde_json::Value::Object(serde_json::Map::new()),
+                );
+                repaired += 1;
+            }
+        }
+    }
+    repaired
+}
+
+/// Apply [`fill_missing_operation_responses`] and warn once if anything was
+/// repaired, so a non-conformant spec is visible rather than silently accepted.
+fn repair_spec_for_parsing(raw: &mut serde_json::Value, source: &str) {
+    let repaired = fill_missing_operation_responses(raw);
+    if repaired > 0 {
+        tracing::warn!(
+            "{source}: {repaired} operation(s) had no `responses` field, which OpenAPI 3.x \
+             requires. Treating them as having no declared responses so the spec can load. \
+             Request generation does not use `responses`, but response-schema validation \
+             will have nothing to check for these operations."
+        );
+    }
+}
+
 /// OpenAPI specification loader and parser
 #[derive(Debug, Clone)]
 pub struct OpenApiSpec {
@@ -60,6 +127,8 @@ impl OpenApiSpec {
             })?;
             (converted, spec)
         } else {
+            let mut raw_json = raw_json;
+            repair_spec_for_parsing(&mut raw_json, "OpenAPI spec");
             let spec: OpenAPI = serde_json::from_value(raw_json.clone()).map_err(|e| {
                 // Enhanced error reporting for debugging missing field errors
                 let error_str = format!("{}", e);
@@ -123,6 +192,8 @@ impl OpenApiSpec {
             })?;
             (converted, spec)
         } else {
+            let mut raw_json = raw_json;
+            repair_spec_for_parsing(&mut raw_json, "OpenAPI spec");
             let spec: OpenAPI = serde_json::from_value(raw_json.clone())
                 .map_err(|e| Error::io_with_context("reading OpenAPI spec", e.to_string()))?;
             (raw_json, spec)
@@ -716,5 +787,74 @@ components:
             .get_schema("#/components/schemas/HiveWrapper")
             .expect("resolve wrapper schema");
         assert!(matches!(wrapper.schema.schema_kind, SchemaKind::Type(Type::Object(_))));
+    }
+}
+
+#[cfg(test)]
+mod missing_responses_tests {
+    use super::*;
+
+    /// A proxy-generated spec with no `responses` on its operations must load.
+    /// Reported on #79: 63 of 70 operations lacked the field and the whole run
+    /// aborted with `missing field \`responses\``.
+    #[test]
+    fn spec_without_operation_responses_loads() {
+        let raw = r#"{
+            "openapi": "3.0.0",
+            "info": { "title": "proxy-generated", "version": "1.0.0" },
+            "paths": {
+                "/orders": {
+                    "get": { "summary": "list" },
+                    "post": {
+                        "summary": "create",
+                        "requestBody": {
+                            "content": { "application/json": { "schema": { "type": "object" } } }
+                        }
+                    }
+                }
+            }
+        }"#;
+
+        let spec = OpenApiSpec::from_string(raw, Some("json"))
+            .expect("a spec missing `responses` should still load for bench/load use");
+
+        let item = spec.spec.paths.paths.get("/orders").expect("path present");
+        let ReferenceOr::Item(item) = item else {
+            panic!("expected inline path item");
+        };
+        assert!(item.get.is_some(), "GET survived the repair");
+        assert!(item.post.is_some(), "POST survived the repair");
+        assert!(
+            item.post.as_ref().unwrap().request_body.is_some(),
+            "requestBody must be preserved — it is what request generation actually reads"
+        );
+    }
+
+    /// The repair must only add the mandatory field, never touch a spec that
+    /// already declares responses.
+    #[test]
+    fn existing_responses_are_left_alone() {
+        let mut raw: serde_json::Value = serde_json::from_str(
+            r#"{"paths": {"/a": {"get": {"responses": {"200": {"description": "ok"}}}}}}"#,
+        )
+        .unwrap();
+        let before = raw.clone();
+        assert_eq!(fill_missing_operation_responses(&mut raw), 0);
+        assert_eq!(raw, before, "a conformant spec must be byte-identical after the pass");
+    }
+
+    /// Non-operation keys under a path item (parameters, servers, $ref) must not
+    /// be mistaken for operations.
+    #[test]
+    fn non_operation_keys_are_not_touched() {
+        let mut raw: serde_json::Value = serde_json::from_str(
+            r#"{"paths": {"/a": {"parameters": [], "servers": [], "get": {}}}}"#,
+        )
+        .unwrap();
+        assert_eq!(fill_missing_operation_responses(&mut raw), 1, "only `get` is an operation");
+        let path = &raw["paths"]["/a"];
+        assert!(path["parameters"].is_array(), "parameters untouched");
+        assert!(path["servers"].is_array(), "servers untouched");
+        assert!(path["get"]["responses"].is_object(), "get repaired");
     }
 }
