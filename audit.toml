@@ -86,5 +86,28 @@ ignore = [
     #
     # Drop this entry if either of those starts returning rkyv (someone
     # enabled the feature), or once rust_decimal ships an rkyv 0.8 release.
+    # h2 0.3.27 only. The 0.4.x instance, which is what actually serves HTTP here
+    # (hyper 1.x / axum), IS patched: bumped 0.4.15 -> 0.4.17 in the same change.
+    #
+    # 0.3.27 arrives ONLY through the AWS SDK client path:
+    #   h2 0.3.27 <- aws-smithy-http-client <- aws-smithy-runtime
+    #             <- aws-config / aws-sdk-kms <- mockforge-platform-signing,
+    #                                            mockforge-registry-server
+    #
+    # It is genuinely compiled (unlike the rkyv entry below), so this is a real
+    # ignore rather than a lockfile artifact. Two reasons it is defensible:
+    #
+    #   * There is nothing to upgrade to. 0.3.27 IS the latest 0.3.x; upstream
+    #     patched only the 0.4 line (`patched = [">= 0.4.16"]`), and the AWS
+    #     crates pin `h2 ^0.3.24` behind their legacy hyper-0.14 path.
+    #   * The flaw is queueing unbounded EMPTY DATA FRAMES FROM A PEER. On this
+    #     path we are the CLIENT, and the peer is an AWS KMS/STS endpoint over
+    #     TLS. Exploiting it would require controlling AWS's own responses.
+    #     Advisory is rated LOW severity for this reason.
+    #
+    # Retire this once the AWS SDK drops its hyper-0.14 path (`cargo tree -i
+    # h2@0.3.27` goes empty), or if h2 ever backports to 0.3.x.
+    { id = "RUSTSEC-2026-0258", reason = "h2 0.3.27 empty-DATA-frame DoS (LOW) — client-only via aws-sdk; 0.3.x is unpatched upstream (fix is 0.4.16+, and our 0.4 instance is bumped to 0.4.17)" },
+
     { id = "RUSTSEC-2026-0235", reason = "rkyv OOB read — unenabled optional feature of rust_decimal, absent from the compiled graph (cargo tree -e normal finds 0); rust_decimal 1.42.1 (latest) still pins rkyv ^0.7.46 so there is no version to upgrade to" },
 ]
