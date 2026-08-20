@@ -1,5 +1,28 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [0.3.213] - 2026-08-20
+
+### Fixed
+
+- **[Contracts]** OpenAPI specs whose operations omit `responses` now load instead of aborting the run (#79 round 65 / Srikanth on 0.3.212). His proxy-generated spec failed outright with `missing field \`responses\``, and the error named no path or method. The spec is genuinely non-conformant (OpenAPI 3.x marks `responses` required, and 63 of its 70 operations omit it), but refusing it is the wrong trade: request generation, load testing and conformance probing all derive from paths, parameters and `requestBody` and never read `responses`, so the missing field costs nothing we use while rejecting the document costs the whole run. Proxies and API-discovery tools emit specs like this routinely, because they observe requests and have nothing to say about responses. A narrow repair pass fills in only the mandatory field, never invents response content, and warns with the count of affected operations and what is lost (response-schema validation has nothing to check for them). Real-binary verified against his attachment: the run now loads and finds all 70 operations.
+
+### Added
+
+- **[Reality]** `--wafbench-dir` now accepts a simple `{title, request, expected}` YAML list in addition to the WAFBench document shape (#987, #79 round 65 / Srikanth). His LLM-generated traffic file was rejected with `invalid type: sequence, expected struct WafBenchFile`, which was accurate about what failed but silent about what would have worked. The WAFBench shape exists to carry CRS rule IDs and provenance that a generated file has no reason to contain. The simple form maps 1:1 onto the internal representation (`body` becomes `data`, titles are synthesised when absent), so the rest of the security-test pipeline is untouched. `expected` accepts `403`, `[403, 406]`, or `{status: ...}`, and an unparsable expectation yields no status rather than dropping the case, since the request is still valid traffic. When both shapes fail, the error now names both with the parse error for each. Real-binary verified against his unmodified file: 8 cases, 24 payloads.
+
+### Security
+
+- **[Security]** RUSTSEC-2026-0258 (`h2` unbounded empty DATA frames): bumped `h2` 0.4.15 to 0.4.17, which is the instance that serves HTTP here via hyper 1.x / axum. The remaining `h2` 0.3.27 is reached only through the AWS SDK client path and is ignored with reasoning recorded in `audit.toml`: 0.3.27 is the latest 0.3.x and upstream patched only the 0.4 line, and the flaw concerns queueing empty frames from a peer, where on that path we are the client talking to AWS KMS/STS over TLS. Advisory is rated low severity.
+
+## [0.3.212] - 2026-08-03
+
+### Fixed
+
+- **[Reality]** `--conformance-basic-auth` (and `--conformance-headers`, where `--auth-bearer` lands) now reach the wire on multi-target runs (#79 round 64 / Srikanth on 0.3.210). His `mockforge bench --use-k6 --targets-file vs_list3.json --conformance-basic-auth user:pass ...` sent no credentials at all, absent from both his PCAP and his proxy, while the identical single-target invocation worked. Round 47 taught `parse_headers()` to fold those auth shortcuts into the shared header map so the same flags work for a plain load run without `--conformance`, and both ends of the chain were already correct (`ParallelExecutor` calls `parse_headers()`; the k6 generator merges `custom_headers` into every endpoint). The break was between them: `execute_multi_target` hand-copies `BenchCommand` field by field and set `conformance_basic_auth: None` / `conformance_headers: vec![]`, nulling the fields *before* `parse_headers()` ran, so the fold had nothing to fold. Real-binary verified across two targets: `grep -c Authorization` on the generated k6 scripts goes 0,0 to 3,3, carrying `Basic dXNlcm5hbWU6cGFzc3dvcmQ=`. Adds a drift guard asserting every field `parse_headers()` folds survives that clone, because field-by-field struct literals drop fields silently. Note that `--validate-requests` and `--export-requests` are conformance-run features (read only inside `execute_conformance_test`); they no-op on a plain load run in single- and multi-target alike, and need `--conformance`.
+- **[Security]** RUSTSEC-2026-0222: `wasmtime` 36.0.12 to 36.0.13, reached via `wasmtime-wasi` -> `wiggle` -> `mockforge-plugin-loader`. Lockfile only, a patch bump inside the existing 36.x line.
+- **[Contracts]** `mockforge-registry-core` no longer fails to compile for default-feature consumers. An associated const added in 0.3.211's audit fix sat inside a `#[cfg(feature = "postgres")]` impl while its ungated caller and tests still referenced it, so `cargo install mockforge-cli` could not build. Nothing in CI covered that combination: the workspace test job runs `--all-features` and the registry server always builds with `postgres`. Moved to a module-level const.
+- **[Contracts]** Repaired the release pipeline itself. A stale doctest in `mockforge-intelligence` (broken since May) was failing `cargo test --workspace --release` in the Create Release job, which skipped everything after it, including the GitHub Release **and** the Fly deploy, which has `needs: release`. Production had therefore been serving 0.3.183 since 2026-06-19. Also aligned every Dockerfile builder with `rust-toolchain.toml` (1.75/1.90/1.91 to 1.96) after `aws-smithy-types` raised its MSRV past the pinned builder and broke container builds outright, and cleared the `unused_qualifications` errors that were reddening the Test job on every PR regardless of content.
+
 ## [0.3.211] - 2026-07-27
 
 ### Fixed
