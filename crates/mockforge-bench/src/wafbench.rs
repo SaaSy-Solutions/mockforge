@@ -274,7 +274,7 @@ pub struct SimpleTrafficRequest {
 ///
 /// Accepts a bare integer (`403`), a sequence (`[403, 406]`), or a mapping with
 /// a `status` key holding either. Anything else yields no expectation rather
-/// than an error: an unparseable expectation should not cost the user the case,
+/// than an error: an unparsable expectation should not cost the user the case,
 /// since the request itself is still perfectly valid traffic to send.
 fn extract_expected_statuses(value: Option<&serde_yaml::Value>) -> Vec<u16> {
     fn as_status(v: &serde_yaml::Value) -> Option<u16> {
@@ -1604,7 +1604,7 @@ tests:
         assert_eq!(extract_expected_statuses(Some(&map_seq)), vec![403, 406]);
     }
 
-    /// An unparseable expectation must not cost the case: the request is still
+    /// An unparsable expectation must not cost the case: the request is still
     /// valid traffic to send.
     #[test]
     fn unusable_expected_yields_no_statuses_not_an_error() {

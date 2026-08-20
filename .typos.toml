@@ -8,6 +8,12 @@
 extend-ignore-re = [
   "(?s)-----BEGIN PRIVATE KEY-----.*?-----END PRIVATE KEY-----",
   "tlVSZ3rda5uMJ625[A-Za-z0-9_-]+",
+  # Modified-UTF-7 payloads in the WAFBench charset test cases (#987). These are
+  # deliberately malformed-charset attack strings, so their bytes are not words
+  # and typos flags fragments of them (e.g. "ACI" inside "...ADoAIgB..."). Match
+  # the UTF-7 shift sequence rather than excluding the file, which would blind
+  # the checker to the real prose around them.
+  "\\+[A-Za-z0-9+/]{8,}-",
 ]
 
 [default.extend-words]
