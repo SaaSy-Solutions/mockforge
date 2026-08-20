@@ -1,3 +1,17 @@
+## [0.3.213] - 2026-08-20
+
+### Fixed
+
+- **[Contracts]** OpenAPI specs whose operations omit `responses` now load instead of aborting the run (#79 round 65 / Srikanth on 0.3.212). His proxy-generated spec failed outright with `missing field \`responses\``, and the error named no path or method. The spec is genuinely non-conformant (OpenAPI 3.x marks `responses` required, and 63 of its 70 operations omit it), but refusing it is the wrong trade: request generation, load testing and conformance probing all derive from paths, parameters and `requestBody` and never read `responses`, so the missing field costs nothing we use while rejecting the document costs the whole run. Proxies and API-discovery tools emit specs like this routinely, because they observe requests and have nothing to say about responses. A narrow repair pass fills in only the mandatory field, never invents response content, and warns with the count of affected operations and what is lost (response-schema validation has nothing to check for them). Real-binary verified against his attachment: the run now loads and finds all 70 operations.
+
+### Added
+
+- **[Reality]** `--wafbench-dir` now accepts a simple `{title, request, expected}` YAML list in addition to the WAFBench document shape (#987, #79 round 65 / Srikanth). His LLM-generated traffic file was rejected with `invalid type: sequence, expected struct WafBenchFile`, which was accurate about what failed but silent about what would have worked. The WAFBench shape exists to carry CRS rule IDs and provenance that a generated file has no reason to contain. The simple form maps 1:1 onto the internal representation (`body` becomes `data`, titles are synthesised when absent), so the rest of the security-test pipeline is untouched. `expected` accepts `403`, `[403, 406]`, or `{status: ...}`, and an unparsable expectation yields no status rather than dropping the case, since the request is still valid traffic. When both shapes fail, the error now names both with the parse error for each. Real-binary verified against his unmodified file: 8 cases, 24 payloads.
+
+### Security
+
+- **[Security]** RUSTSEC-2026-0258 (`h2` unbounded empty DATA frames): bumped `h2` 0.4.15 to 0.4.17, which is the instance that serves HTTP here via hyper 1.x / axum. The remaining `h2` 0.3.27 is reached only through the AWS SDK client path and is ignored with reasoning recorded in `audit.toml`: 0.3.27 is the latest 0.3.x and upstream patched only the 0.4 line, and the flaw concerns queueing empty frames from a peer, where on that path we are the client talking to AWS KMS/STS over TLS. Advisory is rated low severity.
+
 ## [0.3.212] - 2026-08-03
 
 ### Fixed
