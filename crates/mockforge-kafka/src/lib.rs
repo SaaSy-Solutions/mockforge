@@ -129,6 +129,7 @@ pub mod codec_util;
 pub mod consumer_groups;
 pub mod fetch_codec;
 pub mod fetch_nonflex;
+pub mod filter;
 pub mod fixture_executor;
 pub mod fixture_file;
 pub mod fixtures;
@@ -149,6 +150,7 @@ pub mod topics;
 // Re-export main types
 pub use broker::KafkaMockBroker;
 pub use consumer_groups::{ConsumerGroup, ConsumerGroupManager};
+pub use filter::MessageFilter;
 pub use fixture_file::{
     FlattenedFixtures, KafkaFixtureFile, KafkaMessageSpec, KafkaTopicSpec, MessageAutoProduce,
 };
