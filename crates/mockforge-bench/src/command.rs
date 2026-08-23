@@ -515,6 +515,28 @@ fn expand_cidr(
 }
 
 impl BenchCommand {
+    /// Whether the k6 script should carry the security payload-injection layer.
+    ///
+    /// This is the ONLY place the answer is computed. It used to be spelled out
+    /// at four separate call sites, which is the #79 drift shape: the template
+    /// gates `{{#if security_testing_enabled}}` on it, so any site that
+    /// disagreed with another produced either dead code or a call to an
+    /// undefined function.
+    ///
+    /// #997: `--wafbench-verbatim` turns it OFF. In verbatim mode
+    /// `--wafbench-dir` supplies the REQUESTS, not a payload pool, so treating
+    /// it as a pool made the injector append `&test=<payload>` to requests the
+    /// user asked to be sent exactly as written. That corrupted the very cases
+    /// under test and, worse, appended attack payloads to `expected: 200` cases,
+    /// so a correctly-behaving WAF would block them and the run would report a
+    /// failure the user did not write.
+    pub fn security_testing_enabled(&self) -> bool {
+        if self.wafbench_verbatim {
+            return false;
+        }
+        self.security_test || self.wafbench_dir.is_some()
+    }
+
     /// Load and merge specs from --spec files and --spec-dir
     pub async fn load_and_merge_specs(&self) -> Result<OpenApiSpec> {
         let mut all_specs: Vec<(PathBuf, OpenApiSpec)> = Vec::new();
@@ -674,9 +696,27 @@ impl BenchCommand {
             return self.execute_conformance_test().await;
         }
 
-        // Load and parse spec(s)
-        TerminalReporter::print_progress("Loading OpenAPI specification(s)...");
-        let merged_spec = self.load_and_merge_specs().await?;
+        // Load and parse spec(s).
+        //
+        // #997: verbatim mode derives every request from the traffic file, so a
+        // spec supplies nothing. Requiring one anyway forced users to pass an
+        // unrelated file just to satisfy the check. It stays OPTIONAL rather
+        // than ignored: a spec is still honoured for --base-path resolution.
+        let spec_supplied = !self.spec.is_empty() || self.spec_dir.is_some();
+        let merged_spec = if self.wafbench_verbatim && !spec_supplied {
+            tracing::info!(
+                target: "mockforge::bench",
+                "--wafbench-verbatim without --spec: sending only the traffic file's requests"
+            );
+            OpenApiSpec {
+                spec: Default::default(),
+                file_path: None,
+                raw_document: None,
+            }
+        } else {
+            TerminalReporter::print_progress("Loading OpenAPI specification(s)...");
+            self.load_and_merge_specs().await?
+        };
         let parser = SpecParser::from_spec(merged_spec);
         if self.spec.len() > 1 || self.spec_dir.is_some() {
             TerminalReporter::print_success(&format!(
@@ -724,7 +764,12 @@ impl BenchCommand {
             }
         }
 
-        if operations.is_empty() {
+        // #997: in verbatim mode the spec is optional, so an empty operation set
+        // is expected rather than an error — the traffic file supplies the
+        // requests. Erroring here would make --wafbench-verbatim unusable
+        // without an unrelated spec, which is the thing that check exists to
+        // prevent in every OTHER mode.
+        if operations.is_empty() && !self.wafbench_verbatim {
             return Err(BenchError::Other("No operations found in spec".to_string()));
         }
 
@@ -795,7 +840,7 @@ impl BenchCommand {
         let scenario =
             LoadScenario::from_str(&self.scenario).map_err(BenchError::InvalidScenario)?;
 
-        let security_testing_enabled = self.security_test || self.wafbench_dir.is_some();
+        let security_testing_enabled = self.security_testing_enabled();
 
         // Issue #79 round 6 follow-up — Srikanth reported k6 emitting
         // "Insufficient VUs, reached 5 active VUs and cannot initialize more"
@@ -1629,10 +1674,32 @@ impl BenchCommand {
             ));
         }
 
-        // Add security testing code
-        let security_config = self.build_security_config();
-        let wafbench_payloads = self.load_wafbench_payloads();
-        let security_requested = security_config.is_some() || self.wafbench_dir.is_some();
+        // Add security testing code.
+        //
+        // #997: in verbatim mode nothing may be injected — see
+        // `security_testing_enabled`. Both the payload pool and the
+        // "requested" flag must go quiet together, otherwise the else-branch
+        // below emits a warning about payloads that were never wanted.
+        let verbatim = self.wafbench_verbatim;
+        if verbatim && self.security_test {
+            TerminalReporter::print_warning(
+                "--security-test is ignored under --wafbench-verbatim: verbatim mode sends your \
+                 traffic cases exactly as written and will not append attack payloads to them. \
+                 Drop --wafbench-verbatim if you want payload injection.",
+            );
+        }
+        let security_config = if verbatim {
+            None
+        } else {
+            self.build_security_config()
+        };
+        let wafbench_payloads = if verbatim {
+            Vec::new()
+        } else {
+            self.load_wafbench_payloads()
+        };
+        let security_requested =
+            !verbatim && (security_config.is_some() || self.wafbench_dir.is_some());
 
         if security_config.is_some() || !wafbench_payloads.is_empty() {
             TerminalReporter::print_progress("Adding security testing support...");
@@ -2064,7 +2131,7 @@ impl BenchCommand {
         let required_globals = DynamicParamProcessor::get_required_globals(&all_placeholders);
 
         // Check if security testing is enabled
-        let security_testing_enabled = self.wafbench_dir.is_some() || self.security_test;
+        let security_testing_enabled = self.security_testing_enabled();
 
         let data = serde_json::json!({
             "base_url": self.target,
@@ -2169,7 +2236,7 @@ impl BenchCommand {
         let scenario =
             LoadScenario::from_str(&self.scenario).map_err(BenchError::InvalidScenario)?;
 
-        let security_testing_enabled = self.security_test || self.wafbench_dir.is_some();
+        let security_testing_enabled = self.security_testing_enabled();
 
         let k6_config = K6Config {
             target_url: self.target.clone(),
@@ -2473,7 +2540,7 @@ impl BenchCommand {
         }
 
         // Check if security testing is enabled
-        let security_testing_enabled = self.wafbench_dir.is_some() || self.security_test;
+        let security_testing_enabled = self.security_testing_enabled();
 
         let data = serde_json::json!({
             "base_url": self.target,
@@ -4616,5 +4683,147 @@ mod tests {
         let dir = tempdir().unwrap();
         let extracted = BenchCommand::parse_extracted_values(dir.path()).unwrap();
         assert!(extracted.values.is_empty());
+    }
+
+    /// Full `BenchCommand` literal for tests. Extracted from the existing
+    /// header-parsing test so new tests do not have to restate 80+ fields.
+    fn sample_bench_command() -> BenchCommand {
+        BenchCommand {
+            spec: vec![PathBuf::from("test.yaml")],
+            spec_dir: None,
+            merge_conflicts: "error".to_string(),
+            spec_mode: "merge".to_string(),
+            dependency_config: None,
+            target: "http://localhost".to_string(),
+            base_path: None,
+            duration: "1m".to_string(),
+            vus: 10,
+            scenario: "ramp-up".to_string(),
+            operations: None,
+            exclude_operations: None,
+            auth: None,
+            headers: vec![
+                "X-API-Key:test123".to_string(),
+                "X-Client-ID:client456".to_string(),
+            ],
+            output: PathBuf::from("output"),
+            generate_only: false,
+            script_output: None,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            abort_on_error: true,
+            abort_on_error_rate: 0.95,
+            verbose: false,
+            skip_tls_verify: false,
+            chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
+            targets_file: None,
+            max_concurrency: None,
+            results_format: "both".to_string(),
+            params_file: None,
+            crud_flow: false,
+            flow_config: None,
+            extract_fields: None,
+            parallel_create: None,
+            data_file: None,
+            data_distribution: "unique-per-vu".to_string(),
+            data_mappings: None,
+            per_uri_control: false,
+            error_rate: None,
+            error_types: None,
+            security_test: false,
+            security_payloads: None,
+            security_categories: None,
+            security_target_fields: None,
+            wafbench_dir: None,
+            wafbench_cycle_all: false,
+            wafbench_verbatim: false,
+            owasp_api_top10: false,
+            owasp_categories: None,
+            owasp_auth_header: "Authorization".to_string(),
+            owasp_auth_token: None,
+            owasp_admin_paths: None,
+            owasp_id_fields: None,
+            owasp_report: None,
+            owasp_report_format: "json".to_string(),
+            owasp_iterations: 1,
+            conformance: false,
+            conformance_api_key: None,
+            conformance_basic_auth: None,
+            conformance_report: PathBuf::from("conformance-report.json"),
+            conformance_categories: None,
+            conformance_report_format: "json".to_string(),
+            conformance_headers: vec![],
+            conformance_all_operations: false,
+            conformance_custom: None,
+            conformance_delay_ms: 0,
+            use_k6: false,
+            conformance_custom_filter: None,
+            export_requests: false,
+            validate_requests: false,
+            conformance_self_test: false,
+            conformance_self_test_capture: false,
+            conformance_self_test_iterations: 1,
+            conformance_self_test_duration: None,
+            validate_response_schemas: false,
+            source_ips: Vec::new(),
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
+            report_missed_cap: None,
+            discard_response_bodies: false,
+            dns_policy: None,
+        }
+    }
+
+    /// #997 regression. `--wafbench-dir` in verbatim mode supplies the REQUESTS,
+    /// not a payload pool. If the payload-injection layer stays on, the k6
+    /// script appends `&test=<payload>` to every request, which (a) mutates the
+    /// cases the user asked to be sent exactly as written and (b) attaches an
+    /// attack payload to `expected: 200` cases, so a correct WAF blocks them and
+    /// the run reports a failure the user never wrote. Verified on the wire
+    /// against a logging listener before this test was written.
+    #[test]
+    fn verbatim_disables_security_payload_injection() {
+        let mut cmd = sample_bench_command();
+        cmd.wafbench_dir = Some("traffic.yaml".to_string());
+
+        assert!(
+            cmd.security_testing_enabled(),
+            "--wafbench-dir alone must still enable payload injection"
+        );
+
+        cmd.wafbench_verbatim = true;
+        assert!(
+            !cmd.security_testing_enabled(),
+            "verbatim mode must not inject payloads into requests sent as written"
+        );
+
+        // Explicitly asking for both is contradictory; verbatim wins and the
+        // command warns rather than silently mutating the traffic.
+        cmd.security_test = true;
+        assert!(
+            !cmd.security_testing_enabled(),
+            "--security-test must not re-enable injection under --wafbench-verbatim"
+        );
+    }
+
+    /// The template gates `{{#if security_testing_enabled}}` on this flag, and
+    /// it was previously recomputed inline at four render sites. Any site that
+    /// disagreed produced dead code or a call to an undefined function -- the
+    /// #79 drift shape. Keep exactly one definition.
+    #[test]
+    fn security_testing_enabled_has_a_single_definition() {
+        let src = include_str!("command.rs");
+        // Assembled at runtime: a literal needle would match itself in this file.
+        let a = format!("self.{} || self.{}.is_some()", "security_test", "wafbench_dir");
+        let b = format!("self.{}.is_some() || self.{}", "wafbench_dir", "security_test");
+        let inline = src.matches(a.as_str()).count() + src.matches(b.as_str()).count();
+        assert_eq!(
+            inline, 1,
+            "expected the security_testing_enabled() method to be the only place this is \
+             computed, found {inline} inline copies -- collapse them or the render paths drift"
+        );
     }
 }

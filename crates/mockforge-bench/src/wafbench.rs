@@ -252,6 +252,13 @@ pub struct SimpleTrafficCase {
     pub request: SimpleTrafficRequest,
     /// Expected status. Accepts `403`, `[403, 406]`, or `{ status: 403 }`.
     pub expected: Option<serde_yaml::Value>,
+    /// WAFBench's baseline marker: send this case with the rule under test
+    /// disabled. mockforge cannot honour it, because disabling a rule is
+    /// WAF-side configuration and not something a traffic generator controls.
+    /// Parsed only so the case can be reported and skipped instead of being
+    /// silently sent as an unfalsifiable duplicate (#997).
+    #[serde(default)]
+    pub omit_rule: Option<bool>,
 }
 
 /// The request half of a [`SimpleTrafficCase`].
@@ -432,9 +439,34 @@ pub fn parse_traffic_file(content: &str, source: &str) -> Result<WafBenchFile> {
         Ok(file) => Ok(file),
         Err(wafbench_err) => match serde_yaml::from_str::<Vec<SimpleTrafficCase>>(content) {
             Ok(cases) => {
+                let parsed = cases.len();
+                let (omitted, cases): (Vec<_>, Vec<_>) =
+                    cases.into_iter().partition(|c| c.omit_rule == Some(true));
+
+                for case in &omitted {
+                    tracing::warn!(
+                        "{source}: skipping `{}` -- it sets `omit_rule: true`, which asks for the \
+                         request to be sent with the rule under test disabled. mockforge sends \
+                         traffic; it cannot toggle your WAF's rules. Sending it anyway would put \
+                         a byte-identical request on the wire as its non-omitted twin while \
+                         asserting the opposite status, so exactly one of the pair would always \
+                         fail regardless of whether the rule works. Run the same file against a \
+                         WAF configuration with that rule disabled to get the baseline.",
+                        case.title.as_deref().unwrap_or("<untitled>")
+                    );
+                }
+
                 tracing::info!(
-                    "{source}: parsed {} case(s) in the simple request/expected format",
-                    cases.len()
+                    "{source}: parsed {parsed} case(s) in the simple request/expected format{}",
+                    if omitted.is_empty() {
+                        String::new()
+                    } else {
+                        format!(
+                            "; {} skipped for `omit_rule: true`, {} will be sent",
+                            omitted.len(),
+                            cases.len()
+                        )
+                    }
                 );
                 Ok(WafBenchFile {
                     meta: WafBenchMeta {
@@ -1794,5 +1826,50 @@ mod verbatim_tests {
     fn verbatim_skips_cases_without_a_uri() {
         let t = load("- title: no uri\n  request:\n    method: GET\n");
         assert!(t.is_empty(), "a case with no uri yields no request");
+    }
+
+    /// #997: a case marked `omit_rule: true` asks for the request to be sent
+    /// with the rule under test disabled. mockforge cannot do that, and sending
+    /// it anyway produces a byte-identical twin of the non-omitted case with the
+    /// opposite expectation, so one of the pair always fails no matter what the
+    /// WAF does. It must be dropped, not silently sent.
+    #[test]
+    fn omit_rule_cases_are_skipped_not_silently_sent() {
+        let yaml = r#"
+- title: unsupported response_type blocked
+  omit_rule: false
+  request:
+    method: GET
+    uri: /oauth/authorize?response_type=totally-unsupported&redirect_uri=https%3A%2F%2Fevil.example%2Flanding
+  expected: 403
+- title: "baseline: same payload with rule omitted"
+  omit_rule: true
+  request:
+    method: GET
+    uri: /oauth/authorize?response_type=totally-unsupported&redirect_uri=https%3A%2F%2Fevil.example%2Flanding
+  expected: 200
+- title: legitimate flow allowed
+  request:
+    method: GET
+    uri: /oauth/authorize?response_type=code&client_id=abc123
+  expected: 200
+"#;
+        let parsed = parse_traffic_file(yaml, "oauth.yaml").expect("simple format should parse");
+
+        let titles: Vec<_> = parsed.tests.iter().map(|t| t.test_title.clone()).collect();
+        assert_eq!(
+            parsed.tests.len(),
+            2,
+            "the omit_rule:true case must be dropped, got {titles:?}"
+        );
+        assert!(
+            !titles.iter().any(|t| t.contains("rule omitted")),
+            "baseline case leaked into the run: {titles:?}"
+        );
+        // omit_rule:false is an ordinary case and must survive.
+        assert!(
+            titles.iter().any(|t| t.contains("unsupported response_type blocked")),
+            "omit_rule:false must not be treated as omitted: {titles:?}"
+        );
     }
 }
