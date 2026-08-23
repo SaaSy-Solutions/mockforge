@@ -636,6 +636,7 @@ pub async fn run_wafbench(inputs: CloudWafBenchInputs) -> Result<CloudRunArtifac
         skip_tls_verify: inputs.skip_tls_verify,
         wafbench_dir: Some(inputs.rules_dir),
         wafbench_cycle_all: inputs.cycle_all,
+        wafbench_verbatim: false,
         ..default_bench_command(&output_dir)
     };
 
@@ -748,6 +749,7 @@ fn default_bench_command(output_dir: &Path) -> BenchCommand {
         security_target_fields: None,
         wafbench_dir: None,
         wafbench_cycle_all: false,
+        wafbench_verbatim: false,
         conformance: false,
         conformance_api_key: None,
         conformance_basic_auth: None,

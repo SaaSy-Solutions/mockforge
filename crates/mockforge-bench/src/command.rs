@@ -202,6 +202,9 @@ pub struct BenchCommand {
     pub wafbench_dir: Option<String>,
     /// Cycle through ALL WAFBench payloads instead of random sampling
     pub wafbench_cycle_all: bool,
+    /// Send traffic cases exactly as written instead of extracting an attack
+    /// payload from them (#994). See the CLI flag docs for why this exists.
+    pub wafbench_verbatim: bool,
 
     // === OpenAPI 3.0.0 Conformance Testing ===
     /// Enable conformance testing mode
@@ -754,6 +757,30 @@ impl BenchCommand {
             .collect::<Result<Vec<_>>>()?;
         TerminalReporter::print_success("Request templates generated");
 
+        // #994: verbatim mode replaces the spec-derived templates outright. The
+        // spec still loads (it supplies base path and is often required by other
+        // flags), but every request now comes from the traffic file, sent as
+        // written. Anything else would silently mix fuzzed spec endpoints into a
+        // run the user asked to be literal.
+        let templates = if self.wafbench_verbatim {
+            let verbatim = self.load_verbatim_templates()?;
+            if verbatim.is_empty() {
+                return Err(BenchError::Other(
+                    "--wafbench-verbatim was set but no traffic cases were loaded. Check \
+                     --wafbench-dir points at a file, directory or glob containing cases with \
+                     a `request.uri`."
+                        .to_string(),
+                ));
+            }
+            TerminalReporter::print_success(&format!(
+                "Verbatim mode: {} request(s) will be sent exactly as written (spec endpoints not used)",
+                verbatim.len()
+            ));
+            verbatim
+        } else {
+            templates
+        };
+
         // Parse headers
         let custom_headers = self.parse_headers()?;
 
@@ -1061,6 +1088,7 @@ impl BenchCommand {
                 security_target_fields: self.security_target_fields.clone(),
                 wafbench_dir: self.wafbench_dir.clone(),
                 wafbench_cycle_all: self.wafbench_cycle_all,
+                wafbench_verbatim: self.wafbench_verbatim,
                 owasp_api_top10: self.owasp_api_top10,
                 owasp_categories: self.owasp_categories.clone(),
                 owasp_auth_header: self.owasp_auth_header.clone(),
@@ -1269,6 +1297,26 @@ impl BenchCommand {
                 .parse::<u64>()
                 .map_err(|_| BenchError::Other(format!("Invalid duration: {}", duration)))
         }
+    }
+
+    /// Load traffic cases from `--wafbench-dir` and turn them into templates
+    /// that are sent exactly as written (#994).
+    ///
+    /// Reuses the same loader as the payload path, so every input form keeps
+    /// working: a single file, a directory (recursive), or a glob. Only the
+    /// interpretation changes.
+    fn load_verbatim_templates(&self) -> Result<Vec<crate::request_gen::RequestTemplate>> {
+        let Some(pattern) = self.wafbench_dir.as_ref() else {
+            return Err(BenchError::Other(
+                "--wafbench-verbatim requires --wafbench-dir pointing at your traffic file(s)"
+                    .to_string(),
+            ));
+        };
+
+        let mut loader = WafBenchLoader::new();
+        loader.load_from_pattern(pattern)?;
+
+        Ok(crate::wafbench::traffic_cases_to_templates(loader.test_cases()))
     }
 
     /// Parse headers from the repeated `--headers "Key:Value"` flags.
@@ -4228,6 +4276,7 @@ mod tests {
             security_target_fields: None,
             wafbench_dir: None,
             wafbench_cycle_all: false,
+            wafbench_verbatim: false,
             owasp_api_top10: false,
             owasp_categories: None,
             owasp_auth_header: "Authorization".to_string(),
@@ -4412,6 +4461,7 @@ mod tests {
             security_target_fields: None,
             wafbench_dir: None,
             wafbench_cycle_all: false,
+            wafbench_verbatim: false,
             owasp_api_top10: false,
             owasp_categories: None,
             owasp_auth_header: "Authorization".to_string(),
@@ -4499,6 +4549,7 @@ mod tests {
             security_target_fields: None,
             wafbench_dir: None,
             wafbench_cycle_all: false,
+            wafbench_verbatim: false,
             owasp_api_top10: false,
             owasp_categories: None,
             owasp_auth_header: "Authorization".to_string(),

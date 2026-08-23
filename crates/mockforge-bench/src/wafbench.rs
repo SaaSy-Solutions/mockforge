@@ -337,6 +337,90 @@ impl SimpleTrafficCase {
     }
 }
 
+/// Turn traffic cases into request templates that are sent EXACTLY as written
+/// (#994).
+///
+/// The normal WAFBench path treats a case's `uri` as "a CRS attack string
+/// hidden in a query parameter": `extract_uri_payload` keeps only the FIRST
+/// parameter's value, discards the path, and the survivor is re-attached to a
+/// spec-derived endpoint as `?test=<payload>`. That is right for CRS files,
+/// where one attack string is the whole test and fuzzing it across a real API
+/// is the point.
+///
+/// It is wrong when the RELATIONSHIP BETWEEN PARAMETERS is the test. Reported
+/// by Srikanth on #79: a rule chained on `ARGS:redirect_uri` and
+/// `ARGS:response_type` could never fire, because
+///
+///   /oauth/authorize?response_type=totally-unsupported&redirect_uri=https%3A%2F%2Fevil...
+///
+/// collapsed to the bare string `totally-unsupported`, sent to a spec endpoint
+/// under the parameter name `test`. `redirect_uri` never reached the wire, so a
+/// green run looked like the WAF passing when nothing had been exercised.
+///
+/// Verbatim mode does none of that. The raw `uri` becomes the request path with
+/// `query_params` left EMPTY on purpose: `RequestTemplate::generate_path`
+/// rejoins query params as `k=v`, which would re-encode values that are already
+/// percent-encoded. Keeping the URI whole in `path` preserves it byte for byte,
+/// which matters when the encoding IS the payload.
+pub fn traffic_cases_to_templates(
+    cases: &[WafBenchTestCase],
+) -> Vec<crate::request_gen::RequestTemplate> {
+    use crate::request_gen::RequestTemplate;
+    use crate::spec_parser::ApiOperation;
+
+    let mut templates = Vec::new();
+
+    for case in cases {
+        // The Uri payload carries the RAW uri: extraction into a bare attack
+        // string only happens later, when building SecurityPayloads (see
+        // `extract_uri_payload`). Verbatim mode reads it before that.
+        let Some(uri) = case
+            .payloads
+            .iter()
+            .find(|p| p.location == PayloadLocation::Uri)
+            .map(|p| p.value.clone())
+            .filter(|u| !u.is_empty())
+        else {
+            continue;
+        };
+
+        let headers: HashMap<String, String> = case
+            .payloads
+            .iter()
+            .filter(|p| p.location == PayloadLocation::Header)
+            .filter_map(|p| p.header_name.clone().map(|n| (n, p.value.clone())))
+            .collect();
+
+        let body = case.payloads.iter().find(|p| p.location == PayloadLocation::Body).map(|p| {
+            // Keep the body as written. Parse as JSON only so a JSON body
+            // renders as JSON rather than a quoted string; anything else
+            // (form data, raw XML, a deliberately malformed payload) passes
+            // through untouched.
+            serde_json::from_str::<serde_json::Value>(&p.value)
+                .unwrap_or_else(|_| serde_json::Value::String(p.value.clone()))
+        });
+
+        templates.push(RequestTemplate {
+            operation: ApiOperation {
+                method: case.method.clone(),
+                path: uri,
+                operation: Default::default(),
+                operation_id: Some(case.description.clone()),
+            },
+            path_params: HashMap::new(),
+            // Left EMPTY on purpose. `RequestTemplate::generate_path` rejoins
+            // query params as `k=v`, which would re-encode values that are
+            // already percent-encoded. Keeping the whole URI in `path`
+            // preserves it byte for byte, and the encoding is often the payload.
+            query_params: HashMap::new(),
+            headers,
+            body,
+        });
+    }
+
+    templates
+}
+
 /// Parse a traffic file in either supported shape.
 ///
 /// Tries the WAFBench document first, then the simple sequence. On failure the
@@ -1632,5 +1716,83 @@ tests:
         assert!(err.contains("tests"), "must mention the WAFBench shape: {err}");
         assert!(err.contains("expected"), "must mention the simple shape: {err}");
         assert!(err.contains("request"), "must mention the simple shape: {err}");
+    }
+}
+
+#[cfg(test)]
+mod verbatim_tests {
+    use super::*;
+
+    fn load(yaml: &str) -> Vec<crate::request_gen::RequestTemplate> {
+        let file = parse_traffic_file(yaml, "t.yaml").expect("parses");
+        let mut loader = WafBenchLoader::new();
+        for test in &file.tests {
+            if let Some(case) = loader.parse_test_case(test, SecurityCategory::Xss) {
+                loader.test_cases.push(case);
+            }
+        }
+        traffic_cases_to_templates(loader.test_cases())
+    }
+
+    /// Srikanth's OAuth case from #79. The default path collapses this to the
+    /// bare string `totally-unsupported` and sends it to a spec endpoint as
+    /// `?test=`, so a rule chained on `ARGS:redirect_uri` can never fire.
+    /// Verbatim mode must put every parameter on the wire.
+    #[test]
+    fn verbatim_preserves_every_query_parameter() {
+        let t = load(
+            "- title: oauth open redirect\n  request:\n    method: GET\n    uri: /oauth/authorize?response_type=totally-unsupported&redirect_uri=https%3A%2F%2Fevil.example%2Flanding&state=s1\n  expected: 403\n",
+        );
+        assert_eq!(t.len(), 1);
+        let path = t[0].generate_path();
+        assert!(path.starts_with("/oauth/authorize"), "path must survive, got {path}");
+        assert!(path.contains("redirect_uri="), "redirect_uri must reach the wire: {path}");
+        assert!(path.contains("response_type="), "response_type must reach the wire: {path}");
+        assert!(path.contains("state=s1"), "trailing params must survive: {path}");
+        assert_eq!(t[0].operation.method, "GET");
+    }
+
+    /// The encoding IS the payload for charset and traversal tests, so the URI
+    /// must survive byte for byte. This is why `query_params` is left empty
+    /// rather than parsed out and rejoined.
+    #[test]
+    fn verbatim_does_not_reencode_the_uri() {
+        let t = load(
+            "- title: encoded\n  request:\n    method: GET\n    uri: /a?u=https%3A%2F%2Fevil.example%2Fx&b=%2E%2E%2F\n",
+        );
+        let path = t[0].generate_path();
+        assert!(path.contains("https%3A%2F%2Fevil.example%2Fx"), "must not decode: {path}");
+        assert!(path.contains("%2E%2E%2F"), "must not normalise traversal: {path}");
+        assert!(!path.contains("://evil.example"), "must not decode to a real URL: {path}");
+    }
+
+    #[test]
+    fn verbatim_carries_headers_and_body() {
+        let t = load(
+            "- title: post\n  request:\n    method: POST\n    uri: /graphql\n    headers:\n      Content-Type: application/json; charset=utf-7\n    body: '{\"query\":\"{__typename}\"}'\n",
+        );
+        assert_eq!(t[0].operation.method, "POST");
+        assert_eq!(
+            t[0].headers.get("Content-Type").map(String::as_str),
+            Some("application/json; charset=utf-7"),
+            "the charset is the attack; it must not be normalised"
+        );
+        assert!(t[0].body.is_some(), "body must be carried");
+    }
+
+    /// A non-JSON body must pass through rather than being dropped or mangled.
+    #[test]
+    fn verbatim_passes_through_non_json_body() {
+        let t = load("- title: form\n  request:\n    method: POST\n    uri: /f\n    body: 'a=1&b=<script>'\n");
+        let body = t[0].body.as_ref().expect("body carried");
+        assert_eq!(body.as_str(), Some("a=1&b=<script>"), "raw body preserved verbatim");
+    }
+
+    /// Cases with no URI cannot be sent, and must be skipped rather than
+    /// producing a request against the base URL.
+    #[test]
+    fn verbatim_skips_cases_without_a_uri() {
+        let t = load("- title: no uri\n  request:\n    method: GET\n");
+        assert!(t.is_empty(), "a case with no uri yields no request");
     }
 }
