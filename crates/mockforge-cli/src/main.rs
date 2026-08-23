@@ -2016,8 +2016,30 @@ enum Commands {
         /// By default, k6 randomly selects payloads for each request.
         /// With this flag, payloads are cycled through sequentially,
         /// ensuring all attack patterns are tested.
+        ///
+        /// NOTE: this affects payload SELECTION only. It does not change which
+        /// URLs are targeted. For sending your file's requests as written, see
+        /// --wafbench-verbatim.
         #[arg(long)]
         wafbench_cycle_all: bool,
+
+        /// Send each traffic case EXACTLY as written, instead of extracting an
+        /// attack payload from it
+        ///
+        /// Default behaviour treats a case's `uri` as a CRS attack string in a
+        /// query parameter: only the first parameter's value is kept, the path
+        /// is discarded, and the survivor is re-attached to endpoints from
+        /// --spec as `?test=<payload>`. That is correct for CRS/WAFBench files.
+        ///
+        /// It is wrong when the relationship between parameters IS the test
+        /// (e.g. a WAF rule chained on `ARGS:redirect_uri` and
+        /// `ARGS:response_type`), because the other parameters never reach the
+        /// wire and the run looks green without exercising anything.
+        ///
+        /// With this flag the method, full URI (path and query, byte for byte),
+        /// headers and body are sent as given. --spec is not required.
+        #[arg(long)]
+        wafbench_verbatim: bool,
 
         // === OWASP API Security Top 10 Testing ===
         /// Enable OWASP API Security Top 10 (2023) testing mode
@@ -3310,6 +3332,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             security_target_fields,
             wafbench_dir,
             wafbench_cycle_all,
+            wafbench_verbatim,
             owasp_api_top10,
             owasp_categories,
             owasp_auth_header,
@@ -3416,6 +3439,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 security_target_fields,
                 wafbench_dir,
                 wafbench_cycle_all,
+                wafbench_verbatim,
                 owasp_api_top10,
                 owasp_categories,
                 owasp_auth_header,
