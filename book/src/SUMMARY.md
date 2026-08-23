@@ -55,6 +55,7 @@
 ## Testing & Resilience
 
 - [Load Testing](user-guide/load-testing.md)
+- [WAF Testing](user-guide/waf-testing.md)
 - [Chaos Engineering](user-guide/chaos-engineering.md)
 - [Rate Limiting & Traffic Shaping](user-guide/rate-limiting.md)
 - [Observability & Metrics](user-guide/observability.md)
