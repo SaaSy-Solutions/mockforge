@@ -371,4 +371,142 @@ Environment variables override configuration file settings. CLI flags take prece
    - Set `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true`
    - Verify token syntax (e.g., `{{uuid}}` not `{uuid}`)
 
+## Operator and Deployment Variables
+
+These are read by the hosted/cloud components (registry server, plugin host,
+plugin egress proxy, test runner) rather than by `mockforge serve`. Most are
+unset in a normal self-hosted deployment and only matter when running the
+managed stack. Defaults below are the values the code falls back to.
+
+### HTTP keep-alive hints
+
+- `MOCKFORGE_HTTP_KEEPALIVE_TIMEOUT_SECS` (default: `120`)
+  - Idle timeout advertised in the `Keep-Alive` response header
+- `MOCKFORGE_HTTP_KEEPALIVE_MAX_REQUESTS` (default: `1000`)
+  - Max requests per connection advertised in the `Keep-Alive` response header
+
+### Contract diff and drift capture
+
+- `MOCKFORGE_CONTRACT_DIFF_MAX_BODY_MB` (default: `10`)
+  - Largest response body, in MB, the contract-diff middleware will buffer
+- `MOCKFORGE_DRIFT_MAX_BODY_MB` (default: `10`)
+  - Same cap for the drift-tracking middleware
+- `MOCKFORGE_CONTRACT_PROBE_INTERVAL_SECS` (default: `1800`)
+  - Interval for the background contract probe. Values below `60` are ignored
+
+### Capture forwarding (cloud sync)
+
+- `MOCKFORGE_CLOUD_CAPTURES_FORWARDER_URL` (default: unset)
+  - Endpoint captures are forwarded to. Falls back to `MOCKFORGE_CAPTURE_INGEST_URL`.
+    Forwarding is off when neither is set
+- `MOCKFORGE_CAPTURE_FORWARDER_BUFFER` (default: `1024`)
+  - In-memory queue depth for pending captures
+- `MOCKFORGE_CAPTURE_FORWARDER_TIMEOUT_MS` (default: `5000`)
+  - HTTP timeout for each forward attempt
+
+### Kafka
+
+- `MOCKFORGE_KAFKA_OFFSETS_DB` (default: unset)
+  - Path to persist consumer-group offsets. Unset or empty keeps offsets
+    in memory only, so they are lost on restart
+
+### Observability
+
+- `MOCKFORGE_OTLP_GRPC_PORT` (default: `4317`)
+  - Port the registry server listens on for OTLP/gRPC telemetry
+
+### Hosted deployments
+
+- `MOCKFORGE_CLOUD_PLUGINS_IMAGE` (default: `ghcr.io/saasy-solutions/mockforge-cloud-plugins:latest`)
+  - Container image for plugin-enabled hosted mocks. Non-plugin deployments use
+    `MOCKFORGE_DOCKER_IMAGE`
+- `MOCKFORGE_HOSTED_OVERAGE_CEILING_MULT` (default: `0`)
+  - Multiple of the plan limit at which hosted traffic is cut off. `0` disables
+    the ceiling. Values must be positive to take effect
+
+### Incident dispatch
+
+- `MOCKFORGE_PAGERDUTY_ENQUEUE_URL` (default: `https://events.pagerduty.com/v2/enqueue`)
+  - Override for the PagerDuty Events API endpoint, for testing or a proxy
+
+### Platform LLM (managed test generation)
+
+- `MOCKFORGE_PLATFORM_LLM_PROVIDER` (default: `openai`)
+- `MOCKFORGE_PLATFORM_LLM_MODEL` (default: `gpt-4o-mini`)
+- `MOCKFORGE_PLATFORM_LLM_ENDPOINT` (default: unset)
+  - Base URL override, for a self-hosted or proxied provider
+
+### Test runner
+
+- `MOCKFORGE_RUNNER_QUEUE_KEY` (default: `test_runs:queued`)
+  - Redis key the runner pops queued test runs from
+- `MOCKFORGE_RUNNER_MAX_CONCURRENT_JOBS` (default: `4`)
+- `MOCKFORGE_RUNNER_POLL_TIMEOUT_SECS` (default: `5`)
+
+### Plugin egress proxy
+
+- `MOCKFORGE_PLUGIN_EGRESS_LISTEN` (default: `127.0.0.1:8125`)
+  - Listen address for the egress proxy
+- `MOCKFORGE_PLUGIN_EGRESS_ALLOWLIST` (default: unset)
+  - Comma-separated hosts plugins may reach. Takes precedence over the file form
+- `MOCKFORGE_PLUGIN_EGRESS_ALLOWLIST_FILE` (default: unset)
+  - Path to an allowlist file, one host per line
+
+### Plugin host
+
+- `MOCKFORGE_PLUGIN_HOST_SOCKET` (default: `/tmp/plugin-host.sock`)
+  - Unix socket the plugin host listens on
+- `MOCKFORGE_PLUGIN_HOST_SOCKET_MODE` (default: platform default)
+  - Permission bits for that socket. Accepts `0o660`, `660`, `0660` or `0x1B0`
+- `MOCKFORGE_PLUGIN_HOST_SIGNATURE_MODE=required|optional` (default: `optional`)
+  - Whether plugin signatures are enforced. An unrecognised value falls back to
+    `optional` with a warning, so set this explicitly in production
+
+Trusted signing keys, one of:
+
+- `MOCKFORGE_PLUGIN_HOST_TRUSTED_KEYS` (default: unset)
+  - Inline comma-separated public keys
+- `MOCKFORGE_PLUGIN_HOST_TRUSTED_KEYS_FILE` (default: unset)
+  - Path to a file of public keys
+
+Remote trust root, blocklist, rotation and metrics are each off unless their
+URL is set. The bearer and interval variables only apply once the matching URL
+is present:
+
+Trust root:
+
+- `MOCKFORGE_PLUGIN_HOST_TRUST_ROOT_URL` (default: unset, feature off)
+- `MOCKFORGE_PLUGIN_HOST_TRUST_ROOT_BEARER` (default: unset)
+- `MOCKFORGE_PLUGIN_HOST_TRUST_ROOT_INTERVAL_SECS` (default: built-in interval)
+
+Blocklist:
+
+- `MOCKFORGE_PLUGIN_HOST_BLOCKLIST_URL` (default: unset, feature off)
+- `MOCKFORGE_PLUGIN_HOST_BLOCKLIST_BEARER` (default: unset)
+- `MOCKFORGE_PLUGIN_HOST_BLOCKLIST_INTERVAL_SECS` (default: built-in interval)
+
+Key rotation:
+
+- `MOCKFORGE_PLUGIN_HOST_ROTATION_INTERVAL_SECS` (default: built-in interval)
+- `MOCKFORGE_PLUGIN_HOST_ROTATION_BEARER` (default: unset)
+
+Metrics export:
+
+- `MOCKFORGE_PLUGIN_HOST_METRICS_URL` (default: unset, export off)
+- `MOCKFORGE_PLUGIN_HOST_METRICS_BEARER` (default: unset)
+- `MOCKFORGE_PLUGIN_HOST_METRICS_FLUSH_INTERVAL_SECS` (default: built-in interval)
+- `MOCKFORGE_PLUGIN_HOST_METRICS_QUEUE_SIZE` (default: built-in queue depth)
+
+### Test-only escape hatches
+
+Both relax SSRF protection and must never be set in production. Each accepts
+`1` or `true`; anything else leaves the guard strict.
+
+- `MOCKFORGE_SSRF_ALLOW_LOOPBACK` (default: unset, guard strict)
+  - Allows conformance/test-run targets to point at loopback addresses
+- `MOCKFORGE_SSO_ALLOW_INSECURE_ISSUERS` (default: unset, guard strict)
+  - Allows `http://` and localhost OIDC issuers. Logs a warning when set,
+    because it disables the issuer SSRF guard that protects the
+    verified-domain trust model
+
 For more detailed configuration options, see the [Configuration Files](files.md) documentation.
