@@ -1,3 +1,13 @@
+## [0.3.214] - 2026-08-23
+
+### Added
+
+- **[Reality]** New `mockforge bench --wafbench-verbatim` sends each traffic case exactly as written instead of extracting an attack payload from it (#994, #79 round 66 / Srikanth on 0.3.213). His WAF rule chained on `ARGS:redirect_uri` and `ARGS:response_type` never fired, and the run still went green, which for a security tool is worse than an error. The cause: by default a case's `uri` is treated as a CRS attack string hidden in a query parameter, so `extract_uri_payload` keeps only the FIRST parameter's value, discards the path, and re-attaches the survivor to a spec-derived endpoint as `?test=<payload>`. `/oauth/authorize?response_type=totally-unsupported&redirect_uri=https%3A%2F%2Fevil...&state=s1` therefore went out as roughly `GET <spec-endpoint>?test=totally-unsupported`, with `redirect_uri` absent entirely. That behaviour is correct for CRS/WAFBench files, where one attack string is the whole test, so this adds a mode rather than changing the default. With the flag, method, full URI, headers and body are sent as given: no extraction, no path substitution, no `test=` injection, no spec-endpoint cycling, and `--spec` no longer supplies the endpoints. The URI is preserved byte for byte (query params are deliberately not parsed and rejoined, because for charset and traversal cases the encoding IS the payload). Real-binary verified against his own case and his 8-case file. Also documents that `--wafbench-cycle-all` affects payload selection only and does not change targeting.
+
+### Fixed
+
+- **[DevX]** Documented the 41 `MOCKFORGE_*` environment variables that were read in code but absent from user-facing docs, which had left the docs/code drift gate red on every PR regardless of content. Covers the previously undocumented operator surface: plugin host, plugin egress proxy, test runner, platform LLM, capture forwarding, contract-diff and drift body limits, Kafka offset persistence, OTLP port, hosted overage ceiling, PagerDuty endpoint override. Defaults were read from the code rather than guessed, and three easy-to-miss behaviours are called out: `MOCKFORGE_PLUGIN_HOST_SIGNATURE_MODE` silently falls back to `optional` on an unrecognised value, and `MOCKFORGE_SSRF_ALLOW_LOOPBACK` / `MOCKFORGE_SSO_ALLOW_INSECURE_ISSUERS` relax SSRF protection and are test-only.
+
 ## [0.3.213] - 2026-08-20
 
 ### Fixed
