@@ -2569,6 +2569,53 @@ enum Commands {
         mss: Option<u32>,
     },
 
+    /// True HTTP/1.1 pipelining bench with synthetic streaming bodies (#937)
+    ///
+    /// Writes `--pipeline-depth` requests back-to-back on each connection
+    /// BEFORE reading any response, then reads responses in order. Bodies
+    /// stream from a generator (never fully materialised), so GB sizes work.
+    /// Many servers/proxies do not support request pipelining — the report
+    /// surfaces early closes and unanswered requests instead of hiding them.
+    ///
+    /// Examples:
+    ///   mockforge bench-pipeline --target http://localhost:3000/api \
+    ///     --content-type json --body-size 500KB --pipeline-depth 16 \
+    ///     --connections 8 --duration 30s
+    ///   mockforge bench-pipeline --target http://host:8080/upload \
+    ///     --content-type multipart --body-size 10MB --method POST
+    #[cfg(feature = "bench")]
+    #[command(verbatim_doc_comment)]
+    BenchPipeline {
+        /// Target URL (plain http:// only), e.g. `http://localhost:3000/`.
+        #[arg(short, long)]
+        target: String,
+
+        /// HTTP method. Pipelining is only meaningful with bodies, so the
+        /// default is POST.
+        #[arg(short, long, default_value = "POST")]
+        method: String,
+
+        /// Synthetic body flavour: json | xml | urlencoded | multipart.
+        #[arg(long, default_value = "json")]
+        content_type: String,
+
+        /// Exact body size per request: bare bytes or KB/MB/GB / KiB/MiB/GiB.
+        #[arg(long, default_value = "1KB")]
+        body_size: String,
+
+        /// Requests in flight per connection before reading any response.
+        #[arg(long, default_value = "16")]
+        pipeline_depth: usize,
+
+        /// Concurrent connections.
+        #[arg(long, default_value = "8")]
+        connections: usize,
+
+        /// Duration (e.g. 10s, 5m, or bare seconds like 30).
+        #[arg(short, long, default_value = "30s")]
+        duration: String,
+    },
+
     /// Convert a HAR file to conformance custom-checks YAML
     ///
     /// Reads a recorded HTTP Archive (.har) file and generates a YAML config
@@ -3927,6 +3974,60 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 }
                 Err(e) => {
                     eprintln!("QoS bench failed: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        #[cfg(feature = "bench")]
+        Commands::BenchPipeline {
+            target,
+            method,
+            content_type,
+            body_size,
+            pipeline_depth,
+            connections,
+            duration,
+        } => {
+            use mockforge_bench::command::BenchCommand;
+            use mockforge_bench::pipeline_bench::{
+                parse_body_kind, parse_body_size, render_report, run, PipelineBenchConfig,
+            };
+
+            let duration_secs = match BenchCommand::parse_duration(&duration) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("Invalid --duration {duration:?}: {e}. Examples: 10s, 5m, 30");
+                    std::process::exit(1);
+                }
+            };
+            let kind = match parse_body_kind(&content_type) {
+                Ok(k) => k,
+                Err(e) => {
+                    eprintln!("Invalid --content-type {content_type:?}: {e}");
+                    std::process::exit(1);
+                }
+            };
+            let size = match parse_body_size(&body_size) {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!("Invalid --body-size {body_size:?}: {e}");
+                    std::process::exit(1);
+                }
+            };
+            let cfg = PipelineBenchConfig {
+                target_url: target,
+                method: method.to_uppercase(),
+                body_kind: kind,
+                body_size: size,
+                pipeline_depth,
+                connections,
+                duration: std::time::Duration::from_secs(duration_secs),
+            };
+            match run(cfg).await {
+                Ok(r) => print!("{}", render_report(&r)),
+                Err(e) => {
+                    eprintln!("bench-pipeline failed: {e}");
                     std::process::exit(1);
                 }
             }
