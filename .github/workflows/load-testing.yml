@@ -31,12 +31,17 @@ on:
 # Concurrency keys are GitHub-internal context, safe to interpolate.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
+  # #1000: supersede an older run rather than queueing behind it. These jobs are
+  # a post-merge regression signal, so only the newest main is interesting, and
+  # mockforge has just TWO self-hosted runners: a stale load test holding one of
+  # them starves the required checks on everything else.
+  cancel-in-progress: true
 
 jobs:
   standard-load-test:
     name: Standard Load Test
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 60
     if: |
       github.ref == 'refs/heads/main' ||
       (github.event_name == 'workflow_dispatch' && github.event.inputs.test_type == 'standard')
@@ -137,6 +142,7 @@ jobs:
   performance-benchmarks:
     name: Performance Benchmarks
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 60
     if: |
       github.ref == 'refs/heads/main' ||
       github.event_name == 'workflow_dispatch'

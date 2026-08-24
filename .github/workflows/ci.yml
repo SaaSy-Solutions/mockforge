@@ -39,6 +39,7 @@ jobs:
   changes:
     name: Detect change scope
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       code: ${{ steps.filter.outputs.code }}
     steps:
@@ -81,6 +82,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 60
     env:
       CARGO_INCREMENTAL: "0"
     strategy:
@@ -179,6 +181,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 40
 
     steps:
       - name: Set per-runner CARGO_HOME
@@ -239,6 +242,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 40
     env:
       CARGO_INCREMENTAL: "0"
     steps:
@@ -271,6 +275,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 40
     continue-on-error: true
     env:
       CARGO_INCREMENTAL: "0"
@@ -304,6 +309,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 30
     steps:
     - name: Set per-runner CARGO_HOME
       # `runner.name` is unavailable in workflow- or job-level `env:` blocks
@@ -379,6 +385,7 @@ jobs:
   coverage:
     name: Code Coverage
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 45
     # Coverage only runs on main pushes — per-PR runs took a full workspace
     # rebuild with llvm-cov instrumentation (~15 min on a warm runner) for a
     # signal that was never acted on at PR-review time. Codecov tracks the
@@ -424,6 +431,7 @@ jobs:
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 30
     env:
       CARGO_INCREMENTAL: "0"
     steps:
@@ -461,6 +469,7 @@ jobs:
     # public so standard runners are free. Keeps the contended self-hosted Rust
     # slot for jobs that actually compile. (No per-runner CARGO_HOME needed.)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
     - name: Checkout repository
       uses: actions/checkout@v7
@@ -473,6 +482,7 @@ jobs:
     # GitHub-hosted: a git-diff + shell check needs no Rust toolchain; public
     # repo → free standard runner, and it frees the self-hosted Rust slot.
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     if: github.event_name == 'pull_request'
     steps:
     - name: Checkout repository
@@ -505,6 +515,7 @@ jobs:
   build-binaries:
     name: Build Release Binaries
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     needs: [test, warning-gate, security-audit, typos]
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/')
     env:
@@ -638,6 +649,7 @@ jobs:
   release:
     name: Create Release
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 120
     needs: build-binaries
     if: startsWith(github.ref, 'refs/tags/')
     permissions:

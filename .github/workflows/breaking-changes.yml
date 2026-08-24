@@ -15,6 +15,7 @@ concurrency:
 jobs:
   detect-breaking-changes:
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 30
 
     steps:
       - name: Checkout PR branch

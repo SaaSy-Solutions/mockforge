@@ -21,6 +21,7 @@ jobs:
   docs:
     name: Verify mdBook Docs
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repository
