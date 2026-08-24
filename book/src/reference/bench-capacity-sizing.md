@@ -30,6 +30,24 @@ crashes at hour 18.
 > running a subset of `--targets-file`) is the right answer past ~50
 > concurrent targets.
 
+## Tooling requirements
+
+Surfaced in #79 round 34: `mockforge bench --use-k6` failed on
+`k6 v0.49.0` (Jan 2024) and worked after upgrading. The bench depends on
+`constant-arrival-rate` executor semantics and JSON-summary keys that
+stabilised in k6 1.x.
+
+| Tool | Minimum | Notes |
+|------|---------|-------|
+| k6 | **>= 1.0.0** | required for `--use-k6`; recommended: latest stable |
+| Rust | >= 1.74 | MSRV for `cargo install mockforge-cli` (aws-lc-rs) |
+| C/C++ compiler | cc + C++17 | aws-lc-rs and the vendored OpenSSL build (`apt install build-essential cmake`) |
+| protoc | not needed | bundled via `protoc-bin-vendored` since round 32 (#828) |
+| Build RAM | ~4 GB minimum | smaller VMs: `RUSTFLAGS="-C codegen-units=16" CARGO_BUILD_JOBS=1` or add swap |
+
+`mockforge bench --use-k6` parses `k6 version` before launching and warns
+when it detects a version below 1.0.0.
+
 ## How to compute it yourself
 
 The bench uses k6 under the hood; the same back-of-envelope k6 sizing

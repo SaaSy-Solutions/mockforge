@@ -186,6 +186,35 @@ impl K6Executor {
         which::which("k6").is_ok()
     }
 
+    /// Warn when the installed k6 predates the 1.x semantics this crate
+    /// relies on (#860): `constant-arrival-rate` executor behaviour and the
+    /// JSON-summary keys that stabilised in 1.x. Best-effort — a missing or
+    /// unparseable `k6 version` never blocks a run.
+    pub async fn warn_if_pre_v1() {
+        const DOCS: &str =
+            "See https://mockforge.dev/docs/reference/bench-capacity-sizing#tooling-requirements";
+        let output = match TokioCommand::new("k6").arg("version").output().await {
+            Ok(o) if o.status.success() => o,
+            _ => return,
+        };
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        let Some(major) = stdout
+            .split_whitespace()
+            .find_map(|t| t.strip_prefix('v'))
+            .and_then(|rest| rest.split('.').next())
+            .and_then(|major| major.parse::<u64>().ok())
+        else {
+            return;
+        };
+        if major < 1 {
+            crate::reporter::TerminalReporter::print_warning(&format!(
+                "Detected k6 {}.x; mockforge bench requires k6 >= 1.0.0 \
+                 (older versions break executors and summary parsing). Upgrade k6. {DOCS}",
+                major
+            ));
+        }
+    }
+
     /// Get k6 version
     pub async fn get_version(&self) -> Result<String> {
         let output = TokioCommand::new(&self.k6_path)

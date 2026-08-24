@@ -690,6 +690,7 @@ impl BenchCommand {
             );
             return Err(BenchError::K6NotFound);
         }
+        K6Executor::warn_if_pre_v1().await;
 
         // Check for conformance testing mode (before spec loading — conformance doesn't need a user spec)
         if self.conformance {
@@ -3197,6 +3198,7 @@ impl BenchCommand {
                 return Err(BenchError::K6NotFound);
             }
 
+            K6Executor::warn_if_pre_v1().await;
             TerminalReporter::print_progress("Running conformance tests via k6...");
             let executor = K6Executor::new()?
                 .with_local_ips(self.source_ips.join(","))
@@ -3754,6 +3756,7 @@ impl BenchCommand {
                     );
                     return Err(BenchError::K6NotFound);
                 }
+                K6Executor::warn_if_pre_v1().await;
 
                 let script = if let Some(ref annotated) = annotated_ops {
                     let gen = crate::conformance::spec_driven::SpecDrivenConformanceGenerator::new(
