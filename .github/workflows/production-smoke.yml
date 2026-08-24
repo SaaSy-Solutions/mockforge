@@ -26,7 +26,13 @@ permissions:
 jobs:
   smoke:
     name: Smoke api.mockforge.dev
-    runs-on: [self-hosted, linux, x64, rust]
+    # #1000: runs on a GitHub-hosted runner, NOT the self-hosted pool. This job
+    # is curl plus an issue-creation script: it needs no Rust toolchain, and
+    # mockforge has only two self-hosted runners. Sitting in that queue meant a
+    # */15 cron combined with `cancel-in-progress: true` cancelled every run
+    # before it could start, so production monitoring was silently blind for
+    # hours at a time. The repo is public, so hosted minutes are free.
+    runs-on: ubuntu-latest
     timeout-minutes: 5
 
     steps:
