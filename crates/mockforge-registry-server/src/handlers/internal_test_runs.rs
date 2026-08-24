@@ -22,7 +22,7 @@ use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    models::{FitnessFunction, Incident, TestRun, UsageCounter},
+    models::{FitnessFunction, TestRun, UsageCounter},
     AppState,
 };
 use axum::extract::Query;
@@ -146,14 +146,14 @@ async fn maybe_raise_finding_incident(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let severity = payload.get("severity").and_then(|v| v.as_str()).unwrap_or("unknown");
 
-    // Only "breaking" findings (or the explicit "critical"/"high"
-    // synonyms the auditor uses) page someone. Lower-severity
-    // findings live as test_run_events only — the dashboard already
-    // surfaces them without needing an incident.
-    let mapped_severity = match severity {
-        "breaking" | "critical" => "critical",
-        "high" => "high",
-        _ => return Ok(()),
+    // #720 — the severity mapping lives on the IncidentBus so every
+    // producer (this handler, observability alerts, future callers)
+    // translates identically. Milder findings stay as test_run_events
+    // only — the dashboard already surfaces them without an incident.
+    let Some(mapped_severity) =
+        mockforge_registry_core::incident_bus::map_finding_severity(severity)
+    else {
+        return Ok(());
     };
 
     let endpoint = payload.get("endpoint").and_then(|v| v.as_str()).unwrap_or("(unknown endpoint)");
@@ -172,9 +172,9 @@ async fn maybe_raise_finding_incident(
     let dedupe_key = format!("contract-drift:{run_id}:{endpoint}");
     let title = format!("Breaking contract drift on {endpoint}");
 
-    Incident::raise(
-        state.db.pool(),
-        mockforge_registry_core::models::incident::RaiseIncidentInput {
+    use mockforge_registry_core::incident_bus::{IncidentBus, PgIncidentBus};
+    PgIncidentBus::new(state.db.pool().clone())
+        .raise(mockforge_registry_core::models::incident::RaiseIncidentInput {
             org_id: run.org_id,
             workspace_id: None,
             source: "contract_drift",
@@ -183,9 +183,8 @@ async fn maybe_raise_finding_incident(
             severity: mapped_severity,
             title: &title,
             description: Some(description),
-        },
-    )
-    .await?;
+        })
+        .await?;
 
     Ok(())
 }
@@ -282,7 +281,8 @@ async fn mirror_kind_status(
 ) -> sqlx::Result<()> {
     use mockforge_registry_core::models::chaos::CreateChaosCampaignReport;
     use mockforge_registry_core::models::incident::RaiseIncidentInput;
-    use mockforge_registry_core::models::{ChaosCampaignReport, CloneModel, Incident, Snapshot};
+    use mockforge_registry_core::incident_bus::{IncidentBus, PgIncidentBus};
+use mockforge_registry_core::models::{ChaosCampaignReport, CloneModel, Snapshot};
 
     let pool = state.db.pool();
     match run.kind.as_str() {
@@ -407,9 +407,10 @@ async fn mirror_kind_status(
                 })
                 .to_string();
 
-                Incident::raise(
-                    pool,
-                    RaiseIncidentInput {
+                // #720 — raised through the IncidentBus so severity
+                // mapping + dedupe pipeline stay producer-agnostic.
+                PgIncidentBus::new(pool.clone())
+                    .raise(RaiseIncidentInput {
                         org_id: run.org_id,
                         // Smoke runs are tied to a hosted-mock deployment,
                         // not a workspace — workspaces hold templates +
@@ -527,9 +528,9 @@ async fn mirror_kind_status(
                 // not undo the recorded evaluation row above. Log and
                 // swallow so the runner's mirror_kind_status call still
                 // succeeds; on-call can replay from the historical row.
-                if let Err(e) = Incident::raise(
-                    pool,
-                    RaiseIncidentInput {
+                if let Err(e) =
+                    PgIncidentBus::new(pool.clone())
+                        .raise(RaiseIncidentInput {
                         org_id: run.org_id,
                         // workspace_id stays None — same caveat as smoke (#392):
                         // the TestRun row carries org + suite_id, not workspace.

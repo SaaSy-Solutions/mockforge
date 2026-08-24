@@ -73,6 +73,10 @@ pub struct CreateMonitoredServiceRequest {
     pub traffic_source: String,
     #[serde(default)]
     pub traffic_source_ref: Option<String>,
+    /// Optional per-service probe cadence override in seconds (#720).
+    /// Must be > 0 when present; omit to follow the global default.
+    #[serde(default)]
+    pub probe_interval_secs: Option<i32>,
 }
 
 /// `POST /api/v1/workspaces/{workspace_id}/monitored-services`
@@ -97,6 +101,11 @@ pub async fn create_monitored_service(
             MonitoredService::VALID_TRAFFIC_SOURCES.join(", ")
         )));
     }
+    if request.probe_interval_secs.is_some_and(|v| v <= 0) {
+        return Err(ApiError::InvalidRequest(
+            "probe_interval_secs must be a positive number of seconds".into(),
+        ));
+    }
 
     let row = MonitoredService::create(
         state.db.pool(),
@@ -109,6 +118,7 @@ pub async fn create_monitored_service(
             auth_config: request.auth_config.as_ref(),
             traffic_source: &request.traffic_source,
             traffic_source_ref: request.traffic_source_ref.as_deref(),
+            probe_interval_secs: request.probe_interval_secs,
         },
     )
     .await

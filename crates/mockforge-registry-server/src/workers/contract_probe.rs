@@ -7,21 +7,22 @@
 //! "fire it on schedule, not only when the user clicks the button"
 //! piece that the audit called out as missing.
 //!
-//! ## Why a single global interval instead of per-service cron
+//! ## Per-service cadence (#720)
 //!
-//! `MonitoredService` doesn't yet carry a per-row probe interval, and
-//! adding that would force a migration. For the first cut, the worker
-//! ticks at `MOCKFORGE_CONTRACT_PROBE_INTERVAL_SECS` (default 1800 =
-//! 30 min) and enqueues a job for every probeable service. A
-//! per-service cron is a clean follow-up: swap `list_probeable` for a
-//! filtered query and reuse the same `enqueue_for_service` helper.
+//! Each service may carry `probe_interval_secs` (migration
+//! 20250101000083); NULL means "use the global default". Each tick is a
+//! DUE-FILTER via [`MonitoredService::list_probeable_due`]: a service is
+//! enqueued only when `last_probed_at` has aged past its effective
+//! interval, so a 5-minute service and a 6-hour service coexist under
+//! one global tick. `last_probed_at` is stamped after each successful
+//! enqueue (`mark_probed`), which also makes two racing ticks mostly
+//! harmless — the loser's duplicate enqueue is bounded by tick drift.
 //!
 //! ## Idempotency
 //!
 //! Two ticks racing wouldn't double-fire because each enqueue creates a
 //! fresh `test_runs` row with a new UUID — the runner pool drains both
-//! without crashing. The only concern is wasted work on a stuck
-//! runner, which a per-service cron would fix.
+//! without crashing. The due-filter keeps the wasted work bounded.
 //!
 //! ## Error policy
 //!
@@ -69,18 +70,30 @@ pub fn start_contract_probe_worker(pool: PgPool, redis: Option<RedisPool>) {
     });
 }
 
-/// One tick: enqueue a contract_diff job for every probeable service.
-/// Returns the number of jobs enqueued (for observability + tests).
+/// One tick: enqueue a contract_diff job for every probeable service
+/// whose cadence is due (#720). Returns the number of jobs enqueued
+/// (for observability + tests).
 pub async fn run_tick(pool: &PgPool, redis: Option<&RedisPool>) -> sqlx::Result<u32> {
-    let services = MonitoredService::list_probeable(pool).await?;
+    let services = MonitoredService::list_probeable_due(
+        pool,
+        tick_interval_from_env().as_secs() as i64,
+    )
+    .await?;
     if services.is_empty() {
-        debug!("contract_probe: no probeable services");
+        debug!("contract_probe: no services due for probing");
         return Ok(0);
     }
     let mut enqueued = 0u32;
     for svc in services {
         match enqueue_for_service(pool, redis, &svc).await {
-            Ok(()) => enqueued += 1,
+            Ok(()) => {
+                enqueued += 1;
+                // Stamp AFTER a successful enqueue so the due-filter
+                // holds. A failed stamp only risks an early re-probe.
+                if let Err(e) = MonitoredService::mark_probed(pool, svc.id).await {
+                    warn!(service_id = %svc.id, error = %e, "failed to stamp last_probed_at");
+                }
+            }
             Err(e) => warn!(
                 service_id = %svc.id,
                 service_name = %svc.name,

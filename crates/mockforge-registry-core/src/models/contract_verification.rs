@@ -31,6 +31,15 @@ pub struct MonitoredService {
     #[serde(default)]
     pub traffic_source_ref: Option<String>,
     pub enabled: bool,
+    /// Per-service probe cadence override in seconds (#720). `None` =
+    /// follow the worker's global
+    /// MOCKFORGE_CONTRACT_PROBE_INTERVAL_SECS default.
+    #[serde(default)]
+    pub probe_interval_secs: Option<i32>,
+    /// When this service was last enqueued by the probe worker. Drives
+    /// the due-filter in [`MonitoredService::list_probeable_due`].
+    #[serde(default)]
+    pub last_probed_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -107,6 +116,8 @@ pub struct CreateMonitoredService<'a> {
     pub auth_config: Option<&'a serde_json::Value>,
     pub traffic_source: &'a str,
     pub traffic_source_ref: Option<&'a str>,
+    /// Optional per-service probe cadence in seconds (#720).
+    pub probe_interval_secs: Option<i32>,
 }
 
 #[cfg(feature = "postgres")]
@@ -147,6 +158,48 @@ impl MonitoredService {
         .await
     }
 
+    /// #720 — probeable services whose cadence is DUE.
+    ///
+    /// A service is due when it has never been probed, or when
+    /// `now - last_probed_at >= COALESCE(probe_interval_secs, default_secs)`.
+    /// The worker calls this instead of [`Self::list_probeable`] so a
+    /// 5-minute service and a 6-hour service coexist under one global
+    /// tick without wasted enqueues.
+    pub async fn list_probeable_due(
+        pool: &PgPool,
+        default_interval_secs: i64,
+    ) -> sqlx::Result<Vec<Self>> {
+        sqlx::query_as::<_, Self>(
+            r#"
+            SELECT *
+            FROM monitored_services
+            WHERE enabled = TRUE
+              AND openapi_spec_url IS NOT NULL
+              AND openapi_spec_url <> ''
+              AND (
+                    last_probed_at IS NULL
+                    OR now() - last_probed_at >= make_interval(
+                        secs => COALESCE(probe_interval_secs, $1)::int
+                    )
+                  )
+            ORDER BY workspace_id, name
+            "#,
+        )
+        .bind(default_interval_secs as i32)
+        .fetch_all(pool)
+        .await
+    }
+
+    /// #720 — stamp the probe timestamp after a successful enqueue so
+    /// the due-filter above holds even when the global tick runs often.
+    pub async fn mark_probed(pool: &PgPool, id: Uuid) -> sqlx::Result<()> {
+        sqlx::query("UPDATE monitored_services SET last_probed_at = NOW() WHERE id = $1")
+            .bind(id)
+            .execute(pool)
+            .await?;
+        Ok(())
+    }
+
     pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM monitored_services WHERE id = $1")
             .bind(id)
@@ -159,8 +212,8 @@ impl MonitoredService {
             r#"
             INSERT INTO monitored_services
                 (workspace_id, name, base_url, openapi_spec_url, openapi_spec_inline,
-                 auth_config, traffic_source, traffic_source_ref)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                 auth_config, traffic_source, traffic_source_ref, probe_interval_secs)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             RETURNING *
             "#,
         )
@@ -172,6 +225,7 @@ impl MonitoredService {
         .bind(input.auth_config)
         .bind(input.traffic_source)
         .bind(input.traffic_source_ref)
+        .bind(input.probe_interval_secs)
         .fetch_one(pool)
         .await
     }
