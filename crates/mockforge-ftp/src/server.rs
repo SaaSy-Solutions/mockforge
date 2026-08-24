@@ -27,6 +27,29 @@ impl FtpServer {
         }
     }
 
+    /// Create a server pre-loaded with FTP fixtures.
+    ///
+    /// `FtpSpecRegistry` fixtures are attached at construction time via its
+    /// builder, so this is the public path for programmatic fixtures
+    /// (`FtpServer::new` starts empty; the registry is immutable afterwards).
+    pub fn new_with_fixtures(
+        config: FtpConfig,
+        fixtures: Vec<crate::fixtures::FtpFixture>,
+    ) -> Result<Self> {
+        let vfs = Arc::new(VirtualFileSystem::new(config.virtual_root.clone()));
+        let spec_registry = Arc::new(
+            FtpSpecRegistry::new()
+                .with_vfs(vfs.clone())
+                .with_fixtures(fixtures)?,
+        );
+
+        Ok(Self {
+            config,
+            vfs,
+            spec_registry,
+        })
+    }
+
     pub async fn start(&self) -> Result<()> {
         let addr = format!("{}:{}", self.config.host, self.config.port);
         info!("Starting FTP server on {}", addr);
@@ -319,5 +342,46 @@ mod tests {
         let result = server.handle_upload(path, data).await;
         // Should succeed but do nothing since no rule matches
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_new_with_fixtures_loads_virtual_files() {
+        let config = FtpConfig {
+            host: "127.0.0.1".to_string(),
+            port: 2121,
+            virtual_root: std::path::PathBuf::from("/"),
+            ..Default::default()
+        };
+
+        let fixture = crate::fixtures::FtpFixture {
+            identifier: "programmatic".to_string(),
+            name: "Programmatic Fixture".to_string(),
+            description: Some("Created in code".to_string()),
+            virtual_files: vec![crate::fixtures::VirtualFileConfig {
+                path: std::path::PathBuf::from("/pub/hello.txt"),
+                content: crate::fixtures::FileContentConfig::Static {
+                    content: "hello world".to_string(),
+                },
+                permissions: "644".to_string(),
+                owner: "mockforge".to_string(),
+                group: "mockforge".to_string(),
+            }],
+            upload_rules: vec![],
+        };
+
+        let server = FtpServer::new_with_fixtures(config, vec![fixture]).unwrap();
+
+        // The fixture's identifier is registered and its virtual file was
+        // loaded into the server's VFS.
+        assert_eq!(server.spec_registry().fixtures.len(), 1);
+        assert_eq!(
+            server.spec_registry().fixtures[0].identifier,
+            "programmatic"
+        );
+
+        let file = server
+            .vfs()
+            .get_file(std::path::Path::new("/pub/hello.txt"));
+        assert!(file.is_some(), "virtual file from fixture should be in VFS");
     }
 }

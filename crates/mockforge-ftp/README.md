@@ -158,28 +158,38 @@ upload_rules:
 ### Loading Fixtures
 
 ```rust,no_run
-use mockforge_ftp::{FtpServer, FtpSpecRegistry};
+use mockforge_ftp::{FtpServer, FtpFixture, VirtualFileConfig};
+use mockforge_ftp::fixtures::FileContentConfig;
 use mockforge_core::config::FtpConfig;
 
-let config = FtpConfig::default();
-let server = FtpServer::new(config).await?;
-
-// Load fixture from file
-server.spec_registry().load_fixture_from_file("ftp-fixture.yaml").await?;
-
-// Or create fixture programmatically
-use mockforge_ftp::fixtures::{FtpFixture, VirtualFileConfig, UploadRule};
-
+// Fixtures are attached at construction time via the registry builder.
 let fixture = FtpFixture {
     identifier: "programmatic".to_string(),
     name: "Programmatic Fixture".to_string(),
     description: Some("Created in code".to_string()),
-    virtual_files: vec![/* ... */],
-    upload_rules: vec![/* ... */],
+    virtual_files: vec![VirtualFileConfig {
+        path: "/pub/hello.txt".into(),
+        content: FileContentConfig::Static {
+            content: "hello world".to_string(),
+        },
+        permissions: "644".to_string(),
+        owner: "mockforge".to_string(),
+        group: "mockforge".to_string(),
+    }],
+    upload_rules: vec![],
 };
 
-server.spec_registry().add_fixture(fixture)?;
+let config = FtpConfig::default();
+let server = FtpServer::new_with_fixtures(config, vec![fixture])?;
+
+// Virtual files from the fixture are served by the server's VFS:
+let file = server.vfs().get_file(std::path::Path::new("/pub/hello.txt"));
+assert!(file.is_some());
 ```
+
+`FtpServer::new(config)` starts with an empty registry — `FtpSpecRegistry`
+fixtures are bound at construction and cannot be mutated afterwards
+(`spec_registry()` hands out a shared immutable handle).
 
 ## Upload Handling
 
