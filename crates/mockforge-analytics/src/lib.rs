@@ -208,6 +208,39 @@ pub fn record_endpoint_coverage_async(
     }
 }
 
+/// Spawn a fire-and-forget task that records a persona CI hit (#716).
+///
+/// Called from the HTTP request boundary when the client declares its
+/// persona via the `X-MockForge-Persona` header (CI pipelines and test
+/// suites stamp this so MockOps can attribute traffic to the persona
+/// being exercised). No-op when no analytics database is installed.
+pub fn record_persona_ci_hit_async(
+    persona_id: String,
+    workspace_id: Option<String>,
+    org_id: Option<String>,
+    ci_run_id: Option<String>,
+) {
+    if let Some(db) = get_global_db() {
+        tokio::spawn(async move {
+            if let Err(e) = db
+                .record_persona_ci_hit(
+                    &persona_id,
+                    workspace_id.as_deref(),
+                    org_id.as_deref(),
+                    ci_run_id.as_deref(),
+                )
+                .await
+            {
+                tracing::warn!(
+                    persona_id = %persona_id,
+                    error = %e,
+                    "failed to record persona CI hit"
+                );
+            }
+        });
+    }
+}
+
 /// Spawn a fire-and-forget task that records the current reality level for
 /// staleness tracking. `current_reality_level` is the level name (e.g.
 /// `"production_chaos"`); `staleness_days` is "how long ago this level was

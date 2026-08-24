@@ -16,6 +16,25 @@ use mockforge_observability::get_global_registry;
 use std::time::Instant;
 use tracing::debug;
 
+
+/// #716 — read the client-declared persona identity from request headers.
+///
+/// `X-MockForge-Persona` names the persona under test; the optional
+/// `X-MockForge-CI-Run` identifies the CI run stamping it. Blank values
+/// count as absent.
+fn detect_persona_headers(headers: &axum::http::HeaderMap) -> (Option<String>, Option<String>) {
+    let clean = |v: Option<&axum::http::HeaderValue>| {
+        v.and_then(|v| v.to_str().ok())
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+            .map(str::to_string)
+    };
+    (
+        clean(headers.get("x-mockforge-persona")),
+        clean(headers.get("x-mockforge-ci-run")),
+    )
+}
+
 /// Determine pillar from endpoint path
 ///
 /// Analyzes the request path to determine which pillar(s) the request belongs to.
@@ -98,6 +117,10 @@ pub async fn collect_http_metrics(
     // Get metrics registry
     let registry = get_global_registry();
 
+    // #716 — detect a client-declared persona at the boundary (before
+    // `req` is consumed).
+    let (declared_persona, ci_run_id) = detect_persona_headers(req.headers());
+
     // Track in-flight requests
     registry.increment_in_flight("http");
     debug!(
@@ -136,6 +159,17 @@ pub async fn collect_http_metrics(
         None, // workspace_id — see drift_tracking note about plumbing tenant ID
         None,
     );
+
+    // #716 — a persona-declared request counts as a CI hit for that
+    // persona. Fire-and-forget; no-op without an analytics DB.
+    if let Some(persona_id) = declared_persona {
+        mockforge_analytics::record_persona_ci_hit_async(
+            persona_id,
+            None, // workspace_id — tenant plumbing tracked with drift_tracking
+            None,
+            ci_run_id,
+        );
+    }
 
     // Bump TPS / RPS counters for the dashboard rate sampler.
     mockforge_foundation::rate_counters::record_response(status_code);
@@ -513,5 +547,29 @@ mod tests {
             before.ok,
             after.ok
         );
+    }
+}
+
+#[cfg(test)]
+mod persona_ci_hit_tests {
+    use super::*;
+
+    #[test]
+    fn persona_and_run_detected() {
+        let mut h = axum::http::HeaderMap::new();
+        h.insert("x-mockforge-persona", "checkout-user".parse().unwrap());
+        h.insert("x-mockforge-ci-run", "gh-run-123".parse().unwrap());
+        let (persona, run) = detect_persona_headers(&h);
+        assert_eq!(persona.as_deref(), Some("checkout-user"));
+        assert_eq!(run.as_deref(), Some("gh-run-123"));
+    }
+
+    #[test]
+    fn blank_and_absent_are_none() {
+        let mut h = axum::http::HeaderMap::new();
+        h.insert("x-mockforge-persona", "  ".parse().unwrap());
+        let (persona, run) = detect_persona_headers(&h);
+        assert_eq!(persona, None);
+        assert_eq!(run, None);
     }
 }
