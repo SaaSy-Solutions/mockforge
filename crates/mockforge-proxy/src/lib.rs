@@ -10,6 +10,7 @@
 pub mod body_transform;
 pub mod client;
 pub mod conditional;
+pub mod conformance;
 pub mod config;
 pub mod handler;
 pub mod middleware;
