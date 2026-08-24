@@ -55,7 +55,7 @@ impl LlmClient {
     }
 
     /// Resolve the effective sampling seed (#852): per-request override,
-    /// then the behavior-model config, then the MOCKFORGE_AI_SEED env var.
+    /// then the behavior-model config, then the `MOCKFORGE_AI_SEED` env var.
     fn resolve_seed(&self, request: &LlmGenerationRequest) -> Option<i64> {
         request
             .seed
@@ -252,7 +252,7 @@ trait LlmProvider: Send + Sync {
     }
 }
 
-/// OpenAI provider implementation
+/// `OpenAI` provider implementation
 struct OpenAIProvider {
     client: reqwest::Client,
     api_key: String,
@@ -670,9 +670,10 @@ mod tests {
     fn test_seed_resolution_precedence() {
         // request > config > env; here: no env, no config seed -> None
         std::env::remove_var("MOCKFORGE_AI_SEED");
-        let mut config = BehaviorModelConfig::default();
-        config.seed = Some(7);
-        let client = LlmClient::new(config);
+        let client = LlmClient::new(BehaviorModelConfig {
+            seed: Some(7),
+            ..BehaviorModelConfig::default()
+        });
         let req = LlmGenerationRequest::new("s", "u");
         assert_eq!(client.resolve_seed(&req), Some(7), "config seed used");
 

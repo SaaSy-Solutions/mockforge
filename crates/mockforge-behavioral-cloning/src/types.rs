@@ -51,7 +51,7 @@ pub struct EndpointProbabilityModel {
     pub endpoint: String,
     /// HTTP method
     pub method: String,
-    /// Status code probability distribution (status_code -> probability)
+    /// Status code probability distribution (`status_code` -> probability)
     pub status_code_distribution: HashMap<u16, f64>,
     /// Latency distribution statistics
     pub latency_distribution: LatencyDistribution,
@@ -90,7 +90,7 @@ pub struct LatencyDistribution {
 /// An error pattern with associated probability
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ErrorPattern {
-    /// Error type identifier (e.g., "timeout", "500", "400", "rate_limit")
+    /// Error type identifier (e.g. `"timeout"`, `"500"`, `"400"`, `"rate_limit"`)
     pub error_type: String,
     /// Probability of this error occurring (0.0 to 1.0)
     pub probability: f64,

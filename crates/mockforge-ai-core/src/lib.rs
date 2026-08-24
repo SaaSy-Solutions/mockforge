@@ -1,9 +1,9 @@
-//! Core AI/LLM Infrastructure for MockForge
+//! Core AI/LLM Infrastructure for `MockForge`
 //!
-//! This crate provides the foundational AI and LLM infrastructure for MockForge's
+//! This crate provides the foundational AI and LLM infrastructure for `MockForge`'s
 //! intelligent mock behavior system. It includes:
 //!
-//! - **LLM Client**: Provider abstraction for OpenAI, Anthropic, Ollama, and compatible APIs
+//! - **LLM Client**: Provider abstraction for `OpenAI`, Anthropic, Ollama, and compatible APIs
 //! - **Stateful Context**: Session state management for context-aware responses
 //! - **Vector Memory**: Semantic search over past interactions using embeddings
 //! - **Consistency Rules**: Rule evaluation engine and state machines

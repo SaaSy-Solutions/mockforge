@@ -236,7 +236,12 @@ impl ConditionEvaluator {
             return Ok(None);
         }
 
-        let mut value = root.unwrap().clone();
+        let mut value = match root {
+            Some(v) => v.clone(),
+            // Caller guarantees `root` when parts resolve; empty clone keeps
+            // the navigation below a no-op instead of panicking.
+            None => return Ok(None),
+        };
 
         // Navigate through nested properties
         for part in parts.iter().skip(1) {

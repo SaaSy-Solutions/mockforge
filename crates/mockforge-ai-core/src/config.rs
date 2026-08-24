@@ -67,10 +67,10 @@ impl PersonasConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Persona {
-    /// Persona name (e.g., "commercial_midwest", "hobbyist_urban")
+    /// Persona name (e.g., "`commercial_midwest`", "`hobbyist_urban`")
     pub name: String,
 
-    /// Persona traits (key-value pairs, e.g., "apiary_count": "20-40", "hive_count": "800-1500")
+    /// Persona traits (key-value pairs, e.g., "`apiary_count"`: "20-40", "`hive_count"`: "800-1500")
     #[serde(default)]
     pub traits: HashMap<String, String>,
 }
@@ -126,7 +126,7 @@ pub struct BehaviorModelConfig {
 
     /// Sampling seed for deterministic AI generation (#852). When set,
     /// requests default to this seed unless overridden per-request; also
-    /// readable from the MOCKFORGE_AI_SEED environment variable.
+    /// readable from the `MOCKFORGE_AI_SEED` environment variable.
     #[serde(default)]
     pub seed: Option<i64>,
 

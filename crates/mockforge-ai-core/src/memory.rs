@@ -14,7 +14,7 @@ use crate::Result;
 
 /// Vector memory store for persistent, searchable interaction history
 pub struct VectorMemoryStore {
-    /// In-memory storage (session_id -> interactions)
+    /// In-memory storage (`session_id` -> interactions)
     storage: Arc<RwLock<HashMap<String, Vec<InteractionRecord>>>>,
 
     /// Embedding client

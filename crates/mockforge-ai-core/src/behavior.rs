@@ -1,6 +1,6 @@
 //! Behavior model for LLM-powered decision making
 //!
-//! This module provides the BehaviorModel which uses LLMs to make intelligent
+//! This module provides the `BehaviorModel` which uses LLMs to make intelligent
 //! decisions about how the mock API should respond based on context.
 
 use std::sync::Arc;

@@ -184,7 +184,7 @@ impl VisualLayout {
 
     /// Create from React Flow format (JSON)
     ///
-    /// Parses a React Flow JSON object into a VisualLayout.
+    /// Parses a React Flow JSON object into a `VisualLayout`.
     pub fn from_react_flow_json(value: &serde_json::Value) -> Result<Self, serde_json::Error> {
         let empty_vec: Vec<serde_json::Value> = Vec::new();
         let nodes = value
@@ -205,10 +205,10 @@ impl VisualLayout {
                         .and_then(|t| t.as_str())
                         .unwrap_or("state")
                         .to_string(),
-                    position_x: position.get("x").and_then(|x| x.as_f64()).unwrap_or(0.0),
-                    position_y: position.get("y").and_then(|y| y.as_f64()).unwrap_or(0.0),
-                    width: n.get("width").and_then(|w| w.as_f64()).unwrap_or(150.0),
-                    height: n.get("height").and_then(|h| h.as_f64()).unwrap_or(40.0),
+                    position_x: position.get("x").and_then(serde_json::Value::as_f64).unwrap_or(0.0),
+                    position_y: position.get("y").and_then(serde_json::Value::as_f64).unwrap_or(0.0),
+                    width: n.get("width").and_then(serde_json::Value::as_f64).unwrap_or(150.0),
+                    height: n.get("height").and_then(serde_json::Value::as_f64).unwrap_or(40.0),
                     label: data.get("label").and_then(|l| l.as_str()).unwrap_or("").to_string(),
                     style: style.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
                     data: data.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
@@ -231,13 +231,13 @@ impl VisualLayout {
                     id: e.get("id").and_then(|i| i.as_str()).unwrap_or("").to_string(),
                     source: e.get("source").and_then(|s| s.as_str()).unwrap_or("").to_string(),
                     target: e.get("target").and_then(|t| t.as_str()).unwrap_or("").to_string(),
-                    label: e.get("label").and_then(|l| l.as_str()).map(|s| s.to_string()),
+                    label: e.get("label").and_then(|l| l.as_str()).map(ToString::to_string),
                     edge_type: e
                         .get("type")
                         .and_then(|t| t.as_str())
                         .unwrap_or("default")
                         .to_string(),
-                    animated: e.get("animated").and_then(|a| a.as_bool()).unwrap_or(false),
+                    animated: e.get("animated").and_then(serde_json::Value::as_bool).unwrap_or(false),
                     style: style.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
                     data: data.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
                 }

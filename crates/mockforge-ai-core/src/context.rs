@@ -1,6 +1,6 @@
 //! Stateful AI context management
 //!
-//! This module provides the StatefulAiContext which maintains conversation-like
+//! This module provides the `StatefulAiContext` which maintains conversation-like
 //! state across multiple API requests.
 
 use std::sync::Arc;
