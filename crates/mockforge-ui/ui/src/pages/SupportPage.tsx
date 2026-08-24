@@ -7,6 +7,7 @@ import { Alert } from '@/components/ui/alert';
 import { Send, Mail, MessageSquare, HelpCircle } from 'lucide-react';
 import { useToast } from '@/components/ui/ToastProvider';
 import { apiErrorMessage } from '@/utils/errorHandling';
+import { getAuthToken } from '@/services/tokenStorage';
 
 interface SupportRequest {
   subject: string;
@@ -35,7 +36,7 @@ export function SupportPage() {
     setSuccess(false);
 
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       const response = await fetch('/api/v1/support/contact', {
         method: 'POST',
         headers: {

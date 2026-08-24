@@ -10,6 +10,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { logger } from '@/utils/logger';
+import { getAuthToken } from '@/services/tokenStorage';
 
 export interface FlyRuntimeLogEntry {
   timestamp: string;
@@ -56,15 +57,16 @@ export function useFlyRuntimeLogs(
       return;
     }
 
-    // EventSource doesn't honour custom headers, so the auth_token rides as a
-    // query string. The registry server already accepts both Authorization
-    // header and ?token= for SSE endpoints (see middleware/auth.rs).
-    const token = localStorage.getItem('auth_token') ?? '';
+    // EventSource cannot send an Authorization header. Preferred auth is the
+    // HttpOnly session cookie (set by the registry on login) via
+    // `withCredentials`; the ?token= query stays as a fallback for sessions
+    // created before cookies shipped, and for cross-origin cloud deployments.
+    const token = getAuthToken() ?? '';
     const url =
       `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/runtime-logs/stream` +
       (token ? `?token=${encodeURIComponent(token)}` : '');
 
-    const source = new EventSource(url);
+    const source = new EventSource(url, { withCredentials: true });
     sourceRef.current = source;
     setError(null);
     setNotConfigured(false);

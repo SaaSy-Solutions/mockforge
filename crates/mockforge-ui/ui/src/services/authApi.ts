@@ -5,6 +5,7 @@
 import type { User } from '../types';
 import { apiErrorMessage } from '@/utils/errorHandling';
 import { isCloudMode } from '../utils/cloudMode';
+import { getAuthToken } from './tokenStorage';
 
 export interface LoginResponse {
   token: string;
@@ -29,7 +30,7 @@ class AuthApiService {
   private cloud = isCloudMode();
 
   private authHeader(): Record<string, string> {
-    const token = localStorage.getItem('auth_token');
+    const token = getAuthToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 

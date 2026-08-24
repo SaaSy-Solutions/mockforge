@@ -51,6 +51,8 @@ tokio-stream = "0.1"
 jsonwebtoken = { workspace = true }
 oauth2 = { workspace = true }
 ring = { workspace = true }
+subtle = "2"
+bcrypt = "0.15"
 governor = "0.8"
 mockforge-core = { version = "0.3.70", path = "../mockforge-core" }
 mockforge-contracts = { path = "../mockforge-contracts" }

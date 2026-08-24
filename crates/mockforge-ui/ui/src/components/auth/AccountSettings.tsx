@@ -12,6 +12,7 @@ import {
 } from '../ui/Dialog';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { authApi, type TwoFactorSetup } from '../../services/authApi';
+import { getAuthToken } from '@/services/tokenStorage';
 import { apiErrorMessage } from '@/utils/errorHandling';
 import { Shield, Bell, Lock, Mail, Copy, CheckCircle2, Download, Trash2, AlertCircle } from 'lucide-react';
 
@@ -239,7 +240,7 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
         setExporting(true);
         setGdprBanner(null);
         try {
-            const token = localStorage.getItem('auth_token');
+            const token = getAuthToken();
             const response = await fetch('/api/v1/gdpr/export', {
                 headers: { Authorization: `Bearer ${token}` },
             });
@@ -282,7 +283,7 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
         setDeleting(true);
         setGdprBanner(null);
         try {
-            const token = localStorage.getItem('auth_token');
+            const token = getAuthToken();
             const response = await fetch('/api/v1/gdpr/erase', {
                 method: 'DELETE',
                 headers: {
@@ -317,7 +318,7 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
         setVerifyResending(true);
         setVerifyBanner(null);
         try {
-            const token = localStorage.getItem('auth_token');
+            const token = getAuthToken();
             const body = verifyEmailAddress.trim()
                 ? { email: verifyEmailAddress.trim() }
                 : {};

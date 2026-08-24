@@ -7,8 +7,10 @@
 # Microsoft WAFBench CRS rule YAMLs at /usr/share/mockforge/wafbench/
 # so wafbench runs work without the operator pre-uploading rules.
 
-# Stage 1: Build
-FROM rust:1.96-slim AS builder
+# Base images pinned once; override from CI with --build-arg RUST_IMAGE / DEBIAN_IMAGE.
+ARG RUST_IMAGE=rust:1.96-slim
+ARG DEBIAN_IMAGE=debian:trixie-slim
+FROM ${RUST_IMAGE} AS builder
 
 RUN apt-get update && apt-get install -y \
     pkg-config \
@@ -49,7 +51,7 @@ RUN mkdir -p crates/mockforge-ui/ui/dist/assets && \
 RUN cargo build --release --bin mockforge-test-runner
 
 # Stage 2: Runtime
-FROM debian:trixie-slim
+FROM ${DEBIAN_IMAGE}
 
 # Base dependencies + k6 from grafana's apt repo. k6 binary lands on
 # $PATH at /usr/bin/k6.

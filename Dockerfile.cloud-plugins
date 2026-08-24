@@ -19,7 +19,10 @@
 # ─── Stage 0: UI bundle ─────────────────────────────────────────────
 # Same pattern as the main Dockerfile — Vite + pnpm produce the
 # admin UI assets the Rust binary embeds.
-FROM node:22-slim AS ui-builder
+ARG NODE_IMAGE=node:22-slim
+ARG RUST_IMAGE=rust:1.96-slim
+ARG DEBIAN_IMAGE=debian:trixie-slim
+FROM ${NODE_IMAGE} AS ui-builder
 
 WORKDIR /ui
 RUN corepack enable
@@ -30,7 +33,7 @@ COPY crates/mockforge-ui/ui/ ./
 RUN pnpm build
 
 # ─── Stage 1: Rust builder ──────────────────────────────────────────
-FROM rust:1.96-slim AS builder
+FROM ${RUST_IMAGE} AS builder
 
 RUN apt-get update && apt-get install -y \
         pkg-config \
@@ -69,7 +72,7 @@ RUN cargo build --release \
 # ─── Stage 2: Runtime image ─────────────────────────────────────────
 # Debian slim with just the libraries the binaries dlopen at
 # runtime + tini for PID 1 reaping. No build toolchain.
-FROM debian:trixie-slim AS runtime
+FROM ${DEBIAN_IMAGE} AS runtime
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
         tini \

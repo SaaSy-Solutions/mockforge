@@ -12,6 +12,7 @@
 
 import { useEffect, useState } from 'react';
 import { logger } from '@/utils/logger';
+import { getAuthToken } from '@/services/tokenStorage';
 
 /// Mirrors `mockforge_recorder::models::RecordedRequest`. Headers and
 /// query_params are JSON-encoded strings on the wire — kept as `string`
@@ -73,7 +74,7 @@ export function useDeploymentCaptures(
     let cancelled = false;
 
     const poll = async () => {
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       if (!token) return;
 
       const url = `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/captures?limit=${limit}`;
@@ -139,7 +140,7 @@ export async function fetchCaptureResponse(
   deploymentId: string,
   captureId: string,
 ): Promise<DeploymentCaptureResponse | null> {
-  const token = localStorage.getItem('auth_token');
+  const token = getAuthToken();
   if (!token) return null;
   const url = `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/captures/${encodeURIComponent(captureId)}/response`;
   const resp = await fetch(url, {

@@ -49,7 +49,7 @@ export function EmailVerificationPage() {
     setResendSent(false);
 
     try {
-      const authToken = localStorage.getItem('auth_token');
+      const authToken = getAuthToken();
       const response = await fetch('/api/v1/auth/verify-email/resend', {
         method: 'POST',
         headers: {

@@ -17,6 +17,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { logger } from '@/utils/logger';
+import { getAuthToken } from '@/services/tokenStorage';
 
 export interface RuntimeRequestRow {
   timestamp: string;
@@ -79,7 +80,7 @@ export function useRuntimeRequests(
     let cancelled = false;
 
     const poll = async () => {
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       if (!token) return;
 
       const params = new URLSearchParams();

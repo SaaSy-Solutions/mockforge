@@ -1,10 +1,11 @@
 import { useQuery, useMutation, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { apiErrorMessage } from '@/utils/errorHandling';
+import { getAuthToken } from '@/services/tokenStorage';
 
 const API_BASE = '/api/v1/federation';
 
 function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem('auth_token');
+  const token = getAuthToken();
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),

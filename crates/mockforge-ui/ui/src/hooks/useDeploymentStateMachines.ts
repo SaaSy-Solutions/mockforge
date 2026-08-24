@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react';
 import { logger } from '@/utils/logger';
+import { getAuthToken } from '@/services/tokenStorage';
 
 export interface DeploymentStateMachineSummary {
   resource_type: string;
@@ -57,7 +58,7 @@ export function useDeploymentStateMachines(
     let cancelled = false;
 
     const poll = async () => {
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       if (!token) return;
 
       const base = `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/state-machines`;

@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { logger } from '@/utils/logger';
+import { getAuthToken } from '@/services/tokenStorage';
 
 /// Mirrors `handlers::otlp::TraceSummary` in mockforge-registry-server.
 export interface TraceSummary {
@@ -72,7 +73,7 @@ export function useDeploymentTraces(
     let cancelled = false;
 
     const poll = async () => {
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       if (!token) return;
 
       const url = `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/traces?limit=${limit}`;
@@ -131,7 +132,7 @@ export async function fetchTraceSpans(
   deploymentId: string,
   traceId: string,
 ): Promise<TraceSpan[]> {
-  const token = localStorage.getItem('auth_token');
+  const token = getAuthToken();
   if (!token) return [];
   const url = `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/traces/${encodeURIComponent(traceId)}`;
   const resp = await fetch(url, {

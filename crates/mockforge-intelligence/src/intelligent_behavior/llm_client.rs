@@ -516,7 +516,8 @@ impl LlmProvider for AnthropicProvider {
         messages: Vec<ChatMessage>,
         temperature: f64,
         max_tokens: usize,
-        seed: Option<i64>,
+        // Anthropic's Messages API has no sampling-seed parameter; ignored.
+        _seed: Option<i64>,
     ) -> Result<String> {
         // Separate system message from other messages
         let system_message =

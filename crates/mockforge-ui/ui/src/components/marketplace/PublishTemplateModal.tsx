@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react';
 import { apiErrorMessage } from '@/utils/errorHandling';
+import { getAuthToken } from '@/services/tokenStorage';
 import {
   Dialog,
   DialogTitle,
@@ -134,7 +135,7 @@ export const PublishTemplateModal: React.FC<PublishTemplateModalProps> = ({
       };
 
       // Get auth token
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       if (!token) {
         throw new Error('Not authenticated. Please log in.');
       }

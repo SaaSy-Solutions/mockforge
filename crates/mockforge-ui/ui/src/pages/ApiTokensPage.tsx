@@ -27,6 +27,7 @@ import {
   ScrollText,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/ToastProvider';
+import { getAuthToken } from '@/services/tokenStorage';
 
 // Types
 interface ApiToken {
@@ -91,7 +92,7 @@ interface TokenRotationStatusResponse {
 const API_BASE = '/api/v1';
 
 async function fetchTokens(): Promise<ApiToken[]> {
-  const token = localStorage.getItem('auth_token');
+  const token = getAuthToken();
   const response = await fetch(`${API_BASE}/tokens`, {
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -105,7 +106,7 @@ async function fetchTokens(): Promise<ApiToken[]> {
 }
 
 async function createToken(request: CreateTokenRequest): Promise<CreateTokenResponse> {
-  const token = localStorage.getItem('auth_token');
+  const token = getAuthToken();
   const response = await fetch(`${API_BASE}/tokens`, {
     method: 'POST',
     headers: {
@@ -122,7 +123,7 @@ async function createToken(request: CreateTokenRequest): Promise<CreateTokenResp
 }
 
 async function deleteToken(tokenId: string): Promise<void> {
-  const token = localStorage.getItem('auth_token');
+  const token = getAuthToken();
   const response = await fetch(`${API_BASE}/tokens/${tokenId}`, {
     method: 'DELETE',
     headers: {
@@ -136,7 +137,7 @@ async function deleteToken(tokenId: string): Promise<void> {
 }
 
 async function fetchRotationStatus(): Promise<TokenRotationStatusResponse> {
-  const token = localStorage.getItem('auth_token');
+  const token = getAuthToken();
   const response = await fetch(`${API_BASE}/tokens/rotation-status`, {
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -150,7 +151,7 @@ async function fetchRotationStatus(): Promise<TokenRotationStatusResponse> {
 }
 
 async function fetchScopes(): Promise<TokenScopeInfo[]> {
-  const token = localStorage.getItem('auth_token');
+  const token = getAuthToken();
   const response = await fetch(`${API_BASE}/tokens/scopes`, {
     headers: {
       'Authorization': `Bearer ${token}`,
@@ -164,7 +165,7 @@ async function fetchScopes(): Promise<TokenScopeInfo[]> {
 }
 
 async function rotateToken(tokenId: string, newName?: string, deleteOld?: boolean): Promise<RotateTokenResponse> {
-  const token = localStorage.getItem('auth_token');
+  const token = getAuthToken();
   const response = await fetch(`${API_BASE}/tokens/${tokenId}/rotate`, {
     method: 'POST',
     headers: {

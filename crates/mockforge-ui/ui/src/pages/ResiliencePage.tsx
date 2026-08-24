@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { isCloudMode } from '../utils/cloudMode';
 import { cloudResilienceApi, type RuntimeState } from '../services/api/cloudResilience';
+import { getAuthToken } from '../services/tokenStorage';
 
 interface DeploymentSummary {
   id: string;
@@ -75,7 +76,7 @@ export const ResiliencePage: React.FC = () => {
     let cancelled = false;
     (async () => {
       try {
-        const token = localStorage.getItem('auth_token');
+        const token = getAuthToken();
         const response = await fetch('/api/v1/hosted-mocks', {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { FederationDashboard } from '../components/federation/FederationDashboard';
 import { Loader2, AlertCircle, Building2 } from 'lucide-react';
+import { getAuthToken } from '@/services/tokenStorage';
 
 interface Organization {
   id: string;
@@ -15,7 +16,7 @@ interface Organization {
 const SELECTED_ORG_KEY = 'federation:selected-org-id';
 
 async function fetchOrganizations(): Promise<Organization[]> {
-  const token = localStorage.getItem('auth_token');
+  const token = getAuthToken();
   const response = await fetch('/api/v1/organizations', {
     headers: {
       'Authorization': `Bearer ${token}`,

@@ -27,7 +27,7 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 use uuid::Uuid;
 
-use crate::handlers::auth_helpers::{extract_user_id_with_fallback, OptionalAuthClaims};
+use crate::handlers::auth_helpers::{require_user_id_from_claims, OptionalAuthClaims};
 
 /// State for access review handlers
 #[derive(Clone)]
@@ -180,7 +180,7 @@ pub async fn approve_access(
     let mut service = state.service.write().await;
 
     // Extract approver ID from authentication claims, or use default for mock server
-    let approver_id = extract_user_id_with_fallback(&claims);
+    let approver_id = require_user_id_from_claims(&claims)?;
 
     match service
         .approve_user_access(&review_id, request.user_id, approver_id, request.justification)
@@ -236,7 +236,7 @@ pub async fn revoke_access(
     let mut service = state.service.write().await;
 
     // Extract revoker ID from authentication claims, or use default for mock server
-    let revoker_id = extract_user_id_with_fallback(&claims);
+    let revoker_id = require_user_id_from_claims(&claims)?;
 
     match service
         .revoke_user_access(&review_id, request.user_id, revoker_id, request.reason.clone())
@@ -293,7 +293,7 @@ pub async fn update_permissions(
     let mut service = state.service.write().await;
 
     // Extract updater ID from authentication claims, or use default for mock server
-    let updater_id = extract_user_id_with_fallback(&claims);
+    let updater_id = require_user_id_from_claims(&claims)?;
 
     match service
         .update_user_permissions(

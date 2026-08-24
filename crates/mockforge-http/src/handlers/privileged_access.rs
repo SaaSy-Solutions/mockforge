@@ -22,7 +22,7 @@ use tokio::sync::RwLock;
 use tracing::{error, info};
 use uuid::Uuid;
 
-use crate::handlers::auth_helpers::{extract_user_id_with_fallback, OptionalAuthClaims};
+use crate::handlers::auth_helpers::{require_user_id_from_claims, OptionalAuthClaims};
 
 /// State for privileged access handlers
 #[derive(Clone)]
@@ -97,7 +97,7 @@ pub async fn request_privileged_access(
     Json(request): Json<CreatePrivilegedAccessRequest>,
 ) -> Result<Json<PrivilegedAccessRequestResponse>, StatusCode> {
     // Extract user ID from authentication claims, or use default for mock server
-    let user_id = extract_user_id_with_fallback(&claims);
+    let user_id = require_user_id_from_claims(&claims)?;
 
     let manager = state.manager.read().await;
     let access_request = manager
@@ -152,7 +152,7 @@ pub async fn approve_manager(
     claims: OptionalAuthClaims,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract approver ID from authentication claims, or use default for mock server
-    let approver_id = extract_user_id_with_fallback(&claims);
+    let approver_id = require_user_id_from_claims(&claims)?;
 
     let manager = state.manager.write().await;
     manager.approve_manager(request_id, approver_id).await.map_err(|e| {
@@ -201,7 +201,7 @@ pub async fn approve_security(
     }
 
     // Extract approver ID from authentication claims, or use default for mock server
-    let approver_id = extract_user_id_with_fallback(&claims);
+    let approver_id = require_user_id_from_claims(&claims)?;
 
     let expiration_days = request.expiration_days.unwrap_or(365);
 

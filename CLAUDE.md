@@ -2,10 +2,10 @@
 
 ## Project Overview
 
-MockForge is a high-performance mock API server written in Rust. It's a workspace of 42 crates supporting 10+ protocols (HTTP, gRPC, WebSocket, GraphQL, Kafka, MQTT, AMQP, SMTP, FTP, TCP), with an admin UI (React 19 + TypeScript), plugin system, benchmarking (k6), and a multi-tenant registry server.
+MockForge is a high-performance mock API server written in Rust. It's a workspace of 66 crates supporting 10+ protocols (HTTP, gRPC, WebSocket, GraphQL, Kafka, MQTT, AMQP, SMTP, FTP, TCP), with an admin UI (React 19 + TypeScript), plugin system, benchmarking (k6), and a multi-tenant registry server.
 
 - **Language**: Rust 2021 edition, `unsafe_code = "deny"` workspace-wide
-- **Version**: 0.3.31+ (workspace.package.version in root Cargo.toml)
+- **Version**: see `workspace.package.version` in root `Cargo.toml` (release cadence is high — do not hardcode; CHANGELOG.md head tracks it)
 - **License**: MIT OR Apache-2.0
 - **Repository**: https://github.com/SaaSy-Solutions/mockforge
 

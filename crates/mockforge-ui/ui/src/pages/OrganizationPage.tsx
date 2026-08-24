@@ -43,6 +43,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/ToastProvider';
+import { getAuthToken } from '@/services/tokenStorage';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -159,7 +160,7 @@ interface OrgAiSettings {
 const API_BASE = '/api/v1';
 
 function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem('auth_token');
+  const token = getAuthToken();
   return {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',

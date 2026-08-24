@@ -22,6 +22,7 @@ import {
   type TraceSpan,
 } from '@/hooks/useDeploymentTraces';
 import { useDeploymentStateMachines } from '@/hooks/useDeploymentStateMachines';
+import { getAuthToken } from '@/services/tokenStorage';
 import {
   Box,
   Card,
@@ -343,7 +344,7 @@ export const HostedMocksPage: React.FC = () => {
   const [removingDomain, setRemovingDomain] = useState(false);
   const refreshCustomDomain = useCallback(async (deploymentId: string) => {
     setActiveCustomDomainLoading(true);
-    const token = localStorage.getItem('auth_token');
+    const token = getAuthToken();
     if (!token) {
       setActiveCustomDomainLoading(false);
       return;
@@ -377,7 +378,7 @@ export const HostedMocksPage: React.FC = () => {
   const [recorderStatusError, setRecorderStatusError] = useState<string | null>(null);
   const refreshRecorderStatus = useCallback(async (deploymentId: string) => {
     setRecorderStatusError(null);
-    const token = localStorage.getItem('auth_token');
+    const token = getAuthToken();
     if (!token) return;
     try {
       const resp = await fetch(
@@ -493,7 +494,7 @@ export const HostedMocksPage: React.FC = () => {
     setReplayError(null);
     setReplayResult(null);
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       const url = `/api/v1/hosted-mocks/${encodeURIComponent(selectedDeployment.id)}/captures/${encodeURIComponent(selectedCapture.id)}/replay`;
       const resp = await fetch(url, {
         method: 'POST',
@@ -520,7 +521,7 @@ export const HostedMocksPage: React.FC = () => {
   const loadProjects = async () => {
     setProjectsLoadError(null);
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       if (!token) return;
 
       const response = await fetch('/api/v1/projects', {
@@ -566,7 +567,7 @@ export const HostedMocksPage: React.FC = () => {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       if (!token) {
         throw new Error('Not authenticated');
       }
@@ -608,7 +609,7 @@ export const HostedMocksPage: React.FC = () => {
         throw new Error('Invalid JSON in config field');
       }
 
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       if (!token) {
         throw new Error('Not authenticated');
       }
@@ -681,7 +682,7 @@ export const HostedMocksPage: React.FC = () => {
     }
 
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       if (!token) {
         throw new Error('Not authenticated');
       }
@@ -707,7 +708,7 @@ export const HostedMocksPage: React.FC = () => {
     setUploadingSpec(true);
     setError(null);
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       if (!token) {
         throw new Error('Not authenticated');
       }
@@ -760,7 +761,7 @@ export const HostedMocksPage: React.FC = () => {
     setLifecycleId(id);
     setError(null);
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       if (!token) {
         throw new Error('Not authenticated');
       }
@@ -800,7 +801,7 @@ export const HostedMocksPage: React.FC = () => {
     setRedeployingId(id);
     setError(null);
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       if (!token) {
         throw new Error('Not authenticated');
       }
@@ -839,7 +840,7 @@ export const HostedMocksPage: React.FC = () => {
     setSettingDomain(true);
     setError(null);
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       if (!token) {
         throw new Error('Not authenticated');
       }
@@ -890,7 +891,7 @@ export const HostedMocksPage: React.FC = () => {
     setRemovingDomain(true);
     setError(null);
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       if (!token) throw new Error('Not authenticated');
       const response = await fetch(
         `/api/v1/hosted-mocks/${selectedDeployment.id}/custom-domain`,
@@ -941,7 +942,7 @@ export const HostedMocksPage: React.FC = () => {
   const loadDeploymentLogs = async (id: string) => {
     setLogsLoading(true);
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       if (!token) {
         return;
       }
@@ -966,7 +967,7 @@ export const HostedMocksPage: React.FC = () => {
   const loadDeploymentMetrics = async (id: string) => {
     setMetricsLoading(true);
     try {
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       if (!token) {
         return;
       }
@@ -3070,7 +3071,7 @@ async function toggleRecorder(
   deploymentId: string,
   action: 'enable' | 'disable' | 'clear',
 ): Promise<void> {
-  const token = localStorage.getItem('auth_token');
+  const token = getAuthToken();
   if (!token) {
     alert('Not authenticated');
     return;
@@ -3103,7 +3104,7 @@ async function downloadCaptures(
   slug: string,
   format: 'har' | 'jsonl',
 ): Promise<void> {
-  const token = localStorage.getItem('auth_token');
+  const token = getAuthToken();
   if (!token) {
     alert('Not authenticated');
     return;

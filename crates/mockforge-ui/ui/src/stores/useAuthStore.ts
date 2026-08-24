@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User, AuthState, AuthActions } from '../types';
 import { authApi } from '../services/authApi';
+import { setAuthToken, clearAuthToken } from '../services/tokenStorage';
 
 interface AuthStore extends AuthState, AuthActions {
   checkAuth: () => Promise<void>;
@@ -312,11 +313,11 @@ export const useAuthStore = create<AuthStore>()(
   )
 );
 
-// Sync token to localStorage so pages using localStorage.getItem('auth_token') work
+// Sync token through the central storage module so non-store consumers see it.
 useAuthStore.subscribe((state) => {
   if (state.token) {
-    localStorage.setItem('auth_token', state.token);
+    setAuthToken(state.token);
   } else {
-    localStorage.removeItem('auth_token');
+    clearAuthToken();
   }
 });

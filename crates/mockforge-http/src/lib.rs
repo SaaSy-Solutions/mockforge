@@ -3126,8 +3126,9 @@ pub async fn build_router_with_chains_and_multi_tenant(
         // Load PR generation config from environment or use default
         let pr_config = mockforge_intelligence::pr_generation::PRGenerationConfig::from_env();
 
-        let generator = if pr_config.enabled && pr_config.token.is_some() {
-            let token = pr_config.token.as_ref().unwrap().clone();
+        // Arc-wrapped generator only when enabled AND a token is configured;
+        // token presence is checked here rather than unwrapped below.
+        let generator = pr_config.token.clone().filter(|_| pr_config.enabled).map(|token| {
             let generator = match pr_config.provider {
                 PRProvider::GitHub => PRGenerator::new_github(
                     pr_config.owner.clone(),
@@ -3142,10 +3143,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
                     pr_config.base_branch.clone(),
                 ),
             };
-            Some(Arc::new(generator))
-        } else {
-            None
-        };
+            Arc::new(generator)
+        });
 
         let pr_state = PRGenerationState {
             generator: generator.clone(),

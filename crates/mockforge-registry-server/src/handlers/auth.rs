@@ -30,6 +30,47 @@ fn audit_source_ip(headers: &HeaderMap) -> Option<String> {
     }
 }
 
+/// Cookie name carrying the session JWT.
+///
+/// Set `HttpOnly` so XSS cannot read it; the auth middleware accepts it as a
+/// token source so browsers can authenticate without holding the JWT in
+/// JS-reachable storage. See `middleware::auth_middleware` for extraction.
+pub const SESSION_COOKIE: &str = "mockforge_session";
+
+fn cookie_secure() -> bool {
+    static SECURE: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
+        std::env::var("MOCKFORGE_SESSION_COOKIE_SECURE")
+            .map(|v| v.eq_ignore_ascii_case("1") || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(false)
+    });
+    *SECURE
+}
+
+/// Build the `Set-Cookie` value that establishes the browser session.
+fn session_set_cookie(access_token: &str, expires_at_epoch: i64) -> String {
+    let max_age = (expires_at_epoch - Utc::now().timestamp()).max(0);
+    let secure = if cookie_secure() { "; Secure" } else { "" };
+    format!(
+        "{SESSION_COOKIE}={access_token}; Path=/; HttpOnly; SameSite=Lax{secure}; Max-Age={max_age}"
+    )
+}
+
+/// Attach a session cookie to an auth response.
+fn with_session_cookie<T>(
+    response: Json<T>,
+    access_token: &str,
+    expires_at_epoch: i64,
+) -> ([(axum::http::header::HeaderName, axum::http::HeaderValue); 1], Json<T>) {
+    (
+        [(
+            axum::http::header::SET_COOKIE,
+            axum::http::HeaderValue::from_str(&session_set_cookie(access_token, expires_at_epoch))
+                .expect("cookie value is ASCII"),
+        )],
+        response,
+    )
+}
+
 /// Best-effort resolution of a user's organization for an audit record.
 ///
 /// Auth events are user-scoped but the audit log is org-partitioned, so we
@@ -82,7 +123,7 @@ pub struct AuthResponseV2 {
 pub async fn register(
     State(state): State<AppState>,
     Json(request): Json<RegisterRequest>,
-) -> ApiResult<Json<AuthResponseV2>> {
+) -> ApiResult<impl axum::response::IntoResponse> {
     // Validate input
     if request.username.len() < 3 {
         return Err(ApiError::InvalidRequest("Username must be at least 3 characters".to_string()));
@@ -160,21 +201,26 @@ pub async fn register(
         ApiError::Internal(e)
     })?;
 
-    Ok(Json(AuthResponseV2 {
-        access_token: token_pair.access_token,
-        refresh_token: token_pair.refresh_token,
-        access_token_expires_at: token_pair.access_token_expires_at,
-        refresh_token_expires_at: token_pair.refresh_token_expires_at,
-        user_id: user.id.to_string(),
-        username: user.username,
-    }))
-}
+    let issued_access_token = token_pair.access_token.clone();
+    Ok(with_session_cookie(
+        Json(AuthResponseV2 {
+            access_token: token_pair.access_token,
+            refresh_token: token_pair.refresh_token,
+            access_token_expires_at: token_pair.access_token_expires_at,
+            refresh_token_expires_at: token_pair.refresh_token_expires_at,
+            user_id: user.id.to_string(),
+            username: user.username,
+        }),
+        &issued_access_token,
+        token_pair.access_token_expires_at,
+    ))
+ }
 
 pub async fn login(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(request): Json<LoginRequest>,
-) -> ApiResult<Json<AuthResponseV2>> {
+) -> ApiResult<impl axum::response::IntoResponse> {
     let source_ip = audit_source_ip(&headers);
 
     // Find user
@@ -303,14 +349,19 @@ pub async fn login(
         )
         .await;
 
-    Ok(Json(AuthResponseV2 {
-        access_token: token_pair.access_token,
-        refresh_token: token_pair.refresh_token,
-        access_token_expires_at: token_pair.access_token_expires_at,
-        refresh_token_expires_at: token_pair.refresh_token_expires_at,
-        user_id: user.id.to_string(),
-        username: user.username,
-    }))
+    let issued_access_token = token_pair.access_token.clone();
+    Ok(with_session_cookie(
+        Json(AuthResponseV2 {
+            access_token: token_pair.access_token,
+            refresh_token: token_pair.refresh_token,
+            access_token_expires_at: token_pair.access_token_expires_at,
+            refresh_token_expires_at: token_pair.refresh_token_expires_at,
+            user_id: user.id.to_string(),
+            username: user.username,
+        }),
+        &issued_access_token,
+        token_pair.access_token_expires_at,
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -330,7 +381,7 @@ pub struct RefreshTokenResponse {
 pub async fn refresh_token(
     State(state): State<AppState>,
     Json(request): Json<RefreshTokenRequest>,
-) -> ApiResult<Json<RefreshTokenResponse>> {
+) -> ApiResult<impl axum::response::IntoResponse> {
     // Verify the refresh token (not just any token)
     let (claims, old_jti) = verify_refresh_token(&request.refresh_token, &state.config.jwt_secret)
         .map_err(|e| {
@@ -384,12 +435,17 @@ pub async fn refresh_token(
             ApiError::Internal(e)
         })?;
 
-    Ok(Json(RefreshTokenResponse {
-        access_token: token_pair.access_token,
-        refresh_token: token_pair.refresh_token,
-        access_token_expires_at: token_pair.access_token_expires_at,
-        refresh_token_expires_at: token_pair.refresh_token_expires_at,
-    }))
+    let issued_access_token = token_pair.access_token.clone();
+    Ok(with_session_cookie(
+        Json(RefreshTokenResponse {
+            access_token: token_pair.access_token,
+            refresh_token: token_pair.refresh_token,
+            access_token_expires_at: token_pair.access_token_expires_at,
+            refresh_token_expires_at: token_pair.refresh_token_expires_at,
+        }),
+        &issued_access_token,
+        token_pair.access_token_expires_at,
+    ))
 }
 
 // Password reset handlers (moved here to avoid axum version conflicts)

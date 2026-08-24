@@ -3,6 +3,7 @@
 //! This module provides utilities for extracting user information from authenticated requests.
 
 use axum::extract::Extension;
+use axum::http::StatusCode;
 use uuid::Uuid;
 
 use crate::auth::types::AuthClaims;
@@ -25,16 +26,16 @@ pub fn extract_user_id_from_claims(claims: &OptionalAuthClaims) -> Option<Uuid> 
         .and_then(|sub| Uuid::parse_str(sub).ok())
 }
 
-/// Extract user ID from OptionalAuthClaims with fallback
+/// Require a user ID from OptionalAuthClaims
 ///
-/// Returns the user ID from AuthClaims if available, otherwise returns a default UUID.
-/// This is useful for mock servers where authentication may be optional.
-pub fn extract_user_id_with_fallback(claims: &OptionalAuthClaims) -> Uuid {
-    extract_user_id_from_claims(claims).unwrap_or_else(|| {
-        // For mock server, use a deterministic default user ID
-        // In production, this should return an error if authentication is required
-        Uuid::parse_str("00000000-0000-0000-0000-000000000001").expect("hardcoded UUID is valid")
-    })
+/// Returns the user ID from AuthClaims, or an error if the request is not
+/// authenticated. Privileged operations (approvals, revocations, permission
+/// changes) MUST NOT fall back to a synthetic identity: doing so lets
+/// unauthenticated callers perform attributed actions and corrupts audit
+/// trails. Use [`extract_user_id_from_claims`] only when the operation is
+/// genuinely anonymous-safe.
+pub fn require_user_id_from_claims(claims: &OptionalAuthClaims) -> Result<Uuid, StatusCode> {
+    extract_user_id_from_claims(claims).ok_or(StatusCode::UNAUTHORIZED)
 }
 
 /// Extract username from OptionalAuthClaims
@@ -42,4 +43,35 @@ pub fn extract_user_id_with_fallback(claims: &OptionalAuthClaims) -> Uuid {
 /// Returns the username from AuthClaims if available, otherwise returns None.
 pub fn extract_username_from_claims(claims: &OptionalAuthClaims) -> Option<String> {
     claims.as_ref().and_then(|Extension(claims)| claims.username.clone())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn claims_with_sub(sub: &str) -> OptionalAuthClaims {
+        let mut claims = AuthClaims::new();
+        claims.sub = Some(sub.to_string());
+        Some(Extension(claims))
+    }
+
+    #[test]
+    fn require_rejects_unauthenticated() {
+        // Regression: privileged endpoints must 401 instead of falling back
+        // to the synthetic user 00000000-0000-0000-0000-000000000001.
+        assert_eq!(require_user_id_from_claims(&None), Err(StatusCode::UNAUTHORIZED));
+    }
+
+    #[test]
+    fn require_extracts_authenticated_sub() {
+        let id = require_user_id_from_claims(&claims_with_sub("00000000-0000-0000-0000-000000000042"))
+            .expect("valid sub must extract");
+        assert_eq!(id, Uuid::parse_str("00000000-0000-0000-0000-000000000042").unwrap());
+    }
+
+    #[test]
+    fn require_rejects_non_uuid_sub() {
+        // A non-UUID sub must not silently pass as an identity.
+        assert!(require_user_id_from_claims(&claims_with_sub("not-a-uuid")).is_err());
+    }
 }
