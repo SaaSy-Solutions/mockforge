@@ -16,6 +16,9 @@ mod cloud_commands;
 mod config_commands;
 #[allow(dead_code)]
 mod contract_diff_commands;
+
+#[cfg(feature = "recorder")]
+mod verify_mocks_commands;
 #[allow(dead_code)]
 mod contract_sync_commands;
 mod data_commands;
@@ -1103,6 +1106,19 @@ enum Commands {
         #[command(subcommand)]
         diff_command: contract_diff_commands::ContractDiffCommands,
     },
+
+    /// Verify mocks still match the real API (Mock Fidelity / drift detection, #849)
+    ///
+    /// Replays recorded real traffic against the spec your mocks are
+    /// generated from and reports drift. With --fail-on-drift this is a
+    /// CI gate: drift breaks the build instead of silently passing.
+    ///
+    /// Examples:
+    ///   mockforge verify-mocks --spec api.yaml --capture-db captures.db
+    ///   mockforge verify-mocks --spec api.yaml --capture-db captures.db --fail-on-drift
+    #[cfg(feature = "recorder")]
+    #[command(verbatim_doc_comment)]
+    VerifyMocks(verify_mocks_commands::VerifyMocksArgs),
 
     /// API governance and safety features
     ///
@@ -3081,6 +3097,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             )
             .await?;
         }
+        #[cfg(feature = "recorder")]
+        Commands::VerifyMocks(args) => {
+            verify_mocks_commands::handle_verify_mocks_command(args).await?;
+        }
+
         Commands::ContractDiff { diff_command } => {
             contract_diff_commands::handle_contract_diff(diff_command).await?;
         }

@@ -14,8 +14,6 @@
 //! Producers construct a [`PgIncidentBus`] over their pool (or inject any
 //! other impl in tests).
 
-use std::future::Future;
-
 #[cfg(feature = "postgres")]
 use crate::models::incident::{Incident, RaiseIncidentInput};
 
