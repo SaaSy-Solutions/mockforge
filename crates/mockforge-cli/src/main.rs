@@ -19,6 +19,7 @@ mod contract_diff_commands;
 
 #[cfg(feature = "recorder")]
 mod verify_mocks_commands;
+mod mcp_server;
 #[allow(dead_code)]
 mod contract_sync_commands;
 mod data_commands;
@@ -1106,6 +1107,18 @@ enum Commands {
         #[command(subcommand)]
         diff_command: contract_diff_commands::ContractDiffCommands,
     },
+
+    /// Run the MockForge MCP server over stdio (#835)
+    ///
+    /// Speaks newline-delimited JSON-RPC 2.0 so MCP clients (Claude
+    /// Desktop, Cursor, any agent host) can list spec routes, validate
+    /// requests, generate schema-conformant examples, and up-convert
+    /// Swagger 2.0 specs.
+    ///
+    /// Example (Claude Desktop config):
+    ///   { "command": "mockforge", "args": ["mcp"] }
+    #[command(verbatim_doc_comment)]
+    Mcp,
 
     /// Verify mocks still match the real API (Mock Fidelity / drift detection, #849)
     ///
@@ -2722,17 +2735,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Initialize logging with the provided log level
     // Note: Full logging configuration (JSON format, file output) will be applied
     // after loading the config file in the serve command
-    let initial_logging_config = mockforge_observability::LoggingConfig {
-        level: cli.log_level.clone(),
-        json_format: false, // Will be overridden by config file if present
-        file_path: None,
-        max_file_size_mb: 10,
-        max_files: 5,
-    };
-
-    if let Err(e) = mockforge_observability::init_logging(initial_logging_config) {
-        eprintln!("Failed to initialize logging: {}", e);
-        std::process::exit(1);
+    // #835 — the MCP transport is stdin/stdout; ANY log line on stdout
+    // corrupts the protocol stream. Skip logging init entirely for this
+    // subcommand so the stream carries JSON-RPC frames only.
+    let is_mcp = matches!(cli.command, Commands::Mcp);
+    if !is_mcp {
+        let initial_logging_config = mockforge_observability::LoggingConfig {
+            level: cli.log_level.clone(),
+            json_format: false, // Will be overridden by config file if present
+            file_path: None,
+            max_file_size_mb: 10,
+            max_files: 5,
+        };
+        if let Err(e) = mockforge_observability::init_logging(initial_logging_config) {
+            eprintln!("Failed to initialize logging: {}", e);
+            std::process::exit(1);
+        }
     }
 
     // #677 — opt-in MockOps analytics database. Setting MOCKFORGE_ANALYTICS_DB
@@ -3100,6 +3118,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         #[cfg(feature = "recorder")]
         Commands::VerifyMocks(args) => {
             verify_mocks_commands::handle_verify_mocks_command(args).await?;
+        }
+
+        Commands::Mcp => {
+            mcp_server::run().await?;
         }
 
         Commands::ContractDiff { diff_command } => {
