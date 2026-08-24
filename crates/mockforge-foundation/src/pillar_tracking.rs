@@ -150,14 +150,19 @@ pub async fn record_cloud_usage(
     record_pillar_usage(workspace_id, org_id, Pillar::Cloud, metric_name, metric_value).await;
 }
 
-/// Record an AI pillar usage event
+/// Record an AI *pillar telemetry* event (best-effort analytics).
+///
+/// NOTE (#869): this is NOT billing metering. It feeds the pillar usage
+/// dashboards only — it carries no token counts, is lossy under load,
+/// and never enforces or reports quota. Platform-token accounting lives
+/// in `mockforge-registry-server`'s `ai::quota::record_ai_usage`.
 ///
 /// This should be called when:
 /// - AI mock generation occurs
 /// - AI contract diff is performed
 /// - Voice command is executed
 /// - LLM-assisted operation happens
-pub async fn record_ai_usage(
+pub async fn track_ai_pillar_telemetry(
     workspace_id: Option<String>,
     org_id: Option<String>,
     metric_name: &str,

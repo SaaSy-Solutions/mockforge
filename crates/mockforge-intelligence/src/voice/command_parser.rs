@@ -132,7 +132,7 @@ don't include it in the response."#;
         })?;
 
         // Record the voice-command event so the AI pillar dashboard reflects usage.
-        mockforge_foundation::pillar_tracking::record_ai_usage(
+        mockforge_foundation::pillar_tracking::track_ai_pillar_telemetry(
             None,
             None,
             "voice_command",

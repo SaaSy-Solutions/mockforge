@@ -152,7 +152,7 @@ impl MockGenerator {
         };
 
         // Record AI pillar usage (ai_generation type=mock)
-        mockforge_foundation::pillar_tracking::record_ai_usage(
+        mockforge_foundation::pillar_tracking::track_ai_pillar_telemetry(
             _workspace_id.map(String::from),
             None,
             "ai_generation",
@@ -211,7 +211,7 @@ impl MockGenerator {
         } else {
             "ai_generation"
         };
-        mockforge_foundation::pillar_tracking::record_ai_usage(
+        mockforge_foundation::pillar_tracking::track_ai_pillar_telemetry(
             None,
             None,
             metric_name,

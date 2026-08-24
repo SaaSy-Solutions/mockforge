@@ -166,7 +166,7 @@ impl ContractDiffAnalyzer {
         result.confidence = ConfidenceScorer::calculate_overall_confidence(&result.mismatches);
 
         // Record AI pillar usage (ai_generation type=contract_diff) so the dashboard reflects contract-diff activity.
-        mockforge_foundation::pillar_tracking::record_ai_usage(
+        mockforge_foundation::pillar_tracking::track_ai_pillar_telemetry(
             None,
             None,
             "ai_generation",

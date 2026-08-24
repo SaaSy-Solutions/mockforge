@@ -104,6 +104,12 @@ impl LlmClient {
     }
 
     /// Generate a response and return usage information
+    ///
+    /// NOTE (#869): usage returned here is informational only. No caller
+    /// persists it and this crate is NOT part of the billing path —
+    /// platform-token accounting for billable AI spend lives in
+    /// `mockforge-registry-server` (`ai::quota`). If a billable caller
+    /// ever appears, wire `LlmUsage` into that counter explicitly.
     pub async fn generate_with_usage(
         &self,
         request: &LlmGenerationRequest,

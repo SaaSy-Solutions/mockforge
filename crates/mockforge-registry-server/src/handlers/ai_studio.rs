@@ -456,7 +456,7 @@ pub(crate) async fn run_completion(
     let org_ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
-    run_completion_for_org(state, &org_ctx.org, prompt).await
+    run_completion_for_org(state, &org_ctx.org, Some(user_id), prompt).await
 }
 
 /// Same pipeline as [`run_completion`] but skips the user→org resolution
@@ -464,9 +464,15 @@ pub(crate) async fn run_completion(
 /// runner-facing `/api/v1/internal/contract-diff/score` endpoint, where
 /// the auth model is a shared internal token rather than a user
 /// session) use this entry point.
+///
+/// `actor_user_id` attributes the AI spend to the originating user when
+/// known (#869): internal callers may or may not have one. It flows into
+/// the `ai_usage` audit row for SOC2 cost-attribution / abuse forensics;
+/// quota metering stays org-scoped regardless.
 pub(crate) async fn run_completion_for_org(
     state: &AppState,
     org: &mockforge_registry_core::models::Organization,
+    actor_user_id: Option<uuid::Uuid>,
     prompt: PromptInputs,
 ) -> ApiResult<(String, UsageMeta)> {
     // 1. BYOK lookup.
@@ -497,15 +503,14 @@ pub(crate) async fn run_completion_for_org(
     record_ai_usage(state, org.id, selection, total_tokens as i64).await?;
 
     // 6b. Audit the AI usage (#866) for SOC2 cost-attribution / abuse
-    //     forensics. Best-effort: never fails the user's request. No user_id
-    //     here — `run_completion_for_org` is the org-scoped shared path used by
-    //     internal callers without a user session; the user-driven wrapper
-    //     `run_completion` records the same row at the org level.
+    //     forensics. Best-effort: never fails the user's request. The
+    //     originating user is attributed when the caller knows it (#869);
+    //     org-scoped internal callers without a user session leave it None.
     state
         .store
         .record_audit_event(
             org.id,
-            None,
+            actor_user_id,
             AuditEventType::AiUsage,
             format!("AI completion via {} provider", provider_label(selection)),
             Some(serde_json::json!({
