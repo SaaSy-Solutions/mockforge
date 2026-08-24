@@ -347,6 +347,10 @@ impl DeploymentOrchestrator {
             }
         }
 
+        // Sentry error capture (#713). Forwarded after OTLP so both
+        // observability sinks share the same injection point.
+        apply_sentry_env(&mut env);
+
         // Reality-driven proxy upstream (#222). When set, the deployed
         // mockforge-cli's `reality_proxy` middleware forwards a per-request
         // probabilistic share of traffic to this URL based on the
@@ -602,7 +606,6 @@ impl DeploymentOrchestrator {
         )
         .await?;
 
-        // Build updated machine config (same structure as deploy)
         let mut env = HashMap::new();
         env.insert("MOCKFORGE_DEPLOYMENT_ID".to_string(), deployment.id.to_string());
         env.insert("MOCKFORGE_ORG_ID".to_string(), deployment.org_id.to_string());
@@ -611,6 +614,8 @@ impl DeploymentOrchestrator {
         // Same admin-server enable rationale as `deploy_to_flyio` above —
         // gives the resilience proxy something to reach over 6PN.
         env.insert("MOCKFORGE_ADMIN_ENABLED".to_string(), "true".to_string());
+        // Sentry error capture (#713) — same forwarding as `deploy_to_flyio`.
+        apply_sentry_env(&mut env);
 
         if let Some(ref spec_url) = deployment.openapi_spec_url {
             env.insert("MOCKFORGE_OPENAPI_SPEC_URL".to_string(), spec_url.clone());
@@ -806,5 +811,53 @@ impl DeploymentOrchestrator {
         DeploymentLog::create(pool, deployment_id, "info", "Deletion completed", None).await?;
 
         Ok(())
+    }
+}
+
+/// Forward Sentry config (#643/#664) into a hosted-mock's Fly machine env so
+/// tenant machines report errors to the same Sentry project as the registry
+/// server. `SENTRY_DSN` is required for capture (empty/unset disables it);
+/// environment and trace sampling are passed through when the operator sets
+/// them, so per-tenant events stay separable without extra config. Release is
+/// intentionally NOT forwarded: tenant machines run the mockforge-cli image,
+/// whose own crate version is the accurate release identifier.
+fn apply_sentry_env(env: &mut HashMap<String, String>) {
+    if let Ok(dsn) = std::env::var("SENTRY_DSN") {
+        if !dsn.trim().is_empty() {
+            env.insert("SENTRY_DSN".to_string(), dsn);
+            if let Ok(environment) = std::env::var("SENTRY_ENVIRONMENT") {
+                if !environment.trim().is_empty() {
+                    env.insert("SENTRY_ENVIRONMENT".to_string(), environment);
+                }
+            }
+            if let Ok(sample_rate) = std::env::var("SENTRY_TRACES_SAMPLE_RATE") {
+                if !sample_rate.trim().is_empty() {
+                    env.insert("SENTRY_TRACES_SAMPLE_RATE".to_string(), sample_rate);
+                }
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sentry_env_forwarding_follows_dsn() {
+        // One test owns the process-global SENTRY_* vars end to end; cargo
+        // runs test threads in parallel, so a second test here would race.
+        std::env::set_var("SENTRY_DSN", "https://k@example.ingest.sentry.io/1");
+        let mut env = HashMap::new();
+        apply_sentry_env(&mut env);
+        assert_eq!(
+            env.get("SENTRY_DSN").map(String::as_str),
+            Some("https://k@example.ingest.sentry.io/1")
+        );
+
+        std::env::remove_var("SENTRY_DSN");
+        let mut env = HashMap::new();
+        apply_sentry_env(&mut env);
+        assert!(!env.contains_key("SENTRY_DSN"));
     }
 }
