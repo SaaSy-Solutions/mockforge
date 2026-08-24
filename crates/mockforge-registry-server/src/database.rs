@@ -56,8 +56,18 @@ impl Database {
 
     pub async fn migrate(&self) -> Result<()> {
         // Acquire a PostgreSQL advisory lock to prevent concurrent migration runs
-        // across multiple replicas. Lock ID 8675309 is an arbitrary but stable identifier.
-        const MIGRATION_LOCK_ID: i64 = 8675309;
+        // across multiple replicas. Lock ID 8675310 is an arbitrary but stable
+        // identifier.
+        //
+        // History: 8675309 became permanently poisoned on 2026-08-24 — a
+        // deploy whose machines were force-killed mid-migration left a
+        // session-level advisory lock held by an idle Neon POOLER backend
+        // (neondb_owner), which cannot be pg_terminate_backend'd without
+        // superuser and which PgBouncer keeps alive indefinitely. Rotating
+        // the ID orphans the stale lock harmlessly. If this ever recurs,
+        // prefer fixing the leak at the source (xact-scoped locks) before
+        // rotating again.
+        const MIGRATION_LOCK_ID: i64 = 8675310;
 
         // Pin ONE connection for the lock/unlock pair.
         //
