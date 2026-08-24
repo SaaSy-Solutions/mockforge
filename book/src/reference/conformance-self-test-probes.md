@@ -21,6 +21,29 @@ buckets on. So `request-body:type-mismatch:user.email` rolls up under
 `request-body`, alongside `request-body:empty`,
 `request-body:required-removed:id`, and friends.
 
+## Per-location violation entries (#896)
+
+Server-side violation buffer entries are emitted **one per location**,
+not one per request. A single POST that fails a query enum
+(`kind`) AND a required body field (`email`) produces:
+
+```json
+{ "category": "query",         "reason": "kind: Validation error ...",  "occurrences": 1 }
+{ "category": "request-body",  "reason": "email: ... is required",      "occurrences": 1 }
+```
+
+- `category` mirrors the validator detail's `"path"` prefix:
+  `query` / `headers` / `cookies` / `parameters` (path params) /
+  `request-body`.
+- `reason` starts with the offending parameter or field name, so grepping
+  `query.\$.xgafv`-style details works directly against the export.
+- With dedup enabled (`MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE=true`,
+  default), same `(method, path, category, reason)` repeats collapse into
+  one entry with a bumped `occurrences`.
+- Requests whose validator output carries no structured per-location
+  `details[]` fall back to the legacy one-entry-per-request shape with the
+  priority classifier (`classify_validation_reason`).
+
 ## Positive case (one per operation)
 
 | Label | What it sends | Expected status |

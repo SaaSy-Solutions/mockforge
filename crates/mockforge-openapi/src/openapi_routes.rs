@@ -1327,22 +1327,64 @@ impl OpenApiRouteRegistry {
                     .find(|(k, _)| k.eq_ignore_ascii_case(name))
                     .and_then(|(_, v)| v.as_str().map(|s| s.to_string()))
             });
-        mockforge_foundation::conformance_violations::record(
-            mockforge_foundation::conformance_violations::ServerConformanceViolation {
-                timestamp: Utc::now(),
-                method: method.to_string(),
-                path: path_template.to_string(),
-                client_ip: "unknown".to_string(),
-                status: status_code,
-                reason,
-                category,
-                occurrences: 1,
-                client_mockforge_version,
-                client_sent_at,
-                summary: String::new(),
-                categories: Vec::new(),
-            },
-        );
+
+        // Issue #896 — emit ONE buffer entry per LOCATION instead of one
+        // per request. A POST failing `query.$.xgafv`, `query.prettyPrint`,
+        // AND `body.email` now produces three entries
+        // (`query` / `query` / `request-body`) whose reasons carry the
+        // offending param name. Same-path/same-category/same-reason
+        // duplicates still collapse through the dedup buffer.
+        let per_location: Vec<(String, String)> = validation_details(&payload)
+            .iter()
+            .filter_map(split_detail_entry)
+            .collect();
+
+        if per_location.is_empty() {
+            mockforge_foundation::conformance_violations::record(
+                mockforge_foundation::conformance_violations::ServerConformanceViolation {
+                    timestamp: Utc::now(),
+                    method: method.to_string(),
+                    path: path_template.to_string(),
+                    client_ip: "unknown".to_string(),
+                    status: status_code,
+                    reason,
+                    category,
+                    occurrences: 1,
+                    client_mockforge_version,
+                    client_sent_at,
+                    summary: String::new(),
+                    categories: Vec::new(),
+                },
+            );
+        } else {
+            for (loc_category, loc_reason) in per_location {
+                tracing::debug!(
+                    target: "mockforge::conformance",
+                    method = %method,
+                    path = %path_template,
+                    status = status_code,
+                    category = %loc_category,
+                    reason = %loc_reason,
+                    "request conformance violation (per-location)"
+                );
+                mockforge_foundation::conformance_violations::record(
+                    mockforge_foundation::conformance_violations::ServerConformanceViolation {
+                        timestamp: Utc::now(),
+                        method: method.to_string(),
+                        path: path_template.to_string(),
+                        client_ip: "unknown".to_string(),
+                        status: status_code,
+                        reason: loc_reason,
+                        category: loc_category.clone(),
+                        occurrences: 1,
+                        client_mockforge_version: client_mockforge_version.clone(),
+                        client_sent_at,
+                        summary: String::new(),
+                        categories: vec![loc_category],
+                    },
+                );
+            }
+        }
 
         // Issue #79 round 14 — shadow mode: the violation is recorded
         // above (so the Conformance tab still shows it, with its real
@@ -2585,6 +2627,75 @@ static LAST_ERRORS: Lazy<Mutex<VecDeque<Value>>> =
 /// without dragging in the entire spec analyser.
 ///
 /// Issue #79 round 12.
+/// Issue #896 — map a validator detail entry's `"path":"<loc>.<name>"`
+/// to its buffer category and per-location reason. Returns `None` for
+/// entries without a recognisable `<location>.` prefix so callers fall
+/// back to whole-request classification.
+fn split_detail_entry(detail: &Value) -> Option<(String, String)> {
+    let obj = detail.as_object()?;
+    let path = obj.get("path")?.as_str()?;
+    let message = obj
+        .get("message")
+        .and_then(|m| m.as_str())
+        .unwrap_or("validation failed");
+    // Body-level failures arrive as a bare `"path":"body"` (the field
+    // name lives in the message), so accept both `<loc>.<name>` and a
+    // bare location token.
+    let (loc, name) = match path.split_once('.') {
+        Some(("query", rest)) => ("query", rest),
+        Some(("header", rest)) => ("headers", rest),
+        Some(("cookie", rest)) => ("cookies", rest),
+        Some(("path", rest)) => ("parameters", rest),
+        Some(("body", rest)) => ("request-body", rest),
+        _ => match path {
+            "query" => ("query", ""),
+            "header" | "headers" => ("headers", ""),
+            "cookie" | "cookies" => ("cookies", ""),
+            "path" => ("parameters", ""),
+            "body" | "request-body" => ("request-body", ""),
+            _ => return None,
+        },
+    };
+    let reason = if name.is_empty() {
+        message.to_string()
+    } else {
+        format!("{name}: {message}")
+    };
+    Some((loc.to_string(), reason))
+}
+
+/// Issue #896 — pull the validator's structured `details[]` array out of
+/// an error payload. The detail may arrive either as an object
+/// (`{"errors":[..],"details":[..]}`) or as a JSON-encoded string of the
+/// same shape depending on which status/branch produced it.
+fn validation_details(payload: &Value) -> Vec<Value> {
+    let Some(detail) = payload.get("detail") else {
+        return Vec::new();
+    };
+    let parsed = match detail {
+        // Prose-wrapped JSON ("Validation error: {...}") — slice out the
+        // outermost object before parsing.
+        Value::String(s) => match (s.find('{'), s.rfind('}')) {
+            (Some(start), Some(end)) if end > start => {
+                serde_json::from_str::<Value>(&s[start..=end]).ok()
+            }
+            _ => None,
+        },
+        v => Some(v.clone()),
+    };
+    let Some(parsed) = parsed else {
+        return Vec::new();
+    };
+    let Some(details) = parsed.get("details").and_then(|d| d.as_array()) else {
+        return Vec::new();
+    };
+    details
+        .iter()
+        .filter(|d| d.get("path").and_then(|p| p.as_str()).is_some())
+        .cloned()
+        .collect()
+}
+
 pub fn classify_validation_reason(reason: &str) -> String {
     // Round 41 (#79) — Srikanth on 0.3.185: violations on GET requests
     // (which carry no body) AND query-only violations on POST requests
@@ -3194,6 +3305,80 @@ mod tests {
         assert_eq!(
             classify_validation_reason("Content-Type application/xml not allowed"),
             "content-types"
+        );
+    }
+
+    /// Issue #896 — a request violating BOTH a query-level enum AND a
+    /// body required-field on the same operation must produce TWO buffer
+    /// entries with distinct categories (`query` + `request-body`),
+    /// each reason naming the offending parameter.
+    #[test]
+    fn per_location_violation_split_records_one_entry_per_location() {
+        mockforge_foundation::conformance_violations::clear();
+
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "T", "version": "1" },
+            "paths": {
+                "/v1/things": {
+                    "post": {
+                        "summary": "Create thing",
+                        "parameters": [
+                            {
+                                "name": "kind",
+                                "in": "query",
+                                "required": true,
+                                "schema": { "type": "string", "enum": ["a", "b"] }
+                            }
+                        ],
+                        "requestBody": {
+                            "required": true,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["email"],
+                                        "properties": { "email": { "type": "string" } }
+                                    }
+                                }
+                            }
+                        },
+                        "responses": { "200": { "description": "ok" } }
+                    }
+                }
+            }
+        });
+        let spec = crate::spec::OpenApiSpec::from_json(spec_json).expect("spec parses");
+        let router = OpenApiRouteRegistry::new(spec);
+
+        // kind violates the enum AND the body misses `email`.
+        let result = router.run_validation_with_recording_ex(
+            "/v1/things",
+            "POST",
+            &Map::new(),
+            &[("kind".to_string(), json!("bogus"))].into_iter().collect(),
+            &Map::new(),
+            &Map::new(),
+            Some(&json!({})),
+            true,
+        );
+        assert!(result.is_err(), "request must fail validation");
+
+        let buffer = mockforge_foundation::conformance_violations::snapshot();
+        let mine: Vec<_> = buffer
+            .iter()
+            .filter(|v| v.path == "/v1/things" && v.method == "POST")
+            .collect();
+        assert!(
+            mine.iter().any(|v| v.category == "query"
+                && v.reason.contains("kind")),
+            "expected a query entry naming 'kind', got {:?}",
+            mine.iter().map(|v| (&v.category, &v.reason)).collect::<Vec<_>>()
+        );
+        assert!(
+            mine.iter().any(|v| v.category == "request-body"),
+            "expected a separate request-body entry, got {:?}",
+            mine.iter().map(|v| (&v.category, &v.reason)).collect::<Vec<_>>()
         );
     }
 
