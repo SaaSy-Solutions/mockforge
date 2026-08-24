@@ -283,9 +283,7 @@ impl PaginationIntelligence {
         let page_sizes: Vec<usize> = self.examples.iter().filter_map(|e| e.page_size).collect();
 
         if !page_sizes.is_empty() {
-            if let (Some(min), Some(max)) =
-                (page_sizes.iter().min(), page_sizes.iter().max())
-            {
+            if let (Some(min), Some(max)) = (page_sizes.iter().min(), page_sizes.iter().max()) {
                 self.default_rule.default_page_size = *min;
                 self.default_rule.max_page_size = *max;
             }

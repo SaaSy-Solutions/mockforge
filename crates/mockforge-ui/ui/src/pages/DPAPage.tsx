@@ -10,7 +10,7 @@ interface LegalDocument {
 }
 
 async function fetchDPA(): Promise<LegalDocument> {
-  const response = await fetch('/api/v1/legal/dpa');
+  const response = await fetch('/api/v1/legal/dpa', { credentials: 'include' });
   if (!response.ok) {
     throw new Error('Failed to fetch Data Processing Agreement');
   }

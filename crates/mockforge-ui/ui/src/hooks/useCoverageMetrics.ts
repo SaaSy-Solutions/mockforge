@@ -111,7 +111,7 @@ export function useScenarioUsage(
       if (query?.org_id) params.append('org_id', query.org_id);
       if (query?.limit) params.append('limit', query.limit.toString());
 
-      const response = await fetch(`${API_BASE}/scenarios/usage?${params.toString()}`);
+      const response = await fetch(`${API_BASE}/scenarios/usage?${params.toString()}`, { credentials: 'include' });
       if (!response.ok) {
         throw new Error(`Failed to fetch scenario usage: ${response.statusText}`);
       }
@@ -139,7 +139,7 @@ export function usePersonaCIHits(
       if (query?.org_id) params.append('org_id', query.org_id);
       if (query?.limit) params.append('limit', query.limit.toString());
 
-      const response = await fetch(`${API_BASE}/personas/ci-hits?${params.toString()}`);
+      const response = await fetch(`${API_BASE}/personas/ci-hits?${params.toString()}`, { credentials: 'include' });
       if (!response.ok) {
         throw new Error(`Failed to fetch persona CI hits: ${response.statusText}`);
       }
@@ -169,7 +169,7 @@ export function useEndpointCoverage(
         params.append('min_coverage', query.min_coverage.toString());
       }
 
-      const response = await fetch(`${API_BASE}/endpoints/coverage?${params.toString()}`);
+      const response = await fetch(`${API_BASE}/endpoints/coverage?${params.toString()}`, { credentials: 'include' });
       if (!response.ok) {
         throw new Error(`Failed to fetch endpoint coverage: ${response.statusText}`);
       }
@@ -199,9 +199,7 @@ export function useRealityLevelStaleness(
         params.append('max_staleness_days', query.max_staleness_days.toString());
       }
 
-      const response = await fetch(
-        `${API_BASE}/reality-levels/staleness?${params.toString()}`
-      );
+      const response = await fetch(`${API_BASE}/reality-levels/staleness?${params.toString()}`, { credentials: 'include' });
       if (!response.ok) {
         throw new Error(`Failed to fetch reality level staleness: ${response.statusText}`);
       }
@@ -229,7 +227,7 @@ export function useDriftPercentage(
       if (query?.org_id) params.append('org_id', query.org_id);
       if (query?.limit) params.append('limit', query.limit.toString());
 
-      const response = await fetch(`${API_BASE}/drift/percentage?${params.toString()}`);
+      const response = await fetch(`${API_BASE}/drift/percentage?${params.toString()}`, { credentials: 'include' });
       if (!response.ok) {
         throw new Error(`Failed to fetch drift percentage: ${response.statusText}`);
       }

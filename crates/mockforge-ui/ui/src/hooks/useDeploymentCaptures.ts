@@ -81,9 +81,7 @@ export function useDeploymentCaptures(
 
       setLoading(true);
       try {
-        const resp = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const resp = await fetch(url, { credentials: 'include', headers: { Authorization: `Bearer ${token}` }, });
         if (!resp.ok) {
           // The recorder API returns 503 when the recorder isn't enabled
           // on the deployment. Surface that as a friendly empty + hint.
@@ -143,9 +141,7 @@ export async function fetchCaptureResponse(
   const token = getAuthToken();
   if (!token) return null;
   const url = `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/captures/${encodeURIComponent(captureId)}/response`;
-  const resp = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const resp = await fetch(url, { credentials: 'include', headers: { Authorization: `Bearer ${token}` }, });
   if (!resp.ok) return null;
   return resp.json();
 }

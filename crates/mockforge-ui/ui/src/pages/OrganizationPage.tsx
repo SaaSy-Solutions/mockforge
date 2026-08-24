@@ -168,10 +168,8 @@ function authHeaders(): Record<string, string> {
 }
 
 async function apiFetch<T>(url: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(url, {
-    ...init,
-    headers: { ...authHeaders(), ...init?.headers },
-  });
+  const response = await fetch(url, { credentials: 'include', ...init,
+  headers: { ...authHeaders(), ...init?.headers }, });
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
     throw new Error(body.message || body.error || `Request failed (${response.status})`);

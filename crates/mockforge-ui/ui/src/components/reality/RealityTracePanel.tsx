@@ -59,7 +59,7 @@ export function RealityTracePanel({ requestId, className, onNavigate }: RealityT
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`/__mockforge/api/reality/trace/${requestId}`);
+        const response = await fetch(`/__mockforge/api/reality/trace/${requestId}`, { credentials: 'include' });
         if (!response.ok) {
           throw new Error('Failed to fetch reality trace');
         }

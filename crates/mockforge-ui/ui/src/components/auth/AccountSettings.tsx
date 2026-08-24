@@ -241,9 +241,7 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
         setGdprBanner(null);
         try {
             const token = getAuthToken();
-            const response = await fetch('/api/v1/gdpr/export', {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            const response = await fetch('/api/v1/gdpr/export', { credentials: 'include', headers: { Authorization: `Bearer ${token}` }, });
             if (!response.ok) {
                 const body = await response.json().catch(() => ({}));
                 throw new Error(
@@ -284,17 +282,15 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
         setGdprBanner(null);
         try {
             const token = getAuthToken();
-            const response = await fetch('/api/v1/gdpr/erase', {
-                method: 'DELETE',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    confirm: true,
-                    reason: deleteReason.trim() || undefined,
-                }),
-            });
+            const response = await fetch('/api/v1/gdpr/erase', { credentials: 'include', method: 'DELETE',
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                confirm: true,
+                reason: deleteReason.trim() || undefined,
+            }), });
             if (!response.ok) {
                 const body = await response.json().catch(() => ({}));
                 throw new Error(
@@ -322,14 +318,12 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
             const body = verifyEmailAddress.trim()
                 ? { email: verifyEmailAddress.trim() }
                 : {};
-            const response = await fetch('/api/v1/auth/verify-email/resend', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
-                body: JSON.stringify(body),
-            });
+            const response = await fetch('/api/v1/auth/verify-email/resend', { credentials: 'include', method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify(body), });
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
                 throw new Error(

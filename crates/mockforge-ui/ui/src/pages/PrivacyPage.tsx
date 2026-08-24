@@ -10,7 +10,7 @@ interface LegalDocument {
 }
 
 async function fetchPrivacy(): Promise<LegalDocument> {
-  const response = await fetch('/api/v1/legal/privacy');
+  const response = await fetch('/api/v1/legal/privacy', { credentials: 'include' });
   if (!response.ok) {
     throw new Error('Failed to fetch Privacy Policy');
   }

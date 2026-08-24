@@ -100,7 +100,7 @@ function LocalObservabilityView() {
 
   // Fetch initial stats
   useEffect(() => {
-    fetch('/api/observability/stats')
+    fetch('/api/observability/stats', { credentials: 'include' })
       .then(res => res.json())
       .then(data => {
         if (data && typeof data === 'object' && !Array.isArray(data)) {
@@ -109,7 +109,7 @@ function LocalObservabilityView() {
       })
       .catch(console.error);
 
-    fetch('/api/observability/alerts')
+    fetch('/api/observability/alerts', { credentials: 'include' })
       .then(res => res.json())
       .then(data => setAlerts(Array.isArray(data) ? data : []))
       .catch(console.error);

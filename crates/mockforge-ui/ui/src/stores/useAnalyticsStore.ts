@@ -107,7 +107,7 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
     if (isCloud) { set({ isLoading: false }); return; }
     try {
       set({ isLoading: true, error: null });
-      const response = await fetch(`/${BASE_URL}/summary?range=${range}`);
+      const response = await fetch(`/${BASE_URL}/summary?range=${range}`, { credentials: 'include' });
 
       if (!response.ok) {
         throw new Error(`Failed to fetch summary: ${response.statusText}`);
@@ -130,7 +130,7 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
     if (isCloud) { set({ isLoading: false }); return; }
     try {
       set({ isLoading: true, error: null });
-      const response = await fetch(`/${BASE_URL}/requests?range=${range}`);
+      const response = await fetch(`/${BASE_URL}/requests?range=${range}`, { credentials: 'include' });
 
       if (!response.ok) {
         throw new Error(`Failed to fetch requests: ${response.statusText}`);
@@ -153,7 +153,7 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
     if (isCloud) { set({ isLoading: false }); return; }
     try {
       set({ isLoading: true, error: null });
-      const response = await fetch(`/${BASE_URL}/endpoints?limit=${limit}`);
+      const response = await fetch(`/${BASE_URL}/endpoints?limit=${limit}`, { credentials: 'include' });
 
       if (!response.ok) {
         throw new Error(`Failed to fetch endpoints: ${response.statusText}`);
@@ -176,7 +176,7 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
     if (isCloud) { set({ isLoading: false }); return; }
     try {
       set({ isLoading: true, error: null });
-      const response = await fetch(`/${BASE_URL}/websocket`);
+      const response = await fetch(`/${BASE_URL}/websocket`, { credentials: 'include' });
 
       if (!response.ok) {
         throw new Error(`Failed to fetch WebSocket metrics: ${response.statusText}`);
@@ -199,7 +199,7 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
     if (isCloud) { set({ isLoading: false }); return; }
     try {
       set({ isLoading: true, error: null });
-      const response = await fetch(`/${BASE_URL}/smtp`);
+      const response = await fetch(`/${BASE_URL}/smtp`, { credentials: 'include' });
 
       if (!response.ok) {
         throw new Error(`Failed to fetch SMTP metrics: ${response.statusText}`);
@@ -222,7 +222,7 @@ export const useAnalyticsStore = create<AnalyticsStore>((set, get) => ({
     if (isCloud) { set({ isLoading: false }); return; }
     try {
       set({ isLoading: true, error: null });
-      const response = await fetch(`/${BASE_URL}/system`);
+      const response = await fetch(`/${BASE_URL}/system`, { credentials: 'include' });
 
       if (!response.ok) {
         throw new Error(`Failed to fetch system metrics: ${response.statusText}`);

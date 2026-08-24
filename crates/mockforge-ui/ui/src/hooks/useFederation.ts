@@ -64,9 +64,7 @@ export const useFederations = (
   return useQuery<Federation[], Error>({
     queryKey: ['federations', orgId],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}?org_id=${orgId}`, {
-        headers: authHeaders(),
-      });
+      const response = await fetch(`${API_BASE}?org_id=${orgId}`, { credentials: 'include', headers: authHeaders(), });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(apiErrorMessage(response, errorData, 'Failed to fetch federations'));
@@ -83,9 +81,7 @@ export const useFederation = (id: string): UseQueryResult<Federation, Error> => 
   return useQuery<Federation, Error>({
     queryKey: ['federation', id],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/${id}`, {
-        headers: authHeaders(),
-      });
+      const response = await fetch(`${API_BASE}/${id}`, { credentials: 'include', headers: authHeaders(), });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(apiErrorMessage(response, errorData, 'Failed to fetch federation'));
@@ -102,11 +98,9 @@ export const useCreateFederation = () => {
 
   return useMutation<Federation, Error, CreateFederationRequest>({
     mutationFn: async (request) => {
-      const response = await fetch(API_BASE, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify(request),
-      });
+      const response = await fetch(API_BASE, { credentials: 'include', method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(request), });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(apiErrorMessage(response, errorData, 'Failed to create federation'));
@@ -125,11 +119,9 @@ export const useUpdateFederation = () => {
 
   return useMutation<Federation, Error, { id: string; data: UpdateFederationRequest }>({
     mutationFn: async ({ id, data }) => {
-      const response = await fetch(`${API_BASE}/${id}`, {
-        method: 'PATCH',
-        headers: authHeaders(),
-        body: JSON.stringify(data),
-      });
+      const response = await fetch(`${API_BASE}/${id}`, { credentials: 'include', method: 'PATCH',
+      headers: authHeaders(),
+      body: JSON.stringify(data), });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(apiErrorMessage(response, errorData, 'Failed to update federation'));
@@ -149,10 +141,8 @@ export const useDeleteFederation = () => {
 
   return useMutation<void, Error, string>({
     mutationFn: async (id) => {
-      const response = await fetch(`${API_BASE}/${id}`, {
-        method: 'DELETE',
-        headers: authHeaders(),
-      });
+      const response = await fetch(`${API_BASE}/${id}`, { credentials: 'include', method: 'DELETE',
+      headers: authHeaders(), });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(apiErrorMessage(response, errorData, 'Failed to delete federation'));
@@ -168,11 +158,9 @@ export const useDeleteFederation = () => {
 export const useRouteRequest = () => {
   return useMutation<RouteResponse, Error, { federationId: string; request: RouteRequest }>({
     mutationFn: async ({ federationId, request }) => {
-      const response = await fetch(`${API_BASE}/${federationId}/route`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify(request),
-      });
+      const response = await fetch(`${API_BASE}/${federationId}/route`, { credentials: 'include', method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(request), });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(apiErrorMessage(response, errorData, 'Failed to route request'));
@@ -242,9 +230,7 @@ export const useActiveFederationScenario = (
   return useQuery<FederationScenarioActivation | null, Error>({
     queryKey: ['federation-active-scenario', federationId],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/${federationId}/scenarios/active`, {
-        headers: authHeaders(),
-      });
+      const response = await fetch(`${API_BASE}/${federationId}/scenarios/active`, { credentials: 'include', headers: authHeaders(), });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
@@ -268,11 +254,9 @@ export const useActivateFederationScenario = () => {
     { federationId: string; request: ActivateScenarioRequest }
   >({
     mutationFn: async ({ federationId, request }) => {
-      const response = await fetch(`${API_BASE}/${federationId}/scenarios/activate`, {
-        method: 'POST',
-        headers: authHeaders(),
-        body: JSON.stringify(request),
-      });
+      const response = await fetch(`${API_BASE}/${federationId}/scenarios/activate`, { credentials: 'include', method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(request), });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(apiErrorMessage(response, errorData, 'Failed to activate scenario'));
@@ -309,7 +293,7 @@ export const useOrgScenarios = (): UseQueryResult<OrgScenarioEntry[], Error> => 
   return useQuery<OrgScenarioEntry[], Error>({
     queryKey: ['org-scenarios'],
     queryFn: async () => {
-      const response = await fetch(`/api/v1/scenarios`, { headers: authHeaders() });
+      const response = await fetch(`/api/v1/scenarios`, { credentials: 'include', headers: authHeaders() });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(apiErrorMessage(response, errorData, 'Failed to fetch scenarios'));
@@ -344,14 +328,9 @@ export const useReportFederationScenarioState = () => {
     { federationId: string; report: ReportPerServiceStateRequest }
   >({
     mutationFn: async ({ federationId, report }) => {
-      const response = await fetch(
-        `${API_BASE}/${federationId}/scenarios/active/report`,
-        {
-          method: 'POST',
-          headers: authHeaders(),
-          body: JSON.stringify(report),
-        }
-      );
+      const response = await fetch(`${API_BASE}/${federationId}/scenarios/active/report`, { credentials: 'include', method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify(report), });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
@@ -398,10 +377,7 @@ export const useWorkspaceActiveFederationScenarios = (
   return useQuery<WorkspaceActiveScenariosResponse, Error>({
     queryKey: ['workspace-active-federation-scenarios', workspaceId],
     queryFn: async () => {
-      const response = await fetch(
-        `/api/v1/workspaces/${workspaceId}/active-scenarios`,
-        { headers: authHeaders() }
-      );
+      const response = await fetch(`/api/v1/workspaces/${workspaceId}/active-scenarios`, { credentials: 'include', headers: authHeaders() });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(
@@ -425,10 +401,8 @@ export const useDeactivateFederationScenario = () => {
 
   return useMutation<FederationScenarioActivation, Error, { federationId: string }>({
     mutationFn: async ({ federationId }) => {
-      const response = await fetch(`${API_BASE}/${federationId}/scenarios/active`, {
-        method: 'DELETE',
-        headers: authHeaders(),
-      });
+      const response = await fetch(`${API_BASE}/${federationId}/scenarios/active`, { credentials: 'include', method: 'DELETE',
+      headers: authHeaders(), });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         throw new Error(apiErrorMessage(response, errorData, 'Failed to deactivate scenario'));

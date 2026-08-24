@@ -114,11 +114,9 @@ async function request<T>(
   if (bearer) {
     headers['authorization'] = `Bearer ${bearer}`;
   }
-  const resp = await fetch(path, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  const resp = await fetch(path, { credentials: 'include', method,
+  headers,
+  body: body === undefined ? undefined : JSON.stringify(body), });
   if (!resp.ok) {
     let msg = `HTTP ${resp.status}`;
     try {

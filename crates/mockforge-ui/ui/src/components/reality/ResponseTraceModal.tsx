@@ -101,7 +101,9 @@ export function ResponseTraceModal({ requestId, open, onOpenChange }: ResponseTr
       setLoading(true);
       setError(null);
       try {
-        const response = await fetch(`/__mockforge/api/reality/response-trace/${requestId}`);
+        const response = await fetch(`/__mockforge/api/reality/response-trace/${requestId}`, {
+          credentials: 'include',
+        });
         if (!response.ok) {
           throw new Error('Failed to fetch response trace');
         }

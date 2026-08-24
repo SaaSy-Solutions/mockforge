@@ -37,6 +37,13 @@ fn audit_source_ip(headers: &HeaderMap) -> Option<String> {
 /// JS-reachable storage. See `middleware::auth_middleware` for extraction.
 pub const SESSION_COOKIE: &str = "mockforge_session";
 
+/// Cookie name carrying the rotating refresh token.
+///
+/// HttpOnly like the session cookie: the browser never needs to read it, and
+/// `/auth/token/refresh` accepts it from here so the client does not have to
+/// persist it in JS-reachable storage.
+pub const REFRESH_COOKIE: &str = "mockforge_refresh";
+
 fn cookie_secure() -> bool {
     static SECURE: std::sync::LazyLock<bool> = std::sync::LazyLock::new(|| {
         std::env::var("MOCKFORGE_SESSION_COOKIE_SECURE")
@@ -46,27 +53,70 @@ fn cookie_secure() -> bool {
     *SECURE
 }
 
-/// Build the `Set-Cookie` value that establishes the browser session.
+/// Cookie attributes for auth cookies.
+///
+/// `MOCKFORGE_SESSION_COOKIE_SECURE=1` (hosted HTTPS deployments, including
+/// the cloud Pages → api.mockforge.dev cross-origin setup) switches to
+/// `SameSite=None; Secure`, which is required for the browser to attach the
+/// cookies to cross-site requests. Same-site (self-hosted) deployments keep
+/// `SameSite=Lax` and omit `Secure` so plain-HTTP local use works.
+fn cookie_attributes() -> &'static str {
+    if cookie_secure() {
+        "; HttpOnly; SameSite=None; Secure"
+    } else {
+        "; HttpOnly; SameSite=Lax"
+    }
+}
+
+/// Build the `Set-Cookie` value establishing the browser session.
 fn session_set_cookie(access_token: &str, expires_at_epoch: i64) -> String {
     let max_age = (expires_at_epoch - Utc::now().timestamp()).max(0);
-    let secure = if cookie_secure() { "; Secure" } else { "" };
     format!(
-        "{SESSION_COOKIE}={access_token}; Path=/; HttpOnly; SameSite=Lax{secure}; Max-Age={max_age}"
+        "{SESSION_COOKIE}={access_token}; Path=/{}; Max-Age={max_age}",
+        cookie_attributes()
     )
 }
 
-/// Attach a session cookie to an auth response.
+/// Build the `Set-Cookie` value for the rotating refresh token.
+fn refresh_set_cookie(refresh_token: &str) -> String {
+    let max_age_secs = REFRESH_TOKEN_EXPIRY_DAYS * 24 * 60 * 60;
+    format!(
+        "{REFRESH_COOKIE}={refresh_token}; Path=/{}; Max-Age={max_age_secs}",
+        cookie_attributes()
+    )
+}
+
+/// `Set-Cookie` values that expire both auth cookies (logout).
+pub fn clear_auth_cookies() -> [String; 2] {
+    [
+        format!("{SESSION_COOKIE}=; Path=/{}; Max-Age=0", cookie_attributes()),
+        format!("{REFRESH_COOKIE}=; Path=/{}; Max-Age=0", cookie_attributes()),
+    ]
+}
+
+/// Attach session + refresh cookies to an auth response.
 fn with_session_cookie<T>(
     response: Json<T>,
     access_token: &str,
-    expires_at_epoch: i64,
-) -> ([(axum::http::header::HeaderName, axum::http::HeaderValue); 1], Json<T>) {
+    refresh_token: &str,
+    access_expires_at_epoch: i64,
+) -> (
+    axum::response::AppendHeaders<[(axum::http::header::HeaderName, axum::http::HeaderValue); 2]>,
+    Json<T>,
+) {
+    let pair = |value: String| {
+        axum::http::HeaderValue::from_str(&value).expect("cookie value is ASCII")
+    };
     (
-        [(
-            axum::http::header::SET_COOKIE,
-            axum::http::HeaderValue::from_str(&session_set_cookie(access_token, expires_at_epoch))
-                .expect("cookie value is ASCII"),
-        )],
+        // AppendHeaders (not a bare array) so BOTH Set-Cookie headers survive —
+        // a bare [(k, v); N] replaces earlier values of the same header name.
+        axum::response::AppendHeaders([
+            (
+                axum::http::header::SET_COOKIE,
+                pair(session_set_cookie(access_token, access_expires_at_epoch)),
+            ),
+            (axum::http::header::SET_COOKIE, pair(refresh_set_cookie(refresh_token))),
+        ]),
         response,
     )
 }
@@ -202,6 +252,7 @@ pub async fn register(
     })?;
 
     let issued_access_token = token_pair.access_token.clone();
+    let issued_refresh_token = token_pair.refresh_token.clone();
     Ok(with_session_cookie(
         Json(AuthResponseV2 {
             access_token: token_pair.access_token,
@@ -212,6 +263,7 @@ pub async fn register(
             username: user.username,
         }),
         &issued_access_token,
+        &issued_refresh_token,
         token_pair.access_token_expires_at,
     ))
  }
@@ -350,6 +402,7 @@ pub async fn login(
         .await;
 
     let issued_access_token = token_pair.access_token.clone();
+    let issued_refresh_token = token_pair.refresh_token.clone();
     Ok(with_session_cookie(
         Json(AuthResponseV2 {
             access_token: token_pair.access_token,
@@ -360,13 +413,16 @@ pub async fn login(
             username: user.username,
         }),
         &issued_access_token,
+        &issued_refresh_token,
         token_pair.access_token_expires_at,
     ))
 }
 
 #[derive(Debug, Deserialize)]
 pub struct RefreshTokenRequest {
-    pub refresh_token: String,
+    /// Present when the client keeps the token in JS-reachable storage;
+    /// absent when the browser relies on the `mockforge_refresh` cookie.
+    pub refresh_token: Option<String>,
 }
 
 /// Response for refresh token endpoint
@@ -378,12 +434,35 @@ pub struct RefreshTokenResponse {
     pub refresh_token_expires_at: i64,
 }
 
+/// Read `name=value` out of the request's Cookie header.
+fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
+    let cookies = headers.get(axum::http::header::COOKIE)?.to_str().ok()?;
+    cookies.split(';').find_map(|pair| {
+        let (key, value) = pair.trim().split_once('=')?;
+        (key == name).then(|| value.to_string())
+    })
+}
+
+/// Rotate the token pair.
+///
+/// Accepts the refresh token from the JSON body (existing clients) or, when
+/// absent, from the HttpOnly `mockforge_refresh` cookie issued at login.
 pub async fn refresh_token(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(request): Json<RefreshTokenRequest>,
 ) -> ApiResult<impl axum::response::IntoResponse> {
+    // Body token first (existing clients), then the HttpOnly refresh cookie.
+    let supplied_refresh_token = request
+        .refresh_token
+        .or_else(|| cookie_value(&headers, REFRESH_COOKIE))
+        .ok_or_else(|| {
+            ApiError::InvalidRequest("Missing refresh token".to_string())
+        })?;
+
     // Verify the refresh token (not just any token)
-    let (claims, old_jti) = verify_refresh_token(&request.refresh_token, &state.config.jwt_secret)
+    let (claims, old_jti) =
+        verify_refresh_token(&supplied_refresh_token, &state.config.jwt_secret)
         .map_err(|e| {
             tracing::debug!("Refresh token validation failed: {}", e);
             ApiError::InvalidRequest("Invalid or expired refresh token".to_string())
@@ -436,6 +515,7 @@ pub async fn refresh_token(
         })?;
 
     let issued_access_token = token_pair.access_token.clone();
+    let issued_refresh_token = token_pair.refresh_token.clone();
     Ok(with_session_cookie(
         Json(RefreshTokenResponse {
             access_token: token_pair.access_token,
@@ -444,7 +524,44 @@ pub async fn refresh_token(
             refresh_token_expires_at: token_pair.refresh_token_expires_at,
         }),
         &issued_access_token,
+        &issued_refresh_token,
         token_pair.access_token_expires_at,
+    ))
+}
+
+/// Log the browser session out.
+///
+/// Expires both auth cookies and — when the refresh cookie is present and
+/// valid — revokes its JTI server-side so a copied cookie cannot outlive the
+/// logout. Idempotent: logging out without cookies still succeeds.
+pub async fn logout(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> ApiResult<impl axum::response::IntoResponse> {
+    if let Some(refresh_token) = cookie_value(&headers, REFRESH_COOKIE) {
+        match verify_refresh_token(&refresh_token, &state.config.jwt_secret) {
+            Ok((_, jti)) => {
+                if let Err(e) = state.db.revoke_token(&jti, "logout").await {
+                    tracing::warn!("Failed to revoke refresh token on logout: {}", e);
+                }
+            }
+            Err(e) => {
+                tracing::debug!("Logout with invalid/expired refresh cookie: {}", e);
+            }
+        }
+    }
+
+    let pair = |value: String| {
+        axum::http::HeaderValue::from_str(&value).expect("cookie value is ASCII")
+    };
+    let cleared = clear_auth_cookies();
+    Ok((
+        // AppendHeaders so both expiring Set-Cookie headers are sent.
+        axum::response::AppendHeaders([
+            (axum::http::header::SET_COOKIE, pair(cleared[0].clone())),
+            (axum::http::header::SET_COOKIE, pair(cleared[1].clone())),
+        ]),
+        Json(serde_json::json!({ "success": true })),
     ))
 }
 

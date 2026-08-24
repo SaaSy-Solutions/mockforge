@@ -205,8 +205,14 @@ impl VisualLayout {
                         .and_then(|t| t.as_str())
                         .unwrap_or("state")
                         .to_string(),
-                    position_x: position.get("x").and_then(serde_json::Value::as_f64).unwrap_or(0.0),
-                    position_y: position.get("y").and_then(serde_json::Value::as_f64).unwrap_or(0.0),
+                    position_x: position
+                        .get("x")
+                        .and_then(serde_json::Value::as_f64)
+                        .unwrap_or(0.0),
+                    position_y: position
+                        .get("y")
+                        .and_then(serde_json::Value::as_f64)
+                        .unwrap_or(0.0),
                     width: n.get("width").and_then(serde_json::Value::as_f64).unwrap_or(150.0),
                     height: n.get("height").and_then(serde_json::Value::as_f64).unwrap_or(40.0),
                     label: data.get("label").and_then(|l| l.as_str()).unwrap_or("").to_string(),
@@ -237,7 +243,10 @@ impl VisualLayout {
                         .and_then(|t| t.as_str())
                         .unwrap_or("default")
                         .to_string(),
-                    animated: e.get("animated").and_then(serde_json::Value::as_bool).unwrap_or(false),
+                    animated: e
+                        .get("animated")
+                        .and_then(serde_json::Value::as_bool)
+                        .unwrap_or(false),
                     style: style.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
                     data: data.iter().map(|(k, v)| (k.clone(), v.clone())).collect(),
                 }

@@ -350,10 +350,7 @@ export const HostedMocksPage: React.FC = () => {
       return;
     }
     try {
-      const resp = await fetch(
-        `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/custom-domain`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
+      const resp = await fetch(`/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/custom-domain`, { credentials: 'include', headers: { Authorization: `Bearer ${token}` } });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
       setActiveCustomDomain(typeof data?.hostname === 'string' ? data.hostname : null);
@@ -381,10 +378,7 @@ export const HostedMocksPage: React.FC = () => {
     const token = getAuthToken();
     if (!token) return;
     try {
-      const resp = await fetch(
-        `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/captures/status`,
-        { headers: { Authorization: `Bearer ${token}` } },
-      );
+      const resp = await fetch(`/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/captures/status`, { credentials: 'include', headers: { Authorization: `Bearer ${token}` } });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
       const data = await resp.json();
       setRecorderEnabled(typeof data?.enabled === 'boolean' ? data.enabled : null);
@@ -496,10 +490,8 @@ export const HostedMocksPage: React.FC = () => {
     try {
       const token = getAuthToken();
       const url = `/api/v1/hosted-mocks/${encodeURIComponent(selectedDeployment.id)}/captures/${encodeURIComponent(selectedCapture.id)}/replay`;
-      const resp = await fetch(url, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${token ?? ''}` },
-      });
+      const resp = await fetch(url, { credentials: 'include', method: 'POST',
+      headers: { Authorization: `Bearer ${token ?? ''}` }, });
       if (!resp.ok) {
         throw new Error(`HTTP ${resp.status}`);
       }
@@ -524,11 +516,9 @@ export const HostedMocksPage: React.FC = () => {
       const token = getAuthToken();
       if (!token) return;
 
-      const response = await fetch('/api/v1/projects', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch('/api/v1/projects', { credentials: 'include', headers: {
+        Authorization: `Bearer ${token}`,
+      }, });
 
       if (!response.ok) {
         // Non-fatal: project_id is optional
@@ -572,11 +562,9 @@ export const HostedMocksPage: React.FC = () => {
         throw new Error('Not authenticated');
       }
 
-      const response = await fetch('/api/v1/hosted-mocks', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch('/api/v1/hosted-mocks', { credentials: 'include', headers: {
+        Authorization: `Bearer ${token}`,
+      }, });
 
       if (!response.ok) {
         throw new Error('Failed to load deployments');
@@ -631,14 +619,12 @@ export const HostedMocksPage: React.FC = () => {
         enabled_protocols: enabledProtocols,
       };
 
-      const response = await fetch('/api/v1/hosted-mocks', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(request),
-      });
+      const response = await fetch('/api/v1/hosted-mocks', { credentials: 'include', method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(request), });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
@@ -687,12 +673,10 @@ export const HostedMocksPage: React.FC = () => {
         throw new Error('Not authenticated');
       }
 
-      const response = await fetch(`/api/v1/hosted-mocks/${id}`, {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch(`/api/v1/hosted-mocks/${id}`, { credentials: 'include', method: 'DELETE',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      }, });
 
       if (!response.ok) {
         throw new Error('Failed to delete deployment');
@@ -716,13 +700,11 @@ export const HostedMocksPage: React.FC = () => {
       const body = new FormData();
       body.append('file', file);
 
-      const response = await fetch('/api/v1/hosted-mocks/specs/upload', {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body,
-      });
+      const response = await fetch('/api/v1/hosted-mocks/specs/upload', { credentials: 'include', method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+      body, });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Upload failed' }));
@@ -766,13 +748,11 @@ export const HostedMocksPage: React.FC = () => {
         throw new Error('Not authenticated');
       }
 
-      const response = await fetch(`/api/v1/hosted-mocks/${id}/${action}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch(`/api/v1/hosted-mocks/${id}/${action}`, { credentials: 'include', method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      }, });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: `${label} failed` }));
@@ -806,14 +786,12 @@ export const HostedMocksPage: React.FC = () => {
         throw new Error('Not authenticated');
       }
 
-      const response = await fetch(`/api/v1/hosted-mocks/${id}/redeploy`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({}),
-      });
+      const response = await fetch(`/api/v1/hosted-mocks/${id}/redeploy`, { credentials: 'include', method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({}), });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Redeploy failed' }));
@@ -845,17 +823,12 @@ export const HostedMocksPage: React.FC = () => {
         throw new Error('Not authenticated');
       }
 
-      const response = await fetch(
-        `/api/v1/hosted-mocks/${selectedDeployment.id}/set-domain`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${token}`,
-          },
-          body: JSON.stringify({ domain: customDomain.trim() }),
-        },
-      );
+      const response = await fetch(`/api/v1/hosted-mocks/${selectedDeployment.id}/set-domain`, { credentials: 'include', method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ domain: customDomain.trim() }), });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Set domain failed' }));
@@ -893,13 +866,8 @@ export const HostedMocksPage: React.FC = () => {
     try {
       const token = getAuthToken();
       if (!token) throw new Error('Not authenticated');
-      const response = await fetch(
-        `/api/v1/hosted-mocks/${selectedDeployment.id}/custom-domain`,
-        {
-          method: 'DELETE',
-          headers: { Authorization: `Bearer ${token}` },
-        },
-      );
+      const response = await fetch(`/api/v1/hosted-mocks/${selectedDeployment.id}/custom-domain`, { credentials: 'include', method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` }, });
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Remove domain failed' }));
         const raw = errorData?.error ?? errorData?.message;
@@ -947,11 +915,9 @@ export const HostedMocksPage: React.FC = () => {
         return;
       }
 
-      const response = await fetch(`/api/v1/hosted-mocks/${id}/logs`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch(`/api/v1/hosted-mocks/${id}/logs`, { credentials: 'include', headers: {
+        Authorization: `Bearer ${token}`,
+      }, });
 
       if (response.ok) {
         const data = await response.json();
@@ -972,11 +938,9 @@ export const HostedMocksPage: React.FC = () => {
         return;
       }
 
-      const response = await fetch(`/api/v1/hosted-mocks/${id}/metrics`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      const response = await fetch(`/api/v1/hosted-mocks/${id}/metrics`, { credentials: 'include', headers: {
+        Authorization: `Bearer ${token}`,
+      }, });
 
       if (response.ok) {
         const data = await response.json();
@@ -3078,10 +3042,8 @@ async function toggleRecorder(
   }
   const url = `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/captures/${action}`;
   try {
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const resp = await fetch(url, { credentials: 'include', method: 'POST',
+    headers: { Authorization: `Bearer ${token}` }, });
     if (!resp.ok) {
       throw new Error(`HTTP ${resp.status}`);
     }
@@ -3111,9 +3073,7 @@ async function downloadCaptures(
   }
   const url = `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/captures/export/${format}`;
   try {
-    const resp = await fetch(url, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    const resp = await fetch(url, { credentials: 'include', headers: { Authorization: `Bearer ${token}` }, });
     if (!resp.ok) {
       throw new Error(`HTTP ${resp.status}`);
     }

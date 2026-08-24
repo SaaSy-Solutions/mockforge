@@ -30,11 +30,9 @@ export function WaitlistPage() {
     setError(null);
 
     try {
-      const response = await fetch('/api/v1/waitlist/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
-      });
+      const response = await fetch('/api/v1/waitlist/subscribe', { credentials: 'include', method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(formData), });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Failed to join waitlist' }));

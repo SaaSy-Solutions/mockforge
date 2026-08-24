@@ -80,9 +80,7 @@ export function useDeploymentTraces(
 
       setLoading(true);
       try {
-        const resp = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const resp = await fetch(url, { credentials: 'include', headers: { Authorization: `Bearer ${token}` }, });
         if (!resp.ok) {
           // 404 happens before any spans have been ingested — surface as
           // empty rather than an error so the UI doesn't yell at users.
@@ -135,9 +133,7 @@ export async function fetchTraceSpans(
   const token = getAuthToken();
   if (!token) return [];
   const url = `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/traces/${encodeURIComponent(traceId)}`;
-  const resp = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const resp = await fetch(url, { credentials: 'include', headers: { Authorization: `Bearer ${token}` }, });
   if (!resp.ok) return [];
   const data = await resp.json();
   return Array.isArray(data) ? (data as TraceSpan[]) : [];

@@ -66,7 +66,7 @@ export const CollaborativeEditor: React.FC<CollaborativeEditorProps> = ({
   // Initialize current user
   useEffect(() => {
     const initializeUser = async () => {
-      const response = await fetch('/__mockforge/auth/me');
+      const response = await fetch('/__mockforge/auth/me', { credentials: 'include' });
       if (response.ok) {
         const userData = await response.json();
         const user: User = {

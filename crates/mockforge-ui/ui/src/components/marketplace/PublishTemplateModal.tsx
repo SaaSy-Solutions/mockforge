@@ -141,14 +141,12 @@ export const PublishTemplateModal: React.FC<PublishTemplateModalProps> = ({
       }
 
       // Submit to API
-      const response = await fetch('/api/v1/marketplace/templates/publish', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(request),
-      });
+      const response = await fetch('/api/v1/marketplace/templates/publish', { credentials: 'include', method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(request), });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));

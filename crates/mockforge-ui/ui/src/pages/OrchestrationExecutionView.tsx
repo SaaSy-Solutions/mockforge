@@ -283,11 +283,9 @@ export const OrchestrationExecutionView: React.FC<{ orchestrationId: string }> =
         // lifecycle yet — silently no-op rather than firing local URLs.
         return;
       }
-      await fetch(`/api/chaos/orchestration/${orchestrationId}/control`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action }),
-      });
+      await fetch(`/api/chaos/orchestration/${orchestrationId}/control`, { credentials: 'include', method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action }), });
     },
     [orchestrationId, selectedCloudFlowId, activeRunId]
   );

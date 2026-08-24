@@ -45,12 +45,12 @@ export const ApiExplorerPage: React.FC<ApiExplorerPageProps> = ({ deployment, on
 
   useEffect(() => {
     // Check if the deployment has a spec available
-    fetch(specUrl)
+    fetch(specUrl, { credentials: 'include' })
       .then((r) => {
         setHasSpec(r.ok);
         if (!r.ok) {
           // Fall back to loading routes
-          return fetch(`${deployment.deployment_url}/__mockforge/routes`)
+          return fetch(`${deployment.deployment_url}/__mockforge/routes`, { credentials: 'include' })
             .then((rr) => rr.json())
             .then((data) => setRoutes(data.routes || []))
             .catch(() => {});

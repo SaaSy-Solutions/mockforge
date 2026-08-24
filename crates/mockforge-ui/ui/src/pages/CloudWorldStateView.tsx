@@ -74,9 +74,7 @@ export const CloudWorldStateView: React.FC = () => {
     (async () => {
       try {
         const token = getAuthToken();
-        const resp = await fetch('/api/v1/hosted-mocks', {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
+        const resp = await fetch('/api/v1/hosted-mocks', { credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } : {}, });
         if (!resp.ok) {
           if (!cancelled) {
             setError(`Failed to load deployments: ${resp.status}`);

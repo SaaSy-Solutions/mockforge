@@ -32,6 +32,7 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/auth/register", post(handlers::auth::register))
         .route("/api/v1/auth/login", post(handlers::auth::login))
         .route("/api/v1/auth/token/refresh", post(handlers::auth::refresh_token))
+        .route("/api/v1/auth/logout", post(handlers::auth::logout))
         .route(
             "/api/v1/auth/password/reset-request",
             post(handlers::auth::request_password_reset),

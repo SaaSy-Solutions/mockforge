@@ -65,8 +65,8 @@ export function useDeploymentStateMachines(
       setLoading(true);
       try {
         const [definitionsResp, instancesResp] = await Promise.all([
-          fetch(base, { headers: { Authorization: `Bearer ${token}` } }),
-          fetch(`${base}/instances`, { headers: { Authorization: `Bearer ${token}` } }),
+          fetch(base, { credentials: 'include', headers: { Authorization: `Bearer ${token}` } }),
+          fetch(`${base}/instances`, { credentials: 'include', headers: { Authorization: `Bearer ${token}` } }),
         ]);
 
         if (cancelled) return;

@@ -189,7 +189,7 @@ impl K6Executor {
     /// Warn when the installed k6 predates the 1.x semantics this crate
     /// relies on (#860): `constant-arrival-rate` executor behaviour and the
     /// JSON-summary keys that stabilised in 1.x. Best-effort — a missing or
-    /// unparseable `k6 version` never blocks a run.
+    /// unparsable `k6 version` never blocks a run.
     pub async fn warn_if_pre_v1() {
         const DOCS: &str =
             "See https://mockforge.dev/docs/reference/bench-capacity-sizing#tooling-requirements";

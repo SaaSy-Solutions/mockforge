@@ -11,13 +11,17 @@ primary_region = "iad"
   PORT = "8080"
   RUST_LOG = "mockforge_registry_server=info,tower_http=info"
   SKIP_MIGRATIONS = "false"
+  # Cookie-based browser sessions: cross-origin Pages app → this API needs
+  # credentialed CORS plus Secure/SameSite=None cookies.
+  CORS_ALLOWED_ORIGINS = "https://app.mockforge.dev,https://mockforge.dev"
+  ALLOWED_ORIGINS = "https://app.mockforge.dev,https://mockforge.dev"
+  MOCKFORGE_SESSION_COOKIE_SECURE = "1"
 
 # Secrets to set via `flyctl secrets set`:
 #   DATABASE_URL          - PostgreSQL connection string (Neon: postgresql://...?sslmode=require)
 #   JWT_SECRET            - Random 256-bit secret for JWT signing
 #   FLYIO_API_TOKEN       - Fly.io API token for deploying hosted mocks
 #   FLYIO_ORG_SLUG        - Fly.io organization slug
-#   CORS_ALLOWED_ORIGINS  - "https://app.mockforge.dev"
 #   REDIS_URL             - Optional: Redis connection string
 #   S3_BUCKET             - R2 bucket name (e.g. "mockforge-storage")
 #   S3_REGION             - "auto" for Cloudflare R2

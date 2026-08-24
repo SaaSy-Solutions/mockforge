@@ -16,7 +16,6 @@ use mockforge_observability::get_global_registry;
 use std::time::Instant;
 use tracing::debug;
 
-
 /// #716 — read the client-declared persona identity from request headers.
 ///
 /// `X-MockForge-Persona` names the persona under test; the optional
@@ -164,10 +163,8 @@ pub async fn collect_http_metrics(
     // persona. Fire-and-forget; no-op without an analytics DB.
     if let Some(persona_id) = declared_persona {
         mockforge_analytics::record_persona_ci_hit_async(
-            persona_id,
-            None, // workspace_id — tenant plumbing tracked with drift_tracking
-            None,
-            ci_run_id,
+            persona_id, None, // workspace_id — tenant plumbing tracked with drift_tracking
+            None, ci_run_id,
         );
     }
 

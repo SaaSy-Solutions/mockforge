@@ -3,8 +3,6 @@
 pub mod ab_testing;
 pub mod access_review;
 pub mod auth_helpers;
-#[cfg(test)]
-mod governance_auth_tests;
 #[cfg(feature = "behavioral-cloning")]
 pub mod behavioral_cloning;
 pub mod change_management;
@@ -17,6 +15,8 @@ pub mod contract_health;
 pub mod deceptive_canary;
 pub mod drift_budget;
 pub mod failure_designer;
+#[cfg(test)]
+mod governance_auth_tests;
 pub mod incident_replay;
 pub mod oauth2_server;
 pub mod performance;

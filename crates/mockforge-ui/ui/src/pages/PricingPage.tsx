@@ -19,7 +19,7 @@ const PLAN_PRICING: Record<'pro' | 'team', Record<BillingInterval, number>> = {
 };
 
 async function fetchBillingConfig(): Promise<BillingConfig> {
-  const res = await fetch('/api/v1/billing/config');
+  const res = await fetch('/api/v1/billing/config', { credentials: 'include' });
   if (!res.ok) {
     throw new Error(`billing config fetch failed: ${res.status}`);
   }

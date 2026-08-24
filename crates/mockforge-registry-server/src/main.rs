@@ -363,20 +363,24 @@ fn create_app(state: AppState, rate_limiter: RateLimiterState) -> Router {
             let allowed_origins: Vec<_> =
                 origins.split(',').filter_map(|s| s.trim().parse().ok()).collect();
             tracing::info!("CORS configured with {} allowed origins", allowed_origins.len());
+            // allow_credentials is required for cookie-based auth from these
+            // origins (browser session cookie). Paired with the CSRF
+            // middleware's Origin/Referer checks on state-changing requests.
             CorsLayer::new()
                 .allow_origin(AllowOrigin::list(allowed_origins))
                 .allow_methods(Any)
                 .allow_headers(Any)
+                .allow_credentials(true)
         }
         _ => {
-            // In production, default to strict same-origin (no external origins)
+            // In production, default to strict same-origin: no CORS origins
+            // allowed at all. Same-origin requests never consult CORS, and
+            // allowing the literal `Origin: null` (sandboxed iframes,
+            // cross-origin redirects) was an unnecessary grant.
             tracing::info!(
                 "CORS configured with strict same-origin policy (no CORS_ALLOWED_ORIGINS set)"
             );
             CorsLayer::new()
-                .allow_origin(AllowOrigin::exact(
-                    "null".parse().expect("'null' is a valid header value"),
-                ))
                 .allow_methods(Any)
                 .allow_headers(Any)
         }

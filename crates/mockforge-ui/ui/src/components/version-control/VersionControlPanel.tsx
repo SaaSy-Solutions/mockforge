@@ -105,7 +105,7 @@ export const VersionControlPanel: React.FC<{ orchestrationId: string }> = ({
 
   const loadHistory = async () => {
     try {
-      const response = await fetch(`/api/chaos/orchestration/${orchestrationId}/history`);
+      const response = await fetch(`/api/chaos/orchestration/${orchestrationId}/history`, { credentials: 'include' });
       if (response.ok) {
         const data = await response.json();
         setCommits(data.commits || []);
@@ -118,7 +118,7 @@ export const VersionControlPanel: React.FC<{ orchestrationId: string }> = ({
 
   const loadBranches = async () => {
     try {
-      const response = await fetch(`/api/chaos/orchestration/${orchestrationId}/branches`);
+      const response = await fetch(`/api/chaos/orchestration/${orchestrationId}/branches`, { credentials: 'include' });
       if (response.ok) {
         const data = await response.json();
         setBranches(data.branches || []);
@@ -130,13 +130,11 @@ export const VersionControlPanel: React.FC<{ orchestrationId: string }> = ({
 
   const handleCommit = async () => {
     try {
-      const response = await fetch(`/api/chaos/orchestration/${orchestrationId}/commit`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          message: commitMessage,
-        }),
-      });
+      const response = await fetch(`/api/chaos/orchestration/${orchestrationId}/commit`, { credentials: 'include', method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: commitMessage,
+      }), });
 
       if (response.ok) {
         setCommitDialogOpen(false);
@@ -150,14 +148,12 @@ export const VersionControlPanel: React.FC<{ orchestrationId: string }> = ({
 
   const handleCreateBranch = async () => {
     try {
-      const response = await fetch(`/api/chaos/orchestration/${orchestrationId}/branches`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newBranchName,
-          fromCommit: selectedCommits[0],
-        }),
-      });
+      const response = await fetch(`/api/chaos/orchestration/${orchestrationId}/branches`, { credentials: 'include', method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: newBranchName,
+        fromCommit: selectedCommits[0],
+      }), });
 
       if (response.ok) {
         setBranchDialogOpen(false);
@@ -171,11 +167,9 @@ export const VersionControlPanel: React.FC<{ orchestrationId: string }> = ({
 
   const handleCheckout = async (branchName: string) => {
     try {
-      const response = await fetch(`/api/chaos/orchestration/${orchestrationId}/checkout`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ branch: branchName }),
-      });
+      const response = await fetch(`/api/chaos/orchestration/${orchestrationId}/checkout`, { credentials: 'include', method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ branch: branchName }), });
 
       if (response.ok) {
         setCurrentBranch(branchName);
@@ -190,9 +184,7 @@ export const VersionControlPanel: React.FC<{ orchestrationId: string }> = ({
     if (selectedCommits.length !== 2) return;
 
     try {
-      const response = await fetch(
-        `/api/chaos/orchestration/${orchestrationId}/diff?from=${selectedCommits[0]}&to=${selectedCommits[1]}`
-      );
+      const response = await fetch(`/api/chaos/orchestration/${orchestrationId}/diff?from=${selectedCommits[0]}&to=${selectedCommits[1]}`, { credentials: 'include' });
 
       if (response.ok) {
         const diffData = await response.json();

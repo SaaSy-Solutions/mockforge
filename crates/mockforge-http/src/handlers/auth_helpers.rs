@@ -64,8 +64,9 @@ mod tests {
 
     #[test]
     fn require_extracts_authenticated_sub() {
-        let id = require_user_id_from_claims(&claims_with_sub("00000000-0000-0000-0000-000000000042"))
-            .expect("valid sub must extract");
+        let id =
+            require_user_id_from_claims(&claims_with_sub("00000000-0000-0000-0000-000000000042"))
+                .expect("valid sub must extract");
         assert_eq!(id, Uuid::parse_str("00000000-0000-0000-0000-000000000042").unwrap());
     }
 

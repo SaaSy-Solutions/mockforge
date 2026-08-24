@@ -37,14 +37,12 @@ export function SupportPage() {
 
     try {
       const token = getAuthToken();
-      const response = await fetch('/api/v1/support/contact', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { Authorization: `Bearer ${token}` }),
-        },
-        body: JSON.stringify(formData),
-      });
+      const response = await fetch('/api/v1/support/contact', { credentials: 'include', method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: JSON.stringify(formData), });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Failed to submit support request' }));

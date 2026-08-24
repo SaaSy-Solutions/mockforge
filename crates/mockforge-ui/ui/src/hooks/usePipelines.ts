@@ -79,7 +79,7 @@ export const usePipelines = (
   return useQuery<Pipeline[], Error>({
     queryKey: ['pipelines', query],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}?${params.toString()}`);
+      const response = await fetch(`${API_BASE}?${params.toString()}`, { credentials: 'include' });
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         throw new Error(apiErrorMessage(response, errorData, 'Failed to fetch pipelines'));
@@ -96,7 +96,7 @@ export const usePipeline = (id: string): UseQueryResult<Pipeline, Error> => {
   return useQuery<Pipeline, Error>({
     queryKey: ['pipeline', id],
     queryFn: async () => {
-      const response = await fetch(`${API_BASE}/${id}`);
+      const response = await fetch(`${API_BASE}/${id}`, { credentials: 'include' });
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         throw new Error(apiErrorMessage(response, errorData, 'Failed to fetch pipeline'));
@@ -113,11 +113,9 @@ export const useCreatePipeline = () => {
 
   return useMutation<Pipeline, Error, CreatePipelineRequest>({
     mutationFn: async (request) => {
-      const response = await fetch(API_BASE, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(request),
-      });
+      const response = await fetch(API_BASE, { credentials: 'include', method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request), });
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         throw new Error(apiErrorMessage(response, errorData, 'Failed to create pipeline'));
@@ -136,11 +134,9 @@ export const useUpdatePipeline = () => {
 
   return useMutation<Pipeline, Error, { id: string; data: UpdatePipelineRequest }>({
     mutationFn: async ({ id, data }) => {
-      const response = await fetch(`${API_BASE}/${id}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
+      const response = await fetch(`${API_BASE}/${id}`, { credentials: 'include', method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data), });
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         throw new Error(apiErrorMessage(response, errorData, 'Failed to update pipeline'));
@@ -160,9 +156,7 @@ export const useDeletePipeline = () => {
 
   return useMutation<void, Error, string>({
     mutationFn: async (id) => {
-      const response = await fetch(`${API_BASE}/${id}`, {
-        method: 'DELETE',
-      });
+      const response = await fetch(`${API_BASE}/${id}`, { credentials: 'include', method: 'DELETE', });
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         throw new Error(apiErrorMessage(response, errorData, 'Failed to delete pipeline'));
@@ -180,11 +174,9 @@ export const useTriggerPipeline = () => {
 
   return useMutation<PipelineExecution, Error, { id: string; event?: Record<string, any> }>({
     mutationFn: async ({ id, event }) => {
-      const response = await fetch(`${API_BASE}/${id}/trigger`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(event || {}),
-      });
+      const response = await fetch(`${API_BASE}/${id}/trigger`, { credentials: 'include', method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(event || {}), });
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         throw new Error(apiErrorMessage(response, errorData, 'Failed to trigger pipeline'));
@@ -211,7 +203,7 @@ export const usePipelineExecutions = (
   return useQuery<PipelineExecution[], Error>({
     queryKey: ['pipeline-executions', query],
     queryFn: async () => {
-      const response = await fetch(`/api/v1/pipelines/executions?${params.toString()}`);
+      const response = await fetch(`/api/v1/pipelines/executions?${params.toString()}`, { credentials: 'include' });
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         throw new Error(apiErrorMessage(response, errorData, 'Failed to fetch pipeline executions'));
@@ -228,7 +220,7 @@ export const usePipelineExecution = (id: string): UseQueryResult<PipelineExecuti
   return useQuery<PipelineExecution, Error>({
     queryKey: ['pipeline-execution', id],
     queryFn: async () => {
-      const response = await fetch(`/api/v1/pipelines/executions/${id}`);
+      const response = await fetch(`/api/v1/pipelines/executions/${id}`, { credentials: 'include' });
       if (!response.ok) {
         const errorData = await response.json().catch(() => null);
         throw new Error(apiErrorMessage(response, errorData, 'Failed to fetch pipeline execution'));

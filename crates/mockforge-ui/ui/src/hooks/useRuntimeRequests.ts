@@ -92,9 +92,7 @@ export function useRuntimeRequests(
 
       setLoading(true);
       try {
-        const resp = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const resp = await fetch(url, { credentials: 'include', headers: { Authorization: `Bearer ${token}` }, });
         if (!resp.ok) {
           throw new Error(`HTTP ${resp.status}`);
         }

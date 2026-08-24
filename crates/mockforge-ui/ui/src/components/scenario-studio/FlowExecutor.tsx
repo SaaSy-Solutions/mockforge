@@ -51,13 +51,11 @@ export function FlowExecutor({ flowId, onClose }: FlowExecutorProps) {
         return;
       }
 
-      const response = await fetch(`/api/v1/scenario-studio/flows/${flowId}/execute`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ variables: {} }),
-      });
+      const response = await fetch(`/api/v1/scenario-studio/flows/${flowId}/execute`, { credentials: 'include', method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ variables: {} }), });
 
       if (!response.ok) {
         throw new Error('Failed to execute flow');

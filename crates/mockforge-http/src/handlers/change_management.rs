@@ -415,11 +415,10 @@ pub async fn get_change(
             StatusCode::NOT_FOUND
         })?;
 
-    let value = serde_json::to_value(&change)
-        .map_err(|e| {
-            error!("Failed to serialize change request: {}", e);
-            StatusCode::INTERNAL_SERVER_ERROR
-        })?;
+    let value = serde_json::to_value(&change).map_err(|e| {
+        error!("Failed to serialize change request: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
     Ok(Json(value))
 }
 

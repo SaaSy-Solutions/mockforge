@@ -25,10 +25,8 @@ export function useUpdatePersonaLifecycles() {
 
   return useMutation({
     mutationFn: async (workspace: string = 'default') => {
-      const response = await fetch(`/api/v1/consistency/persona/update-lifecycles?workspace=${workspace}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-      });
+      const response = await fetch(`/api/v1/consistency/persona/update-lifecycles?workspace=${workspace}`, { credentials: 'include', method: 'POST',
+      headers: { 'Content-Type': 'application/json' }, });
       // Handle 405 (Method Not Allowed) gracefully - endpoint may not be implemented
       if (response.status === 405) {
         logger.debug('[TimeTravel] Persona lifecycle update endpoint not available (405)');

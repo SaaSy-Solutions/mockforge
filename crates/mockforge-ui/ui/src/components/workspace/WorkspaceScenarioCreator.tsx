@@ -92,13 +92,11 @@ export function WorkspaceScenarioCreator({
           error: cloudScenario ? undefined : 'Model output was not parseable JSON',
         };
       } else {
-        const response = await fetch('/api/v2/voice/create-workspace-scenario', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ description }),
-        });
+        const response = await fetch('/api/v2/voice/create-workspace-scenario', { credentials: 'include', method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ description }), });
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));

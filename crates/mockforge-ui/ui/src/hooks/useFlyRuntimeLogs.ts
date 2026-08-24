@@ -10,7 +10,6 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { logger } from '@/utils/logger';
-import { getAuthToken } from '@/services/tokenStorage';
 
 export interface FlyRuntimeLogEntry {
   timestamp: string;
@@ -57,14 +56,12 @@ export function useFlyRuntimeLogs(
       return;
     }
 
-    // EventSource cannot send an Authorization header. Preferred auth is the
-    // HttpOnly session cookie (set by the registry on login) via
-    // `withCredentials`; the ?token= query stays as a fallback for sessions
-    // created before cookies shipped, and for cross-origin cloud deployments.
-    const token = getAuthToken() ?? '';
+    // EventSource cannot send an Authorization header. Authentication rides
+    // on the HttpOnly session cookie (`withCredentials`), which the registry
+    // sets on login and accepts on SSE endpoints. No token in the URL —
+    // query-string tokens leak into proxy logs and referrers.
     const url =
-      `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/runtime-logs/stream` +
-      (token ? `?token=${encodeURIComponent(token)}` : '');
+      `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/runtime-logs/stream`;
 
     const source = new EventSource(url, { withCredentials: true });
     sourceRef.current = source;

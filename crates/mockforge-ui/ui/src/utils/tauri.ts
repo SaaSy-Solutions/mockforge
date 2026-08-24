@@ -94,7 +94,7 @@ export async function getServerStatus(): Promise<ServerStatus> {
   } else {
     // Web version - check if server is reachable
     try {
-      const response = await fetch('http://localhost:9080/health/live');
+      const response = await fetch('http://localhost:9080/health/live', { credentials: 'include' });
       return {
         running: response.ok,
         http_port: 3000,

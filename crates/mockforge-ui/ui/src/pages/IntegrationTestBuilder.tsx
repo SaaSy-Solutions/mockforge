@@ -268,14 +268,12 @@ const IntegrationTestBuilder: React.FC = () => {
     setSelectedFormat(format);
 
     try {
-      const response = await fetch(`/api/recorder/workflows/${workflow.id}/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          workflow,
-          format,
-        }),
-      });
+      const response = await fetch(`/api/recorder/workflows/${workflow.id}/generate`, { credentials: 'include', method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        workflow,
+        format,
+      }), });
 
       const data = await response.json();
       if (data.success) {
