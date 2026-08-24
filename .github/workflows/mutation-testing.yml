@@ -114,6 +114,7 @@ jobs:
     name: Aggregate Mutation Results
     needs: mutation-test
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 15
     if: always()
 
     steps:

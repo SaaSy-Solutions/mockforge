@@ -35,6 +35,7 @@ jobs:
   benchmark:
     name: Run Benchmarks
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 45
     permissions:
       contents: write
       pull-requests: write

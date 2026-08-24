@@ -36,6 +36,7 @@ jobs:
   build:
     name: Build Test Binary
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 60
     outputs:
       binary_path: ${{ steps.build.outputs.binary_path }}
 
@@ -70,6 +71,7 @@ jobs:
     name: Network Partition Test
     needs: build
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 30
     if: github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'network-partition' || github.event.inputs.scenario == ''
 
     steps:
@@ -130,6 +132,7 @@ jobs:
     name: High Latency Test
     needs: build
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 30
     if: github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'high-latency' || github.event.inputs.scenario == ''
 
     steps:
@@ -188,6 +191,7 @@ jobs:
     name: Packet Loss Test
     needs: build
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 30
     if: github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'packet-loss' || github.event.inputs.scenario == ''
 
     steps:
@@ -242,6 +246,7 @@ jobs:
     name: Resource Exhaustion Test
     needs: build
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 30
     if: github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'resource-exhaustion' || github.event.inputs.scenario == ''
 
     steps:
@@ -320,6 +325,7 @@ jobs:
     name: Connection Storm Test
     needs: build
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 30
     if: github.event.inputs.scenario == 'all' || github.event.inputs.scenario == 'connection-storm' || github.event.inputs.scenario == ''
 
     steps:
@@ -388,6 +394,7 @@ jobs:
     name: Chaos Test Summary
     needs: [network-partition, high-latency, packet-loss, resource-exhaustion, connection-storm]
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 15
     if: always()
 
     steps:

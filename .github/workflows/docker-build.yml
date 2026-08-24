@@ -41,6 +41,7 @@ jobs:
   build-and-push:
     name: Build and Push Docker Image
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 90
     # Skip drafts to avoid burning minutes on in-progress PRs
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     permissions:
@@ -166,6 +167,7 @@ jobs:
     name: Security Scan and Analysis
     needs: build-and-push
     runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 30
     if: github.event_name != 'pull_request'
     permissions:
       security-events: write

@@ -133,3 +133,15 @@ repos:
     language: system
     pass_filenames: false
     files: '(^|/)(Dockerfile[^/]*|rust-toolchain\.toml)$'
+  - id: workflow-timeouts
+    name: Self-hosted job timeout guard
+    # Blocks a commit that leaves a self-hosted job without `timeout-minutes`.
+    # mockforge has exactly TWO dedicated runner registrations, so a job with no
+    # timeout inherits GitHub's 360-minute default and one hung job removes half
+    # of CI capacity for six hours. A 2h16m load test on main did exactly that
+    # on 2026-08-23, stalling the required Security Audit for the v0.3.214
+    # release by roughly two hours (#1000).
+    entry: scripts/check-workflow-timeouts.sh
+    language: system
+    pass_filenames: false
+    files: '^\.github/workflows/.*\.ya?ml$'
