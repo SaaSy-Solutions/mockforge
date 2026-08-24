@@ -29,7 +29,7 @@ for f in sorted(pathlib.Path('.github/workflows').glob('*.yml')):
         doc = yaml.safe_load(f.read_text())
     except Exception as e:
         print(f"  {f.name}: YAML parse error: {e}")
-        missing.append(f"{f.name}: unparseable")
+        missing.append(f"{f.name}: unparsable")
         continue
     for name, job in (doc.get('jobs') or {}).items():
         if not isinstance(job, dict):
