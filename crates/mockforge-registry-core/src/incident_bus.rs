@@ -16,6 +16,7 @@
 
 #[cfg(feature = "postgres")]
 use crate::models::incident::{Incident, RaiseIncidentInput};
+use std::future::Future;
 
 /// Map a contract-diff finding severity to an incident severity.
 ///
