@@ -151,6 +151,10 @@ pub struct KafkaMockBroker {
     fixture_runtime: Arc<OnceLock<Arc<FixtureRuntime>>>,
     /// Metrics collection and reporting
     metrics: Arc<KafkaMetrics>,
+    /// #715 — optional traffic recorder. Set from
+    /// MOCKFORGE_KAFKA_RECORDING_DB (sqlite path) at construction; when
+    /// unset no exchange is recorded and behaviour is unchanged.
+    recorder: Option<std::sync::Arc<mockforge_recorder::Recorder>>,
 }
 
 impl KafkaMockBroker {
@@ -216,7 +220,44 @@ impl KafkaMockBroker {
             spec_registry: Arc::new(spec_registry),
             fixture_runtime: Arc::new(OnceLock::new()),
             metrics,
+            // #715 — opt-in traffic recording, same env-gated pattern as
+            // MOCKFORGE_KAFKA_OFFSETS_DB above. Point the var at a sqlite
+            // path and every produce/consume exchange lands in the shared
+            // recorder schema for replay + drift tooling.
+            recorder: match std::env::var("MOCKFORGE_KAFKA_RECORDING_DB") {
+                Ok(path) if !path.trim().is_empty() => {
+                    match mockforge_recorder::RecorderDatabase::new(path.as_str()).await {
+                        Ok(db) => Some(std::sync::Arc::new(mockforge_recorder::Recorder::new(db))),
+                        Err(e) => {
+                            tracing::warn!(
+                                error = %e,
+                                "MOCKFORGE_KAFKA_RECORDING_DB unusable; continuing without recording"
+                            );
+                            None
+                        }
+                    }
+                }
+                _ => None,
+            },
         })
+    }
+
+    /// #715 — attach a recorder after construction (programmatic setup).
+    pub fn set_recorder(&mut self, recorder: std::sync::Arc<mockforge_recorder::Recorder>) {
+        self.recorder = Some(recorder);
+    }
+
+    /// #715 — best-effort fire-and-forget of one broker exchange into the
+    /// recorder. Never blocks or fails the data path; failures log WARN.
+    fn record_exchange(&self, event: mockforge_recorder::RecordedRequest) {
+        if let Some(rec) = &self.recorder {
+            let rec = rec.clone();
+            tokio::spawn(async move {
+                if let Err(e) = rec.record_request(event).await {
+                    tracing::warn!(error = %e, "failed to record kafka exchange");
+                }
+            });
+        }
     }
 
     /// Inject all `config.seed_messages` into their respective topic logs.
@@ -702,6 +743,28 @@ impl KafkaMockBroker {
                     if i == 0 {
                         base_offset = offset;
                     }
+                    // #715 — record the produce exchange (best-effort).
+                    // Snapshot from `accepted_for_relationships`: the
+                    // original key/value were moved into the produced
+                    // message, and this clone keeps them alive.
+                    if self.recorder.is_some() {
+                        if let Some(stored) = accepted_for_relationships.last() {
+                            let key_str = stored
+                                .key
+                                .as_deref()
+                                .and_then(|k| std::str::from_utf8(k).ok());
+                            self.record_exchange(
+                                mockforge_recorder::protocols::async_brokers::kafka_event(
+                                    "produce",
+                                    &topic_data.name,
+                                    Some(part.partition_index),
+                                    Some(offset),
+                                    key_str,
+                                    &stored.value,
+                                ),
+                            );
+                        }
+                    }
                 }
 
                 partition_results.push(PartitionProduceResult {
@@ -873,6 +936,24 @@ impl KafkaMockBroker {
                     }
                     estimated_size += record_size;
                     selected.push(msg);
+                }
+
+                // #715 — record the consume side of every record served.
+                if self.recorder.is_some() && !selected.is_empty() {
+                    for msg in &selected {
+                        let key_str =
+                            msg.key.as_deref().and_then(|k| std::str::from_utf8(k).ok());
+                        self.record_exchange(
+                            mockforge_recorder::protocols::async_brokers::kafka_event(
+                                "consume",
+                                &t.topic,
+                                Some(p.partition_index),
+                                Some(msg.offset),
+                                key_str,
+                                &msg.value,
+                            ),
+                        );
+                    }
                 }
 
                 let records_blob = if selected.is_empty() {
@@ -1479,6 +1560,48 @@ fn get_api_key_from_request(request: &KafkaRequest) -> i16 {
 
 #[cfg(test)]
 mod tests {
+
+    /// #715 — the recorder wiring round-trips: a broker-shaped kafka_event
+    /// flows through Recorder::record_request into the sqlite store.
+    #[tokio::test]
+    async fn recorder_roundtrip_stores_kafka_exchange() {
+        let db = mockforge_recorder::RecorderDatabase::new_in_memory()
+            .await
+            .expect("in-memory db");
+        let probe_db = db.clone();
+        let recorder = std::sync::Arc::new(mockforge_recorder::Recorder::new(db));
+
+        let event = mockforge_recorder::protocols::async_brokers::kafka_event(
+            "produce",
+            "orders",
+            Some(0),
+            Some(7),
+            Some("key-1"),
+            br#"{"order_id":42}"#,
+        );
+        let id = recorder
+            .clone()
+            .record_request(event)
+            .await
+            .expect("record exchange");
+
+        // The stored row keeps the storage convention: protocol kafka,
+        // method = op, path = topic, body preserved as utf8.
+        let result = mockforge_recorder::query::execute_query(
+            &probe_db,
+            mockforge_recorder::query::QueryFilter {
+                protocol: Some(mockforge_recorder::models::Protocol::Kafka),
+                ..Default::default()
+            },
+        )
+        .await
+        .expect("query recorded exchanges");
+        assert!(result.total >= 1, "exchange must be queryable");
+        let exchange = &result.exchanges[0];
+        assert_eq!(exchange.request.method, "produce");
+        assert_eq!(exchange.request.path, "orders");
+    }
+
     use super::*;
     use mockforge_core::config::KafkaSeedMessage;
 
