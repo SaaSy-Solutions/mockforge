@@ -366,10 +366,25 @@ fn create_app(state: AppState, rate_limiter: RateLimiterState) -> Router {
             // allow_credentials is required for cookie-based auth from these
             // origins (browser session cookie). Paired with the CSRF
             // middleware's Origin/Referer checks on state-changing requests.
+            // NOTE: allow_credentials(true) forbids `*` for methods/headers
+            // (tower-http panics; the spec forbids it) — explicit lists only.
             CorsLayer::new()
                 .allow_origin(AllowOrigin::list(allowed_origins))
-                .allow_methods(Any)
-                .allow_headers(Any)
+                .allow_methods([
+                    axum::http::Method::GET,
+                    axum::http::Method::POST,
+                    axum::http::Method::PUT,
+                    axum::http::Method::PATCH,
+                    axum::http::Method::DELETE,
+                    axum::http::Method::OPTIONS,
+                ])
+                .allow_headers([
+                    axum::http::header::AUTHORIZATION,
+                    axum::http::header::CONTENT_TYPE,
+                    axum::http::header::ACCEPT,
+                    axum::http::header::ORIGIN,
+                    axum::http::HeaderName::from_static("x-request-id"),
+                ])
                 .allow_credentials(true)
         }
         _ => {
