@@ -194,3 +194,6 @@ conformance-report.json
 
 # Test data (databases, fixtures)
 tests/data/
+
+# agent worktrees
+.worktrees/
