@@ -18,6 +18,7 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::{
@@ -99,17 +100,38 @@ pub async fn run_event(
     Json(body): Json<EventBody>,
 ) -> ApiResult<Json<serde_json::Value>> {
     require_internal_auth(&headers)?;
+    ingest_runner_event(state.db.pool(), id, body.seq, &body.event_type, &body.payload)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("event ingestion failed: {e}")))?;
+    Ok(Json(serde_json::json!({ "appended": true })))
+}
 
+/// #719 — the runner-facing ingestion pipeline, shared by the HTTP
+/// handler above and the `diff_finding_incident_e2e` test so the test
+/// exercises exactly what a runner's POST executes.
+///
+/// Inserts the event (idempotent on `(run_id, seq)`), then raises an
+/// incident when the finding is severe enough. Ingestion must never be
+/// blocked by incident-raising trouble: raise failures are logged and
+/// swallowed here (the HTTP handler maps only *ingestion* failures to
+/// 5xx).
+pub async fn ingest_runner_event(
+    pool: &PgPool,
+    run_id: Uuid,
+    seq: i32,
+    event_type: &str,
+    payload: &serde_json::Value,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     sqlx::query(
         "INSERT INTO test_run_events (run_id, seq, event_type, payload) \
          VALUES ($1, $2, $3, $4) \
          ON CONFLICT (run_id, seq) DO NOTHING",
     )
-    .bind(id)
-    .bind(body.seq)
-    .bind(&body.event_type)
-    .bind(&body.payload)
-    .execute(state.db.pool())
+    .bind(run_id)
+    .bind(seq)
+    .bind(event_type)
+    .bind(payload)
+    .execute(pool)
     .await
     .map_err(ApiError::Database)?;
 
@@ -120,18 +142,18 @@ pub async fn run_event(
     // a spawn because the caller is the runner and we want any DB
     // pressure to fall on the request, not on a detached task that
     // could pile up unbounded.
-    if body.event_type == "diff_finding" {
-        if let Err(e) = maybe_raise_finding_incident(&state, id, &body.payload).await {
+    if event_type == "diff_finding" {
+        if let Err(e) = maybe_raise_finding_incident(pool, run_id, payload).await {
             tracing::warn!(
-                run_id = %id,
-                seq = body.seq,
+                run_id = %run_id,
+                seq,
                 error = %e,
                 "failed to raise incident from diff_finding event",
             );
         }
     }
 
-    Ok(Json(serde_json::json!({ "appended": true })))
+    Ok(())
 }
 
 /// Inspect a `diff_finding` payload and raise an incident if it's
@@ -140,7 +162,7 @@ pub async fn run_event(
 /// `endpoint` doubles as the per-run dedupe key so repeated reports
 /// for the same endpoint within one run collapse to one incident.
 async fn maybe_raise_finding_incident(
-    state: &AppState,
+    pool: &PgPool,
     run_id: Uuid,
     payload: &serde_json::Value,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -165,7 +187,7 @@ async fn maybe_raise_finding_incident(
     // Fetch the run so we know which org to attribute the incident to.
     // We don't error on "run gone" — that's the runner racing with a
     // cancellation, not an incident worth raising.
-    let Some(run) = TestRun::find_by_id(state.db.pool(), run_id).await? else {
+    let Some(run) = TestRun::find_by_id(pool, run_id).await? else {
         return Ok(());
     };
 
@@ -173,7 +195,7 @@ async fn maybe_raise_finding_incident(
     let title = format!("Breaking contract drift on {endpoint}");
 
     use mockforge_registry_core::incident_bus::{IncidentBus, PgIncidentBus};
-    PgIncidentBus::new(state.db.pool().clone())
+    PgIncidentBus::new(pool.clone())
         .raise(mockforge_registry_core::models::incident::RaiseIncidentInput {
             org_id: run.org_id,
             workspace_id: None,
