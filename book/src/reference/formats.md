@@ -4,6 +4,12 @@ MockForge supports various data formats for configuration, specifications, and d
 
 ## OpenAPI Specifications
 
+MockForge supports **OpenAPI 3.0/3.1** natively and **Swagger / OpenAPI 2.0**
+via automatic up-conversion to 3.0 at import time (#838) — host/basePath/
+schemes fold into `servers`, `definitions` become `components/schemas`,
+body/formData parameters become `requestBody`, and response schemas move
+under `content`. No external converter is needed.
+
 ### JSON Format (Primary)
 
 MockForge primarily supports OpenAPI 3.0+ specifications in JSON format:

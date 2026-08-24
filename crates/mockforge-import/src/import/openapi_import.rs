@@ -79,7 +79,7 @@ pub fn import_openapi_spec(
 
     // Parse as JSON value first for validation - optimized to avoid double parsing
     // Try JSON first, then YAML (more robust detection)
-    let json_value: Value = match serde_json::from_str::<Value>(content) {
+    let mut json_value: Value = match serde_json::from_str::<Value>(content) {
         Ok(val) => val,
         Err(_) => {
             // Try YAML if JSON parsing fails
@@ -104,12 +104,10 @@ pub fn import_openapi_spec(
                 return Err(format!("Invalid OpenAPI 2.0 (Swagger) specification:\n{}", error_msg));
             }
 
-            // Note: OpenAPI 2.0 support is currently limited to validation.
-            // Full parsing requires conversion to OpenAPI 3.x format.
-            // For now, return a helpful error suggesting conversion.
-            return Err("OpenAPI 2.0 (Swagger) specifications are detected but not yet fully supported for parsing. \
-                Please convert your Swagger 2.0 spec to OpenAPI 3.x format. \
-                You can use tools like 'swagger2openapi' or the online converter at https://editor.swagger.io/ to convert your spec.".to_string());
+            // #838 — up-convert Swagger 2.0 → OpenAPI 3.0 and fall
+            // through to the normal parse path, so legacy specs import
+            // without an external converter step.
+            json_value = super::swagger2_convert::convert_swagger2_to_openapi3(&json_value)?;
         }
         mockforge_openapi::spec_parser::SpecFormat::OpenApi30
         | mockforge_openapi::spec_parser::SpecFormat::OpenApi31 => {
