@@ -54,6 +54,19 @@ impl LlmClient {
         }
     }
 
+    /// Resolve the effective sampling seed (#852): per-request override,
+    /// then the behavior-model config, then the MOCKFORGE_AI_SEED env var.
+    fn resolve_seed(&self, request: &LlmGenerationRequest) -> Option<i64> {
+        request
+            .seed
+            .or(self.config.seed)
+            .or_else(|| {
+                std::env::var("MOCKFORGE_AI_SEED")
+                    .ok()
+                    .and_then(|s| s.trim().parse().ok())
+            })
+    }
+
     /// Generate a response from a prompt
     pub async fn generate(&self, request: &LlmGenerationRequest) -> Result<serde_json::Value> {
         self.ensure_initialized().await?;
@@ -77,7 +90,7 @@ impl LlmClient {
 
         // Generate response
         let response_text = provider
-            .generate_chat(messages, request.temperature, request.max_tokens)
+            .generate_chat(messages, request.temperature, request.max_tokens, self.resolve_seed(request))
             .await?;
 
         // Try to parse as JSON
@@ -129,7 +142,7 @@ impl LlmClient {
 
         // Generate response with usage tracking
         let (response_text, usage) = provider
-            .generate_chat_with_usage(messages, request.temperature, request.max_tokens)
+            .generate_chat_with_usage(messages, request.temperature, request.max_tokens, self.resolve_seed(request))
             .await?;
 
         // Try to parse as JSON
@@ -210,6 +223,7 @@ trait LlmProvider: Send + Sync {
         messages: Vec<ChatMessage>,
         temperature: f64,
         max_tokens: usize,
+        seed: Option<i64>,
     ) -> Result<String>;
 
     /// Generate chat completion with usage tracking
@@ -218,9 +232,10 @@ trait LlmProvider: Send + Sync {
         messages: Vec<ChatMessage>,
         temperature: f64,
         max_tokens: usize,
+        seed: Option<i64>,
     ) -> Result<(String, LlmUsage)> {
         // Default implementation: call generate_chat and estimate tokens
-        let response = self.generate_chat(messages, temperature, max_tokens).await?;
+        let response = self.generate_chat(messages, temperature, max_tokens, seed).await?;
         // Rough estimation: ~4 characters per token
         let estimated_tokens = (response.len() as f64 / 4.0) as u64;
         Ok((response, LlmUsage::new(estimated_tokens, estimated_tokens)))
@@ -264,8 +279,9 @@ impl LlmProvider for OpenAIProvider {
         messages: Vec<ChatMessage>,
         temperature: f64,
         max_tokens: usize,
+        seed: Option<i64>,
     ) -> Result<String> {
-        let request_body = serde_json::json!({
+        let mut request_body = serde_json::json!({
             "model": self.model,
             "messages": messages.iter().map(|m| {
                 serde_json::json!({
@@ -276,6 +292,9 @@ impl LlmProvider for OpenAIProvider {
             "temperature": temperature,
             "max_tokens": max_tokens,
         });
+        if let Some(seed) = seed {
+            request_body["seed"] = serde_json::json!(seed);
+        }
 
         let response = self
             .client
@@ -315,8 +334,9 @@ impl LlmProvider for OpenAIProvider {
         messages: Vec<ChatMessage>,
         temperature: f64,
         max_tokens: usize,
+        seed: Option<i64>,
     ) -> Result<(String, LlmUsage)> {
-        let request_body = serde_json::json!({
+        let mut request_body = serde_json::json!({
             "model": self.model,
             "messages": messages.iter().map(|m| {
                 serde_json::json!({
@@ -327,6 +347,9 @@ impl LlmProvider for OpenAIProvider {
             "temperature": temperature,
             "max_tokens": max_tokens,
         });
+        if let Some(seed) = seed {
+            request_body["seed"] = serde_json::json!(seed);
+        }
 
         let response = self
             .client
@@ -403,8 +426,9 @@ impl LlmProvider for OllamaProvider {
         messages: Vec<ChatMessage>,
         temperature: f64,
         max_tokens: usize,
+        seed: Option<i64>,
     ) -> Result<String> {
-        let request_body = serde_json::json!({
+        let mut request_body = serde_json::json!({
             "model": self.model,
             "messages": messages.iter().map(|m| {
                 serde_json::json!({
@@ -418,7 +442,10 @@ impl LlmProvider for OllamaProvider {
             },
             "stream": false,
         });
-
+        // Ollama takes the seed inside `options` (#852).
+        if let Some(seed) = seed {
+            request_body["options"]["seed"] = serde_json::json!(seed);
+        }
         let response = self
             .client
             .post(&self.endpoint)
@@ -489,6 +516,7 @@ impl LlmProvider for AnthropicProvider {
         messages: Vec<ChatMessage>,
         temperature: f64,
         max_tokens: usize,
+        seed: Option<i64>,
     ) -> Result<String> {
         // Separate system message from other messages
         let system_message =
@@ -591,8 +619,9 @@ impl LlmProvider for OpenAICompatibleProvider {
         messages: Vec<ChatMessage>,
         temperature: f64,
         max_tokens: usize,
+        seed: Option<i64>,
     ) -> Result<String> {
-        let request_body = serde_json::json!({
+        let mut request_body = serde_json::json!({
             "model": self.model,
             "messages": messages.iter().map(|m| {
                 serde_json::json!({
@@ -603,7 +632,11 @@ impl LlmProvider for OpenAICompatibleProvider {
             "temperature": temperature,
             "max_tokens": max_tokens,
         });
-
+        // Most OpenAI-compatible servers honour the OpenAI `seed` field
+        // (#852); those that don't ignore it.
+        if let Some(seed) = seed {
+            request_body["seed"] = serde_json::json!(seed);
+        }
         let mut request =
             self.client.post(&self.endpoint).header("Content-Type", "application/json");
 

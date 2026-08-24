@@ -339,6 +339,7 @@ impl PaginationIntelligence {
             temperature: 0.5, // Some variation but not too much
             max_tokens: 50,
             schema: None,
+            seed: None,
         };
 
         let response = llm_client.generate(&request_llm).await?;

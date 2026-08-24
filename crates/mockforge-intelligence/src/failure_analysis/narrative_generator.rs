@@ -89,6 +89,7 @@ Be thorough but concise. Focus on actionable insights."#;
             temperature: 0.3, // Lower temperature for more consistent analysis
             max_tokens: 2000,
             schema: None,
+            seed: None,
         };
 
         // Generate response from LLM

@@ -36,6 +36,7 @@ impl SemanticAnalyzer {
                 temperature: 0.3, // Lower temperature for more precise semantic analysis
                 max_tokens: 3000,
                 rules: crate::intelligent_behavior::BehaviorRules::default(),
+                seed: None,
             };
 
             Some(LlmClient::new(llm_config))

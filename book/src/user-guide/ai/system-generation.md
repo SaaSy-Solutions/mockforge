@@ -258,9 +258,42 @@ ai:
 
 When enabled, AI outputs are frozen to deterministic YAML/JSON.
 
+### Seeded Generation (#852)
+
+`deterministic_mode` freezes AI output *after* generation. For
+reproducibility *during* generation — same prompt in, same spec out, across
+machines and CI runs — use a sampling seed:
+
+```yaml
+# mockforge.yaml
+ai:
+  seed: 42          # per-deployment default
+```
+
+or via the environment: `MOCKFORGE_AI_SEED=42`. A seed set on an individual
+request overrides both. Resolution order: request > config >
+`MOCKFORGE_AI_SEED`.
+
+Provider support:
+
+| Provider | Seed support |
+|----------|--------------|
+| OpenAI | native (`seed` field) |
+| OpenAI-compatible (vLLM, llama.cpp, LM Studio) | usually native |
+| Ollama | native (`options.seed`) |
+| Anthropic | none — pin `temperature: 0` instead; identical prompts are typically stable but not guaranteed byte-identical |
+
+**Determinism guarantee for CI:** with a fixed seed, fixed model version,
+and fixed temperature, seeded providers return identical output for
+identical input. The recommended QA workflow is still generate-once,
+bake-to-fixtures (above / `auto_freeze`): treat the LLM as an authoring
+tool and run tests against frozen mocks, so provider-side variance can
+never reach an assertion.
+
 ### System Coherence Validation
 
 Ensures all generated components are coherent:
+
 - Personas match endpoints
 - Lifecycles match entities
 - Scenarios match personas

@@ -117,6 +117,7 @@ don't include it in the response."#;
             temperature: 0.3, // Lower temperature for more consistent parsing
             max_tokens: 2000,
             schema: None,
+            seed: None,
         };
 
         // Generate response from LLM
@@ -211,6 +212,7 @@ and include a "question" or "confirmation" field in the response."#;
             temperature: 0.3,
             max_tokens: 2000,
             schema: None,
+            seed: None,
         };
 
         // Generate response
@@ -318,6 +320,7 @@ Be specific and extract all details mentioned in the command."#;
             temperature: 0.3,
             max_tokens: 3000,
             schema: None,
+            seed: None,
         };
 
         // Generate response from LLM
@@ -451,6 +454,7 @@ Be specific and extract all details mentioned in the command. Ensure at least 2-
             temperature: 0.3,
             max_tokens: 4000,
             schema: None,
+            seed: None,
         };
 
         // Generate response from LLM
@@ -516,6 +520,7 @@ Examples:
             temperature: 0.3,
             max_tokens: 2000,
             schema: None,
+            seed: None,
         };
 
         // Generate response from LLM
@@ -580,6 +585,7 @@ Examples:
             temperature: 0.3,
             max_tokens: 2000,
             schema: None,
+            seed: None,
         };
 
         // Generate response from LLM

@@ -284,6 +284,7 @@ Provide 3-5 specific suggestions for fixing this test failure. Include linked ar
             temperature: 0.3,
             max_tokens: 1500,
             schema: None,
+            seed: None,
         };
 
         // Generate suggestions from LLM
@@ -689,6 +690,7 @@ mod tests {
                 temperature: 0.7,
                 max_tokens: 2000,
                 rules: crate::intelligent_behavior::types::BehaviorRules::default(),
+                seed: None,
             },
             ..Default::default()
         }

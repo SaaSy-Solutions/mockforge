@@ -633,6 +633,7 @@ impl RuleGenerator {
             temperature: 0.3, // Lower temperature for more consistent rules
             max_tokens: 2000,
             schema: None,
+            seed: None,
         };
 
         let response = llm_client.generate(&request).await?;
@@ -711,6 +712,7 @@ impl RuleGenerator {
             temperature: 0.7,
             max_tokens: 500,
             schema: None,
+            seed: None,
         };
 
         let response = llm_client.generate(&request).await?;

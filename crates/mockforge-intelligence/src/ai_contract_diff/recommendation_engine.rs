@@ -32,6 +32,7 @@ impl RecommendationEngine {
                 temperature: 0.7, // Lower temperature for more focused recommendations
                 max_tokens: 2000,
                 rules: crate::intelligent_behavior::BehaviorRules::default(), // No specific rules for contract diff recommendations
+                seed: None,
             };
 
             Some(LlmClient::new(llm_config))
