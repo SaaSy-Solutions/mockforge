@@ -1516,6 +1516,7 @@ impl AmqpConnection {
     }
 
     async fn handle_basic_publish(&mut self, channel: u16, arguments: &[u8]) -> io::Result<bool> {
+        crate::recording::ensure_init().await;
         let mut offset = 2; // Skip reserved
 
         // Exchange name
@@ -2146,6 +2147,12 @@ impl AmqpConnection {
                     }
                 } else {
                     // Route immediately
+                    // #715 — record the published message (best-effort).
+                    crate::recording::record_publish(
+                        &state.exchange,
+                        &state.routing_key,
+                        &message.body,
+                    );
                     self.route_message(&state.exchange, &state.routing_key, message.clone()).await;
 
                     // Send publisher confirm if enabled
@@ -2232,6 +2239,7 @@ impl AmqpConnection {
 
     /// Deliver messages from a queue to all consumers on this connection
     async fn deliver_to_consumers(&mut self, queue_name: &str) -> io::Result<()> {
+        crate::recording::ensure_init().await;
         // Collect consumers interested in this queue
         let mut deliveries: Vec<(u16, String, bool, u16)> = Vec::new(); // (channel, consumer_tag, no_ack, prefetch)
 
@@ -2285,6 +2293,11 @@ impl AmqpConnection {
                 let Some(queued_msg) = message_opt else {
                     break; // queue empty — done for this consumer
                 };
+                // #715 — record the delivery to this consumer (best-effort).
+                crate::recording::record_deliver(
+                    queue_name,
+                    &queued_msg.message.body,
+                );
                 // Get delivery tag
                 let delivery_tag = self
                     .channels
