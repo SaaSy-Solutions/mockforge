@@ -26,6 +26,8 @@ pub mod multi_tenant_types;
 pub mod pillar_tracking;
 pub mod pillars;
 pub mod protocol;
+pub mod reality_continuum;
+pub mod time_travel;
 pub mod protocol_contract_types;
 pub mod rate_counters;
 pub mod response_generation_trace;

@@ -403,8 +403,12 @@ pub mod proxy;
 /// (it pokes at concrete `ServerConfig` sub-structs and belongs in core).
 pub use mockforge_intelligence::reality;
 pub mod reality_apply;
+// #634 (ADR-0001) — reality_continuum moved to mockforge-foundation
+// (approved destination per dependency-graph review on the issue).
+// Re-exported here so existing `mockforge_core::reality_continuum::*`
+// call sites resolve unchanged.
 #[cfg(feature = "advanced")]
-pub mod reality_continuum;
+pub use mockforge_foundation::reality_continuum;
 pub mod record_replay;
 pub mod request_capture;
 pub mod request_chaining;
@@ -447,7 +451,9 @@ pub mod template_expansion;
 pub mod template_library;
 pub mod templating;
 #[cfg(feature = "advanced")]
-pub mod time_travel;
+// #634 — time_travel moved to mockforge-foundation as part of the
+// approved reality_continuum retarget (the engine holds a VirtualClock).
+pub use mockforge_foundation::time_travel;
 #[cfg(feature = "advanced")]
 pub mod time_travel_handler;
 /// Shared TLS utilities for building rustls server and client configurations.
