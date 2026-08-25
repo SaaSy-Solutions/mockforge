@@ -147,6 +147,9 @@ pub async fn start_mqtt_server_with_session_manager(
     metrics: Arc<MqttMetrics>,
     config: MqttConfig,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // #715 — install the traffic recorder before any client I/O.
+    crate::recording::init_from_env().await;
+
     let addr = format!("{}:{}", config.host, config.port);
 
     info!(

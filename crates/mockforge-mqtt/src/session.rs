@@ -521,6 +521,16 @@ impl SessionManager {
 
     /// Handle PUBLISH packet - route to subscribers
     pub async fn publish(&self, publisher_id: &str, publish: &PublishPacket) {
+        // #715 — record the inbound publish (best-effort; no-op unless
+        // MOCKFORGE_MQTT_RECORDING_DB configured the recorder).
+        crate::recording::record_publish(
+            publisher_id,
+            &publish.topic,
+            publish.qos as u8,
+            publish.retain,
+            &publish.payload,
+        );
+
         // Update publisher's last activity
         {
             let mut active = self.active_clients.write().await;
@@ -580,6 +590,14 @@ impl SessionManager {
                     if let Some(metrics) = &self.metrics {
                         metrics.record_delivery();
                     }
+                    // #715 — record the delivery side of the exchange.
+                    crate::recording::record_delivery(
+                        &sub.client_id,
+                        &publish.topic,
+                        delivery_qos as u8,
+                        false,
+                        &publish.payload,
+                    );
                     debug!("Delivered message to {} on topic {}", sub.client_id, publish.topic);
                 }
             }

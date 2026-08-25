@@ -56,6 +56,7 @@ pub mod fixtures;
 pub mod messages;
 pub mod metrics;
 pub mod protocol;
+pub mod recording;
 /// Unified protocol server lifecycle implementation
 pub mod protocol_server;
 pub mod queues;
