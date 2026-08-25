@@ -80,19 +80,21 @@ pub(crate) async fn handle_verify_mocks_command(
     } = args;
 
     // 1. Load + parse the spec (Swagger 2.0 auto-up-converted).
-    let raw = std::fs::read_to_string(&spec)
-        .map_err(|e| mockforge_core::Error::config(format!("cannot read {}: {e}", spec.display())))?;
+    let raw = std::fs::read_to_string(&spec).map_err(|e| {
+        mockforge_core::Error::config(format!("cannot read {}: {e}", spec.display()))
+    })?;
     let mut spec_value: Value = serde_json::from_str(&raw)
         .or_else(|_| serde_yaml::from_str(&raw))
-        .map_err(|e| mockforge_core::Error::config(format!("cannot parse {}: {e}", spec.display())))?;
+        .map_err(|e| {
+            mockforge_core::Error::config(format!("cannot parse {}: {e}", spec.display()))
+        })?;
     if spec_value.get("swagger").and_then(Value::as_str) == Some("2.0") {
-        spec_value = mockforge_import::import::swagger2_convert::convert_swagger2_to_openapi3(
-            &spec_value,
-        )
-        .map_err(mockforge_core::Error::config)?;
+        spec_value =
+            mockforge_import::import::swagger2_convert::convert_swagger2_to_openapi3(&spec_value)
+                .map_err(mockforge_core::Error::config)?;
     }
-    let openapi =
-        OpenApiSpec::from_json(spec_value).map_err(|e| mockforge_core::Error::config(e.to_string()))?;
+    let openapi = OpenApiSpec::from_json(spec_value)
+        .map_err(|e| mockforge_core::Error::config(e.to_string()))?;
     let registry = OpenApiRouteRegistry::new(openapi);
 
     // 2. Open the capture DB and pull HTTP exchanges.
@@ -238,18 +240,14 @@ fn decode_body(body: &Option<String>, encoding: &str) -> Option<Vec<u8>> {
     let raw = body.as_ref()?;
     if encoding == "base64" {
         use base64::Engine;
-        base64::engine::general_purpose::STANDARD
-            .decode(raw)
-            .ok()
+        base64::engine::general_purpose::STANDARD.decode(raw).ok()
     } else {
         Some(raw.clone().into_bytes())
     }
 }
 
 fn to_value_map(map: &HashMap<String, String>) -> serde_json::Map<String, Value> {
-    map.iter()
-        .map(|(k, v)| (k.clone(), Value::String(v.clone())))
-        .collect()
+    map.iter().map(|(k, v)| (k.clone(), Value::String(v.clone()))).collect()
 }
 
 fn query_map(query: Option<&str>) -> serde_json::Map<String, Value> {
@@ -258,10 +256,7 @@ fn query_map(query: Option<&str>) -> serde_json::Map<String, Value> {
         for pair in q.split('&') {
             let mut kv = pair.splitn(2, '=');
             if let (Some(k), Some(v)) = (kv.next(), kv.next()) {
-                if let (Ok(k), Ok(v)) = (
-                    urlencoding::decode(k),
-                    urlencoding::decode(v),
-                ) {
+                if let (Ok(k), Ok(v)) = (urlencoding::decode(k), urlencoding::decode(v)) {
                     out.insert(k.into_owned(), Value::String(v.into_owned()));
                 }
             }
@@ -271,8 +266,7 @@ fn query_map(query: Option<&str>) -> serde_json::Map<String, Value> {
 }
 
 fn header_value_map(headers_json: &str) -> serde_json::Map<String, Value> {
-    serde_json::from_str::<serde_json::Map<String, Value>>(headers_json)
-        .unwrap_or_default()
+    serde_json::from_str::<serde_json::Map<String, Value>>(headers_json).unwrap_or_default()
 }
 
 fn extract_path_params(concrete: &str, template: &str) -> HashMap<String, String> {
@@ -296,8 +290,7 @@ fn match_template(
         if !route.method.eq_ignore_ascii_case(method) {
             return None;
         }
-        segment_match(concrete_path, &route.path)
-            .map(|params| (route.path.clone(), params))
+        segment_match(concrete_path, &route.path).map(|params| (route.path.clone(), params))
     })
 }
 
@@ -344,9 +337,7 @@ fn check_response_drift(
         };
         let media = response.content.get("application/json")?;
         match &media.schema {
-            Some(openapiv3::ReferenceOr::Item(schema)) => {
-                serde_json::to_value(schema).ok()
-            }
+            Some(openapiv3::ReferenceOr::Item(schema)) => serde_json::to_value(schema).ok(),
             Some(openapiv3::ReferenceOr::Reference { reference }) => {
                 Some(serde_json::json!({ "$ref": reference }))
             }
