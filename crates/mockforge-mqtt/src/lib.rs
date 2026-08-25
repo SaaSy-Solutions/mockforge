@@ -43,6 +43,7 @@ pub mod protocol;
 /// Unified protocol server lifecycle implementation
 pub mod protocol_server;
 pub mod qos;
+pub mod recording;
 pub mod server;
 pub mod session;
 pub mod spec_registry;
