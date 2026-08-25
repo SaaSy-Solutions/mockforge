@@ -1,7 +1,8 @@
 name: Production Smoke Test
 
-# Runs end-to-end against api.mockforge.dev every 15 minutes. Catches regressions
-# that ship past release.yml's gates and surface only when real customers hit them.
+# Runs end-to-end against the hosted registry API (mockforge-registry.fly.dev)
+# every 15 minutes. Catches regressions that ship past release.yml's gates and
+# surface only when real customers hit them.
 #
 # Each run exercises: health → register → login → list hosted-mocks → billing/subscription.
 # If any step fails, the workflow opens a GitHub issue (deduped by title) so it
@@ -25,7 +26,7 @@ permissions:
 
 jobs:
   smoke:
-    name: Smoke api.mockforge.dev
+    name: Smoke registry API (mockforge-registry.fly.dev)
     # #1000: runs on a GitHub-hosted runner, NOT the self-hosted pool. This job
     # is curl plus an issue-creation script: it needs no Rust toolchain, and
     # mockforge has only two self-hosted runners. Sitting in that queue meant a
@@ -46,7 +47,11 @@ jobs:
         # if `failure_step` got written.
         continue-on-error: true
         env:
-          BASE_URL: https://api.mockforge.dev
+          # The registry API hosts /api/v1/auth/*, hosted-mocks and billing.
+          # api.mockforge.dev is the public DEMO serve instance (fly.demo.toml)
+          # — it has no registry endpoints, so this workflow never passed
+          # against it (0 successes in its history before this change).
+          BASE_URL: https://mockforge-registry.fly.dev
         run: |
           set +e
           fail() {
