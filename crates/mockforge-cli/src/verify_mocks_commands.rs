@@ -325,7 +325,7 @@ fn check_response_drift(
     registry: &OpenApiRouteRegistry,
     method: &str,
     template: &str,
-    concrete_path: &str,
+    _concrete_path: &str,
     status: u16,
     body: Option<&[u8]>,
 ) -> Option<String> {
