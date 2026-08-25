@@ -2294,10 +2294,7 @@ impl AmqpConnection {
                     break; // queue empty — done for this consumer
                 };
                 // #715 — record the delivery to this consumer (best-effort).
-                crate::recording::record_deliver(
-                    queue_name,
-                    &queued_msg.message.body,
-                );
+                crate::recording::record_deliver(queue_name, &queued_msg.message.body);
                 // Get delivery tag
                 let delivery_tag = self
                     .channels

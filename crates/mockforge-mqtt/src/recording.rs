@@ -22,18 +22,16 @@ pub async fn init_from_env() {
         return;
     }
     let recorder = match std::env::var("MOCKFORGE_MQTT_RECORDING_DB") {
-        Ok(path) if !path.trim().is_empty() => {
-            match RecorderDatabase::new(path.as_str()).await {
-                Ok(db) => Some(Arc::new(Recorder::new(db))),
-                Err(e) => {
-                    tracing::warn!(
-                        error = %e,
-                        "MOCKFORGE_MQTT_RECORDING_DB unusable; continuing without recording"
-                    );
-                    None
-                }
+        Ok(path) if !path.trim().is_empty() => match RecorderDatabase::new(path.as_str()).await {
+            Ok(db) => Some(Arc::new(Recorder::new(db))),
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "MOCKFORGE_MQTT_RECORDING_DB unusable; continuing without recording"
+                );
+                None
             }
-        }
+        },
         _ => None,
     };
     let _ = RECORDER.set(recorder);

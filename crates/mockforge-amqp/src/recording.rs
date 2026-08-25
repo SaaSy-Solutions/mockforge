@@ -17,18 +17,16 @@ pub async fn ensure_init() {
         return;
     }
     let recorder = match std::env::var("MOCKFORGE_AMQP_RECORDING_DB") {
-        Ok(path) if !path.trim().is_empty() => {
-            match RecorderDatabase::new(path.as_str()).await {
-                Ok(db) => Some(Arc::new(Recorder::new(db))),
-                Err(e) => {
-                    tracing::warn!(
-                        error = %e,
-                        "MOCKFORGE_AMQP_RECORDING_DB unusable; continuing without recording"
-                    );
-                    None
-                }
+        Ok(path) if !path.trim().is_empty() => match RecorderDatabase::new(path.as_str()).await {
+            Ok(db) => Some(Arc::new(Recorder::new(db))),
+            Err(e) => {
+                tracing::warn!(
+                    error = %e,
+                    "MOCKFORGE_AMQP_RECORDING_DB unusable; continuing without recording"
+                );
+                None
             }
-        }
+        },
         _ => None,
     };
     let _ = RECORDER.set(recorder);
@@ -54,11 +52,7 @@ fn spawn_record(event: RecordedRequest) {
 }
 
 /// Record a Basic.Publish crossing the wire (#715).
-pub(crate) fn record_publish(
-    exchange: &str,
-    routing_key: &str,
-    payload: &[u8],
-) {
+pub(crate) fn record_publish(exchange: &str, routing_key: &str, payload: &[u8]) {
     spawn_record(async_brokers::amqp_event("publish", exchange, routing_key, payload));
 }
 
