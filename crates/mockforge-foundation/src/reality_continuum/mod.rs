@@ -19,7 +19,7 @@ pub mod schedule;
 /// This module re-exports them under their legacy path for backwards
 /// compatibility.
 pub mod response_trace {
-    pub use mockforge_foundation::response_generation_trace::*;
+    pub use crate::response_generation_trace::*;
 }
 
 pub use blender::ResponseBlender;
