@@ -26,6 +26,7 @@ import {
     type FlowKind,
     type FlowVersion,
 } from '../services/api/cloudFlows';
+import RunLiveTail from '../components/RunLiveTail';
 
 const KIND_OPTIONS: FlowKind[] = ['scenario', 'orchestration', 'state_machine', 'chain'];
 
@@ -63,6 +64,7 @@ const CloudView: React.FC = () => {
     const [editing, setEditing] = useState<Flow | null>(null);
     const [kindFilter, setKindFilter] = useState<FlowKind | 'all'>('all');
     const [runMessage, setRunMessage] = useState<string | null>(null);
+    const [tailRunId, setTailRunId] = useState<string | null>(null);
 
     const workspaceId = activeWorkspace?.id;
 
@@ -96,8 +98,10 @@ const CloudView: React.FC = () => {
 
     const triggerMutation = useMutation({
         mutationFn: (id: string) => cloudFlowsApi.triggerRun(id),
-        onSuccess: (run) =>
-            setRunMessage(`Run queued — id ${run.id.slice(0, 8)}. Open Cloud Test Runs to tail events.`),
+        onSuccess: (run) => {
+            setRunMessage(`Run queued — id ${run.id.slice(0, 8)}. Live progress below.`);
+            setTailRunId(run.id);
+        },
         onError: (err: Error) => setRunMessage(`Trigger failed: ${err.message}`),
     });
 
@@ -167,6 +171,11 @@ const CloudView: React.FC = () => {
                     <button onClick={() => setRunMessage(null)} className="text-xs underline">
                         dismiss
                     </button>
+                </div>
+            )}
+            {tailRunId && (
+                <div className="mb-4">
+                    <RunLiveTail runId={tailRunId} />
                 </div>
             )}
 

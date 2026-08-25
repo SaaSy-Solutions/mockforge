@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { isCloudMode } from '../utils/cloudMode';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';
+import RunLiveTail from '../components/RunLiveTail';
 import {
     cloudChaosApi,
     type ChaosCampaign,
@@ -177,8 +178,12 @@ const CloudView: React.FC = () => {
 
             {runMutation.isSuccess && runMutation.data && (
                 <div className="mb-4 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 p-4 rounded-lg text-sm">
-                    Run queued — id {runMutation.data.id.slice(0, 8)}. Watch live events on the Cloud Test
-                    Runs page.
+                    Run queued — id {runMutation.data.id.slice(0, 8)}. Live progress below.
+                </div>
+            )}
+            {runMutation.isSuccess && runMutation.data && (
+                <div className="mb-4">
+                    <RunLiveTail runId={runMutation.data.id} />
                 </div>
             )}
             {runMutation.isError && (
