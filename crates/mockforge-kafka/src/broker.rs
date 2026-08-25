@@ -1579,7 +1579,7 @@ mod tests {
             Some("key-1"),
             br#"{"order_id":42}"#,
         );
-        let id = recorder
+        recorder
             .clone()
             .record_request(event)
             .await

@@ -212,7 +212,7 @@ pub fn record_endpoint_coverage_async(
 ///
 /// Called from the HTTP request boundary when the client declares its
 /// persona via the `X-MockForge-Persona` header (CI pipelines and test
-/// suites stamp this so MockOps can attribute traffic to the persona
+/// suites stamp this so `MockOps` can attribute traffic to the persona
 /// being exercised). No-op when no analytics database is installed.
 pub fn record_persona_ci_hit_async(
     persona_id: String,
