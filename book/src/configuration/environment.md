@@ -175,6 +175,7 @@ Host binding for the gRPC server is YAML-only (`grpc.host`).
 - `MOCKFORGE_KAFKA_ADVERTISED_HOST=<host>` — hostname advertised in metadata responses (defaults to the bind host).
 - `MOCKFORGE_KAFKA_ADVERTISED_PORT=<int>` — port advertised in metadata responses (defaults to the bind port).
 - `MOCKFORGE_KAFKA_FIXTURES_DIR=path/to/kafka-fixtures` — directory of pre-recorded Kafka topic fixtures.
+- `MOCKFORGE_KAFKA_RECORDING_DB=path/to/recording.sqlite` — SQLite file for recording produce/consume exchanges; when set, every Kafka exchange is persisted for replay.
 
 ## Federation
 
@@ -217,6 +218,13 @@ backend; the OSS local mock server doesn't need them.
 - `MOCKFORGE_OIDC_ISSUER=<url>` — issuer URL whose `/.well-known/openid-configuration` MockForge will fetch.
 - `MOCKFORGE_OIDC_CONFIG=<path>` — path to a YAML/JSON file overriding individual OIDC discovery fields.
 - `MOCKFORGE_OIDC_SECRET=<client-secret>` — confidential-client secret for the configured `client_id`.
+
+### Registry session cookies (registry server)
+
+- `MOCKFORGE_SESSION_COOKIE_SECURE=true|false` — set `Secure; SameSite=None` on the
+  `mockforge_session` / `mockforge_refresh` auth cookies. Required for hosted HTTPS
+  deployments where the admin UI is served from a different origin than the API;
+  self-hosted plain-HTTP setups keep `SameSite=Lax` without `Secure`.
 
 ## Hot Reload
 
@@ -263,6 +271,9 @@ Watch the spec / config / fixtures dirs and rebuild routes on change without res
 ## Proxy / Record-Replay
 
 - `MOCKFORGE_PROXY_UPSTREAM=<url>` — when set, requests with no matching mock are proxied here. Pair with `mockforge serve --record` (or the recorder admin API) to capture upstream traffic for replay.
+- `MOCKFORGE_PROXY_SPEC=<path>` — OpenAPI/Swagger spec (JSON or YAML) backing the proxy's passive conformance tap (#864).
+- `MOCKFORGE_PROXY_VALIDATE_CONFORMANCE=true|false` — validate proxied requests against the spec and report violations; requires `MOCKFORGE_PROXY_SPEC`.
+- `MOCKFORGE_PROXY_VALIDATE_CONFORMANCE_STRICT=true|false` — additionally reject non-conforming requests with a diagnostic response instead of forwarding.
 
 ## Tunneling
 

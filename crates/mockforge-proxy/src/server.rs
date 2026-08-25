@@ -271,7 +271,7 @@ async fn proxy_handler(
             .await
         {
             warn!(status = status, path = %uri.path(), "strict conformance rejection");
-            return axum::response::Response::builder()
+            return Response::builder()
                 .status(status)
                 .body(payload.to_string())
                 .map_err(|_| StatusCode::BAD_GATEWAY);
