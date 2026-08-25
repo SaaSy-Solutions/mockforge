@@ -161,14 +161,33 @@ fn percent_decode_token(raw: &str) -> Option<String> {
     String::from_utf8(out).ok()
 }
 
+/// Cookie name issued by the auth handlers (`handlers::auth::SESSION_COOKIE`).
+pub const SESSION_COOKIE: &str = "mockforge_session";
+
+/// Pull the session JWT out of the `Cookie` header, if present.
+///
+/// Priority in [`auth_middleware`] is `Authorization` header → session cookie
+/// → `?token=` query. The cookie is HttpOnly, so unlike the query parameter it
+/// is not readable by page JavaScript and does not leak via referrer/logs.
+fn extract_session_cookie(headers: &HeaderMap) -> Option<String> {
+    let cookies = headers.get(axum::http::header::COOKIE)?.to_str().ok()?;
+    cookies.split(';').find_map(|pair| {
+        let (name, value) = pair.trim().split_once('=')?;
+        (name == SESSION_COOKIE).then(|| value.to_string())
+    })
+}
+
 /// Extract and verify JWT token or API token.
 ///
 /// Tokens are normally read from the `Authorization: Bearer <token>` header.
-/// Browsers cannot send custom headers on `EventSource` connections, so for
-/// SSE endpoints (and similar) we also accept the token in a `?token=` query
-/// string parameter. JWTs are short-lived, so the common "URL tokens leak to
-/// logs/referrer" risk is bounded — but we never recommend this path for
-/// long-lived API tokens. Header takes precedence when both are present.
+/// Browser clients authenticated via `login`/`register`/`refresh` also carry an
+/// HttpOnly session cookie (`SESSION_COOKIE`), which is accepted as a second
+/// source so page JavaScript does not need to hold (or be able to steal) the
+/// JWT. Browsers cannot send custom headers on `EventSource` connections, so
+/// for SSE endpoints we additionally accept `?token=` — JWTs are short-lived,
+/// bounding the "URL tokens leak to logs/referrer" risk, but this path is
+/// deprecated in favour of the cookie and never recommended for long-lived API
+/// tokens. Precedence: header → cookie → query.
 pub async fn auth_middleware(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -196,12 +215,16 @@ pub async fn auth_middleware(
         })
     });
 
-    let owned_token = header_token.or(query_token).ok_or_else(|| {
-        auth_error_response(
-            "Authentication required",
-            "Include an Authorization: Bearer <token> header (or ?token= query for SSE).",
-        )
-    })?;
+    let owned_token = header_token
+        .or_else(|| extract_session_cookie(&headers))
+        .or(query_token)
+        .ok_or_else(|| {
+            auth_error_response(
+                "Authentication required",
+                "Include an Authorization: Bearer <token> header (or an authenticated session \
+                 cookie; ?token= is supported for SSE only).",
+            )
+        })?;
 
     let token = owned_token.as_str();
 
@@ -241,4 +264,35 @@ pub async fn auth_middleware(
     request.extensions_mut().insert(AuthType::Jwt);
 
     Ok(next.run(request).await)
+}
+
+#[cfg(test)]
+mod session_cookie_tests {
+    use super::*;
+
+    fn headers_with_cookie(value: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::COOKIE,
+            axum::http::HeaderValue::from_str(value).unwrap(),
+        );
+        headers
+    }
+
+    #[test]
+    fn extracts_session_cookie() {
+        let headers = headers_with_cookie("other=1; mockforge_session=jwt-value; x=y");
+        assert_eq!(extract_session_cookie(&headers).as_deref(), Some("jwt-value"));
+    }
+
+    #[test]
+    fn returns_none_without_session_cookie() {
+        let headers = headers_with_cookie("other=1; x=y");
+        assert_eq!(extract_session_cookie(&headers), None);
+    }
+
+    #[test]
+    fn returns_none_without_cookie_header() {
+        assert_eq!(extract_session_cookie(&HeaderMap::new()), None);
+    }
 }

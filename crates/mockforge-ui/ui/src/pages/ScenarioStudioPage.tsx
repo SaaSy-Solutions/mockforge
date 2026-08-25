@@ -230,7 +230,7 @@ export function ScenarioStudioPage() {
         setError(null);
         return;
       }
-      const response = await fetch('/api/v1/scenario-studio/flows');
+      const response = await fetch('/api/v1/scenario-studio/flows', { credentials: 'include' });
       if (response.ok) {
         const data = await response.json();
         // API may return an array directly or { flows: [...], total: N }
@@ -349,14 +349,12 @@ export function ScenarioStudioPage() {
         setNewFlowName('');
         return;
       }
-      const response = await fetch('/api/v1/scenario-studio/flows', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: newFlowName,
-          flow_type: newFlowType,
-        }),
-      });
+      const response = await fetch('/api/v1/scenario-studio/flows', { credentials: 'include', method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: newFlowName,
+        flow_type: newFlowType,
+      }), });
       if (response.ok) {
         const flow = await response.json();
         setFlows([...flows, flow]);
@@ -450,14 +448,12 @@ export function ScenarioStudioPage() {
         return;
       }
 
-      const response = await fetch(`/api/v1/scenario-studio/flows/${selectedFlow.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          steps,
-          connections,
-        }),
-      });
+      const response = await fetch(`/api/v1/scenario-studio/flows/${selectedFlow.id}`, { credentials: 'include', method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        steps,
+        connections,
+      }), });
 
       if (response.ok) {
         const updatedFlow = await response.json();
@@ -489,9 +485,7 @@ export function ScenarioStudioPage() {
         }
         return;
       }
-      const response = await fetch(`/api/v1/scenario-studio/flows/${flowId}`, {
-        method: 'DELETE',
-      });
+      const response = await fetch(`/api/v1/scenario-studio/flows/${flowId}`, { credentials: 'include', method: 'DELETE', });
       if (response.ok) {
         setFlows(flows.filter((f) => f.id !== flowId));
         if (selectedFlow?.id === flowId) {

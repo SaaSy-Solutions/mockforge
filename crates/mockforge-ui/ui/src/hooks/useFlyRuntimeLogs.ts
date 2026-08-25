@@ -56,15 +56,14 @@ export function useFlyRuntimeLogs(
       return;
     }
 
-    // EventSource doesn't honour custom headers, so the auth_token rides as a
-    // query string. The registry server already accepts both Authorization
-    // header and ?token= for SSE endpoints (see middleware/auth.rs).
-    const token = localStorage.getItem('auth_token') ?? '';
+    // EventSource cannot send an Authorization header. Authentication rides
+    // on the HttpOnly session cookie (`withCredentials`), which the registry
+    // sets on login and accepts on SSE endpoints. No token in the URL —
+    // query-string tokens leak into proxy logs and referrers.
     const url =
-      `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/runtime-logs/stream` +
-      (token ? `?token=${encodeURIComponent(token)}` : '');
+      `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/runtime-logs/stream`;
 
-    const source = new EventSource(url);
+    const source = new EventSource(url, { withCredentials: true });
     sourceRef.current = source;
     setError(null);
     setNotConfigured(false);

@@ -124,12 +124,9 @@ impl EdgeAmplifier {
     /// amplification was applied. Requires that original probabilities
     /// were stored during amplification.
     pub fn restore_original(model: &mut EndpointProbabilityModel) -> Result<()> {
-        let original_probs = match &model.original_error_probabilities {
-            Some(probs) => probs,
-            None => {
-                // No original probabilities stored - nothing to restore
-                return Ok(());
-            }
+        // No original probabilities stored - nothing to restore
+        let Some(original_probs) = &model.original_error_probabilities else {
+            return Ok(());
         };
 
         // Restore each pattern's probability from the stored original

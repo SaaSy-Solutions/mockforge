@@ -1,6 +1,12 @@
 # Multi-stage Docker build for MockForge
 # Stage 0: Build the React Admin UI bundle so the Rust build can embed real assets
-FROM node:22-slim AS ui-builder
+# Base images are pinned once here; CI/toolchain bumps override with
+# --build-arg RUST_IMAGE=... / NODE_IMAGE=... / DEBIAN_IMAGE=... instead of
+# editing FROM lines scattered through the file.
+ARG NODE_IMAGE=node:22-slim
+ARG RUST_IMAGE=rust:1.96-slim
+ARG DEBIAN_IMAGE=debian:trixie-slim
+FROM ${NODE_IMAGE} AS ui-builder
 
 WORKDIR /ui
 
@@ -19,7 +25,7 @@ RUN pnpm build
 
 # Stage 1: Build the Rust application
 # Use rust:1.90-slim (Trixie/testing-based) which has GLIBC 2.39+ required by native dependencies
-FROM rust:1.96-slim AS builder
+FROM ${RUST_IMAGE} AS builder
 
 # Install required dependencies for building (including C++ for Kafka support)
 RUN apt-get update && apt-get install -y \
@@ -70,7 +76,7 @@ RUN cargo build --release --bin mockforge --no-default-features --features cloud
 
 # Stage 2: Create the runtime image
 # Use debian:trixie-slim to match builder's GLIBC version (2.39+)
-FROM debian:trixie-slim
+FROM ${DEBIAN_IMAGE}
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \

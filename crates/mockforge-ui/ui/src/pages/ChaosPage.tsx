@@ -173,7 +173,7 @@ export function ChaosPage() {
 
   const fetchScenarios = async () => {
     try {
-      const response = await fetch('/api/chaos/scenarios');
+      const response = await fetch('/api/chaos/scenarios', { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch scenarios');
       const data = await response.json();
       setScenarios(data.scenarios || []);
@@ -186,7 +186,7 @@ export function ChaosPage() {
 
   const fetchStatus = async () => {
     try {
-      const response = await fetch('/api/chaos/status');
+      const response = await fetch('/api/chaos/status', { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch status');
       const data = await response.json();
       setStatus(data);
@@ -197,9 +197,7 @@ export function ChaosPage() {
 
   const startScenario = async (scenarioName: string) => {
     try {
-      const response = await fetch(`/api/chaos/scenarios/${scenarioName}`, {
-        method: 'POST',
-      });
+      const response = await fetch(`/api/chaos/scenarios/${scenarioName}`, { credentials: 'include', method: 'POST', });
       if (!response.ok) throw new Error('Failed to start scenario');
       fetchStatus();
     } catch (err) {
@@ -209,9 +207,7 @@ export function ChaosPage() {
 
   const stopChaos = async () => {
     try {
-      const response = await fetch('/api/chaos/disable', {
-        method: 'POST',
-      });
+      const response = await fetch('/api/chaos/disable', { credentials: 'include', method: 'POST', });
       if (!response.ok) throw new Error('Failed to stop chaos');
       fetchStatus();
     } catch (err) {

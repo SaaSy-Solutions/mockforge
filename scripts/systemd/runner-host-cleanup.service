@@ -1,0 +1,12 @@
+[Unit]
+Description=MockForge runner host disk cleanup (one shot)
+# Source of truth: scripts/runner-host-cleanup.sh (#706 item 5).
+# Aggressive wipes exit 4 so this unit surfaces them via systemctl result
+# and journal alerts instead of silently risking builds.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/runner-host-cleanup.sh
+# A nonzero exit (3 = ambiguous skip, 4 = aggressive fired) must show up
+# as a failed/success-with-status run, not vanish.
+SuccessExitStatus=0 4

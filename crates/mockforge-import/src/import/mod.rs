@@ -13,6 +13,7 @@ pub mod openapi_import;
 pub mod postman_environment;
 pub mod postman_import;
 pub mod schema_data_generator;
+pub mod swagger2_convert;
 
 // Re-export the main functions and types
 pub use asyncapi_import::{

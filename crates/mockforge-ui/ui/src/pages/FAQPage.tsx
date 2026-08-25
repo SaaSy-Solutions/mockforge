@@ -23,7 +23,7 @@ export function FAQPage() {
   const { data: faqData, isLoading, error } = useQuery<FAQResponse>({
     queryKey: ['faq'],
     queryFn: async () => {
-      const response = await fetch('/api/v1/faq');
+      const response = await fetch('/api/v1/faq', { credentials: 'include' });
       if (!response.ok) {
         throw new Error('Failed to fetch FAQ');
       }

@@ -32,6 +32,7 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useToast } from '@/components/ui/ToastProvider';
+import { getAuthToken } from '@/services/tokenStorage';
 
 // Types
 interface BYOKConfig {
@@ -91,7 +92,7 @@ interface TestConnectionResult {
 const API_BASE = '/api/v1';
 
 function authHeaders(): Record<string, string> {
-  const token = localStorage.getItem('auth_token');
+  const token = getAuthToken();
   return {
     Authorization: `Bearer ${token}`,
     'Content-Type': 'application/json',
@@ -99,17 +100,13 @@ function authHeaders(): Record<string, string> {
 }
 
 async function fetchOrganizations(): Promise<Organization[]> {
-  const response = await fetch(`${API_BASE}/organizations`, {
-    headers: authHeaders(),
-  });
+  const response = await fetch(`${API_BASE}/organizations`, { credentials: 'include', headers: authHeaders(), });
   if (!response.ok) throw new Error('Failed to fetch organizations');
   return response.json();
 }
 
 async function fetchBYOKConfig(reveal: boolean): Promise<BYOKConfig> {
-  const response = await fetch(`${API_BASE}/settings/byok?reveal=${reveal}`, {
-    headers: authHeaders(),
-  });
+  const response = await fetch(`${API_BASE}/settings/byok?reveal=${reveal}`, { credentials: 'include', headers: authHeaders(), });
   if (!response.ok) {
     if (response.status === 404) {
       return { provider: 'openai', api_key: '', enabled: false };
@@ -120,11 +117,9 @@ async function fetchBYOKConfig(reveal: boolean): Promise<BYOKConfig> {
 }
 
 async function saveBYOKConfig(config: BYOKConfig): Promise<void> {
-  const response = await fetch(`${API_BASE}/settings/byok`, {
-    method: 'PUT',
-    headers: authHeaders(),
-    body: JSON.stringify(config),
-  });
+  const response = await fetch(`${API_BASE}/settings/byok`, { credentials: 'include', method: 'PUT',
+  headers: authHeaders(),
+  body: JSON.stringify(config), });
   if (!response.ok) {
     const error = await response.json();
     throw new Error(error.message || 'Failed to save BYOK config');
@@ -132,10 +127,8 @@ async function saveBYOKConfig(config: BYOKConfig): Promise<void> {
 }
 
 async function deleteBYOKConfig(): Promise<void> {
-  const response = await fetch(`${API_BASE}/settings/byok`, {
-    method: 'DELETE',
-    headers: authHeaders(),
-  });
+  const response = await fetch(`${API_BASE}/settings/byok`, { credentials: 'include', method: 'DELETE',
+  headers: authHeaders(), });
   if (!response.ok) throw new Error('Failed to delete BYOK config');
 }
 
@@ -145,46 +138,35 @@ async function testBYOKConnection(config: {
   base_url?: string;
   model?: string;
 }): Promise<TestConnectionResult> {
-  const response = await fetch(`${API_BASE}/settings/byok/test`, {
-    method: 'POST',
-    headers: authHeaders(),
-    body: JSON.stringify(config),
-  });
+  const response = await fetch(`${API_BASE}/settings/byok/test`, { credentials: 'include', method: 'POST',
+  headers: authHeaders(),
+  body: JSON.stringify(config), });
   if (!response.ok) throw new Error('Failed to test connection');
   return response.json();
 }
 
 async function fetchOrgAiSettings(orgId: string): Promise<OrgAiSettings> {
-  const response = await fetch(`${API_BASE}/organizations/${orgId}/settings/ai`, {
-    headers: authHeaders(),
-  });
+  const response = await fetch(`${API_BASE}/organizations/${orgId}/settings/ai`, { credentials: 'include', headers: authHeaders(), });
   if (!response.ok) throw new Error('Failed to fetch AI settings');
   return response.json();
 }
 
 async function saveOrgAiSettings(orgId: string, settings: OrgAiSettings): Promise<OrgAiSettings> {
-  const response = await fetch(`${API_BASE}/organizations/${orgId}/settings/ai`, {
-    method: 'PATCH',
-    headers: authHeaders(),
-    body: JSON.stringify(settings),
-  });
+  const response = await fetch(`${API_BASE}/organizations/${orgId}/settings/ai`, { credentials: 'include', method: 'PATCH',
+  headers: authHeaders(),
+  body: JSON.stringify(settings), });
   if (!response.ok) throw new Error('Failed to save AI settings');
   return response.json();
 }
 
 async function fetchOrgUsage(orgId: string): Promise<OrgUsage> {
-  const response = await fetch(`${API_BASE}/organizations/${orgId}/usage`, {
-    headers: authHeaders(),
-  });
+  const response = await fetch(`${API_BASE}/organizations/${orgId}/usage`, { credentials: 'include', headers: authHeaders(), });
   if (!response.ok) throw new Error('Failed to fetch usage');
   return response.json();
 }
 
 async function fetchAuditLogs(orgId: string): Promise<AuditLogEntry[]> {
-  const response = await fetch(
-    `${API_BASE}/organizations/${orgId}/audit-logs?event_type=byok_config_updated,byok_config_deleted`,
-    { headers: authHeaders() }
-  );
+  const response = await fetch(`${API_BASE}/organizations/${orgId}/audit-logs?event_type=byok_config_updated,byok_config_deleted`, { credentials: 'include', headers: authHeaders() });
   if (!response.ok) throw new Error('Failed to fetch audit logs');
   const body = (await response.json()) as { logs?: AuditLogEntry[] } | AuditLogEntry[];
   return Array.isArray(body) ? body : (body.logs ?? []);

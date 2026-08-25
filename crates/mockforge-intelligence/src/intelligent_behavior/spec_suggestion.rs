@@ -182,6 +182,7 @@ impl SpecSuggestionEngine {
             temperature: 0.7,
             max_tokens: 4000,
             schema: None,
+            seed: None,
         };
 
         let llm_response = self.llm_client.generate(&request).await?;

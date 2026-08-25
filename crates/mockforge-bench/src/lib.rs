@@ -17,6 +17,7 @@ pub mod k6_gen;
 pub mod mock_integration;
 pub mod owasp_api;
 pub mod parallel_executor;
+pub mod pipeline_bench;
 pub mod parallel_requests;
 pub mod param_overrides;
 pub mod preflight;

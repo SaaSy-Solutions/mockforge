@@ -10,6 +10,7 @@
 
 import { useEffect, useState } from 'react';
 import { logger } from '@/utils/logger';
+import { getAuthToken } from '@/services/tokenStorage';
 
 /// Mirrors `handlers::otlp::TraceSummary` in mockforge-registry-server.
 export interface TraceSummary {
@@ -72,16 +73,14 @@ export function useDeploymentTraces(
     let cancelled = false;
 
     const poll = async () => {
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       if (!token) return;
 
       const url = `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/traces?limit=${limit}`;
 
       setLoading(true);
       try {
-        const resp = await fetch(url, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const resp = await fetch(url, { credentials: 'include', headers: { Authorization: `Bearer ${token}` }, });
         if (!resp.ok) {
           // 404 happens before any spans have been ingested — surface as
           // empty rather than an error so the UI doesn't yell at users.
@@ -131,12 +130,10 @@ export async function fetchTraceSpans(
   deploymentId: string,
   traceId: string,
 ): Promise<TraceSpan[]> {
-  const token = localStorage.getItem('auth_token');
+  const token = getAuthToken();
   if (!token) return [];
   const url = `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/traces/${encodeURIComponent(traceId)}`;
-  const resp = await fetch(url, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
+  const resp = await fetch(url, { credentials: 'include', headers: { Authorization: `Bearer ${token}` }, });
   if (!resp.ok) return [];
   const data = await resp.json();
   return Array.isArray(data) ? (data as TraceSpan[]) : [];

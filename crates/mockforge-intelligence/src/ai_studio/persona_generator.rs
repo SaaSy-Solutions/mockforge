@@ -124,6 +124,7 @@ Make the persona realistic and consistent. Traits should align with the descript
             temperature: 0.7, // Higher temperature for more creative personas
             max_tokens: 1500,
             schema: None,
+            seed: None,
         };
 
         // Generate persona from LLM
@@ -264,6 +265,7 @@ Return the updated persona in the same JSON structure as the input."#;
             temperature: 0.5,
             max_tokens: 1500,
             schema: None,
+            seed: None,
         };
 
         // Generate updated persona

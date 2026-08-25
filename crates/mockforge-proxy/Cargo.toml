@@ -15,6 +15,13 @@ schema = ["dep:schemars"]
 [dependencies]
 schemars = { version = "0.8", optional = true }
 mockforge-core = { path = "../mockforge-core" }
+# #864 — conformance tap: spec registry + validators + shared buffer.
+mockforge-openapi = { path = "../mockforge-openapi" }
+mockforge-foundation = { path = "../mockforge-foundation" }
+openapiv3 = { workspace = true }
+chrono = { workspace = true }
+urlencoding = "2"
+serde_yaml = { workspace = true }
 axum = { workspace = true }
 # `server::ProxyServer` (moved from `mockforge-http` under #555 phase 1)
 # needs `tokio::sync::RwLock` + `#[tokio::test]` in its unit tests; `http`

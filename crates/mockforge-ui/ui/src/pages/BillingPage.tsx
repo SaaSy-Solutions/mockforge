@@ -170,7 +170,7 @@ async function fetchInvoices(): Promise<ListInvoicesResponse> {
 }
 
 async function fetchBillingConfig(): Promise<BillingConfig> {
-  const response = await fetch(`${API_BASE}/billing/config`);
+  const response = await fetch(`${API_BASE}/billing/config`, { credentials: 'include' });
   if (!response.ok) {
     throw new Error(await extractErrorMessage(response, 'Failed to fetch billing config'));
   }

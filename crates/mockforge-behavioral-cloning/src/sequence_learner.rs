@@ -11,9 +11,9 @@ use std::collections::HashMap;
 /// Trait for querying trace data for sequence learning
 #[async_trait]
 pub trait TraceQueryProvider: Send + Sync {
-    /// Get requests grouped by trace_id, ordered by timestamp
+    /// Get requests grouped by `trace_id`, ordered by timestamp
     ///
-    /// Returns a vector of (trace_id, requests) tuples where requests
+    /// Returns a vector of (`trace_id`, requests) tuples where requests
     /// are ordered by timestamp within each trace.
     async fn get_requests_by_trace(
         &self,
@@ -42,11 +42,11 @@ pub struct SequenceLearner;
 impl SequenceLearner {
     /// Discover sequences from trace correlation
     ///
-    /// Uses trace_id/span_id to find correlated request sequences
+    /// Uses `trace_id`/`span_id` to find correlated request sequences
     /// and identifies common patterns.
     ///
     /// This implementation:
-    /// 1. Queries database for requests grouped by trace_id
+    /// 1. Queries database for requests grouped by `trace_id`
     /// 2. Orders by timestamp within each trace
     /// 3. Identifies common subsequences (e.g., login -> list -> detail)
     /// 4. Calculates transition probabilities between steps
@@ -143,7 +143,7 @@ impl SequenceLearner {
     /// Analyzes multiple sequences to extract common patterns
     /// and calculate confidence scores.
     ///
-    /// Each sequence is represented as (endpoint, method, delay_ms) tuples.
+    /// Each sequence is represented as (endpoint, method, `delay_ms`) tuples.
     pub fn learn_sequence_pattern(
         sequences: &[Vec<(String, String, Option<u64>)>], // (endpoint, method, delay)
         min_frequency: f64,

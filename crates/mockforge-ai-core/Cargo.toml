@@ -33,5 +33,5 @@ uuid = { workspace = true }
 rand = { workspace = true }
 schemars = { version = "0.8", optional = true }
 
-[lints.rust]
-missing_docs = "deny"
+[lints]
+workspace = true

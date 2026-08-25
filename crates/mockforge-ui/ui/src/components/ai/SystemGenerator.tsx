@@ -96,16 +96,14 @@ export function SystemGenerator({ onUsageUpdate }: SystemGeneratorProps) {
     try {
       setIsGenerating(true);
 
-      const response = await fetch('/__mockforge/api/v1/ai-studio/generate-system', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          description: description.trim(),
-          output_formats: outputFormats,
-        }),
-      });
+      const response = await fetch('/__mockforge/api/v1/ai-studio/generate-system', { credentials: 'include', method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        description: description.trim(),
+        output_formats: outputFormats,
+      }), });
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Unknown error' }));
@@ -139,18 +137,13 @@ export function SystemGenerator({ onUsageUpdate }: SystemGeneratorProps) {
     try {
       setIsApplying(true);
 
-      const response = await fetch(
-        `/__mockforge/api/v1/ai-studio/system/${generatedSystem.system_id}/apply`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            artifact_ids: null, // Apply all
-          }),
-        }
-      );
+      const response = await fetch(`/__mockforge/api/v1/ai-studio/system/${generatedSystem.system_id}/apply`, { credentials: 'include', method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        artifact_ids: null, // Apply all
+      }), });
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Unknown error' }));
@@ -182,18 +175,13 @@ export function SystemGenerator({ onUsageUpdate }: SystemGeneratorProps) {
     try {
       setIsFreezing(true);
 
-      const response = await fetch(
-        `/__mockforge/api/v1/ai-studio/system/${generatedSystem.system_id}/freeze`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            artifact_ids: artifactIds || Object.values(generatedSystem.artifacts).map(a => a.artifact_id),
-          }),
-        }
-      );
+      const response = await fetch(`/__mockforge/api/v1/ai-studio/system/${generatedSystem.system_id}/freeze`, { credentials: 'include', method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        artifact_ids: artifactIds || Object.values(generatedSystem.artifacts).map(a => a.artifact_id),
+      }), });
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Unknown error' }));

@@ -194,3 +194,11 @@ conformance-report.json
 
 # Test data (databases, fixtures)
 tests/data/
+
+# agent worktrees
+.worktrees/
+
+# Mutation testing output (file form; dir form already ignored above)
+mutants.out
+compile-check.db
+/.claude/worktrees/

@@ -80,9 +80,7 @@ export function PluginList({ filterType, filterStatus, onSelectPlugin }: PluginL
     }
 
     try {
-      const response = await fetch(`/__mockforge/plugins/${pluginId}`, {
-        method: 'DELETE',
-      });
+      const response = await fetch(`/__mockforge/plugins/${pluginId}`, { credentials: 'include', method: 'DELETE', });
       const data = await response.json();
 
       if (data.success) {
@@ -97,11 +95,9 @@ export function PluginList({ filterType, filterStatus, onSelectPlugin }: PluginL
 
   const handleReloadPlugin = async (pluginId: string) => {
     try {
-      const response = await fetch('/__mockforge/plugins/reload', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ plugin_id: pluginId }),
-      });
+      const response = await fetch('/__mockforge/plugins/reload', { credentials: 'include', method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ plugin_id: pluginId }), });
       const data = await response.json();
 
       if (data.success) {

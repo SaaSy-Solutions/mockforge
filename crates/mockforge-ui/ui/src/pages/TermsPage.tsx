@@ -10,7 +10,7 @@ interface LegalDocument {
 }
 
 async function fetchTerms(): Promise<LegalDocument> {
-  const response = await fetch('/api/v1/legal/terms');
+  const response = await fetch('/api/v1/legal/terms', { credentials: 'include' });
   if (!response.ok) {
     throw new Error('Failed to fetch Terms of Service');
   }

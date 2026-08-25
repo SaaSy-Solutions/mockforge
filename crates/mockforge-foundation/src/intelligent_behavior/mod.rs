@@ -76,6 +76,11 @@ pub struct LlmGenerationRequest {
     pub max_tokens: usize,
     /// Expected response schema (JSON Schema).
     pub schema: Option<Value>,
+    /// Sampling seed for deterministic generation (#852). Forwarded to
+    /// providers that support one; pair with a fixed temperature for
+    /// reproducible output in CI.
+    #[serde(default)]
+    pub seed: Option<i64>,
 }
 
 impl LlmGenerationRequest {
@@ -87,6 +92,7 @@ impl LlmGenerationRequest {
             temperature: default_temperature(),
             max_tokens: default_max_tokens(),
             schema: None,
+            seed: None,
         }
     }
 

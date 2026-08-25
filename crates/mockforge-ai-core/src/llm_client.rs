@@ -54,6 +54,15 @@ impl LlmClient {
         }
     }
 
+    /// Resolve the effective sampling seed (#852): per-request override,
+    /// then the behavior-model config, then the `MOCKFORGE_AI_SEED` env var.
+    fn resolve_seed(&self, request: &LlmGenerationRequest) -> Option<i64> {
+        request
+            .seed
+            .or(self.config.seed)
+            .or_else(|| std::env::var("MOCKFORGE_AI_SEED").ok().and_then(|s| s.trim().parse().ok()))
+    }
+
     /// Generate a response from a prompt
     pub async fn generate(&self, request: &LlmGenerationRequest) -> Result<serde_json::Value> {
         self.ensure_initialized().await?;
@@ -77,7 +86,12 @@ impl LlmClient {
 
         // Generate response
         let response_text = provider
-            .generate_chat(messages, request.temperature, request.max_tokens)
+            .generate_chat(
+                messages,
+                request.temperature,
+                request.max_tokens,
+                self.resolve_seed(request),
+            )
             .await?;
 
         // Try to parse as JSON
@@ -104,6 +118,12 @@ impl LlmClient {
     }
 
     /// Generate a response and return usage information
+    ///
+    /// NOTE (#869): usage returned here is informational only. No caller
+    /// persists it and this crate is NOT part of the billing path —
+    /// platform-token accounting for billable AI spend lives in
+    /// `mockforge-registry-server` (`ai::quota`). If a billable caller
+    /// ever appears, wire `LlmUsage` into that counter explicitly.
     pub async fn generate_with_usage(
         &self,
         request: &LlmGenerationRequest,
@@ -129,7 +149,12 @@ impl LlmClient {
 
         // Generate response with usage tracking
         let (response_text, usage) = provider
-            .generate_chat_with_usage(messages, request.temperature, request.max_tokens)
+            .generate_chat_with_usage(
+                messages,
+                request.temperature,
+                request.max_tokens,
+                self.resolve_seed(request),
+            )
             .await?;
 
         // Try to parse as JSON
@@ -204,12 +229,17 @@ impl LlmUsage {
 /// LLM provider trait
 #[async_trait::async_trait]
 trait LlmProvider: Send + Sync {
-    /// Generate chat completion
+    /// Generate chat completion.
+    ///
+    /// `seed` (#852): provider-native sampling seed for deterministic
+    /// generation. Providers without native seed support ignore it —
+    /// callers wanting determinism there should also pin temperature 0.
     async fn generate_chat(
         &self,
         messages: Vec<ChatMessage>,
         temperature: f64,
         max_tokens: usize,
+        seed: Option<i64>,
     ) -> Result<String>;
 
     /// Generate chat completion with usage tracking
@@ -218,16 +248,17 @@ trait LlmProvider: Send + Sync {
         messages: Vec<ChatMessage>,
         temperature: f64,
         max_tokens: usize,
+        seed: Option<i64>,
     ) -> Result<(String, LlmUsage)> {
         // Default implementation: call generate_chat and estimate tokens
-        let response = self.generate_chat(messages, temperature, max_tokens).await?;
+        let response = self.generate_chat(messages, temperature, max_tokens, seed).await?;
         // Rough estimation: ~4 characters per token
         let estimated_tokens = (response.len() as f64 / 4.0) as u64;
         Ok((response, LlmUsage::new(estimated_tokens, estimated_tokens)))
     }
 }
 
-/// OpenAI provider implementation
+/// `OpenAI` provider implementation
 struct OpenAIProvider {
     client: reqwest::Client,
     api_key: String,
@@ -264,8 +295,9 @@ impl LlmProvider for OpenAIProvider {
         messages: Vec<ChatMessage>,
         temperature: f64,
         max_tokens: usize,
+        seed: Option<i64>,
     ) -> Result<String> {
-        let request_body = serde_json::json!({
+        let mut request_body = serde_json::json!({
             "model": self.model,
             "messages": messages.iter().map(|m| {
                 serde_json::json!({
@@ -276,6 +308,9 @@ impl LlmProvider for OpenAIProvider {
             "temperature": temperature,
             "max_tokens": max_tokens,
         });
+        if let Some(seed) = seed {
+            request_body["seed"] = serde_json::json!(seed);
+        }
 
         let response = self
             .client
@@ -310,8 +345,9 @@ impl LlmProvider for OpenAIProvider {
         messages: Vec<ChatMessage>,
         temperature: f64,
         max_tokens: usize,
+        seed: Option<i64>,
     ) -> Result<(String, LlmUsage)> {
-        let request_body = serde_json::json!({
+        let mut request_body = serde_json::json!({
             "model": self.model,
             "messages": messages.iter().map(|m| {
                 serde_json::json!({
@@ -322,6 +358,9 @@ impl LlmProvider for OpenAIProvider {
             "temperature": temperature,
             "max_tokens": max_tokens,
         });
+        if let Some(seed) = seed {
+            request_body["seed"] = serde_json::json!(seed);
+        }
 
         let response = self
             .client
@@ -393,8 +432,9 @@ impl LlmProvider for OllamaProvider {
         messages: Vec<ChatMessage>,
         temperature: f64,
         max_tokens: usize,
+        seed: Option<i64>,
     ) -> Result<String> {
-        let request_body = serde_json::json!({
+        let mut request_body = serde_json::json!({
             "model": self.model,
             "messages": messages.iter().map(|m| {
                 serde_json::json!({
@@ -408,6 +448,10 @@ impl LlmProvider for OllamaProvider {
             },
             "stream": false,
         });
+        // Ollama takes the seed inside `options` (#852).
+        if let Some(seed) = seed {
+            request_body["options"]["seed"] = serde_json::json!(seed);
+        }
 
         let response = self
             .client
@@ -474,6 +518,9 @@ impl LlmProvider for AnthropicProvider {
         messages: Vec<ChatMessage>,
         temperature: f64,
         max_tokens: usize,
+        // Anthropic's Messages API has no sampling-seed parameter; ignored.
+        // Determinism here comes from pinning temperature (see #852 docs).
+        _seed: Option<i64>,
     ) -> Result<String> {
         // Separate system message from other messages
         let system_message =
@@ -561,8 +608,9 @@ impl LlmProvider for OpenAICompatibleProvider {
         messages: Vec<ChatMessage>,
         temperature: f64,
         max_tokens: usize,
+        seed: Option<i64>,
     ) -> Result<String> {
-        let request_body = serde_json::json!({
+        let mut request_body = serde_json::json!({
             "model": self.model,
             "messages": messages.iter().map(|m| {
                 serde_json::json!({
@@ -573,6 +621,11 @@ impl LlmProvider for OpenAICompatibleProvider {
             "temperature": temperature,
             "max_tokens": max_tokens,
         });
+        // Most OpenAI-compatible servers (vLLM, llama.cpp server, LM Studio)
+        // honour the OpenAI `seed` field (#852); those that don't ignore it.
+        if let Some(seed) = seed {
+            request_body["seed"] = serde_json::json!(seed);
+        }
 
         let mut request =
             self.client.post(&self.endpoint).header("Content-Type", "application/json");
@@ -617,5 +670,39 @@ mod tests {
         let config = BehaviorModelConfig::default();
         let client = LlmClient::new(config);
         assert_eq!(client.config().llm_provider, "openai");
+    }
+
+    #[test]
+    fn test_seed_resolution_precedence() {
+        // request > config > env; here: no env, no config seed -> None
+        std::env::remove_var("MOCKFORGE_AI_SEED");
+        let client = LlmClient::new(BehaviorModelConfig {
+            seed: Some(7),
+            ..BehaviorModelConfig::default()
+        });
+        let req = LlmGenerationRequest::new("s", "u");
+        assert_eq!(client.resolve_seed(&req), Some(7), "config seed used");
+
+        let req = LlmGenerationRequest::new("s", "u").with_seed(42);
+        assert_eq!(client.resolve_seed(&req), Some(42), "request seed wins");
+
+        let client = LlmClient::new(BehaviorModelConfig::default());
+        std::env::set_var("MOCKFORGE_AI_SEED", "1234");
+        let req = LlmGenerationRequest::new("s", "u");
+        assert_eq!(client.resolve_seed(&req), Some(1234), "env fallback");
+        std::env::remove_var("MOCKFORGE_AI_SEED");
+    }
+
+    #[test]
+    fn test_seed_serializes_roundtrip() {
+        let req = LlmGenerationRequest::new("s", "u").with_seed(99);
+        let json = serde_json::to_string(&req).unwrap();
+        assert!(json.contains("\"seed\":99"));
+        let back: LlmGenerationRequest = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.seed, Some(99));
+        // absent seed stays None (back-compat with old payloads)
+        let old: LlmGenerationRequest =
+            serde_json::from_str(r#"{"system_prompt":"a","user_prompt":"b"}"#).unwrap();
+        assert_eq!(old.seed, None);
     }
 }

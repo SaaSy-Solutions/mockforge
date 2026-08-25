@@ -76,6 +76,7 @@ impl ApiCritiqueEngine {
             temperature: 0.3, // Lower temperature for more consistent analysis
             max_tokens: 4000,
             schema: None,
+            seed: None,
         };
 
         let (response_json, usage) = self.llm_client.generate_with_usage(&llm_request).await?;
@@ -267,6 +268,7 @@ mod tests {
                 temperature: 0.7,
                 max_tokens: 2000,
                 rules: crate::intelligent_behavior::types::BehaviorRules::default(),
+                seed: None,
             },
             ..Default::default()
         }

@@ -192,7 +192,9 @@ impl MutationAnalyzer {
             });
         }
 
-        let previous = previous.unwrap();
+        static EMPTY_OBJECT: std::sync::LazyLock<Value> =
+            std::sync::LazyLock::new(|| Value::Object(serde_json::Map::new()));
+        let previous = previous.unwrap_or(&EMPTY_OBJECT);
 
         // Compare objects
         if let (Value::Object(current_obj), Value::Object(prev_obj)) = (current, previous) {
@@ -319,7 +321,7 @@ impl MutationAnalyzer {
                         if let Some(required) = schema.get("required").and_then(|r| r.as_array()) {
                             if required
                                 .iter()
-                                .any(|f| f.as_str().map(|s| s == change.field).unwrap_or(false))
+                                .any(|f| f.as_str().is_some_and(|s| s == change.field))
                             {
                                 issues.push(ValidationIssue {
                                     field: Some(change.field.clone()),

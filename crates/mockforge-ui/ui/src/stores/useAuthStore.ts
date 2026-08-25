@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User, AuthState, AuthActions } from '../types';
 import { authApi } from '../services/authApi';
+import { setAuthToken, clearAuthToken } from '../services/tokenStorage';
 
 interface AuthStore extends AuthState, AuthActions {
   checkAuth: () => Promise<void>;
@@ -170,6 +171,31 @@ export const useAuthStore = create<AuthStore>()(
       checkAuth: async () => {
         const { token, refreshToken, user: existingUser } = get();
         if (!token) {
+          // No in-memory token (page reload with memory-only token storage):
+          // try to restore the session from the HttpOnly auth cookies. The
+          // registry accepts the session cookie on /auth/me, so a valid cookie
+          // means the user is still logged in even without a JS-held JWT.
+          try {
+            const res = await fetch('/api/v1/auth/me', { credentials: 'include' });
+            if (res.ok) {
+              const me = await res.json();
+              set({
+                user: {
+                  ...(existingUser ?? {}),
+                  id: me.user_id,
+                  username: me.username,
+                  email: me.email,
+                  is_verified: me.is_verified,
+                  is_admin: me.is_admin,
+                } as User,
+                isAuthenticated: true,
+                isLoading: false,
+              });
+              return;
+            }
+          } catch {
+            /* fall through to logged-out */
+          }
           set({ isAuthenticated: false, isLoading: false });
           return;
         }
@@ -312,11 +338,11 @@ export const useAuthStore = create<AuthStore>()(
   )
 );
 
-// Sync token to localStorage so pages using localStorage.getItem('auth_token') work
+// Sync token through the central storage module so non-store consumers see it.
 useAuthStore.subscribe((state) => {
   if (state.token) {
-    localStorage.setItem('auth_token', state.token);
+    setAuthToken(state.token);
   } else {
-    localStorage.removeItem('auth_token');
+    clearAuthToken();
   }
 });

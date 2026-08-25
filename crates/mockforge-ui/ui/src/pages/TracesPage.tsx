@@ -51,7 +51,7 @@ export function TracesPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await fetch('/api/observability/traces');
+      const response = await fetch('/api/observability/traces', { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch traces');
       const data = await response.json();
       setTraces(data.traces || []);

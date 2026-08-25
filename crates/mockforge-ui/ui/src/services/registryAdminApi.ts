@@ -9,9 +9,9 @@
 // JWT stored under `mockforge_registry_admin_token`.
 
 import { isCloudMode as detectCloudMode } from '../utils/cloudMode';
+import { getAuthToken } from './tokenStorage';
 
 const TOKEN_STORAGE_KEY = 'mockforge_registry_admin_token';
-const SAAS_TOKEN_KEY = 'auth_token'; // matches useAuthStore's persist key
 
 /** True when the frontend is built against a remote cloud API backend (VITE_MOCKFORGE_MODE=cloud). */
 export const isCloudMode = detectCloudMode;
@@ -67,10 +67,9 @@ export interface CreateApiTokenResponse {
 export function getStoredToken(): string | null {
   try {
     if (isCloudMode()) {
-      // SaaS auth store persists a JSON blob; extract the token field.
-      const raw = localStorage.getItem(SAAS_TOKEN_KEY);
+      // useAuthStore persists just the JWT string under the auth_token key.
+      const raw = getAuthToken();
       if (!raw) return null;
-      // useAuthStore stores just the JWT string directly under auth_token
       return raw;
     }
     return localStorage.getItem(TOKEN_STORAGE_KEY);
@@ -115,11 +114,9 @@ async function request<T>(
   if (bearer) {
     headers['authorization'] = `Bearer ${bearer}`;
   }
-  const resp = await fetch(path, {
-    method,
-    headers,
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
+  const resp = await fetch(path, { credentials: 'include', method,
+  headers,
+  body: body === undefined ? undefined : JSON.stringify(body), });
   if (!resp.ok) {
     let msg = `HTTP ${resp.status}`;
     try {
@@ -164,7 +161,7 @@ export async function registryLogin(
       username: string;
     }>('POST', '/api/v1/auth/login', { email: identifier, password });
     // Store the SaaS token so getStoredToken() picks it up.
-    try { localStorage.setItem('auth_token', resp.access_token); } catch { /* */ }
+    try { setAuthToken(resp.access_token); } catch { /* */ }
     return {
       token: resp.access_token,
       user: { id: resp.user_id, username: resp.username, email: identifier, is_verified: true, is_admin: false },
@@ -184,7 +181,7 @@ export async function registryRegister(
       user_id: string;
       username: string;
     }>('POST', '/api/v1/auth/register', { username, email, password });
-    try { localStorage.setItem('auth_token', resp.access_token); } catch { /* */ }
+    try { setAuthToken(resp.access_token); } catch { /* */ }
     return {
       token: resp.access_token,
       user: { id: resp.user_id, username: resp.username, email, is_verified: false, is_admin: false },

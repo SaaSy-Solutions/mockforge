@@ -102,9 +102,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
     setSsoError('');
     setSsoLoading(true);
     try {
-      const res = await fetch(
-        `/api/v1/sso/discover?email=${encodeURIComponent(ssoEmail)}`,
-      );
+      const res = await fetch(`/api/v1/sso/discover?email=${encodeURIComponent(ssoEmail)}`, { credentials: 'include' });
       if (res.ok) {
         const data = (await res.json()) as SsoDiscoverResponse;
         window.location.href = `/api/v1/sso/${data.provider}/login/${encodeURIComponent(data.org_slug)}`;

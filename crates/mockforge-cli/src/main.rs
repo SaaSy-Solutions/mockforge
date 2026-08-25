@@ -16,6 +16,10 @@ mod cloud_commands;
 mod config_commands;
 #[allow(dead_code)]
 mod contract_diff_commands;
+
+#[cfg(feature = "recorder")]
+mod verify_mocks_commands;
+mod mcp_server;
 #[allow(dead_code)]
 mod contract_sync_commands;
 mod data_commands;
@@ -1103,6 +1107,31 @@ enum Commands {
         #[command(subcommand)]
         diff_command: contract_diff_commands::ContractDiffCommands,
     },
+
+    /// Run the MockForge MCP server over stdio (#835)
+    ///
+    /// Speaks newline-delimited JSON-RPC 2.0 so MCP clients (Claude
+    /// Desktop, Cursor, any agent host) can list spec routes, validate
+    /// requests, generate schema-conformant examples, and up-convert
+    /// Swagger 2.0 specs.
+    ///
+    /// Example (Claude Desktop config):
+    ///   { "command": "mockforge", "args": ["mcp"] }
+    #[command(verbatim_doc_comment)]
+    Mcp,
+
+    /// Verify mocks still match the real API (Mock Fidelity / drift detection, #849)
+    ///
+    /// Replays recorded real traffic against the spec your mocks are
+    /// generated from and reports drift. With --fail-on-drift this is a
+    /// CI gate: drift breaks the build instead of silently passing.
+    ///
+    /// Examples:
+    ///   mockforge verify-mocks --spec api.yaml --capture-db captures.db
+    ///   mockforge verify-mocks --spec api.yaml --capture-db captures.db --fail-on-drift
+    #[cfg(feature = "recorder")]
+    #[command(verbatim_doc_comment)]
+    VerifyMocks(verify_mocks_commands::VerifyMocksArgs),
 
     /// API governance and safety features
     ///
@@ -2569,6 +2598,53 @@ enum Commands {
         mss: Option<u32>,
     },
 
+    /// True HTTP/1.1 pipelining bench with synthetic streaming bodies (#937)
+    ///
+    /// Writes `--pipeline-depth` requests back-to-back on each connection
+    /// BEFORE reading any response, then reads responses in order. Bodies
+    /// stream from a generator (never fully materialised), so GB sizes work.
+    /// Many servers/proxies do not support request pipelining — the report
+    /// surfaces early closes and unanswered requests instead of hiding them.
+    ///
+    /// Examples:
+    ///   mockforge bench-pipeline --target http://localhost:3000/api \
+    ///     --content-type json --body-size 500KB --pipeline-depth 16 \
+    ///     --connections 8 --duration 30s
+    ///   mockforge bench-pipeline --target http://host:8080/upload \
+    ///     --content-type multipart --body-size 10MB --method POST
+    #[cfg(feature = "bench")]
+    #[command(verbatim_doc_comment)]
+    BenchPipeline {
+        /// Target URL (plain http:// only), e.g. `http://localhost:3000/`.
+        #[arg(short, long)]
+        target: String,
+
+        /// HTTP method. Pipelining is only meaningful with bodies, so the
+        /// default is POST.
+        #[arg(short, long, default_value = "POST")]
+        method: String,
+
+        /// Synthetic body flavour: json | xml | urlencoded | multipart.
+        #[arg(long, default_value = "json")]
+        content_type: String,
+
+        /// Exact body size per request: bare bytes or KB/MB/GB / KiB/MiB/GiB.
+        #[arg(long, default_value = "1KB")]
+        body_size: String,
+
+        /// Requests in flight per connection before reading any response.
+        #[arg(long, default_value = "16")]
+        pipeline_depth: usize,
+
+        /// Concurrent connections.
+        #[arg(long, default_value = "8")]
+        connections: usize,
+
+        /// Duration (e.g. 10s, 5m, or bare seconds like 30).
+        #[arg(short, long, default_value = "30s")]
+        duration: String,
+    },
+
     /// Convert a HAR file to conformance custom-checks YAML
     ///
     /// Reads a recorded HTTP Archive (.har) file and generates a YAML config
@@ -2659,17 +2735,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Initialize logging with the provided log level
     // Note: Full logging configuration (JSON format, file output) will be applied
     // after loading the config file in the serve command
-    let initial_logging_config = mockforge_observability::LoggingConfig {
-        level: cli.log_level.clone(),
-        json_format: false, // Will be overridden by config file if present
-        file_path: None,
-        max_file_size_mb: 10,
-        max_files: 5,
-    };
-
-    if let Err(e) = mockforge_observability::init_logging(initial_logging_config) {
-        eprintln!("Failed to initialize logging: {}", e);
-        std::process::exit(1);
+    // #835 — the MCP transport is stdin/stdout; ANY log line on stdout
+    // corrupts the protocol stream. Skip logging init entirely for this
+    // subcommand so the stream carries JSON-RPC frames only.
+    let is_mcp = matches!(cli.command, Commands::Mcp);
+    if !is_mcp {
+        let initial_logging_config = mockforge_observability::LoggingConfig {
+            level: cli.log_level.clone(),
+            json_format: false, // Will be overridden by config file if present
+            file_path: None,
+            max_file_size_mb: 10,
+            max_files: 5,
+        };
+        if let Err(e) = mockforge_observability::init_logging(initial_logging_config) {
+            eprintln!("Failed to initialize logging: {}", e);
+            std::process::exit(1);
+        }
     }
 
     // #677 — opt-in MockOps analytics database. Setting MOCKFORGE_ANALYTICS_DB
@@ -3034,6 +3115,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             )
             .await?;
         }
+        #[cfg(feature = "recorder")]
+        Commands::VerifyMocks(args) => {
+            verify_mocks_commands::handle_verify_mocks_command(args).await?;
+        }
+
+        Commands::Mcp => {
+            mcp_server::run().await?;
+        }
+
         Commands::ContractDiff { diff_command } => {
             contract_diff_commands::handle_contract_diff(diff_command).await?;
         }
@@ -3927,6 +4017,60 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 }
                 Err(e) => {
                     eprintln!("QoS bench failed: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        #[cfg(feature = "bench")]
+        Commands::BenchPipeline {
+            target,
+            method,
+            content_type,
+            body_size,
+            pipeline_depth,
+            connections,
+            duration,
+        } => {
+            use mockforge_bench::command::BenchCommand;
+            use mockforge_bench::pipeline_bench::{
+                parse_body_kind, parse_body_size, render_report, run, PipelineBenchConfig,
+            };
+
+            let duration_secs = match BenchCommand::parse_duration(&duration) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("Invalid --duration {duration:?}: {e}. Examples: 10s, 5m, 30");
+                    std::process::exit(1);
+                }
+            };
+            let kind = match parse_body_kind(&content_type) {
+                Ok(k) => k,
+                Err(e) => {
+                    eprintln!("Invalid --content-type {content_type:?}: {e}");
+                    std::process::exit(1);
+                }
+            };
+            let size = match parse_body_size(&body_size) {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!("Invalid --body-size {body_size:?}: {e}");
+                    std::process::exit(1);
+                }
+            };
+            let cfg = PipelineBenchConfig {
+                target_url: target,
+                method: method.to_uppercase(),
+                body_kind: kind,
+                body_size: size,
+                pipeline_depth,
+                connections,
+                duration: std::time::Duration::from_secs(duration_secs),
+            };
+            match run(cfg).await {
+                Ok(r) => print!("{}", render_report(&r)),
+                Err(e) => {
+                    eprintln!("bench-pipeline failed: {e}");
                     std::process::exit(1);
                 }
             }

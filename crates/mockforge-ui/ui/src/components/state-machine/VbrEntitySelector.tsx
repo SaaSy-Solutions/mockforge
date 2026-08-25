@@ -78,7 +78,7 @@ export function VbrEntitySelector({
           try {
             // Try to access the entity endpoint to see if it exists
             // This is a heuristic - in production, we'd have a proper endpoint
-            const response = await fetch(`/vbr-api/${entityName}?limit=1`);
+            const response = await fetch(`/vbr-api/${entityName}?limit=1`, { credentials: 'include' });
             if (response.ok) {
               entityMap.set(entityName, {
                 name: entityName,

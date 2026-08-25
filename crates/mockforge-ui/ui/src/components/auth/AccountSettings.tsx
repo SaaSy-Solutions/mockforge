@@ -12,6 +12,7 @@ import {
 } from '../ui/Dialog';
 import { useAuthStore } from '../../stores/useAuthStore';
 import { authApi, type TwoFactorSetup } from '../../services/authApi';
+import { getAuthToken } from '@/services/tokenStorage';
 import { apiErrorMessage } from '@/utils/errorHandling';
 import { Shield, Bell, Lock, Mail, Copy, CheckCircle2, Download, Trash2, AlertCircle } from 'lucide-react';
 
@@ -239,10 +240,8 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
         setExporting(true);
         setGdprBanner(null);
         try {
-            const token = localStorage.getItem('auth_token');
-            const response = await fetch('/api/v1/gdpr/export', {
-                headers: { Authorization: `Bearer ${token}` },
-            });
+            const token = getAuthToken();
+            const response = await fetch('/api/v1/gdpr/export', { credentials: 'include', headers: { Authorization: `Bearer ${token}` }, });
             if (!response.ok) {
                 const body = await response.json().catch(() => ({}));
                 throw new Error(
@@ -282,18 +281,16 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
         setDeleting(true);
         setGdprBanner(null);
         try {
-            const token = localStorage.getItem('auth_token');
-            const response = await fetch('/api/v1/gdpr/erase', {
-                method: 'DELETE',
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                    confirm: true,
-                    reason: deleteReason.trim() || undefined,
-                }),
-            });
+            const token = getAuthToken();
+            const response = await fetch('/api/v1/gdpr/erase', { credentials: 'include', method: 'DELETE',
+            headers: {
+                Authorization: `Bearer ${token}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                confirm: true,
+                reason: deleteReason.trim() || undefined,
+            }), });
             if (!response.ok) {
                 const body = await response.json().catch(() => ({}));
                 throw new Error(
@@ -317,18 +314,16 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
         setVerifyResending(true);
         setVerifyBanner(null);
         try {
-            const token = localStorage.getItem('auth_token');
+            const token = getAuthToken();
             const body = verifyEmailAddress.trim()
                 ? { email: verifyEmailAddress.trim() }
                 : {};
-            const response = await fetch('/api/v1/auth/verify-email/resend', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-                },
-                body: JSON.stringify(body),
-            });
+            const response = await fetch('/api/v1/auth/verify-email/resend', { credentials: 'include', method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify(body), });
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
                 throw new Error(

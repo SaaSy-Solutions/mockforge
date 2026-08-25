@@ -301,11 +301,9 @@ export const OrchestrationBuilder: React.FC = () => {
         setCloudRunInfo({ runId: run.id, status: run.status });
         return;
       }
-      const response = await fetch('/api/chaos/orchestration/execute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(orchestration),
-      });
+      const response = await fetch('/api/chaos/orchestration/execute', { credentials: 'include', method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(orchestration), });
       if (response.ok) {
         alert('Orchestration started successfully!');
       } else {

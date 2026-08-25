@@ -14,7 +14,7 @@ pub struct ConsistencyRule {
     /// Description of what this rule does
     pub description: Option<String>,
 
-    /// Condition for applying the rule (e.g., "path starts_with '/api/cart'")
+    /// Condition for applying the rule (e.g., "path `starts_with` '/api/cart'")
     pub condition: String,
 
     /// Action to take when condition matches

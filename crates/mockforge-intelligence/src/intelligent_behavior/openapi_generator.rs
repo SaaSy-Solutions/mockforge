@@ -343,6 +343,7 @@ impl OpenApiSpecGenerator {
             temperature: 0.3, // Lower temperature for more consistent output
             max_tokens: 4000,
             schema: None, // No schema constraint for OpenAPI generation
+            seed: None,
         };
 
         // Generate spec using LLM

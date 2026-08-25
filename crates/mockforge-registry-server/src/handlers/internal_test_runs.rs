@@ -18,11 +18,12 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
+use sqlx::PgPool;
 use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    models::{FitnessFunction, Incident, TestRun, UsageCounter},
+    models::{FitnessFunction, TestRun, UsageCounter},
     AppState,
 };
 use axum::extract::Query;
@@ -99,17 +100,38 @@ pub async fn run_event(
     Json(body): Json<EventBody>,
 ) -> ApiResult<Json<serde_json::Value>> {
     require_internal_auth(&headers)?;
+    ingest_runner_event(state.db.pool(), id, body.seq, &body.event_type, &body.payload)
+        .await
+        .map_err(|e| ApiError::Internal(anyhow::anyhow!("event ingestion failed: {e}")))?;
+    Ok(Json(serde_json::json!({ "appended": true })))
+}
 
+/// #719 — the runner-facing ingestion pipeline, shared by the HTTP
+/// handler above and the `diff_finding_incident_e2e` test so the test
+/// exercises exactly what a runner's POST executes.
+///
+/// Inserts the event (idempotent on `(run_id, seq)`), then raises an
+/// incident when the finding is severe enough. Ingestion must never be
+/// blocked by incident-raising trouble: raise failures are logged and
+/// swallowed here (the HTTP handler maps only *ingestion* failures to
+/// 5xx).
+pub async fn ingest_runner_event(
+    pool: &PgPool,
+    run_id: Uuid,
+    seq: i32,
+    event_type: &str,
+    payload: &serde_json::Value,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     sqlx::query(
         "INSERT INTO test_run_events (run_id, seq, event_type, payload) \
          VALUES ($1, $2, $3, $4) \
          ON CONFLICT (run_id, seq) DO NOTHING",
     )
-    .bind(id)
-    .bind(body.seq)
-    .bind(&body.event_type)
-    .bind(&body.payload)
-    .execute(state.db.pool())
+    .bind(run_id)
+    .bind(seq)
+    .bind(event_type)
+    .bind(payload)
+    .execute(pool)
     .await
     .map_err(ApiError::Database)?;
 
@@ -120,18 +142,18 @@ pub async fn run_event(
     // a spawn because the caller is the runner and we want any DB
     // pressure to fall on the request, not on a detached task that
     // could pile up unbounded.
-    if body.event_type == "diff_finding" {
-        if let Err(e) = maybe_raise_finding_incident(&state, id, &body.payload).await {
+    if event_type == "diff_finding" {
+        if let Err(e) = maybe_raise_finding_incident(pool, run_id, payload).await {
             tracing::warn!(
-                run_id = %id,
-                seq = body.seq,
+                run_id = %run_id,
+                seq,
                 error = %e,
                 "failed to raise incident from diff_finding event",
             );
         }
     }
 
-    Ok(Json(serde_json::json!({ "appended": true })))
+    Ok(())
 }
 
 /// Inspect a `diff_finding` payload and raise an incident if it's
@@ -140,20 +162,20 @@ pub async fn run_event(
 /// `endpoint` doubles as the per-run dedupe key so repeated reports
 /// for the same endpoint within one run collapse to one incident.
 async fn maybe_raise_finding_incident(
-    state: &AppState,
+    pool: &PgPool,
     run_id: Uuid,
     payload: &serde_json::Value,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let severity = payload.get("severity").and_then(|v| v.as_str()).unwrap_or("unknown");
 
-    // Only "breaking" findings (or the explicit "critical"/"high"
-    // synonyms the auditor uses) page someone. Lower-severity
-    // findings live as test_run_events only — the dashboard already
-    // surfaces them without needing an incident.
-    let mapped_severity = match severity {
-        "breaking" | "critical" => "critical",
-        "high" => "high",
-        _ => return Ok(()),
+    // #720 — the severity mapping lives on the IncidentBus so every
+    // producer (this handler, observability alerts, future callers)
+    // translates identically. Milder findings stay as test_run_events
+    // only — the dashboard already surfaces them without an incident.
+    let Some(mapped_severity) =
+        mockforge_registry_core::incident_bus::map_finding_severity(severity)
+    else {
+        return Ok(());
     };
 
     let endpoint = payload.get("endpoint").and_then(|v| v.as_str()).unwrap_or("(unknown endpoint)");
@@ -165,16 +187,16 @@ async fn maybe_raise_finding_incident(
     // Fetch the run so we know which org to attribute the incident to.
     // We don't error on "run gone" — that's the runner racing with a
     // cancellation, not an incident worth raising.
-    let Some(run) = TestRun::find_by_id(state.db.pool(), run_id).await? else {
+    let Some(run) = TestRun::find_by_id(pool, run_id).await? else {
         return Ok(());
     };
 
     let dedupe_key = format!("contract-drift:{run_id}:{endpoint}");
     let title = format!("Breaking contract drift on {endpoint}");
 
-    Incident::raise(
-        state.db.pool(),
-        mockforge_registry_core::models::incident::RaiseIncidentInput {
+    use mockforge_registry_core::incident_bus::{IncidentBus, PgIncidentBus};
+    PgIncidentBus::new(pool.clone())
+        .raise(mockforge_registry_core::models::incident::RaiseIncidentInput {
             org_id: run.org_id,
             workspace_id: None,
             source: "contract_drift",
@@ -183,9 +205,8 @@ async fn maybe_raise_finding_incident(
             severity: mapped_severity,
             title: &title,
             description: Some(description),
-        },
-    )
-    .await?;
+        })
+        .await?;
 
     Ok(())
 }
@@ -282,7 +303,8 @@ async fn mirror_kind_status(
 ) -> sqlx::Result<()> {
     use mockforge_registry_core::models::chaos::CreateChaosCampaignReport;
     use mockforge_registry_core::models::incident::RaiseIncidentInput;
-    use mockforge_registry_core::models::{ChaosCampaignReport, CloneModel, Incident, Snapshot};
+    use mockforge_registry_core::incident_bus::{IncidentBus, PgIncidentBus};
+use mockforge_registry_core::models::{ChaosCampaignReport, CloneModel, Snapshot};
 
     let pool = state.db.pool();
     match run.kind.as_str() {
@@ -407,9 +429,10 @@ async fn mirror_kind_status(
                 })
                 .to_string();
 
-                Incident::raise(
-                    pool,
-                    RaiseIncidentInput {
+                // #720 — raised through the IncidentBus so severity
+                // mapping + dedupe pipeline stay producer-agnostic.
+                PgIncidentBus::new(pool.clone())
+                    .raise(RaiseIncidentInput {
                         org_id: run.org_id,
                         // Smoke runs are tied to a hosted-mock deployment,
                         // not a workspace — workspaces hold templates +
@@ -527,9 +550,9 @@ async fn mirror_kind_status(
                 // not undo the recorded evaluation row above. Log and
                 // swallow so the runner's mirror_kind_status call still
                 // succeeds; on-call can replay from the historical row.
-                if let Err(e) = Incident::raise(
-                    pool,
-                    RaiseIncidentInput {
+                if let Err(e) =
+                    PgIncidentBus::new(pool.clone())
+                        .raise(RaiseIncidentInput {
                         org_id: run.org_id,
                         // workspace_id stays None — same caveat as smoke (#392):
                         // the TestRun row carries org + suite_id, not workspace.

@@ -162,13 +162,11 @@ export function VoiceInput({ onCommandProcessed, className }: VoiceInputProps) {
           spec: undefined,
         };
       } else {
-        const response = await fetch('/api/v2/voice/process', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ command }),
-        });
+        const response = await fetch('/api/v2/voice/process', { credentials: 'include', method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ command }), });
 
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));

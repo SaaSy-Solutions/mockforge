@@ -26,7 +26,7 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{error, info};
 
-use crate::handlers::auth_helpers::{extract_user_id_with_fallback, OptionalAuthClaims};
+use crate::handlers::auth_helpers::{require_user_id_from_claims, OptionalAuthClaims};
 
 /// State for risk assessment handlers
 #[derive(Clone)]
@@ -111,7 +111,7 @@ pub async fn create_risk(
     Json(request): Json<CreateRiskRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract user ID from authentication claims, or use default for mock server
-    let created_by = extract_user_id_with_fallback(&claims);
+    let created_by = require_user_id_from_claims(&claims)?;
 
     let engine = state.engine.write().await;
     let risk = engine
@@ -289,7 +289,7 @@ pub async fn update_risk_assessment(
     Json(request): Json<UpdateRiskAssessmentRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract user ID from authentication claims, or use default for mock server
-    let updated_by = extract_user_id_with_fallback(&claims);
+    let updated_by = require_user_id_from_claims(&claims)?;
 
     let engine = state.engine.write().await;
     engine
@@ -337,7 +337,7 @@ pub async fn update_treatment_plan(
     Json(request): Json<UpdateTreatmentPlanRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract user ID from authentication claims, or use default for mock server
-    let updated_by = extract_user_id_with_fallback(&claims);
+    let updated_by = require_user_id_from_claims(&claims)?;
 
     let engine = state.engine.write().await;
     engine
@@ -391,7 +391,7 @@ pub async fn update_treatment_status(
     Json(request): Json<serde_json::Value>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract user ID from authentication claims, or use default for mock server
-    let _updated_by = extract_user_id_with_fallback(&claims);
+    let _updated_by = require_user_id_from_claims(&claims)?;
 
     let status_str =
         request.get("status").and_then(|v| v.as_str()).ok_or(StatusCode::BAD_REQUEST)?;
@@ -428,7 +428,7 @@ pub async fn set_residual_risk(
     Json(request): Json<SetResidualRiskRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract user ID from authentication claims, or use default for mock server
-    let _updated_by = extract_user_id_with_fallback(&claims);
+    let _updated_by = require_user_id_from_claims(&claims)?;
 
     let engine = state.engine.write().await;
     engine
@@ -456,7 +456,7 @@ pub async fn review_risk(
     claims: OptionalAuthClaims,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract user ID from authentication claims, or use default for mock server
-    let reviewed_by = extract_user_id_with_fallback(&claims);
+    let reviewed_by = require_user_id_from_claims(&claims)?;
 
     let engine = state.engine.write().await;
     engine.review_risk(&risk_id, reviewed_by).await.map_err(|e| {

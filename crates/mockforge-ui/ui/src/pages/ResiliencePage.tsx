@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useWebSocket } from '../hooks/useWebSocket';
 import { isCloudMode } from '../utils/cloudMode';
 import { cloudResilienceApi, type RuntimeState } from '../services/api/cloudResilience';
+import { getAuthToken } from '../services/tokenStorage';
 
 interface DeploymentSummary {
   id: string;
@@ -75,10 +76,8 @@ export const ResiliencePage: React.FC = () => {
     let cancelled = false;
     (async () => {
       try {
-        const token = localStorage.getItem('auth_token');
-        const response = await fetch('/api/v1/hosted-mocks', {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
+        const token = getAuthToken();
+        const response = await fetch('/api/v1/hosted-mocks', { credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } : {}, });
         if (!response.ok) return;
         const list = (await response.json()) as DeploymentSummary[];
         if (cancelled) return;
@@ -113,7 +112,7 @@ export const ResiliencePage: React.FC = () => {
         setRuntimeState(env.runtime_state);
         return;
       }
-      const response = await fetch('/api/resilience/circuit-breakers');
+      const response = await fetch('/api/resilience/circuit-breakers', { credentials: 'include' });
       const data = await response.json();
       setCircuitBreakers(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -133,7 +132,7 @@ export const ResiliencePage: React.FC = () => {
         setRuntimeState(env.runtime_state);
         return;
       }
-      const response = await fetch('/api/resilience/bulkheads');
+      const response = await fetch('/api/resilience/bulkheads', { credentials: 'include' });
       const data = await response.json();
       setBulkheads(Array.isArray(data) ? data : []);
     } catch (error) {
@@ -156,7 +155,7 @@ export const ResiliencePage: React.FC = () => {
         setRuntimeState(s.runtime_state);
         return;
       }
-      const response = await fetch('/api/resilience/dashboard/summary');
+      const response = await fetch('/api/resilience/dashboard/summary', { credentials: 'include' });
       const data = await response.json();
       setSummary(data && typeof data === 'object' && !Array.isArray(data) ? data : null);
     } catch (error) {
@@ -178,9 +177,7 @@ export const ResiliencePage: React.FC = () => {
         fetchCircuitBreakers();
         return;
       }
-      await fetch(`/api/resilience/circuit-breakers/${encodeURIComponent(endpoint)}/reset`, {
-        method: 'POST',
-      });
+      await fetch(`/api/resilience/circuit-breakers/${encodeURIComponent(endpoint)}/reset`, { credentials: 'include', method: 'POST', });
       fetchCircuitBreakers();
     } catch (error) {
       console.error('Failed to reset circuit breaker:', error);
@@ -198,9 +195,7 @@ export const ResiliencePage: React.FC = () => {
         fetchBulkheads();
         return;
       }
-      await fetch(`/api/resilience/bulkheads/${encodeURIComponent(service)}/reset`, {
-        method: 'POST',
-      });
+      await fetch(`/api/resilience/bulkheads/${encodeURIComponent(service)}/reset`, { credentials: 'include', method: 'POST', });
       fetchBulkheads();
     } catch (error) {
       console.error('Failed to reset bulkhead:', error);

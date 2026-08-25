@@ -14,7 +14,6 @@ use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
 /// Proxy server state
-#[derive(Debug)]
 pub struct ProxyServer {
     /// Proxy configuration
     config: Arc<RwLock<ProxyConfig>>,
@@ -30,11 +29,70 @@ pub struct ProxyServer {
     total_response_time_ms: Arc<RwLock<u64>>,
     /// Error counter for error rate calculation
     error_counter: Arc<RwLock<u64>>,
+    /// #864 — optional passive conformance tap over a loaded spec.
+    /// Built from MOCKFORGE_PROXY_SPEC + MOCKFORGE_PROXY_VALIDATE_CONFORMANCE.
+    conformance_tap: Option<crate::conformance::ConformanceTap>,
+}
+
+impl std::fmt::Debug for ProxyServer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ProxyServer")
+            .field("log_requests", &self.log_requests)
+            .field("log_responses", &self.log_responses)
+            .field("conformance_tap", &self.conformance_tap.as_ref().map(|_| "configured"))
+            .finish()
+    }
 }
 
 impl ProxyServer {
     /// Create a new proxy server
     pub fn new(config: ProxyConfig, log_requests: bool, log_responses: bool) -> Self {
+        // #864 — opt-in conformance tap. Requires a spec (env or config)
+        // and the validate flag; strict mode additionally rejects.
+        let want_validation = std::env::var("MOCKFORGE_PROXY_VALIDATE_CONFORMANCE")
+            .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+            .unwrap_or(false);
+        let conformance_tap = if want_validation {
+            let strict = std::env::var("MOCKFORGE_PROXY_VALIDATE_CONFORMANCE_STRICT")
+                .map(|v| v.eq_ignore_ascii_case("true") || v == "1")
+                .unwrap_or(false);
+            match std::env::var("MOCKFORGE_PROXY_SPEC") {
+                Ok(path) if !path.trim().is_empty() => {
+                    match std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|raw| {
+                        serde_json::from_str::<serde_json::Value>(&raw)
+                            .or_else(|_| serde_yaml::from_str::<serde_json::Value>(&raw))
+                            .map_err(|e| e.to_string())
+                    }) {
+                        Ok(spec_value) => {
+                            match crate::conformance::ConformanceTap::from_spec_value(spec_value, strict) {
+                                Ok(tap) => {
+                                    info!(
+                                        spec = %path,
+                                        strict,
+                                        "proxy conformance validation enabled (#864)"
+                                    );
+                                    Some(tap)
+                                }
+                                Err(e) => {
+                                    warn!(spec = %path, error = %e, "conformance tap disabled");
+                                    None
+                                }
+                            }
+                        }
+                        Err(e) => {
+                            warn!(spec = %path, error = %e, "cannot parse conformance spec; tap disabled");
+                            None
+                        }
+                    }
+                }
+                _ => {
+                    warn!("MOCKFORGE_PROXY_VALIDATE_CONFORMANCE set but MOCKFORGE_PROXY_SPEC missing; tap disabled");
+                    None
+                }
+            }
+        } else {
+            None
+        };
         Self {
             config: Arc::new(RwLock::new(config)),
             log_requests,
@@ -43,6 +101,7 @@ impl ProxyServer {
             start_time: std::time::Instant::now(),
             total_response_time_ms: Arc::new(RwLock::new(0)),
             error_counter: Arc::new(RwLock::new(0)),
+            conformance_tap,
         }
     }
 
@@ -196,6 +255,29 @@ async fn proxy_handler(
         }
     }
 
+    // #864 — passive request validation against the loaded spec. The
+    // findings land in the shared conformance buffer (bench/TUI/admin read
+    // the same store). In STRICT mode a violation rejects with the spec
+    // status instead of forwarding.
+    if let Some(tap) = &state.conformance_tap {
+        if let Some((status, payload)) = tap
+            .validate_request(
+                method.as_str(),
+                uri.path(),
+                uri.query().as_deref(),
+                &headers,
+                Some(transformed_request_body.as_deref().unwrap_or(&[])),
+            )
+            .await
+        {
+            warn!(status = status, path = %uri.path(), "strict conformance rejection");
+            return Response::builder()
+                .status(status)
+                .body(payload.to_string())
+                .map_err(|_| StatusCode::BAD_GATEWAY);
+        }
+    }
+
     match proxy_client
         .send_request(
             reqwest_method,
@@ -257,6 +339,17 @@ async fn proxy_handler(
                         final_body_bytes = transformed_body;
                     }
                 }
+            }
+
+            // #864 — observational response validation against the spec.
+            if let Some(tap) = &state.conformance_tap {
+                tap.validate_response(
+                    method.as_str(),
+                    uri.path(),
+                    status.as_u16(),
+                    Some(final_body_bytes.as_slice()),
+                )
+                .await;
             }
 
             let body_string = String::from_utf8_lossy(&final_body_bytes).to_string();

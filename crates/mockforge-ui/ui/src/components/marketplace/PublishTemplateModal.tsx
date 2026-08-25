@@ -6,6 +6,7 @@
 
 import React, { useState } from 'react';
 import { apiErrorMessage } from '@/utils/errorHandling';
+import { getAuthToken } from '@/services/tokenStorage';
 import {
   Dialog,
   DialogTitle,
@@ -134,20 +135,18 @@ export const PublishTemplateModal: React.FC<PublishTemplateModalProps> = ({
       };
 
       // Get auth token
-      const token = localStorage.getItem('auth_token');
+      const token = getAuthToken();
       if (!token) {
         throw new Error('Not authenticated. Please log in.');
       }
 
       // Submit to API
-      const response = await fetch('/api/v1/marketplace/templates/publish', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(request),
-      });
+      const response = await fetch('/api/v1/marketplace/templates/publish', { credentials: 'include', method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(request), });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));

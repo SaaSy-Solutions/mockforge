@@ -265,9 +265,11 @@ impl ProbabilisticModel {
         model
             .status_code_distribution
             .iter()
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
-            .map(|(code, _)| *code)
-            .unwrap_or(200)
+            .max_by(|a, b| {
+                a.1.partial_cmp(b.1)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map_or(200, |(code, _)| *code)
     }
 
     /// Sample latency based on learned distribution
@@ -323,7 +325,7 @@ impl ProbabilisticModel {
         let new_total = total + 1.0;
 
         // Update frequency for observed status code
-        for (_code, prob) in model.status_code_distribution.iter_mut() {
+        for prob in model.status_code_distribution.values_mut() {
             *prob = (*prob * total) / new_total;
         }
 

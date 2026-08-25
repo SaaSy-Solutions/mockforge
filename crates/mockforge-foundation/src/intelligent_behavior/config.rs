@@ -75,6 +75,12 @@ pub struct BehaviorModelConfig {
     /// Maximum tokens for LLM response
     #[serde(default = "default_max_tokens")]
     pub max_tokens: usize,
+    /// Sampling seed for deterministic AI generation (#852). When set,
+    /// requests default to this seed unless overridden per-request; also
+    /// readable from the MOCKFORGE_AI_SEED environment variable.
+    #[serde(default)]
+    pub seed: Option<i64>,
+
     /// Behavior rules
     #[serde(default)]
     pub rules: BehaviorRules,
@@ -89,6 +95,7 @@ impl Default for BehaviorModelConfig {
             api_endpoint: None,
             temperature: default_temperature(),
             max_tokens: default_max_tokens(),
+            seed: None,
             rules: BehaviorRules::default(),
         }
     }

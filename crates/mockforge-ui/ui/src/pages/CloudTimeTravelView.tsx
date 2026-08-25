@@ -31,6 +31,7 @@ import {
   type TimeTravelRuntimeState,
 } from '../services/api/cloudTimeTravel';
 import { cn } from '../utils/cn';
+import { getAuthToken } from '../services/tokenStorage';
 
 interface DeploymentSummary {
   id: string;
@@ -80,10 +81,8 @@ export const CloudTimeTravelView: React.FC = () => {
     let cancelled = false;
     (async () => {
       try {
-        const token = localStorage.getItem('auth_token');
-        const resp = await fetch('/api/v1/hosted-mocks', {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
+        const token = getAuthToken();
+        const resp = await fetch('/api/v1/hosted-mocks', { credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } : {}, });
         if (!resp.ok) {
           if (!cancelled) {
             setError(`Failed to load deployments: ${resp.status}`);

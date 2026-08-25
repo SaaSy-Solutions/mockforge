@@ -458,6 +458,45 @@ mockforge tui
 Optionally pair with `MOCKFORGE_METRICS_LOG_FILE=path.csv` to also append a
 persistent CSV record while the server runs.
 
+### `bench-pipeline` - HTTP Pipelining Load Test
+
+Load-test a target with HTTP pipelining: synthetic request bodies
+(json / xml / urlencoded / multipart) are written back-to-back per
+connection before any response is read.
+
+```bash
+mockforge bench-pipeline --target http://localhost:3000/api \
+  --content-type json --body-size 500KB --pipeline-depth 16 \
+  --connections 8 --duration 30s
+```
+
+#### Options
+
+- `--target <url>` (required): plain-`http://` target URL.
+- `--method <method>`: HTTP method; pipelining is only meaningful with bodies, so the default is `POST`.
+- `--content-type <flavour>`: `json` | `xml` | `urlencoded` | `multipart` (default `json`).
+- `--body-size <size>`: exact body size per request — bare bytes or KB/MB/GB / KiB/MiB/GiB (default `1KB`).
+- `--pipeline-depth <n>`: requests in flight per connection before reading responses (default `16`).
+- `--connections <n>`: concurrent connections (default `8`).
+
+### `verify-mocks` - Mock Fidelity / Drift Detection
+
+Compare the mocks generated from an OpenAPI spec against real captured
+traffic in a recorder database, and report drift: endpoints whose mocks no
+longer match how clients actually call them.
+
+```bash
+mockforge verify-mocks --spec openapi.json --capture-db recorder.sqlite
+```
+
+#### Options
+
+- `--spec <path>` (required): OpenAPI spec the mocks were generated from (3.x natively; Swagger 2.0 is up-converted automatically).
+- `--capture-db <path>` (required): recorder SQLite database holding captured traffic (what `mockforge record` writes).
+- `--limit <n>`: maximum exchanges to evaluate, oldest first (default `500`).
+- `--fail-on-drift`: exit with code 1 when any drift is found — use as a CI gate.
+- `--output <path>`: write the structured drift report as JSON.
+
 ### `sync` - Workspace Synchronization Daemon
 
 Start a background daemon that monitors a workspace directory for file changes and automatically syncs them to MockForge workspaces.

@@ -8382,6 +8382,7 @@ dependencies = [
  "axum 0.8.9",
  "axum-server",
  "base64 0.22.1",
+ "bcrypt",
  "chrono",
  "dashmap 6.2.1",
  "futures",
@@ -8440,6 +8441,7 @@ dependencies = [
  "serde_yaml",
  "sha2 0.10.9",
  "sqlx",
+ "subtle",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -8570,6 +8572,7 @@ dependencies = [
  "flate2",
  "lz4_flex",
  "mockforge-core",
+ "mockforge-recorder",
  "rand 0.9.5",
  "rdkafka",
  "regex",
@@ -8929,17 +8932,23 @@ name = "mockforge-proxy"
 version = "0.3.214"
 dependencies = [
  "axum 0.8.9",
+ "chrono",
  "http 1.4.2",
  "mockforge-core",
+ "mockforge-foundation",
+ "mockforge-openapi",
+ "openapiv3",
  "rand 0.9.5",
  "reqwest 0.12.28",
  "schemars 0.8.22",
  "serde",
  "serde_json",
+ "serde_yaml",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
  "url",
+ "urlencoding",
 ]
 
 [[package]]

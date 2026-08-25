@@ -23,6 +23,7 @@ import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/button';
 import { RefreshCw } from 'lucide-react';
 import { WorldStateGraph } from '../components/world-state/WorldStateGraph';
+import { getAuthToken } from '../services/tokenStorage';
 import { StateLayerPanel, type StateLayer } from '../components/world-state/StateLayerPanel';
 import { StateNodeInspector } from '../components/world-state/StateNodeInspector';
 import {
@@ -72,10 +73,8 @@ export const CloudWorldStateView: React.FC = () => {
     let cancelled = false;
     (async () => {
       try {
-        const token = localStorage.getItem('auth_token');
-        const resp = await fetch('/api/v1/hosted-mocks', {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
+        const token = getAuthToken();
+        const resp = await fetch('/api/v1/hosted-mocks', { credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } : {}, });
         if (!resp.ok) {
           if (!cancelled) {
             setError(`Failed to load deployments: ${resp.status}`);

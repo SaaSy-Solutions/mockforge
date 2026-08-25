@@ -62,7 +62,7 @@ impl EmbeddingClient {
         Ok(embeddings)
     }
 
-    /// Generate embedding using OpenAI API
+    /// Generate embedding using `OpenAI` API
     async fn generate_openai_embedding(&self, text: &str) -> Result<Vec<f32>> {
         let api_key = self
             .api_key

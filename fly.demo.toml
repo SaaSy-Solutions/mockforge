@@ -1,0 +1,36 @@
+# Fly.io configuration for the public MockForge demo instance.
+# Serves the bundled example specs (ecommerce-store, weather-geo, chat-api)
+# over the HTTP mock protocol plus the management API, so agents and
+# prospects can exercise the product live at https://api.mockforge.dev.
+# Deploy: flyctl deploy --config fly.demo.toml
+
+app = "mockforge-demo"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+# Override the default `serve --admin` CMD: the demo is a mock host, not a
+# registry-admin host. The entrypoint passes the subcommand through.
+[processes]
+  app = "serve --spec /app/examples/scenarios/ecommerce-store/openapi.json --spec /app/examples/scenarios/weather-geo/openapi.json --spec /app/examples/scenarios/chat-api/openapi.json --admin"
+
+[http_service]
+  internal_port = 3000
+  processes = ["app"]
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[checks.health]
+  port = 3000
+  type = "http"
+  path = "/__mockforge/api/health"
+  timeout = "5s"
+  grace_period = "60s"
+  method = "get"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"

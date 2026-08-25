@@ -63,6 +63,11 @@ pub struct ScoreRequest {
     /// and is hard-capped at [`MAX_SAMPLES_PER_ENDPOINT`].
     #[serde(default)]
     pub max_samples_per_endpoint: Option<i64>,
+    /// Originating user, when the runner knows it (#869). Purely for
+    /// audit attribution of the AI spend — auth stays the shared
+    /// internal token; quota metering stays org-scoped.
+    #[serde(default)]
+    pub triggered_by_user_id: Option<Uuid>,
 }
 
 #[derive(Debug, Serialize)]
@@ -241,7 +246,8 @@ pub async fn score_contract_drift(
         temperature: 0.2,
         max_tokens: 4096,
     };
-    let (raw_text, meta) = run_completion_for_org(&state, &org, prompt).await?;
+    let (raw_text, meta) =
+        run_completion_for_org(&state, &org, request.triggered_by_user_id, prompt).await?;
 
     let findings = match extract_json_payload(&raw_text) {
         Some(json) => parse_findings(&json),

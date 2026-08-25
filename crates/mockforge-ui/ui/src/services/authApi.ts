@@ -5,6 +5,7 @@
 import type { User } from '../types';
 import { apiErrorMessage } from '@/utils/errorHandling';
 import { isCloudMode } from '../utils/cloudMode';
+import { getAuthToken } from './tokenStorage';
 
 export interface LoginResponse {
   token: string;
@@ -29,19 +30,17 @@ class AuthApiService {
   private cloud = isCloudMode();
 
   private authHeader(): Record<string, string> {
-    const token = localStorage.getItem('auth_token');
+    const token = getAuthToken();
     return token ? { Authorization: `Bearer ${token}` } : {};
   }
 
   private async authedFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
-    const response = await fetch(path, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...this.authHeader(),
-        ...options.headers,
-      },
-    });
+    const response = await fetch(path, { credentials: 'include', ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...this.authHeader(),
+      ...options.headers,
+    }, });
     if (!response.ok) {
       const body = await response.json().catch(() => ({ error: 'Unknown error' }));
       throw new Error(apiErrorMessage(response, body, `HTTP ${response.status}`));
@@ -51,13 +50,11 @@ class AuthApiService {
   }
 
   private async fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
-    const response = await fetch(url, {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options?.headers,
-      },
-    });
+    const response = await fetch(url, { credentials: 'include', ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options?.headers,
+    }, });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));

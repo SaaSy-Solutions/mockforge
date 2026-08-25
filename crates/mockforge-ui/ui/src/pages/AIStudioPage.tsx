@@ -61,6 +61,7 @@ async function dispatchChat(message: string): Promise<{
     return { message: result.content, intent: 'cloud_chat' };
   }
   const response = await fetch('/__mockforge/ai-studio/chat', {
+    credentials: 'include',
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message }),
@@ -174,7 +175,7 @@ export function AIStudioPage() {
     try {
       setLoadingStats(true);
       // Load usage stats from API
-      const response = await fetch('/__mockforge/ai-studio/usage');
+      const response = await fetch('/__mockforge/ai-studio/usage', { credentials: 'include' });
       if (response.ok) {
         const result = await response.json();
         if (result.success && result.data) {
@@ -372,6 +373,7 @@ export function AIStudioPage() {
                                     onClick={async () => {
                                       try {
                                         const response = await fetch('/__mockforge/ai-studio/freeze', {
+                                          credentials: 'include',
                                           method: 'POST',
                                           headers: {
                                             'Content-Type': 'application/json',
@@ -669,6 +671,7 @@ export function AIStudioPage() {
                                         try {
                                           // Apply patch via API
                                           const response = await fetch('/__mockforge/ai-studio/apply-patch', {
+                                            credentials: 'include',
                                             method: 'POST',
                                             headers: {
                                               'Content-Type': 'application/json',
@@ -937,6 +940,7 @@ export function AIStudioPage() {
                             onClick={async () => {
                               try {
                                 const response = await fetch('/__mockforge/ai-studio/freeze', {
+                                  credentials: 'include',
                                   method: 'POST',
                                   headers: {
                                     'Content-Type': 'application/json',

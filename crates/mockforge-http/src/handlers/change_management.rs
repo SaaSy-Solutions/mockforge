@@ -27,7 +27,7 @@ use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::handlers::auth_helpers::{
-    extract_user_id_with_fallback, extract_username_from_claims, OptionalAuthClaims,
+    extract_username_from_claims, require_user_id_from_claims, OptionalAuthClaims,
 };
 
 /// State for change management handlers
@@ -141,7 +141,7 @@ pub async fn create_change_request(
     Json(request): Json<CreateChangeRequest>,
 ) -> Result<Json<ChangeRequestResponse>, StatusCode> {
     // Extract requester ID from authentication claims, or use default for mock server
-    let requester_id = extract_user_id_with_fallback(&claims);
+    let requester_id = require_user_id_from_claims(&claims)?;
 
     let engine = state.engine.write().await;
     let change = engine
@@ -205,7 +205,7 @@ pub async fn approve_change(
     Json(request): Json<ApproveChangeRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract approver ID and name from authentication claims, or use defaults for mock server
-    let approver_id = extract_user_id_with_fallback(&claims);
+    let approver_id = require_user_id_from_claims(&claims)?;
     let approver =
         extract_username_from_claims(&claims).unwrap_or_else(|| format!("user-{}", approver_id));
 
@@ -299,7 +299,7 @@ pub async fn start_implementation(
     Json(request): Json<StartImplementationRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract implementer ID from authentication claims, or use default for mock server
-    let implementer_id = extract_user_id_with_fallback(&claims);
+    let implementer_id = require_user_id_from_claims(&claims)?;
 
     let engine = state.engine.write().await;
     engine
@@ -352,7 +352,7 @@ pub async fn complete_change(
     Json(request): Json<CompleteChangeRequest>,
 ) -> Result<Json<serde_json::Value>, StatusCode> {
     // Extract implementer ID from authentication claims, or use default for mock server
-    let implementer_id = extract_user_id_with_fallback(&claims);
+    let implementer_id = require_user_id_from_claims(&claims)?;
 
     let engine = state.engine.write().await;
     engine
@@ -415,7 +415,11 @@ pub async fn get_change(
             StatusCode::NOT_FOUND
         })?;
 
-    Ok(Json(serde_json::to_value(&change).unwrap()))
+    let value = serde_json::to_value(&change).map_err(|e| {
+        error!("Failed to serialize change request: {}", e);
+        StatusCode::INTERNAL_SERVER_ERROR
+    })?;
+    Ok(Json(value))
 }
 
 /// List change requests

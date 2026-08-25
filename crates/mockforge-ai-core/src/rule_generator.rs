@@ -1,6 +1,6 @@
-//! Rule auto-generation engine for MockAI
+//! Rule auto-generation engine for `MockAI`
 //!
-//! This module analyzes example request/response pairs and OpenAPI specifications
+//! This module analyzes example request/response pairs and `OpenAPI` specifications
 //! to automatically generate behavioral rules, validation rules, pagination patterns,
 //! and state machines.
 
@@ -95,7 +95,7 @@ pub struct CrudExample {
 pub struct ValidationRule {
     /// Field name this rule applies to
     pub field: String,
-    /// Validation type (required, format, min_length, max_length, pattern, etc.)
+    /// Validation type (required, format, `min_length`, `max_length`, pattern, etc.)
     pub validation_type: String,
     /// Validation parameters
     pub parameters: HashMap<String, Value>,
@@ -667,7 +667,7 @@ impl RuleGenerator {
         }
 
         // Fallback to last segment if all are numeric
-        segments.last().map(|s| s.to_string()).unwrap_or_else(|| "Resource".to_string())
+        segments.last().map_or_else(|| "Resource".to_string(), ToString::to_string)
     }
 
     /// Infer state machines from examples
@@ -768,13 +768,13 @@ impl RuleGenerator {
 
         // Add method information
         if !methods.is_empty() {
-            let methods_vec: Vec<&str> = methods.iter().map(|s| s.as_str()).collect();
+            let methods_vec: Vec<&str> = methods.iter().map(String::as_str).collect();
             prompt.push_str(&format!("Supported methods: {}. ", methods_vec.join(", ")));
         }
 
         // Add path information
         if !paths.is_empty() {
-            let paths_vec: Vec<&str> = paths.iter().take(5).map(|s| s.as_str()).collect();
+            let paths_vec: Vec<&str> = paths.iter().take(5).map(String::as_str).collect();
             prompt.push_str(&format!("Available endpoints: {}. ", paths_vec.join(", ")));
         }
 
@@ -813,6 +813,7 @@ impl RuleGenerator {
             temperature: 0.3, // Lower temperature for more consistent rules
             max_tokens: 2000,
             schema: None,
+            seed: None,
         };
 
         let response = llm_client.generate(&request).await?;
@@ -891,6 +892,7 @@ impl RuleGenerator {
             temperature: 0.7,
             max_tokens: 500,
             schema: None,
+            seed: None,
         };
 
         let response = llm_client.generate(&request).await?;

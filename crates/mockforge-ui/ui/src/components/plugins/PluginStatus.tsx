@@ -50,7 +50,7 @@ export function PluginStatus() {
   const fetchStatus = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/__mockforge/plugins/status');
+      const response = await fetch('/__mockforge/plugins/status', { credentials: 'include' });
       const data = await response.json();
 
       if (data.success) {

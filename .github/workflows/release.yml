@@ -126,6 +126,58 @@ jobs:
         draft: false
         prerelease: ${{ contains(github.ref_name, 'rc') || contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') }}
 
+  release-windows:
+    name: Windows binaries (#884)
+    runs-on: windows-latest
+    needs: release
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v7
+
+    - name: Install Rust toolchain
+      uses: ./.github/actions/rust-toolchain
+
+    - name: Build mockforge-cli (x86_64-pc-windows-msvc)
+      run: cargo build --release --bin mockforge
+
+    - name: Sign binary (Azure Trusted Signing)
+      # Signing keeps SmartScreen quiet on first run. Runs only when the
+      # org configures the Trusted Signing secrets; otherwise the release
+      # ships unsigned and this step says so explicitly.
+      env:
+        AZURE_TENANT_ID: ${{ secrets.AZURE_TRUSTED_SIGNING_TENANT_ID }}
+        AZURE_CLIENT_ID: ${{ secrets.AZURE_TRUSTED_SIGNING_CLIENT_ID }}
+        AZURE_CLIENT_SECRET: ${{ secrets.AZURE_TRUSTED_SIGNING_CLIENT_SECRET }}
+        AZURE_CODE_SIGNING_NAME: ${{ secrets.AZURE_TRUSTED_SIGNING_NAME }}
+        AZURE_CODE_SIGNING_ACCOUNT_URL: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT_URL }}
+      if: env.AZURE_TENANT_ID != '' && env.AZURE_CLIENT_ID != '' && env.AZURE_CLIENT_SECRET != ''
+      shell: pwsh
+      run: |
+        dotnet tool install --global Azure.SigningCli --version 3.* 
+        $exe = "target/release/mockforge.exe"
+        Azure.SigningCli code trusted-signing `
+          -b $exe `
+          -d "$env:AZURE_CODE_SIGNING_ACCOUNT_URL" `
+          -c "$env:AZURE_CODE_SIGNING_NAME" `
+          --tenant-id "$env:AZURE_TENANT_ID" `
+          --client-id "$env:AZURE_CLIENT_ID" `
+          --client-secret "$env:AZURE_CLIENT_SECRET"
+        if ($LASTEXITCODE -ne 0) { throw "signing failed" }
+
+    - name: Package release zip
+      shell: pwsh
+      run: |
+        New-Item -ItemType Directory -Path dist | Out-Null
+        Copy-Item target/release/mockforge.exe dist/
+        Copy-Item README.md dist/ -ErrorAction SilentlyContinue
+        Compress-Archive -Path dist/* -DestinationPath "mockforge-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip"
+
+    - name: Upload Windows asset to the release
+      uses: softprops/action-gh-release@v3
+      with:
+        tag_name: ${{ github.ref_name }}
+        files: mockforge-${{ github.ref_name }}-x86_64-pc-windows-msvc.zip
+
   publish:
     name: Publish to crates.io
     runs-on: ubuntu-latest

@@ -40,7 +40,7 @@ pub struct SessionTracking {
     #[serde(default = "default_header_name")]
     pub header_name: String,
 
-    /// Query parameter name (if method is QueryParam)
+    /// Query parameter name (if method is `QueryParam`)
     #[serde(default = "default_query_param")]
     pub query_param: String,
 

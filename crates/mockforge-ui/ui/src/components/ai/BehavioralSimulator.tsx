@@ -165,17 +165,15 @@ export function BehavioralSimulator({ onUsageUpdate }: BehavioralSimulatorProps)
     try {
       setIsCreatingAgent(true);
 
-      const response = await fetch('/__mockforge/api/v1/ai-studio/simulate-behavior/create-agent', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          persona_id: personaId || null,
-          behavior_policy: behaviorPolicy || null,
-          generate_persona: generatePersona,
-        }),
-      });
+      const response = await fetch('/__mockforge/api/v1/ai-studio/simulate-behavior/create-agent', { credentials: 'include', method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        persona_id: personaId || null,
+        behavior_policy: behaviorPolicy || null,
+        generate_persona: generatePersona,
+      }), });
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Unknown error' }));
@@ -209,17 +207,15 @@ export function BehavioralSimulator({ onUsageUpdate }: BehavioralSimulatorProps)
     try {
       setIsSimulating(true);
 
-      const response = await fetch('/__mockforge/api/v1/ai-studio/simulate-behavior', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          agent_id: selectedAgent,
-          current_state: currentState,
-          trigger_event: triggerEvent || null,
-        }),
-      });
+      const response = await fetch('/__mockforge/api/v1/ai-studio/simulate-behavior', { credentials: 'include', method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        agent_id: selectedAgent,
+        current_state: currentState,
+        trigger_event: triggerEvent || null,
+      }), });
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Unknown error' }));

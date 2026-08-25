@@ -15,6 +15,7 @@
 
 pub mod auth;
 pub mod error;
+pub mod incident_bus;
 pub mod models;
 pub mod permissions;
 pub mod scope_check;

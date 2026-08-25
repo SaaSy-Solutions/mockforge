@@ -165,18 +165,16 @@ export const ScenarioMarketplacePage: React.FC = () => {
   const loadScenarios = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/v1/marketplace/scenarios/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: searchQuery || null,
-          category: selectedCategory !== 'all' ? selectedCategory : null,
-          tags: [],
-          sort: sortBy,
-          page,
-          per_page: perPage,
-        }),
-      });
+      const response = await fetch('/api/v1/marketplace/scenarios/search', { credentials: 'include', method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        query: searchQuery || null,
+        category: selectedCategory !== 'all' ? selectedCategory : null,
+        tags: [],
+        sort: sortBy,
+        page,
+        per_page: perPage,
+      }), });
 
       if (response.ok) {
         const data = await response.json();
@@ -229,9 +227,7 @@ export const ScenarioMarketplacePage: React.FC = () => {
 
   const loadReviews = async (scenarioName: string) => {
     try {
-      const response = await fetch(
-        `/api/v1/marketplace/scenarios/${encodeURIComponent(scenarioName)}/reviews?page=0&per_page=20`
-      );
+      const response = await fetch(`/api/v1/marketplace/scenarios/${encodeURIComponent(scenarioName)}/reviews?page=0&per_page=20`, { credentials: 'include' });
       if (response.ok) {
         const data = await response.json();
         setReviews(data.reviews || []);
@@ -256,9 +252,7 @@ export const ScenarioMarketplacePage: React.FC = () => {
   const handleDownload = async (scenarioName: string, version?: string) => {
     try {
       const targetVersion = version || selectedScenario?.version || 'latest';
-      const response = await fetch(
-        `/api/v1/marketplace/scenarios/${encodeURIComponent(scenarioName)}/versions/${encodeURIComponent(targetVersion)}`
-      );
+      const response = await fetch(`/api/v1/marketplace/scenarios/${encodeURIComponent(scenarioName)}/versions/${encodeURIComponent(targetVersion)}`, { credentials: 'include' });
 
       if (response.ok) {
         const data = await response.json();

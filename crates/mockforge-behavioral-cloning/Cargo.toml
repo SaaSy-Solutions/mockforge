@@ -25,5 +25,5 @@ thiserror = { workspace = true }
 async-trait = { workspace = true }
 rand = { workspace = true }
 
-[lints.rust]
-missing_docs = "deny"
+[lints]
+workspace = true

@@ -52,3 +52,6 @@ mockforge-recorder = { version = "0.3.70", path = "../mockforge-recorder" }
 [dev-dependencies]
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread", "test-util"] }
 tempfile = "3.8"
+
+[lints]
+workspace = true

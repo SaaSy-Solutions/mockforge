@@ -67,10 +67,10 @@ impl PersonasConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub struct Persona {
-    /// Persona name (e.g., "commercial_midwest", "hobbyist_urban")
+    /// Persona name (e.g., "`commercial_midwest`", "`hobbyist_urban`")
     pub name: String,
 
-    /// Persona traits (key-value pairs, e.g., "apiary_count": "20-40", "hive_count": "800-1500")
+    /// Persona traits (key-value pairs, e.g., "`apiary_count"`: "20-40", "`hive_count"`: "800-1500")
     #[serde(default)]
     pub traits: HashMap<String, String>,
 }
@@ -124,6 +124,12 @@ pub struct BehaviorModelConfig {
     #[serde(default = "default_max_tokens")]
     pub max_tokens: usize,
 
+    /// Sampling seed for deterministic AI generation (#852). When set,
+    /// requests default to this seed unless overridden per-request; also
+    /// readable from the `MOCKFORGE_AI_SEED` environment variable.
+    #[serde(default)]
+    pub seed: Option<i64>,
+
     /// Behavior rules
     #[serde(default)]
     pub rules: BehaviorRules,
@@ -138,6 +144,7 @@ impl Default for BehaviorModelConfig {
             api_endpoint: None,
             temperature: default_temperature(),
             max_tokens: default_max_tokens(),
+            seed: None,
             rules: BehaviorRules::default(),
         }
     }

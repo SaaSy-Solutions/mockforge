@@ -48,7 +48,7 @@ export function NarrativeView({ requestId, className }: NarrativeViewProps) {
     setError(null);
 
     try {
-      const response = await fetch(`/api/v2/failures/${requestId}`);
+      const response = await fetch(`/api/v2/failures/${requestId}`, { credentials: 'include' });
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }

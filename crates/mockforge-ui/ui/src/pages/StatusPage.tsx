@@ -61,7 +61,7 @@ export function StatusPage() {
   const { data: status, isLoading, error } = useQuery<StatusResponse>({
     queryKey: ['status'],
     queryFn: async () => {
-      const response = await fetch('/api/v1/status');
+      const response = await fetch('/api/v1/status', { credentials: 'include' });
       if (!response.ok) {
         throw new Error('Failed to fetch status');
       }

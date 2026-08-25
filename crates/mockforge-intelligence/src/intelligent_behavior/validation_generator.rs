@@ -327,6 +327,7 @@ impl ValidationGenerator {
             temperature: 0.3, // Lower temperature for consistent error messages
             max_tokens: 100,
             schema: None,
+            seed: None,
         };
 
         let response = llm_client.generate(&request).await?;
@@ -400,6 +401,7 @@ impl ValidationGenerator {
             temperature: 0.5,
             max_tokens: 300,
             schema: None,
+            seed: None,
         };
 
         let response = llm_client.generate(&request).await?;

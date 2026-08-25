@@ -172,9 +172,22 @@ pub async fn csrf_middleware(
             Err(csrf_error_response().into_response())
         }
         None => {
-            // No origin header - could be an API client or direct request
-            // For web forms, Origin/Referer should be present
-            // Allow for now but log for monitoring
+            let has_auth_cookie = headers.get(axum::http::header::COOKIE).is_some_and(|c| {
+                c.to_str().map(|c| c.contains(super::SESSION_COOKIE)).unwrap_or(false)
+            });
+            if has_auth_cookie {
+                // Cookie-authenticated browsers ALWAYS attach Origin (or at
+                // least Referer) on state-changing requests. A missing one
+                // alongside a session cookie means a stripped/forged request —
+                // reject rather than wave it through.
+                tracing::warn!(
+                    path = %request.uri().path(),
+                    "CSRF check failed: session cookie without Origin/Referer"
+                );
+                return Err(csrf_error_response().into_response());
+            }
+            // No origin header and no auth cookie - API client or direct
+            // request. Allowed; these authenticate via Authorization header.
             tracing::debug!(
                 path = %request.uri().path(),
                 "Request without Origin/Referer header"

@@ -49,11 +49,9 @@ export function RecorderPage() {
   const fetchRequests = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/recorder/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ limit: 100 })
-      });
+      const response = await fetch('/api/recorder/search', { credentials: 'include', method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ limit: 100 }) });
       if (!response.ok) throw new Error('Failed to fetch requests');
       const data = await response.json();
       setRequests(data.requests || []);
@@ -66,7 +64,7 @@ export function RecorderPage() {
 
   const fetchScenarios = async () => {
     try {
-      const response = await fetch('/api/chaos/recording/list');
+      const response = await fetch('/api/chaos/recording/list', { credentials: 'include' });
       if (!response.ok) throw new Error('Failed to fetch scenarios');
       const data = await response.json();
       setScenarios(data.scenarios || []);
@@ -77,7 +75,7 @@ export function RecorderPage() {
 
   const checkRecordingStatus = async () => {
     try {
-      const response = await fetch('/api/chaos/recording/status');
+      const response = await fetch('/api/chaos/recording/status', { credentials: 'include' });
       if (!response.ok) return;
       const data = await response.json();
       setIsRecording(data.is_recording || false);
@@ -88,11 +86,9 @@ export function RecorderPage() {
 
   const startRecording = async () => {
     try {
-      const response = await fetch('/api/chaos/recording/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scenario_name: 'manual_recording' })
-      });
+      const response = await fetch('/api/chaos/recording/start', { credentials: 'include', method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scenario_name: 'manual_recording' }) });
       if (!response.ok) throw new Error('Failed to start recording');
       setIsRecording(true);
     } catch (err) {
@@ -102,9 +98,7 @@ export function RecorderPage() {
 
   const stopRecording = async () => {
     try {
-      const response = await fetch('/api/chaos/recording/stop', {
-        method: 'POST',
-      });
+      const response = await fetch('/api/chaos/recording/stop', { credentials: 'include', method: 'POST', });
       if (!response.ok) throw new Error('Failed to stop recording');
       setIsRecording(false);
       fetchScenarios();
@@ -115,15 +109,13 @@ export function RecorderPage() {
 
   const replayScenario = async (scenarioName: string) => {
     try {
-      const response = await fetch('/api/chaos/replay/start', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scenario_name: scenarioName,
-          speed: 1.0,
-          loop_replay: false
-        })
-      });
+      const response = await fetch('/api/chaos/replay/start', { credentials: 'include', method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        scenario_name: scenarioName,
+        speed: 1.0,
+        loop_replay: false
+      }) });
       if (!response.ok) throw new Error('Failed to start replay');
       alert('Replay started successfully');
     } catch (err) {
@@ -133,14 +125,12 @@ export function RecorderPage() {
 
   const exportScenario = async (scenarioName: string) => {
     try {
-      const response = await fetch('/api/chaos/recording/export', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scenario_name: scenarioName,
-          format: 'json'
-        })
-      });
+      const response = await fetch('/api/chaos/recording/export', { credentials: 'include', method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        scenario_name: scenarioName,
+        format: 'json'
+      }) });
       if (!response.ok) throw new Error('Failed to export scenario');
       const blob = await response.blob();
       const url = window.URL.createObjectURL(blob);

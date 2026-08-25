@@ -136,7 +136,7 @@ function buildQueryString(params: Record<string, any>): string {
 
 async function fetchAnalytics<T>(endpoint: string, filter?: AnalyticsFilter): Promise<T> {
   const queryString = filter ? buildQueryString(filter) : '';
-  const response = await fetch(`${API_BASE}${endpoint}${queryString}`);
+  const response = await fetch(`${API_BASE}${endpoint}${queryString}`, { credentials: 'include' });
 
   if (!response.ok) {
     throw new Error(`Analytics API error: ${response.statusText}`);
@@ -259,7 +259,7 @@ export function useTrafficPatterns(
  */
 export async function exportToCSV(filter?: AnalyticsFilter): Promise<string> {
   const queryString = filter ? buildQueryString(filter) : '';
-  const response = await fetch(`${API_BASE}/export/csv${queryString}`);
+  const response = await fetch(`${API_BASE}/export/csv${queryString}`, { credentials: 'include' });
 
   if (!response.ok) {
     throw new Error(`Export failed: ${response.statusText}`);
@@ -273,7 +273,7 @@ export async function exportToCSV(filter?: AnalyticsFilter): Promise<string> {
  */
 export async function exportToJSON(filter?: AnalyticsFilter): Promise<string> {
   const queryString = filter ? buildQueryString(filter) : '';
-  const response = await fetch(`${API_BASE}/export/json${queryString}`);
+  const response = await fetch(`${API_BASE}/export/json${queryString}`, { credentials: 'include' });
 
   if (!response.ok) {
     throw new Error(`Export failed: ${response.statusText}`);

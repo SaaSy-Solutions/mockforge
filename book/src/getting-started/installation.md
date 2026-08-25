@@ -120,8 +120,15 @@ MockForge supports:
 
 ### Windows install path
 
-The published release artefacts and the Docker image are Linux-only
-today. Windows users install from source via `cargo install`:
+Every release ships a prebuilt `mockforge-<version>-x86_64-pc-windows-msvc.zip`
+asset on the [GitHub releases page](https://github.com/SaaSy-Solutions/mockforge/releases).
+Download it, unzip `mockforge.exe` into a directory on `%PATH%`, and
+`mockforge --version` works with no Rust toolchain or Visual Studio Build
+Tools installed. When release signing secrets are configured the binary is
+signed via Azure Trusted Signing, so SmartScreen does not warn on first
+run; unsigned builds may show the standard "unknown publisher" prompt.
+
+If you prefer building from source:
 
 1. Install [Rustup](https://rustup.rs/) (the standard Rust installer for
    Windows). Pick the default `x86_64-pc-windows-msvc` toolchain when

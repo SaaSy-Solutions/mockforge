@@ -114,9 +114,7 @@ function registerValidSW(swUrl: string, config?: Config) {
 
 function checkValidServiceWorker(swUrl: string, config?: Config) {
   // Check if the service worker can be found
-  fetch(swUrl, {
-    headers: { 'Service-Worker': 'script' },
-  })
+  fetch(swUrl, { credentials: 'include', headers: { 'Service-Worker': 'script' }, })
     .then((response) => {
       // Ensure service worker exists, and that we really are getting a JS file
       const contentType = response.headers.get('content-type');

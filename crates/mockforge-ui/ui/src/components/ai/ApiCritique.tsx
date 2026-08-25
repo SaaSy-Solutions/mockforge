@@ -167,17 +167,15 @@ export function ApiCritique({ onUsageUpdate }: ApiCritiqueProps) {
         }
       }
 
-      const response = await fetch('/__mockforge/api/v1/ai-studio/api-critique', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          schema: schemaJson,
-          schema_type: schemaType,
-          focus_areas: focusAreas,
-        }),
-      });
+      const response = await fetch('/__mockforge/api/v1/ai-studio/api-critique', { credentials: 'include', method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        schema: schemaJson,
+        schema_type: schemaType,
+        focus_areas: focusAreas,
+      }), });
 
       if (!response.ok) {
         const error = await response.json().catch(() => ({ error: 'Unknown error' }));

@@ -38,3 +38,6 @@ parking_lot = { workspace = true }
 
 [dev-dependencies]
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread", "test-util"] }
+
+[lints]
+workspace = true

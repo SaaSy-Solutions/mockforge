@@ -80,7 +80,7 @@ export function PluginDetails({ pluginId, onClose }: PluginDetailsProps) {
   const fetchPluginDetails = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch(`/__mockforge/plugins/${pluginId}`);
+      const response = await fetch(`/__mockforge/plugins/${pluginId}`, { credentials: 'include' });
       const data = await response.json();
 
       if (data.success) {

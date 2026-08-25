@@ -25,9 +25,7 @@ export function EmailVerificationPage() {
 
     const verify = async () => {
       try {
-        const response = await fetch(
-          `/api/v1/auth/verify-email?token=${encodeURIComponent(token)}`,
-        );
+        const response = await fetch(`/api/v1/auth/verify-email?token=${encodeURIComponent(token)}`, { credentials: 'include' });
         if (!response.ok) {
           const errorData = await response.json().catch(() => ({ error: 'Verification failed' }));
           throw new Error(apiErrorMessage(response, errorData, 'Verification failed'));
@@ -49,15 +47,13 @@ export function EmailVerificationPage() {
     setResendSent(false);
 
     try {
-      const authToken = localStorage.getItem('auth_token');
-      const response = await fetch('/api/v1/auth/verify-email/resend', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(authToken && { Authorization: `Bearer ${authToken}` }),
-        },
-        body: JSON.stringify({ email: resendEmail || undefined }),
-      });
+      const authToken = getAuthToken();
+      const response = await fetch('/api/v1/auth/verify-email/resend', { credentials: 'include', method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authToken && { Authorization: `Bearer ${authToken}` }),
+      },
+      body: JSON.stringify({ email: resendEmail || undefined }), });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Failed to resend verification' }));

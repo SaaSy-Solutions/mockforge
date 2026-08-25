@@ -1,0 +1,10 @@
+[Unit]
+Description=Run runner-host-cleanup every 30 minutes
+
+[Timer]
+OnBootSec=10min
+OnUnitActiveSec=30min
+AccuracySec=1min
+
+[Install]
+WantedBy=timers.target

@@ -268,7 +268,9 @@ pub async fn stream_run_events(
     let cursor = EventCursor {
         run_id: id,
         pool,
-        seq: 0,
+        // #668 — resume from where the client left off instead of
+        // replaying everything since the run started.
+        seq: parse_last_event_id(&headers),
         buffered: Vec::new(),
         terminal_emitted: false,
     };
@@ -294,7 +296,10 @@ async fn advance_event_cursor(
             "payload": row.payload,
             "occurred_at": row.occurred_at,
         });
-        let evt = Event::default().event(&row.event_type).data(payload.to_string());
+        let evt = Event::default()
+            .id(row.seq.to_string())
+            .event(&row.event_type)
+            .data(payload.to_string());
         return Some((Ok(evt), cursor));
     }
 
@@ -336,7 +341,10 @@ async fn advance_event_cursor(
             "payload": row.payload,
             "occurred_at": row.occurred_at,
         });
-        let evt = Event::default().event(&row.event_type).data(payload.to_string());
+        let evt = Event::default()
+            .id(row.seq.to_string())
+            .event(&row.event_type)
+            .data(payload.to_string());
         return Some((Ok(evt), cursor));
     }
 
@@ -377,6 +385,17 @@ async fn advance_event_cursor(
 }
 
 /// Per-stream poll state.
+/// #668 — SSE replay: parse the standard `Last-Event-ID` request header
+/// into a starting seq cursor. Non-numeric / absent headers start from
+/// the beginning (seq 0), matching pre-replay behaviour.
+fn parse_last_event_id(headers: &HeaderMap) -> i32 {
+    headers
+        .get(axum::http::HeaderName::from_static("last-event-id"))
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.trim().parse::<i32>().ok())
+        .unwrap_or(0)
+}
+
 struct EventCursor {
     run_id: Uuid,
     pool: sqlx::PgPool,
@@ -530,5 +549,33 @@ mod tests {
         let policy = ssrf_policy();
         validate_target_url("http://127.0.0.1:8080/", policy).await.unwrap();
         std::env::remove_var("MOCKFORGE_SSRF_ALLOW_LOOPBACK");
+    }
+}
+
+#[cfg(test)]
+mod sse_replay_tests {
+    use super::*;
+    use axum::http::HeaderMap as AxumHeaders;
+
+    #[test]
+    fn absent_header_starts_from_zero() {
+        assert_eq!(parse_last_event_id(&AxumHeaders::new()), 0);
+    }
+
+    #[test]
+    fn numeric_header_resumes_cursor() {
+        let mut h = AxumHeaders::new();
+        h.insert(axum::http::HeaderName::from_static("last-event-id"), "42".parse().unwrap());
+        assert_eq!(parse_last_event_id(&h), 42);
+    }
+
+    #[test]
+    fn garbage_header_falls_back_to_zero() {
+        let mut h = AxumHeaders::new();
+        h.insert(
+            axum::http::HeaderName::from_static("last-event-id"),
+            "not-a-seq".parse().unwrap(),
+        );
+        assert_eq!(parse_last_event_id(&h), 0);
     }
 }

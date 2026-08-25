@@ -279,6 +279,13 @@ pub struct LlmGenerationRequest {
 
     /// Expected response schema (JSON Schema)
     pub schema: Option<serde_json::Value>,
+
+    /// Sampling seed for deterministic generation (#852). Forwarded to
+    /// providers that support one (OpenAI-compatible `seed`, Ollama
+    /// `options.seed`); ignored where the API has no equivalent. Pair with
+    /// a fixed temperature (typically 0) for reproducible output in CI.
+    #[serde(default)]
+    pub seed: Option<i64>,
 }
 
 impl LlmGenerationRequest {
@@ -290,6 +297,7 @@ impl LlmGenerationRequest {
             temperature: default_temperature(),
             max_tokens: default_max_tokens(),
             schema: None,
+            seed: None,
         }
     }
 
@@ -298,10 +306,15 @@ impl LlmGenerationRequest {
         self.temperature = temperature;
         self
     }
-
     /// Set max tokens
     pub fn with_max_tokens(mut self, max_tokens: usize) -> Self {
         self.max_tokens = max_tokens;
+        self
+    }
+
+    /// Set the sampling seed (#852). See [`LlmGenerationRequest::seed`].
+    pub fn with_seed(mut self, seed: i64) -> Self {
+        self.seed = Some(seed);
         self
     }
 

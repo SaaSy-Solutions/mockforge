@@ -80,7 +80,7 @@ pub struct PaginationRule {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum PaginationFormat {
-    /// Page-based (page, per_page)
+    /// Page-based (page, `per_page`)
     PageBased,
     /// Offset-based (offset, limit)
     OffsetBased,
@@ -283,8 +283,10 @@ impl PaginationIntelligence {
         let page_sizes: Vec<usize> = self.examples.iter().filter_map(|e| e.page_size).collect();
 
         if !page_sizes.is_empty() {
-            self.default_rule.default_page_size = *page_sizes.iter().min().unwrap();
-            self.default_rule.max_page_size = *page_sizes.iter().max().unwrap();
+            if let (Some(min), Some(max)) = (page_sizes.iter().min(), page_sizes.iter().max()) {
+                self.default_rule.default_page_size = *min;
+                self.default_rule.max_page_size = *max;
+            }
         }
 
         // Detect pagination format
@@ -339,6 +341,7 @@ impl PaginationIntelligence {
             temperature: 0.5, // Some variation but not too much
             max_tokens: 50,
             schema: None,
+            seed: None,
         };
 
         let response = llm_client.generate(&request_llm).await?;

@@ -34,6 +34,7 @@ impl RemediationGenerator {
                 temperature: 0.3, // Lower temperature for precise suggestions
                 max_tokens: 2000,
                 rules: crate::intelligent_behavior::BehaviorRules::default(),
+                seed: None,
             };
 
             Some(LlmClient::new(llm_config))

@@ -127,29 +127,27 @@ const TestGeneratorPage: React.FC = () => {
   const handleGenerate = async () => {
     setLoading(true);
     try {
-      const response = await fetch('/api/recorder/generate-tests', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          format,
-          filter: {
-            protocol,
-            limit,
-          },
-          ai_descriptions: aiDescriptions,
-          generate_fixtures: generateFixtures,
-          suggest_edge_cases: suggestEdgeCases,
-          analyze_test_gaps: analyzeGaps,
-          deduplicate_tests: deduplicateTests,
-          optimize_test_order: optimizeOrder,
-          llm_config: aiDescriptions ? {
-            provider: 'ollama',
-            api_endpoint: 'http://localhost:11434/api/generate',
-            model: 'llama2',
-            temperature: 0.3,
-          } : null,
-        }),
-      });
+      const response = await fetch('/api/recorder/generate-tests', { credentials: 'include', method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        format,
+        filter: {
+          protocol,
+          limit,
+        },
+        ai_descriptions: aiDescriptions,
+        generate_fixtures: generateFixtures,
+        suggest_edge_cases: suggestEdgeCases,
+        analyze_test_gaps: analyzeGaps,
+        deduplicate_tests: deduplicateTests,
+        optimize_test_order: optimizeOrder,
+        llm_config: aiDescriptions ? {
+          provider: 'ollama',
+          api_endpoint: 'http://localhost:11434/api/generate',
+          model: 'llama2',
+          temperature: 0.3,
+        } : null,
+      }), });
 
       const data = await response.json();
 

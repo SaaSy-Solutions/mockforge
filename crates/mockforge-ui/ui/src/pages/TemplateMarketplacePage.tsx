@@ -133,11 +133,9 @@ export const TemplateMarketplacePage: React.FC = () => {
       if (searchQuery.trim()) body.query = searchQuery.trim();
       if (selectedCategory !== 'all') body.category = selectedCategory;
 
-      const response = await fetch('/api/v1/marketplace/templates/search', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
+      const response = await fetch('/api/v1/marketplace/templates/search', { credentials: 'include', method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body), });
 
       if (!response.ok) {
         throw new Error(`Search failed: ${response.status}`);
@@ -258,9 +256,7 @@ export const TemplateMarketplacePage: React.FC = () => {
 
   const loadReviews = useCallback(async (template: Template) => {
     try {
-      const response = await fetch(
-        `/api/v1/marketplace/templates/${encodeURIComponent(template.name)}/${encodeURIComponent(template.version)}/reviews?page=0&per_page=50`
-      );
+      const response = await fetch(`/api/v1/marketplace/templates/${encodeURIComponent(template.name)}/${encodeURIComponent(template.version)}/reviews?page=0&per_page=50`, { credentials: 'include' });
       if (response.ok) {
         const data = await response.json();
         setReviews(Array.isArray(data.reviews) ? data.reviews : []);
@@ -284,9 +280,7 @@ export const TemplateMarketplacePage: React.FC = () => {
 
   const handleDownload = async (template: Template) => {
     try {
-      const response = await fetch(
-        `/api/v1/marketplace/templates/${encodeURIComponent(template.name)}/${encodeURIComponent(template.version)}`
-      );
+      const response = await fetch(`/api/v1/marketplace/templates/${encodeURIComponent(template.name)}/${encodeURIComponent(template.version)}`, { credentials: 'include' });
       if (!response.ok) {
         throw new Error(`Download failed: ${response.status}`);
       }

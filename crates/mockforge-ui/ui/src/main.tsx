@@ -1,5 +1,9 @@
 import { logger } from '@/utils/logger';
 import '@/utils/apiClient'; // Initialize cloud mode fetch override early
+import axios from 'axios';
+// Cookie-based auth: let axios attach the HttpOnly session cookie cross-origin
+// (fetch calls set `credentials: 'include'` individually).
+axios.defaults.withCredentials = true;
 import { StrictMode, lazy, Suspense } from 'react'
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'

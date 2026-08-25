@@ -128,6 +128,7 @@ appropriate condition structures."#;
             temperature: 0.2, // Lower temperature for more consistent parsing
             max_tokens: 2000,
             schema: None,
+            seed: None,
         };
 
         // Generate response from LLM
