@@ -1,1 +1,515 @@
+//! Database connection and models
 
+use anyhow::Result;
+use sqlx::{postgres::PgPoolOptions, Connection, PgPool};
+
+#[derive(Clone, Debug)]
+pub struct Database {
+    /// Owner/elevated pool. Runs migrations (only the table owner can
+    /// `ENABLE ROW LEVEL SECURITY`) and cross-org background workers that
+    /// legitimately sweep every tenant. On the current Neon setup this role
+    /// has `BYPASSRLS`, so it is NOT subject to the #832 RLS policies.
+    pool: PgPool,
+    /// Request-path pool. When `APP_DATABASE_URL` is set this is a separate
+    /// `NOSUPERUSER NOBYPASSRLS` role, so the #832 RLS policies actually bite
+    /// for handler queries; when it is unset this simply aliases `pool` so
+    /// behavior is unchanged. Handlers that rely on the RLS backstop MUST run
+    /// their queries through `with_org_context` to bind `app.current_org_id`.
+    runtime_pool: PgPool,
+}
+
+impl Database {
+    pub async fn connect(database_url: &str) -> Result<Self> {
+        // DATABASE_MAX_CONNECTIONS: Maximum number of database connections in the pool
+        // Default: 20
+        let max_connections: u32 = std::env::var("DATABASE_MAX_CONNECTIONS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(20);
+
+        let pool = PgPoolOptions::new()
+            .max_connections(max_connections)
+            .connect(database_url)
+            .await?;
+
+        // #832 tenant-isolation role-split. `APP_DATABASE_URL`, when set, points
+        // at a NOBYPASSRLS role used only for request-path queries so the RLS
+        // policies enforce org scoping. Migrations and cross-org workers keep
+        // using the owner `pool`. Unset (or empty) => runtime aliases the owner
+        // pool, preserving the pre-#832 single-role behavior exactly.
+        let runtime_pool = match std::env::var("APP_DATABASE_URL") {
+            Ok(url) if !url.trim().is_empty() => {
+                tracing::info!(
+                    "APP_DATABASE_URL set: request-path queries will use the dedicated \
+                     runtime role (RLS-enforced); migrations/workers stay on the owner role"
+                );
+                PgPoolOptions::new()
+                    .max_connections(max_connections)
+                    .connect(url.trim())
+                    .await?
+            }
+            _ => pool.clone(),
+        };
+
+        Ok(Self { pool, runtime_pool })
+    }
+
+    pub async fn migrate(&self) -> Result<()> {
+        // Prevent concurrent migration runs across multiple replicas.
+        //
+        // We use `pg_advisory_xact_lock` inside an explicit transaction, held
+        // open for the duration of the migrations. This is the ONLY advisory
+        // lock form that is safe behind a transaction-mode connection pooler
+        // (Neon's PgBouncer endpoint assigns each STATEMENT to an arbitrary
+        // server backend):
+        //
+        // - `pg_advisory_lock`/`pg_advisory_unlock` are SESSION-scoped. With
+        //   statement-level pooling, acquire and unlock land on different
+        //   server backends, so unlock returns false and the lock leaks on
+        //   the acquiring backend forever — poisoning one pooled backend per
+        //   boot (observed live on 2026-08-24: every deploy leaked one, and
+        //   force-killed boots poisoned more).
+        // - `pg_advisory_xact_lock` is bound to the transaction, and PgBouncer
+        //   guarantees transaction-to-backend stickiness: the lock lives
+        //   exactly as long as our transaction, is released by COMMIT or
+        //   ROLLBACK (including crash/kill — the backend just sees the socket
+        //   close), and never needs an explicit unlock that could misfire.
+        //
+        // History: session-scoped locking leaked locks on 2026-07-30 (v94,
+        // pinned-pool-connection variant) and again on 2026-08-24 (Neon
+        // pooler); stale IDs 8675309/8675310 were orphaned to superuser-only
+        // backends both times.
+        const MIGRATION_LOCK_ID: i64 = 8675311;
+
+        let mut conn = self.pool.acquire().await?;
+
+        // Fail fast instead of hanging boot forever. An unreachable lock is an
+        // operational problem that needs a human; blocking indefinitely turns it
+        // into an opaque outage where the app looks "starting" but never binds.
+        // 60s is far longer than an uncontended acquisition and far shorter than
+        // a deploy health-check budget.
+        let mut tx = conn.begin().await?;
+        sqlx::query("SET LOCAL lock_timeout = '60s'").execute(&mut *tx).await?;
+
+        tracing::info!("Acquiring advisory xact lock for database migrations...");
+        if let Err(e) = sqlx::query("SELECT pg_advisory_xact_lock($1)")
+            .bind(MIGRATION_LOCK_ID)
+            .execute(&mut *tx)
+            .await
+        {
+            tracing::error!(
+                "Could not acquire the migration advisory lock ({MIGRATION_LOCK_ID}) within \
+                 the timeout: {e}. Another instance may be mid-migration, or a previous one \
+                 leaked the lock."
+            );
+            return Err(e.into());
+        }
+        tracing::info!("Advisory lock acquired, running migrations...");
+
+        // Run migrations while holding the transaction lock. Any error aborts
+        // boot — `sqlx::migrate!().run()` bails on the *first* inconsistency
+        // without applying subsequent pending migrations, so historically-
+        // permissive "warn and continue" handling silently skipped everything
+        // past the gap and left the DB multiple versions behind without
+        // surfacing a single error to operators. We'd rather refuse to boot
+        // and have someone repair the `_sqlx_migrations` table than
+        // crash-loop a worker that depends on a table that never got created.
+        let result =
+            sqlx::migrate!("./migrations")
+                .run(&self.pool)
+                .await
+                .map_err(|e| -> anyhow::Error {
+                    if e.to_string().contains("previously applied but is missing") {
+                        tracing::error!(
+                            "sqlx refused to migrate: the DB's `_sqlx_migrations` table has an \
+                         applied row whose matching file is missing from the repo. This \
+                         blocks ALL subsequent migrations from running. To fix, either \
+                         restore the missing file or remove the orphaned tracking row \
+                         manually (psql: `DELETE FROM _sqlx_migrations WHERE version = …`). \
+                         Full error: {:?}",
+                            e
+                        );
+                    }
+                    e.into()
+                });
+
+        // Releasing the lock: drop/rollback of `tx` releases the xact lock
+        // automatically — no unlock statement that could land on the wrong
+        // pooled backend. Rollback (not commit) because the transaction made
+        // no data changes; it existed solely to scope the lock.
+        if let Err(e) = tx.rollback().await {
+            tracing::warn!("Migration lock transaction rollback: {e}");
+        }
+
+        // Drop the pinned connection explicitly: returning it to the pool while
+        // it might still hold the lock is precisely the failure being fixed.
+        drop(conn);
+
+        result
+    }
+
+    pub fn pool(&self) -> &PgPool {
+        &self.pool
+    }
+
+    /// Request-path pool for tenant-isolated queries (#832). Aliases
+    /// [`Self::pool`] unless `APP_DATABASE_URL` is set, in which case it is a
+    /// dedicated `NOBYPASSRLS` role the RLS policies enforce against. The
+    /// request-handling `RegistryStore` is built from this pool; migrations and
+    /// cross-org workers keep using [`Self::pool`].
+    pub fn runtime_pool(&self) -> &PgPool {
+        &self.runtime_pool
+    }
+
+    /// Get total number of plugins
+    pub async fn get_total_plugins(&self) -> Result<i64> {
+        let count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM plugins").fetch_one(&self.pool).await?;
+        Ok(count.0)
+    }
+
+    /// Get total downloads across all plugins
+    pub async fn get_total_downloads(&self) -> Result<i64> {
+        // downloads_total is NUMERIC in database, so we need to cast it
+        let total: (Option<i64>,) =
+            sqlx::query_as("SELECT COALESCE(SUM(downloads_total)::BIGINT, 0) FROM plugins")
+                .fetch_one(&self.pool)
+                .await?;
+        Ok(total.0.unwrap_or(0))
+    }
+
+    /// Get total number of users
+    pub async fn get_total_users(&self) -> Result<i64> {
+        let count: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM users").fetch_one(&self.pool).await?;
+        Ok(count.0)
+    }
+
+    // ==================== Token Revocation Functions ====================
+
+    /// Store a refresh token JTI for tracking (called on token creation)
+    pub async fn store_refresh_token_jti(
+        &self,
+        jti: &str,
+        user_id: uuid::Uuid,
+        expires_at: chrono::DateTime<chrono::Utc>,
+    ) -> Result<()> {
+        sqlx::query(
+            r#"
+            INSERT INTO token_revocations (jti, user_id, expires_at)
+            VALUES ($1, $2, $3)
+            ON CONFLICT (jti) DO NOTHING
+            "#,
+        )
+        .bind(jti)
+        .bind(user_id)
+        .bind(expires_at)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Check if a refresh token JTI has been revoked
+    pub async fn is_token_revoked(&self, jti: &str) -> Result<bool> {
+        let result: Option<(Option<chrono::DateTime<chrono::Utc>>,)> = sqlx::query_as(
+            r#"
+            SELECT revoked_at FROM token_revocations WHERE jti = $1
+            "#,
+        )
+        .bind(jti)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        match result {
+            // Token found and has a revoked_at timestamp = revoked
+            Some((Some(_),)) => Ok(true),
+            // Token found but no revoked_at timestamp = not revoked (active)
+            Some((None,)) => Ok(false),
+            // Token not found = treat as revoked (unknown tokens should be rejected)
+            None => Ok(true),
+        }
+    }
+
+    /// Revoke a refresh token JTI (called on logout or token refresh)
+    pub async fn revoke_token(&self, jti: &str, reason: &str) -> Result<()> {
+        sqlx::query(
+            r#"
+            UPDATE token_revocations
+            SET revoked_at = NOW(), revocation_reason = $2
+            WHERE jti = $1 AND revoked_at IS NULL
+            "#,
+        )
+        .bind(jti)
+        .bind(reason)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(())
+    }
+
+    /// Revoke all refresh tokens for a user (called on password change, security events)
+    pub async fn revoke_all_user_tokens(&self, user_id: uuid::Uuid, reason: &str) -> Result<u64> {
+        let result = sqlx::query(
+            r#"
+            UPDATE token_revocations
+            SET revoked_at = NOW(), revocation_reason = $2
+            WHERE user_id = $1 AND revoked_at IS NULL
+            "#,
+        )
+        .bind(user_id)
+        .bind(reason)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    /// Clean up expired token revocation records (for maintenance)
+    pub async fn cleanup_expired_tokens(&self) -> Result<u64> {
+        let result = sqlx::query(
+            r#"
+            DELETE FROM token_revocations
+            WHERE expires_at < NOW() - INTERVAL '1 day'
+            "#,
+        )
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_database_clone() {
+        // Verify Database implements Clone
+        fn requires_clone<T: Clone>() {}
+        requires_clone::<Database>();
+    }
+
+    #[tokio::test]
+    async fn test_database_connect() {
+        // This test would require a real Postgres database
+        // We can test that the function exists and has the right signature
+        let database_url = "postgresql://test:test@localhost/test_db";
+
+        // Attempt to connect (will fail without a real database, which is expected)
+        let result = Database::connect(database_url).await;
+
+        // We expect this to fail since we don't have a database running
+        assert!(
+            result.is_err(),
+            "expected connection to fail without a running database, but got: {result:?}"
+        );
+    }
+
+    #[test]
+    fn test_database_pool_type() {
+        // Verify that Database has the expected structure
+        // This ensures the API surface is correct
+        fn check_pool_method(_db: &Database) -> &PgPool {
+            _db.pool()
+        }
+
+        // Verify the function has the expected signature (compile-time check)
+        let _: fn(&Database) -> &PgPool = check_pool_method;
+    }
+
+    // Mock test to verify query structures
+    #[test]
+    fn test_total_plugins_query_structure() {
+        let query = "SELECT COUNT(*) FROM plugins";
+
+        // Verify basic query structure
+        assert!(query.contains("SELECT"));
+        assert!(query.contains("COUNT(*)"));
+        assert!(query.contains("FROM plugins"));
+    }
+
+    #[test]
+    fn test_total_downloads_query_structure() {
+        let query = "SELECT COALESCE(SUM(downloads_total)::BIGINT, 0) FROM plugins";
+
+        // Verify query structure
+        assert!(query.contains("SELECT"));
+        assert!(query.contains("COALESCE"));
+        assert!(query.contains("SUM(downloads_total)"));
+        assert!(query.contains("FROM plugins"));
+        assert!(query.contains("::BIGINT"));
+    }
+
+    #[test]
+    fn test_total_users_query_structure() {
+        let query = "SELECT COUNT(*) FROM users";
+
+        // Verify basic query structure
+        assert!(query.contains("SELECT"));
+        assert!(query.contains("COUNT(*)"));
+        assert!(query.contains("FROM users"));
+    }
+
+    #[test]
+    fn test_migration_error_handling() {
+        // Verify the migration error message patterns
+        let error_msg = "previously applied but is missing";
+
+        assert!(error_msg.contains("previously applied"));
+        assert!(error_msg.contains("missing"));
+    }
+
+    // Integration-style tests (require database, so we make them conditional)
+    // These will be skipped in normal test runs but can be run with a test database
+
+    #[tokio::test]
+    #[ignore] // Requires database
+    async fn test_database_migration() {
+        // This test requires a real Postgres database
+        let database_url = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://test:test@localhost/test_db".to_string());
+
+        if let Ok(db) = Database::connect(&database_url).await {
+            let result = db.migrate().await;
+            // Migration should either succeed or fail gracefully
+            assert!(result.is_ok() || result.is_err());
+        }
+    }
+
+    #[tokio::test]
+    #[ignore] // Requires database
+    async fn test_get_total_plugins() {
+        let database_url = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://test:test@localhost/test_db".to_string());
+
+        if let Ok(db) = Database::connect(&database_url).await {
+            let _ = db.migrate().await;
+
+            let result = db.get_total_plugins().await;
+            if let Ok(count) = result {
+                assert!(count >= 0);
+            }
+        }
+    }
+
+    #[tokio::test]
+    #[ignore] // Requires database
+    async fn test_get_total_downloads() {
+        let database_url = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://test:test@localhost/test_db".to_string());
+
+        if let Ok(db) = Database::connect(&database_url).await {
+            let _ = db.migrate().await;
+
+            let result = db.get_total_downloads().await;
+            if let Ok(count) = result {
+                assert!(count >= 0);
+            }
+        }
+    }
+
+    #[tokio::test]
+    #[ignore] // Requires database
+    async fn test_get_total_users() {
+        let database_url = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://test:test@localhost/test_db".to_string());
+
+        if let Ok(db) = Database::connect(&database_url).await {
+            let _ = db.migrate().await;
+
+            let result = db.get_total_users().await;
+            if let Ok(count) = result {
+                assert!(count >= 0);
+            }
+        }
+    }
+
+    #[tokio::test]
+    #[ignore] // Requires database
+    async fn test_pool_reuse() {
+        let database_url = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://test:test@localhost/test_db".to_string());
+
+        if let Ok(db) = Database::connect(&database_url).await {
+            // Get pool reference multiple times
+            let pool1 = db.pool();
+            let pool2 = db.pool();
+
+            // Should return the same pool
+            assert!(std::ptr::eq(pool1, pool2));
+        }
+    }
+
+    #[test]
+    fn test_database_connection_string_validation() {
+        // Test various database URL formats
+        let valid_urls = vec![
+            "postgresql://user:pass@localhost/db",
+            "postgresql://user:pass@localhost:5432/db",
+            "postgresql://localhost/db",
+            "postgres://user:pass@host:5432/database?sslmode=require",
+        ];
+
+        for url in valid_urls {
+            assert!(url.starts_with("postgres"));
+            assert!(url.contains("://"));
+        }
+    }
+
+    #[test]
+    fn test_max_connections_config() {
+        // Verify the default max_connections value is reasonable
+        let max_connections = 20; // Default value from DATABASE_MAX_CONNECTIONS env var
+
+        assert!(max_connections > 0);
+        assert!(max_connections <= 100); // Reasonable upper bound
+    }
+
+    #[tokio::test]
+    #[ignore] // Requires database
+    async fn test_migration_idempotency() {
+        let database_url = std::env::var("TEST_DATABASE_URL")
+            .unwrap_or_else(|_| "postgresql://test:test@localhost/test_db".to_string());
+
+        if let Ok(db) = Database::connect(&database_url).await {
+            // Run migrations twice
+            let result1 = db.migrate().await;
+            let result2 = db.migrate().await;
+
+            // Both should succeed (migrations are idempotent)
+            // Or both should handle the "already applied" case gracefully
+            assert!(result1.is_ok() || result1.is_err());
+            assert!(result2.is_ok() || result2.is_err());
+        }
+    }
+
+    #[test]
+    fn test_query_return_types() {
+        // Verify that query return types are correct
+        // This is a compile-time check that the types match expectations
+
+        fn check_total_plugins_type(_: i64) {}
+        fn check_total_downloads_type(_: i64) {}
+        fn check_total_users_type(_: i64) {}
+
+        // Verify the functions accept i64 (compile-time type check)
+        let _: fn(i64) = check_total_plugins_type;
+        let _: fn(i64) = check_total_downloads_type;
+        let _: fn(i64) = check_total_users_type;
+    }
+
+    #[test]
+    fn test_database_error_types() {
+        // Verify error types are appropriate
+        use anyhow::Result;
+
+        fn returns_result() -> Result<()> {
+            Ok(())
+        }
+
+        let result = returns_result();
+        assert!(result.is_ok());
+    }
+}

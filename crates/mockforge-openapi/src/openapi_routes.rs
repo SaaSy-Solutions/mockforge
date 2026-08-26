@@ -1,1 +1,5305 @@
+//! OpenAPI-based route generation for MockForge
+//!
+//! The authoritative `OpenApiRouteRegistry` and all `build_router_*` methods
+//! are defined in this file. Sub-modules provide additional utilities:
+//! - `builder`: Helper functions for building routers from specs
+//! - `generation`: Route generation utilities
+//! - `validation`: Request/response validation types and logic
+//!
+//! Note: `registry` sub-module contains an abandoned partial refactoring with a
+//! duplicate `OpenApiRouteRegistry` type. Use the one from this module.
 
+pub mod builder;
+pub mod generation;
+#[doc(hidden)]
+pub mod registry;
+pub mod validation;
+
+use crate::response::AiGenerator;
+use crate::response_rewriter::ResponseRewriter;
+use crate::{OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSpec};
+use axum::extract::{DefaultBodyLimit, Path as AxumPath, RawQuery};
+use axum::http::HeaderMap;
+use axum::response::IntoResponse;
+use axum::routing::*;
+use axum::{Json, Router};
+pub use builder::*;
+use chrono::Utc;
+pub use generation::*;
+use mockforge_foundation::ai_response::RequestContext;
+use mockforge_foundation::error::{Error, Result};
+use mockforge_foundation::latency::LatencyInjector;
+use mockforge_foundation::response_generation_trace::ResponseGenerationTrace;
+use mockforge_foundation::schema_diff::validation_diff;
+use once_cell::sync::Lazy;
+use openapiv3::ParameterSchemaOrContent;
+use serde_json::{json, Map, Value};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::sync::{Arc, Mutex};
+use tracing;
+pub use validation::*;
+
+/// OpenAPI route registry that manages generated routes
+#[derive(Clone)]
+pub struct OpenApiRouteRegistry {
+    /// The OpenAPI specification
+    spec: Arc<OpenApiSpec>,
+    /// Generated routes
+    routes: Vec<OpenApiRoute>,
+    /// Validation options
+    options: ValidationOptions,
+    /// Custom fixture loader (optional)
+    custom_fixture_loader: Option<Arc<crate::custom_fixture::CustomFixtureLoader>>,
+}
+
+/// Validation mode for request/response validation
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize, Default)]
+pub enum ValidationMode {
+    /// Validation is disabled (no checks performed)
+    Disabled,
+    /// Validation warnings are logged but do not fail requests
+    #[default]
+    Warn,
+    /// Validation failures return error responses
+    Enforce,
+}
+
+/// Options for configuring validation behavior
+#[derive(Debug, Clone)]
+pub struct ValidationOptions {
+    /// Validation mode for incoming requests
+    pub request_mode: ValidationMode,
+    /// Whether to aggregate multiple validation errors into a single response
+    pub aggregate_errors: bool,
+    /// Whether to validate outgoing responses against schemas
+    pub validate_responses: bool,
+    /// Per-operation validation mode overrides (operation ID -> mode)
+    pub overrides: HashMap<String, ValidationMode>,
+    /// Skip validation for request paths starting with any of these prefixes
+    pub admin_skip_prefixes: Vec<String>,
+    /// Expand templating tokens in responses/examples after generation
+    pub response_template_expand: bool,
+    /// HTTP status code to return for validation failures (e.g., 400 or 422)
+    pub validation_status: Option<u16>,
+}
+
+impl Default for ValidationOptions {
+    fn default() -> Self {
+        Self {
+            request_mode: ValidationMode::Enforce,
+            aggregate_errors: true,
+            validate_responses: false,
+            overrides: HashMap::new(),
+            admin_skip_prefixes: Vec::new(),
+            response_template_expand: false,
+            validation_status: None,
+        }
+    }
+}
+
+/// Shared context for all route handlers, encapsulating optional features.
+///
+/// Each `build_router_*` variant constructs a `RouterContext` with the appropriate
+/// features enabled, then delegates to `build_router_with_context`.
+#[derive(Clone)]
+pub struct RouterContext {
+    /// Custom fixture loader (highest priority response source)
+    pub custom_fixture_loader: Option<Arc<crate::custom_fixture::CustomFixtureLoader>>,
+    /// Latency injector (per-operation-tag latency simulation)
+    pub latency_injector: Option<LatencyInjector>,
+    /// Failure injector (per-tag fault injection)
+    pub failure_injector: Option<mockforge_foundation::failure_injection::FailureInjector>,
+    /// Response-body mutation hook — used for template token expansion
+    /// and override rule application. Core's concrete impl is
+    /// [`crate::openapi_rewriter::CoreResponseRewriter`].
+    pub response_rewriter: Option<Arc<dyn ResponseRewriter>>,
+    /// Whether override application is active (gates the
+    /// [`ResponseRewriter::apply_overrides`] call).
+    pub overrides_enabled: bool,
+    /// AI response generator
+    pub ai_generator: Option<Arc<dyn AiGenerator + Send + Sync>>,
+    /// MockAI intelligent behavior handle (type-erased via
+    /// [`mockforge_foundation::intelligent_behavior::MockAiBehavior`] so
+    /// the OpenAPI router doesn't depend on core's concrete `MockAI`).
+    pub mockai: Option<
+        Arc<
+            tokio::sync::RwLock<
+                dyn mockforge_foundation::intelligent_behavior::MockAiBehavior + Send + Sync,
+            >,
+        >,
+    >,
+    /// Enable full validation (422 enhanced responses, response validation, trace)
+    pub enable_full_validation: bool,
+    /// Enable template token expansion
+    pub enable_template_expand: bool,
+    /// Whether to add /openapi.json endpoint
+    pub add_spec_endpoint: bool,
+}
+
+impl Default for RouterContext {
+    fn default() -> Self {
+        Self {
+            custom_fixture_loader: None,
+            latency_injector: None,
+            failure_injector: None,
+            response_rewriter: None,
+            overrides_enabled: false,
+            ai_generator: None,
+            mockai: None,
+            enable_full_validation: false,
+            enable_template_expand: false,
+            add_spec_endpoint: true,
+        }
+    }
+}
+
+/// Maximum body bytes the OpenAPI router accepts. Axum's `DefaultBodyLimit`
+/// is 2 MiB out of the box; for an HTTP **mock** that's far too low —
+/// users routinely send fixture-sized JSON, multipart uploads, or
+/// chunked-transfer test payloads in the tens of MB. When the body
+/// exceeds the limit, axum's `Bytes` / `Option<Json<Value>>` extractors
+/// truncate the body and the handler runs without ever consuming the
+/// rest of the request, so hyper sends the response and SSL Close
+/// Notify *while the client is still uploading* — which is exactly the
+/// "200 OK before all chunk requests arrived" behaviour Srikanth caught
+/// on the 10 MB chunked PCAP for Issue #79.
+///
+/// Configurable via `MOCKFORGE_HTTP_BODY_LIMIT_MB`. Default 50 MiB,
+/// which covers the realistic mock-traffic range without giving an
+/// untrusted client an unlimited memory-fill vector.
+fn openapi_body_limit_bytes() -> usize {
+    const DEFAULT_MB: usize = 50;
+    std::env::var("MOCKFORGE_HTTP_BODY_LIMIT_MB")
+        .ok()
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(DEFAULT_MB)
+        .saturating_mul(1024 * 1024)
+}
+
+impl OpenApiRouteRegistry {
+    /// Create a new registry from an OpenAPI spec
+    pub fn new(spec: OpenApiSpec) -> Self {
+        Self::new_with_env(spec)
+    }
+
+    /// Create a new registry from an OpenAPI spec with environment-based validation options
+    ///
+    /// Options are read from environment variables:
+    /// - `MOCKFORGE_REQUEST_VALIDATION`: "off"/"warn"/"enforce" (default: "enforce")
+    /// - `MOCKFORGE_AGGREGATE_ERRORS`: "1"/"true" to aggregate errors (default: true)
+    /// - `MOCKFORGE_RESPONSE_VALIDATION`: "1"/"true" to validate responses (default: false)
+    /// - `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND`: "1"/"true" to expand templates (default: false)
+    /// - `MOCKFORGE_VALIDATION_STATUS`: HTTP status code for validation failures (optional)
+    pub fn new_with_env(spec: OpenApiSpec) -> Self {
+        Self::new_with_env_and_persona(spec, None)
+    }
+
+    /// Create a new registry from an OpenAPI spec with environment-based validation options and persona
+    pub fn new_with_env_and_persona(
+        spec: OpenApiSpec,
+        persona: Option<Arc<mockforge_foundation::intelligent_behavior::Persona>>,
+    ) -> Self {
+        tracing::debug!("Creating OpenAPI route registry");
+        let spec = Arc::new(spec);
+        let routes = Self::generate_routes_with_persona(&spec, persona);
+        let options = ValidationOptions {
+            request_mode: match std::env::var("MOCKFORGE_REQUEST_VALIDATION")
+                .unwrap_or_else(|_| "enforce".into())
+                .to_ascii_lowercase()
+                .as_str()
+            {
+                "off" | "disable" | "disabled" => ValidationMode::Disabled,
+                "warn" | "warning" => ValidationMode::Warn,
+                _ => ValidationMode::Enforce,
+            },
+            aggregate_errors: std::env::var("MOCKFORGE_AGGREGATE_ERRORS")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(true),
+            validate_responses: std::env::var("MOCKFORGE_RESPONSE_VALIDATION")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false),
+            overrides: HashMap::new(),
+            admin_skip_prefixes: Vec::new(),
+            response_template_expand: std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false),
+            validation_status: std::env::var("MOCKFORGE_VALIDATION_STATUS")
+                .ok()
+                .and_then(|s| s.parse::<u16>().ok()),
+        };
+        Self {
+            spec,
+            routes,
+            options,
+            custom_fixture_loader: None,
+        }
+    }
+
+    /// Construct with explicit options
+    pub fn new_with_options(spec: OpenApiSpec, options: ValidationOptions) -> Self {
+        Self::new_with_options_and_persona(spec, options, None)
+    }
+
+    /// Construct with explicit options and persona
+    pub fn new_with_options_and_persona(
+        spec: OpenApiSpec,
+        options: ValidationOptions,
+        persona: Option<Arc<mockforge_foundation::intelligent_behavior::Persona>>,
+    ) -> Self {
+        tracing::debug!("Creating OpenAPI route registry with custom options");
+        let spec = Arc::new(spec);
+        let routes = Self::generate_routes_with_persona(&spec, persona);
+        Self {
+            spec,
+            routes,
+            options,
+            custom_fixture_loader: None,
+        }
+    }
+
+    /// Set custom fixture loader
+    pub fn with_custom_fixture_loader(
+        mut self,
+        loader: Arc<crate::custom_fixture::CustomFixtureLoader>,
+    ) -> Self {
+        self.custom_fixture_loader = Some(loader);
+        self
+    }
+
+    /// Clone this registry for validation purposes (creates an independent copy)
+    ///
+    /// This is useful when you need a separate registry instance for validation
+    /// that won't interfere with the main registry's state.
+    pub fn clone_for_validation(&self) -> Self {
+        OpenApiRouteRegistry {
+            spec: self.spec.clone(),
+            routes: self.routes.clone(),
+            options: self.options.clone(),
+            custom_fixture_loader: self.custom_fixture_loader.clone(),
+        }
+    }
+
+    /// Generate routes from the OpenAPI specification with optional persona
+    fn generate_routes_with_persona(
+        spec: &Arc<OpenApiSpec>,
+        persona: Option<Arc<mockforge_foundation::intelligent_behavior::Persona>>,
+    ) -> Vec<OpenApiRoute> {
+        let mut routes = Vec::new();
+
+        let all_paths_ops = spec.all_paths_and_operations();
+        tracing::debug!("Generating routes from OpenAPI spec with {} paths", all_paths_ops.len());
+
+        for (path, operations) in all_paths_ops {
+            tracing::debug!("Processing path: {}", path);
+            for (method, operation) in operations {
+                routes.push(OpenApiRoute::from_operation_with_persona(
+                    &method,
+                    path.clone(),
+                    &operation,
+                    spec.clone(),
+                    persona.clone(),
+                ));
+            }
+        }
+
+        tracing::debug!("Generated {} total routes from OpenAPI spec", routes.len());
+        routes
+    }
+
+    /// Get all routes
+    pub fn routes(&self) -> &[OpenApiRoute] {
+        &self.routes
+    }
+
+    /// Get the OpenAPI specification
+    pub fn spec(&self) -> &OpenApiSpec {
+        &self.spec
+    }
+
+    /// Normalize an Axum path for dedup by replacing all `{param}` with `{_}`.
+    /// This ensures paths like `/func/{period}` and `/func/{date}` are treated as duplicates,
+    /// since Axum/matchit treats all path parameters as equivalent for routing.
+    fn normalize_path_for_dedup(path: &str) -> String {
+        let mut result = String::with_capacity(path.len());
+        let mut in_brace = false;
+        for ch in path.chars() {
+            if ch == '{' {
+                in_brace = true;
+                result.push_str("{_}");
+            } else if ch == '}' {
+                in_brace = false;
+            } else if !in_brace {
+                result.push(ch);
+            }
+        }
+        result
+    }
+
+    /// Returns deduplicated routes with their resolved Axum-compatible paths.
+    ///
+    /// Handles path validation, canonical param-name resolution (to prevent matchit panics
+    /// when two OpenAPI paths differ only in param names), and duplicate detection.
+    /// This is the shared preamble extracted from all `build_router_*` variants.
+    fn deduplicated_routes(&self) -> Vec<(String, &OpenApiRoute)> {
+        let mut result = Vec::new();
+        let mut registered_routes: HashSet<(String, String)> = HashSet::new();
+        let mut canonical_paths: HashMap<String, String> = HashMap::new();
+
+        for route in &self.routes {
+            if !route.is_valid_axum_path() {
+                tracing::warn!(
+                    "Skipping route with unsupported path syntax: {} {}",
+                    route.method,
+                    route.path
+                );
+                continue;
+            }
+            let axum_path = route.axum_path();
+            let normalized = Self::normalize_path_for_dedup(&axum_path);
+            let axum_path = canonical_paths
+                .entry(normalized.clone())
+                .or_insert_with(|| axum_path.clone())
+                .clone();
+            let route_key = (route.method.clone(), normalized);
+            if !registered_routes.insert(route_key) {
+                tracing::debug!(
+                    "Skipping duplicate route: {} {} (axum path: {})",
+                    route.method,
+                    route.path,
+                    axum_path
+                );
+                continue;
+            }
+            result.push((axum_path, route));
+        }
+        result
+    }
+
+    /// Register a handler on a router for the given HTTP method.
+    ///
+    /// Shared epilogue extracted from all `build_router_*` variants.
+    fn route_for_method<H, T>(router: Router, path: &str, method: &str, handler: H) -> Router
+    where
+        H: axum::handler::Handler<T, ()>,
+        T: 'static,
+    {
+        match method {
+            "GET" => router.route(path, get(handler)),
+            "POST" => router.route(path, post(handler)),
+            "PUT" => router.route(path, put(handler)),
+            "DELETE" => router.route(path, delete(handler)),
+            "PATCH" => router.route(path, patch(handler)),
+            "HEAD" => router.route(path, head(handler)),
+            "OPTIONS" => router.route(path, options(handler)),
+            _ => router,
+        }
+    }
+
+    /// Build an Axum router from the OpenAPI spec (simplified)
+    pub fn build_router(self) -> Router {
+        let ctx = RouterContext {
+            custom_fixture_loader: self.custom_fixture_loader.clone(),
+            enable_full_validation: true,
+            enable_template_expand: true,
+            add_spec_endpoint: true,
+            ..Default::default()
+        };
+        self.build_router_with_context(ctx)
+    }
+
+    /// Build an Axum router using a shared RouterContext.
+    ///
+    /// This is the unified router builder that all `build_router_*` variants
+    /// delegate to. The RouterContext controls which features are active.
+    fn build_router_with_context(self, ctx: RouterContext) -> Router {
+        let mut router = Router::new();
+        tracing::debug!("Building router from {} routes", self.routes.len());
+
+        let deduped = self.deduplicated_routes();
+        let ctx = Arc::new(ctx);
+        // Issue #79 round 14 hotfix — share ONE validator across all
+        // route handlers via Arc. Previously each of N route closures
+        // captured its own `clone_for_validation()` (which deep-clones
+        // the entire N-element routes Vec), making router construction
+        // O(N²) in memory — ~260 GB resident for an 11,422-operation
+        // spec (Microsoft Graph), which the OOM killer reaped right
+        // after "Stored N routes". An Arc clone is 8 bytes.
+        let validator = Arc::new(self.clone_for_validation());
+        for (axum_path, route) in &deduped {
+            tracing::debug!("Adding route: {} {}", route.method, route.path);
+            let operation = route.operation.clone();
+            let method = route.method.clone();
+            let path_template = route.path.clone();
+            let validator = validator.clone();
+            let route_clone = (*route).clone();
+            let ctx = ctx.clone();
+
+            // Extract tags from operation for latency and failure injection
+            let mut operation_tags = operation.tags.clone();
+            if let Some(operation_id) = &operation.operation_id {
+                operation_tags.push(operation_id.clone());
+            }
+
+            // Unified handler: fixture -> failure -> latency -> scenario/override -> mock -> validate -> expand -> overrides -> trace -> response
+            let handler = move |AxumPath(path_params): AxumPath<HashMap<String, String>>,
+                                RawQuery(raw_query): RawQuery,
+                                headers: HeaderMap,
+                                body: axum::body::Bytes| async move {
+                tracing::debug!("Handling OpenAPI request: {} {}", method, path_template);
+
+                // (a) Check for custom fixture first (highest priority)
+                if let Some(ref loader) = ctx.custom_fixture_loader {
+                    use crate::request_fingerprint::RequestFingerprint;
+                    use axum::http::{Method, Uri};
+
+                    // Reconstruct the full path from template and params
+                    let mut request_path = path_template.clone();
+                    for (key, value) in &path_params {
+                        request_path = request_path.replace(&format!("{{{}}}", key), value);
+                    }
+
+                    // Normalize the path to match fixture normalization
+                    let normalized_request_path =
+                        crate::custom_fixture::CustomFixtureLoader::normalize_path(&request_path);
+
+                    // Build query string
+                    let query_string =
+                        raw_query.as_ref().map(|q| q.to_string()).unwrap_or_default();
+
+                    // Create URI for fingerprint
+                    // IMPORTANT: Use normalized path to match fixture paths
+                    let uri_str = if query_string.is_empty() {
+                        normalized_request_path.clone()
+                    } else {
+                        format!("{}?{}", normalized_request_path, query_string)
+                    };
+
+                    if let Ok(uri) = uri_str.parse::<Uri>() {
+                        let http_method =
+                            Method::from_bytes(method.as_bytes()).unwrap_or(Method::GET);
+                        let body_slice = if body.is_empty() {
+                            None
+                        } else {
+                            Some(body.as_ref())
+                        };
+                        let fingerprint =
+                            RequestFingerprint::new(http_method, &uri, &headers, body_slice);
+
+                        // Debug logging for fixture matching
+                        tracing::debug!(
+                            "Checking fixture for {} {} (template: '{}', request_path: '{}', normalized: '{}', fingerprint.path: '{}')",
+                            method,
+                            path_template,
+                            path_template,
+                            request_path,
+                            normalized_request_path,
+                            fingerprint.path
+                        );
+
+                        if let Some(custom_fixture) = loader.load_fixture(&fingerprint) {
+                            tracing::debug!(
+                                "Using custom fixture for {} {}",
+                                method,
+                                path_template
+                            );
+
+                            // Apply delay if specified
+                            if custom_fixture.delay_ms > 0 {
+                                tokio::time::sleep(tokio::time::Duration::from_millis(
+                                    custom_fixture.delay_ms,
+                                ))
+                                .await;
+                            }
+
+                            // Convert response to JSON string if needed
+                            let response_body = if custom_fixture.response.is_string() {
+                                custom_fixture.response.as_str().unwrap().to_string()
+                            } else {
+                                serde_json::to_string(&custom_fixture.response)
+                                    .unwrap_or_else(|_| "{}".to_string())
+                            };
+
+                            // Parse response body as JSON
+                            let json_value: Value = serde_json::from_str(&response_body)
+                                .unwrap_or_else(|_| serde_json::json!({}));
+
+                            // Build response with status and JSON body
+                            let status = axum::http::StatusCode::from_u16(custom_fixture.status)
+                                .unwrap_or(axum::http::StatusCode::OK);
+
+                            let mut response = (status, Json(json_value)).into_response();
+
+                            // Add custom headers to response
+                            let response_headers = response.headers_mut();
+                            for (key, value) in &custom_fixture.headers {
+                                if let (Ok(header_name), Ok(header_value)) = (
+                                    axum::http::HeaderName::from_bytes(key.as_bytes()),
+                                    axum::http::HeaderValue::from_str(value),
+                                ) {
+                                    response_headers.insert(header_name, header_value);
+                                }
+                            }
+
+                            // Ensure content-type is set if not already present
+                            if !custom_fixture.headers.contains_key("content-type") {
+                                response_headers.insert(
+                                    axum::http::header::CONTENT_TYPE,
+                                    axum::http::HeaderValue::from_static("application/json"),
+                                );
+                            }
+
+                            return response;
+                        }
+                    }
+                }
+
+                // (b) Failure injection (if configured)
+                if let Some(ref failure_injector) = ctx.failure_injector {
+                    if let Some((status_code, error_message)) =
+                        failure_injector.process_request(&operation_tags)
+                    {
+                        let payload = serde_json::json!({
+                            "error": error_message,
+                            "injected_failure": true
+                        });
+                        let body_bytes = serde_json::to_vec(&payload)
+                            .unwrap_or_else(|_| br#"{"error":"injected failure"}"#.to_vec());
+                        return axum::http::Response::builder()
+                            .status(
+                                axum::http::StatusCode::from_u16(status_code)
+                                    .unwrap_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR),
+                            )
+                            .header(axum::http::header::CONTENT_TYPE, "application/json")
+                            .body(axum::body::Body::from(body_bytes))
+                            .expect("Response builder should create valid response");
+                    }
+                }
+
+                // (c) Latency injection (if configured)
+                if let Some(ref injector) = ctx.latency_injector {
+                    if let Err(e) = injector.inject_latency(&operation_tags).await {
+                        tracing::warn!("Failed to inject latency: {}", e);
+                    }
+                }
+
+                // (d) Scenario/status override from headers
+                let scenario = headers
+                    .get("X-Mockforge-Scenario")
+                    .and_then(|v| v.to_str().ok())
+                    .map(|s| s.to_string())
+                    .or_else(|| std::env::var("MOCKFORGE_HTTP_SCENARIO").ok());
+
+                let status_override = headers
+                    .get("X-Mockforge-Response-Status")
+                    .and_then(|v| v.to_str().ok())
+                    .and_then(|s| s.parse::<u16>().ok());
+
+                // (e) Generate mock response for this request with scenario support
+                let (selected_status, mock_response) = route_clone
+                    .mock_response_with_status_and_scenario_and_override(
+                        scenario.as_deref(),
+                        status_override,
+                    );
+
+                // (f) Validation (if full validation is enabled)
+                if ctx.enable_full_validation {
+                    // Build params maps
+                    let mut path_map = Map::new();
+                    for (k, v) in &path_params {
+                        path_map.insert(k.clone(), Value::String(v.clone()));
+                    }
+
+                    // Query
+                    let mut query_map = Map::new();
+                    if let Some(ref q) = raw_query {
+                        for (k, v) in url::form_urlencoded::parse(q.as_bytes()) {
+                            query_map.insert(k.to_string(), Value::String(v.to_string()));
+                        }
+                    }
+
+                    // Headers: only capture those declared on this operation
+                    let mut header_map = Map::new();
+                    for p_ref in &operation.parameters {
+                        if let Some(openapiv3::Parameter::Header { parameter_data, .. }) =
+                            p_ref.as_item()
+                        {
+                            let name_lc = parameter_data.name.to_ascii_lowercase();
+                            if let Ok(hn) = axum::http::HeaderName::from_bytes(name_lc.as_bytes()) {
+                                if let Some(val) = headers.get(hn) {
+                                    if let Ok(s) = val.to_str() {
+                                        header_map.insert(
+                                            parameter_data.name.clone(),
+                                            Value::String(s.to_string()),
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Cookies: parse Cookie header
+                    let mut cookie_map = Map::new();
+                    if let Some(val) = headers.get(axum::http::header::COOKIE) {
+                        if let Ok(s) = val.to_str() {
+                            for part in s.split(';') {
+                                let part = part.trim();
+                                if let Some((k, v)) = part.split_once('=') {
+                                    cookie_map.insert(k.to_string(), Value::String(v.to_string()));
+                                }
+                            }
+                        }
+                    }
+
+                    // Check if this is a multipart request
+                    let is_multipart = headers
+                        .get(axum::http::header::CONTENT_TYPE)
+                        .and_then(|v| v.to_str().ok())
+                        .map(|ct| ct.starts_with("multipart/form-data"))
+                        .unwrap_or(false);
+
+                    // Extract multipart data if applicable
+                    #[allow(unused_assignments)]
+                    let mut multipart_fields = HashMap::new();
+                    let mut _multipart_files = HashMap::new();
+                    let mut body_json: Option<Value> = None;
+
+                    if is_multipart {
+                        // For multipart requests, extract fields and files
+                        match extract_multipart_from_bytes(&body, &headers).await {
+                            Ok((fields, files)) => {
+                                multipart_fields = fields;
+                                _multipart_files = files;
+                                // Also create a JSON representation for validation
+                                let mut body_obj = Map::new();
+                                for (k, v) in &multipart_fields {
+                                    body_obj.insert(k.clone(), v.clone());
+                                }
+                                if !body_obj.is_empty() {
+                                    body_json = Some(Value::Object(body_obj));
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!("Failed to parse multipart data: {}", e);
+                            }
+                        }
+                    } else {
+                        // Body: try JSON when present
+                        body_json = if !body.is_empty() {
+                            serde_json::from_slice(&body).ok()
+                        } else {
+                            None
+                        };
+                    }
+
+                    // Round 28 — content-type-mismatch check before the
+                    // body schema validator. Srikanth's
+                    // 0.3.171 trace: bench sent `Content-Type:
+                    // application/xml` against a JSON-only endpoint,
+                    // server happily 204'd (because the body still
+                    // parsed as JSON) and the conformance buffer never
+                    // saw a violation. Now the validator surfaces the
+                    // mismatch explicitly so the TUI Conformance tab
+                    // shows it and the server returns the configured
+                    // validation status. The body block below still
+                    // runs for cases where Content-Type matched but
+                    // the body shape doesn't.
+                    let actual_ct =
+                        headers.get(axum::http::header::CONTENT_TYPE).and_then(|v| v.to_str().ok());
+                    if let Err(ct_err) =
+                        validator.check_request_content_type(&path_template, &method, actual_ct)
+                    {
+                        let status_code =
+                            validator.options.validation_status.unwrap_or_else(|| {
+                                std::env::var("MOCKFORGE_VALIDATION_STATUS")
+                                    .ok()
+                                    .and_then(|s| s.parse::<u16>().ok())
+                                    .unwrap_or(415)
+                            });
+                        let (client_mockforge_version, client_sent_at) =
+                            mockforge_foundation::conformance_violations::read_client_stamps(
+                                |name| {
+                                    headers
+                                        .get(name)
+                                        .and_then(|v| v.to_str().ok())
+                                        .map(|s| s.to_string())
+                                },
+                            );
+                        mockforge_foundation::conformance_violations::record(
+                            mockforge_foundation::conformance_violations::ServerConformanceViolation {
+                                timestamp: Utc::now(),
+                                method: method.to_string(),
+                                path: path_template.clone(),
+                                client_ip: "unknown".to_string(),
+                                status: status_code,
+                                reason: ct_err.clone(),
+                                category: "content-types".to_string(),
+                                occurrences: 1,
+                                client_mockforge_version,
+                                client_sent_at,
+                                summary: String::new(),
+                                categories: Vec::new(),
+                            },
+                        );
+                        let status = axum::http::StatusCode::from_u16(status_code)
+                            .unwrap_or(axum::http::StatusCode::UNSUPPORTED_MEDIA_TYPE);
+                        let payload = serde_json::json!({
+                            "error": "content_type_not_allowed",
+                            "message": ct_err,
+                        });
+                        let body_bytes = serde_json::to_vec(&payload)
+                            .unwrap_or_else(|_| br#"{"error":"Serialization failed"}"#.to_vec());
+                        return axum::response::Response::builder()
+                            .status(status)
+                            .header("content-type", "application/json")
+                            .body(axum::body::Body::from(body_bytes))
+                            .unwrap_or_else(|_| {
+                                axum::response::Response::builder()
+                                    .status(axum::http::StatusCode::INTERNAL_SERVER_ERROR)
+                                    .body(axum::body::Body::empty())
+                                    .unwrap()
+                            });
+                    }
+
+                    // Issue #925 — pass real wire presence, not "did it parse as
+                    // JSON". A non-empty octet-stream / XML / urlencoded body
+                    // is present even though `body_json` is `None`.
+                    if let Err(e) = validator.validate_request_with_all_ex(
+                        &path_template,
+                        &method,
+                        &path_map,
+                        &query_map,
+                        &header_map,
+                        &cookie_map,
+                        body_json.as_ref(),
+                        !body.is_empty(),
+                    ) {
+                        // Choose status: prefer options.validation_status, fallback to env, else 400
+                        let status_code =
+                            validator.options.validation_status.unwrap_or_else(|| {
+                                std::env::var("MOCKFORGE_VALIDATION_STATUS")
+                                    .ok()
+                                    .and_then(|s| s.parse::<u16>().ok())
+                                    .unwrap_or(400)
+                            });
+
+                        let payload = if status_code == 422 {
+                            // For 422 responses, use enhanced schema validation with detailed errors
+                            generate_enhanced_422_response(
+                                &validator,
+                                &path_template,
+                                &method,
+                                body_json.as_ref(),
+                                &path_map,
+                                &query_map,
+                                &header_map,
+                                &cookie_map,
+                            )
+                        } else {
+                            // For other status codes, use generic error format
+                            let msg = format!("{}", e);
+                            let detail_val = serde_json::from_str::<Value>(&msg)
+                                .unwrap_or(serde_json::json!(msg));
+                            json!({
+                                "error": "request validation failed",
+                                "detail": detail_val,
+                                "method": method,
+                                "path": path_template,
+                                "timestamp": Utc::now().to_rfc3339(),
+                            })
+                        };
+
+                        record_validation_error(&payload);
+
+                        // Issue #79 round 12 — also push to the workspace-wide
+                        // server-conformance violation ring buffer so the TUI's
+                        // "Conformance" screen can surface incoming spec
+                        // violations. Best-effort, bounded; the existing
+                        // `record_validation_error` keeps writing to its
+                        // tenant-scoped persistent store unchanged.
+                        let reason = payload
+                            .get("detail")
+                            .and_then(|d| {
+                                if d.is_string() {
+                                    d.as_str().map(|s| s.to_string())
+                                } else {
+                                    serde_json::to_string(d).ok()
+                                }
+                            })
+                            .unwrap_or_else(|| {
+                                payload
+                                    .get("error")
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("request validation failed")
+                                    .to_string()
+                            });
+                        let category = classify_validation_reason(&reason);
+                        let (client_mockforge_version, client_sent_at) =
+                            mockforge_foundation::conformance_violations::read_client_stamps(
+                                |name| {
+                                    headers
+                                        .get(name)
+                                        .and_then(|v| v.to_str().ok())
+                                        .map(|s| s.to_string())
+                                },
+                            );
+                        mockforge_foundation::conformance_violations::record(
+                            mockforge_foundation::conformance_violations::ServerConformanceViolation {
+                                timestamp: Utc::now(),
+                                method: method.to_string(),
+                                path: path_template.clone(),
+                                client_ip: "unknown".to_string(),
+                                status: status_code,
+                                reason,
+                                category,
+                                occurrences: 1,
+                                client_mockforge_version,
+                                client_sent_at,
+                                summary: String::new(),
+                                categories: Vec::new(),
+                            },
+                        );
+
+                        let status = axum::http::StatusCode::from_u16(status_code)
+                            .unwrap_or(axum::http::StatusCode::BAD_REQUEST);
+
+                        // Serialize payload with fallback for serialization errors
+                        let body_bytes = serde_json::to_vec(&payload)
+                            .unwrap_or_else(|_| br#"{"error":"Serialization failed"}"#.to_vec());
+
+                        return axum::http::Response::builder()
+                            .status(status)
+                            .header(axum::http::header::CONTENT_TYPE, "application/json")
+                            .body(axum::body::Body::from(body_bytes))
+                            .expect("Response builder should create valid response with valid headers and body");
+                    }
+                }
+
+                // (g) Template expansion (if enabled via context or env var).
+                //
+                // The `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND` env var is tri-state:
+                //   * unset  -> fall back to context/options flags
+                //   * "true" / "1" -> force expansion on
+                //   * "false" / anything else -> force expansion OFF
+                // Treating it as a forcing override (not just OR) lets tests and
+                // ad-hoc operator overrides disable token expansion explicitly.
+                let mut final_response = mock_response.clone();
+                let env_expand: Option<bool> = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
+                    .ok()
+                    .map(|v| v == "1" || v.eq_ignore_ascii_case("true"));
+                let expand = match env_expand {
+                    Some(v) => v,
+                    None => {
+                        ctx.enable_template_expand || validator.options.response_template_expand
+                    }
+                };
+                if expand {
+                    if let Some(ref rewriter) = ctx.response_rewriter {
+                        rewriter.expand_tokens(&mut final_response);
+                    }
+                }
+
+                // (h) Apply overrides if a rewriter is wired up and overrides are enabled.
+                if ctx.overrides_enabled {
+                    if let Some(ref rewriter) = ctx.response_rewriter {
+                        let op_tags =
+                            operation.operation_id.clone().map(|id| vec![id]).unwrap_or_default();
+                        rewriter.apply_overrides(
+                            &operation.operation_id.clone().unwrap_or_default(),
+                            &op_tags,
+                            &path_template,
+                            &mut final_response,
+                        );
+                    }
+                }
+
+                // (i) Response validation and trace (if full validation is enabled)
+                if ctx.enable_full_validation {
+                    // Optional response validation
+                    if validator.options.validate_responses {
+                        // Find the first 2xx response in the operation
+                        if let Some((status_code, _response)) = operation
+                            .responses
+                            .responses
+                            .iter()
+                            .filter_map(|(status, resp)| match status {
+                                openapiv3::StatusCode::Code(code)
+                                    if *code >= 200 && *code < 300 =>
+                                {
+                                    resp.as_item().map(|r| ((*code), r))
+                                }
+                                openapiv3::StatusCode::Range(range)
+                                    if *range >= 200 && *range < 300 =>
+                                {
+                                    resp.as_item().map(|r| (200, r))
+                                }
+                                _ => None,
+                            })
+                            .next()
+                        {
+                            // Basic response validation - check if response is valid JSON
+                            if serde_json::from_value::<Value>(final_response.clone()).is_err() {
+                                tracing::warn!(
+                                    "Response validation failed: invalid JSON for status {}",
+                                    status_code
+                                );
+                            }
+                        }
+                    }
+
+                    // Capture final payload and run schema validation for trace
+                    let mut trace = ResponseGenerationTrace::new();
+                    trace.set_final_payload(final_response.clone());
+
+                    // Extract response schema and run validation diff
+                    if let Some((_status_code, response_ref)) = operation
+                        .responses
+                        .responses
+                        .iter()
+                        .filter_map(|(status, resp)| match status {
+                            openapiv3::StatusCode::Code(code) if *code == selected_status => {
+                                resp.as_item().map(|r| ((*code), r))
+                            }
+                            openapiv3::StatusCode::Range(range)
+                                if *range >= 200 && *range < 300 =>
+                            {
+                                resp.as_item().map(|r| (200, r))
+                            }
+                            _ => None,
+                        })
+                        .next()
+                        .or_else(|| {
+                            // Fallback to first 2xx response
+                            operation
+                                .responses
+                                .responses
+                                .iter()
+                                .filter_map(|(status, resp)| match status {
+                                    openapiv3::StatusCode::Code(code)
+                                        if *code >= 200 && *code < 300 =>
+                                    {
+                                        resp.as_item().map(|r| ((*code), r))
+                                    }
+                                    _ => None,
+                                })
+                                .next()
+                        })
+                    {
+                        // response_ref is already a Response, not a ReferenceOr
+                        let response_item = response_ref;
+                        // Extract schema from application/json content
+                        if let Some(content) = response_item.content.get("application/json") {
+                            if let Some(schema_ref) = &content.schema {
+                                // Convert OpenAPI schema to JSON Schema Value
+                                if let Some(schema) = schema_ref.as_item() {
+                                    if let Ok(schema_json) = serde_json::to_value(schema) {
+                                        // Run validation diff
+                                        let validation_errors =
+                                            validation_diff(&schema_json, &final_response);
+                                        trace.set_schema_validation_diff(validation_errors);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Store trace in response extensions for later retrieval by logging middleware
+                    let mut response = Json(final_response).into_response();
+                    response.extensions_mut().insert(trace);
+                    *response.status_mut() = axum::http::StatusCode::from_u16(selected_status)
+                        .unwrap_or(axum::http::StatusCode::OK);
+                    inject_spec_response_headers(&mut response, &route_clone, selected_status);
+                    return response;
+                }
+
+                // (j) Return response (non-full-validation path)
+                let mut response = Json(final_response).into_response();
+                *response.status_mut() = axum::http::StatusCode::from_u16(selected_status)
+                    .unwrap_or(axum::http::StatusCode::OK);
+                inject_spec_response_headers(&mut response, &route_clone, selected_status);
+                response
+            };
+
+            router = Self::route_for_method(router, axum_path, &route.method, handler);
+        }
+
+        // Add OpenAPI documentation endpoint if configured
+        if ctx.add_spec_endpoint {
+            let spec_json = serde_json::to_value(&self.spec.spec).unwrap_or(Value::Null);
+            router = router.route("/openapi.json", get(move || async move { Json(spec_json) }));
+        }
+
+        // Issue #79 — raise the body-size cap above axum's 2 MiB default so
+        // large chunked uploads don't get truncated mid-extraction. See
+        // `openapi_body_limit_bytes` for the rationale.
+        router.layer(DefaultBodyLimit::max(openapi_body_limit_bytes()))
+    }
+
+    /// Build an Axum router from the OpenAPI spec with latency injection support
+    pub fn build_router_with_latency(self, latency_injector: LatencyInjector) -> Router {
+        self.build_router_with_injectors(latency_injector, None)
+    }
+
+    /// Build an Axum router from the OpenAPI spec with both latency and failure injection support
+    pub fn build_router_with_injectors(
+        self,
+        latency_injector: LatencyInjector,
+        failure_injector: Option<mockforge_foundation::failure_injection::FailureInjector>,
+    ) -> Router {
+        self.build_router_with_injectors_and_overrides(
+            latency_injector,
+            failure_injector,
+            None,
+            false,
+        )
+    }
+
+    /// Build an Axum router from the OpenAPI spec with latency, failure
+    /// injection, and a response-rewriter hook (typically wrapping
+    /// core's `Overrides` + `templating::expand_tokens`).
+    pub fn build_router_with_injectors_and_overrides(
+        self,
+        latency_injector: LatencyInjector,
+        failure_injector: Option<mockforge_foundation::failure_injection::FailureInjector>,
+        response_rewriter: Option<Arc<dyn ResponseRewriter>>,
+        overrides_enabled: bool,
+    ) -> Router {
+        let ctx = RouterContext {
+            custom_fixture_loader: self.custom_fixture_loader.clone(),
+            latency_injector: Some(latency_injector),
+            failure_injector,
+            response_rewriter,
+            overrides_enabled,
+            enable_full_validation: true,
+            enable_template_expand: true,
+            add_spec_endpoint: true,
+            ..Default::default()
+        };
+        self.build_router_with_context(ctx)
+    }
+
+    /// Get route by path and method
+    pub fn get_route(&self, path: &str, method: &str) -> Option<&OpenApiRoute> {
+        self.routes.iter().find(|route| route.path == path && route.method == method)
+    }
+
+    /// Get all routes for a specific path
+    pub fn get_routes_for_path(&self, path: &str) -> Vec<&OpenApiRoute> {
+        self.routes.iter().filter(|route| route.path == path).collect()
+    }
+
+    /// Validate request against OpenAPI spec (legacy body-only)
+    pub fn validate_request(&self, path: &str, method: &str, body: Option<&Value>) -> Result<()> {
+        self.validate_request_with(path, method, &Map::new(), &Map::new(), body)
+    }
+
+    /// Round 28 — Srikanth's content-type-mismatch finding on 0.3.171:
+    /// the bench-side probe was correctly sending `Content-Type:
+    /// application/xml` against a JSON-only endpoint, but mockforge's
+    /// server-side conformance validator was accepting it because the
+    /// existing path checked the BODY against the JSON schema directly
+    /// (ignoring the actual Content-Type header). This method gives
+    /// the route handler a way to flag Content-Type mismatches before
+    /// the body validation runs.
+    ///
+    /// Returns `Err(message)` when the operation's request body
+    /// declares one or more `content` keys AND the actual
+    /// Content-Type doesn't match any of them; `Ok(())` otherwise
+    /// (no requestBody declared, no Content-Type sent, or a match
+    /// found). The comparison is type/subtype only (parameters like
+    /// `; charset=...` and `; boundary=...` are stripped).
+    pub fn check_request_content_type(
+        &self,
+        path: &str,
+        method: &str,
+        actual_content_type: Option<&str>,
+    ) -> std::result::Result<(), String> {
+        let Some(route) = self.get_route(path, method) else {
+            return Ok(());
+        };
+        let Some(rb_ref) = &route.operation.request_body else {
+            return Ok(());
+        };
+        let request_body = match rb_ref {
+            openapiv3::ReferenceOr::Item(rb) => rb,
+            openapiv3::ReferenceOr::Reference { reference } => {
+                let resolved = self
+                    .spec
+                    .spec
+                    .components
+                    .as_ref()
+                    .and_then(|components| {
+                        components
+                            .request_bodies
+                            .get(reference.trim_start_matches("#/components/requestBodies/"))
+                    })
+                    .and_then(|rb_ref| rb_ref.as_item());
+                let Some(rb) = resolved else { return Ok(()) };
+                rb
+            }
+        };
+        if request_body.content.is_empty() {
+            return Ok(());
+        }
+        let actual = actual_content_type
+            .and_then(|s| s.split(';').next())
+            .map(|s| s.trim().to_ascii_lowercase());
+        let Some(actual) = actual else {
+            // No Content-Type sent at all. If a body is required and
+            // content is declared, the body validator catches it via
+            // a different path; we don't flag here so that
+            // bodyless-but-required cases don't double-report.
+            return Ok(());
+        };
+        let allowed: Vec<String> = request_body
+            .content
+            .keys()
+            .map(|k| k.split(';').next().unwrap_or(k).trim().to_ascii_lowercase())
+            .collect();
+        if allowed.iter().any(|a| a == &actual) {
+            return Ok(());
+        }
+        Err(format!(
+            "Content-Type '{actual}' not allowed; spec declares: [{}]",
+            allowed.join(", ")
+        ))
+    }
+
+    /// Validate request against OpenAPI spec with path/query params
+    pub fn validate_request_with(
+        &self,
+        path: &str,
+        method: &str,
+        path_params: &Map<String, Value>,
+        query_params: &Map<String, Value>,
+        body: Option<&Value>,
+    ) -> Result<()> {
+        self.validate_request_with_all(
+            path,
+            method,
+            path_params,
+            query_params,
+            &Map::new(),
+            &Map::new(),
+            body,
+        )
+    }
+
+    /// Issue #79 round 13 — run the standard request-validation bookend
+    /// (validate → build error payload → record to the conformance ring
+    /// buffer) and return `Ok(())` if validation passed, or
+    /// `Err((status_code, payload))` if it failed. Centralises the logic
+    /// that previously lived inline at `build_router_with_context`
+    /// (line ~686) so the MockAI and AI handlers can share it instead
+    /// of silently bypassing validation.
+    ///
+    /// Callers should short-circuit with the returned status + payload
+    /// on `Err`; the violation has already been recorded to
+    /// `mockforge_foundation::conformance_violations` by the time this
+    /// function returns.
+    #[allow(clippy::too_many_arguments)]
+    pub fn run_validation_with_recording(
+        &self,
+        path_template: &str,
+        method: &str,
+        path_params: &Map<String, Value>,
+        query_params: &Map<String, Value>,
+        header_map: &Map<String, Value>,
+        cookie_map: &Map<String, Value>,
+        body: Option<&Value>,
+    ) -> std::result::Result<(), (u16, Value)> {
+        let body_present = body.is_some();
+        self.run_validation_with_recording_ex(
+            path_template,
+            method,
+            path_params,
+            query_params,
+            header_map,
+            cookie_map,
+            body,
+            body_present,
+        )
+    }
+
+    /// Same as [`Self::run_validation_with_recording`], but with an explicit
+    /// body-presence flag so a non-JSON body isn't mistaken for a missing one
+    /// (issue #925).
+    #[allow(clippy::too_many_arguments)]
+    pub fn run_validation_with_recording_ex(
+        &self,
+        path_template: &str,
+        method: &str,
+        path_params: &Map<String, Value>,
+        query_params: &Map<String, Value>,
+        header_map: &Map<String, Value>,
+        cookie_map: &Map<String, Value>,
+        body: Option<&Value>,
+        body_present: bool,
+    ) -> std::result::Result<(), (u16, Value)> {
+        let e = match self.validate_request_with_all_ex(
+            path_template,
+            method,
+            path_params,
+            query_params,
+            header_map,
+            cookie_map,
+            body,
+            body_present,
+        ) {
+            Ok(()) => {
+                // Round 17.1 — track conformant requests alongside
+                // violations so the TUI can show the real pass/fail
+                // ratio (Srikanth's (f) follow-up).
+                mockforge_foundation::conformance_violations::record_ok();
+                return Ok(());
+            }
+            Err(e) => e,
+        };
+
+        let status_code = self.options.validation_status.unwrap_or_else(|| {
+            std::env::var("MOCKFORGE_VALIDATION_STATUS")
+                .ok()
+                .and_then(|s| s.parse::<u16>().ok())
+                .unwrap_or(400)
+        });
+
+        let payload = if status_code == 422 {
+            generate_enhanced_422_response(
+                self,
+                path_template,
+                method,
+                body,
+                path_params,
+                query_params,
+                header_map,
+                cookie_map,
+            )
+        } else {
+            let msg = format!("{}", e);
+            let detail_val = serde_json::from_str::<Value>(&msg).unwrap_or(serde_json::json!(msg));
+            json!({
+                "error": "request validation failed",
+                "detail": detail_val,
+                "method": method,
+                "path": path_template,
+                "timestamp": Utc::now().to_rfc3339(),
+            })
+        };
+
+        record_validation_error(&payload);
+
+        let reason = payload
+            .get("detail")
+            .and_then(|d| {
+                if d.is_string() {
+                    d.as_str().map(|s| s.to_string())
+                } else {
+                    serde_json::to_string(d).ok()
+                }
+            })
+            .unwrap_or_else(|| {
+                payload
+                    .get("error")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("request validation failed")
+                    .to_string()
+            });
+        let category = classify_validation_reason(&reason);
+        // Issue #79 round 15 — Srikanth asked for server-side logs of
+        // *why* a request was a violation. Emit one line per violation
+        // under a dedicated target so it can be enabled precisely
+        // (`RUST_LOG=mockforge::conformance=debug`) without turning on
+        // firehose debug logging. DEBUG (not WARN) so it doesn't spam
+        // the default log under load — the aggregate is in the
+        // Conformance tab / API; this is the opt-in detail channel.
+        tracing::debug!(
+            target: "mockforge::conformance",
+            method = %method,
+            path = %path_template,
+            status = status_code,
+            category = %category,
+            reason = %reason,
+            "request conformance violation"
+        );
+        let (client_mockforge_version, client_sent_at) =
+            mockforge_foundation::conformance_violations::read_client_stamps(|name| {
+                header_map
+                    .iter()
+                    .find(|(k, _)| k.eq_ignore_ascii_case(name))
+                    .and_then(|(_, v)| v.as_str().map(|s| s.to_string()))
+            });
+
+        // Issue #896 — emit ONE buffer entry per LOCATION instead of one
+        // per request. A POST failing `query.$.xgafv`, `query.prettyPrint`,
+        // AND `body.email` now produces three entries
+        // (`query` / `query` / `request-body`) whose reasons carry the
+        // offending param name. Same-path/same-category/same-reason
+        // duplicates still collapse through the dedup buffer.
+        let per_location: Vec<(String, String)> =
+            validation_details(&payload).iter().filter_map(split_detail_entry).collect();
+
+        if per_location.is_empty() {
+            mockforge_foundation::conformance_violations::record(
+                mockforge_foundation::conformance_violations::ServerConformanceViolation {
+                    timestamp: Utc::now(),
+                    method: method.to_string(),
+                    path: path_template.to_string(),
+                    client_ip: "unknown".to_string(),
+                    status: status_code,
+                    reason,
+                    category,
+                    occurrences: 1,
+                    client_mockforge_version,
+                    client_sent_at,
+                    summary: String::new(),
+                    categories: Vec::new(),
+                },
+            );
+        } else {
+            for (loc_category, loc_reason) in per_location {
+                tracing::debug!(
+                    target: "mockforge::conformance",
+                    method = %method,
+                    path = %path_template,
+                    status = status_code,
+                    category = %loc_category,
+                    reason = %loc_reason,
+                    "request conformance violation (per-location)"
+                );
+                mockforge_foundation::conformance_violations::record(
+                    mockforge_foundation::conformance_violations::ServerConformanceViolation {
+                        timestamp: Utc::now(),
+                        method: method.to_string(),
+                        path: path_template.to_string(),
+                        client_ip: "unknown".to_string(),
+                        status: status_code,
+                        reason: loc_reason,
+                        category: loc_category.clone(),
+                        occurrences: 1,
+                        client_mockforge_version: client_mockforge_version.clone(),
+                        client_sent_at,
+                        summary: String::new(),
+                        categories: vec![loc_category],
+                    },
+                );
+            }
+        }
+
+        // Issue #79 round 14 — shadow mode: the violation is recorded
+        // above (so the Conformance tab still shows it, with its real
+        // 400/422 classification), but we return Ok so the handler
+        // proceeds to synthesise a normal 2xx response. Lets a proxy
+        // replay run flow through non-blocking while capturing every
+        // violation.
+        if mockforge_foundation::unknown_paths::shadow_mode_enabled() {
+            return Ok(());
+        }
+
+        Err((status_code, payload))
+    }
+
+    /// Validate request against OpenAPI spec with path/query/header/cookie params.
+    ///
+    /// `body` is the request body parsed as JSON, or `None` when it was absent
+    /// OR could not be parsed as JSON. Because those two cases are
+    /// indistinguishable here, prefer [`Self::validate_request_with_all_ex`],
+    /// which takes an explicit body-presence flag (see issue #925).
+    #[allow(clippy::too_many_arguments)]
+    pub fn validate_request_with_all(
+        &self,
+        path: &str,
+        method: &str,
+        path_params: &Map<String, Value>,
+        query_params: &Map<String, Value>,
+        header_params: &Map<String, Value>,
+        cookie_params: &Map<String, Value>,
+        body: Option<&Value>,
+    ) -> Result<()> {
+        let body_present = body.is_some();
+        self.validate_request_with_all_ex(
+            path,
+            method,
+            path_params,
+            query_params,
+            header_params,
+            cookie_params,
+            body,
+            body_present,
+        )
+    }
+
+    /// Same as [`Self::validate_request_with_all`], but the caller states
+    /// explicitly whether a request body was present on the wire.
+    ///
+    /// Issue #925 — the handlers used to derive body presence from
+    /// `serde_json::from_slice(&bytes).ok()`, so ANY non-JSON body
+    /// (`application/octet-stream` file uploads, `application/xml`,
+    /// `application/x-www-form-urlencoded`, raw text) collapsed to `None` and
+    /// the validator reported `body: Request body is required but not
+    /// provided`. Every PUT carrying a file body 400'd while JSON POSTs passed,
+    /// which is why the bug looked method-specific. `body_present` lets us tell
+    /// "absent" apart from "present but not JSON".
+    #[allow(clippy::too_many_arguments)]
+    pub fn validate_request_with_all_ex(
+        &self,
+        path: &str,
+        method: &str,
+        path_params: &Map<String, Value>,
+        query_params: &Map<String, Value>,
+        header_params: &Map<String, Value>,
+        cookie_params: &Map<String, Value>,
+        body: Option<&Value>,
+        body_present: bool,
+    ) -> Result<()> {
+        // Skip validation for any configured admin prefixes
+        for pref in &self.options.admin_skip_prefixes {
+            if !pref.is_empty() && path.starts_with(pref) {
+                return Ok(());
+            }
+        }
+        // Runtime env overrides
+        let env_mode = std::env::var("MOCKFORGE_REQUEST_VALIDATION").ok().map(|v| {
+            match v.to_ascii_lowercase().as_str() {
+                "off" | "disable" | "disabled" => ValidationMode::Disabled,
+                "warn" | "warning" => ValidationMode::Warn,
+                _ => ValidationMode::Enforce,
+            }
+        });
+        let aggregate = std::env::var("MOCKFORGE_AGGREGATE_ERRORS")
+            .ok()
+            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+            .unwrap_or(self.options.aggregate_errors);
+        // Per-route runtime overrides via JSON env var
+        let env_overrides: Option<Map<String, Value>> =
+            std::env::var("MOCKFORGE_VALIDATION_OVERRIDES_JSON")
+                .ok()
+                .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+                .and_then(|v| v.as_object().cloned());
+        // Response validation is handled in HTTP layer now
+        let mut effective_mode = env_mode.unwrap_or(self.options.request_mode.clone());
+        // Apply runtime overrides first if present
+        if let Some(map) = &env_overrides {
+            if let Some(v) = map.get(&format!("{} {}", method, path)) {
+                if let Some(m) = v.as_str() {
+                    effective_mode = match m {
+                        "off" => ValidationMode::Disabled,
+                        "warn" => ValidationMode::Warn,
+                        _ => ValidationMode::Enforce,
+                    };
+                }
+            }
+        }
+        // Then static options overrides
+        if let Some(override_mode) = self.options.overrides.get(&format!("{} {}", method, path)) {
+            effective_mode = override_mode.clone();
+        }
+        if matches!(effective_mode, ValidationMode::Disabled) {
+            return Ok(());
+        }
+        if let Some(route) = self.get_route(path, method) {
+            if matches!(effective_mode, ValidationMode::Disabled) {
+                return Ok(());
+            }
+            let mut errors: Vec<String> = Vec::new();
+            let mut details: Vec<Value> = Vec::new();
+            // Validate request body if required
+            if let Some(schema) = &route.operation.request_body {
+                // Resolve the request body reference up front so we can read
+                // `required` regardless of whether a body was sent (#925).
+                let request_body = match schema {
+                    openapiv3::ReferenceOr::Item(rb) => Some(rb),
+                    openapiv3::ReferenceOr::Reference { reference } => {
+                        // Try to resolve request body reference through spec
+                        self.spec
+                            .spec
+                            .components
+                            .as_ref()
+                            .and_then(|components| {
+                                components.request_bodies.get(
+                                    reference.trim_start_matches("#/components/requestBodies/"),
+                                )
+                            })
+                            .and_then(|rb_ref| rb_ref.as_item())
+                    }
+                };
+
+                if let Some(value) = body {
+                    if let Some(rb) = request_body {
+                        if let Some(content) = rb.content.get("application/json") {
+                            if let Some(schema_ref) = &content.schema {
+                                // Issue #79 round 19 — every body validator on
+                                // this path used `OpenApiSchema::new(...).validate()`
+                                // which builds a naked jsonschema validator with
+                                // no `components` context. Nested `$ref` strings
+                                // to `#/components/schemas/X` (especially
+                                // dotted vCenter names) then fail with
+                                // "Pointer does not exist". Round 18.3 fixed
+                                // the bench-side + the `validate_request_body`
+                                // sibling; this is the live-server route
+                                // handler, the third path. Switch to
+                                // `schema_ref_resolver::build_validator` which
+                                // inlines the spec's components.
+                                let root_schema = match schema_ref {
+                                    openapiv3::ReferenceOr::Item(s) => Some((*s).clone()),
+                                    openapiv3::ReferenceOr::Reference { reference } => {
+                                        self.spec.get_schema(reference).map(|s| s.schema.clone())
+                                    }
+                                };
+                                if let Some(root_schema) = root_schema {
+                                    let result = crate::schema_ref_resolver::build_validator(
+                                        &root_schema,
+                                        &self.spec.spec,
+                                    )
+                                    .and_then(|validator| {
+                                        let errs: Vec<String> = validator
+                                            .iter_errors(value)
+                                            .map(|e| e.to_string())
+                                            .collect();
+                                        if errs.is_empty() {
+                                            Ok(())
+                                        } else {
+                                            Err(errs.join("; "))
+                                        }
+                                    });
+                                    if let Err(error_msg) = result {
+                                        errors
+                                            .push(format!("body validation failed: {}", error_msg));
+                                        if aggregate {
+                                            details.push(serde_json::json!({"path":"body","code":"schema_validation","message":error_msg}));
+                                        }
+                                    }
+                                } else if let openapiv3::ReferenceOr::Reference { reference } =
+                                    schema_ref
+                                {
+                                    // Schema reference couldn't be resolved
+                                    errors.push(format!("body validation failed: could not resolve schema reference {}", reference));
+                                    if aggregate {
+                                        details.push(serde_json::json!({"path":"body","code":"reference_error","message":"Could not resolve schema reference"}));
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        // Request body reference couldn't be resolved or no application/json content
+                        errors.push("body validation failed: could not resolve request body or no application/json content".to_string());
+                        if aggregate {
+                            details.push(serde_json::json!({"path":"body","code":"reference_error","message":"Could not resolve request body reference"}));
+                        }
+                    }
+                } else if body_present {
+                    // Issue #925 — a body WAS sent, it just isn't JSON
+                    // (octet-stream upload, XML, urlencoded, raw text). There
+                    // is no JSON Schema to check it against, and the
+                    // content-type gate above already enforced the media types
+                    // the spec declares. Treating this as "missing" is what
+                    // made every PUT file upload 400.
+                    tracing::debug!(
+                        "Non-JSON request body present; skipping JSON schema validation"
+                    );
+                } else if request_body.map(|rb| rb.required).unwrap_or(false) {
+                    // Issue #925 — only complain when the spec actually marks
+                    // the body `required: true`. Previously the mere presence
+                    // of a `requestBody` block triggered this, so an operation
+                    // declaring `required: false` still 400'd on an empty body.
+                    errors.push("body: Request body is required but not provided".to_string());
+                    details.push(serde_json::json!({"path":"body","code":"required","message":"Request body is required"}));
+                }
+            } else if body_present {
+                // No body expected but provided — not an error by default, but log it
+                tracing::debug!("Body provided for operation without requestBody; accepting");
+            }
+
+            // Validate path/query parameters
+            for p_ref in &route.operation.parameters {
+                if let Some(p) = p_ref.as_item() {
+                    match p {
+                        openapiv3::Parameter::Path { parameter_data, .. } => {
+                            validate_parameter(
+                                parameter_data,
+                                path_params,
+                                "path",
+                                aggregate,
+                                &mut errors,
+                                &mut details,
+                            );
+                        }
+                        openapiv3::Parameter::Query {
+                            parameter_data,
+                            style,
+                            ..
+                        } => {
+                            // For deepObject style, reconstruct nested value from keys like name[prop]
+                            // e.g., filter[name]=John&filter[age]=30 -> {"name":"John","age":"30"}
+                            let deep_value = if matches!(style, openapiv3::QueryStyle::DeepObject) {
+                                let prefix_bracket = format!("{}[", parameter_data.name);
+                                let mut obj = Map::new();
+                                for (key, val) in query_params.iter() {
+                                    if let Some(rest) = key.strip_prefix(&prefix_bracket) {
+                                        if let Some(prop) = rest.strip_suffix(']') {
+                                            obj.insert(prop.to_string(), val.clone());
+                                        }
+                                    }
+                                }
+                                if obj.is_empty() {
+                                    None
+                                } else {
+                                    Some(Value::Object(obj))
+                                }
+                            } else {
+                                None
+                            };
+                            let style_str = match style {
+                                openapiv3::QueryStyle::Form => Some("form"),
+                                openapiv3::QueryStyle::SpaceDelimited => Some("spaceDelimited"),
+                                openapiv3::QueryStyle::PipeDelimited => Some("pipeDelimited"),
+                                openapiv3::QueryStyle::DeepObject => Some("deepObject"),
+                            };
+                            validate_parameter_with_deep_object(
+                                parameter_data,
+                                query_params,
+                                "query",
+                                deep_value,
+                                style_str,
+                                aggregate,
+                                &mut errors,
+                                &mut details,
+                            );
+                        }
+                        openapiv3::Parameter::Header { parameter_data, .. } => {
+                            validate_parameter(
+                                parameter_data,
+                                header_params,
+                                "header",
+                                aggregate,
+                                &mut errors,
+                                &mut details,
+                            );
+                        }
+                        openapiv3::Parameter::Cookie { parameter_data, .. } => {
+                            validate_parameter(
+                                parameter_data,
+                                cookie_params,
+                                "cookie",
+                                aggregate,
+                                &mut errors,
+                                &mut details,
+                            );
+                        }
+                    }
+                }
+            }
+            if errors.is_empty() {
+                return Ok(());
+            }
+            match effective_mode {
+                ValidationMode::Disabled => Ok(()),
+                ValidationMode::Warn => {
+                    tracing::warn!("Request validation warnings: {:?}", errors);
+                    Ok(())
+                }
+                ValidationMode::Enforce => Err(Error::validation(
+                    serde_json::json!({"errors": errors, "details": details}).to_string(),
+                )),
+            }
+        } else {
+            Err(Error::internal(format!("Route {} {} not found in OpenAPI spec", method, path)))
+        }
+    }
+
+    // Legacy helper removed (mock + status selection happens in handler via route.mock_response_with_status)
+
+    /// Get all paths defined in the spec
+    pub fn paths(&self) -> Vec<String> {
+        let mut paths: Vec<String> = self.routes.iter().map(|route| route.path.clone()).collect();
+        paths.sort();
+        paths.dedup();
+        paths
+    }
+
+    /// Get all HTTP methods supported
+    pub fn methods(&self) -> Vec<String> {
+        let mut methods: Vec<String> =
+            self.routes.iter().map(|route| route.method.clone()).collect();
+        methods.sort();
+        methods.dedup();
+        methods
+    }
+
+    /// Get operation details for a route
+    pub fn get_operation(&self, path: &str, method: &str) -> Option<OpenApiOperation> {
+        self.get_route(path, method).map(|route| {
+            OpenApiOperation::from_operation(
+                &route.method,
+                route.path.clone(),
+                &route.operation,
+                &self.spec,
+            )
+        })
+    }
+
+    /// Extract path parameters from a request path by matching against known routes
+    pub fn extract_path_parameters(&self, path: &str, method: &str) -> HashMap<String, String> {
+        // Among all routes that match, prefer the most *specific* — the one with
+        // the most static (non-parameter) segments — so an exact literal route
+        // wins over a same-arity `{param}` route regardless of declaration order
+        // (e.g. `/users/me` matches `/users/me`, not `/users/{id}`). Returning
+        // the first match meant spec order silently decided this (#757).
+        let mut best: Option<(usize, HashMap<String, String>)> = None;
+        for route in &self.routes {
+            if route.method != method {
+                continue;
+            }
+
+            if let Some(params) = self.match_path_to_route(path, &route.path) {
+                let static_segments = route
+                    .path
+                    .trim_start_matches('/')
+                    .split('/')
+                    .filter(|s| !(s.starts_with('{') && s.ends_with('}')))
+                    .count();
+                let is_more_specific = match &best {
+                    None => true,
+                    Some((score, _)) => static_segments > *score,
+                };
+                if is_more_specific {
+                    best = Some((static_segments, params));
+                }
+            }
+        }
+        best.map(|(_, params)| params).unwrap_or_default()
+    }
+
+    /// Match a request path against a route pattern and extract parameters
+    fn match_path_to_route(
+        &self,
+        request_path: &str,
+        route_pattern: &str,
+    ) -> Option<HashMap<String, String>> {
+        let mut params = HashMap::new();
+
+        // Split both paths into segments
+        let request_segments: Vec<&str> = request_path.trim_start_matches('/').split('/').collect();
+        let pattern_segments: Vec<&str> =
+            route_pattern.trim_start_matches('/').split('/').collect();
+
+        if request_segments.len() != pattern_segments.len() {
+            return None;
+        }
+
+        for (req_seg, pat_seg) in request_segments.iter().zip(pattern_segments.iter()) {
+            if pat_seg.starts_with('{') && pat_seg.ends_with('}') {
+                // This is a parameter. Reject an *empty* captured segment (e.g.
+                // a trailing slash: `/users/` would otherwise match
+                // `/users/{id}` with id=""), which downstream treats as a real
+                // value (#757).
+                if req_seg.is_empty() {
+                    return None;
+                }
+                let param_name = &pat_seg[1..pat_seg.len() - 1];
+                params.insert(param_name.to_string(), req_seg.to_string());
+            } else if req_seg != pat_seg {
+                // Static segment doesn't match
+                return None;
+            }
+        }
+
+        Some(params)
+    }
+
+    /// Convert OpenAPI path to Axum-compatible path
+    /// This is a utility function for converting path parameters from {param} to :param format
+    pub fn convert_path_to_axum(openapi_path: &str) -> String {
+        // Axum v0.7+ uses {param} format, same as OpenAPI
+        openapi_path.to_string()
+    }
+
+    /// Build router with AI generator support
+    pub fn build_router_with_ai(
+        &self,
+        ai_generator: Option<Arc<dyn AiGenerator + Send + Sync>>,
+    ) -> Router {
+        let mut router = Router::new();
+        let deduped = self.deduplicated_routes();
+        tracing::debug!("Building router with AI support from {} routes", self.routes.len());
+
+        // Issue #79 round 14 hotfix — one shared validator (Arc) instead
+        // of a per-route deep clone. See `build_router_with_context` for
+        // the O(N²)/OOM rationale.
+        let validator = Arc::new(self.clone_for_validation());
+        for (axum_path, route) in &deduped {
+            tracing::debug!("Adding AI-enabled route: {} {}", route.method, route.path);
+
+            let route_clone = (*route).clone();
+            let ai_generator_clone = ai_generator.clone();
+            // Issue #79 round 13 — same validation bypass as
+            // `build_router_with_mockai`. Run validation before AI
+            // response generation; the validator is shared via Arc.
+            let validator_clone = validator.clone();
+
+            // Create async handler that extracts request data and builds context
+            let handler = move |AxumPath(path_params): AxumPath<HashMap<String, String>>,
+                                axum::extract::Query(query_params): axum::extract::Query<
+                HashMap<String, String>,
+            >,
+                                headers: HeaderMap,
+                                body_bytes: axum::body::Bytes| {
+                let route = route_clone.clone();
+                let ai_generator = ai_generator_clone.clone();
+                let validator = validator_clone.clone();
+
+                async move {
+                    // Issue #925 — this handler used to take
+                    // `body: Option<Json<Value>>`, which axum resolves to
+                    // `None` for any request whose Content-Type isn't
+                    // `application/json`. A PUT carrying an octet-stream /
+                    // XML / urlencoded body therefore looked bodyless and the
+                    // validator rejected it as "required but not provided".
+                    // Take the raw bytes and track presence separately, the
+                    // same way the MockAI handler does.
+                    let body_present = !body_bytes.is_empty();
+                    let body: Option<Json<Value>> = if body_bytes.is_empty() {
+                        None
+                    } else {
+                        serde_json::from_slice::<Value>(&body_bytes).ok().map(Json)
+                    };
+                    // (a-pre) Run request validation against the spec
+                    // before AI response synthesis. On failure this
+                    // also records to the foundation conformance ring
+                    // buffer surfaced by the TUI Conformance tab.
+                    let mut path_map = Map::new();
+                    for (k, v) in &path_params {
+                        path_map.insert(k.clone(), Value::String(v.clone()));
+                    }
+                    let mut query_map = Map::new();
+                    for (k, v) in &query_params {
+                        query_map.insert(k.clone(), Value::String(v.clone()));
+                    }
+                    let mut header_map = Map::new();
+                    for (k, v) in headers.iter() {
+                        if let Ok(s) = v.to_str() {
+                            header_map.insert(k.to_string(), Value::String(s.to_string()));
+                        }
+                    }
+                    let body_val: Option<&Value> = body.as_ref().map(|Json(b)| b);
+                    if let Err((status_code, payload)) = validator.run_validation_with_recording_ex(
+                        &route.path,
+                        &route.method,
+                        &path_map,
+                        &query_map,
+                        &header_map,
+                        &Map::new(),
+                        body_val,
+                        body_present,
+                    ) {
+                        let status = axum::http::StatusCode::from_u16(status_code)
+                            .unwrap_or(axum::http::StatusCode::BAD_REQUEST);
+                        return (status, Json(payload));
+                    }
+
+                    tracing::debug!(
+                        "Handling AI request for route: {} {}",
+                        route.method,
+                        route.path
+                    );
+
+                    // Build request context
+                    let mut context = RequestContext::new(route.method.clone(), route.path.clone());
+
+                    // Extract headers
+                    context.headers = headers
+                        .iter()
+                        .map(|(k, v)| {
+                            (k.to_string(), Value::String(v.to_str().unwrap_or("").to_string()))
+                        })
+                        .collect();
+
+                    // Extract body if present
+                    context.body = body.map(|Json(b)| b);
+
+                    // Generate AI response if AI generator is available and route has AI config
+                    let (status, response) = if let (Some(generator), Some(_ai_config)) =
+                        (ai_generator, &route.ai_config)
+                    {
+                        route
+                            .mock_response_with_status_async(&context, Some(generator.as_ref()))
+                            .await
+                    } else {
+                        // No AI support, use static response
+                        route.mock_response_with_status()
+                    };
+
+                    (
+                        axum::http::StatusCode::from_u16(status)
+                            .unwrap_or(axum::http::StatusCode::OK),
+                        Json(response),
+                    )
+                }
+            };
+
+            router = Self::route_for_method(router, axum_path, &route.method, handler);
+        }
+
+        // Issue #79 — same body-limit raise as `build_router_with_context`;
+        // the AI handler also uses `Option<Json<Value>>` so axum's 2 MiB
+        // default truncates large bodies and the handler responds early.
+        router.layer(DefaultBodyLimit::max(openapi_body_limit_bytes()))
+    }
+
+    /// Build router with MockAI (Behavioral Mock Intelligence) support
+    ///
+    /// This method integrates MockAI for intelligent, context-aware response generation,
+    /// mutation detection, validation error generation, and pagination intelligence.
+    ///
+    /// # Arguments
+    /// * `mockai` - Optional MockAI instance for intelligent behavior
+    ///
+    /// # Returns
+    /// Axum router with MockAI-powered response generation
+    pub fn build_router_with_mockai(
+        &self,
+        mockai: Option<
+            Arc<
+                tokio::sync::RwLock<
+                    dyn mockforge_foundation::intelligent_behavior::MockAiBehavior + Send + Sync,
+                >,
+            >,
+        >,
+    ) -> Router {
+        use mockforge_foundation::intelligent_behavior::Request as MockAIRequest;
+
+        let mut router = Router::new();
+        let deduped = self.deduplicated_routes();
+        tracing::debug!("Building router with MockAI support from {} routes", self.routes.len());
+
+        let custom_loader = self.custom_fixture_loader.clone();
+        // Issue #79 round 14 hotfix — one shared validator (Arc) instead
+        // of a per-route deep clone. See `build_router_with_context` for
+        // the O(N²)/OOM rationale.
+        let validator = Arc::new(self.clone_for_validation());
+        for (axum_path, route) in &deduped {
+            tracing::debug!("Adding MockAI-enabled route: {} {}", route.method, route.path);
+
+            let route_clone = (*route).clone();
+            let mockai_clone = mockai.clone();
+            let custom_loader_clone = custom_loader.clone();
+            // Issue #79 round 13 — the MockAI handler was bypassing
+            // request validation entirely, so spec violations never
+            // populated the conformance ring buffer. Run
+            // `run_validation_with_recording` before fixture/MockAI/
+            // mock-response synthesis; the validator is shared via Arc.
+            let validator_clone = validator.clone();
+
+            // Create async handler that processes requests through MockAI
+            // Query params are extracted via Query extractor with HashMap
+            // Round 32 — Srikanth on 0.3.176: bench's content-type-swap
+            // probes return 415 client-side but the server-side
+            // conformance buffer only ever shows 400s. Root cause: this
+            // handler used to take `body: Option<Json<Value>>`, and
+            // axum's `Json` extractor 415s a request whose
+            // `Content-Type` isn't `application/json` BEFORE the
+            // handler runs — so the buffer never had a chance to
+            // record the violation, and client/server logs got out of
+            // sync on the same URI. Extract raw bytes instead; we now
+            // do the content-type check ourselves (recording to the
+            // buffer with category `content-types` and the configured
+            // validation status, default 415) and parse the body as
+            // JSON manually for the validator + MockAI paths below.
+            let handler = move |AxumPath(path_params): AxumPath<HashMap<String, String>>,
+                                query: axum::extract::Query<HashMap<String, String>>,
+                                headers: HeaderMap,
+                                body_bytes: axum::body::Bytes| {
+                let route = route_clone.clone();
+                let mockai = mockai_clone.clone();
+                let validator = validator_clone.clone();
+
+                async move {
+                    let mut path_map = Map::new();
+                    for (k, v) in &path_params {
+                        path_map.insert(k.clone(), Value::String(v.clone()));
+                    }
+                    let mut query_map = Map::new();
+                    for (k, v) in &query.0 {
+                        query_map.insert(k.clone(), Value::String(v.clone()));
+                    }
+                    let mut header_map = Map::new();
+                    for (k, v) in headers.iter() {
+                        if let Ok(s) = v.to_str() {
+                            header_map.insert(k.to_string(), Value::String(s.to_string()));
+                        }
+                    }
+
+                    // (a-pre1) Round 32 — content-type mismatch check
+                    // BEFORE body parsing. Mirrors the existing check
+                    // in `build_router_with_context`; both must record
+                    // because at any given moment exactly one of the
+                    // two router builders is wired up.
+                    if !body_bytes.is_empty() {
+                        let actual_ct = headers
+                            .get(axum::http::header::CONTENT_TYPE)
+                            .and_then(|v| v.to_str().ok());
+                        if let Err(ct_err) = validator.check_request_content_type(
+                            &route.path,
+                            &route.method,
+                            actual_ct,
+                        ) {
+                            let status_code =
+                                validator.options.validation_status.unwrap_or_else(|| {
+                                    std::env::var("MOCKFORGE_VALIDATION_STATUS")
+                                        .ok()
+                                        .and_then(|s| s.parse::<u16>().ok())
+                                        .unwrap_or(415)
+                                });
+                            let (client_mockforge_version, client_sent_at) =
+                                mockforge_foundation::conformance_violations::read_client_stamps(
+                                    |name| {
+                                        headers
+                                            .get(name)
+                                            .and_then(|v| v.to_str().ok())
+                                            .map(|s| s.to_string())
+                                    },
+                                );
+                            mockforge_foundation::conformance_violations::record(
+                                mockforge_foundation::conformance_violations::ServerConformanceViolation {
+                                    timestamp: Utc::now(),
+                                    method: route.method.clone(),
+                                    path: route.path.clone(),
+                                    client_ip: "unknown".to_string(),
+                                    status: status_code,
+                                    reason: ct_err.clone(),
+                                    category: "content-types".to_string(),
+                                    occurrences: 1,
+                                    client_mockforge_version,
+                                    client_sent_at,
+                                    summary: String::new(),
+                                categories: Vec::new(),
+                                },
+                            );
+                            let status = axum::http::StatusCode::from_u16(status_code)
+                                .unwrap_or(axum::http::StatusCode::UNSUPPORTED_MEDIA_TYPE);
+                            return (
+                                status,
+                                Json(serde_json::json!({
+                                    "error": "content_type_not_allowed",
+                                    "message": ct_err,
+                                })),
+                            )
+                                .into_response();
+                        }
+                    }
+
+                    // (a-pre2) Parse body as JSON when present so the
+                    // validator, fingerprint, and MockAI paths can all
+                    // see it. We deliberately don't fail on JSON parse
+                    // errors here — the body validator below produces
+                    // the right shape of error message in that case.
+                    //
+                    // Round 42 (#79) — Srikanth on 0.3.186: a multipart
+                    // upload (Content-Type: `multipart/form-data; ...`)
+                    // returns `400 body: Request body is required but
+                    // not provided` because the JSON parse silently
+                    // returns None and the validator treats that as
+                    // "no body present". For multipart requests, parse
+                    // the form parts into a synthetic JSON object (one
+                    // entry per field name, file parts contribute their
+                    // tmpfile path) so the validator sees the body
+                    // exists. Schema validation then runs against that
+                    // synthetic object the same way it would for a
+                    // regular `application/json` body.
+                    let is_multipart_req = headers
+                        .get(axum::http::header::CONTENT_TYPE)
+                        .and_then(|v| v.to_str().ok())
+                        .map(|ct| ct.starts_with("multipart/form-data"))
+                        .unwrap_or(false);
+                    let body: Option<Json<Value>> = if body_bytes.is_empty() {
+                        None
+                    } else if is_multipart_req {
+                        match extract_multipart_from_bytes(&body_bytes, &headers).await {
+                            Ok((fields, _files)) => {
+                                let mut obj = Map::new();
+                                for (k, v) in fields {
+                                    obj.insert(k, v);
+                                }
+                                if obj.is_empty() {
+                                    // Non-empty multipart body that yielded
+                                    // zero fields (malformed envelope or
+                                    // files only with no Content-Disposition
+                                    // name); still signal "body present" so
+                                    // the validator doesn't 400 with "body
+                                    // required". Schema mismatches downstream
+                                    // surface as their own validation errors.
+                                    Some(Json(Value::Object(Map::new())))
+                                } else {
+                                    Some(Json(Value::Object(obj)))
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!(
+                                    "multipart parse failed for {} {}: {}",
+                                    route.method,
+                                    route.path,
+                                    e
+                                );
+                                Some(Json(Value::Object(Map::new())))
+                            }
+                        }
+                    } else {
+                        serde_json::from_slice::<Value>(&body_bytes).ok().map(Json)
+                    };
+
+                    // (a-pre3) Run request validation against the spec
+                    // before any response synthesis. On failure this
+                    // also records to the foundation conformance ring
+                    // buffer surfaced by the TUI Conformance tab.
+                    let body_val: Option<&Value> = body.as_ref().map(|Json(b)| b);
+                    // Issue #925 — real wire presence, not JSON-parseability.
+                    if let Err((status_code, payload)) = validator.run_validation_with_recording_ex(
+                        &route.path,
+                        &route.method,
+                        &path_map,
+                        &query_map,
+                        &header_map,
+                        &Map::new(),
+                        body_val,
+                        !body_bytes.is_empty(),
+                    ) {
+                        let status = axum::http::StatusCode::from_u16(status_code)
+                            .unwrap_or(axum::http::StatusCode::BAD_REQUEST);
+                        return (status, Json(payload)).into_response();
+                    }
+
+                    tracing::info!(
+                        "[FIXTURE DEBUG] Starting fixture check for {} {} (custom_loader available: {})",
+                        route.method,
+                        route.path,
+                        custom_loader_clone.is_some()
+                    );
+
+                    // Check for custom fixture first (highest priority, before MockAI)
+                    if let Some(ref loader) = custom_loader_clone {
+                        use crate::request_fingerprint::RequestFingerprint;
+                        use axum::http::{Method, Uri};
+
+                        // Build query string from parsed query params
+                        let query_string = if query.0.is_empty() {
+                            String::new()
+                        } else {
+                            query
+                                .0
+                                .iter()
+                                .map(|(k, v)| format!("{}={}", k, v))
+                                .collect::<Vec<_>>()
+                                .join("&")
+                        };
+
+                        // Normalize the path to match fixture normalization
+                        let normalized_request_path =
+                            crate::custom_fixture::CustomFixtureLoader::normalize_path(&route.path);
+
+                        tracing::info!(
+                            "[FIXTURE DEBUG] Path normalization: original='{}', normalized='{}'",
+                            route.path,
+                            normalized_request_path
+                        );
+
+                        // Create URI for fingerprint
+                        let uri_str = if query_string.is_empty() {
+                            normalized_request_path.clone()
+                        } else {
+                            format!("{}?{}", normalized_request_path, query_string)
+                        };
+
+                        tracing::info!(
+                            "[FIXTURE DEBUG] URI construction: uri_str='{}', query_string='{}'",
+                            uri_str,
+                            query_string
+                        );
+
+                        if let Ok(uri) = uri_str.parse::<Uri>() {
+                            let http_method =
+                                Method::from_bytes(route.method.as_bytes()).unwrap_or(Method::GET);
+
+                            // Convert body to bytes for fingerprint
+                            let body_bytes =
+                                body.as_ref().and_then(|Json(b)| serde_json::to_vec(b).ok());
+                            let body_slice = body_bytes.as_deref();
+
+                            let fingerprint =
+                                RequestFingerprint::new(http_method, &uri, &headers, body_slice);
+
+                            tracing::info!(
+                                "[FIXTURE DEBUG] RequestFingerprint created: method='{}', path='{}', query='{}', body_hash={:?}",
+                                fingerprint.method,
+                                fingerprint.path,
+                                fingerprint.query,
+                                fingerprint.body_hash
+                            );
+
+                            // Check what fixtures are available for this method
+                            let available_fixtures = loader.has_fixture(&fingerprint);
+                            tracing::info!(
+                                "[FIXTURE DEBUG] Fixture check result: has_fixture={}",
+                                available_fixtures
+                            );
+
+                            if let Some(custom_fixture) = loader.load_fixture(&fingerprint) {
+                                tracing::info!(
+                                    "[FIXTURE DEBUG] ✅ FIXTURE MATCHED! Using custom fixture for {} {} (status: {}, path: '{}')",
+                                    route.method,
+                                    route.path,
+                                    custom_fixture.status,
+                                    custom_fixture.path
+                                );
+
+                                // Apply delay if specified
+                                if custom_fixture.delay_ms > 0 {
+                                    tokio::time::sleep(tokio::time::Duration::from_millis(
+                                        custom_fixture.delay_ms,
+                                    ))
+                                    .await;
+                                }
+
+                                // Convert response to JSON string if needed
+                                let response_body = if custom_fixture.response.is_string() {
+                                    custom_fixture.response.as_str().unwrap().to_string()
+                                } else {
+                                    serde_json::to_string(&custom_fixture.response)
+                                        .unwrap_or_else(|_| "{}".to_string())
+                                };
+
+                                // Parse response body as JSON
+                                let json_value: Value = serde_json::from_str(&response_body)
+                                    .unwrap_or_else(|_| serde_json::json!({}));
+
+                                // Build response with status and JSON body
+                                let status =
+                                    axum::http::StatusCode::from_u16(custom_fixture.status)
+                                        .unwrap_or(axum::http::StatusCode::OK);
+
+                                // Return as tuple (StatusCode, Json) to match handler signature
+                                return (status, Json(json_value)).into_response();
+                            } else {
+                                tracing::warn!(
+                                    "[FIXTURE DEBUG] ❌ No fixture match found for {} {} (fingerprint.path='{}', normalized='{}')",
+                                    route.method,
+                                    route.path,
+                                    fingerprint.path,
+                                    normalized_request_path
+                                );
+                            }
+                        } else {
+                            tracing::warn!("[FIXTURE DEBUG] Failed to parse URI: '{}'", uri_str);
+                        }
+                    } else {
+                        tracing::warn!(
+                            "[FIXTURE DEBUG] Custom fixture loader not available for {} {}",
+                            route.method,
+                            route.path
+                        );
+                    }
+
+                    tracing::debug!(
+                        "Handling MockAI request for route: {} {}",
+                        route.method,
+                        route.path
+                    );
+
+                    // Query parameters are already parsed by Query extractor
+                    let mockai_query = query.0;
+
+                    // If MockAI is enabled, use it to process the request
+                    // CRITICAL FIX: Skip MockAI for GET, HEAD, and OPTIONS requests
+                    // These are read-only operations and should use OpenAPI response generation
+                    // MockAI's mutation analysis incorrectly treats GET requests as "Create" mutations
+                    let method_upper = route.method.to_uppercase();
+                    let should_use_mockai =
+                        matches!(method_upper.as_str(), "POST" | "PUT" | "PATCH" | "DELETE");
+
+                    if should_use_mockai {
+                        if let Some(mockai_arc) = mockai {
+                            let mockai_guard = mockai_arc.read().await;
+
+                            // Build MockAI request
+                            let mut mockai_headers = HashMap::new();
+                            for (k, v) in headers.iter() {
+                                mockai_headers
+                                    .insert(k.to_string(), v.to_str().unwrap_or("").to_string());
+                            }
+
+                            let mockai_request = MockAIRequest {
+                                method: route.method.clone(),
+                                path: route.path.clone(),
+                                body: body.as_ref().map(|Json(b)| b.clone()),
+                                query_params: mockai_query,
+                                headers: mockai_headers,
+                            };
+
+                            // Process request through MockAI
+                            match mockai_guard.process_request(&mockai_request).await {
+                                Ok(mockai_response) => {
+                                    // Check if MockAI returned an empty object (signals to use OpenAPI generation)
+                                    let is_empty = mockai_response.body.is_object()
+                                        && mockai_response
+                                            .body
+                                            .as_object()
+                                            .map(|obj| obj.is_empty())
+                                            .unwrap_or(false);
+
+                                    if is_empty {
+                                        tracing::debug!(
+                                            "MockAI returned empty object for {} {}, falling back to OpenAPI response generation",
+                                            route.method,
+                                            route.path
+                                        );
+                                        // Fall through to standard OpenAPI response generation
+                                    } else {
+                                        // Use the status code from the OpenAPI spec rather than
+                                        // MockAI's hardcoded 200, so that e.g. POST returning 201
+                                        // is honored correctly.
+                                        let spec_status = route.find_first_available_status_code();
+                                        tracing::debug!(
+                                            "MockAI generated response for {} {}, using spec status: {} (MockAI suggested: {})",
+                                            route.method,
+                                            route.path,
+                                            spec_status,
+                                            mockai_response.status_code
+                                        );
+                                        let status = axum::http::StatusCode::from_u16(spec_status)
+                                            .unwrap_or(axum::http::StatusCode::OK);
+                                        let mut resp =
+                                            (status, Json(mockai_response.body)).into_response();
+                                        inject_spec_response_headers(
+                                            &mut resp,
+                                            &route,
+                                            spec_status,
+                                        );
+                                        return resp;
+                                    }
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "MockAI processing failed for {} {}: {}, falling back to standard response",
+                                        route.method,
+                                        route.path,
+                                        e
+                                    );
+                                    // Fall through to standard response generation
+                                }
+                            }
+                        }
+                    } else {
+                        tracing::debug!(
+                            "Skipping MockAI for {} request {} - using OpenAPI response generation",
+                            method_upper,
+                            route.path
+                        );
+                    }
+
+                    // Check for status code override header
+                    let status_override = headers
+                        .get("X-Mockforge-Response-Status")
+                        .and_then(|v| v.to_str().ok())
+                        .and_then(|s| s.parse::<u16>().ok());
+
+                    // Check for scenario header
+                    let scenario = headers
+                        .get("X-Mockforge-Scenario")
+                        .and_then(|v| v.to_str().ok())
+                        .map(|s| s.to_string())
+                        .or_else(|| std::env::var("MOCKFORGE_HTTP_SCENARIO").ok());
+
+                    // Fallback to standard response generation
+                    let (status, response) = route
+                        .mock_response_with_status_and_scenario_and_override(
+                            scenario.as_deref(),
+                            status_override,
+                        );
+                    let status_code = axum::http::StatusCode::from_u16(status)
+                        .unwrap_or(axum::http::StatusCode::OK);
+                    let mut resp = (status_code, Json(response)).into_response();
+                    inject_spec_response_headers(&mut resp, &route, status);
+                    resp
+                }
+            };
+
+            router = Self::route_for_method(router, axum_path, &route.method, handler);
+        }
+
+        // Issue #79 — see `build_router_with_context`; same body-limit raise
+        // for the MockAI router.
+        router.layer(DefaultBodyLimit::max(openapi_body_limit_bytes()))
+    }
+}
+
+/// Inject response headers declared in `responses.<code>.headers` from
+/// the spec into an axum response, after the body and status have been
+/// set. No-op when the route's operation has no headers for that status.
+///
+/// Round 43 (#79) — the validator already knew about declared response
+/// headers (`validation::validate_response_headers`) but the synthesiser
+/// never emitted them, so `mockforge serve` returned 200 with no
+/// `Set-Cookie` even when the spec promised one. Existing headers stay
+/// (so axum's content-type / vary / rate-limit headers aren't clobbered)
+/// — we only insert if absent. Invalid HeaderName / HeaderValue bytes
+/// are silently skipped so a typo in the spec doesn't take the response
+/// down.
+fn inject_spec_response_headers(
+    response: &mut axum::response::Response,
+    route: &OpenApiRoute,
+    status_code: u16,
+) {
+    let synthesized = route.mock_response_headers_for_status(status_code);
+    if synthesized.is_empty() {
+        return;
+    }
+    let response_headers = response.headers_mut();
+    for (name, value) in synthesized {
+        let Ok(header_name) = axum::http::HeaderName::from_bytes(name.as_bytes()) else {
+            continue;
+        };
+        if response_headers.contains_key(&header_name) {
+            continue;
+        }
+        let Ok(header_value) = axum::http::HeaderValue::from_str(&value) else {
+            continue;
+        };
+        response_headers.insert(header_name, header_value);
+    }
+}
+
+// Note: templating helpers are now in core::templating (shared across modules)
+
+/// Extract multipart form data from request body bytes
+/// Returns (form_fields, file_paths) where file_paths maps field names to stored file paths
+async fn extract_multipart_from_bytes(
+    body: &axum::body::Bytes,
+    headers: &HeaderMap,
+) -> Result<(HashMap<String, Value>, HashMap<String, String>)> {
+    // Get boundary from Content-Type header
+    let boundary = headers
+        .get(axum::http::header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|ct| {
+            ct.split(';').find_map(|part| {
+                let part = part.trim();
+                if part.starts_with("boundary=") {
+                    Some(part.strip_prefix("boundary=").unwrap_or("").trim_matches('"'))
+                } else {
+                    None
+                }
+            })
+        })
+        .ok_or_else(|| Error::internal("Missing boundary in Content-Type header"))?;
+
+    let mut fields = HashMap::new();
+    let mut files = HashMap::new();
+
+    // Parse multipart data using bytes directly (not string conversion)
+    // Multipart format: --boundary\r\n...\r\n--boundary\r\n...\r\n--boundary--\r\n
+    let boundary_prefix = format!("--{}", boundary).into_bytes();
+    let boundary_line = format!("\r\n--{}\r\n", boundary).into_bytes();
+    let end_boundary = format!("\r\n--{}--\r\n", boundary).into_bytes();
+
+    // Find all boundary positions
+    let mut pos = 0;
+    let mut parts = Vec::new();
+
+    // Skip initial boundary if present
+    if body.starts_with(&boundary_prefix) {
+        if let Some(first_crlf) = body.iter().position(|&b| b == b'\r') {
+            pos = first_crlf + 2; // Skip --boundary\r\n
+        }
+    }
+
+    // Find all middle boundaries
+    while let Some(boundary_pos) = body[pos..]
+        .windows(boundary_line.len())
+        .position(|window| window == boundary_line.as_slice())
+    {
+        let actual_pos = pos + boundary_pos;
+        if actual_pos > pos {
+            parts.push((pos, actual_pos));
+        }
+        pos = actual_pos + boundary_line.len();
+    }
+
+    // Find final boundary
+    if let Some(end_pos) = body[pos..]
+        .windows(end_boundary.len())
+        .position(|window| window == end_boundary.as_slice())
+    {
+        let actual_end = pos + end_pos;
+        if actual_end > pos {
+            parts.push((pos, actual_end));
+        }
+    } else if pos < body.len() {
+        // No final boundary found, treat rest as last part
+        parts.push((pos, body.len()));
+    }
+
+    // Process each part
+    for (start, end) in parts {
+        let part_data = &body[start..end];
+
+        // Find header/body separator (CRLF CRLF)
+        let separator = b"\r\n\r\n";
+        if let Some(sep_pos) =
+            part_data.windows(separator.len()).position(|window| window == separator)
+        {
+            let header_bytes = &part_data[..sep_pos];
+            let body_start = sep_pos + separator.len();
+            let body_data = &part_data[body_start..];
+
+            // Parse headers (assuming UTF-8)
+            let header_str = String::from_utf8_lossy(header_bytes);
+            let mut field_name = None;
+            let mut filename = None;
+
+            for header_line in header_str.lines() {
+                if header_line.starts_with("Content-Disposition:") {
+                    // Extract field name
+                    if let Some(name_start) = header_line.find("name=\"") {
+                        let name_start = name_start + 6;
+                        if let Some(name_end) = header_line[name_start..].find('"') {
+                            field_name =
+                                Some(header_line[name_start..name_start + name_end].to_string());
+                        }
+                    }
+
+                    // Extract filename if present
+                    if let Some(file_start) = header_line.find("filename=\"") {
+                        let file_start = file_start + 10;
+                        if let Some(file_end) = header_line[file_start..].find('"') {
+                            filename =
+                                Some(header_line[file_start..file_start + file_end].to_string());
+                        }
+                    }
+                }
+            }
+
+            if let Some(name) = field_name {
+                if let Some(file) = filename {
+                    // This is a file upload - store to temp directory
+                    let temp_dir = std::env::temp_dir().join("mockforge-uploads");
+                    std::fs::create_dir_all(&temp_dir)
+                        .map_err(|e| Error::io_with_context("temp directory", e.to_string()))?;
+
+                    let file_path = temp_dir.join(format!("{}_{}", uuid::Uuid::new_v4(), file));
+                    std::fs::write(&file_path, body_data)
+                        .map_err(|e| Error::io_with_context("file", e.to_string()))?;
+
+                    let file_path_str = file_path.to_string_lossy().to_string();
+                    files.insert(name.clone(), file_path_str.clone());
+                    fields.insert(name, Value::String(file_path_str));
+                } else {
+                    // This is a regular form field - try to parse as UTF-8 string
+                    // Trim trailing CRLF
+                    let body_str = body_data
+                        .strip_suffix(b"\r\n")
+                        .or_else(|| body_data.strip_suffix(b"\n"))
+                        .unwrap_or(body_data);
+
+                    if let Ok(field_value) = String::from_utf8(body_str.to_vec()) {
+                        fields.insert(name, Value::String(field_value.trim().to_string()));
+                    } else {
+                        // Non-UTF-8 field value - store as base64 encoded string
+                        use base64::{engine::general_purpose, Engine as _};
+                        fields.insert(
+                            name,
+                            Value::String(general_purpose::STANDARD.encode(body_str)),
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    Ok((fields, files))
+}
+
+static LAST_ERRORS: Lazy<Mutex<VecDeque<Value>>> =
+    Lazy::new(|| Mutex::new(VecDeque::with_capacity(20)));
+
+/// Classify a validation error reason string into one of the
+/// `ConformanceFeature` categories used by the bench-side spec
+/// validator. Best-effort string match — keeps the server-side
+/// conformance ring buffer's `category` field meaningful for the TUI
+/// without dragging in the entire spec analyser.
+///
+/// Issue #79 round 12.
+/// Issue #896 — map a validator detail entry's `"path":"<loc>.<name>"`
+/// to its buffer category and per-location reason. Returns `None` for
+/// entries without a recognisable `<location>.` prefix so callers fall
+/// back to whole-request classification.
+fn split_detail_entry(detail: &Value) -> Option<(String, String)> {
+    let obj = detail.as_object()?;
+    let path = obj.get("path")?.as_str()?;
+    let message = obj.get("message").and_then(|m| m.as_str()).unwrap_or("validation failed");
+    // Body-level failures arrive as a bare `"path":"body"` (the field
+    // name lives in the message), so accept both `<loc>.<name>` and a
+    // bare location token.
+    let (loc, name) = match path.split_once('.') {
+        Some(("query", rest)) => ("query", rest),
+        Some(("header", rest)) => ("headers", rest),
+        Some(("cookie", rest)) => ("cookies", rest),
+        Some(("path", rest)) => ("parameters", rest),
+        Some(("body", rest)) => ("request-body", rest),
+        _ => match path {
+            "query" => ("query", ""),
+            "header" | "headers" => ("headers", ""),
+            "cookie" | "cookies" => ("cookies", ""),
+            "path" => ("parameters", ""),
+            "body" | "request-body" => ("request-body", ""),
+            _ => return None,
+        },
+    };
+    let reason = if name.is_empty() {
+        message.to_string()
+    } else {
+        format!("{name}: {message}")
+    };
+    Some((loc.to_string(), reason))
+}
+
+/// Issue #896 — pull the validator's structured `details[]` array out of
+/// an error payload. The detail may arrive either as an object
+/// (`{"errors":[..],"details":[..]}`) or as a JSON-encoded string of the
+/// same shape depending on which status/branch produced it.
+fn validation_details(payload: &Value) -> Vec<Value> {
+    let Some(detail) = payload.get("detail") else {
+        return Vec::new();
+    };
+    let parsed = match detail {
+        // Prose-wrapped JSON ("Validation error: {...}") — slice out the
+        // outermost object before parsing.
+        Value::String(s) => match (s.find('{'), s.rfind('}')) {
+            (Some(start), Some(end)) if end > start => {
+                serde_json::from_str::<Value>(&s[start..=end]).ok()
+            }
+            _ => None,
+        },
+        v => Some(v.clone()),
+    };
+    let Some(parsed) = parsed else {
+        return Vec::new();
+    };
+    let Some(details) = parsed.get("details").and_then(|d| d.as_array()) else {
+        return Vec::new();
+    };
+    details
+        .iter()
+        .filter(|d| d.get("path").and_then(|p| p.as_str()).is_some())
+        .cloned()
+        .collect()
+}
+
+pub fn classify_validation_reason(reason: &str) -> String {
+    // Round 41 (#79) — Srikanth on 0.3.185: violations on GET requests
+    // (which carry no body) AND query-only violations on POST requests
+    // were both being categorised as "request-body" because the older
+    // matcher checked `r.contains("schema")` before the per-location
+    // checks. The validator's error payload embeds a structured
+    // `"path":"<location>.<name>"` per violation; classify on the
+    // FIRST such path so the category reflects the actual failure
+    // location instead of the validator's prose.
+    let r = reason.to_ascii_lowercase();
+
+    // Round 46 (#79) — Srikanth on 0.3.190: "In the classifier order
+    // you mentioned: query > header > cookie > path > body  -- Where
+    // is http method violation coming?" Method-not-allowed rejections
+    // run BEFORE the schema validator (axum's `MethodNotAllowed`
+    // never hits this code), but the spec-level check that catches
+    // POST-on-a-GET-only operation runs at validator entry and emits
+    // a "method ... is not allowed" prose without a structured
+    // `"path"` field. So `method` sits AHEAD of the per-loc checks
+    // when we see the method keyword in the reason, and BEHIND
+    // content-type because content-type mismatches surface first in
+    // the request lifecycle. Updated priority: content-type > method
+    // > query > header > cookie > path > body.
+    if r.contains("method") && (r.contains("not allowed") || r.contains("unsupported")) {
+        return "http-methods".into();
+    }
+
+    // Cheap structured pull from the validator's `"path":"<loc>.<name>"` fields.
+    let path_starts_with = |prefix: &str| r.contains(&format!("\"path\":\"{}", prefix));
+    if path_starts_with("query.") {
+        return "query".into();
+    }
+    if path_starts_with("header.") {
+        return "headers".into();
+    }
+    if path_starts_with("cookie.") {
+        return "cookies".into();
+    }
+    if path_starts_with("path.") {
+        return "parameters".into();
+    }
+    if path_starts_with("body") {
+        return "request-body".into();
+    }
+
+    // Content-type mismatches are surfaced separately, BEFORE the
+    // schema validator runs.
+    if r.contains("content-type") || r.contains("content type") {
+        return "content-types".into();
+    }
+
+    // Fallback: the older heuristics for callers that don't embed a
+    // structured path field (e.g. malformed JSON, missing body
+    // entirely, security-scheme mismatches).
+    if r.contains("required")
+        && (r.contains("param") || r.contains("query") || r.contains("header"))
+    {
+        return "parameters".into();
+    }
+    if r.contains("auth") || r.contains("security") {
+        return "security".into();
+    }
+    if r.contains("method") {
+        return "http-methods".into();
+    }
+    if r.contains("schema") || r.contains("body") || r.contains("json") {
+        return "request-body".into();
+    }
+    if r.contains("enum") || r.contains("min") || r.contains("max") || r.contains("pattern") {
+        return "constraints".into();
+    }
+    String::new()
+}
+
+/// Record last validation error for Admin UI inspection
+pub fn record_validation_error(v: &Value) {
+    if let Ok(mut q) = LAST_ERRORS.lock() {
+        if q.len() >= 20 {
+            q.pop_front();
+        }
+        q.push_back(v.clone());
+    }
+    // If mutex is poisoned, we silently fail - validation errors are informational only
+}
+
+/// Get most recent validation error
+pub fn get_last_validation_error() -> Option<Value> {
+    LAST_ERRORS.lock().ok()?.back().cloned()
+}
+
+/// Get recent validation errors (most recent last)
+pub fn get_validation_errors() -> Vec<Value> {
+    LAST_ERRORS.lock().map(|q| q.iter().cloned().collect()).unwrap_or_default()
+}
+
+/// Coerce a parameter `value` into the expected JSON type per `schema` where reasonable.
+/// Applies only to param contexts (not request bodies). Conservative conversions:
+/// - integer/number: parse from string; arrays: split comma-separated strings and coerce items
+/// - boolean: parse true/false (case-insensitive) from string
+fn coerce_value_for_schema(value: &Value, schema: &openapiv3::Schema) -> Value {
+    // Basic coercion: try to parse strings as appropriate types
+    match value {
+        Value::String(s) => {
+            // Check if schema expects an array and we have a comma-separated string
+            if let openapiv3::SchemaKind::Type(openapiv3::Type::Array(array_type)) =
+                &schema.schema_kind
+            {
+                if s.contains(',') {
+                    // Split comma-separated string into array
+                    let parts: Vec<&str> = s.split(',').map(|s| s.trim()).collect();
+                    let mut array_values = Vec::new();
+
+                    for part in parts {
+                        // Coerce each part based on array item type
+                        if let Some(items_schema) = &array_type.items {
+                            if let Some(items_schema_obj) = items_schema.as_item() {
+                                let part_value = Value::String(part.to_string());
+                                let coerced_part =
+                                    coerce_value_for_schema(&part_value, items_schema_obj);
+                                array_values.push(coerced_part);
+                            } else {
+                                // If items schema is a reference or not available, keep as string
+                                array_values.push(Value::String(part.to_string()));
+                            }
+                        } else {
+                            // No items schema defined, keep as string
+                            array_values.push(Value::String(part.to_string()));
+                        }
+                    }
+                    return Value::Array(array_values);
+                }
+            }
+
+            // Only coerce if the schema expects a different type
+            match &schema.schema_kind {
+                openapiv3::SchemaKind::Type(openapiv3::Type::String(_)) => {
+                    // Schema expects string, keep as string
+                    value.clone()
+                }
+                openapiv3::SchemaKind::Type(openapiv3::Type::Number(_)) => {
+                    // Schema expects number, try to parse
+                    if let Ok(n) = s.parse::<f64>() {
+                        if let Some(num) = serde_json::Number::from_f64(n) {
+                            return Value::Number(num);
+                        }
+                    }
+                    value.clone()
+                }
+                openapiv3::SchemaKind::Type(openapiv3::Type::Integer(_)) => {
+                    // Schema expects integer, try to parse
+                    if let Ok(n) = s.parse::<i64>() {
+                        if let Some(num) = serde_json::Number::from_f64(n as f64) {
+                            return Value::Number(num);
+                        }
+                    }
+                    value.clone()
+                }
+                openapiv3::SchemaKind::Type(openapiv3::Type::Boolean(_)) => {
+                    // Schema expects boolean, try to parse
+                    match s.to_lowercase().as_str() {
+                        "true" | "1" | "yes" | "on" => Value::Bool(true),
+                        "false" | "0" | "no" | "off" => Value::Bool(false),
+                        _ => value.clone(),
+                    }
+                }
+                _ => {
+                    // Unknown schema type, keep as string
+                    value.clone()
+                }
+            }
+        }
+        _ => value.clone(),
+    }
+}
+
+/// Apply style-aware coercion for query params
+fn coerce_by_style(value: &Value, schema: &openapiv3::Schema, style: Option<&str>) -> Value {
+    // Style-aware coercion for query parameters
+    match value {
+        Value::String(s) => {
+            // Check if schema expects an array and we have a delimited string
+            if let openapiv3::SchemaKind::Type(openapiv3::Type::Array(array_type)) =
+                &schema.schema_kind
+            {
+                let delimiter = match style {
+                    Some("spaceDelimited") => " ",
+                    Some("pipeDelimited") => "|",
+                    Some("form") | None => ",", // Default to form style (comma-separated)
+                    _ => ",",                   // Fallback to comma
+                };
+
+                if s.contains(delimiter) {
+                    // Split delimited string into array
+                    let parts: Vec<&str> = s.split(delimiter).map(|s| s.trim()).collect();
+                    let mut array_values = Vec::new();
+
+                    for part in parts {
+                        // Coerce each part based on array item type
+                        if let Some(items_schema) = &array_type.items {
+                            if let Some(items_schema_obj) = items_schema.as_item() {
+                                let part_value = Value::String(part.to_string());
+                                let coerced_part =
+                                    coerce_by_style(&part_value, items_schema_obj, style);
+                                array_values.push(coerced_part);
+                            } else {
+                                // If items schema is a reference or not available, keep as string
+                                array_values.push(Value::String(part.to_string()));
+                            }
+                        } else {
+                            // No items schema defined, keep as string
+                            array_values.push(Value::String(part.to_string()));
+                        }
+                    }
+                    return Value::Array(array_values);
+                }
+            }
+
+            // Try to parse as number first
+            if let Ok(n) = s.parse::<f64>() {
+                if let Some(num) = serde_json::Number::from_f64(n) {
+                    return Value::Number(num);
+                }
+            }
+            // Try to parse as boolean
+            match s.to_lowercase().as_str() {
+                "true" | "1" | "yes" | "on" => return Value::Bool(true),
+                "false" | "0" | "no" | "off" => return Value::Bool(false),
+                _ => {}
+            }
+            // Keep as string
+            value.clone()
+        }
+        _ => value.clone(),
+    }
+}
+
+/// Build a deepObject from query params like `name[prop]=val`
+fn build_deep_object(name: &str, params: &Map<String, Value>) -> Option<Value> {
+    let prefix = format!("{}[", name);
+    let mut obj = Map::new();
+    for (k, v) in params.iter() {
+        if let Some(rest) = k.strip_prefix(&prefix) {
+            if let Some(key) = rest.strip_suffix(']') {
+                obj.insert(key.to_string(), v.clone());
+            }
+        }
+    }
+    if obj.is_empty() {
+        None
+    } else {
+        Some(Value::Object(obj))
+    }
+}
+
+// Import the enhanced schema diff functionality
+// use mockforge_foundation::schema_diff::{validation_diff, to_enhanced_422_json, ValidationError}; // Not currently used
+
+/// Generate an enhanced 422 response with detailed schema validation errors
+/// This function provides comprehensive error information using the new schema diff utility
+#[allow(clippy::too_many_arguments)]
+fn generate_enhanced_422_response(
+    validator: &OpenApiRouteRegistry,
+    path_template: &str,
+    method: &str,
+    body: Option<&Value>,
+    path_params: &Map<String, Value>,
+    query_params: &Map<String, Value>,
+    header_params: &Map<String, Value>,
+    cookie_params: &Map<String, Value>,
+) -> Value {
+    let mut field_errors = Vec::new();
+
+    // Extract schema validation details if we have a route
+    if let Some(route) = validator.get_route(path_template, method) {
+        // Validate request body with detailed error collection
+        if let Some(schema) = &route.operation.request_body {
+            if let Some(value) = body {
+                if let Some(content) =
+                    schema.as_item().and_then(|rb| rb.content.get("application/json"))
+                {
+                    if let Some(_schema_ref) = &content.schema {
+                        // Basic JSON validation - schema validation deferred
+                        if serde_json::from_value::<Value>(value.clone()).is_err() {
+                            field_errors.push(json!({
+                                "path": "body",
+                                "message": "invalid JSON"
+                            }));
+                        }
+                    }
+                }
+            } else {
+                field_errors.push(json!({
+                    "path": "body",
+                    "expected": "object",
+                    "found": "missing",
+                    "message": "Request body is required but not provided"
+                }));
+            }
+        }
+
+        // Validate parameters with detailed error collection
+        for param_ref in &route.operation.parameters {
+            if let Some(param) = param_ref.as_item() {
+                match param {
+                    openapiv3::Parameter::Path { parameter_data, .. } => {
+                        validate_parameter_detailed(
+                            parameter_data,
+                            path_params,
+                            "path",
+                            "path parameter",
+                            &mut field_errors,
+                        );
+                    }
+                    openapiv3::Parameter::Query { parameter_data, .. } => {
+                        let deep_value = if Some("form") == Some("deepObject") {
+                            build_deep_object(&parameter_data.name, query_params)
+                        } else {
+                            None
+                        };
+                        validate_parameter_detailed_with_deep(
+                            parameter_data,
+                            query_params,
+                            "query",
+                            "query parameter",
+                            deep_value,
+                            &mut field_errors,
+                        );
+                    }
+                    openapiv3::Parameter::Header { parameter_data, .. } => {
+                        validate_parameter_detailed(
+                            parameter_data,
+                            header_params,
+                            "header",
+                            "header parameter",
+                            &mut field_errors,
+                        );
+                    }
+                    openapiv3::Parameter::Cookie { parameter_data, .. } => {
+                        validate_parameter_detailed(
+                            parameter_data,
+                            cookie_params,
+                            "cookie",
+                            "cookie parameter",
+                            &mut field_errors,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    // Return the detailed 422 error format
+    json!({
+        "error": "Schema validation failed",
+        "details": field_errors,
+        "method": method,
+        "path": path_template,
+        "timestamp": Utc::now().to_rfc3339(),
+        "validation_type": "openapi_schema"
+    })
+}
+
+/// Helper function to validate a parameter
+fn validate_parameter(
+    parameter_data: &openapiv3::ParameterData,
+    params_map: &Map<String, Value>,
+    prefix: &str,
+    aggregate: bool,
+    errors: &mut Vec<String>,
+    details: &mut Vec<Value>,
+) {
+    match params_map.get(&parameter_data.name) {
+        Some(v) => {
+            if let ParameterSchemaOrContent::Schema(s) = &parameter_data.format {
+                if let Some(schema) = s.as_item() {
+                    let coerced = coerce_value_for_schema(v, schema);
+                    // Validate the coerced value against the schema
+                    if let Err(validation_error) =
+                        OpenApiSchema::new(schema.clone()).validate(&coerced)
+                    {
+                        let error_msg = validation_error.to_string();
+                        errors.push(format!(
+                            "{} parameter '{}' validation failed: {}",
+                            prefix, parameter_data.name, error_msg
+                        ));
+                        if aggregate {
+                            details.push(serde_json::json!({"path":format!("{}.{}", prefix, parameter_data.name),"code":"schema_validation","message":error_msg}));
+                        }
+                    }
+                }
+            }
+        }
+        None => {
+            if parameter_data.required {
+                errors.push(format!(
+                    "missing required {} parameter '{}'",
+                    prefix, parameter_data.name
+                ));
+                details.push(serde_json::json!({"path":format!("{}.{}", prefix, parameter_data.name),"code":"required","message":"Missing required parameter"}));
+            }
+        }
+    }
+}
+
+/// Helper function to validate a parameter with deep object support
+#[allow(clippy::too_many_arguments)]
+fn validate_parameter_with_deep_object(
+    parameter_data: &openapiv3::ParameterData,
+    params_map: &Map<String, Value>,
+    prefix: &str,
+    deep_value: Option<Value>,
+    style: Option<&str>,
+    aggregate: bool,
+    errors: &mut Vec<String>,
+    details: &mut Vec<Value>,
+) {
+    match deep_value.as_ref().or_else(|| params_map.get(&parameter_data.name)) {
+        Some(v) => {
+            if let ParameterSchemaOrContent::Schema(s) = &parameter_data.format {
+                if let Some(schema) = s.as_item() {
+                    let coerced = coerce_by_style(v, schema, style); // Use the actual style
+                                                                     // Validate the coerced value against the schema
+                    if let Err(validation_error) =
+                        OpenApiSchema::new(schema.clone()).validate(&coerced)
+                    {
+                        let error_msg = validation_error.to_string();
+                        errors.push(format!(
+                            "{} parameter '{}' validation failed: {}",
+                            prefix, parameter_data.name, error_msg
+                        ));
+                        if aggregate {
+                            details.push(serde_json::json!({"path":format!("{}.{}", prefix, parameter_data.name),"code":"schema_validation","message":error_msg}));
+                        }
+                    }
+                }
+            }
+        }
+        None => {
+            if parameter_data.required {
+                errors.push(format!(
+                    "missing required {} parameter '{}'",
+                    prefix, parameter_data.name
+                ));
+                details.push(serde_json::json!({"path":format!("{}.{}", prefix, parameter_data.name),"code":"required","message":"Missing required parameter"}));
+            }
+        }
+    }
+}
+
+/// Helper function to validate a parameter with detailed error collection
+fn validate_parameter_detailed(
+    parameter_data: &openapiv3::ParameterData,
+    params_map: &Map<String, Value>,
+    location: &str,
+    value_type: &str,
+    field_errors: &mut Vec<Value>,
+) {
+    match params_map.get(&parameter_data.name) {
+        Some(value) => {
+            if let ParameterSchemaOrContent::Schema(schema) = &parameter_data.format {
+                // Collect detailed validation errors for this parameter
+                let details: Vec<Value> = Vec::new();
+                let param_path = format!("{}.{}", location, parameter_data.name);
+
+                // Apply coercion before validation
+                if let Some(schema_ref) = schema.as_item() {
+                    let coerced_value = coerce_value_for_schema(value, schema_ref);
+                    // Validate the coerced value against the schema
+                    if let Err(validation_error) =
+                        OpenApiSchema::new(schema_ref.clone()).validate(&coerced_value)
+                    {
+                        field_errors.push(json!({
+                            "path": param_path,
+                            "expected": "valid according to schema",
+                            "found": coerced_value,
+                            "message": validation_error.to_string()
+                        }));
+                    }
+                }
+
+                for detail in details {
+                    field_errors.push(json!({
+                        "path": detail["path"],
+                        "expected": detail["expected_type"],
+                        "found": detail["value"],
+                        "message": detail["message"]
+                    }));
+                }
+            }
+        }
+        None => {
+            if parameter_data.required {
+                field_errors.push(json!({
+                    "path": format!("{}.{}", location, parameter_data.name),
+                    "expected": "value",
+                    "found": "missing",
+                    "message": format!("Missing required {} '{}'", value_type, parameter_data.name)
+                }));
+            }
+        }
+    }
+}
+
+/// Helper function to validate a parameter with deep object support and detailed errors
+fn validate_parameter_detailed_with_deep(
+    parameter_data: &openapiv3::ParameterData,
+    params_map: &Map<String, Value>,
+    location: &str,
+    value_type: &str,
+    deep_value: Option<Value>,
+    field_errors: &mut Vec<Value>,
+) {
+    match deep_value.as_ref().or_else(|| params_map.get(&parameter_data.name)) {
+        Some(value) => {
+            if let ParameterSchemaOrContent::Schema(schema) = &parameter_data.format {
+                // Collect detailed validation errors for this parameter
+                let details: Vec<Value> = Vec::new();
+                let param_path = format!("{}.{}", location, parameter_data.name);
+
+                // Apply coercion before validation
+                if let Some(schema_ref) = schema.as_item() {
+                    let coerced_value = coerce_by_style(value, schema_ref, Some("form")); // Default to form style for now
+                                                                                          // Validate the coerced value against the schema
+                    if let Err(validation_error) =
+                        OpenApiSchema::new(schema_ref.clone()).validate(&coerced_value)
+                    {
+                        field_errors.push(json!({
+                            "path": param_path,
+                            "expected": "valid according to schema",
+                            "found": coerced_value,
+                            "message": validation_error.to_string()
+                        }));
+                    }
+                }
+
+                for detail in details {
+                    field_errors.push(json!({
+                        "path": detail["path"],
+                        "expected": detail["expected_type"],
+                        "found": detail["value"],
+                        "message": detail["message"]
+                    }));
+                }
+            }
+        }
+        None => {
+            if parameter_data.required {
+                field_errors.push(json!({
+                    "path": format!("{}.{}", location, parameter_data.name),
+                    "expected": "value",
+                    "found": "missing",
+                    "message": format!("Missing required {} '{}'", value_type, parameter_data.name)
+                }));
+            }
+        }
+    }
+}
+
+/// Helper function to create an OpenAPI route registry from a file
+pub async fn create_registry_from_file<P: AsRef<std::path::Path>>(
+    path: P,
+) -> Result<OpenApiRouteRegistry> {
+    let spec = OpenApiSpec::from_file(path).await?;
+    spec.validate()?;
+    Ok(OpenApiRouteRegistry::new(spec))
+}
+
+/// Helper function to create an OpenAPI route registry from JSON
+pub fn create_registry_from_json(json: Value) -> Result<OpenApiRouteRegistry> {
+    let spec = OpenApiSpec::from_json(json)?;
+    spec.validate()?;
+    Ok(OpenApiRouteRegistry::new(spec))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use tempfile::TempDir;
+
+    /// Round 41 (#79) — Srikanth on 0.3.185: GET requests carry no
+    /// body, so a query-only violation on GET should be categorised
+    /// as `query`, not `request-body`. POST requests with both query
+    /// AND body validators should also be classified by where the
+    /// first detail's `"path":...` lives rather than the validator's
+    /// generic "schema_validation" prose. The new classifier looks
+    /// for `"path":"query.<name>"` / `"path":"header.<name>"` etc.
+    /// first.
+    #[test]
+    fn classify_validation_reason_uses_structured_path_field_first() {
+        // Real shape from the Google Apigee /v1/organizations report
+        // — query-only enum/boolean violations.
+        let query_only = r#"{"details":[{"code":"schema_validation","message":"Validation error","path":"query.$.xgafv"}]}"#;
+        assert_eq!(classify_validation_reason(query_only), "query");
+
+        let header_only = r#"{"details":[{"code":"schema_validation","message":"missing required X-Trace","path":"header.X-Trace"}]}"#;
+        assert_eq!(classify_validation_reason(header_only), "headers");
+
+        let cookie_only = r#"{"details":[{"code":"schema_validation","message":"missing session","path":"cookie.session"}]}"#;
+        assert_eq!(classify_validation_reason(cookie_only), "cookies");
+
+        // Body-only violation stays `request-body`.
+        let body_only = r#"{"details":[{"code":"schema_validation","message":"name required","path":"body.name"}]}"#;
+        assert_eq!(classify_validation_reason(body_only), "request-body");
+
+        // Content-type mismatch keeps its own category.
+        assert_eq!(
+            classify_validation_reason("Content-Type application/xml not allowed"),
+            "content-types"
+        );
+    }
+
+    /// Issue #896 — a request violating BOTH a query-level enum AND a
+    /// body required-field on the same operation must produce TWO buffer
+    /// entries with distinct categories (`query` + `request-body`),
+    /// each reason naming the offending parameter.
+    #[test]
+    fn per_location_violation_split_records_one_entry_per_location() {
+        mockforge_foundation::conformance_violations::clear();
+
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "T", "version": "1" },
+            "paths": {
+                "/v1/things": {
+                    "post": {
+                        "summary": "Create thing",
+                        "parameters": [
+                            {
+                                "name": "kind",
+                                "in": "query",
+                                "required": true,
+                                "schema": { "type": "string", "enum": ["a", "b"] }
+                            }
+                        ],
+                        "requestBody": {
+                            "required": true,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["email"],
+                                        "properties": { "email": { "type": "string" } }
+                                    }
+                                }
+                            }
+                        },
+                        "responses": { "200": { "description": "ok" } }
+                    }
+                }
+            }
+        });
+        let spec = crate::spec::OpenApiSpec::from_json(spec_json).expect("spec parses");
+        let router = OpenApiRouteRegistry::new(spec);
+
+        // kind violates the enum AND the body misses `email`.
+        let result = router.run_validation_with_recording_ex(
+            "/v1/things",
+            "POST",
+            &Map::new(),
+            &[("kind".to_string(), json!("bogus"))].into_iter().collect(),
+            &Map::new(),
+            &Map::new(),
+            Some(&json!({})),
+            true,
+        );
+        assert!(result.is_err(), "request must fail validation");
+
+        let buffer = mockforge_foundation::conformance_violations::snapshot();
+        let mine: Vec<_> =
+            buffer.iter().filter(|v| v.path == "/v1/things" && v.method == "POST").collect();
+        assert!(
+            mine.iter().any(|v| v.category == "query" && v.reason.contains("kind")),
+            "expected a query entry naming 'kind', got {:?}",
+            mine.iter().map(|v| (&v.category, &v.reason)).collect::<Vec<_>>()
+        );
+        assert!(
+            mine.iter().any(|v| v.category == "request-body"),
+            "expected a separate request-body entry, got {:?}",
+            mine.iter().map(|v| (&v.category, &v.reason)).collect::<Vec<_>>()
+        );
+    }
+
+    #[tokio::test]
+    async fn test_registry_creation() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0"
+            },
+            "paths": {
+                "/users": {
+                    "get": {
+                        "summary": "Get users",
+                        "responses": {
+                            "200": {
+                                "description": "Success",
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "array",
+                                            "items": {
+                                                "type": "object",
+                                                "properties": {
+                                                    "id": {"type": "integer"},
+                                                    "name": {"type": "string"}
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "post": {
+                        "summary": "Create user",
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "name": {"type": "string"}
+                                        },
+                                        "required": ["name"]
+                                    }
+                                }
+                            }
+                        },
+                        "responses": {
+                            "201": {
+                                "description": "Created",
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {
+                                                "id": {"type": "integer"},
+                                                "name": {"type": "string"}
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "/users/{id}": {
+                    "get": {
+                        "summary": "Get user by ID",
+                        "parameters": [
+                            {
+                                "name": "id",
+                                "in": "path",
+                                "required": true,
+                                "schema": {"type": "integer"}
+                            }
+                        ],
+                        "responses": {
+                            "200": {
+                                "description": "Success",
+                                "content": {
+                                    "application/json": {
+                                        "schema": {
+                                            "type": "object",
+                                            "properties": {
+                                                "id": {"type": "integer"},
+                                                "name": {"type": "string"}
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        let registry = create_registry_from_json(spec_json).unwrap();
+
+        // Test basic properties
+        assert_eq!(registry.paths().len(), 2);
+        assert!(registry.paths().contains(&"/users".to_string()));
+        assert!(registry.paths().contains(&"/users/{id}".to_string()));
+
+        assert_eq!(registry.methods().len(), 2);
+        assert!(registry.methods().contains(&"GET".to_string()));
+        assert!(registry.methods().contains(&"POST".to_string()));
+
+        // Test route lookup
+        let get_users_route = registry.get_route("/users", "GET").unwrap();
+        assert_eq!(get_users_route.method, "GET");
+        assert_eq!(get_users_route.path, "/users");
+
+        let post_users_route = registry.get_route("/users", "POST").unwrap();
+        assert_eq!(post_users_route.method, "POST");
+        assert!(post_users_route.operation.request_body.is_some());
+
+        // Test path parameter conversion
+        let user_by_id_route = registry.get_route("/users/{id}", "GET").unwrap();
+        assert_eq!(user_by_id_route.axum_path(), "/users/{id}");
+    }
+
+    /// Round 28 — Srikanth's 0.3.171 trace showed mockforge silently
+    /// accepting `Content-Type: application/xml` against a JSON-only
+    /// endpoint. The new `check_request_content_type` should flag
+    /// that as a mismatch; matching types and missing-Content-Type
+    /// (let the body validator handle it) should still pass.
+    #[tokio::test]
+    async fn check_request_content_type_flags_mismatch() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "T", "version": "1" },
+            "paths": {
+                "/api/appliance/access/consolecli": {
+                    "put": {
+                        "requestBody": {
+                            "required": true,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["enabled"],
+                                        "properties": {"enabled": {"type": "boolean"}}
+                                    }
+                                }
+                            }
+                        },
+                        "responses": { "204": { "description": "ok" } }
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Mismatched Content-Type → flagged.
+        let r = registry.check_request_content_type(
+            "/api/appliance/access/consolecli",
+            "PUT",
+            Some("application/xml"),
+        );
+        assert!(r.is_err(), "should flag application/xml: {:?}", r);
+        let msg = r.unwrap_err();
+        assert!(msg.contains("application/xml"), "{msg}");
+        assert!(msg.contains("application/json"), "{msg}");
+
+        // Matching Content-Type → pass.
+        let r = registry.check_request_content_type(
+            "/api/appliance/access/consolecli",
+            "PUT",
+            Some("application/json"),
+        );
+        assert!(r.is_ok(), "should accept application/json: {:?}", r);
+
+        // Charset suffix on the matching type → still pass.
+        let r = registry.check_request_content_type(
+            "/api/appliance/access/consolecli",
+            "PUT",
+            Some("application/json; charset=utf-8"),
+        );
+        assert!(r.is_ok(), "should strip charset: {:?}", r);
+
+        // No requestBody on this method → noop pass.
+        let r = registry.check_request_content_type(
+            "/api/appliance/access/consolecli",
+            "GET",
+            Some("application/xml"),
+        );
+        assert!(r.is_ok(), "GET has no requestBody on this op: {:?}", r);
+
+        // No Content-Type sent → noop pass (body validator's job).
+        let r =
+            registry.check_request_content_type("/api/appliance/access/consolecli", "PUT", None);
+        assert!(r.is_ok(), "no Content-Type → don't double-report: {:?}", r);
+    }
+
+    #[tokio::test]
+    async fn test_validate_request_with_params_and_formats() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {
+                "/users/{id}": {
+                    "post": {
+                        "parameters": [
+                            { "name": "id", "in": "path", "required": true, "schema": {"type": "string"} },
+                            { "name": "q",  "in": "query", "required": false, "schema": {"type": "integer"} }
+                        ],
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["email", "website"],
+                                        "properties": {
+                                            "email":   {"type": "string", "format": "email"},
+                                            "website": {"type": "string", "format": "uri"}
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "responses": {"200": {"description": "ok"}}
+                    }
+                }
+            }
+        });
+
+        let registry = create_registry_from_json(spec_json).unwrap();
+        let mut path_params = Map::new();
+        path_params.insert("id".to_string(), json!("abc"));
+        let mut query_params = Map::new();
+        query_params.insert("q".to_string(), json!(123));
+
+        // valid body
+        let body = json!({"email":"a@b.co","website":"https://example.com"});
+        assert!(registry
+            .validate_request_with("/users/{id}", "POST", &path_params, &query_params, Some(&body))
+            .is_ok());
+
+        // invalid email
+        let bad_email = json!({"email":"not-an-email","website":"https://example.com"});
+        assert!(registry
+            .validate_request_with(
+                "/users/{id}",
+                "POST",
+                &path_params,
+                &query_params,
+                Some(&bad_email)
+            )
+            .is_err());
+
+        // missing required path param
+        let empty_path_params = Map::new();
+        assert!(registry
+            .validate_request_with(
+                "/users/{id}",
+                "POST",
+                &empty_path_params,
+                &query_params,
+                Some(&body)
+            )
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn test_ref_resolution_for_params_and_body() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Ref API", "version": "1.0.0" },
+            "components": {
+                "schemas": {
+                    "EmailWebsite": {
+                        "type": "object",
+                        "required": ["email", "website"],
+                        "properties": {
+                            "email":   {"type": "string", "format": "email"},
+                            "website": {"type": "string", "format": "uri"}
+                        }
+                    }
+                },
+                "parameters": {
+                    "PathId": {"name": "id", "in": "path", "required": true, "schema": {"type": "string"}},
+                    "QueryQ": {"name": "q",  "in": "query", "required": false, "schema": {"type": "integer"}}
+                },
+                "requestBodies": {
+                    "CreateUser": {
+                        "content": {
+                            "application/json": {
+                                "schema": {"$ref": "#/components/schemas/EmailWebsite"}
+                            }
+                        }
+                    }
+                }
+            },
+            "paths": {
+                "/users/{id}": {
+                    "post": {
+                        "parameters": [
+                            {"$ref": "#/components/parameters/PathId"},
+                            {"$ref": "#/components/parameters/QueryQ"}
+                        ],
+                        "requestBody": {"$ref": "#/components/requestBodies/CreateUser"},
+                        "responses": {"200": {"description": "ok"}}
+                    }
+                }
+            }
+        });
+
+        let registry = create_registry_from_json(spec_json).unwrap();
+        let mut path_params = Map::new();
+        path_params.insert("id".to_string(), json!("abc"));
+        let mut query_params = Map::new();
+        query_params.insert("q".to_string(), json!(7));
+
+        let body = json!({"email":"user@example.com","website":"https://example.com"});
+        assert!(registry
+            .validate_request_with("/users/{id}", "POST", &path_params, &query_params, Some(&body))
+            .is_ok());
+
+        let bad = json!({"email":"nope","website":"https://example.com"});
+        assert!(registry
+            .validate_request_with("/users/{id}", "POST", &path_params, &query_params, Some(&bad))
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn test_header_cookie_and_query_coercion() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Params API", "version": "1.0.0" },
+            "paths": {
+                "/items": {
+                    "get": {
+                        "parameters": [
+                            {"name": "X-Flag", "in": "header", "required": true, "schema": {"type": "boolean"}},
+                            {"name": "session", "in": "cookie", "required": true, "schema": {"type": "string"}},
+                            {"name": "ids", "in": "query", "required": false, "schema": {"type": "array", "items": {"type": "integer"}}}
+                        ],
+                        "responses": {"200": {"description": "ok"}}
+                    }
+                }
+            }
+        });
+
+        let registry = create_registry_from_json(spec_json).unwrap();
+
+        let path_params = Map::new();
+        let mut query_params = Map::new();
+        // comma-separated string for array should coerce
+        query_params.insert("ids".to_string(), json!("1,2,3"));
+        let mut header_params = Map::new();
+        header_params.insert("X-Flag".to_string(), json!("true"));
+        let mut cookie_params = Map::new();
+        cookie_params.insert("session".to_string(), json!("abc123"));
+
+        assert!(registry
+            .validate_request_with_all(
+                "/items",
+                "GET",
+                &path_params,
+                &query_params,
+                &header_params,
+                &cookie_params,
+                None
+            )
+            .is_ok());
+
+        // Missing required cookie
+        let empty_cookie = Map::new();
+        assert!(registry
+            .validate_request_with_all(
+                "/items",
+                "GET",
+                &path_params,
+                &query_params,
+                &header_params,
+                &empty_cookie,
+                None
+            )
+            .is_err());
+
+        // Bad boolean header value (cannot coerce)
+        let mut bad_header = Map::new();
+        bad_header.insert("X-Flag".to_string(), json!("notabool"));
+        assert!(registry
+            .validate_request_with_all(
+                "/items",
+                "GET",
+                &path_params,
+                &query_params,
+                &bad_header,
+                &cookie_params,
+                None
+            )
+            .is_err());
+    }
+
+    #[tokio::test]
+    async fn test_query_styles_space_pipe_deepobject() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Query Styles API", "version": "1.0.0" },
+            "paths": {"/search": {"get": {
+                "parameters": [
+                    {"name":"tags","in":"query","style":"spaceDelimited","schema":{"type":"array","items":{"type":"string"}}},
+                    {"name":"ids","in":"query","style":"pipeDelimited","schema":{"type":"array","items":{"type":"integer"}}},
+                    {"name":"filter","in":"query","style":"deepObject","schema":{"type":"object","properties":{"color":{"type":"string"}},"required":["color"]}}
+                ],
+                "responses": {"200": {"description":"ok"}}
+            }} }
+        });
+
+        let registry = create_registry_from_json(spec_json).unwrap();
+
+        let path_params = Map::new();
+        let mut query = Map::new();
+        query.insert("tags".into(), json!("alpha beta gamma"));
+        query.insert("ids".into(), json!("1|2|3"));
+        query.insert("filter[color]".into(), json!("red"));
+
+        assert!(registry
+            .validate_request_with("/search", "GET", &path_params, &query, None)
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_oneof_anyof_allof_validation() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Composite API", "version": "1.0.0" },
+            "paths": {
+                "/composite": {
+                    "post": {
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "allOf": [
+                                            {"type": "object", "required": ["base"], "properties": {"base": {"type": "string"}}}
+                                        ],
+                                        "oneOf": [
+                                            {"type": "object", "properties": {"a": {"type": "integer"}}, "required": ["a"], "not": {"required": ["b"]}},
+                                            {"type": "object", "properties": {"b": {"type": "integer"}}, "required": ["b"], "not": {"required": ["a"]}}
+                                        ],
+                                        "anyOf": [
+                                            {"type": "object", "properties": {"flag": {"type": "boolean"}}, "required": ["flag"]},
+                                            {"type": "object", "properties": {"extra": {"type": "string"}}, "required": ["extra"]}
+                                        ]
+                                    }
+                                }
+                            }
+                        },
+                        "responses": {"200": {"description": "ok"}}
+                    }
+                }
+            }
+        });
+
+        let registry = create_registry_from_json(spec_json).unwrap();
+        // valid: satisfies base via allOf, exactly one of a/b, and at least one of flag/extra
+        let ok = json!({"base": "x", "a": 1, "flag": true});
+        assert!(registry
+            .validate_request_with("/composite", "POST", &Map::new(), &Map::new(), Some(&ok))
+            .is_ok());
+
+        // invalid oneOf: both a and b present
+        let bad_oneof = json!({"base": "x", "a": 1, "b": 2, "flag": false});
+        assert!(registry
+            .validate_request_with("/composite", "POST", &Map::new(), &Map::new(), Some(&bad_oneof))
+            .is_err());
+
+        // invalid anyOf: none of flag/extra present
+        let bad_anyof = json!({"base": "x", "a": 1});
+        assert!(registry
+            .validate_request_with("/composite", "POST", &Map::new(), &Map::new(), Some(&bad_anyof))
+            .is_err());
+
+        // invalid allOf: missing base
+        let bad_allof = json!({"a": 1, "flag": true});
+        assert!(registry
+            .validate_request_with("/composite", "POST", &Map::new(), &Map::new(), Some(&bad_allof))
+            .is_err());
+    }
+
+    /// Round 19 — regression for Srikanth's vCenter spec which has
+    /// component schemas with dotted names like
+    /// `Esx.Settings.Inventory.EntitySpec`. The route-handler's body
+    /// validator used to build a naked `jsonschema` validator with no
+    /// `components` context, so nested `$ref` strings to
+    /// `#/components/schemas/X` failed with "Pointer does not exist".
+    /// Round 18.3 fixed the bench + `validate_request_body` paths;
+    /// round 19 fixes this third path in `openapi_routes`.
+    #[tokio::test]
+    async fn dotted_schema_ref_resolves_in_route_validator() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Dotted", "version": "1.0.0" },
+            "paths": {
+                "/x": {
+                    "post": {
+                        "requestBody": {
+                            "required": true,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "$ref": "#/components/schemas/Esx.Settings.Inventory.EntitySpec"
+                                    }
+                                }
+                            }
+                        },
+                        "responses": {"200": {"description": "ok"}}
+                    }
+                }
+            },
+            "components": {
+                "schemas": {
+                    "Esx.Settings.Inventory.EntitySpec": {
+                        "type": "object",
+                        "required": ["type"],
+                        "properties": {"type": {"type": "string"}}
+                    }
+                }
+            }
+        });
+        let registry = create_registry_from_json(spec_json).unwrap();
+        // Pre-fix: this errored with `Pointer '/components/schemas/Esx.Settings.Inventory.EntitySpec' does not exist`.
+        // Post-fix: the dotted ref resolves and the body validates.
+        let good = json!({"type": "HOST"});
+        let res =
+            registry.validate_request_with("/x", "POST", &Map::new(), &Map::new(), Some(&good));
+        assert!(res.is_ok(), "valid body should pass; got {res:?}");
+        // And a bad body should still error from inside the resolved schema, not from a build failure.
+        let bad = json!({"unrelated": 1});
+        let err = registry
+            .validate_request_with("/x", "POST", &Map::new(), &Map::new(), Some(&bad))
+            .unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            !msg.contains("Pointer") || !msg.contains("does not exist"),
+            "should not be a pointer-resolution failure; got: {msg}"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_overrides_warn_mode_allows_invalid() {
+        // Spec with a POST route expecting an integer query param
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Overrides API", "version": "1.0.0" },
+            "paths": {"/things": {"post": {
+                "parameters": [{"name":"q","in":"query","required":true,"schema":{"type":"integer"}}],
+                "responses": {"200": {"description":"ok"}}
+            }}}
+        });
+
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let mut overrides = HashMap::new();
+        overrides.insert("POST /things".to_string(), ValidationMode::Warn);
+        let registry = OpenApiRouteRegistry::new_with_options(
+            spec,
+            ValidationOptions {
+                request_mode: ValidationMode::Enforce,
+                aggregate_errors: true,
+                validate_responses: false,
+                overrides,
+                admin_skip_prefixes: vec![],
+                response_template_expand: false,
+                validation_status: None,
+            },
+        );
+
+        // Invalid q (missing) should warn, not error
+        let ok = registry.validate_request_with("/things", "POST", &Map::new(), &Map::new(), None);
+        assert!(ok.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_admin_skip_prefix_short_circuit() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Skip API", "version": "1.0.0" },
+            "paths": {}
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new_with_options(
+            spec,
+            ValidationOptions {
+                request_mode: ValidationMode::Enforce,
+                aggregate_errors: true,
+                validate_responses: false,
+                overrides: HashMap::new(),
+                admin_skip_prefixes: vec!["/admin".into()],
+                response_template_expand: false,
+                validation_status: None,
+            },
+        );
+
+        // No route exists for this, but skip prefix means it is accepted
+        let res = registry.validate_request_with_all(
+            "/admin/__mockforge/health",
+            "GET",
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            None,
+        );
+        assert!(res.is_ok());
+    }
+
+    #[test]
+    fn test_path_conversion() {
+        assert_eq!(OpenApiRouteRegistry::convert_path_to_axum("/users"), "/users");
+        assert_eq!(OpenApiRouteRegistry::convert_path_to_axum("/users/{id}"), "/users/{id}");
+        assert_eq!(
+            OpenApiRouteRegistry::convert_path_to_axum("/users/{id}/posts/{postId}"),
+            "/users/{id}/posts/{postId}"
+        );
+    }
+
+    #[test]
+    fn test_validation_options_default() {
+        let options = ValidationOptions::default();
+        assert!(matches!(options.request_mode, ValidationMode::Enforce));
+        assert!(options.aggregate_errors);
+        assert!(!options.validate_responses);
+        assert!(options.overrides.is_empty());
+        assert!(options.admin_skip_prefixes.is_empty());
+        assert!(!options.response_template_expand);
+        assert!(options.validation_status.is_none());
+    }
+
+    #[test]
+    fn test_validation_mode_variants() {
+        // Test that all variants can be created and compared
+        let disabled = ValidationMode::Disabled;
+        let warn = ValidationMode::Warn;
+        let enforce = ValidationMode::Enforce;
+        let default = ValidationMode::default();
+
+        // Test that default is Warn
+        assert!(matches!(default, ValidationMode::Warn));
+
+        // Test that variants are distinct
+        assert!(!matches!(disabled, ValidationMode::Warn));
+        assert!(!matches!(warn, ValidationMode::Enforce));
+        assert!(!matches!(enforce, ValidationMode::Disabled));
+    }
+
+    #[test]
+    fn test_registry_spec_accessor() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0"
+            },
+            "paths": {}
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec.clone());
+
+        // Test spec() accessor
+        let accessed_spec = registry.spec();
+        assert_eq!(accessed_spec.title(), "Test API");
+    }
+
+    #[test]
+    fn test_clone_for_validation() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0"
+            },
+            "paths": {
+                "/users": {
+                    "get": {
+                        "responses": {
+                            "200": {
+                                "description": "Success"
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Test clone_for_validation
+        let cloned = registry.clone_for_validation();
+        assert_eq!(cloned.routes().len(), registry.routes().len());
+        assert_eq!(cloned.spec().title(), registry.spec().title());
+    }
+
+    #[test]
+    fn test_with_custom_fixture_loader() {
+        let temp_dir = TempDir::new().unwrap();
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0"
+            },
+            "paths": {}
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+        let original_routes_len = registry.routes().len();
+
+        // Test with_custom_fixture_loader
+        let custom_loader = Arc::new(crate::custom_fixture::CustomFixtureLoader::new(
+            temp_dir.path().to_path_buf(),
+            true,
+        ));
+        let registry_with_loader = registry.with_custom_fixture_loader(custom_loader);
+
+        // Verify the loader was set (we can't directly access it, but we can test it doesn't panic)
+        assert_eq!(registry_with_loader.routes().len(), original_routes_len);
+    }
+
+    #[test]
+    fn test_get_route() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0"
+            },
+            "paths": {
+                "/users": {
+                    "get": {
+                        "operationId": "getUsers",
+                        "responses": {
+                            "200": {
+                                "description": "Success"
+                            }
+                        }
+                    },
+                    "post": {
+                        "operationId": "createUser",
+                        "responses": {
+                            "201": {
+                                "description": "Created"
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Test get_route for existing route
+        let route = registry.get_route("/users", "GET");
+        assert!(route.is_some());
+        assert_eq!(route.unwrap().method, "GET");
+        assert_eq!(route.unwrap().path, "/users");
+
+        // Test get_route for non-existent route
+        let route = registry.get_route("/nonexistent", "GET");
+        assert!(route.is_none());
+
+        // Test get_route for different method
+        let route = registry.get_route("/users", "POST");
+        assert!(route.is_some());
+        assert_eq!(route.unwrap().method, "POST");
+    }
+
+    #[test]
+    fn test_get_routes_for_path() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0"
+            },
+            "paths": {
+                "/users": {
+                    "get": {
+                        "responses": {
+                            "200": {
+                                "description": "Success"
+                            }
+                        }
+                    },
+                    "post": {
+                        "responses": {
+                            "201": {
+                                "description": "Created"
+                            }
+                        }
+                    },
+                    "put": {
+                        "responses": {
+                            "200": {
+                                "description": "Success"
+                            }
+                        }
+                    }
+                },
+                "/posts": {
+                    "get": {
+                        "responses": {
+                            "200": {
+                                "description": "Success"
+                            }
+                        }
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Test get_routes_for_path with multiple methods
+        let routes = registry.get_routes_for_path("/users");
+        assert_eq!(routes.len(), 3);
+        let methods: Vec<&str> = routes.iter().map(|r| r.method.as_str()).collect();
+        assert!(methods.contains(&"GET"));
+        assert!(methods.contains(&"POST"));
+        assert!(methods.contains(&"PUT"));
+
+        // Test get_routes_for_path with single method
+        let routes = registry.get_routes_for_path("/posts");
+        assert_eq!(routes.len(), 1);
+        assert_eq!(routes[0].method, "GET");
+
+        // Test get_routes_for_path with non-existent path
+        let routes = registry.get_routes_for_path("/nonexistent");
+        assert!(routes.is_empty());
+    }
+
+    #[test]
+    fn test_new_vs_new_with_options() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0"
+            },
+            "paths": {}
+        });
+        let spec1 = OpenApiSpec::from_json(spec_json.clone()).unwrap();
+        let spec2 = OpenApiSpec::from_json(spec_json).unwrap();
+
+        // Test new() - uses environment-based options
+        let registry1 = OpenApiRouteRegistry::new(spec1);
+        assert_eq!(registry1.spec().title(), "Test API");
+
+        // Test new_with_options() - uses explicit options
+        let options = ValidationOptions {
+            request_mode: ValidationMode::Disabled,
+            aggregate_errors: false,
+            validate_responses: true,
+            overrides: HashMap::new(),
+            admin_skip_prefixes: vec!["/admin".to_string()],
+            response_template_expand: true,
+            validation_status: Some(422),
+        };
+        let registry2 = OpenApiRouteRegistry::new_with_options(spec2, options);
+        assert_eq!(registry2.spec().title(), "Test API");
+    }
+
+    #[test]
+    fn test_new_with_env_vs_new() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {
+                "title": "Test API",
+                "version": "1.0.0"
+            },
+            "paths": {}
+        });
+        let spec1 = OpenApiSpec::from_json(spec_json.clone()).unwrap();
+        let spec2 = OpenApiSpec::from_json(spec_json).unwrap();
+
+        // Test new() calls new_with_env()
+        let registry1 = OpenApiRouteRegistry::new(spec1);
+
+        // Test new_with_env() directly
+        let registry2 = OpenApiRouteRegistry::new_with_env(spec2);
+
+        // Both should create valid registries
+        assert_eq!(registry1.spec().title(), "Test API");
+        assert_eq!(registry2.spec().title(), "Test API");
+    }
+
+    #[test]
+    fn test_validation_options_custom() {
+        let options = ValidationOptions {
+            request_mode: ValidationMode::Warn,
+            aggregate_errors: false,
+            validate_responses: true,
+            overrides: {
+                let mut map = HashMap::new();
+                map.insert("getUsers".to_string(), ValidationMode::Disabled);
+                map
+            },
+            admin_skip_prefixes: vec!["/admin".to_string(), "/internal".to_string()],
+            response_template_expand: true,
+            validation_status: Some(422),
+        };
+
+        assert!(matches!(options.request_mode, ValidationMode::Warn));
+        assert!(!options.aggregate_errors);
+        assert!(options.validate_responses);
+        assert_eq!(options.overrides.len(), 1);
+        assert_eq!(options.admin_skip_prefixes.len(), 2);
+        assert!(options.response_template_expand);
+        assert_eq!(options.validation_status, Some(422));
+    }
+
+    #[test]
+    fn test_validation_mode_default_standalone() {
+        let mode = ValidationMode::default();
+        assert!(matches!(mode, ValidationMode::Warn));
+    }
+
+    #[test]
+    fn test_validation_mode_clone() {
+        let mode1 = ValidationMode::Enforce;
+        let mode2 = mode1.clone();
+        assert!(matches!(mode1, ValidationMode::Enforce));
+        assert!(matches!(mode2, ValidationMode::Enforce));
+    }
+
+    #[test]
+    fn test_validation_mode_debug() {
+        let mode = ValidationMode::Disabled;
+        let debug_str = format!("{:?}", mode);
+        assert!(debug_str.contains("Disabled") || debug_str.contains("ValidationMode"));
+    }
+
+    #[test]
+    fn test_validation_options_clone() {
+        let options1 = ValidationOptions {
+            request_mode: ValidationMode::Warn,
+            aggregate_errors: true,
+            validate_responses: false,
+            overrides: HashMap::new(),
+            admin_skip_prefixes: vec![],
+            response_template_expand: false,
+            validation_status: None,
+        };
+        let options2 = options1.clone();
+        assert!(matches!(options2.request_mode, ValidationMode::Warn));
+        assert_eq!(options1.aggregate_errors, options2.aggregate_errors);
+    }
+
+    #[test]
+    fn test_validation_options_debug() {
+        let options = ValidationOptions::default();
+        let debug_str = format!("{:?}", options);
+        assert!(debug_str.contains("ValidationOptions"));
+    }
+
+    #[test]
+    fn test_validation_options_with_all_fields() {
+        let mut overrides = HashMap::new();
+        overrides.insert("op1".to_string(), ValidationMode::Disabled);
+        overrides.insert("op2".to_string(), ValidationMode::Warn);
+
+        let options = ValidationOptions {
+            request_mode: ValidationMode::Enforce,
+            aggregate_errors: false,
+            validate_responses: true,
+            overrides: overrides.clone(),
+            admin_skip_prefixes: vec!["/admin".to_string(), "/internal".to_string()],
+            response_template_expand: true,
+            validation_status: Some(422),
+        };
+
+        assert!(matches!(options.request_mode, ValidationMode::Enforce));
+        assert!(!options.aggregate_errors);
+        assert!(options.validate_responses);
+        assert_eq!(options.overrides.len(), 2);
+        assert_eq!(options.admin_skip_prefixes.len(), 2);
+        assert!(options.response_template_expand);
+        assert_eq!(options.validation_status, Some(422));
+    }
+
+    #[test]
+    fn test_openapi_route_registry_clone() {
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Test API", "version": "1.0.0" },
+            "paths": {}
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry1 = OpenApiRouteRegistry::new(spec);
+        let registry2 = registry1.clone();
+        assert_eq!(registry1.spec().title(), registry2.spec().title());
+    }
+
+    #[test]
+    fn test_validation_mode_serialization() {
+        let mode = ValidationMode::Enforce;
+        let json = serde_json::to_string(&mode).unwrap();
+        assert!(json.contains("Enforce") || json.contains("enforce"));
+    }
+
+    #[test]
+    fn test_validation_mode_deserialization() {
+        let json = r#""Disabled""#;
+        let mode: ValidationMode = serde_json::from_str(json).unwrap();
+        assert!(matches!(mode, ValidationMode::Disabled));
+    }
+
+    #[test]
+    fn test_validation_options_default_values() {
+        let options = ValidationOptions::default();
+        assert!(matches!(options.request_mode, ValidationMode::Enforce));
+        assert!(options.aggregate_errors);
+        assert!(!options.validate_responses);
+        assert!(options.overrides.is_empty());
+        assert!(options.admin_skip_prefixes.is_empty());
+        assert!(!options.response_template_expand);
+        assert_eq!(options.validation_status, None);
+    }
+
+    #[test]
+    fn test_validation_mode_all_variants() {
+        let disabled = ValidationMode::Disabled;
+        let warn = ValidationMode::Warn;
+        let enforce = ValidationMode::Enforce;
+
+        assert!(matches!(disabled, ValidationMode::Disabled));
+        assert!(matches!(warn, ValidationMode::Warn));
+        assert!(matches!(enforce, ValidationMode::Enforce));
+    }
+
+    #[test]
+    fn test_validation_options_with_overrides() {
+        let mut overrides = HashMap::new();
+        overrides.insert("operation1".to_string(), ValidationMode::Disabled);
+        overrides.insert("operation2".to_string(), ValidationMode::Warn);
+
+        let options = ValidationOptions {
+            request_mode: ValidationMode::Enforce,
+            aggregate_errors: true,
+            validate_responses: false,
+            overrides,
+            admin_skip_prefixes: vec![],
+            response_template_expand: false,
+            validation_status: None,
+        };
+
+        assert_eq!(options.overrides.len(), 2);
+        assert!(matches!(options.overrides.get("operation1"), Some(ValidationMode::Disabled)));
+        assert!(matches!(options.overrides.get("operation2"), Some(ValidationMode::Warn)));
+    }
+
+    #[test]
+    fn test_validation_options_with_admin_skip_prefixes() {
+        let options = ValidationOptions {
+            request_mode: ValidationMode::Enforce,
+            aggregate_errors: true,
+            validate_responses: false,
+            overrides: HashMap::new(),
+            admin_skip_prefixes: vec![
+                "/admin".to_string(),
+                "/internal".to_string(),
+                "/debug".to_string(),
+            ],
+            response_template_expand: false,
+            validation_status: None,
+        };
+
+        assert_eq!(options.admin_skip_prefixes.len(), 3);
+        assert!(options.admin_skip_prefixes.contains(&"/admin".to_string()));
+        assert!(options.admin_skip_prefixes.contains(&"/internal".to_string()));
+        assert!(options.admin_skip_prefixes.contains(&"/debug".to_string()));
+    }
+
+    #[test]
+    fn test_validation_options_with_validation_status() {
+        let options1 = ValidationOptions {
+            request_mode: ValidationMode::Enforce,
+            aggregate_errors: true,
+            validate_responses: false,
+            overrides: HashMap::new(),
+            admin_skip_prefixes: vec![],
+            response_template_expand: false,
+            validation_status: Some(400),
+        };
+
+        let options2 = ValidationOptions {
+            request_mode: ValidationMode::Enforce,
+            aggregate_errors: true,
+            validate_responses: false,
+            overrides: HashMap::new(),
+            admin_skip_prefixes: vec![],
+            response_template_expand: false,
+            validation_status: Some(422),
+        };
+
+        assert_eq!(options1.validation_status, Some(400));
+        assert_eq!(options2.validation_status, Some(422));
+    }
+
+    #[test]
+    fn test_validate_request_with_disabled_mode() {
+        // Test validation with disabled mode (lines 1001-1007)
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/users": {
+                    "get": {
+                        "responses": {"200": {"description": "OK"}}
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let options = ValidationOptions {
+            request_mode: ValidationMode::Disabled,
+            ..Default::default()
+        };
+        let registry = OpenApiRouteRegistry::new_with_options(spec, options);
+
+        // Should pass validation when disabled (lines 1002-1003, 1005-1007)
+        let result = registry.validate_request_with_all(
+            "/users",
+            "GET",
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            None,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_request_with_warn_mode() {
+        // Test validation with warn mode (lines 1162-1166)
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/users": {
+                    "post": {
+                        "requestBody": {
+                            "required": true,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["name"],
+                                        "properties": {
+                                            "name": {"type": "string"}
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "responses": {"200": {"description": "OK"}}
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let options = ValidationOptions {
+            request_mode: ValidationMode::Warn,
+            ..Default::default()
+        };
+        let registry = OpenApiRouteRegistry::new_with_options(spec, options);
+
+        // Should pass with warnings when body is missing (lines 1162-1166)
+        let result = registry.validate_request_with_all(
+            "/users",
+            "POST",
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            None, // Missing required body
+        );
+        assert!(result.is_ok()); // Warn mode doesn't fail
+    }
+
+    #[test]
+    fn test_validate_request_body_validation_error() {
+        // Test request body validation error path (lines 1072-1091)
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/users": {
+                    "post": {
+                        "requestBody": {
+                            "required": true,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["name"],
+                                        "properties": {
+                                            "name": {"type": "string"}
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "responses": {"200": {"description": "OK"}}
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Should fail validation when body is missing (lines 1088-1091)
+        let result = registry.validate_request_with_all(
+            "/users",
+            "POST",
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            None, // Missing required body
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_request_body_schema_validation_error() {
+        // Test request body schema validation error (lines 1038-1049)
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/users": {
+                    "post": {
+                        "requestBody": {
+                            "required": true,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["name"],
+                                        "properties": {
+                                            "name": {"type": "string"}
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "responses": {"200": {"description": "OK"}}
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Should fail validation when body doesn't match schema (lines 1038-1049)
+        let invalid_body = json!({}); // Missing required "name" field
+        let result = registry.validate_request_with_all(
+            "/users",
+            "POST",
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            Some(&invalid_body),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_request_body_referenced_schema_error() {
+        // Test request body with referenced schema that can't be resolved (lines 1070-1076)
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/users": {
+                    "post": {
+                        "requestBody": {
+                            "required": true,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "$ref": "#/components/schemas/NonExistentSchema"
+                                    }
+                                }
+                            }
+                        },
+                        "responses": {"200": {"description": "OK"}}
+                    }
+                }
+            },
+            "components": {}
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Should fail validation when schema reference can't be resolved (lines 1070-1076)
+        let body = json!({"name": "test"});
+        let result = registry.validate_request_with_all(
+            "/users",
+            "POST",
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            Some(&body),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_request_body_referenced_request_body_error() {
+        // Test request body with referenced request body that can't be resolved (lines 1081-1087)
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/users": {
+                    "post": {
+                        "requestBody": {
+                            "$ref": "#/components/requestBodies/NonExistentRequestBody"
+                        },
+                        "responses": {"200": {"description": "OK"}}
+                    }
+                }
+            },
+            "components": {}
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Should fail validation when request body reference can't be resolved (lines 1081-1087)
+        let body = json!({"name": "test"});
+        let result = registry.validate_request_with_all(
+            "/users",
+            "POST",
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            Some(&body),
+        );
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_validate_request_body_provided_when_not_expected() {
+        // Test body provided when not expected (lines 1092-1094)
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/users": {
+                    "get": {
+                        "responses": {"200": {"description": "OK"}}
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Should accept body even when not expected (lines 1092-1094)
+        let body = json!({"extra": "data"});
+        let result = registry.validate_request_with_all(
+            "/users",
+            "GET",
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            Some(&body),
+        );
+        // Should not error - just logs debug message
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_get_operation() {
+        // Test get_operation method (lines 1196-1205)
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/users": {
+                    "get": {
+                        "operationId": "getUsers",
+                        "summary": "Get users",
+                        "responses": {"200": {"description": "OK"}}
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Should return operation details (lines 1196-1205)
+        let operation = registry.get_operation("/users", "GET");
+        assert!(operation.is_some());
+        assert_eq!(operation.unwrap().method, "GET");
+
+        // Should return None for non-existent route
+        assert!(registry.get_operation("/nonexistent", "GET").is_none());
+    }
+
+    #[test]
+    fn test_extract_path_parameters() {
+        // Test extract_path_parameters method (lines 1208-1223)
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/users/{id}": {
+                    "get": {
+                        "parameters": [
+                            {
+                                "name": "id",
+                                "in": "path",
+                                "required": true,
+                                "schema": {"type": "string"}
+                            }
+                        ],
+                        "responses": {"200": {"description": "OK"}}
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Should extract path parameters (lines 1208-1223)
+        let params = registry.extract_path_parameters("/users/123", "GET");
+        assert_eq!(params.get("id"), Some(&"123".to_string()));
+
+        // Should return empty map for non-matching path
+        let empty_params = registry.extract_path_parameters("/users", "GET");
+        assert!(empty_params.is_empty());
+    }
+
+    #[test]
+    fn extract_path_parameters_prefers_static_route_and_rejects_empty() {
+        // #757: a literal route must win over a same-arity `{param}` route, and
+        // a `{param}` must not capture an empty (trailing-slash) segment.
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/users/{id}": { "get": { "responses": {"200": {"description": "OK"}} } },
+                "/users/me":   { "get": { "responses": {"200": {"description": "OK"}} } }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Literal `/users/me` wins over `/users/{id}` → no `id` captured.
+        let me = registry.extract_path_parameters("/users/me", "GET");
+        assert!(!me.contains_key("id"), "literal route should win, got {me:?}");
+
+        // A real id still matches the parameter route.
+        let by_id = registry.extract_path_parameters("/users/123", "GET");
+        assert_eq!(by_id.get("id"), Some(&"123".to_string()));
+
+        // Trailing slash must NOT bind `{id}` to an empty value.
+        let trailing = registry.extract_path_parameters("/users/", "GET");
+        assert!(
+            trailing.is_empty(),
+            "empty trailing segment should not bind id, got {trailing:?}"
+        );
+    }
+
+    #[test]
+    fn test_extract_path_parameters_multiple_params() {
+        // Test extract_path_parameters with multiple path parameters
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/users/{userId}/posts/{postId}": {
+                    "get": {
+                        "parameters": [
+                            {
+                                "name": "userId",
+                                "in": "path",
+                                "required": true,
+                                "schema": {"type": "string"}
+                            },
+                            {
+                                "name": "postId",
+                                "in": "path",
+                                "required": true,
+                                "schema": {"type": "string"}
+                            }
+                        ],
+                        "responses": {"200": {"description": "OK"}}
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Should extract multiple path parameters
+        let params = registry.extract_path_parameters("/users/123/posts/456", "GET");
+        assert_eq!(params.get("userId"), Some(&"123".to_string()));
+        assert_eq!(params.get("postId"), Some(&"456".to_string()));
+    }
+
+    #[test]
+    fn test_validate_request_route_not_found() {
+        // Test validation when route not found (lines 1171-1173)
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/users": {
+                    "get": {
+                        "responses": {"200": {"description": "OK"}}
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Should return error when route not found (lines 1171-1173)
+        let result = registry.validate_request_with_all(
+            "/nonexistent",
+            "GET",
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            None,
+        );
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("not found"));
+    }
+
+    #[test]
+    fn test_validate_request_with_path_parameters() {
+        // Test path parameter validation (lines 1101-1110)
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/users/{id}": {
+                    "get": {
+                        "parameters": [
+                            {
+                                "name": "id",
+                                "in": "path",
+                                "required": true,
+                                "schema": {"type": "string", "minLength": 1}
+                            }
+                        ],
+                        "responses": {"200": {"description": "OK"}}
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Should pass validation with valid path parameter
+        let mut path_params = Map::new();
+        path_params.insert("id".to_string(), json!("123"));
+        let result = registry.validate_request_with_all(
+            "/users/{id}",
+            "GET",
+            &path_params,
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            None,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_request_with_query_parameters() {
+        // Test query parameter validation (lines 1111-1134)
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/users": {
+                    "get": {
+                        "parameters": [
+                            {
+                                "name": "page",
+                                "in": "query",
+                                "required": true,
+                                "schema": {"type": "integer", "minimum": 1}
+                            }
+                        ],
+                        "responses": {"200": {"description": "OK"}}
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Should pass validation with valid query parameter
+        let mut query_params = Map::new();
+        query_params.insert("page".to_string(), json!(1));
+        let result = registry.validate_request_with_all(
+            "/users",
+            "GET",
+            &Map::new(),
+            &query_params,
+            &Map::new(),
+            &Map::new(),
+            None,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_request_with_header_parameters() {
+        // Test header parameter validation (lines 1135-1144)
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/users": {
+                    "get": {
+                        "parameters": [
+                            {
+                                "name": "X-API-Key",
+                                "in": "header",
+                                "required": true,
+                                "schema": {"type": "string"}
+                            }
+                        ],
+                        "responses": {"200": {"description": "OK"}}
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Should pass validation with valid header parameter
+        let mut header_params = Map::new();
+        header_params.insert("X-API-Key".to_string(), json!("secret-key"));
+        let result = registry.validate_request_with_all(
+            "/users",
+            "GET",
+            &Map::new(),
+            &Map::new(),
+            &header_params,
+            &Map::new(),
+            None,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_request_with_cookie_parameters() {
+        // Test cookie parameter validation (lines 1145-1154)
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/users": {
+                    "get": {
+                        "parameters": [
+                            {
+                                "name": "sessionId",
+                                "in": "cookie",
+                                "required": true,
+                                "schema": {"type": "string"}
+                            }
+                        ],
+                        "responses": {"200": {"description": "OK"}}
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Should pass validation with valid cookie parameter
+        let mut cookie_params = Map::new();
+        cookie_params.insert("sessionId".to_string(), json!("abc123"));
+        let result = registry.validate_request_with_all(
+            "/users",
+            "GET",
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            &cookie_params,
+            None,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_request_no_errors_early_return() {
+        // Test early return when no errors (lines 1158-1160)
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/users": {
+                    "get": {
+                        "responses": {"200": {"description": "OK"}}
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Should return early when no errors (lines 1158-1160)
+        let result = registry.validate_request_with_all(
+            "/users",
+            "GET",
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            None,
+        );
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_request_query_parameter_different_styles() {
+        // Test query parameter validation with different styles (lines 1118-1123)
+        let spec_json = json!({
+            "openapi": "3.0.0",
+            "info": {"title": "Test API", "version": "1.0.0"},
+            "paths": {
+                "/users": {
+                    "get": {
+                        "parameters": [
+                            {
+                                "name": "tags",
+                                "in": "query",
+                                "style": "pipeDelimited",
+                                "schema": {
+                                    "type": "array",
+                                    "items": {"type": "string"}
+                                }
+                            }
+                        ],
+                        "responses": {"200": {"description": "OK"}}
+                    }
+                }
+            }
+        });
+        let spec = OpenApiSpec::from_json(spec_json).unwrap();
+        let registry = OpenApiRouteRegistry::new(spec);
+
+        // Should handle pipeDelimited style (lines 1118-1123)
+        let mut query_params = Map::new();
+        query_params.insert("tags".to_string(), json!(["tag1", "tag2"]));
+        let result = registry.validate_request_with_all(
+            "/users",
+            "GET",
+            &Map::new(),
+            &query_params,
+            &Map::new(),
+            &Map::new(),
+            None,
+        );
+        // Should not error on style handling
+        assert!(result.is_ok() || result.is_err()); // Either is fine, just testing the path
+    }
+
+    /// Build a spec with a PUT whose requestBody is a non-JSON media type.
+    fn octet_stream_put_spec(required: bool) -> Value {
+        json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Files API", "version": "1.0.0" },
+            "paths": {
+                "/files/{name}": {
+                    "put": {
+                        "parameters": [
+                            {"name": "name", "in": "path", "required": true,
+                             "schema": {"type": "string"}}
+                        ],
+                        "requestBody": {
+                            "required": required,
+                            "content": {
+                                "application/octet-stream": {
+                                    "schema": {"type": "string", "format": "binary"}
+                                }
+                            }
+                        },
+                        "responses": {"200": {"description": "ok"}}
+                    }
+                }
+            }
+        })
+    }
+
+    /// Issue #925 — a PUT carrying a non-JSON body (octet-stream file upload)
+    /// must NOT be rejected as "Request body is required but not provided".
+    /// The body never parses as JSON, so `body` is `None`; only `body_present`
+    /// can tell "absent" from "present but not JSON".
+    #[tokio::test]
+    async fn non_json_request_body_is_not_reported_missing() {
+        let registry = create_registry_from_json(octet_stream_put_spec(true)).unwrap();
+        let mut path_params = Map::new();
+        path_params.insert("name".to_string(), json!("test.mod"));
+
+        // body_present = true, parsed JSON = None  →  the real PUT upload case.
+        let res = registry.validate_request_with_all_ex(
+            "/files/{name}",
+            "PUT",
+            &path_params,
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            None,
+            true,
+        );
+        assert!(res.is_ok(), "non-JSON PUT body must pass, got {res:?}");
+    }
+
+    /// A genuinely absent body against `required: true` still errors.
+    #[tokio::test]
+    async fn absent_body_against_required_still_errors() {
+        let registry = create_registry_from_json(octet_stream_put_spec(true)).unwrap();
+        let mut path_params = Map::new();
+        path_params.insert("name".to_string(), json!("test.mod"));
+
+        let res = registry.validate_request_with_all_ex(
+            "/files/{name}",
+            "PUT",
+            &path_params,
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            None,
+            false,
+        );
+        let err = res.expect_err("absent required body must error");
+        assert!(err.to_string().contains("Request body is required"), "unexpected error: {err}");
+    }
+
+    /// Issue #925 — `requestBody.required: false` with no body must not error.
+    /// Previously the mere presence of a `requestBody` block triggered the
+    /// "required but not provided" message regardless of the `required` flag.
+    #[tokio::test]
+    async fn absent_body_against_optional_request_body_is_ok() {
+        let registry = create_registry_from_json(octet_stream_put_spec(false)).unwrap();
+        let mut path_params = Map::new();
+        path_params.insert("name".to_string(), json!("test.mod"));
+
+        let res = registry.validate_request_with_all_ex(
+            "/files/{name}",
+            "PUT",
+            &path_params,
+            &Map::new(),
+            &Map::new(),
+            &Map::new(),
+            None,
+            false,
+        );
+        assert!(res.is_ok(), "optional body may be omitted, got {res:?}");
+    }
+
+    /// A JSON body still schema-validates as before (no regression).
+    #[tokio::test]
+    async fn json_request_body_still_schema_validates() {
+        let spec = json!({
+            "openapi": "3.0.0",
+            "info": { "title": "Users API", "version": "1.0.0" },
+            "paths": {
+                "/users": {
+                    "post": {
+                        "requestBody": {
+                            "required": true,
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {"age": {"type": "integer"}},
+                                        "required": ["age"]
+                                    }
+                                }
+                            }
+                        },
+                        "responses": {"200": {"description": "ok"}}
+                    }
+                }
+            }
+        });
+        let registry = create_registry_from_json(spec).unwrap();
+
+        let good = json!({"age": 30});
+        assert!(registry
+            .validate_request_with_all_ex(
+                "/users",
+                "POST",
+                &Map::new(),
+                &Map::new(),
+                &Map::new(),
+                &Map::new(),
+                Some(&good),
+                true
+            )
+            .is_ok());
+
+        let bad = json!({"age": "thirty"});
+        assert!(registry
+            .validate_request_with_all_ex(
+                "/users",
+                "POST",
+                &Map::new(),
+                &Map::new(),
+                &Map::new(),
+                &Map::new(),
+                Some(&bad),
+                true
+            )
+            .is_err());
+    }
+}

@@ -1,1 +1,4382 @@
+use clap::{Args, CommandFactory, Parser, Subcommand};
+use clap_complete::{generate, Shell};
+use std::net::SocketAddr;
+use std::path::PathBuf;
+use tokio::net::TcpListener;
 
+mod ai_commands;
+#[cfg(feature = "amqp")]
+mod amqp_commands;
+mod backend_generator;
+mod blueprint_commands;
+mod chaos_commands;
+mod client_generator;
+#[allow(dead_code)]
+mod cloud_commands;
+mod config_commands;
+#[allow(dead_code)]
+mod contract_diff_commands;
+
+#[allow(dead_code)]
+mod contract_sync_commands;
+mod data_commands;
+mod deploy_commands;
+#[allow(dead_code, unexpected_cfgs)]
+mod dev_setup_commands;
+mod fixture_validation;
+mod flow_commands;
+#[cfg(feature = "ftp")]
+mod ftp_commands;
+mod generate_commands;
+mod git_watch_commands;
+#[allow(dead_code)]
+mod governance_commands;
+mod import_commands;
+mod insomnia_import;
+#[cfg(feature = "kafka")]
+mod kafka_commands;
+#[allow(dead_code)]
+mod logs_commands;
+mod mcp_server;
+mod mockai_commands;
+mod mod_commands;
+#[cfg(feature = "mqtt")]
+mod mqtt_commands;
+mod orchestrate_commands;
+mod plugin_commands;
+#[allow(dead_code)]
+mod progress;
+#[cfg(feature = "recorder")]
+#[allow(dead_code)]
+mod recorder_commands;
+#[cfg(feature = "scenarios")]
+mod scenario_commands;
+mod schema;
+mod serve;
+#[cfg(feature = "smtp")]
+#[allow(dead_code)]
+mod smtp_commands;
+mod snapshot_commands;
+#[allow(dead_code)]
+mod template_commands;
+#[allow(dead_code)]
+mod time_commands;
+#[cfg(feature = "tunnel")]
+mod tunnel_commands;
+#[cfg(feature = "vbr")]
+mod vbr_commands;
+#[cfg(feature = "recorder")]
+mod verify_mocks_commands;
+#[allow(dead_code)]
+mod voice_commands;
+#[allow(dead_code)]
+mod wizard;
+mod workspace_commands;
+
+#[cfg(test)]
+mod tests;
+
+#[derive(Parser)]
+#[command(name = "mockforge")]
+#[command(about = "MockForge - Comprehensive API Mocking Framework")]
+#[command(version = env!("CARGO_PKG_VERSION"))]
+struct Cli {
+    /// Set log level (error, warn, info, debug, trace)
+    #[arg(short = 'v', long, global = true, default_value = "info")]
+    log_level: String,
+
+    #[command(subcommand)]
+    command: Commands,
+}
+
+/// Network port configuration for all supported protocols
+#[derive(Args)]
+struct PortArgs {
+    /// HTTP server port (defaults to config or 3000)
+    #[arg(long, help_heading = "Server Ports")]
+    pub http_port: Option<u16>,
+
+    /// HTTPS server port. When set, runs an additional TLS listener
+    /// alongside `--http-port` (which always serves plain HTTP in this
+    /// mode). Requires `--tls-cert` and `--tls-key`. Lets you serve the
+    /// same routes on, e.g., 80 and 443 simultaneously like nginx.
+    #[arg(long, help_heading = "Server Ports")]
+    pub https_port: Option<u16>,
+
+    /// WebSocket server port (defaults to config or 3001)
+    #[arg(long, help_heading = "Server Ports")]
+    pub ws_port: Option<u16>,
+
+    /// gRPC server port (defaults to config or 50051)
+    #[arg(long, help_heading = "Server Ports")]
+    pub grpc_port: Option<u16>,
+
+    /// SMTP server port (defaults to config or 1025)
+    #[arg(long, help_heading = "Server Ports")]
+    pub smtp_port: Option<u16>,
+
+    /// MQTT server port (defaults to config or 1883)
+    #[arg(long, help_heading = "Server Ports")]
+    pub mqtt_port: Option<u16>,
+
+    /// Kafka broker port (defaults to config or 9092)
+    #[arg(long, help_heading = "Server Ports")]
+    pub kafka_port: Option<u16>,
+
+    /// AMQP broker port (defaults to config or 5672)
+    #[arg(long, help_heading = "Server Ports")]
+    pub amqp_port: Option<u16>,
+
+    /// TCP server port (defaults to config or 9999)
+    #[arg(long, help_heading = "Server Ports")]
+    pub tcp_port: Option<u16>,
+
+    /// GraphQL server port (defaults to config or 4000)
+    #[arg(long, help_heading = "Server Ports")]
+    pub graphql_port: Option<u16>,
+}
+
+/// TLS/HTTPS configuration
+#[derive(Args)]
+struct TlsArgs {
+    /// Enable TLS/HTTPS
+    #[arg(long, help_heading = "TLS/HTTPS")]
+    pub tls_enabled: bool,
+
+    /// Path to TLS certificate file (PEM format)
+    #[arg(long, help_heading = "TLS/HTTPS")]
+    pub tls_cert: Option<PathBuf>,
+
+    /// Path to TLS private key file (PEM format)
+    #[arg(long, help_heading = "TLS/HTTPS")]
+    pub tls_key: Option<PathBuf>,
+
+    /// Path to CA certificate file for mTLS (optional)
+    #[arg(long, help_heading = "TLS/HTTPS")]
+    pub tls_ca: Option<PathBuf>,
+
+    /// Minimum TLS version (1.2 or 1.3, default: 1.2)
+    #[arg(long, default_value = "1.2", help_heading = "TLS/HTTPS")]
+    pub tls_min_version: String,
+
+    /// Mutual TLS mode: off (default), optional, required
+    #[arg(long, default_value = "off", help_heading = "TLS/HTTPS")]
+    pub mtls: String,
+}
+
+/// Observability configuration (metrics + distributed tracing)
+#[derive(Args)]
+struct ObservabilityArgs {
+    /// Enable Prometheus metrics endpoint
+    #[arg(long, help_heading = "Observability & Metrics")]
+    pub metrics: bool,
+
+    /// Metrics server port (defaults to config or 9090)
+    #[arg(long, help_heading = "Observability & Metrics")]
+    pub metrics_port: Option<u16>,
+
+    /// Enable OpenTelemetry distributed tracing
+    #[arg(long, help_heading = "Tracing")]
+    pub tracing: bool,
+
+    /// Service name for traces
+    #[arg(long, default_value = "mockforge", help_heading = "Tracing")]
+    pub tracing_service_name: String,
+
+    /// Tracing environment (development, staging, production)
+    #[arg(long, default_value = "development", help_heading = "Tracing")]
+    pub tracing_environment: String,
+
+    /// Jaeger endpoint for trace export
+    #[arg(
+        long,
+        default_value = "http://localhost:14268/api/traces",
+        help_heading = "Tracing"
+    )]
+    pub jaeger_endpoint: String,
+
+    /// Tracing sampling rate (0.0 to 1.0)
+    #[arg(long, default_value = "1.0", help_heading = "Tracing")]
+    pub tracing_sampling_rate: f64,
+}
+
+/// API Flight Recorder configuration
+#[derive(Args)]
+struct RecorderArgs {
+    /// Enable API Flight Recorder
+    #[arg(long, help_heading = "API Flight Recorder")]
+    pub recorder: bool,
+
+    /// Recorder database file path
+    #[arg(
+        long,
+        default_value = "./mockforge-recordings.db",
+        help_heading = "API Flight Recorder"
+    )]
+    pub recorder_db: String,
+
+    /// Disable recorder management API
+    #[arg(long, help_heading = "API Flight Recorder")]
+    pub recorder_no_api: bool,
+
+    /// Recorder management API port (defaults to main port)
+    #[arg(long, help_heading = "API Flight Recorder")]
+    pub recorder_api_port: Option<u16>,
+
+    /// Maximum number of recorded requests (0 for unlimited)
+    #[arg(long, default_value = "10000", help_heading = "API Flight Recorder")]
+    pub recorder_max_requests: i64,
+
+    /// Auto-delete recordings older than N days (0 to disable)
+    #[arg(long, default_value = "7", help_heading = "API Flight Recorder")]
+    pub recorder_retention_days: i64,
+}
+
+/// Chaos engineering, fault injection, and resilience pattern configuration
+#[derive(Args)]
+struct ChaosArgs {
+    /// Enable chaos engineering (fault injection and reliability testing)
+    #[arg(long, help_heading = "Chaos Engineering")]
+    pub chaos: bool,
+
+    /// Predefined chaos scenario: network_degradation, service_instability, cascading_failure, peak_traffic, slow_backend
+    #[arg(long, help_heading = "Chaos Engineering")]
+    pub chaos_scenario: Option<String>,
+
+    /// Chaos latency: fixed delay in milliseconds
+    #[arg(long, help_heading = "Chaos Engineering")]
+    pub chaos_latency_ms: Option<u64>,
+
+    /// Chaos latency: random delay range (min-max) in milliseconds
+    #[arg(long, help_heading = "Chaos Engineering")]
+    pub chaos_latency_range: Option<String>,
+
+    /// Chaos latency probability (0.0-1.0)
+    #[arg(long, default_value = "1.0", help_heading = "Chaos Engineering")]
+    pub chaos_latency_probability: f64,
+
+    /// Chaos fault injection: HTTP error codes (comma-separated)
+    #[arg(long, help_heading = "Chaos Engineering")]
+    pub chaos_http_errors: Option<String>,
+
+    /// Chaos fault injection: HTTP error probability (0.0-1.0)
+    #[arg(long, default_value = "0.1", help_heading = "Chaos Engineering")]
+    pub chaos_http_error_probability: f64,
+
+    /// Chaos rate limit: requests per second
+    #[arg(long, help_heading = "Chaos Engineering")]
+    pub chaos_rate_limit: Option<u32>,
+
+    /// Chaos: bandwidth limit in bytes/sec (e.g., 10000 = 10KB/s for slow network simulation)
+    #[arg(long, help_heading = "Chaos Engineering")]
+    pub chaos_bandwidth_limit: Option<u64>,
+
+    /// Chaos: packet loss percentage 0-100 (e.g., 5.0 = 5% packet loss)
+    #[arg(long, help_heading = "Chaos Engineering")]
+    pub chaos_packet_loss: Option<f64>,
+
+    /// Enable gRPC-specific chaos engineering
+    #[arg(long, help_heading = "Chaos Engineering - gRPC")]
+    pub chaos_grpc: bool,
+
+    /// gRPC chaos: status codes to inject (comma-separated)
+    #[arg(long, help_heading = "Chaos Engineering - gRPC")]
+    pub chaos_grpc_status_codes: Option<String>,
+
+    /// gRPC chaos: stream interruption probability (0.0-1.0)
+    #[arg(long, default_value = "0.1", help_heading = "Chaos Engineering - gRPC")]
+    pub chaos_grpc_stream_interruption_probability: f64,
+
+    /// Enable WebSocket-specific chaos engineering
+    #[arg(long, help_heading = "Chaos Engineering - WebSocket")]
+    pub chaos_websocket: bool,
+
+    /// WebSocket chaos: close codes to inject (comma-separated)
+    #[arg(long, help_heading = "Chaos Engineering - WebSocket")]
+    pub chaos_websocket_close_codes: Option<String>,
+
+    /// WebSocket chaos: message drop probability (0.0-1.0)
+    #[arg(
+        long,
+        default_value = "0.05",
+        help_heading = "Chaos Engineering - WebSocket"
+    )]
+    pub chaos_websocket_message_drop_probability: f64,
+
+    /// WebSocket chaos: message corruption probability (0.0-1.0)
+    #[arg(
+        long,
+        default_value = "0.05",
+        help_heading = "Chaos Engineering - WebSocket"
+    )]
+    pub chaos_websocket_message_corruption_probability: f64,
+
+    /// Enable GraphQL-specific chaos engineering
+    #[arg(long, help_heading = "Chaos Engineering - GraphQL")]
+    pub chaos_graphql: bool,
+
+    /// GraphQL chaos: error codes to inject (comma-separated)
+    #[arg(long, help_heading = "Chaos Engineering - GraphQL")]
+    pub chaos_graphql_error_codes: Option<String>,
+
+    /// GraphQL chaos: partial data probability (0.0-1.0)
+    #[arg(
+        long,
+        default_value = "0.1",
+        help_heading = "Chaos Engineering - GraphQL"
+    )]
+    pub chaos_graphql_partial_data_probability: f64,
+
+    /// GraphQL chaos: enable resolver-level latency injection
+    #[arg(long, help_heading = "Chaos Engineering - GraphQL")]
+    pub chaos_graphql_resolver_latency: bool,
+
+    /// Enable random chaos mode (randomly injects errors and delays)
+    #[arg(long, help_heading = "Chaos Engineering - Random")]
+    pub chaos_random: bool,
+
+    /// Random chaos: error injection rate (0.0-1.0)
+    #[arg(
+        long,
+        default_value = "0.1",
+        help_heading = "Chaos Engineering - Random"
+    )]
+    pub chaos_random_error_rate: f64,
+
+    /// Random chaos: delay injection rate (0.0-1.0)
+    #[arg(
+        long,
+        default_value = "0.3",
+        help_heading = "Chaos Engineering - Random"
+    )]
+    pub chaos_random_delay_rate: f64,
+
+    /// Random chaos: minimum delay in milliseconds
+    #[arg(
+        long,
+        default_value = "100",
+        help_heading = "Chaos Engineering - Random"
+    )]
+    pub chaos_random_min_delay: u64,
+
+    /// Random chaos: maximum delay in milliseconds
+    #[arg(
+        long,
+        default_value = "2000",
+        help_heading = "Chaos Engineering - Random"
+    )]
+    pub chaos_random_max_delay: u64,
+
+    /// Apply a chaos network profile by name (e.g., slow_3g, flaky_wifi)
+    #[arg(long, help_heading = "Chaos Engineering - Profiles")]
+    pub chaos_profile: Option<String>,
+
+    /// Enable circuit breaker pattern
+    #[arg(long, help_heading = "Resilience Patterns")]
+    pub circuit_breaker: bool,
+
+    /// Circuit breaker: failure threshold
+    #[arg(long, default_value = "5", help_heading = "Resilience Patterns")]
+    pub circuit_breaker_failure_threshold: u64,
+
+    /// Circuit breaker: success threshold
+    #[arg(long, default_value = "2", help_heading = "Resilience Patterns")]
+    pub circuit_breaker_success_threshold: u64,
+
+    /// Circuit breaker: timeout in milliseconds
+    #[arg(long, default_value = "60000", help_heading = "Resilience Patterns")]
+    pub circuit_breaker_timeout_ms: u64,
+
+    /// Circuit breaker: failure rate threshold percentage (0-100)
+    #[arg(long, default_value = "50.0", help_heading = "Resilience Patterns")]
+    pub circuit_breaker_failure_rate: f64,
+
+    /// Enable bulkhead pattern
+    #[arg(long, help_heading = "Resilience Patterns")]
+    pub bulkhead: bool,
+
+    /// Bulkhead: maximum concurrent requests
+    #[arg(long, default_value = "100", help_heading = "Resilience Patterns")]
+    pub bulkhead_max_concurrent: u32,
+
+    /// Bulkhead: maximum queue size
+    #[arg(long, default_value = "10", help_heading = "Resilience Patterns")]
+    pub bulkhead_max_queue: u32,
+
+    /// Bulkhead: queue timeout in milliseconds
+    #[arg(long, default_value = "5000", help_heading = "Resilience Patterns")]
+    pub bulkhead_queue_timeout_ms: u64,
+}
+
+/// Traffic shaping and network simulation configuration
+#[derive(Args)]
+struct TrafficArgs {
+    /// Enable traffic shaping (bandwidth throttling and packet loss simulation)
+    #[arg(long, help_heading = "Traffic Shaping")]
+    pub traffic_shaping: bool,
+
+    /// Maximum bandwidth in bytes per second (e.g., 1000000 = 1MB/s)
+    #[arg(long, default_value = "1000000", help_heading = "Traffic Shaping")]
+    pub bandwidth_limit: u64,
+
+    /// Maximum burst size in bytes (allows temporary bursts above bandwidth limit)
+    #[arg(long, default_value = "10000", help_heading = "Traffic Shaping")]
+    pub burst_size: u64,
+
+    /// Network condition profile (3g, 4g, 5g, satellite_leo, satellite_geo, congested, lossy, high_latency, intermittent, extremely_poor, perfect)
+    #[arg(long, help_heading = "Network Profiles")]
+    pub network_profile: Option<String>,
+
+    /// List all available network profiles with descriptions
+    #[arg(long, help_heading = "Network Profiles")]
+    pub list_network_profiles: bool,
+}
+
+/// AI-powered features and reality simulation configuration
+#[derive(Args)]
+struct AiArgs {
+    /// Enable AI-powered features
+    #[arg(long, help_heading = "AI Features")]
+    pub ai_enabled: bool,
+
+    /// AI/RAG provider (openai, anthropic, ollama, openai_compatible)
+    #[arg(long, help_heading = "AI Features")]
+    pub rag_provider: Option<String>,
+
+    /// AI/RAG model name
+    #[arg(long, help_heading = "AI Features")]
+    pub rag_model: Option<String>,
+
+    /// AI/RAG API key (or set MOCKFORGE_RAG_API_KEY)
+    #[arg(long, help_heading = "AI Features")]
+    pub rag_api_key: Option<String>,
+
+    /// Reality level (1-5) for unified realism control
+    ///
+    /// Controls chaos, latency, and MockAI behavior:
+    ///   1 = Static Stubs (no chaos, instant, no AI)
+    ///   2 = Light Simulation (minimal latency, basic AI)
+    ///   3 = Moderate Realism (some chaos, moderate latency, full AI)
+    ///   4 = High Realism (increased chaos, realistic latency, session state)
+    ///   5 = Production Chaos (maximum chaos, production-like latency, full features)
+    ///
+    /// Can also be set via MOCKFORGE_REALITY_LEVEL environment variable.
+    #[arg(long, help_heading = "Reality Slider")]
+    pub reality_level: Option<u8>,
+}
+
+/// CLI arguments for the serve command (extracted to reduce enum size and prevent stack overflow)
+///
+/// Grouped into logical sub-structs for navigability. CLI flags are unchanged —
+/// `#[command(flatten)]` inlines all sub-struct args at the top level.
+#[derive(Args)]
+struct ServeCliArgs {
+    /// Configuration file path
+    #[arg(short, long)]
+    pub config: Option<PathBuf>,
+
+    /// Configuration profile to use (dev, ci, demo, etc.)
+    #[arg(short, long)]
+    pub profile: Option<String>,
+
+    /// OpenAPI spec file(s) for HTTP server (can be repeated multiple times)
+    #[arg(short, long, help_heading = "Server Configuration", action = clap::ArgAction::Append)]
+    pub spec: Vec<PathBuf>,
+
+    /// Directory containing OpenAPI spec files (discovers .json, .yaml, .yml files)
+    #[arg(long, help_heading = "Server Configuration")]
+    pub spec_dir: Option<PathBuf>,
+
+    /// Conflict resolution strategy when merging multiple specs: error (default), first, last
+    #[arg(long, default_value = "error", help_heading = "Server Configuration")]
+    pub merge_conflicts: String,
+
+    /// API versioning mode: none (default), info, path-prefix
+    #[arg(long, default_value = "none", help_heading = "Server Configuration")]
+    pub api_versioning: String,
+
+    /// API base path prefix (e.g., "/api" or "/v2/api")
+    ///
+    /// Prepends this path to all API endpoint paths from the OpenAPI spec.
+    /// If not specified, the base path is extracted from the OpenAPI spec's
+    /// servers URL (e.g., "https://example.com/api" → "/api").
+    ///
+    /// The CLI option takes priority over the spec's base path.
+    /// Use empty string "" to override and disable any base path.
+    ///
+    /// Example:
+    ///   --base-path /api           (all routes served at /api/...)
+    ///   --base-path /v2            (all routes served at /v2/...)
+    ///   --base-path ""             (disable base path, use paths as-is)
+    #[arg(long, value_name = "PATH", help_heading = "Server Configuration")]
+    pub base_path: Option<String>,
+
+    /// WebSocket replay file
+    #[arg(long, help_heading = "Server Configuration")]
+    pub ws_replay_file: Option<PathBuf>,
+
+    /// GraphQL schema file (.graphql or .gql)
+    #[arg(long, help_heading = "Server Configuration")]
+    pub graphql: Option<PathBuf>,
+
+    /// GraphQL upstream server URL for passthrough
+    #[arg(long, help_heading = "Server Configuration")]
+    pub graphql_upstream: Option<String>,
+
+    /// Enable admin UI
+    #[arg(long, help_heading = "Admin & UI")]
+    pub admin: bool,
+
+    /// Enable the mock LLM endpoint: OpenAI-compatible
+    /// `POST /v1/chat/completions` + `GET /v1/models` and Anthropic-compatible
+    /// `POST /v1/messages` (with SSE streaming when `stream:true`), so an agent
+    /// can point its base URL at MockForge. Returns deterministic canned
+    /// completions with realistic envelopes (#912).
+    #[arg(long, help_heading = "AI Features")]
+    pub llm_mock: bool,
+
+    /// Mock LLM reply source (#915): `mock` (canned, default), `proxy` (forward
+    /// every request to `--llm-mock-upstream`), `record` (forward on cassette
+    /// miss and save, replay on hit), or `replay` (cassette only, offline).
+    #[arg(long, default_value = "mock", help_heading = "AI Features")]
+    pub llm_mock_mode: String,
+
+    /// Upstream OpenAI/Anthropic-compatible base URL for `proxy`/`record` modes,
+    /// e.g. `https://api.openai.com` or `http://localhost:11434` (#915).
+    #[arg(long, help_heading = "AI Features")]
+    pub llm_mock_upstream: Option<String>,
+
+    /// API key forwarded to the upstream (Bearer for OpenAI, `x-api-key` for
+    /// Anthropic). Falls back to `$OPENAI_API_KEY` / `$ANTHROPIC_API_KEY` (#915).
+    #[arg(long, help_heading = "AI Features")]
+    pub llm_mock_api_key: Option<String>,
+
+    /// Cassette file for `record`/`replay` modes (JSON). Created on first
+    /// record; loaded at startup for replay (#915).
+    #[arg(long, help_heading = "AI Features")]
+    pub llm_mock_cassette: Option<PathBuf>,
+
+    /// Enable the mock MCP server: JSON-RPC 2.0 at `POST /mcp` answering
+    /// `initialize` / `tools/list` / `tools/call` / `resources/list` /
+    /// `prompts/list` with a configurable tool catalog, so an agent acting as
+    /// an MCP client can talk to MockForge (#913).
+    #[arg(long, help_heading = "AI Features")]
+    pub mcp_mock: bool,
+
+    /// Admin UI port (defaults to config or 9080)
+    #[arg(long, help_heading = "Admin & UI")]
+    pub admin_port: Option<u16>,
+
+    /// Bind the admin UI on this host instead of the safe loopback default
+    /// (`127.0.0.1`). Pass `0.0.0.0` to expose the admin port on every
+    /// interface so the mockforge-tui on another machine can connect
+    /// (Issue #79 round 38 / Srikanth on 0.3.182: "admin ports are
+    /// opening only on 127.0.0.1 so I am able to open the mockforge tui
+    /// UI on the Server locally but when I access the server from some
+    /// other machine via mockforge TUI connections are getting refused").
+    /// Pass `::` to dual-stack bind on IPv6 + IPv4-mapped-IPv6.
+    ///
+    /// SECURITY NOTE: `0.0.0.0` exposes the admin API on every interface
+    /// in your network. Pair with `--admin-auth-required` when binding
+    /// publicly.
+    #[arg(long, help_heading = "Admin & UI")]
+    pub admin_host: Option<String>,
+
+    /// Validate configuration and check port availability without starting servers
+    #[arg(long, help_heading = "Validation")]
+    pub dry_run: bool,
+
+    /// Show progress indicators during server startup
+    #[arg(long, help_heading = "Validation")]
+    pub progress: bool,
+
+    /// Enable verbose logging output
+    #[arg(long, help_heading = "Validation")]
+    pub verbose: bool,
+
+    /// Skip auto-discovery of `mockforge.yaml` / `mockforge.config.{ts,js}`
+    /// from the current directory and its ancestors. Use this for embedded
+    /// scenarios (e.g. the @mockforge-dev/sdk Node.js SDK) where a config
+    /// file in the host project would otherwise silently override explicit
+    /// flags.
+    #[arg(long, help_heading = "Configuration")]
+    pub no_config: bool,
+
+    /// Disable the built-in HTTP per-IP rate limiter (default: 1000 req/min, 2000 burst).
+    ///
+    /// Equivalent to setting `MOCKFORGE_RATE_LIMIT_ENABLED=false`. Useful when
+    /// load-testing against a spec — without this, sustained traffic from a
+    /// single client will start receiving `429 Too Many Requests` once the
+    /// per-minute budget is exhausted.
+    #[arg(long, help_heading = "Server Configuration")]
+    pub no_rate_limit: bool,
+
+    /// Shadow / report-only mode (Issue #79): return 200 for unknown
+    /// paths and spec violations instead of 404/400/422, while still
+    /// recording them to the Conformance tab + unknown-paths feed.
+    /// Lets a proxy replay flow through non-blocking with full
+    /// violation capture. Equivalent to `MOCKFORGE_SHADOW_MODE=true`,
+    /// but as a flag so it's not silently forgotten.
+    #[arg(long, help_heading = "Server Configuration")]
+    pub shadow: bool,
+
+    /// Cap of the in-memory conformance-violation ring buffer that the
+    /// TUI / `/__mockforge/api/conformance/violations` endpoint reads
+    /// from (Issue #79 round 29). Default `256`, max `65536`. Mirrors
+    /// `MOCKFORGE_CONFORMANCE_BUFFER_SIZE`; the env var still works.
+    #[arg(long, value_name = "N", help_heading = "Server Configuration")]
+    pub conformance_buffer_size: Option<usize>,
+
+    /// Dedup conformance violations by `(method, path, status, category,
+    /// reason)` signature instead of FIFO (Issue #79 round 30 +
+    /// Srikanth's round-31 ask: "give in the mockforge server command
+    /// as opposed to environmental variable which I sometimes forget").
+    /// Each duplicate of a buffered signature bumps `occurrences`
+    /// instead of consuming a new slot. Mirrors
+    /// `MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE=true`.
+    #[arg(long, help_heading = "Server Configuration")]
+    pub conformance_buffer_unique: bool,
+
+    /// Force-inject spec violations into synthesized 2xx responses
+    /// (Issue #79 round 33 / Srikanth's r32 ask: "can we add those as
+    /// a negative response tests from mockforge server side"). When
+    /// set, drops the first declared required field from every 2xx
+    /// response body so a downstream proxy / conformance pipeline can
+    /// be exercised against a known-bad-shape mockforge end-to-end.
+    /// Mirrors `MOCKFORGE_INJECT_RESPONSE_VIOLATIONS=true`. OFF by
+    /// default; honour `--no-validate-responses` semantics: this is a
+    /// negative-testing knob, not a release-grade behavior.
+    #[arg(long, help_heading = "Server Configuration")]
+    pub inject_response_violations: bool,
+
+    #[command(flatten)]
+    pub ports: PortArgs,
+
+    #[command(flatten)]
+    pub tls: TlsArgs,
+
+    #[command(flatten)]
+    pub observability: ObservabilityArgs,
+
+    #[command(flatten)]
+    pub recorder_opts: RecorderArgs,
+
+    #[command(flatten)]
+    pub chaos_opts: ChaosArgs,
+
+    #[command(flatten)]
+    pub traffic: TrafficArgs,
+
+    #[command(flatten)]
+    pub ai: AiArgs,
+}
+
+#[derive(Subcommand)]
+#[allow(clippy::large_enum_variant)]
+enum Commands {
+    /// Start mock servers (HTTP, WebSocket, gRPC)
+    ///
+    /// Examples:
+    ///   mockforge serve --config mockforge.yaml
+    ///   mockforge serve --http-port 8080 --admin --metrics
+    ///   mockforge serve --chaos --chaos-scenario network_degradation --chaos-latency-ms 200
+    ///   mockforge serve --traffic-shaping --bandwidth-limit 500000 --burst-size 50000
+    #[command(verbatim_doc_comment)]
+    Serve(Box<ServeCliArgs>),
+
+    /// SMTP server management and mailbox operations
+    ///
+    /// Examples:
+    ///   mockforge smtp mailbox list
+    ///   mockforge smtp mailbox show email-123
+    ///   mockforge smtp mailbox clear
+    ///   mockforge smtp fixtures list
+    ///   mockforge smtp send --to user@example.com --subject "Test"
+    #[cfg(feature = "smtp")]
+    #[command(verbatim_doc_comment)]
+    Smtp {
+        #[command(subcommand)]
+        smtp_command: smtp_commands::SmtpCommands,
+    },
+
+    #[cfg(feature = "mqtt")]
+    /// MQTT broker management and topic operations
+    ///
+    /// Examples:
+    ///   mockforge mqtt publish --topic "sensors/temp" --payload '{"temp": 22.5}'
+    ///   mockforge mqtt subscribe --topic "sensors/#"
+    ///   mockforge mqtt topics list
+    ///   mockforge mqtt fixtures load ./fixtures/mqtt/
+    #[command(verbatim_doc_comment)]
+    Mqtt {
+        #[command(subcommand)]
+        mqtt_command: mqtt_commands::MqttCommands,
+    },
+
+    #[cfg(feature = "ftp")]
+    /// FTP server management
+    ///
+    /// Examples:
+    ///   mockforge ftp serve --port 2121
+    ///   mockforge ftp fixtures load ./fixtures/ftp/
+    ///   mockforge ftp vfs add /test.txt --content "Hello World"
+    #[command(verbatim_doc_comment)]
+    Ftp {
+        #[command(subcommand)]
+        ftp_command: ftp_commands::FtpCommands,
+    },
+
+    /// Kafka broker management and topic operations
+    ///
+    /// Examples:
+    ///   mockforge kafka serve --port 9092
+    ///   mockforge kafka produce --topic orders --value '{"id": "123"}'
+    ///   mockforge kafka consume --topic orders --group test-group
+    ///   mockforge kafka topic create orders --partitions 3
+    #[cfg(feature = "kafka")]
+    #[command(verbatim_doc_comment)]
+    Kafka {
+        #[command(subcommand)]
+        kafka_command: kafka_commands::KafkaCommands,
+    },
+
+    #[cfg(feature = "amqp")]
+    /// AMQP broker management and message operations
+    ///
+    /// Examples:
+    ///   mockforge amqp serve --port 5672
+    ///   mockforge amqp publish --exchange orders --routing-key "order.created" --body '{"id": "123"}'
+    ///   mockforge amqp consume --queue orders.new
+    ///   mockforge amqp exchange declare orders --type topic --durable
+    #[command(verbatim_doc_comment)]
+    Amqp {
+        #[command(subcommand)]
+        amqp_command: amqp_commands::AmqpCommands,
+    },
+
+    /// Generate synthetic data
+    Data {
+        #[command(subcommand)]
+        data_command: data_commands::DataCommands,
+    },
+
+    /// Start admin UI only (standalone server)
+    Admin {
+        /// Admin UI port
+        #[arg(short, long, default_value = "9080")]
+        port: u16,
+
+        /// Configuration file path
+        #[arg(short, long)]
+        config: Option<PathBuf>,
+    },
+
+    /// Start sync daemon for bidirectional workspace synchronization
+    ///
+    /// The sync daemon monitors a directory for .yaml/.yml file changes and automatically
+    /// imports them into MockForge workspaces. Perfect for version control integration,
+    /// team collaboration via Git, and file-based development workflows.
+    ///
+    /// Examples:
+    ///   mockforge sync --workspace-dir ./workspaces
+    ///   mockforge sync -w /path/to/git/repo/workspaces
+    ///
+    /// What you'll see:
+    ///   • Real-time notifications when files are created, modified, or deleted
+    ///   • Import success/failure status for each file
+    ///   • Clear error messages if files can't be imported
+    ///   • Informative startup message explaining what's monitored
+    ///
+    /// The daemon will continue running until you press Ctrl+C.
+    #[command(verbatim_doc_comment)]
+    Sync {
+        /// Workspace directory to monitor for file changes
+        #[arg(short, long)]
+        workspace_dir: PathBuf,
+
+        /// Configuration file path (optional)
+        #[arg(short, long)]
+        config: Option<PathBuf>,
+    },
+
+    /// Quick REST mock mode - spin up instant mock API from JSON
+    ///
+    /// Perfect for rapid prototyping with zero configuration. Auto-detects routes
+    /// from JSON keys and creates full CRUD endpoints instantly.
+    ///
+    /// Examples:
+    ///   mockforge quick data.json
+    ///   mockforge quick sample.json --port 4000
+    ///   mockforge quick mock.json --admin --metrics
+    ///
+    /// JSON file structure:
+    /// {
+    ///   "users": [{"id": 1, "name": "Alice"}],
+    ///   "posts": [{"id": 1, "title": "First Post"}]
+    /// }
+    ///
+    /// Auto-generated routes:
+    ///   GET    /users      - List all users
+    ///   GET    /users/:id  - Get single user
+    ///   POST   /users      - Create user
+    ///   PUT    /users/:id  - Update user
+    ///   DELETE /users/:id  - Delete user
+    ///   (same for all root-level JSON keys)
+    ///
+    /// Supports dynamic data generation:
+    ///   "$random.uuid", "$random.int", "$faker.name", "$faker.email", "$ai(prompt)"
+    #[command(verbatim_doc_comment)]
+    Quick {
+        /// JSON file path containing mock data
+        file: PathBuf,
+
+        /// HTTP server port (defaults to 3000)
+        #[arg(short, long, default_value = "3000")]
+        port: u16,
+
+        /// Enable admin UI
+        #[arg(long)]
+        admin: bool,
+
+        /// Admin UI port (defaults to 9080)
+        #[arg(long, default_value = "9080")]
+        admin_port: u16,
+
+        /// Enable Prometheus metrics endpoint
+        #[arg(long)]
+        metrics: bool,
+
+        /// Metrics server port (defaults to 9090)
+        #[arg(long, default_value = "9090")]
+        metrics_port: u16,
+
+        /// Enable request logging
+        #[arg(long)]
+        logging: bool,
+
+        /// Host to bind to (defaults to 127.0.0.1)
+        #[arg(long, default_value = "127.0.0.1")]
+        host: String,
+    },
+
+    /// Generate shell completions
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
+    },
+
+    /// Initialize a new MockForge project
+    ///
+    /// Examples:
+    ///   mockforge init my-project
+    ///   mockforge init . --blueprint ecommerce
+    ///   mockforge init . --blueprint b2c-saas
+    Init {
+        /// Project name (defaults to current directory name)
+        #[arg(default_value = ".")]
+        name: String,
+
+        /// Skip creating example files
+        #[arg(long)]
+        no_examples: bool,
+
+        /// Create project from a blueprint (e.g., ecommerce, b2c-saas, banking-lite)
+        #[arg(long)]
+        blueprint: Option<String>,
+    },
+
+    /// Interactive getting started wizard
+    ///
+    /// Guides you through setting up your first MockForge project with
+    /// auto-detection and sample mock generation.
+    ///
+    /// Examples:
+    ///   mockforge wizard
+    Wizard,
+
+    /// Validate HTTP fixtures
+    ///
+    /// Validates fixture files in a directory or a single file.
+    /// Supports both flat and nested fixture formats.
+    ///
+    /// Examples:
+    ///   mockforge validate-fixtures --dir ./fixtures
+    ///   mockforge validate-fixtures --file ./fixtures/auth-login.json
+    ///   mockforge validate-fixtures --dir ./fixtures --verbose
+    #[command(verbatim_doc_comment)]
+    ValidateFixtures {
+        /// Directory containing fixture files to validate
+        #[arg(short, long, conflicts_with = "file")]
+        dir: Option<PathBuf>,
+
+        /// Single fixture file to validate
+        #[arg(short, long, conflicts_with = "dir")]
+        file: Option<PathBuf>,
+
+        /// Show detailed output for all fixtures
+        #[arg(long)]
+        verbose: bool,
+    },
+
+    /// Generate mock servers from OpenAPI specifications
+    ///
+    /// Examples:
+    ///   mockforge generate --spec openapi.yaml
+    ///   mockforge generate --spec api.json --output ./generated
+    ///   mockforge generate  # Uses mockforge.toml config
+    #[command(verbatim_doc_comment)]
+    Generate {
+        /// Path to mockforge.toml configuration file
+        #[arg(short, long)]
+        config: Option<PathBuf>,
+
+        /// OpenAPI specification file (JSON or YAML)
+        #[arg(short, long)]
+        spec: Option<PathBuf>,
+
+        /// Output directory path
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Generate verbose output
+        #[arg(long)]
+        verbose: bool,
+
+        /// Dry run (validate config without generating)
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Watch mode - regenerate when files change
+        #[arg(long)]
+        watch: bool,
+
+        /// Watch debounce time in milliseconds
+        #[arg(long, default_value = "500")]
+        watch_debounce: u64,
+
+        /// Show progress bar during generation
+        #[arg(long)]
+        progress: bool,
+    },
+
+    /// Generate JSON Schema for MockForge configuration files
+    ///
+    /// Generates JSON Schemas that can be used by IDEs and editors
+    /// to provide autocomplete, validation, and documentation for
+    /// mockforge.yaml, persona files, reality config, and blueprint files.
+    ///
+    /// Examples:
+    ///   mockforge schema generate
+    ///   mockforge schema generate --output schemas/
+    ///   mockforge schema generate --type config --output mockforge-config.schema.json
+    #[command(verbatim_doc_comment)]
+    Schema {
+        #[command(subcommand)]
+        schema_command: Option<generate_commands::SchemaCommands>,
+    },
+
+    /// One-command frontend integration setup
+    ///
+    /// Sets up MockForge integration for frontend frameworks with:
+    /// - Typed client generation from OpenAPI spec
+    /// - Example hooks/composables/services
+    /// - Environment configuration
+    /// - SDK dependencies
+    ///
+    /// Examples:
+    ///   mockforge dev-setup react
+    ///   mockforge dev-setup vue --spec api.yaml
+    ///   mockforge dev-setup next --base-url http://localhost:3000
+    #[command(verbatim_doc_comment)]
+    DevSetup {
+        #[command(flatten)]
+        args: dev_setup_commands::DevSetupArgs,
+    },
+
+    /// Configuration management
+    Config {
+        #[command(subcommand)]
+        config_command: config_commands::ConfigCommands,
+    },
+
+    /// Watch a Git repository for OpenAPI spec changes and auto-sync
+    ///
+    /// Monitors a Git repository for changes to OpenAPI specification files
+    /// and automatically reloads mocks when changes are detected.
+    ///
+    /// Examples:
+    ///   mockforge git-watch https://github.com/user/api-specs --spec-paths "specs/*.yaml"
+    ///   mockforge git-watch https://github.com/user/api-specs --branch develop --poll-interval 30
+    ///   mockforge git-watch https://github.com/user/api-specs --reload-command "mockforge serve --spec"
+    #[command(verbatim_doc_comment)]
+    GitWatch {
+        /// Git repository URL (HTTPS or SSH)
+        #[arg(value_name = "REPOSITORY_URL")]
+        repository_url: String,
+
+        /// Branch to watch (default: "main")
+        #[arg(short, long, default_value = "main")]
+        branch: Option<String>,
+
+        /// Path(s) to OpenAPI spec files in the repository (supports glob patterns)
+        /// Default: ["**/*.yaml", "**/*.json", "**/openapi*.yaml", "**/openapi*.json"]
+        #[arg(short, long, value_name = "PATH")]
+        spec_paths: Vec<String>,
+
+        /// Polling interval in seconds (default: 60)
+        #[arg(long, default_value = "60")]
+        poll_interval: Option<u64>,
+
+        /// Authentication token for private repositories
+        #[arg(long, value_name = "TOKEN")]
+        auth_token: Option<String>,
+
+        /// Local cache directory for cloned repository (default: "./.mockforge-git-cache")
+        #[arg(long, value_name = "DIR")]
+        cache_dir: Option<PathBuf>,
+
+        /// Command to execute when spec files change
+        /// Spec file paths will be appended as arguments
+        #[arg(long, value_name = "COMMAND")]
+        reload_command: Option<String>,
+    },
+
+    /// Sync and validate mocks against Git-hosted OpenAPI specs
+    ///
+    /// Fetches OpenAPI specifications from a Git repository and validates
+    /// that mocks conform to the contract. Can optionally update mocks to match specs.
+    ///
+    /// Examples:
+    ///   mockforge contract-sync https://github.com/user/api-specs --mock-config mocks.yaml
+    ///   mockforge contract-sync https://github.com/user/api-specs --branch develop --strict
+    ///   mockforge contract-sync https://github.com/user/api-specs --update --output report.md
+    #[command(verbatim_doc_comment)]
+    ContractSync {
+        /// Git repository URL (HTTPS or SSH)
+        #[arg(value_name = "REPOSITORY_URL")]
+        repository_url: String,
+
+        /// Branch to sync from (default: "main")
+        #[arg(short, long, default_value = "main")]
+        branch: Option<String>,
+
+        /// Path(s) to OpenAPI spec files in the repository (supports glob patterns)
+        /// Default: ["**/*.yaml", "**/*.json", "**/openapi*.yaml", "**/openapi*.json"]
+        #[arg(short, long, value_name = "PATH")]
+        spec_paths: Vec<String>,
+
+        /// Path to mock configuration file to validate/update
+        #[arg(long, value_name = "FILE")]
+        mock_config: Option<PathBuf>,
+
+        /// Authentication token for private repositories
+        #[arg(long, value_name = "TOKEN")]
+        auth_token: Option<String>,
+
+        /// Local cache directory for cloned repository (default: "./.mockforge-git-cache")
+        #[arg(long, value_name = "DIR")]
+        cache_dir: Option<PathBuf>,
+
+        /// Use strict validation mode (fails on warnings)
+        #[arg(long)]
+        strict: bool,
+
+        /// Output file path for validation report (optional)
+        #[arg(short, long, value_name = "FILE")]
+        output: Option<PathBuf>,
+
+        /// Update mock configuration to match Git specs
+        #[arg(long)]
+        update: bool,
+    },
+
+    /// AI-powered contract diff analysis
+    ///
+    /// Analyze front-end requests against backend contract specifications,
+    /// detect mismatches, and generate correction proposals.
+    ///
+    /// Examples:
+    ///   mockforge contract-diff analyze --spec api.yaml --request-path request.json
+    ///   mockforge contract-diff analyze --spec api.yaml --capture-id abc123 --output results.json
+    ///   mockforge contract-diff compare --old-spec old.yaml --new-spec new.yaml
+    ///   mockforge contract-diff generate-patch --spec api.yaml --request-path request.json --output patch.json
+    ///   mockforge contract-diff apply-patch --spec api.yaml --patch patch.json
+    #[command(verbatim_doc_comment)]
+    ContractDiff {
+        #[command(subcommand)]
+        diff_command: contract_diff_commands::ContractDiffCommands,
+    },
+
+    /// Run the MockForge MCP server over stdio (#835)
+    ///
+    /// Speaks newline-delimited JSON-RPC 2.0 so MCP clients (Claude
+    /// Desktop, Cursor, any agent host) can list spec routes, validate
+    /// requests, generate schema-conformant examples, and up-convert
+    /// Swagger 2.0 specs.
+    ///
+    /// Example (Claude Desktop config):
+    ///   { "command": "mockforge", "args": ["mcp"] }
+    #[command(verbatim_doc_comment)]
+    Mcp,
+
+    /// Verify mocks still match the real API (Mock Fidelity / drift detection, #849)
+    ///
+    /// Replays recorded real traffic against the spec your mocks are
+    /// generated from and reports drift. With --fail-on-drift this is a
+    /// CI gate: drift breaks the build instead of silently passing.
+    ///
+    /// Examples:
+    ///   mockforge verify-mocks --spec api.yaml --capture-db captures.db
+    ///   mockforge verify-mocks --spec api.yaml --capture-db captures.db --fail-on-drift
+    #[cfg(feature = "recorder")]
+    #[command(verbatim_doc_comment)]
+    VerifyMocks(verify_mocks_commands::VerifyMocksArgs),
+
+    /// API governance and safety features
+    ///
+    /// Manage API change forecasting, semantic drift detection, and threat modeling.
+    ///
+    /// Examples:
+    ///   mockforge governance forecast generate --window-days 90
+    ///   mockforge governance semantic analyze --before old.yaml --after new.yaml --endpoint /api/users --method GET
+    ///   mockforge governance threat assess --spec api.yaml
+    ///   mockforge governance status
+    #[command(verbatim_doc_comment)]
+    Governance {
+        #[command(subcommand)]
+        gov_command: governance_commands::GovernanceCommands,
+    },
+
+    /// Import API specifications and generate mocks (OpenAPI, AsyncAPI)
+    ///
+    /// Examples:
+    ///   mockforge import openapi ./specs/api.yaml
+    ///   mockforge import openapi ./specs/api.json --output mocks.json --verbose
+    ///   mockforge import asyncapi ./specs/events.yaml --protocol mqtt
+    ///   mockforge import coverage ./specs/api.yaml
+    #[command(verbatim_doc_comment)]
+    Import {
+        #[command(subcommand)]
+        import_command: import_commands::ImportCommands,
+    },
+
+    /// Test AI-powered features
+    TestAi {
+        #[command(subcommand)]
+        ai_command: ai_commands::AiTestCommands,
+    },
+
+    /// Plugin management
+    Plugin {
+        #[command(subcommand)]
+        plugin_command: plugin_commands::PluginCommands,
+    },
+
+    /// Recorder management (stub mapping conversion)
+    ///
+    /// Convert recorded API interactions into replayable stub mappings (fixtures).
+    ///
+    /// Examples:
+    ///   mockforge recorder convert --recording-id abc123 --output fixtures/user-api.yaml
+    ///   mockforge recorder convert --input recordings.db --output fixtures/ --format yaml
+    #[cfg(feature = "recorder")]
+    Recorder {
+        #[command(subcommand)]
+        recorder_command: recorder_commands::RecorderCommands,
+    },
+
+    /// Flow recording and behavioral cloning
+    ///
+    /// Record multi-step flows, view timelines, and compile behavioral scenarios.
+    ///
+    /// Examples:
+    ///   mockforge flow list
+    ///   mockforge flow view <flow-id>
+    ///   mockforge flow tag <flow-id> --name "checkout_success"
+    ///   mockforge flow compile <flow-id> --scenario-name "checkout"
+    Flow {
+        #[command(subcommand)]
+        flow_command: flow_commands::FlowCommands,
+    },
+
+    /// Scenario marketplace management
+    ///
+    /// Examples:
+    ///   mockforge scenario install ./scenarios/ecommerce-store
+    ///   mockforge scenario list
+    ///   mockforge scenario search ecommerce
+    ///   mockforge scenario use ecommerce-store
+    #[cfg(feature = "scenarios")]
+    #[command(verbatim_doc_comment)]
+    Scenario {
+        #[command(subcommand)]
+        scenario_command: scenario_commands::ScenarioCommands,
+    },
+
+    /// Reality Profile Pack management
+    ///
+    /// Manage and apply reality profile packs that configure hyper-realistic mock behaviors.
+    ///
+    /// Examples:
+    ///   mockforge reality-profile install ecommerce-peak-season
+    ///   mockforge reality-profile list
+    ///   mockforge reality-profile apply ecommerce-peak-season --workspace default
+    #[cfg(feature = "scenarios")]
+    #[command(verbatim_doc_comment)]
+    RealityProfile {
+        #[command(subcommand)]
+        reality_profile_command: scenario_commands::RealityProfileCommands,
+    },
+
+    /// Behavioral Economics Engine management
+    ///
+    /// Configure behavior rules that make mocks react to pressure, load, pricing, and fraud.
+    ///
+    /// Examples:
+    ///   mockforge behavior-rule add --name "latency-conversion" --condition latency --threshold 400 --action modify-conversion-rate --multiplier 0.8
+    ///   mockforge behavior-rule list
+    ///   mockforge behavior-rule enable
+    #[cfg(feature = "scenarios")]
+    #[command(verbatim_doc_comment)]
+    BehaviorRule {
+        #[command(subcommand)]
+        behavior_rule_command: scenario_commands::BehaviorRuleCommands,
+    },
+
+    /// Drift Learning configuration
+    ///
+    /// Configure drift learning that allows mocks to learn from recorded traffic patterns.
+    ///
+    /// Examples:
+    ///   mockforge drift-learning enable --sensitivity 0.2 --min-samples 10
+    ///   mockforge drift-learning status
+    ///   mockforge drift-learning disable
+    #[cfg(feature = "scenarios")]
+    #[command(verbatim_doc_comment)]
+    DriftLearning {
+        #[command(subcommand)]
+        drift_learning_command: scenario_commands::DriftLearningCommands,
+    },
+
+    /// Template library management
+    ///
+    /// Manage shared templates with versioning and marketplace support.
+    ///
+    /// Examples:
+    ///   mockforge template register --id user-profile --name "User Profile" --content "{{faker.name}}"
+    ///   mockforge template list
+    ///   mockforge template search user
+    ///   mockforge template install user-profile --registry https://registry.mockforge.dev
+    ///   mockforge template marketplace search payment --registry https://registry.mockforge.dev
+    #[command(verbatim_doc_comment)]
+    Template {
+        #[command(subcommand)]
+        template_command: template_commands::TemplateCommands,
+    },
+
+    /// Blueprint management - predefined app archetypes
+    ///
+    /// Blueprints provide opinionated "Golden Path" workflows with:
+    /// - Pre-configured personas for different user types
+    /// - Reality defaults optimized for the use case
+    /// - Sample flows demonstrating common workflows
+    /// - Playground collections for testing
+    ///
+    /// Examples:
+    ///   mockforge blueprint list
+    ///   mockforge blueprint create my-app --blueprint b2c-saas
+    ///   mockforge blueprint info ecommerce
+    #[command(verbatim_doc_comment)]
+    Blueprint {
+        #[command(subcommand)]
+        blueprint_command: blueprint_commands::BlueprintCommands,
+    },
+
+    /// Client code generation for frontend frameworks
+    ///
+    /// Examples:
+    ///   mockforge client generate --spec api.json --framework react --output ./generated
+    ///   mockforge client generate --spec api.yaml --framework vue --base-url https://api.example.com
+    ///   mockforge client list
+    #[command(verbatim_doc_comment)]
+    Client {
+        #[command(subcommand)]
+        client_command: client_generator::ClientCommand,
+    },
+
+    /// Backend server code generation from OpenAPI specifications
+    ///
+    /// Examples:
+    ///   mockforge backend generate --spec api.json --backend rust --output ./my-backend
+    ///   mockforge backend generate --spec api.yaml --backend rust --port 8080 --database postgres
+    ///   mockforge backend list
+    #[command(verbatim_doc_comment)]
+    Backend {
+        #[command(subcommand)]
+        backend_command: backend_generator::BackendCommand,
+    },
+
+    /// Multi-tenant workspace management
+    ///
+    /// Examples:
+    ///   mockforge workspace list
+    ///   mockforge workspace create my-workspace --name "My Workspace"
+    ///   mockforge workspace info my-workspace
+    ///   mockforge workspace delete my-workspace
+    #[command(verbatim_doc_comment)]
+    Workspace {
+        #[command(subcommand)]
+        workspace_command: workspace_commands::WorkspaceCommands,
+    },
+
+    /// Cloud sync and collaboration commands
+    ///
+    /// Examples:
+    ///   mockforge cloud login
+    ///   mockforge cloud sync --workspace my-workspace
+    ///   mockforge cloud workspace list
+    ///   mockforge cloud team members --workspace my-workspace
+    #[command(verbatim_doc_comment)]
+    Cloud {
+        #[command(subcommand)]
+        cloud_command: cloud_commands::CloudCommands,
+    },
+
+    /// Authenticate with MockForge Cloud (alias for 'cloud login')
+    ///
+    /// Examples:
+    ///   mockforge login
+    ///   mockforge login --token <api-token>
+    ///   mockforge login --provider github
+    #[command(verbatim_doc_comment)]
+    Login {
+        /// API token for authentication
+        #[arg(long)]
+        token: Option<String>,
+
+        /// OAuth provider (github, google)
+        #[arg(long)]
+        provider: Option<String>,
+
+        /// Cloud service URL
+        #[arg(long, default_value = "https://api.mockforge.dev")]
+        service_url: String,
+    },
+
+    /// Expose local MockForge server via public URL (tunneling)
+    ///
+    /// Examples:
+    ///   mockforge tunnel start --local-url http://localhost:3000
+    ///   mockforge tunnel start --local-url http://localhost:3000 --subdomain my-api
+    ///   mockforge tunnel status
+    ///   mockforge tunnel stop
+    ///   mockforge tunnel list
+    #[cfg(feature = "tunnel")]
+    #[command(verbatim_doc_comment)]
+    Tunnel {
+        #[command(subcommand)]
+        tunnel_command: tunnel_commands::TunnelSubcommand,
+    },
+
+    /// Deploy mock APIs with production-like configuration (deceptive deploy)
+    ///
+    /// Examples:
+    ///   mockforge deploy --config config.yaml --spec api.yaml
+    ///   mockforge deploy --config config.yaml --auto-tunnel
+    ///   mockforge deploy --production-preset
+    ///   mockforge deploy status
+    ///   mockforge deploy stop
+    #[command(verbatim_doc_comment)]
+    Deploy {
+        #[command(subcommand)]
+        deploy_command: deploy_commands::DeploySubcommand,
+    },
+
+    /// Virtual Backend Reality (VBR) engine management
+    ///
+    /// Create stateful mock servers with persistent databases, auto-generated
+    /// CRUD APIs, and relationship endpoints.
+    ///
+    /// Examples:
+    ///   mockforge vbr create entity User --fields id:string,name:string,email:string
+    ///   mockforge vbr serve --port 3000 --storage sqlite
+    ///   mockforge vbr manage entities list
+    #[cfg(feature = "vbr")]
+    #[command(verbatim_doc_comment)]
+    Vbr {
+        #[command(subcommand)]
+        vbr_command: vbr_commands::VbrCommands,
+    },
+
+    /// MockAI (Behavioral Mock Intelligence) management
+    ///
+    /// AI-powered mock generation and response realism. Auto-generate rules
+    /// from examples or OpenAPI specs, enable intelligent behavior for endpoints.
+    ///
+    /// Examples:
+    ///   mockforge mockai learn --from-examples examples.json
+    ///   mockforge mockai generate --from-openapi api.yaml
+    ///   mockforge mockai enable --endpoint "/api/users"
+    ///   mockforge mockai status
+    #[command(verbatim_doc_comment)]
+    Mockai {
+        #[command(subcommand)]
+        mockai_command: mockai_commands::MockAICommands,
+    },
+
+    /// Time travel and snapshot management
+    ///
+    /// Save and restore entire system states (across protocols, personas, and reality level).
+    /// Enables point-in-time recovery and state management.
+    ///
+    /// Examples:
+    ///   mockforge snapshot save "post-checkout-failure" --description "State after checkout failure"
+    ///   mockforge snapshot load "post-checkout-failure"
+    ///   mockforge snapshot list
+    ///   mockforge snapshot info "post-checkout-failure"
+    ///   mockforge snapshot delete "old-snapshot"
+    #[command(verbatim_doc_comment)]
+    Snapshot {
+        #[command(subcommand)]
+        snapshot_command: snapshot_commands::SnapshotCommands,
+    },
+
+    /// Voice + LLM Interface for conversational mock creation
+    ///
+    /// Build mocks conversationally using natural language commands powered by LLM.
+    /// Supports both single-shot and interactive conversational modes.
+    ///
+    /// Examples:
+    ///   mockforge voice create --command "Create a fake e-commerce API with 20 products" --output api.yaml
+    ///   mockforge voice create --serve --port 3000
+    ///   mockforge voice interactive
+    #[command(verbatim_doc_comment)]
+    Voice {
+        #[command(subcommand)]
+        voice_command: voice_commands::VoiceCommands,
+    },
+
+    /// Time travel / temporal simulation control
+    ///
+    /// Control virtual clock for testing time-dependent behavior. Requires
+    /// MockForge server to be running with admin UI enabled.
+    ///
+    /// Examples:
+    ///   mockforge time status
+    ///   mockforge time enable --time "2025-01-01T00:00:00Z"
+    ///   mockforge time advance 1month
+    ///   mockforge time advance 2h
+    ///   mockforge time set "2025-06-01T12:00:00Z"
+    ///   mockforge time scale 2.0
+    ///   mockforge time reset
+    ///   mockforge time save "1-month-later" --description "Scenario after 1 month"
+    ///   mockforge time load "1-month-later"
+    ///   mockforge time list
+    #[command(verbatim_doc_comment)]
+    Time {
+        #[command(subcommand)]
+        time_command: time_commands::TimeCommands,
+        /// Admin UI URL (default: http://localhost:9080)
+        #[arg(long)]
+        admin_url: Option<String>,
+    },
+
+    /// View logs from MockForge server or log files
+    ///
+    /// View request logs from a running MockForge server (via Admin API) or from log files.
+    /// Supports filtering, following (like tail -f), and JSON output.
+    ///
+    /// Examples:
+    ///   mockforge logs
+    ///   mockforge logs -f
+    ///   mockforge logs --method GET --path /api/users
+    ///   mockforge logs --status 500 --limit 20
+    ///   mockforge logs --file logs/mockforge.log -f
+    ///   mockforge logs --json
+    #[command(verbatim_doc_comment)]
+    Logs {
+        /// Admin UI URL (default: http://localhost:9080)
+        #[arg(long)]
+        admin_url: Option<String>,
+
+        /// Read from log file instead of Admin API
+        #[arg(short, long)]
+        file: Option<PathBuf>,
+
+        /// Follow logs in real-time (like tail -f)
+        #[arg(short = 'F', long)]
+        follow: bool,
+
+        /// Filter by HTTP method (GET, POST, etc.)
+        #[arg(long)]
+        method: Option<String>,
+
+        /// Filter by path pattern
+        #[arg(long)]
+        path: Option<String>,
+
+        /// Filter by status code
+        #[arg(long)]
+        status: Option<u16>,
+
+        /// Limit number of log entries
+        #[arg(short, long)]
+        limit: Option<usize>,
+
+        /// Output as JSON
+        #[arg(long)]
+        json: bool,
+
+        /// Configuration file path (used to find log file path)
+        #[arg(short, long)]
+        config: Option<PathBuf>,
+    },
+
+    /// MOD (Mock-Oriented Development) commands
+    ///
+    /// Mock-Oriented Development (MOD) is a methodology that places mocks at the center
+    /// of the development workflow. Use MOD to design APIs, coordinate teams, and build
+    /// with confidence.
+    ///
+    /// Examples:
+    ///   mockforge mod init --template small-team
+    ///   mockforge mod validate --contract contracts/api.yaml --target http://localhost:8080
+    ///   mockforge mod review --contract contracts/api.yaml --mock http://localhost:3000 --implementation http://localhost:8080
+    ///   mockforge mod generate --from-openapi contracts/api.yaml --output mocks/
+    ///   mockforge mod templates
+    #[command(verbatim_doc_comment)]
+    Mod {
+        #[command(subcommand)]
+        mod_command: mod_commands::ModCommands,
+    },
+
+    /// Chaos engineering profile management
+    ///
+    /// Examples:
+    ///   mockforge chaos profile apply slow_3g
+    ///   mockforge chaos profile export slow_3g --format json
+    ///   mockforge chaos profile import --file profile.json
+    #[command(verbatim_doc_comment)]
+    Chaos {
+        #[command(subcommand)]
+        chaos_command: chaos_commands::ChaosCommands,
+    },
+
+    /// Chaos experiment orchestration
+    Orchestrate {
+        #[command(subcommand)]
+        orchestrate_command: orchestrate_commands::OrchestrateCommands,
+    },
+
+    /// Generate tests from recorded API interactions
+    ///
+    /// Examples:
+    ///   mockforge generate-tests --format rust_reqwest --output tests.rs
+    ///   mockforge generate-tests --format k6 --protocol http --method GET --limit 20
+    ///   mockforge generate-tests --format python_pytest --ai-descriptions --llm-provider openai
+    ///   mockforge generate-tests --format postman --path "/api/users/*" --status-code 200
+    #[command(verbatim_doc_comment)]
+    GenerateTests {
+        /// Recorder database file path
+        #[arg(short, long, default_value = "./mockforge-recordings.db")]
+        database: PathBuf,
+
+        /// Test format (rust_reqwest, http_file, curl, postman, k6, python_pytest, javascript_jest, go_test)
+        #[arg(short, long, default_value = "rust_reqwest")]
+        format: String,
+
+        /// Output file path
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Filter by protocol (http, grpc, websocket, graphql)
+        #[arg(long)]
+        protocol: Option<String>,
+
+        /// Filter by HTTP method (GET, POST, etc.)
+        #[arg(long)]
+        method: Option<String>,
+
+        /// Filter by path pattern (supports wildcards)
+        #[arg(long)]
+        path: Option<String>,
+
+        /// Filter by status code
+        #[arg(long)]
+        status_code: Option<u16>,
+
+        /// Limit number of tests to generate
+        #[arg(short, long, default_value = "50")]
+        limit: usize,
+
+        /// Test suite name
+        #[arg(long, default_value = "generated_tests")]
+        suite_name: String,
+
+        /// Base URL for generated tests
+        #[arg(long, default_value = "http://localhost:3000")]
+        base_url: String,
+
+        /// Use AI to generate intelligent test descriptions
+        #[arg(long)]
+        ai_descriptions: bool,
+
+        /// LLM provider for AI descriptions (openai, ollama)
+        #[arg(long, default_value = "ollama")]
+        llm_provider: String,
+
+        /// LLM model for AI descriptions
+        #[arg(long, default_value = "llama2")]
+        llm_model: String,
+
+        /// LLM API endpoint
+        #[arg(long)]
+        llm_endpoint: Option<String>,
+
+        /// LLM API key (for OpenAI, Anthropic)
+        #[arg(long)]
+        llm_api_key: Option<String>,
+
+        /// Include body validation assertions
+        #[arg(long, default_value = "true")]
+        validate_body: bool,
+
+        /// Include status code validation assertions
+        #[arg(long, default_value = "true")]
+        validate_status: bool,
+
+        /// Include header validation assertions
+        #[arg(long)]
+        validate_headers: bool,
+
+        /// Include timing validation assertions
+        #[arg(long)]
+        validate_timing: bool,
+
+        /// Maximum duration threshold in ms for timing validation
+        #[arg(long)]
+        max_duration_ms: Option<u64>,
+    },
+
+    /// AI-powered API specification suggestion
+    ///
+    /// Generate complete OpenAPI specs or MockForge configs from minimal input.
+    /// Provide a single endpoint example, API description, or partial spec, and
+    /// MockForge will use AI to suggest additional endpoints and generate a
+    /// complete specification.
+    ///
+    /// Examples:
+    ///   mockforge suggest --from example.json --output openapi.yaml
+    ///   mockforge suggest --from-description "A blog API with posts and comments" --format both
+    ///   mockforge suggest --from example.json --num-suggestions 10 --domain e-commerce
+    #[command(verbatim_doc_comment)]
+    Suggest {
+        /// Input file (JSON containing endpoint example, description, or partial spec)
+        #[arg(short, long, conflicts_with = "from_description")]
+        from: Option<PathBuf>,
+
+        /// Generate from text description instead of file
+        #[arg(long, conflicts_with = "from")]
+        from_description: Option<String>,
+
+        /// Output format (openapi, mockforge, both)
+        #[arg(long, default_value = "openapi")]
+        format: String,
+
+        /// Output file path (without extension for 'both' format)
+        #[arg(short, long)]
+        output: Option<PathBuf>,
+
+        /// Number of additional endpoints to suggest
+        #[arg(long, default_value = "5")]
+        num_suggestions: usize,
+
+        /// Include examples in generated specs
+        #[arg(long, default_value = "true")]
+        include_examples: bool,
+
+        /// API domain hint (e-commerce, social-media, fintech, etc.)
+        #[arg(long)]
+        domain: Option<String>,
+
+        /// LLM provider (openai, anthropic, ollama, openai-compatible)
+        #[arg(long, default_value = "openai")]
+        llm_provider: String,
+
+        /// LLM model name
+        #[arg(long)]
+        llm_model: Option<String>,
+
+        /// LLM API endpoint (for custom providers)
+        #[arg(long)]
+        llm_endpoint: Option<String>,
+
+        /// LLM API key (or set OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
+        #[arg(long)]
+        llm_api_key: Option<String>,
+
+        /// Temperature for LLM generation (0.0-1.0)
+        #[arg(long, default_value = "0.7")]
+        temperature: f64,
+
+        /// Print suggestions as JSON to stdout instead of saving
+        #[arg(long)]
+        print_json: bool,
+    },
+
+    /// Load test a real service using an API specification
+    ///
+    /// Examples:
+    ///   mockforge bench --spec api.yaml --target https://api.example.com
+    ///   mockforge bench --spec api.yaml --target https://staging.api.com --duration 5m --vus 100
+    ///   mockforge bench --spec api.yaml --target https://api.com --scenario spike --output results/
+    ///   mockforge bench --spec api.yaml --target https://api.com --operations "GET /users,POST /users"
+    ///   mockforge bench --spec api.yaml --targets-file /path/to/targets.txt --max-concurrency 20
+    ///   mockforge bench --spec api.yaml --target https://api.com --params-file params.json
+    ///
+    /// Multi-spec mode:
+    ///   mockforge bench --spec pools.yaml --spec vs.yaml --target https://api.com
+    ///   mockforge bench --spec-dir ./specs/ --target https://api.com
+    ///   mockforge bench --spec a.yaml --spec b.yaml --merge-conflicts first --target https://api.com
+    #[cfg(feature = "bench")]
+    #[command(verbatim_doc_comment)]
+    Bench {
+        /// API specification file(s) (OpenAPI/Swagger). Can specify multiple.
+        #[arg(short, long, action = clap::ArgAction::Append)]
+        spec: Vec<PathBuf>,
+
+        /// Directory containing OpenAPI spec files (discovers .json, .yaml, .yml files)
+        #[arg(long)]
+        spec_dir: Option<PathBuf>,
+
+        /// Conflict resolution strategy when merging multiple specs: "error" (default), "first", "last"
+        #[arg(long, default_value = "error")]
+        merge_conflicts: String,
+
+        /// Spec mode: "merge" (default) combines all specs, "sequential" runs them in order
+        #[arg(long, default_value = "merge")]
+        spec_mode: String,
+
+        /// Dependency configuration file (YAML/JSON) for cross-spec value passing
+        /// Only used when --spec-mode is "sequential"
+        #[arg(long)]
+        dependency_config: Option<PathBuf>,
+
+        /// Target service URL (mutually exclusive with --targets-file)
+        #[arg(short, long)]
+        target: Option<String>,
+
+        /// File containing multiple targets (one per line or JSON array)
+        /// Mutually exclusive with --target. Supports absolute paths.
+        #[arg(long)]
+        targets_file: Option<PathBuf>,
+
+        /// API base path prefix (e.g., "/api" or "/v2/api")
+        ///
+        /// Prepends this path to all API endpoint paths in the generated test.
+        /// If not specified, the base path is extracted from the OpenAPI spec's
+        /// servers URL (e.g., "https://example.com/api" → "/api").
+        ///
+        /// The CLI option takes priority over the spec's base path.
+        /// Use empty string "" to override and disable any base path.
+        ///
+        /// Example:
+        ///   --base-path /api           (all requests go to /api/...)
+        ///   --base-path /v2            (all requests go to /v2/...)
+        ///   --base-path ""             (disable base path, use paths as-is)
+        #[arg(long, value_name = "PATH")]
+        base_path: Option<String>,
+
+        /// Test duration (e.g., 30s, 5m, 1h)
+        #[arg(short, long, default_value = "1m")]
+        duration: String,
+
+        /// Number of virtual users (concurrent connections)
+        #[arg(long, default_value = "10")]
+        vus: u32,
+
+        /// Target requests-per-second (open-model load). When set, switches the
+        /// k6 executor from `ramping-vus` (which produces an implicit RPS
+        /// limited by VU sleep time) to `constant-arrival-rate`, which fires
+        /// `--rps` requests per second regardless of how long each one takes.
+        /// Useful for stressing rate limits and observing chaos at a fixed
+        /// throughput. `--vus` becomes the *max* pre-allocated VU pool.
+        /// Issue #79 — Srikanth's round-3 reply.
+        #[arg(long, value_name = "N")]
+        rps: Option<u32>,
+
+        /// Connections-per-second target. When set, disables k6's HTTP keep-
+        /// alive so every request opens a fresh TCP/TLS connection — useful
+        /// for stressing connection-limit / connection-error chaos. Combined
+        /// with `--rps`, the effective new-connection rate equals `--rps`.
+        /// Without `--rps`, the rate is bounded by VUs × (1 / request latency).
+        /// Issue #79.
+        #[arg(long)]
+        cps: bool,
+
+        /// Load test scenario (constant, ramp-up, spike, stress, soak)
+        #[arg(long, default_value = "ramp-up")]
+        scenario: String,
+
+        /// Filter operations to test (comma-separated, e.g., "GET /users,POST /users")
+        #[arg(long)]
+        operations: Option<String>,
+
+        /// Exclude operations from testing (comma-separated)
+        ///
+        /// Supports "METHOD /path" or just "METHOD" to exclude all operations of that type.
+        /// Examples:
+        ///   --exclude-operations "DELETE"              (exclude all DELETE operations)
+        ///   --exclude-operations "DELETE,POST"         (exclude all DELETE and POST)
+        ///   --exclude-operations "DELETE /users/{id}"  (exclude specific operation)
+        #[arg(long)]
+        exclude_operations: Option<String>,
+
+        /// Authentication header value (e.g., "Bearer token123")
+        #[arg(long)]
+        auth: Option<String>,
+
+        /// Additional header, format "Key:Value". Repeatable: pass --headers once
+        /// per header (e.g. --headers "A:1" --headers "B:2"). One header per flag
+        /// means values may contain commas (#761).
+        #[arg(long)]
+        headers: Vec<String>,
+
+        /// Output directory for results
+        #[arg(short, long, default_value = "bench-results")]
+        output: PathBuf,
+
+        /// Generate k6 script without running
+        #[arg(long)]
+        generate_only: bool,
+
+        /// k6 script output path (when using --generate-only)
+        #[arg(long)]
+        script_output: Option<PathBuf>,
+
+        /// Response time threshold percentile (p(50), p(75), p(90), p(95), p(99))
+        #[arg(long, default_value = "p(95)")]
+        threshold_percentile: String,
+
+        /// Response time threshold in milliseconds
+        #[arg(long, default_value = "500")]
+        threshold_ms: u64,
+
+        /// Maximum acceptable error rate (0.0-1.0)
+        #[arg(long, default_value = "0.05")]
+        max_error_rate: f64,
+
+        /// Disable the k6 abort-on-error safety valve so the load test runs its
+        /// full duration even when most requests fail. Use for stress tests
+        /// against a WAF/proxy that legitimately rejects most traffic (#79).
+        /// By default a target that fails >= --abort-on-error-rate of requests
+        /// for 60s is aborted to avoid an out-of-memory k6 run against a dead
+        /// endpoint.
+        #[arg(long = "no-abort-on-error")]
+        no_abort_on_error: bool,
+
+        /// Failure rate (0.0-1.0) above which the abort-on-error safety valve
+        /// stops a target after a 60s grace period. Default 0.95. Ignored when
+        /// --no-abort-on-error is set (#79).
+        #[arg(long = "abort-on-error-rate", default_value = "0.95")]
+        abort_on_error_rate: f64,
+
+        /// Enable verbose output
+        #[arg(short = 'V', long)]
+        verbose: bool,
+
+        /// Skip TLS certificate validation (insecure, for test environments only)
+        #[arg(long)]
+        insecure: bool,
+
+        /// Set `Transfer-Encoding: chunked` on every k6 request body. NOTE:
+        /// k6 runs on Go's `net/http`, which decides chunking based on body
+        /// type — a string body has known length and Go normally sends
+        /// `Content-Length`. Setting this flag is the closest k6-script
+        /// approximation; for true raw chunked traffic, use `curl
+        /// --data-binary @file -H 'Transfer-Encoding: chunked'`.
+        #[arg(long)]
+        chunked_request_bodies: bool,
+
+        /// Maximum number of parallel test executions (for multi-target mode)
+        /// Only used when --targets-file is specified
+        #[arg(long, default_value = "10")]
+        max_concurrency: u32,
+
+        /// Results format: "per-target", "aggregated", or "both" (default: "both")
+        /// Only used when --targets-file is specified
+        #[arg(long, default_value = "both")]
+        results_format: String,
+
+        /// Parameter values override file (JSON or YAML)
+        ///
+        /// Allows providing custom values for path parameters, query parameters,
+        /// headers, and request bodies instead of auto-generated placeholder values.
+        ///
+        /// Example file format:
+        /// {
+        ///   "defaults": { "path_params": { "id": "123" } },
+        ///   "operations": { "createUser": { "body": { "name": "Test" } } }
+        /// }
+        #[arg(long, value_name = "FILE")]
+        params_file: Option<PathBuf>,
+
+        // === CRUD Flow Options ===
+        /// Enable CRUD flow mode (auto-detect from spec or use --flow-config)
+        ///
+        /// Automatically detects Create/Read/Update/Delete patterns from the OpenAPI spec
+        /// and executes them as a sequential flow with response chaining.
+        #[arg(long)]
+        crud_flow: bool,
+
+        /// Custom CRUD flow configuration file (YAML)
+        ///
+        /// Overrides auto-detection with explicit flow definition.
+        /// See documentation for flow config format.
+        #[arg(long, value_name = "FILE")]
+        flow_config: Option<PathBuf>,
+
+        /// Fields to extract from responses (comma-separated)
+        ///
+        /// Used in CRUD flow mode to chain values between requests.
+        /// Example: --extract-fields "id,uuid,name"
+        #[arg(long)]
+        extract_fields: Option<String>,
+
+        // === Parallel Execution Options ===
+        /// Create N resources in parallel using http.batch()
+        ///
+        /// Executes POST requests in parallel batches for high-throughput testing.
+        /// Example: --parallel-create 300
+        #[arg(long, value_name = "N")]
+        parallel_create: Option<u32>,
+
+        // === Data-Driven Testing Options ===
+        /// Test data file (CSV or JSON)
+        ///
+        /// Loads test data for data-driven testing using k6 SharedArray.
+        /// CSV files should have headers matching field names.
+        #[arg(long, value_name = "FILE")]
+        data_file: Option<PathBuf>,
+
+        /// Data distribution strategy
+        ///
+        /// How to distribute data across VUs and iterations:
+        /// - unique-per-vu: Each VU gets unique row (default)
+        /// - unique-per-iteration: Each iteration gets unique row
+        /// - random: Random row selection
+        /// - sequential: Sequential iteration through all rows
+        #[arg(long, default_value = "unique-per-vu")]
+        data_distribution: String,
+
+        /// Data column to request field mappings
+        ///
+        /// Format: "column:target,column2:target2"
+        /// Targets: body.field, path.param, query.param, header.name
+        /// Example: --data-mappings "email:body.email,userId:path.id"
+        #[arg(long)]
+        data_mappings: Option<String>,
+
+        // === Invalid Data Testing Options ===
+        /// Percentage of requests to send with invalid data (0.0-1.0)
+        ///
+        /// Enables error testing by mixing valid and invalid requests.
+        /// Example: --error-rate 0.2 for 20% invalid requests
+        #[arg(long)]
+        error_rate: Option<f64>,
+
+        /// Types of invalid data to generate (comma-separated)
+        ///
+        /// Options: missing-field, wrong-type, empty, null, out-of-range, malformed
+        /// Example: --error-types "missing-field,wrong-type,null"
+        #[arg(long)]
+        error_types: Option<String>,
+
+        // === Security Testing Options ===
+        /// Enable security payload injection testing
+        ///
+        /// Injects common attack payloads (SQLi, XSS, etc.) to test error handling.
+        /// ONLY use against test/staging environments!
+        #[arg(long)]
+        security_test: bool,
+
+        /// Custom security payloads file (JSON)
+        ///
+        /// Extends built-in payloads with custom attack patterns.
+        /// See documentation for payload file format.
+        #[arg(long, value_name = "FILE")]
+        security_payloads: Option<PathBuf>,
+
+        /// Security test categories (comma-separated)
+        ///
+        /// Options: sqli, xss, command-injection, path-traversal, ssti, ldap,
+        /// xxe, llm-prompt-injection (OWASP LLM01: prompt-injection/jailbreak
+        /// payloads for agent->LLM paths), dlp (synthetic PII canaries: test
+        /// card PANs, SSN/AWS-key shapes for data-loss-prevention egress tests)
+        /// Example: --security-categories "sqli,xss,llm-prompt-injection,dlp"
+        #[arg(long)]
+        security_categories: Option<String>,
+
+        /// Fields to target for security payload injection
+        ///
+        /// If not specified, injects into first string field.
+        /// Example: --security-target-fields "name,email,query"
+        #[arg(long)]
+        security_target_fields: Option<String>,
+
+        // === WAFBench Integration ===
+        /// WAFBench test directory or glob pattern
+        ///
+        /// Load attack patterns from WAFBench YAML files (CRS rule sets).
+        /// Supports glob patterns for selecting specific rule categories.
+        ///
+        /// Examples:
+        ///   --wafbench-dir ./wafbench/REQUEST-941-*        (all XSS rules)
+        ///   --wafbench-dir ./wafbench/REQUEST-942-*        (all SQLi rules)
+        ///   --wafbench-dir ./wafbench/**/*.yaml            (all rules)
+        ///
+        /// See: https://github.com/microsoft/WAFBench
+        #[arg(long, value_name = "PATH")]
+        wafbench_dir: Option<String>,
+
+        /// Cycle through ALL WAFBench payloads instead of random sampling
+        ///
+        /// By default, k6 randomly selects payloads for each request.
+        /// With this flag, payloads are cycled through sequentially,
+        /// ensuring all attack patterns are tested.
+        ///
+        /// NOTE: this affects payload SELECTION only. It does not change which
+        /// URLs are targeted. For sending your file's requests as written, see
+        /// --wafbench-verbatim.
+        #[arg(long)]
+        wafbench_cycle_all: bool,
+
+        /// Send each traffic case EXACTLY as written, instead of extracting an
+        /// attack payload from it
+        ///
+        /// Default behaviour treats a case's `uri` as a CRS attack string in a
+        /// query parameter: only the first parameter's value is kept, the path
+        /// is discarded, and the survivor is re-attached to endpoints from
+        /// --spec as `?test=<payload>`. That is correct for CRS/WAFBench files.
+        ///
+        /// It is wrong when the relationship between parameters IS the test
+        /// (e.g. a WAF rule chained on `ARGS:redirect_uri` and
+        /// `ARGS:response_type`), because the other parameters never reach the
+        /// wire and the run looks green without exercising anything.
+        ///
+        /// With this flag the method, full URI (path and query, byte for byte),
+        /// headers and body are sent as given. --spec is not required.
+        #[arg(long)]
+        wafbench_verbatim: bool,
+
+        // === OWASP API Security Top 10 Testing ===
+        /// Enable OWASP API Security Top 10 (2023) testing mode
+        ///
+        /// Runs automated security tests for all 10 OWASP API security categories:
+        /// API1: BOLA, API2: Auth, API3: Mass Assignment, API4: Rate Limiting,
+        /// API5: Function Auth, API6: Business Logic, API7: SSRF,
+        /// API8: Misconfiguration, API9: Inventory, API10: Unsafe Consumption
+        ///
+        /// ONLY use against test/staging environments!
+        #[arg(long)]
+        owasp_api_top10: bool,
+
+        /// OWASP API categories to test (comma-separated)
+        ///
+        /// Options: api1, api2, api3, api4, api5, api6, api7, api8, api9, api10
+        /// Also accepts aliases: bola, auth, ssrf, misconfig, etc.
+        /// Default: all categories
+        ///
+        /// Example: --owasp-categories "api1,api2,api7"
+        #[arg(long)]
+        owasp_categories: Option<String>,
+
+        /// Authorization header name for OWASP auth tests
+        ///
+        /// Default: "Authorization"
+        #[arg(long, default_value = "Authorization")]
+        owasp_auth_header: String,
+
+        /// Valid authorization token for OWASP baseline requests
+        ///
+        /// Required for accurate auth bypass and BOLA testing.
+        /// Example: --owasp-auth-token "Bearer your-token-here"
+        #[arg(long)]
+        owasp_auth_token: Option<String>,
+
+        /// File containing admin/privileged paths to test
+        ///
+        /// One path per line. Used for API5 (Broken Function Authorization).
+        /// Default: built-in list (/admin, /internal, etc.)
+        #[arg(long, value_name = "FILE")]
+        owasp_admin_paths: Option<PathBuf>,
+
+        /// Fields containing resource IDs for BOLA testing
+        ///
+        /// Comma-separated list of field names that contain resource IDs.
+        /// Default: id, uuid, user_id, userId, account_id, accountId
+        ///
+        /// Example: --owasp-id-fields "id,resourceId,orderId"
+        #[arg(long)]
+        owasp_id_fields: Option<String>,
+
+        /// OWASP report output file
+        ///
+        /// Default: owasp-report.json
+        #[arg(long, value_name = "FILE")]
+        owasp_report: Option<PathBuf>,
+
+        /// OWASP report format
+        ///
+        /// Options: json, sarif
+        /// SARIF format integrates with IDEs and CI/CD tools.
+        #[arg(long, default_value = "json")]
+        owasp_report_format: String,
+
+        /// Number of iterations per VU for OWASP tests
+        ///
+        /// Controls how many times each virtual user runs through
+        /// the security tests. Default: 1
+        ///
+        /// Example: --owasp-iterations 5
+        #[arg(long, default_value = "1")]
+        owasp_iterations: u32,
+
+        /// Run OpenAPI 3.0.0 conformance testing
+        ///
+        /// Generates and runs a comprehensive k6 script that exercises
+        /// all OpenAPI 3.0.0 features (parameters, request bodies, schema types,
+        /// composition, string formats, constraints, response codes, HTTP methods,
+        /// content negotiation, and security schemes).
+        ///
+        /// Reports per-feature pass/fail results.
+        ///
+        /// Example: mockforge bench --conformance --target http://localhost:3000
+        #[arg(long)]
+        conformance: bool,
+
+        /// API key for conformance security scheme tests
+        ///
+        /// Used to test API key authentication in conformance mode.
+        ///
+        /// Example: --conformance-api-key "my-api-key"
+        #[arg(long)]
+        conformance_api_key: Option<String>,
+
+        /// Basic auth credentials for conformance security scheme tests
+        ///
+        /// Format: username:password
+        ///
+        /// Works for HTTP Basic AND for LDAP gateways that accept the same
+        /// `Authorization: Basic <base64(user:pass)>` envelope (most do).
+        ///
+        /// Example: --conformance-basic-auth "admin:secret"
+        #[arg(long)]
+        conformance_basic_auth: Option<String>,
+
+        /// Round 46 (#79) — Bearer / JWT token shortcut. Sends every
+        /// request with `Authorization: Bearer <token>`.
+        ///
+        /// Use for: JWT (mint the token out-of-band with your IdP, paste
+        /// it here), opaque bearer tokens, and most OAuth2 access tokens.
+        /// For SAML, exchange the SAML assertion for a session cookie at
+        /// your IdP first, then forward it via `--conformance-header
+        /// "Cookie: <session>"` since SAML itself doesn't ride on every
+        /// request.
+        ///
+        /// Equivalent to `--conformance-header "Authorization: Bearer
+        /// <token>"`; this flag is just the ergonomic shortcut. The
+        /// long-form is still available when you need to send a
+        /// non-Bearer scheme like `Token`, `OAuth`, `AWS4-HMAC-SHA256`,
+        /// etc.
+        ///
+        /// Example: --auth-bearer "eyJhbGciOiJSUzI1NiIs..."
+        #[arg(long, value_name = "TOKEN")]
+        auth_bearer: Option<String>,
+
+        /// Conformance report output file
+        ///
+        /// Default: conformance-report.json
+        #[arg(long, value_name = "FILE", default_value = "conformance-report.json")]
+        conformance_report: PathBuf,
+
+        /// Conformance categories to test (comma-separated)
+        ///
+        /// Only run conformance tests for specific categories.
+        /// Valid categories: parameters, request-bodies, schema-types, composition,
+        /// string-formats, constraints, response-codes, http-methods, content-types, security,
+        /// response-validation
+        ///
+        /// Example: --conformance-categories "parameters,security"
+        #[arg(long)]
+        conformance_categories: Option<String>,
+
+        /// Conformance report format
+        ///
+        /// Output format for the conformance report: "json" (default) or "sarif" (SARIF 2.1.0).
+        /// SARIF format is compatible with GitHub Code Scanning and VS Code SARIF Viewer.
+        ///
+        /// Example: --conformance-report-format sarif
+        #[arg(long, default_value = "json")]
+        conformance_report_format: String,
+
+        /// Custom headers to inject into every conformance request (repeatable)
+        ///
+        /// Use this to provide authentication headers when testing against
+        /// real APIs that require credentials. Each header is in "Name: Value" format.
+        /// Custom headers override spec-derived placeholder values for matching names.
+        ///
+        /// Example: --conformance-header "X-CSRFToken: real-token" --conformance-header "Cookie: sessionid=abc"
+        #[arg(long = "conformance-header", value_name = "HEADER")]
+        conformance_headers: Vec<String>,
+
+        /// Test ALL API operations in conformance mode (not just representative samples)
+        ///
+        /// By default, spec-driven conformance picks one representative operation per
+        /// feature check (e.g., one GET, one POST). This flag tests every operation
+        /// for method, response code, and body categories, using path-qualified check
+        /// names like "method:GET:/api/users".
+        ///
+        /// Example: --conformance-all-operations
+        #[arg(long)]
+        conformance_all_operations: bool,
+
+        /// Custom conformance checks YAML file
+        ///
+        /// Define additional conformance checks beyond the built-in OpenAPI 3.0.0 feature set.
+        /// Custom checks appear under a "Custom" category in the report.
+        ///
+        /// Example: --conformance-custom custom-checks.yaml
+        #[arg(long, value_name = "FILE")]
+        conformance_custom: Option<PathBuf>,
+
+        /// Delay in milliseconds between consecutive conformance requests.
+        ///
+        /// Useful when testing against rate-limited APIs to avoid 429 responses.
+        /// Default: 0 (no delay). Example: --conformance-delay 100 for 100ms between requests.
+        #[arg(long, value_name = "MS", default_value = "0")]
+        conformance_delay: u64,
+
+        /// Use k6 for conformance test execution instead of the native Rust executor
+        ///
+        /// By default, conformance tests run using a native Rust executor (no k6 required).
+        /// Use this flag to fall back to the k6-based execution path.
+        #[arg(long)]
+        use_k6: bool,
+
+        /// Regex filter for custom conformance checks.
+        ///
+        /// Only custom checks whose name or path matches the regex pattern
+        /// are included. All spec-driven checks still run.
+        ///
+        /// Examples:
+        ///   --conformance-custom-filter "wafcrs|ssl"
+        ///   --conformance-custom-filter "GET"
+        ///   --conformance-custom-filter "/api/users"
+        #[arg(long, value_name = "REGEX")]
+        conformance_custom_filter: Option<String>,
+
+        /// Export all request/response pairs to conformance-requests.json.
+        ///
+        /// Creates a JSON file in the output directory containing every HTTP
+        /// request sent during conformance testing along with the full response
+        /// (status, headers, body). Useful for comparing against your product's
+        /// expected behavior.
+        #[arg(long)]
+        export_requests: bool,
+
+        /// Validate each request against the OpenAPI spec.
+        ///
+        /// Checks that request bodies match the spec's requestBody schema,
+        /// required parameters are present, and content types are correct.
+        /// Violations are written to conformance-request-violations.json.
+        #[arg(long)]
+        validate_requests: bool,
+
+        /// Issue #79 round 13 — replace the standard conformance run
+        /// with a positive + per-category negative driver. For each
+        /// spec operation: send one valid request (expect 2xx) plus
+        /// negatives per category (empty body, wrong-type body,
+        /// missing required query/header) and report how many were
+        /// correctly rejected with 4xx. Useful to verify the server's
+        /// validator is actually wired for the given spec. Requires
+        /// --spec. Writes `conformance-self-test.json` to the output
+        /// directory alongside the regular report.
+        #[arg(long)]
+        conformance_self_test: bool,
+
+        /// Issue #79 round 23 (c-iii): when set, the self-test driver
+        /// records every probe's method, URL, request headers/body and
+        /// response status/headers/body to
+        /// `conformance-self-test-requests.jsonl` (one JSON object per
+        /// line) next to the JSON/HTML report. Bodies cap at 16 KiB per
+        /// direction; `*_truncated` flags whether more was dropped.
+        ///
+        /// Lets you confirm geo-source-ip headers actually shipped, or
+        /// inspect why a negative probe came back 200 instead of 4xx,
+        /// without re-running under `RUST_LOG=trace`.
+        ///
+        /// No effect without `--conformance-self-test`.
+        #[arg(long)]
+        conformance_self_test_capture: bool,
+
+        /// Issue #79 round 25 (a2 / a3): validate every probe's response
+        /// body against the spec's response schema for the actual
+        /// status returned. The mismatch is recorded in the JSONL /
+        /// HTML capture viewer under `response_schema_error`. Requires
+        /// `--conformance-self-test --conformance-self-test-capture`
+        /// (the validator needs the body, which only the capture path
+        /// reads). Off by default because validating large response
+        /// bodies adds wall-clock time on big specs.
+        #[arg(long)]
+        validate_response_schemas: bool,
+
+        /// Round 47 (#79) — Srikanth on 0.3.191: "Is there a way I
+        /// can run conformance-self-test for longer duration or the
+        /// duration I specify to simulate and test all the network
+        /// related problems. Currently for some of the specs it runs
+        /// and finishes quickly cant even try to do any network
+        /// triggers".
+        ///
+        /// Repeat the full self-test probe matrix `N` times in
+        /// sequence. Defaults to 1 (the existing round-13 behaviour).
+        /// Combine with `--conformance-delay` to space probes apart
+        /// so you can pull/push wires mid-run. No effect without
+        /// `--conformance-self-test`.
+        #[arg(long, value_name = "N", default_value = "1")]
+        conformance_self_test_iterations: u32,
+
+        /// Round 47 (#79) — alternative to `--conformance-self-test-
+        /// iterations`: keep firing the probe matrix until the
+        /// specified duration elapses. Mutually convenient with
+        /// `--conformance-delay` for keeping a controlled probe rate
+        /// over the window. Accepts the same shorthand as `--duration`
+        /// (e.g. `120s`, `5m`, `1h`). When both `--conformance-self-
+        /// test-iterations` and `--conformance-self-test-duration` are
+        /// set, duration wins (iterations becomes the floor). No
+        /// effect without `--conformance-self-test`.
+        #[arg(long, value_name = "DURATION")]
+        conformance_self_test_duration: Option<String>,
+
+        /// Issue #79 round 18.5 — local source IPs to bind self-test
+        /// requests to. Each IP must already be assigned to an
+        /// interface on this host (sub-interface, aliased address,
+        /// etc.) — the OS refuses to bind unknown addresses.
+        ///
+        /// Operations round-robin through the pool — useful for
+        /// testing how a multi-homed bench host or a GEODB server
+        /// reacts when traffic arrives from multiple TCP source
+        /// addresses. Repeatable.
+        ///
+        /// Example: --source-ip 10.0.0.5 --source-ip 10.0.0.6
+        #[arg(long = "source-ip", value_name = "IP")]
+        source_ips: Vec<String>,
+
+        /// Issue #79 round 18.5 — fake source IPs to advertise via
+        /// forwarded-IP headers. Used to exercise GEODB lookup at
+        /// the destination without actually emitting packets from
+        /// those addresses (which would require raw sockets + root).
+        ///
+        /// The IP rotates per operation across the default header
+        /// set (X-Forwarded-For, True-Client-IP, CF-Connecting-IP)
+        /// or the headers listed via --geo-source-header. Repeatable.
+        ///
+        /// Example: --geo-source-ip 203.0.113.42 --geo-source-ip 198.51.100.7
+        #[arg(long = "geo-source-ip", value_name = "IP")]
+        geo_source_ips: Vec<String>,
+
+        /// Issue #79 round 18.5 — which forwarded-IP header to use
+        /// for `--geo-source-ip`. Defaults to a 3-header set covering
+        /// Cloudflare (`CF-Connecting-IP`), Akamai/CloudFront
+        /// (`True-Client-IP`), and the de-facto `X-Forwarded-For`.
+        /// Override to test a specific stack. Repeatable.
+        #[arg(long = "geo-source-header", value_name = "HEADER")]
+        geo_source_headers: Vec<String>,
+
+        /// Issue #79 round 21 — cap the HTML conformance report's
+        /// missed-negative drill-down at N rows. Default 200, pass
+        /// `0` for no cap (show everything). The JSON report always
+        /// has the full set; this knob only controls the HTML view
+        /// so a 50 000-violation run doesn't produce a multi-MB
+        /// browser-choking file by default.
+        #[arg(long = "report-missed-cap", value_name = "N")]
+        report_missed_cap: Option<u32>,
+
+        /// Issue #79 round 57 — run k6 with `K6_DISCARD_RESPONSE_BODIES=true`
+        /// so it does not buffer response bodies in memory. For scale / stress
+        /// load runs where you only care about status codes and latency: keeps
+        /// k6's RSS bounded on long, high-VU runs (guards the OOM / SIGKILL
+        /// failure mode). This is the first-class flag for the env var wired in
+        /// 0.3.204. Multi-target load already discards by default; this enables
+        /// it for single-target load runs too. No effect on conformance /
+        /// self-test / CRUD-extraction runs, which need the response body.
+        #[arg(long = "discard-response-bodies")]
+        discard_response_bodies: bool,
+
+        /// Issue #79 round 61 — DNS resolution policy passed to k6 as
+        /// `--dns "policy=<value>"`. Use `preferIPv6` (or `onlyIPv6`) to make a
+        /// GEODB IPv6 test dial hostname targets over their AAAA record while
+        /// keeping the hostname on the wire (needed when the proxy routes by
+        /// Host/SNI so the target must be a name, not a bracket IP). Without it
+        /// k6/Go default to IPv4, which then can't be dialed from an IPv6
+        /// `--source-ip` ("no suitable address found"). Values: preferIPv4
+        /// (default when unset), preferIPv6, onlyIPv4, onlyIPv6, any.
+        #[arg(long = "dns-policy")]
+        dns_policy: Option<String>,
+    },
+
+    /// Native Rust chunked-encoding traffic generator.
+    ///
+    /// Sends real `Transfer-Encoding: chunked` requests via hyper. Use this
+    /// when the k6/Go-based `bench --chunked-request-bodies` flow doesn't
+    /// produce on-the-wire chunking (Go's `net/http` decides chunking from
+    /// body type and may send Content-Length instead).
+    ///
+    /// Without --spec, runs against the single URL given by --target.
+    /// With --spec, --target becomes the base URL and the bench iterates
+    /// every POST/PUT/PATCH operation in the spec sequentially, running
+    /// for --duration each. --base-path is prepended to every spec path
+    /// (priority: CLI > spec.servers, matching `mockforge bench`).
+    ///
+    /// Examples:
+    ///   mockforge bench-chunked --target http://localhost:3000/upload
+    ///   mockforge bench-chunked --target http://localhost:3000/upload \
+    ///     --concurrency 10 --duration 60s \
+    ///     --chunk-size-bytes 4096 --total-size-bytes 10485760 \
+    ///     --chunk-interval-ms 50
+    ///   mockforge bench-chunked --spec api.json --target https://192.168.2.86 \
+    ///     --base-path /v1.0 --duration 10m --insecure \
+    ///     --validate-requests --export-requests
+    #[cfg(feature = "bench")]
+    #[command(verbatim_doc_comment)]
+    BenchChunked {
+        /// Target URL. Without --spec: full URL of the chunked endpoint
+        /// (e.g. `http://host:3000/upload`). With --spec: base URL only
+        /// (e.g. `https://192.168.2.86`); the path is taken from each
+        /// matching operation in the spec.
+        #[arg(short, long)]
+        target: String,
+
+        /// OpenAPI spec to drive the bench. When set, runs one chunked
+        /// bench per POST/PUT/PATCH operation, each for --duration.
+        #[arg(long)]
+        spec: Option<PathBuf>,
+
+        /// API base path prefix (e.g., "/api" or "/v1.0").
+        ///
+        /// Prepends this path to each spec-derived operation path before
+        /// the URL is built. Priority (matches `mockforge bench`):
+        ///   1. CLI --base-path (even empty string to disable)
+        ///   2. Base path from spec's `servers` URL
+        ///   3. None
+        ///
+        /// Only applied when --spec is given. Ignored in single-target
+        /// mode (the user-provided --target URL is used verbatim).
+        #[arg(long, value_name = "PATH")]
+        base_path: Option<String>,
+
+        /// Run only the operation with this `operationId` (when --spec
+        /// is given). Without this flag, all POST/PUT/PATCH ops run.
+        #[arg(long)]
+        operation_id: Option<String>,
+
+        /// HTTP method (POST, PUT, PATCH). Ignored when --spec is set —
+        /// the method comes from each spec operation.
+        #[arg(short, long, default_value = "POST")]
+        method: String,
+
+        /// Number of concurrent workers.
+        #[arg(short, long, default_value = "10")]
+        concurrency: u32,
+
+        /// Duration (e.g., 30s, 5m, 1h, or bare seconds like 600).
+        /// **Per operation** when --spec is set — a spec with 3 POST/PATCH
+        /// ops and --duration 30s runs for ~90s total.
+        #[arg(short, long, default_value = "30s")]
+        duration: String,
+
+        /// Size of each chunk emitted into the request body, in bytes.
+        /// The body is streamed without a Content-Length, so hyper sends
+        /// `Transfer-Encoding: chunked` automatically.
+        #[arg(long, default_value = "1024")]
+        chunk_size_bytes: usize,
+
+        /// Body size **per request**, in bytes. With --chunk-size-bytes,
+        /// each request emits `total_size_bytes / chunk_size_bytes` chunks
+        /// at --chunk-interval-ms apart, then the next request starts.
+        /// Total bytes over the whole run = total_size_bytes × completed
+        /// requests. (e.g. 10 MiB / 4 KiB = 2560 chunks per request.)
+        #[arg(long, default_value = "1048576")]
+        total_size_bytes: usize,
+
+        /// Sleep between chunks (ms). 0 = back-to-back. With non-zero
+        /// values, each request takes at least `(total_size_bytes /
+        /// chunk_size_bytes) * chunk_interval_ms` milliseconds.
+        #[arg(long, default_value = "0")]
+        chunk_interval_ms: u64,
+
+        /// Extra header (`Name: Value`); may be repeated.
+        #[arg(long, action = clap::ArgAction::Append)]
+        header: Vec<String>,
+
+        /// Skip TLS certificate verification (for self-signed test servers).
+        #[arg(long)]
+        insecure: bool,
+
+        /// Pre-flight: validate every spec operation can produce a usable
+        /// request before running the bench. Currently checks that path
+        /// templates can be filled in (no missing required path params)
+        /// and that the resolved method is POST/PUT/PATCH. Validation
+        /// failures are written to `<output>/chunked-request-violations.json`
+        /// and abort the run with a non-zero exit. No-op without --spec.
+        #[arg(long)]
+        validate_requests: bool,
+
+        /// After the run, write a JSON file describing each operation's
+        /// request shape (method, URL, headers, body sizing) and the
+        /// resulting status-code distribution + captured error samples,
+        /// to `<output>/chunked-requests.json`. Useful for diffing against
+        /// real-system behavior. No-op without --spec.
+        #[arg(long)]
+        export_requests: bool,
+
+        /// Output directory for `chunked-requests.json` /
+        /// `chunked-request-violations.json` (when --export-requests /
+        /// --validate-requests is set). Created if missing.
+        #[arg(short, long, default_value = "bench-results")]
+        output: PathBuf,
+    },
+
+    /// Generate HTTP load marked with QoS / DSCP traffic classes (#933)
+    ///
+    /// A native (non-k6) generator that sets the IPv4 IP_TOS (DSCP) byte on
+    /// each TCP connection before connect, so you can drive Voice / Video /
+    /// Best-Effort / Background traffic (mixed in one run) at a path under test
+    /// and observe its QoS handling. Presets: voice (EF/46), video (AF41/34),
+    /// best-effort (0), background (CS1/8); or `dscpNN` for a raw code point.
+    /// `--class NAME[:WEIGHT]` is repeatable and weights are relative.
+    ///
+    /// Plain http:// targets only (the point is raw socket control, not TLS).
+    /// Jumbo frames and IP fragmentation are NIC/kernel-level and are not
+    /// socket knobs; see `--help` output for the tc/netem/ip-link recipes.
+    ///
+    /// Examples:
+    ///   mockforge bench-qos --target http://localhost:3000/ \
+    ///     --class voice:40 --class video:30 --class best-effort:30 \
+    ///     --duration 10s --concurrency 20
+    ///   mockforge bench-qos --target http://host:8080/health \
+    ///     --class dscp46 --mss 536 --duration 30s
+    #[cfg(feature = "bench")]
+    #[command(verbatim_doc_comment)]
+    BenchQos {
+        /// Target URL (plain http:// only), e.g. `http://localhost:3000/`.
+        #[arg(short, long)]
+        target: String,
+
+        /// Traffic class to send: `NAME[:WEIGHT]`. NAME is a preset
+        /// (voice, video, best-effort, background) or `dscpNN` (NN=0-63).
+        /// Repeat to mix classes; WEIGHT (default 1) is the relative share.
+        #[arg(long = "class", value_name = "NAME[:WEIGHT]", action = clap::ArgAction::Append, required = true)]
+        classes: Vec<String>,
+
+        /// HTTP method (GET/HEAD/POST/...). Body is empty.
+        #[arg(short, long, default_value = "GET")]
+        method: String,
+
+        /// Number of concurrent workers.
+        #[arg(short, long, default_value = "10")]
+        concurrency: u32,
+
+        /// Duration (e.g. 10s, 5m, or bare seconds like 30).
+        #[arg(short, long, default_value = "10s")]
+        duration: String,
+
+        /// Optional TCP_MAXSEG (MSS) clamp, in bytes, applied to every
+        /// connection. Forces smaller segments (approximates a small MTU).
+        #[arg(long)]
+        mss: Option<u32>,
+    },
+
+    /// True HTTP/1.1 pipelining bench with synthetic streaming bodies (#937)
+    ///
+    /// Writes `--pipeline-depth` requests back-to-back on each connection
+    /// BEFORE reading any response, then reads responses in order. Bodies
+    /// stream from a generator (never fully materialised), so GB sizes work.
+    /// Many servers/proxies do not support request pipelining — the report
+    /// surfaces early closes and unanswered requests instead of hiding them.
+    ///
+    /// Examples:
+    ///   mockforge bench-pipeline --target http://localhost:3000/api \
+    ///     --content-type json --body-size 500KB --pipeline-depth 16 \
+    ///     --connections 8 --duration 30s
+    ///   mockforge bench-pipeline --target http://host:8080/upload \
+    ///     --content-type multipart --body-size 10MB --method POST
+    #[cfg(feature = "bench")]
+    #[command(verbatim_doc_comment)]
+    BenchPipeline {
+        /// Target URL (plain http:// only), e.g. `http://localhost:3000/`.
+        #[arg(short, long)]
+        target: String,
+
+        /// HTTP method. Pipelining is only meaningful with bodies, so the
+        /// default is POST.
+        #[arg(short, long, default_value = "POST")]
+        method: String,
+
+        /// Synthetic body flavour: json | xml | urlencoded | multipart.
+        #[arg(long, default_value = "json")]
+        content_type: String,
+
+        /// Exact body size per request: bare bytes or KB/MB/GB / KiB/MiB/GiB.
+        #[arg(long, default_value = "1KB")]
+        body_size: String,
+
+        /// Requests in flight per connection before reading any response.
+        #[arg(long, default_value = "16")]
+        pipeline_depth: usize,
+
+        /// Concurrent connections.
+        #[arg(long, default_value = "8")]
+        connections: usize,
+
+        /// Duration (e.g. 10s, 5m, or bare seconds like 30).
+        #[arg(short, long, default_value = "30s")]
+        duration: String,
+    },
+
+    /// Convert a HAR file to conformance custom-checks YAML
+    ///
+    /// Reads a recorded HTTP Archive (.har) file and generates a YAML config
+    /// that can be used with `mockforge bench --conformance-custom`.
+    ///
+    /// Examples:
+    ///   mockforge har-to-conformance --har recording.har
+    ///   mockforge har-to-conformance --har recording.har --output checks.yaml
+    ///   mockforge har-to-conformance --har recording.har --include-headers content-type,x-api-version
+    #[cfg(feature = "bench")]
+    #[command(verbatim_doc_comment)]
+    HarToConformance {
+        /// Path to the HAR file
+        #[arg(long)]
+        har: PathBuf,
+
+        /// Output file path (default: stdout)
+        #[arg(long)]
+        output: Option<PathBuf>,
+
+        /// Base URL to strip from entry URLs (auto-detected if omitted).
+        /// Example: --base-url https://192.168.2.86/api
+        #[arg(long)]
+        base_url: Option<String>,
+
+        /// Base path to strip from generated paths (e.g., /api).
+        /// Use this when your HAR URLs include a path prefix that you also
+        /// pass via --base-path to the bench command, to avoid path doubling.
+        #[arg(long)]
+        strip_base_path: Option<String>,
+
+        /// Skip static asset entries (.js, .css, .png, etc.)
+        #[arg(long, default_value = "true")]
+        skip_static: bool,
+
+        /// Response headers to include in checks (comma-separated)
+        #[arg(long, value_delimiter = ',')]
+        include_headers: Vec<String>,
+
+        /// Maximum number of HAR entries to process (0 = unlimited)
+        #[arg(long, default_value = "0")]
+        max_entries: usize,
+    },
+}
+
+/// Return a short name for the top-level CLI subcommand used for pillar analytics.
+fn cli_command_name(cmd: &Commands) -> &'static str {
+    match cmd {
+        Commands::Serve(_) => "serve",
+        #[cfg(feature = "smtp")]
+        Commands::Smtp { .. } => "smtp",
+        #[cfg(feature = "mqtt")]
+        Commands::Mqtt { .. } => "mqtt",
+        #[cfg(feature = "ftp")]
+        Commands::Ftp { .. } => "ftp",
+        #[cfg(feature = "kafka")]
+        Commands::Kafka { .. } => "kafka",
+        #[cfg(feature = "amqp")]
+        Commands::Amqp { .. } => "amqp",
+        Commands::Data { .. } => "data",
+        Commands::Admin { .. } => "admin",
+        Commands::Sync { .. } => "sync",
+        Commands::Quick { .. } => "quick",
+        Commands::Completions { .. } => "completions",
+        Commands::Init { .. } => "init",
+        Commands::Wizard => "wizard",
+        Commands::ValidateFixtures { .. } => "validate-fixtures",
+        Commands::Generate { .. } => "generate",
+        Commands::Schema { .. } => "schema",
+        Commands::DevSetup { .. } => "dev-setup",
+        Commands::Config { .. } => "config",
+        _ => "other",
+    }
+}
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let cli = Cli::parse();
+
+    // Initialize Sentry first so panics and errors during the rest of startup
+    // are captured. No-op at runtime when SENTRY_DSN is unset, so it's safe
+    // to call on every CLI invocation (local, CI, hosted-mock). The guard's
+    // Drop flushes queued events — bind to a main-scoped local so it lives
+    // for the whole program.
+    #[cfg(feature = "sentry")]
+    let _sentry_guard = mockforge_observability::init_sentry();
+
+    // Initialize logging with the provided log level
+    // Note: Full logging configuration (JSON format, file output) will be applied
+    // after loading the config file in the serve command
+    // #835 — the MCP transport is stdin/stdout; ANY log line on stdout
+    // corrupts the protocol stream. Skip logging init entirely for this
+    // subcommand so the stream carries JSON-RPC frames only.
+    let is_mcp = matches!(cli.command, Commands::Mcp);
+    if !is_mcp {
+        let initial_logging_config = mockforge_observability::LoggingConfig {
+            level: cli.log_level.clone(),
+            json_format: false, // Will be overridden by config file if present
+            file_path: None,
+            max_file_size_mb: 10,
+            max_files: 5,
+        };
+        if let Err(e) = mockforge_observability::init_logging(initial_logging_config) {
+            eprintln!("Failed to initialize logging: {}", e);
+            std::process::exit(1);
+        }
+    }
+
+    // #677 — opt-in MockOps analytics database. Setting MOCKFORGE_ANALYTICS_DB
+    // to a sqlite path turns on the EndpointCoverage / RealityLevelStaleness
+    // / ScenarioUsage / DriftPercentage dashboards by giving the recorder
+    // helpers in `mockforge_analytics` somewhere to write. Left unset, all
+    // the `record_*_async` calls in the middleware are zero-overhead no-ops.
+    if let Ok(path) = std::env::var("MOCKFORGE_ANALYTICS_DB") {
+        if !path.is_empty() {
+            let cfg = mockforge_analytics::AnalyticsConfig {
+                database_path: PathBuf::from(&path),
+                ..Default::default()
+            };
+            match mockforge_analytics::init(cfg).await {
+                Ok(db) => {
+                    if mockforge_analytics::set_global_db(db).is_err() {
+                        tracing::warn!(
+                            "analytics database already initialised; keeping first install"
+                        );
+                    } else {
+                        tracing::info!(path = %path, "📊 MockOps analytics database installed");
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(path = %path, error = %e, "failed to open analytics database, continuing without it");
+                }
+            }
+        }
+    }
+
+    // Record the invoked CLI subcommand for the DevX pillar dashboard.
+    let command_name = cli_command_name(&cli.command);
+    mockforge_core::pillar_tracking::record_devx_usage(
+        None,
+        None,
+        "cli_command",
+        serde_json::json!({ "command": command_name }),
+    )
+    .await;
+
+    match cli.command {
+        Commands::Serve(args) => {
+            // Issue #79 round 15 — `--shadow` is a thin alias for the
+            // env var the server reads at request time. Set it before
+            // anything boots so `shadow_mode_enabled()` sees it. A flag
+            // is harder to forget than an env var (Srikanth's (g) ask).
+            if args.shadow {
+                std::env::set_var("MOCKFORGE_SHADOW_MODE", "true");
+            }
+            // Handle --list-network-profiles flag
+            if args.traffic.list_network_profiles {
+                let catalog = mockforge_core::NetworkProfileCatalog::new();
+                println!("\n📡 Available Network Profiles:\n");
+                for (name, description) in catalog.list_profiles_with_description() {
+                    println!("  • {:<20} {}", name, description);
+                }
+                println!();
+                return Ok(());
+            }
+
+            // Validate TLS flags
+            if args.tls.tls_enabled {
+                if args.tls.tls_cert.is_none() || args.tls.tls_key.is_none() {
+                    eprintln!("Error: --tls-enabled requires --tls-cert and --tls-key");
+                    std::process::exit(1);
+                }
+                if (args.tls.mtls == "optional" || args.tls.mtls == "required")
+                    && args.tls.tls_ca.is_none()
+                {
+                    eprintln!("Error: --mtls {} requires --tls-ca", args.tls.mtls);
+                    std::process::exit(1);
+                }
+            }
+            if (args.tls.mtls == "optional" || args.tls.mtls == "required") && !args.tls.tls_enabled
+            {
+                eprintln!("Error: --mtls {} requires --tls-enabled", args.tls.mtls);
+                std::process::exit(1);
+            }
+            // --https-port runs a TLS listener alongside the plain --http-port,
+            // so it always needs a cert + key (independent of --tls-enabled).
+            if args.ports.https_port.is_some()
+                && (args.tls.tls_cert.is_none() || args.tls.tls_key.is_none())
+            {
+                eprintln!("Error: --https-port requires --tls-cert and --tls-key");
+                std::process::exit(1);
+            }
+            if let (Some(http), Some(https)) = (args.ports.http_port, args.ports.https_port) {
+                if http == https {
+                    eprintln!(
+                        "Error: --http-port ({}) and --https-port ({}) must differ",
+                        http, https
+                    );
+                    std::process::exit(1);
+                }
+            }
+
+            // Validate spec flags (mutually exclusive)
+            if !args.spec.is_empty() && args.spec_dir.is_some() {
+                eprintln!("Error: --spec and --spec-dir cannot be used together");
+                std::process::exit(1);
+            }
+
+            // Validate merge_conflicts and api_versioning values
+            if !matches!(args.merge_conflicts.as_str(), "error" | "first" | "last") {
+                eprintln!("Error: --merge-conflicts must be one of: error, first, last");
+                std::process::exit(1);
+            }
+            if !matches!(args.api_versioning.as_str(), "none" | "info" | "path-prefix") {
+                eprintln!("Error: --api-versioning must be one of: none, info, path-prefix");
+                std::process::exit(1);
+            }
+
+            serve::handle_serve(serve::ServeArgs {
+                config_path: args.config,
+                profile: args.profile,
+                http_port: args.ports.http_port,
+                https_port: args.ports.https_port,
+                ws_port: args.ports.ws_port,
+                grpc_port: args.ports.grpc_port,
+                tcp_port: args.ports.tcp_port,
+                admin: args.admin,
+                admin_port: args.admin_port,
+                admin_host: args.admin_host,
+                llm_mock: args.llm_mock,
+                llm_mock_mode: args.llm_mock_mode,
+                llm_mock_upstream: args.llm_mock_upstream,
+                llm_mock_api_key: args.llm_mock_api_key,
+                llm_mock_cassette: args.llm_mock_cassette,
+                mcp_mock: args.mcp_mock,
+                metrics: args.observability.metrics,
+                metrics_port: args.observability.metrics_port,
+                tracing: args.observability.tracing,
+                tracing_service_name: args.observability.tracing_service_name,
+                tracing_environment: args.observability.tracing_environment,
+                jaeger_endpoint: args.observability.jaeger_endpoint,
+                tracing_sampling_rate: args.observability.tracing_sampling_rate,
+                recorder: args.recorder_opts.recorder,
+                recorder_db: args.recorder_opts.recorder_db,
+                recorder_no_api: args.recorder_opts.recorder_no_api,
+                recorder_api_port: args.recorder_opts.recorder_api_port,
+                recorder_max_requests: args.recorder_opts.recorder_max_requests,
+                recorder_retention_days: args.recorder_opts.recorder_retention_days,
+                chaos: args.chaos_opts.chaos,
+                chaos_scenario: args.chaos_opts.chaos_scenario,
+                chaos_latency_ms: args.chaos_opts.chaos_latency_ms,
+                chaos_latency_range: args.chaos_opts.chaos_latency_range,
+                chaos_latency_probability: args.chaos_opts.chaos_latency_probability,
+                chaos_http_errors: args.chaos_opts.chaos_http_errors,
+                chaos_http_error_probability: args.chaos_opts.chaos_http_error_probability,
+                chaos_rate_limit: args.chaos_opts.chaos_rate_limit,
+                chaos_bandwidth_limit: args.chaos_opts.chaos_bandwidth_limit,
+                chaos_packet_loss: args.chaos_opts.chaos_packet_loss,
+                spec: args.spec,
+                spec_dir: args.spec_dir,
+                merge_conflicts: args.merge_conflicts,
+                api_versioning: args.api_versioning,
+                base_path: args.base_path,
+                tls_enabled: args.tls.tls_enabled,
+                tls_cert: args.tls.tls_cert,
+                tls_key: args.tls.tls_key,
+                tls_ca: args.tls.tls_ca,
+                tls_min_version: args.tls.tls_min_version,
+                mtls: args.tls.mtls,
+                ws_replay_file: args.ws_replay_file,
+                graphql: args.graphql,
+                graphql_port: args.ports.graphql_port,
+                graphql_upstream: args.graphql_upstream,
+                traffic_shaping: args.traffic.traffic_shaping,
+                bandwidth_limit: args.traffic.bandwidth_limit,
+                burst_size: args.traffic.burst_size,
+                ai_enabled: args.ai.ai_enabled,
+                rag_provider: args.ai.rag_provider,
+                rag_model: args.ai.rag_model,
+                rag_api_key: args.ai.rag_api_key,
+                network_profile: args.traffic.network_profile,
+                chaos_random: args.chaos_opts.chaos_random,
+                chaos_random_error_rate: args.chaos_opts.chaos_random_error_rate,
+                chaos_random_delay_rate: args.chaos_opts.chaos_random_delay_rate,
+                chaos_random_min_delay: args.chaos_opts.chaos_random_min_delay,
+                chaos_random_max_delay: args.chaos_opts.chaos_random_max_delay,
+                reality_level: args.ai.reality_level,
+                dry_run: args.dry_run,
+                progress: args.progress,
+                verbose: args.verbose,
+                no_config: args.no_config,
+                no_rate_limit: args.no_rate_limit,
+                circuit_breaker: args.chaos_opts.circuit_breaker,
+                circuit_breaker_failure_threshold: args
+                    .chaos_opts
+                    .circuit_breaker_failure_threshold,
+                circuit_breaker_success_threshold: args
+                    .chaos_opts
+                    .circuit_breaker_success_threshold,
+                circuit_breaker_timeout_ms: args.chaos_opts.circuit_breaker_timeout_ms,
+                circuit_breaker_failure_rate: args.chaos_opts.circuit_breaker_failure_rate,
+                bulkhead: args.chaos_opts.bulkhead,
+                bulkhead_max_concurrent: args.chaos_opts.bulkhead_max_concurrent,
+                bulkhead_max_queue: args.chaos_opts.bulkhead_max_queue,
+                bulkhead_queue_timeout_ms: args.chaos_opts.bulkhead_queue_timeout_ms,
+                conformance_buffer_size: args.conformance_buffer_size,
+                conformance_buffer_unique: args.conformance_buffer_unique,
+                inject_response_violations: args.inject_response_violations,
+            })
+            .await?;
+        }
+        #[cfg(feature = "smtp")]
+        Commands::Smtp { smtp_command } => {
+            smtp_commands::handle_smtp_command(smtp_command).await?;
+        }
+        #[cfg(feature = "mqtt")]
+        Commands::Mqtt { mqtt_command } => {
+            mqtt_commands::handle_mqtt_command(mqtt_command).await?;
+        }
+        #[cfg(feature = "ftp")]
+        Commands::Ftp { ftp_command } => {
+            ftp_commands::handle_ftp_command(ftp_command).await?;
+        }
+        #[cfg(feature = "kafka")]
+        Commands::Kafka { kafka_command } => {
+            kafka_commands::handle_kafka_command(kafka_command).await?;
+        }
+        #[cfg(feature = "amqp")]
+        Commands::Amqp { amqp_command } => {
+            amqp_commands::execute_amqp_command(amqp_command).await?;
+        }
+        Commands::Data { data_command } => {
+            data_commands::handle_data(data_command).await?;
+        }
+        Commands::Admin { port, config } => {
+            handle_admin(port, config).await?;
+        }
+        Commands::Sync {
+            workspace_dir,
+            config,
+        } => {
+            handle_sync(workspace_dir, config).await?;
+        }
+        Commands::Quick {
+            file,
+            port,
+            admin,
+            admin_port,
+            metrics,
+            metrics_port,
+            logging,
+            host,
+        } => {
+            handle_quick(file, port, host, admin, admin_port, metrics, metrics_port, logging)
+                .await?;
+        }
+        Commands::Completions { shell } => {
+            handle_completions(shell);
+        }
+        Commands::Init {
+            name,
+            no_examples,
+            blueprint,
+        } => {
+            generate_commands::handle_init(name, no_examples, blueprint).await?;
+        }
+        Commands::Wizard => {
+            let config = wizard::run_wizard().await?;
+            wizard::generate_project(&config).await?;
+        }
+        Commands::ValidateFixtures { dir, file, verbose } => {
+            use fixture_validation::{print_results, validate_directory, validate_file};
+
+            if let Some(dir_path) = dir {
+                let results = validate_directory(&dir_path).await?;
+                print_results(&results, verbose);
+
+                // Exit with error code if any fixtures are invalid
+                let invalid_count = results.iter().filter(|r| !r.valid).count();
+                if invalid_count > 0 {
+                    std::process::exit(1);
+                }
+            } else if let Some(file_path) = file {
+                let result = validate_file(&file_path).await?;
+                let is_valid = result.valid;
+                print_results(&[result], verbose);
+
+                if !is_valid {
+                    std::process::exit(1);
+                }
+            } else {
+                eprintln!("Error: Either --dir or --file must be specified");
+                std::process::exit(1);
+            }
+        }
+        Commands::Generate {
+            config,
+            spec,
+            output,
+            verbose,
+            dry_run,
+            watch,
+            watch_debounce,
+            progress,
+        } => {
+            generate_commands::handle_generate(
+                config,
+                spec,
+                output,
+                verbose,
+                dry_run,
+                watch,
+                watch_debounce,
+                progress,
+            )
+            .await?;
+        }
+        Commands::Schema { schema_command } => {
+            generate_commands::handle_schema(schema_command).await?;
+        }
+        Commands::DevSetup { args } => {
+            dev_setup_commands::execute_dev_setup(args).await?;
+        }
+        Commands::Config { config_command } => {
+            config_commands::handle_config(config_command).await?;
+        }
+        Commands::GitWatch {
+            repository_url,
+            branch,
+            spec_paths,
+            poll_interval,
+            auth_token,
+            cache_dir,
+            reload_command,
+        } => {
+            git_watch_commands::handle_git_watch(
+                repository_url,
+                branch,
+                spec_paths,
+                poll_interval,
+                auth_token,
+                cache_dir,
+                reload_command,
+            )
+            .await?;
+        }
+        Commands::ContractSync {
+            repository_url,
+            branch,
+            spec_paths,
+            mock_config,
+            auth_token,
+            cache_dir,
+            strict,
+            output,
+            update,
+        } => {
+            contract_sync_commands::handle_contract_sync(
+                repository_url,
+                branch,
+                spec_paths,
+                mock_config,
+                auth_token,
+                cache_dir,
+                strict,
+                output,
+                update,
+            )
+            .await?;
+        }
+        #[cfg(feature = "recorder")]
+        Commands::VerifyMocks(args) => {
+            verify_mocks_commands::handle_verify_mocks_command(args).await?;
+        }
+
+        Commands::Mcp => {
+            mcp_server::run().await?;
+        }
+
+        Commands::ContractDiff { diff_command } => {
+            contract_diff_commands::handle_contract_diff(diff_command).await?;
+        }
+        Commands::Governance { gov_command } => {
+            governance_commands::handle_governance(gov_command).await?;
+        }
+        Commands::Import { import_command } => {
+            import_commands::handle_import_command(import_command).await?;
+        }
+        Commands::TestAi { ai_command } => {
+            ai_commands::handle_test_ai(ai_command).await?;
+        }
+
+        Commands::Plugin { plugin_command } => {
+            plugin_commands::handle_plugin_command(plugin_command).await?;
+        }
+        #[cfg(feature = "recorder")]
+        Commands::Recorder { recorder_command } => {
+            recorder_commands::handle_recorder_command(recorder_command).await?;
+        }
+        Commands::Flow { flow_command } => {
+            flow_commands::handle_flow_command(flow_command).await?;
+        }
+        #[cfg(feature = "scenarios")]
+        Commands::Scenario { scenario_command } => {
+            scenario_commands::handle_scenario_command(scenario_command).await?;
+        }
+        #[cfg(feature = "scenarios")]
+        Commands::RealityProfile {
+            reality_profile_command,
+        } => {
+            scenario_commands::handle_reality_profile_command(reality_profile_command).await?;
+        }
+        #[cfg(feature = "scenarios")]
+        Commands::BehaviorRule {
+            behavior_rule_command,
+        } => {
+            scenario_commands::handle_behavior_rule_command(behavior_rule_command).await?;
+        }
+        #[cfg(feature = "scenarios")]
+        Commands::DriftLearning {
+            drift_learning_command,
+        } => {
+            scenario_commands::handle_drift_learning_command(drift_learning_command).await?;
+        }
+        Commands::Template { template_command } => {
+            template_commands::handle_template_command(template_command).await?;
+        }
+        Commands::Blueprint { blueprint_command } => match blueprint_command {
+            blueprint_commands::BlueprintCommands::List { detailed, category } => {
+                blueprint_commands::list_blueprints(detailed, category)?;
+            }
+            blueprint_commands::BlueprintCommands::Create {
+                name,
+                blueprint,
+                output,
+                force,
+            } => {
+                blueprint_commands::create_from_blueprint(name, blueprint, output, force)?;
+            }
+            blueprint_commands::BlueprintCommands::Info { blueprint_id } => {
+                blueprint_commands::show_blueprint_info(blueprint_id)?;
+            }
+        },
+        Commands::Client { client_command } => {
+            client_generator::execute_client_command(client_command).await?;
+        }
+        Commands::Backend { backend_command } => {
+            backend_generator::handle_backend_command(backend_command).await?;
+        }
+        Commands::Workspace { workspace_command } => {
+            workspace_commands::handle_workspace_command(workspace_command).await?;
+        }
+
+        Commands::Cloud { cloud_command } => {
+            cloud_commands::handle_cloud_command(cloud_command)
+                .await
+                .map_err(|e| anyhow::anyhow!("Cloud command failed: {}", e))?;
+        }
+
+        Commands::Login {
+            token,
+            provider,
+            service_url,
+        } => {
+            cloud_commands::handle_cloud_command(cloud_commands::CloudCommands::Login {
+                token,
+                provider,
+                service_url,
+            })
+            .await
+            .map_err(|e| anyhow::anyhow!("Login failed: {}", e))?;
+        }
+
+        #[cfg(feature = "tunnel")]
+        Commands::Tunnel { tunnel_command } => {
+            tunnel_commands::handle_tunnel_command(tunnel_command)
+                .await
+                .map_err(|e| anyhow::anyhow!("Tunnel command failed: {}", e))?;
+        }
+
+        Commands::Deploy { deploy_command } => {
+            deploy_commands::handle_deploy_command(deploy_command)
+                .await
+                .map_err(|e| anyhow::anyhow!("Deploy command failed: {}", e))?;
+        }
+
+        #[cfg(feature = "vbr")]
+        Commands::Vbr { vbr_command } => {
+            vbr_commands::execute_vbr_command(vbr_command)
+                .await
+                .map_err(|e| anyhow::anyhow!("VBR command failed: {}", e))?;
+        }
+
+        Commands::Snapshot { snapshot_command } => {
+            snapshot_commands::handle_snapshot_command(snapshot_command)
+                .await
+                .map_err(|e| anyhow::anyhow!("Snapshot command failed: {}", e))?;
+        }
+
+        Commands::Mockai { mockai_command } => {
+            mockai_commands::handle_mockai_command(mockai_command)
+                .await
+                .map_err(|e| anyhow::anyhow!("MockAI command failed: {}", e))?;
+        }
+        Commands::Voice { voice_command } => {
+            voice_commands::handle_voice_command(voice_command)
+                .await
+                .map_err(|e| anyhow::anyhow!("Voice command failed: {}", e))?;
+        }
+
+        Commands::Mod { mod_command } => {
+            mod_commands::handle_mod_command(mod_command).await?;
+        }
+        Commands::Chaos { chaos_command } => {
+            chaos_commands::handle_chaos_command(chaos_command).await?;
+        }
+        Commands::Time {
+            time_command,
+            admin_url,
+        } => {
+            time_commands::execute_time_command(time_command, admin_url)
+                .await
+                .map_err(|e| anyhow::anyhow!("Time command failed: {}", e))?;
+        }
+
+        Commands::Logs {
+            admin_url,
+            file,
+            follow,
+            method,
+            path,
+            status,
+            limit,
+            json,
+            config,
+        } => {
+            logs_commands::execute_logs_command(
+                admin_url, file, follow, method, path, status, limit, json, config,
+            )
+            .await
+            .map_err(|e| anyhow::anyhow!("Logs command failed: {}", e))?;
+        }
+
+        Commands::Orchestrate {
+            orchestrate_command,
+        } => {
+            orchestrate_commands::handle_orchestrate(orchestrate_command).await?;
+        }
+
+        Commands::GenerateTests {
+            database,
+            format,
+            output,
+            protocol,
+            method,
+            path,
+            status_code,
+            limit,
+            suite_name,
+            base_url,
+            ai_descriptions,
+            llm_provider,
+            llm_model,
+            llm_endpoint,
+            llm_api_key,
+            validate_body,
+            validate_status,
+            validate_headers,
+            validate_timing,
+            max_duration_ms,
+        } => {
+            ai_commands::handle_generate_tests(
+                database,
+                format,
+                output,
+                protocol,
+                method,
+                path,
+                status_code,
+                limit,
+                suite_name,
+                base_url,
+                ai_descriptions,
+                llm_provider,
+                llm_model,
+                llm_endpoint,
+                llm_api_key,
+                validate_body,
+                validate_status,
+                validate_headers,
+                validate_timing,
+                max_duration_ms,
+            )
+            .await?;
+        }
+
+        Commands::Suggest {
+            from,
+            from_description,
+            format,
+            output,
+            num_suggestions,
+            include_examples,
+            domain,
+            llm_provider,
+            llm_model,
+            llm_endpoint,
+            llm_api_key,
+            temperature,
+            print_json,
+        } => {
+            orchestrate_commands::handle_suggest(
+                from,
+                from_description,
+                format,
+                output,
+                num_suggestions,
+                include_examples,
+                domain,
+                llm_provider,
+                llm_model,
+                llm_endpoint,
+                llm_api_key,
+                temperature,
+                print_json,
+            )
+            .await?;
+        }
+
+        #[cfg(feature = "bench")]
+        Commands::Bench {
+            spec,
+            spec_dir,
+            merge_conflicts,
+            spec_mode,
+            dependency_config,
+            target,
+            targets_file,
+            base_path,
+            duration,
+            vus,
+            rps,
+            cps,
+            scenario,
+            operations,
+            exclude_operations,
+            auth,
+            headers,
+            output,
+            generate_only,
+            script_output,
+            threshold_percentile,
+            threshold_ms,
+            max_error_rate,
+            no_abort_on_error,
+            abort_on_error_rate,
+            verbose,
+            insecure,
+            chunked_request_bodies,
+            max_concurrency,
+            results_format,
+            params_file,
+            crud_flow,
+            flow_config,
+            extract_fields,
+            parallel_create,
+            data_file,
+            data_distribution,
+            data_mappings,
+            error_rate,
+            error_types,
+            security_test,
+            security_payloads,
+            security_categories,
+            security_target_fields,
+            wafbench_dir,
+            wafbench_cycle_all,
+            wafbench_verbatim,
+            owasp_api_top10,
+            owasp_categories,
+            owasp_auth_header,
+            owasp_auth_token,
+            owasp_admin_paths,
+            owasp_id_fields,
+            owasp_report,
+            owasp_report_format,
+            owasp_iterations,
+            conformance,
+            conformance_api_key,
+            conformance_basic_auth,
+            auth_bearer,
+            conformance_report,
+            conformance_categories,
+            conformance_report_format,
+            conformance_headers,
+            conformance_all_operations,
+            conformance_custom,
+            conformance_delay,
+            use_k6,
+            conformance_custom_filter,
+            export_requests,
+            validate_requests,
+            conformance_self_test,
+            conformance_self_test_capture,
+            validate_response_schemas,
+            conformance_self_test_iterations,
+            conformance_self_test_duration,
+            source_ips,
+            geo_source_ips,
+            geo_source_headers,
+            report_missed_cap,
+            discard_response_bodies,
+            dns_policy,
+        } => {
+            // Validate that either --target or --targets-file is provided, but not both
+            match (&target, &targets_file) {
+                (None, None) => {
+                    eprintln!("Error: Either --target or --targets-file must be specified");
+                    std::process::exit(1);
+                }
+                (Some(_), Some(_)) => {
+                    eprintln!("Error: --target and --targets-file are mutually exclusive");
+                    std::process::exit(1);
+                }
+                _ => {}
+            }
+
+            // Validate results_format
+            if !matches!(results_format.as_str(), "per-target" | "aggregated" | "both") {
+                eprintln!("Error: --results-format must be one of: per-target, aggregated, both");
+                std::process::exit(1);
+            }
+
+            // Use empty string for target if targets_file is provided (not used in multi-target mode)
+            let target_str = target.unwrap_or_default();
+
+            let bench_cmd = mockforge_bench::BenchCommand {
+                spec,
+                spec_dir,
+                merge_conflicts,
+                spec_mode,
+                dependency_config,
+                target: target_str,
+                base_path,
+                duration,
+                vus,
+                target_rps: rps,
+                no_keep_alive: cps,
+                scenario,
+                operations,
+                exclude_operations,
+                auth,
+                headers,
+                output,
+                generate_only,
+                script_output,
+                threshold_percentile,
+                threshold_ms,
+                max_error_rate,
+                abort_on_error: !no_abort_on_error,
+                abort_on_error_rate,
+                verbose,
+                skip_tls_verify: insecure,
+                chunked_request_bodies,
+                targets_file,
+                max_concurrency: Some(max_concurrency),
+                results_format,
+                params_file,
+                crud_flow,
+                flow_config,
+                extract_fields,
+                parallel_create,
+                data_file,
+                data_distribution,
+                data_mappings,
+                per_uri_control: false,
+                error_rate,
+                error_types,
+                security_test,
+                security_payloads,
+                security_categories,
+                security_target_fields,
+                wafbench_dir,
+                wafbench_cycle_all,
+                wafbench_verbatim,
+                owasp_api_top10,
+                owasp_categories,
+                owasp_auth_header,
+                owasp_auth_token,
+                owasp_admin_paths,
+                owasp_id_fields,
+                owasp_report,
+                owasp_report_format,
+                owasp_iterations,
+                conformance,
+                conformance_api_key,
+                conformance_basic_auth,
+                conformance_report,
+                conformance_categories,
+                conformance_report_format,
+                // Round 46 (#79) — fold the ergonomic --auth-bearer shortcut
+                // into the existing `--conformance-header` plumbing so it
+                // flows through every conformance / self-test / multi-target
+                // path without separate wiring at each call site.
+                conformance_headers: {
+                    let mut h = conformance_headers;
+                    if let Some(token) = auth_bearer.as_ref() {
+                        // De-dup: don't overwrite a user-supplied Authorization
+                        // header if they passed one explicitly via
+                        // `--conformance-header`.
+                        let already_set = h.iter().any(|line| {
+                            line.split(':')
+                                .next()
+                                .map(|name| name.trim().eq_ignore_ascii_case("Authorization"))
+                                .unwrap_or(false)
+                        });
+                        if !already_set {
+                            h.push(format!("Authorization: Bearer {}", token));
+                        }
+                    }
+                    h
+                },
+                conformance_all_operations,
+                conformance_custom,
+                conformance_delay_ms: conformance_delay,
+                use_k6,
+                conformance_custom_filter,
+                export_requests,
+                validate_requests,
+                conformance_self_test,
+                conformance_self_test_capture,
+                validate_response_schemas,
+                conformance_self_test_iterations,
+                conformance_self_test_duration,
+                source_ips,
+                geo_source_ips,
+                geo_source_headers,
+                report_missed_cap,
+                discard_response_bodies,
+                dns_policy,
+            };
+
+            if let Err(e) = bench_cmd.execute().await {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        }
+
+        #[cfg(feature = "bench")]
+        Commands::BenchChunked {
+            target,
+            spec,
+            base_path,
+            operation_id,
+            method,
+            concurrency,
+            duration,
+            chunk_size_bytes,
+            total_size_bytes,
+            chunk_interval_ms,
+            header,
+            insecure,
+            validate_requests,
+            export_requests,
+            output,
+        } => {
+            use mockforge_bench::chunked_bench::{run, ChunkedBenchConfig, ChunkedBenchResult};
+            use mockforge_bench::command::BenchCommand;
+            use std::collections::HashMap;
+
+            // Match `mockforge bench`'s humantime parsing so users can pass
+            // "30s", "5m", "1h", or bare seconds. Issue #79: previously a
+            // bare u64 (in seconds) which rejected `-d 600s`.
+            let duration_secs = match BenchCommand::parse_duration(&duration) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!(
+                        "Invalid --duration {:?}: {}. Examples: 30s, 5m, 1h, 600",
+                        duration, e
+                    );
+                    std::process::exit(1);
+                }
+            };
+
+            let mut headers = HashMap::new();
+            for h in header {
+                if let Some((k, v)) = h.split_once(':') {
+                    headers.insert(k.trim().to_string(), v.trim().to_string());
+                }
+            }
+
+            // Helper to print one result block; used by both single-target
+            // and spec-driven flows.
+            fn print_result(label: &str, r: &ChunkedBenchResult) {
+                println!("Chunked bench [{}] complete in {:?}", label, r.elapsed);
+                println!("  Total requests: {}", r.total_requests);
+                println!("  Successful:     {}", r.successful);
+                println!("  Failed:         {}", r.failed);
+                println!("  Bytes sent:     {}", r.bytes_sent);
+                println!("  Throughput:     {:.2} req/s", r.req_per_sec);
+                println!(
+                    "  Latency:        avg={:.1}ms p50={}ms p95={}ms p99={}ms",
+                    r.avg_latency_ms, r.p50_ms, r.p95_ms, r.p99_ms
+                );
+                if !r.status_counts.is_empty() {
+                    println!("  Status codes:");
+                    let mut codes: Vec<_> = r.status_counts.iter().collect();
+                    codes.sort_by_key(|(k, _)| **k);
+                    for (code, n) in codes {
+                        println!("    {} = {}", code, n);
+                    }
+                }
+                // Surface the captured error responses so the user can tell
+                // whether errors came from MockForge, an upstream proxy, a
+                // CDN, etc. Hint at the most common cause when 5xx is
+                // involved (proxy upstream timeout on long chunked uploads).
+                if !r.error_samples.is_empty() {
+                    println!("  Error response samples:");
+                    for s in &r.error_samples {
+                        let server = s.server_header.as_deref().unwrap_or("(no Server header)");
+                        println!("    [{}] Server: {}", s.status, server);
+                        if !s.body_excerpt.is_empty() {
+                            let one_line = s.body_excerpt.replace('\n', " ");
+                            println!("       body: {}", one_line);
+                        }
+                    }
+                    if r.status_counts.keys().any(|c| (500..600).contains(c)) {
+                        println!(
+                            "  Hint: 5xx responses with `Server:` revealing a proxy/LB usually \
+                             mean the proxy timed out reading from upstream. Each chunked request \
+                             takes >= (total_size_bytes / chunk_size_bytes) * chunk_interval_ms; \
+                             if that exceeds the proxy's upstream timeout, errors are inevitable."
+                        );
+                    }
+                }
+            }
+
+            if let Some(spec_path) = spec {
+                // Spec-driven mode: iterate POST/PUT/PATCH operations.
+                use mockforge_bench::request_gen::RequestGenerator;
+                use mockforge_bench::spec_parser::SpecParser;
+
+                let parser = match SpecParser::from_file(&spec_path).await {
+                    Ok(p) => p,
+                    Err(e) => {
+                        eprintln!("Failed to parse spec {:?}: {}", spec_path, e);
+                        std::process::exit(1);
+                    }
+                };
+                let base_url = target.trim_end_matches('/').to_string();
+                // CLI --base-path > spec.servers > none. Empty string from CLI
+                // explicitly disables (matches `mockforge bench` semantics).
+                let effective_base_path: Option<String> = match &base_path {
+                    Some(p) if p.is_empty() => None,
+                    Some(p) => Some(p.clone()),
+                    None => parser.get_base_path(),
+                };
+                let want_methods = ["POST", "PUT", "PATCH"];
+                let ops: Vec<_> = parser
+                    .get_operations()
+                    .into_iter()
+                    .filter(|op| want_methods.contains(&op.method.to_uppercase().as_str()))
+                    .filter(|op| match &operation_id {
+                        Some(id) => op.operation_id.as_deref() == Some(id.as_str()),
+                        None => true,
+                    })
+                    .collect();
+                if ops.is_empty() {
+                    eprintln!(
+                        "No POST/PUT/PATCH operations matched in {:?}{}",
+                        spec_path,
+                        operation_id
+                            .as_deref()
+                            .map(|id| format!(" (operation-id={id})"))
+                            .unwrap_or_default()
+                    );
+                    std::process::exit(1);
+                }
+
+                // Pre-flight validation. Any failure here aborts before
+                // touching the network so the bench doesn't half-run.
+                let mut violations: Vec<serde_json::Value> = Vec::new();
+                let mut planned: Vec<(
+                    String, // label
+                    String, // method
+                    String, // url
+                    String, // op.path
+                )> = Vec::with_capacity(ops.len());
+                for op in &ops {
+                    let label = op.display_name();
+                    match RequestGenerator::generate_template(op) {
+                        Ok(template) => {
+                            let path_with_base = match &effective_base_path {
+                                Some(bp) if !bp.is_empty() => {
+                                    format!("{}{}", bp, template.generate_path())
+                                }
+                                _ => template.generate_path().to_string(),
+                            };
+                            let url = format!("{}{}", base_url, path_with_base);
+                            if reqwest::Method::from_bytes(op.method.to_uppercase().as_bytes())
+                                .is_err()
+                            {
+                                violations.push(serde_json::json!({
+                                    "operation": label,
+                                    "method": op.method,
+                                    "path": op.path,
+                                    "kind": "invalid_method",
+                                    "detail": format!("`{}` is not a valid HTTP method", op.method),
+                                }));
+                            } else {
+                                planned.push((
+                                    label,
+                                    op.method.to_uppercase(),
+                                    url,
+                                    op.path.clone(),
+                                ));
+                            }
+                        }
+                        Err(e) => {
+                            violations.push(serde_json::json!({
+                                "operation": label,
+                                "method": op.method,
+                                "path": op.path,
+                                "kind": "template_build_failure",
+                                "detail": e.to_string(),
+                            }));
+                        }
+                    }
+                }
+
+                if validate_requests {
+                    if !violations.is_empty() {
+                        if let Err(e) = std::fs::create_dir_all(&output) {
+                            eprintln!("Failed to create output directory {:?}: {}", output, e);
+                            std::process::exit(1);
+                        }
+                        let path = output.join("chunked-request-violations.json");
+                        let payload = serde_json::json!({
+                            "spec": spec_path.display().to_string(),
+                            "base_url": base_url,
+                            "base_path": effective_base_path,
+                            "violations": violations,
+                        });
+                        match serde_json::to_string_pretty(&payload) {
+                            Ok(s) => {
+                                if let Err(e) = std::fs::write(&path, s) {
+                                    eprintln!("Failed to write {:?}: {}", path, e);
+                                }
+                            }
+                            Err(e) => eprintln!("Failed to serialize violations: {}", e),
+                        }
+                        eprintln!(
+                            "✗ --validate-requests: {} violation(s); see {:?}",
+                            violations.len(),
+                            path
+                        );
+                        std::process::exit(1);
+                    } else {
+                        println!("✅ --validate-requests: all {} operations OK", planned.len());
+                    }
+                }
+
+                println!(
+                    "→ {} chunked bench {} from {:?} (base {}{})",
+                    planned.len(),
+                    if planned.len() == 1 {
+                        "operation"
+                    } else {
+                        "operations"
+                    },
+                    spec_path,
+                    base_url,
+                    effective_base_path
+                        .as_deref()
+                        .map(|bp| format!(", base-path {}", bp))
+                        .unwrap_or_default()
+                );
+
+                let mut any_failed = false;
+                let mut export_records: Vec<serde_json::Value> = Vec::new();
+                for (label, method_str, url, op_path) in &planned {
+                    let method = match reqwest::Method::from_bytes(method_str.as_bytes()) {
+                        Ok(m) => m,
+                        Err(_) => {
+                            eprintln!("✗ {}: invalid method `{}`", label, method_str);
+                            any_failed = true;
+                            continue;
+                        }
+                    };
+                    println!();
+                    println!("→ {} {}  ({})", method_str, op_path, url);
+                    let cfg = ChunkedBenchConfig {
+                        target_url: url.clone(),
+                        method,
+                        concurrency,
+                        duration: std::time::Duration::from_secs(duration_secs),
+                        chunk_size_bytes,
+                        total_size_bytes,
+                        chunk_interval_ms,
+                        headers: headers.clone(),
+                        skip_tls_verify: insecure,
+                    };
+                    match run(cfg).await {
+                        Ok(r) => {
+                            print_result(label, &r);
+                            if export_requests {
+                                export_records.push(serde_json::json!({
+                                    "operation": label,
+                                    "method": method_str,
+                                    "url": url,
+                                    "spec_path": op_path,
+                                    "headers": headers,
+                                    "chunk_size_bytes": chunk_size_bytes,
+                                    "total_size_bytes": total_size_bytes,
+                                    "chunk_interval_ms": chunk_interval_ms,
+                                    "concurrency": concurrency,
+                                    "duration_secs": duration_secs,
+                                    "result": {
+                                        "total_requests": r.total_requests,
+                                        "successful": r.successful,
+                                        "failed": r.failed,
+                                        "bytes_sent": r.bytes_sent,
+                                        "elapsed_ms": r.elapsed.as_millis(),
+                                        "req_per_sec": r.req_per_sec,
+                                        "avg_latency_ms": r.avg_latency_ms,
+                                        "p50_ms": r.p50_ms,
+                                        "p95_ms": r.p95_ms,
+                                        "p99_ms": r.p99_ms,
+                                        "status_counts": r.status_counts,
+                                        "error_samples": r.error_samples.iter().map(|s| serde_json::json!({
+                                            "status": s.status,
+                                            "server_header": s.server_header,
+                                            "body_excerpt": s.body_excerpt,
+                                        })).collect::<Vec<_>>(),
+                                    },
+                                }));
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("✗ {}: chunked bench failed: {}", label, e);
+                            any_failed = true;
+                        }
+                    }
+                }
+
+                if export_requests {
+                    if let Err(e) = std::fs::create_dir_all(&output) {
+                        eprintln!("Failed to create output directory {:?}: {}", output, e);
+                    } else {
+                        let path = output.join("chunked-requests.json");
+                        let payload = serde_json::json!({
+                            "spec": spec_path.display().to_string(),
+                            "base_url": base_url,
+                            "base_path": effective_base_path,
+                            "operations": export_records,
+                        });
+                        match serde_json::to_string_pretty(&payload) {
+                            Ok(s) => match std::fs::write(&path, s) {
+                                Ok(_) => println!(
+                                    "📝 --export-requests: wrote {} operations to {:?}",
+                                    export_records.len(),
+                                    path
+                                ),
+                                Err(e) => eprintln!("Failed to write {:?}: {}", path, e),
+                            },
+                            Err(e) => eprintln!("Failed to serialize export: {}", e),
+                        }
+                    }
+                }
+
+                if any_failed {
+                    std::process::exit(1);
+                }
+            } else {
+                // Single-target mode (original behavior). --base-path,
+                // --validate-requests, --export-requests are spec-only.
+                if base_path.is_some() {
+                    eprintln!(
+                        "Note: --base-path has no effect without --spec; \
+                         single-target mode uses --target verbatim"
+                    );
+                }
+                if validate_requests {
+                    eprintln!("Note: --validate-requests requires --spec (skipped)");
+                }
+                if export_requests {
+                    eprintln!("Note: --export-requests requires --spec (skipped)");
+                }
+                let method = match reqwest::Method::from_bytes(method.to_uppercase().as_bytes()) {
+                    Ok(m) => m,
+                    Err(_) => {
+                        eprintln!("Invalid HTTP method: {}", method);
+                        std::process::exit(1);
+                    }
+                };
+                let cfg = ChunkedBenchConfig {
+                    target_url: target,
+                    method,
+                    concurrency,
+                    duration: std::time::Duration::from_secs(duration_secs),
+                    chunk_size_bytes,
+                    total_size_bytes,
+                    chunk_interval_ms,
+                    headers,
+                    skip_tls_verify: insecure,
+                };
+                match run(cfg).await {
+                    Ok(r) => print_result("single-target", &r),
+                    Err(e) => {
+                        eprintln!("Chunked bench failed: {}", e);
+                        std::process::exit(1);
+                    }
+                }
+            }
+        }
+
+        #[cfg(feature = "bench")]
+        Commands::BenchQos {
+            target,
+            classes,
+            method,
+            concurrency,
+            duration,
+            mss,
+        } => {
+            use mockforge_bench::command::BenchCommand;
+            use mockforge_bench::qos_bench::{parse_class, render_report, run, QosBenchConfig};
+
+            let duration_secs = match BenchCommand::parse_duration(&duration) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("Invalid --duration {duration:?}: {e}. Examples: 10s, 5m, 30");
+                    std::process::exit(1);
+                }
+            };
+
+            let mut parsed = Vec::with_capacity(classes.len());
+            for c in &classes {
+                match parse_class(c) {
+                    Ok(tc) => parsed.push(tc),
+                    Err(e) => {
+                        eprintln!("Invalid --class {c:?}: {e}");
+                        std::process::exit(1);
+                    }
+                }
+            }
+
+            let cfg = QosBenchConfig {
+                target_url: target,
+                method,
+                classes: parsed,
+                concurrency,
+                duration: std::time::Duration::from_secs(duration_secs),
+                mss,
+            };
+            match run(cfg).await {
+                Ok(r) => {
+                    print!("{}", render_report(&r));
+                    // Jumbo frames and IP fragmentation are NIC/kernel-level,
+                    // not socket knobs, so they live at the OS layer. Point the
+                    // user at the tools that do control them (#933).
+                    println!(
+                        "\nJumbo frames / IP fragmentation are interface/kernel-level (not a \
+                         socket option). To shape those on the sending host:\n  \
+                         jumbo frames:   sudo ip link set dev <iface> mtu 9000\n  \
+                         force small MTU: sudo ip link set dev <iface> mtu 1280   (or use --mss)\n  \
+                         fragmentation / loss / delay: sudo tc qdisc add dev <iface> root netem \
+                         delay 20ms loss 1%%\nDSCP marking above is applied per connection via IP_TOS."
+                    );
+                }
+                Err(e) => {
+                    eprintln!("QoS bench failed: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        #[cfg(feature = "bench")]
+        Commands::BenchPipeline {
+            target,
+            method,
+            content_type,
+            body_size,
+            pipeline_depth,
+            connections,
+            duration,
+        } => {
+            use mockforge_bench::command::BenchCommand;
+            use mockforge_bench::pipeline_bench::{
+                parse_body_kind, parse_body_size, render_report, run, PipelineBenchConfig,
+            };
+
+            let duration_secs = match BenchCommand::parse_duration(&duration) {
+                Ok(d) => d,
+                Err(e) => {
+                    eprintln!("Invalid --duration {duration:?}: {e}. Examples: 10s, 5m, 30");
+                    std::process::exit(1);
+                }
+            };
+            let kind = match parse_body_kind(&content_type) {
+                Ok(k) => k,
+                Err(e) => {
+                    eprintln!("Invalid --content-type {content_type:?}: {e}");
+                    std::process::exit(1);
+                }
+            };
+            let size = match parse_body_size(&body_size) {
+                Ok(v) => v,
+                Err(e) => {
+                    eprintln!("Invalid --body-size {body_size:?}: {e}");
+                    std::process::exit(1);
+                }
+            };
+            let cfg = PipelineBenchConfig {
+                target_url: target,
+                method: method.to_uppercase(),
+                body_kind: kind,
+                body_size: size,
+                pipeline_depth,
+                connections,
+                duration: std::time::Duration::from_secs(duration_secs),
+            };
+            match run(cfg).await {
+                Ok(r) => print!("{}", render_report(&r)),
+                Err(e) => {
+                    eprintln!("bench-pipeline failed: {e}");
+                    std::process::exit(1);
+                }
+            }
+        }
+
+        #[cfg(feature = "bench")]
+        Commands::HarToConformance {
+            har,
+            output,
+            base_url,
+            strip_base_path,
+            skip_static,
+            include_headers,
+            max_entries,
+        } => {
+            use mockforge_bench::conformance::har_to_custom::{
+                generate_custom_yaml_from_har, HarToCustomOptions,
+            };
+
+            // If --strip-base-path is given, auto-detect the host from the HAR
+            // and append the base path to form the full base URL for stripping.
+            let effective_base_url = if let Some(ref bu) = base_url {
+                Some(bu.clone())
+            } else if let Some(ref sbp) = strip_base_path {
+                // Read the HAR to detect the host, then append the base path
+                let raw = std::fs::read_to_string(&har)?;
+                let archive: serde_json::Value = serde_json::from_str(&raw)?;
+                if let Some(url_str) =
+                    archive.pointer("/log/entries/0/request/url").and_then(|v| v.as_str())
+                {
+                    if let Ok(parsed) = url::Url::parse(url_str) {
+                        let mut host_base = format!(
+                            "{}://{}",
+                            parsed.scheme(),
+                            parsed.host_str().unwrap_or("localhost")
+                        );
+                        if let Some(port) = parsed.port() {
+                            host_base.push_str(&format!(":{}", port));
+                        }
+                        let bp = sbp.trim_end_matches('/');
+                        let bp = if bp.starts_with('/') {
+                            bp.to_string()
+                        } else {
+                            format!("/{}", bp)
+                        };
+                        Some(format!("{}{}", host_base, bp))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                }
+            } else {
+                None
+            };
+
+            let options = HarToCustomOptions {
+                base_url: effective_base_url,
+                skip_static,
+                include_headers: if include_headers.is_empty() {
+                    vec!["content-type".to_string()]
+                } else {
+                    include_headers
+                },
+                max_entries,
+            };
+
+            match generate_custom_yaml_from_har(&har, options) {
+                Ok(yaml) => {
+                    if let Some(output_path) = output {
+                        std::fs::write(&output_path, &yaml)?;
+                        println!("Custom conformance YAML written to: {}", output_path.display());
+                    } else {
+                        println!("{}", yaml);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Error generating conformance YAML from HAR: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+#[allow(clippy::items_after_test_module)]
+mod cli_tests {
+    use super::*;
+
+    #[test]
+    fn parses_admin_port_override() {
+        // Run on a thread with a larger stack to avoid stack overflow
+        // from clap parsing the large Commands enum (~50 variants)
+        let result = std::thread::Builder::new()
+            .stack_size(8 * 1024 * 1024)
+            .spawn(|| {
+                let cli = Cli::parse_from([
+                    "mockforge",
+                    "serve",
+                    "--admin",
+                    "--admin-port",
+                    "3100",
+                    "--http-port",
+                    "3200",
+                    "--ws-port",
+                    "3201",
+                    "--grpc-port",
+                    "5200",
+                ]);
+
+                match cli.command {
+                    Commands::Serve(args) => assert_eq!(args.admin_port, Some(3100)),
+                    _ => panic!("expected serve command"),
+                }
+            })
+            .expect("failed to spawn thread")
+            .join();
+
+        if let Err(e) = result {
+            std::panic::resume_unwind(e);
+        }
+    }
+}
+
+async fn handle_admin(
+    port: u16,
+    _config: Option<PathBuf>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("\u{1f39b}\u{fe0f} Starting MockForge Admin UI...");
+
+    // Start the admin UI server
+    let addr = format!("127.0.0.1:{}", port).parse()?;
+    let prometheus_url =
+        std::env::var("PROMETHEUS_URL").unwrap_or_else(|_| "http://localhost:9090".to_string());
+    mockforge_ui::start_admin_server(
+        addr,
+        None, // http_server_addr
+        None, // ws_server_addr
+        None, // grpc_server_addr
+        None, // graphql_server_addr
+        true, // api_enabled
+        prometheus_url,
+        None, // chaos_api_state
+        None, // latency_injector
+        None, // mockai
+        None, // continuum_config
+        None, // virtual_clock
+        None, // recorder
+        None, // federation
+        None, // vbr_engine
+        None, // resilience_api_state (#468 — admin-only entry point, no http_app to wire)
+    )
+    .await?;
+
+    println!("\u{2705} Admin UI started successfully!");
+    println!("\u{1f310} Access at: http://localhost:{}/", port);
+
+    // Keep running until shutdown signal
+    tokio::signal::ctrl_c().await?;
+    println!("\u{1f44b} Shutting down admin UI...");
+
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn handle_quick(
+    file: PathBuf,
+    port: u16,
+    host: String,
+    admin: bool,
+    admin_port: u16,
+    metrics: bool,
+    metrics_port: u16,
+    logging: bool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    use mockforge_http::quick_mock::{build_quick_router, QuickMockState};
+    use std::fs;
+
+    println!("\n\u{26a1} MockForge Quick Mock Mode");
+    println!("\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}");
+    println!("\u{1f4c1} Loading data from: {}", file.display());
+
+    // Load JSON file
+    let json_str = fs::read_to_string(&file)
+        .map_err(|e| format!("Failed to read file '{}': {}", file.display(), e))?;
+
+    let json_data: serde_json::Value = serde_json::from_str(&json_str)
+        .map_err(|e| format!("Failed to parse JSON from '{}': {}", file.display(), e))?;
+
+    println!("\u{2713} JSON loaded successfully");
+
+    // Create quick mock state
+    println!("\u{1f50d} Auto-detecting routes from JSON keys...");
+    let state = QuickMockState::from_json(json_data)
+        .await
+        .map_err(|e| format!("Failed to create quick mock state: {}", e))?;
+
+    let resource_names = state.resource_names().await;
+    println!("\u{2713} Detected {} resource(s):", resource_names.len());
+    for resource in &resource_names {
+        println!("  \u{2022} /{}", resource);
+    }
+
+    // Build router
+    let app = build_quick_router(state).await;
+
+    println!();
+    println!("\u{1f680} Quick Mock Server Configuration:");
+    println!("\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}");
+    println!("   HTTP Server:  http://{}:{}", host, port);
+
+    if admin {
+        println!("   Admin UI:     http://{}:{}", host, admin_port);
+    }
+    if metrics {
+        println!("   Metrics:      http://{}:{}/__metrics", host, metrics_port);
+    }
+    if logging {
+        println!("   Logging:      Enabled");
+    }
+
+    println!();
+    println!("\u{1f4da} Available Endpoints:");
+    println!("\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}");
+    for resource in &resource_names {
+        println!("   GET    /{}          - List all", resource);
+        println!("   GET    /{}/:id      - Get by ID", resource);
+        println!("   POST   /{}          - Create new", resource);
+        println!("   PUT    /{}/:id      - Update by ID", resource);
+        println!("   DELETE /{}/:id      - Delete by ID", resource);
+        println!();
+    }
+    println!("   GET    /__quick/info       - API information");
+    println!("\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}");
+
+    // Start server
+    let addr: SocketAddr = format!("{}:{}", host, port).parse()?;
+    let listener = TcpListener::bind(addr).await?;
+
+    println!();
+    println!("\u{2705} Server started successfully!");
+    println!("\u{1f4a1} Press Ctrl+C to stop");
+    println!("\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\n");
+
+    // Serve with graceful shutdown
+    axum::serve(listener, app)
+        .with_graceful_shutdown(async {
+            tokio::signal::ctrl_c().await.unwrap_or_else(|e| {
+                eprintln!(
+                    "\u{26a0}\u{fe0f}  Warning: Failed to install CTRL+C signal handler: {}",
+                    e
+                );
+                eprintln!("\u{1f4a1} Server may not shut down gracefully on SIGINT");
+            });
+        })
+        .await?;
+
+    println!("\n\u{1f44b} Server stopped\n");
+
+    Ok(())
+}
+
+async fn handle_sync(
+    workspace_dir: PathBuf,
+    _config: Option<PathBuf>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    println!("\n\u{1f504} Starting MockForge Sync Daemon...");
+    println!("\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}");
+    println!("\u{1f4c1} Workspace directory: {}", workspace_dir.display());
+    println!();
+    println!("\u{2139}\u{fe0f}  What the sync daemon does:");
+    println!("   \u{2022} Monitors the workspace directory for .yaml/.yml file changes");
+    println!("   \u{2022} Automatically imports new or modified request files");
+    println!("   \u{2022} Syncs changes bidirectionally between files and workspace");
+    println!("   \u{2022} Skips hidden files (starting with .)");
+    println!();
+    println!("\u{1f50d} Monitoring for file changes...");
+    println!("\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}\u{2501}");
+    println!();
+
+    // Create sync service
+    let sync_service = mockforge_core::SyncService::new(&workspace_dir);
+
+    // Start the sync service
+    sync_service.start().await?;
+
+    println!("\u{2705} Sync daemon started successfully!");
+    println!("\u{1f4a1} Press Ctrl+C to stop\n");
+
+    // Keep running until shutdown signal
+    tokio::signal::ctrl_c().await?;
+    println!("\n\u{1f6d1} Received shutdown signal");
+
+    // Stop the sync service
+    sync_service.stop().await?;
+    println!("\u{1f44b} Sync daemon stopped\n");
+
+    Ok(())
+}
+
+/// Handle shell completions generation
+fn handle_completions(shell: Shell) {
+    let mut cmd = Cli::command();
+    let bin_name = cmd.get_name().to_string();
+    generate(shell, &mut cmd, bin_name, &mut std::io::stdout());
+}
