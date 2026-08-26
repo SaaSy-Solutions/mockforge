@@ -3,7 +3,7 @@
 //! Defines the configuration structures for blending mock and real data sources,
 //! including transition modes, schedules, and merge strategies.
 
-use crate::protocol_abstraction::Protocol;
+use crate::protocol::Protocol;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 

@@ -28,7 +28,8 @@ pub async fn run() -> mockforge_core::Result<()> {
     let stdin = std::io::stdin();
     let mut stdout = std::io::stdout();
     for line in stdin.lock().lines() {
-        let line = line.map_err(|e| mockforge_core::Error::io_with_context("mcp stdin", e.to_string()))?;
+        let line =
+            line.map_err(|e| mockforge_core::Error::io_with_context("mcp stdin", e.to_string()))?;
         if line.trim().is_empty() {
             continue;
         }
@@ -48,8 +49,7 @@ pub async fn run() -> mockforge_core::Result<()> {
 }
 
 async fn handle_line(line: &str) -> Result<Option<Value>, (i64, String)> {
-    let msg: Value = serde_json::from_str(line)
-        .map_err(|_| (-32700, "parse error".to_string()))?;
+    let msg: Value = serde_json::from_str(line).map_err(|_| (-32700, "parse error".to_string()))?;
     let id = msg.get("id").cloned();
     let method = msg.get("method").and_then(Value::as_str).unwrap_or("");
     let params = msg.get("params").cloned().unwrap_or(Value::Null);
@@ -87,7 +87,9 @@ async fn handle_line(line: &str) -> Result<Option<Value>, (i64, String)> {
     }?;
 
     let _ = id;
-    Ok(Some(json!({ "jsonrpc": "2.0", "id": id.unwrap_or(Value::Null), "result": result })))
+    Ok(Some(
+        json!({ "jsonrpc": "2.0", "id": id.unwrap_or(Value::Null), "result": result }),
+    ))
 }
 
 fn tools_list() -> Result<Value, (i64, String)> {
@@ -187,11 +189,7 @@ async fn tools_call(name: &str, args: &Value) -> Result<String, String> {
 
         "validate_request" => {
             let registry = load_spec(args)?;
-            let method = args
-                .get("method")
-                .and_then(Value::as_str)
-                .unwrap_or("GET")
-                .to_uppercase();
+            let method = args.get("method").and_then(Value::as_str).unwrap_or("GET").to_uppercase();
             let path = args
                 .get("path")
                 .and_then(Value::as_str)
@@ -210,11 +208,8 @@ async fn tools_call(name: &str, args: &Value) -> Result<String, String> {
                         .collect()
                 })
                 .unwrap_or_default();
-            let headers: serde_json::Map<String, Value> = args
-                .get("headers")
-                .and_then(Value::as_object)
-                .cloned()
-                .unwrap_or_default();
+            let headers: serde_json::Map<String, Value> =
+                args.get("headers").and_then(Value::as_object).cloned().unwrap_or_default();
             let body = args.get("body").filter(|b| !b.is_null());
 
             match registry.run_validation_with_recording_ex(
@@ -236,28 +231,27 @@ async fn tools_call(name: &str, args: &Value) -> Result<String, String> {
 
         "generate_example" => {
             let registry = load_spec(args)?;
-            let method = args
-                .get("method")
-                .and_then(Value::as_str)
-                .unwrap_or("GET")
-                .to_uppercase();
+            let method = args.get("method").and_then(Value::as_str).unwrap_or("GET").to_uppercase();
             let path = args
                 .get("path")
                 .and_then(Value::as_str)
                 .ok_or("missing required argument: path")?;
             let want_status = args.get("status").and_then(Value::as_u64).unwrap_or(200);
 
-            let route = registry.routes().iter().find(|r| {
-                r.method.eq_ignore_ascii_case(&method) && r.path == path
-            });
+            let route = registry
+                .routes()
+                .iter()
+                .find(|r| r.method.eq_ignore_ascii_case(&method) && r.path == path);
             let Some(route) = route else {
                 return Err(format!("no operation {method} {path}"));
             };
 
-            let declared: Option<Value> = route.operation.responses.responses.iter().find_map(
-                |(code, r)| match code {
+            let declared: Option<Value> =
+                route.operation.responses.responses.iter().find_map(|(code, r)| match code {
                     openapiv3::StatusCode::Code(c) if *c as u64 == want_status => {
-                        let ReferenceOr::Item(response) = r else { return None };
+                        let ReferenceOr::Item(response) = r else {
+                            return None;
+                        };
                         let media = response.content.get("application/json")?;
                         match &media.schema {
                             Some(openapiv3::ReferenceOr::Item(schema)) => {
@@ -270,15 +264,15 @@ async fn tools_call(name: &str, args: &Value) -> Result<String, String> {
                         }
                     }
                     _ => None,
-                },
-            );
+                });
             let Some(schema) = declared else {
                 return Err(format!(
                     "no application/json schema declared for status {want_status} on {method} {path}"
                 ));
             };
             let merged = merge_components_into(schema, &registry.spec().spec);
-            let example = mockforge_import::import::schema_data_generator::generate_from_schema(&merged);
+            let example =
+                mockforge_import::import::schema_data_generator::generate_from_schema(&merged);
             serde_json::to_string_pretty(&example).map_err(|e| e.to_string())
         }
 
@@ -326,10 +320,7 @@ fn find_template(
 }
 
 fn path_params_value(params: &HashMap<String, String>) -> serde_json::Map<String, Value> {
-    params
-        .iter()
-        .map(|(k, v)| (k.clone(), Value::String(v.clone())))
-        .collect()
+    params.iter().map(|(k, v)| (k.clone(), Value::String(v.clone()))).collect()
 }
 
 #[cfg(test)]
@@ -361,9 +352,7 @@ mod tests {
 
     #[tokio::test]
     async fn list_routes_returns_operations() {
-        let out = tools_call("list_routes", &json!({ "spec": SPEC }))
-            .await
-            .expect("ok");
+        let out = tools_call("list_routes", &json!({ "spec": SPEC })).await.expect("ok");
         assert!(out.contains("/users/{id}"), "route listed: {out}");
         assert!(out.contains("\"Get user\""), "summary included");
     }
@@ -397,9 +386,9 @@ mod tests {
         .expect("example generated");
         let parsed: Value = serde_json::from_str(&out).expect("valid JSON example");
         assert!(
-                    parsed["id"].is_i64() || parsed["id"].is_u64(),
-                    "id generated from schema: {parsed}"
-                );
+            parsed["id"].is_i64() || parsed["id"].is_u64(),
+            "id generated from schema: {parsed}"
+        );
     }
 
     #[tokio::test]

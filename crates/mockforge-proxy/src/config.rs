@@ -53,6 +53,17 @@ pub struct ProxyConfig {
     /// Response body replacement rules for browser proxy mode
     #[serde(default)]
     pub response_replacements: Vec<BodyTransformRule>,
+    /// Allow absolute `http(s)://` URLs embedded in the stripped request
+    /// path to be forwarded as-is (#1012 / MF-002). Off by default: the
+    /// forward-proxy-by-path-vector was an open proxy/SSRF hole. Even when
+    /// enabled, request-derived URLs still pass the egress guard.
+    #[serde(default)]
+    pub allow_absolute_url_upstream: bool,
+    /// Explicit upstream allowlist overriding the egress denylist for
+    /// request-derived URLs. Entries here re-open SSRF by design — only
+    /// list hosts the proxy must genuinely reach.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub upstream_allowlist: Option<crate::egress::UpstreamAllowlist>,
 }
 
 /// Proxy routing rule
@@ -117,6 +128,8 @@ impl ProxyConfig {
             migration_groups: HashMap::new(),
             request_replacements: Vec::new(),
             response_replacements: Vec::new(),
+            allow_absolute_url_upstream: false,
+            upstream_allowlist: None,
         }
     }
 
@@ -518,6 +531,8 @@ impl Default for ProxyConfig {
             migration_groups: HashMap::new(),
             request_replacements: Vec::new(),
             response_replacements: Vec::new(),
+            allow_absolute_url_upstream: false,
+            upstream_allowlist: None,
         }
     }
 }

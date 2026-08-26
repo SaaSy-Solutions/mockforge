@@ -10,8 +10,10 @@
 pub mod body_transform;
 pub mod client;
 pub mod conditional;
-pub mod conformance;
 pub mod config;
+pub mod conformance;
+/// Upstream egress guard (SSRF mitigation, #1012 / MF-002).
+pub mod egress;
 pub mod handler;
 pub mod middleware;
 /// Reality-slider mock/proxy switching middleware (#222). Moved from

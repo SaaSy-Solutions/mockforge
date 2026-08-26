@@ -18,8 +18,8 @@ use serde_json::Map as JsonMap;
 use serde_json::Value;
 
 use mockforge_openapi::openapi_routes::OpenApiRouteRegistry;
-use mockforge_openapi::spec::OpenApiSpec;
 use mockforge_openapi::schema_ref_resolver::merge_components_into;
+use mockforge_openapi::spec::OpenApiSpec;
 
 /// A passive conformance tap over one loaded spec.
 pub struct ConformanceTap {
@@ -33,8 +33,7 @@ impl ConformanceTap {
     /// Build a tap from a raw OpenAPI 3.x document (JSON or YAML already
     /// parsed to a Value).
     pub fn from_spec_value(spec: Value, strict: bool) -> Result<Self, String> {
-        let openapi =
-            OpenApiSpec::from_json(spec).map_err(|e| format!("invalid spec: {e}"))?;
+        let openapi = OpenApiSpec::from_json(spec).map_err(|e| format!("invalid spec: {e}"))?;
         Ok(Self {
             registry: OpenApiRouteRegistry::new(openapi),
             strict,
@@ -57,8 +56,7 @@ impl ConformanceTap {
             if !route.method.eq_ignore_ascii_case(method) {
                 return None;
             }
-            match_template(concrete_path, &route.path)
-                .map(|params| (route.path.clone(), params))
+            match_template(concrete_path, &route.path).map(|params| (route.path.clone(), params))
         })
     }
 
@@ -96,10 +94,7 @@ impl ConformanceTap {
             for pair in q.split('&') {
                 let mut kv = pair.splitn(2, '=');
                 if let (Some(k), Some(v)) = (kv.next(), kv.next()) {
-                    if let (Ok(k), Ok(v)) = (
-                        urlencoding_decode(k),
-                        urlencoding_decode(v),
-                    ) {
+                    if let (Ok(k), Ok(v)) = (urlencoding_decode(k), urlencoding_decode(v)) {
                         query_map.insert(k, Value::String(v));
                     }
                 }
@@ -118,17 +113,17 @@ impl ConformanceTap {
         // `X-Trace` in the spec matches `x-trace` on the wire.
         if let Some((_, route)) = self.matched_route(method, concrete_path) {
             for p in route.operation.parameters.iter() {
-                if let Some(openapiv3::Parameter::Header { parameter_data, .. }) =
-                    match p {
-                        openapiv3::ReferenceOr::Item(param) => Some(param),
-                        _ => None,
-                    }
-                {
+                if let Some(openapiv3::Parameter::Header { parameter_data, .. }) = match p {
+                    openapiv3::ReferenceOr::Item(param) => Some(param),
+                    _ => None,
+                } {
                     if !header_values.contains_key(&parameter_data.name) {
                         if let Some(v) = headers.get(&parameter_data.name) {
                             if let Ok(vs) = v.to_str() {
-                                header_values
-                                    .insert(parameter_data.name.clone(), Value::String(vs.to_string()));
+                                header_values.insert(
+                                    parameter_data.name.clone(),
+                                    Value::String(vs.to_string()),
+                                );
                             }
                         }
                     }
@@ -137,10 +132,8 @@ impl ConformanceTap {
         }
 
         // Path params feed the validator as their own bucket.
-        let path_param_map: JsonMap<String, Value> = path_params
-            .iter()
-            .map(|(k, v)| (k.clone(), Value::String(v.clone())))
-            .collect();
+        let path_param_map: JsonMap<String, Value> =
+            path_params.iter().map(|(k, v)| (k.clone(), Value::String(v.clone()))).collect();
 
         let (body_json, body_present) = parse_body(body);
 
@@ -184,9 +177,7 @@ impl ConformanceTap {
         let responses = &route.operation.responses;
         let status_declared = responses.responses.keys().any(|code| match code {
             openapiv3::StatusCode::Code(c) => *c == status,
-            openapiv3::StatusCode::Range(start) => {
-                status >= *start && status < *start + 100
-            }
+            openapiv3::StatusCode::Range(start) => status >= *start && status < *start + 100,
         });
         let has_default = responses.default.is_some();
         if !status_declared && !has_default {
@@ -194,9 +185,7 @@ impl ConformanceTap {
                 method,
                 concrete_path,
                 status,
-                &format!(
-                    "response status {status} is not declared for {method} {template}"
-                ),
+                &format!("response status {status} is not declared for {method} {template}"),
             );
             return;
         }
@@ -212,17 +201,10 @@ impl ConformanceTap {
 
         let merged = merge_components_into(schema_value.clone(), &self.registry.spec().spec);
         let result =
-            mockforge_openapi::openapi_routes::validation::validate_json_value(
-                &body_json,
-                &merged,
-            );
+            mockforge_openapi::openapi_routes::validation::validate_json_value(&body_json, &merged);
         if !result.errors.is_empty() {
-            let detail = result
-                .errors
-                .iter()
-                .map(|e| e.message.clone())
-                .collect::<Vec<_>>()
-                .join("; ");
+            let detail =
+                result.errors.iter().map(|e| e.message.clone()).collect::<Vec<_>>().join("; ");
             record_response_shape(
                 method,
                 concrete_path,
@@ -253,10 +235,8 @@ fn record_response_shape(method: &str, path: &str, status: u16, reason: &str) {
 
 fn declared_json_schema(responses: &openapiv3::Responses, status: u16) -> Option<Value> {
     use openapiv3::{ReferenceOr, Response, StatusCode};
-    let response_ref: Option<&ReferenceOr<Response>> = responses
-        .responses
-        .iter()
-        .find_map(|(code, r)| match code {
+    let response_ref: Option<&ReferenceOr<Response>> =
+        responses.responses.iter().find_map(|(code, r)| match code {
             StatusCode::Code(c) if *c == status => Some(r),
             StatusCode::Range(start) if status >= *start && status < *start + 100 => Some(r),
             _ => None,
@@ -297,9 +277,7 @@ fn match_template(concrete: &str, template: &str) -> Option<HashMap<String, Stri
 }
 
 fn urlencoding_decode(v: &str) -> Result<String, ()> {
-    urlencoding::decode(v)
-        .map(|c| c.into_owned())
-        .map_err(|_| ())
+    urlencoding::decode(v).map(|c| c.into_owned()).map_err(|_| ())
 }
 
 fn parse_body(body: Option<&[u8]>) -> (Option<Value>, bool) {
@@ -363,15 +341,7 @@ mod tests {
         let t = tap(false).await;
 
         // X-Trace header required by spec but absent.
-        let rejected = t
-            .validate_request(
-                "GET",
-                "/users/abc",
-                None,
-                &HeaderMap::new(),
-                None,
-            )
-            .await;
+        let rejected = t.validate_request("GET", "/users/abc", None, &HeaderMap::new(), None).await;
         assert!(rejected.is_none(), "observational mode must not reject");
 
         let snap = conformance_violations::snapshot();
@@ -387,9 +357,7 @@ mod tests {
         let t = tap(true).await;
         let mut headers = HeaderMap::new();
         headers.insert("X-Trace", "abc".parse().unwrap());
-        let rejected = t
-            .validate_request("GET", "/users/ok", None, &headers, None)
-            .await;
+        let rejected = t.validate_request("GET", "/users/ok", None, &headers, None).await;
         // /users/ok matches no route? It DOES match /users/{id}; body absent
         // and all params satisfied -> no rejection.
         assert!(rejected.is_none());
@@ -400,11 +368,10 @@ mod tests {
         conformance_violations::clear();
         let t = tap(false).await;
         assert!(t.match_template("GET", "/unknown/path/deep").is_none());
-        assert!(
-            t.validate_request("GET", "/unknown/path/deep", None, &HeaderMap::new(), None)
-                .await
-                .is_none()
-        );
+        assert!(t
+            .validate_request("GET", "/unknown/path/deep", None, &HeaderMap::new(), None)
+            .await
+            .is_none());
         assert!(
             !conformance_violations::snapshot()
                 .iter()
@@ -415,8 +382,8 @@ mod tests {
 
     #[test]
     fn template_matcher_extracts_params() {
-        let params = match_template("/users/42/orders/7", "/users/{u}/orders/{o}")
-            .expect("matches");
+        let params =
+            match_template("/users/42/orders/7", "/users/{u}/orders/{o}").expect("matches");
         assert_eq!(params.get("u").map(String::as_str), Some("42"));
         assert_eq!(params.get("o").map(String::as_str), Some("7"));
         assert!(match_template("/users/42/extra", "/users/{u}").is_none());

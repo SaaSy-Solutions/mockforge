@@ -59,6 +59,7 @@ pub mod protocol;
 /// Unified protocol server lifecycle implementation
 pub mod protocol_server;
 pub mod queues;
+pub mod recording;
 pub mod spec_registry;
 pub mod tls;
 
