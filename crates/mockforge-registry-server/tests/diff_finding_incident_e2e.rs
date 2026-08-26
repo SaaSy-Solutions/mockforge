@@ -26,9 +26,9 @@ use sqlx::postgres::PgPoolOptions;
 use sqlx::{PgPool, Row};
 use uuid::Uuid;
 
-use mockforge_registry_server::handlers::internal_test_runs::ingest_runner_event;
 use mockforge_registry_core::models::test_run::EnqueueTestRun;
 use mockforge_registry_core::models::{Incident, TestRun};
+use mockforge_registry_server::handlers::internal_test_runs::ingest_runner_event;
 
 async fn pool() -> PgPool {
     let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
@@ -61,25 +61,21 @@ async fn seed_run(pool: &PgPool) -> TestRun {
     .await
     .expect("seed user");
 
-    sqlx::query(
-        "INSERT INTO organizations (id, name, slug, owner_id) VALUES ($1, 'e2e', $2, $3)",
-    )
-    .bind(org_id)
-    .bind(format!("e2e-{org_id}"))
-    .bind(user_id)
-    .execute(pool)
-    .await
-    .expect("seed org");
+    sqlx::query("INSERT INTO organizations (id, name, slug, owner_id) VALUES ($1, 'e2e', $2, $3)")
+        .bind(org_id)
+        .bind(format!("e2e-{org_id}"))
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .expect("seed org");
 
-    sqlx::query(
-        "INSERT INTO workspaces (id, org_id, name, created_by) VALUES ($1, $2, 'e2e', $3)",
-    )
-    .bind(workspace_id)
-    .bind(org_id)
-    .bind(user_id)
-    .execute(pool)
-    .await
-    .expect("seed workspace");
+    sqlx::query("INSERT INTO workspaces (id, org_id, name, created_by) VALUES ($1, $2, 'e2e', $3)")
+        .bind(workspace_id)
+        .bind(org_id)
+        .bind(user_id)
+        .execute(pool)
+        .await
+        .expect("seed workspace");
 
     sqlx::query(
         "INSERT INTO test_suites (id, workspace_id, name, kind, config) \
@@ -142,18 +138,15 @@ async fn breaking_finding_raises_dedupes_and_dispatches() {
     // --- runner emits a synthetic BREAKING diff_finding -------------------
     ingest(&pool, run.id, 1, breaking_payload("/pets/200")).await;
 
-    let incidents =
-        Incident::list_by_org(&pool, run.org_id, Some("open"), 10)
-            .await
-            .expect("list incidents");
+    let incidents = Incident::list_by_org(&pool, run.org_id, Some("open"), 10)
+        .await
+        .expect("list incidents");
     assert_eq!(incidents.len(), 1, "exactly one open incident after one breaking finding");
     let incident = &incidents[0];
     assert_eq!(incident.source, "contract_drift");
     assert_eq!(incident.severity, "critical", "breaking maps to critical");
     assert!(
-        incident
-            .dedupe_key
-            .starts_with(&format!("contract-drift:{}", run.id)),
+        incident.dedupe_key.starts_with(&format!("contract-drift:{}", run.id)),
         "dedupe key scoped per (run, endpoint), got {}",
         incident.dedupe_key
     );
@@ -204,4 +197,3 @@ async fn breaking_finding_raises_dedupes_and_dispatches() {
 // The helper below drives the REAL ingestion path (`ingest_runner_event`,
 // the code behind POST /api/v1/internal/test-runs/{id}/events) without
 // spinning up an HTTP server — same tradeoff as the other *_e2e suites.
-

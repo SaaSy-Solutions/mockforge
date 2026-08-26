@@ -37,11 +37,8 @@ impl FtpServer {
         fixtures: Vec<crate::fixtures::FtpFixture>,
     ) -> Result<Self> {
         let vfs = Arc::new(VirtualFileSystem::new(config.virtual_root.clone()));
-        let spec_registry = Arc::new(
-            FtpSpecRegistry::new()
-                .with_vfs(vfs.clone())
-                .with_fixtures(fixtures)?,
-        );
+        let spec_registry =
+            Arc::new(FtpSpecRegistry::new().with_vfs(vfs.clone()).with_fixtures(fixtures)?);
 
         Ok(Self {
             config,
@@ -374,14 +371,9 @@ mod tests {
         // The fixture's identifier is registered and its virtual file was
         // loaded into the server's VFS.
         assert_eq!(server.spec_registry().fixtures.len(), 1);
-        assert_eq!(
-            server.spec_registry().fixtures[0].identifier,
-            "programmatic"
-        );
+        assert_eq!(server.spec_registry().fixtures[0].identifier, "programmatic");
 
-        let file = server
-            .vfs()
-            .get_file(std::path::Path::new("/pub/hello.txt"));
+        let file = server.vfs().get_file(std::path::Path::new("/pub/hello.txt"));
         assert!(file.is_some(), "virtual file from fixture should be in VFS");
     }
 }

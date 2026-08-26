@@ -167,7 +167,11 @@ impl StreamBody {
                 // Patterned filler keeps compression proxies honest and
                 // makes truncation visible in captured bodies.
                 *b = self.phase;
-                self.phase = if self.phase >= b'z' { b'a' } else { self.phase + 1 };
+                self.phase = if self.phase >= b'z' {
+                    b'a'
+                } else {
+                    self.phase + 1
+                };
             }
             self.written_fill += take as u64;
             if self.written_fill == self.fill_total {
@@ -249,15 +253,20 @@ fn parse_http_target(url: &str) -> Result<(String, u16, String), String> {
     if host.is_empty() {
         return Err(format!("empty host in '{url}'"));
     }
-    Ok((host, port, if path.is_empty() { "/".into() } else { path.to_string() }))
+    Ok((
+        host,
+        port,
+        if path.is_empty() {
+            "/".into()
+        } else {
+            path.to_string()
+        },
+    ))
 }
 
 /// Read one HTTP/1.1 response head, drain its body (Content-Length or
 /// chunked), and return `(status, bytes_consumed)`.
-async fn read_response(
-    stream: &mut TcpStream,
-    buf: &mut Vec<u8>,
-) -> std::io::Result<(u16, u64)> {
+async fn read_response(stream: &mut TcpStream, buf: &mut Vec<u8>) -> std::io::Result<(u16, u64)> {
     let mut consumed: u64 = 0;
     // --- head ---
     let head_end = loop {
@@ -298,8 +307,12 @@ async fn read_response(
         .lines()
         .find_map(|l| l.strip_prefix("content-length:"))
         .and_then(|v| v.trim().parse().ok());
-    let chunked = lower.contains("transfer-Encoding:") || lower.contains("transfer-encoding:")
-        && lower.split("transfer-encoding:").nth(1).map_or(false, |v| v.contains("chunked"));
+    let chunked = lower.contains("transfer-Encoding:")
+        || lower.contains("transfer-encoding:")
+            && lower
+                .split("transfer-encoding:")
+                .nth(1)
+                .map_or(false, |v| v.contains("chunked"));
 
     // --- body ---
     if chunked {
@@ -407,8 +420,7 @@ impl StreamBody {
 
 /// Run the pipelining bench.
 pub async fn run(cfg: PipelineBenchConfig) -> anyhow::Result<PipelineBenchResult> {
-    let (host, port, path) =
-        parse_http_target(&cfg.target_url).map_err(anyhow::Error::msg)?;
+    let (host, port, path) = parse_http_target(&cfg.target_url).map_err(anyhow::Error::msg)?;
     if cfg.pipeline_depth == 0 {
         anyhow::bail!("--pipeline-depth must be >= 1");
     }
@@ -435,8 +447,16 @@ pub async fn run(cfg: PipelineBenchConfig) -> anyhow::Result<PipelineBenchResult
         let method = cfg.method.clone();
         handles.push(tokio::spawn(async move {
             connection_loop(
-                addr, &host, port, &path, &method, cfg.body_kind, cfg.body_size,
-                cfg.pipeline_depth, deadline, &counters,
+                addr,
+                &host,
+                port,
+                &path,
+                &method,
+                cfg.body_kind,
+                cfg.body_size,
+                cfg.pipeline_depth,
+                deadline,
+                &counters,
             )
             .await;
         }));
@@ -566,9 +586,7 @@ async fn connection_loop(
             match read_response(s, &mut recv_buf).await {
                 Ok((status, consumed)) => {
                     counters.responses_received.fetch_add(1, Ordering::Relaxed);
-                    counters
-                        .bytes_received
-                        .fetch_add(consumed, Ordering::Relaxed);
+                    counters.bytes_received.fetch_add(consumed, Ordering::Relaxed);
                     if let Ok(mut map) = counters.statuses.lock() {
                         *map.entry(status.to_string()).or_insert(0) += 1;
                     }
@@ -619,10 +637,7 @@ pub fn render_report(res: &PipelineBenchResult) -> String {
     let mut out = String::new();
     out.push_str("\n=== bench-pipeline results ===\n");
     out.push_str(&format!("requests sent          : {}\n", res.requests_sent));
-    out.push_str(&format!(
-        "responses received     : {}\n",
-        res.responses_received
-    ));
+    out.push_str(&format!("responses received     : {}\n", res.responses_received));
     if res.requests_sent != res.responses_received {
         out.push_str(&format!(
             "  NOTE: {} request(s) never got a response — the target likely \
@@ -630,10 +645,7 @@ pub fn render_report(res: &PipelineBenchResult) -> String {
             res.requests_sent - res.responses_received
         ));
     }
-    out.push_str(&format!(
-        "connection closed early: {}\n",
-        res.connection_closed_early
-    ));
+    out.push_str(&format!("connection closed early: {}\n", res.connection_closed_early));
     out.push_str(&format!("connection errors      : {}\n", res.connection_errors));
     out.push_str(&format!("reconnects             : {}\n", res.reconnects));
     out.push_str(&format!(

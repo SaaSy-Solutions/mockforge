@@ -17,9 +17,6 @@ mod config_commands;
 #[allow(dead_code)]
 mod contract_diff_commands;
 
-#[cfg(feature = "recorder")]
-mod verify_mocks_commands;
-mod mcp_server;
 #[allow(dead_code)]
 mod contract_sync_commands;
 mod data_commands;
@@ -40,6 +37,7 @@ mod insomnia_import;
 mod kafka_commands;
 #[allow(dead_code)]
 mod logs_commands;
+mod mcp_server;
 mod mockai_commands;
 mod mod_commands;
 #[cfg(feature = "mqtt")]
@@ -67,6 +65,8 @@ mod time_commands;
 mod tunnel_commands;
 #[cfg(feature = "vbr")]
 mod vbr_commands;
+#[cfg(feature = "recorder")]
+mod verify_mocks_commands;
 #[allow(dead_code)]
 mod voice_commands;
 #[allow(dead_code)]

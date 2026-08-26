@@ -26,16 +26,16 @@ pub mod multi_tenant_types;
 pub mod pillar_tracking;
 pub mod pillars;
 pub mod protocol;
-pub mod reality_continuum;
-pub mod time_travel;
 pub mod protocol_contract_types;
 pub mod rate_counters;
+pub mod reality_continuum;
 pub mod response_generation_trace;
 pub mod response_selection;
 pub mod scenario_types;
 pub mod schema_diff;
 pub mod state_machine;
 pub mod threat_modeling_types;
+pub mod time_travel;
 pub mod unknown_paths;
 pub mod workspace_promotion;
 

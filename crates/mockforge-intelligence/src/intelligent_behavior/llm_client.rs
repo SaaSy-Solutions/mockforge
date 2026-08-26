@@ -60,11 +60,7 @@ impl LlmClient {
         request
             .seed
             .or(self.config.seed)
-            .or_else(|| {
-                std::env::var("MOCKFORGE_AI_SEED")
-                    .ok()
-                    .and_then(|s| s.trim().parse().ok())
-            })
+            .or_else(|| std::env::var("MOCKFORGE_AI_SEED").ok().and_then(|s| s.trim().parse().ok()))
     }
 
     /// Generate a response from a prompt
@@ -90,7 +86,12 @@ impl LlmClient {
 
         // Generate response
         let response_text = provider
-            .generate_chat(messages, request.temperature, request.max_tokens, self.resolve_seed(request))
+            .generate_chat(
+                messages,
+                request.temperature,
+                request.max_tokens,
+                self.resolve_seed(request),
+            )
             .await?;
 
         // Try to parse as JSON
@@ -142,7 +143,12 @@ impl LlmClient {
 
         // Generate response with usage tracking
         let (response_text, usage) = provider
-            .generate_chat_with_usage(messages, request.temperature, request.max_tokens, self.resolve_seed(request))
+            .generate_chat_with_usage(
+                messages,
+                request.temperature,
+                request.max_tokens,
+                self.resolve_seed(request),
+            )
             .await?;
 
         // Try to parse as JSON

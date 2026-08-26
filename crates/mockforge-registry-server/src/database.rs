@@ -89,9 +89,7 @@ impl Database {
         // 60s is far longer than an uncontended acquisition and far shorter than
         // a deploy health-check budget.
         let mut tx = conn.begin().await?;
-        sqlx::query("SET LOCAL lock_timeout = '60s'")
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query("SET LOCAL lock_timeout = '60s'").execute(&mut *tx).await?;
 
         tracing::info!("Acquiring advisory xact lock for database migrations...");
         if let Err(e) = sqlx::query("SELECT pg_advisory_xact_lock($1)")

@@ -272,10 +272,8 @@ mod session_cookie_tests {
 
     fn headers_with_cookie(value: &str) -> HeaderMap {
         let mut headers = HeaderMap::new();
-        headers.insert(
-            axum::http::header::COOKIE,
-            axum::http::HeaderValue::from_str(value).unwrap(),
-        );
+        headers
+            .insert(axum::http::header::COOKIE, axum::http::HeaderValue::from_str(value).unwrap());
         headers
     }
 

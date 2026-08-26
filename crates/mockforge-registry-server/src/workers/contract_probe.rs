@@ -74,11 +74,9 @@ pub fn start_contract_probe_worker(pool: PgPool, redis: Option<RedisPool>) {
 /// whose cadence is due (#720). Returns the number of jobs enqueued
 /// (for observability + tests).
 pub async fn run_tick(pool: &PgPool, redis: Option<&RedisPool>) -> sqlx::Result<u32> {
-    let services = MonitoredService::list_probeable_due(
-        pool,
-        tick_interval_from_env().as_secs() as i64,
-    )
-    .await?;
+    let services =
+        MonitoredService::list_probeable_due(pool, tick_interval_from_env().as_secs() as i64)
+            .await?;
     if services.is_empty() {
         debug!("contract_probe: no services due for probing");
         return Ok(0);

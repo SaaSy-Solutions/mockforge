@@ -12,36 +12,37 @@ async fn main() -> anyhow::Result<()> {
     let db = RecorderDatabase::new(&db_path).await?;
     let recorder = Recorder::new(db);
 
-    let mut exchange = |id: &str, path: &str, status: i32, body: String| -> (RecordedRequest, RecordedResponse) {
-        (
-            RecordedRequest {
-                id: id.to_string(),
-                protocol: Protocol::Http,
-                timestamp: chrono::Utc::now(),
-                method: "GET".into(),
-                path: path.into(),
-                query_params: None,
-                headers: "{}".into(),
-                body: None,
-                body_encoding: "utf8".into(),
-                client_ip: None,
-                trace_id: None,
-                span_id: None,
-                duration_ms: Some(5),
-                status_code: Some(status as i32),
-                tags: None,
-            },
-            RecordedResponse {
-                request_id: id.to_string(),
-                status_code: status as i32,
-                headers: "{}".into(),
-                body: Some(body),
-                body_encoding: "utf8".into(),
-                size_bytes: 0,
-                timestamp: chrono::Utc::now(),
-            },
-        )
-    };
+    let mut exchange =
+        |id: &str, path: &str, status: i32, body: String| -> (RecordedRequest, RecordedResponse) {
+            (
+                RecordedRequest {
+                    id: id.to_string(),
+                    protocol: Protocol::Http,
+                    timestamp: chrono::Utc::now(),
+                    method: "GET".into(),
+                    path: path.into(),
+                    query_params: None,
+                    headers: "{}".into(),
+                    body: None,
+                    body_encoding: "utf8".into(),
+                    client_ip: None,
+                    trace_id: None,
+                    span_id: None,
+                    duration_ms: Some(5),
+                    status_code: Some(status as i32),
+                    tags: None,
+                },
+                RecordedResponse {
+                    request_id: id.to_string(),
+                    status_code: status as i32,
+                    headers: "{}".into(),
+                    body: Some(body),
+                    body_encoding: "utf8".into(),
+                    size_bytes: 0,
+                    timestamp: chrono::Utc::now(),
+                },
+            )
+        };
 
     for (id, path, status, body) in [
         ("ok-1", "/users/1", 200, r#"{"id":"1","email":"a@b.c"}"#.to_string()),

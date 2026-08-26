@@ -301,10 +301,10 @@ async fn mirror_kind_status(
     run: &TestRun,
     summary: Option<&serde_json::Value>,
 ) -> sqlx::Result<()> {
+    use mockforge_registry_core::incident_bus::{IncidentBus, PgIncidentBus};
     use mockforge_registry_core::models::chaos::CreateChaosCampaignReport;
     use mockforge_registry_core::models::incident::RaiseIncidentInput;
-    use mockforge_registry_core::incident_bus::{IncidentBus, PgIncidentBus};
-use mockforge_registry_core::models::{ChaosCampaignReport, CloneModel, Snapshot};
+    use mockforge_registry_core::models::{ChaosCampaignReport, CloneModel, Snapshot};
 
     let pool = state.db.pool();
     match run.kind.as_str() {
@@ -448,9 +448,8 @@ use mockforge_registry_core::models::{ChaosCampaignReport, CloneModel, Snapshot}
                         severity,
                         title: &title,
                         description: Some(&description),
-                    },
-                )
-                .await?;
+                    })
+                    .await?;
             }
         }
         "fitness_evaluation" => {
@@ -550,9 +549,8 @@ use mockforge_registry_core::models::{ChaosCampaignReport, CloneModel, Snapshot}
                 // not undo the recorded evaluation row above. Log and
                 // swallow so the runner's mirror_kind_status call still
                 // succeeds; on-call can replay from the historical row.
-                if let Err(e) =
-                    PgIncidentBus::new(pool.clone())
-                        .raise(RaiseIncidentInput {
+                if let Err(e) = PgIncidentBus::new(pool.clone())
+                    .raise(RaiseIncidentInput {
                         org_id: run.org_id,
                         // workspace_id stays None — same caveat as smoke (#392):
                         // the TestRun row carries org + suite_id, not workspace.
@@ -566,9 +564,8 @@ use mockforge_registry_core::models::{ChaosCampaignReport, CloneModel, Snapshot}
                         severity,
                         title: &title,
                         description: Some(&description),
-                    },
-                )
-                .await
+                    })
+                    .await
                 {
                     tracing::warn!(
                         run_id = %run.id,

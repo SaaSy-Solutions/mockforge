@@ -749,10 +749,8 @@ impl KafkaMockBroker {
                     // message, and this clone keeps them alive.
                     if self.recorder.is_some() {
                         if let Some(stored) = accepted_for_relationships.last() {
-                            let key_str = stored
-                                .key
-                                .as_deref()
-                                .and_then(|k| std::str::from_utf8(k).ok());
+                            let key_str =
+                                stored.key.as_deref().and_then(|k| std::str::from_utf8(k).ok());
                             self.record_exchange(
                                 mockforge_recorder::protocols::async_brokers::kafka_event(
                                     "produce",
@@ -941,8 +939,7 @@ impl KafkaMockBroker {
                 // #715 — record the consume side of every record served.
                 if self.recorder.is_some() && !selected.is_empty() {
                     for msg in &selected {
-                        let key_str =
-                            msg.key.as_deref().and_then(|k| std::str::from_utf8(k).ok());
+                        let key_str = msg.key.as_deref().and_then(|k| std::str::from_utf8(k).ok());
                         self.record_exchange(
                             mockforge_recorder::protocols::async_brokers::kafka_event(
                                 "consume",
@@ -1579,11 +1576,7 @@ mod tests {
             Some("key-1"),
             br#"{"order_id":42}"#,
         );
-        recorder
-            .clone()
-            .record_request(event)
-            .await
-            .expect("record exchange");
+        recorder.clone().record_request(event).await.expect("record exchange");
 
         // The stored row keeps the storage convention: protocol kafka,
         // method = op, path = topic, body preserved as utf8.

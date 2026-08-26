@@ -1334,10 +1334,8 @@ impl OpenApiRouteRegistry {
         // (`query` / `query` / `request-body`) whose reasons carry the
         // offending param name. Same-path/same-category/same-reason
         // duplicates still collapse through the dedup buffer.
-        let per_location: Vec<(String, String)> = validation_details(&payload)
-            .iter()
-            .filter_map(split_detail_entry)
-            .collect();
+        let per_location: Vec<(String, String)> =
+            validation_details(&payload).iter().filter_map(split_detail_entry).collect();
 
         if per_location.is_empty() {
             mockforge_foundation::conformance_violations::record(
@@ -2634,10 +2632,7 @@ static LAST_ERRORS: Lazy<Mutex<VecDeque<Value>>> =
 fn split_detail_entry(detail: &Value) -> Option<(String, String)> {
     let obj = detail.as_object()?;
     let path = obj.get("path")?.as_str()?;
-    let message = obj
-        .get("message")
-        .and_then(|m| m.as_str())
-        .unwrap_or("validation failed");
+    let message = obj.get("message").and_then(|m| m.as_str()).unwrap_or("validation failed");
     // Body-level failures arrive as a bare `"path":"body"` (the field
     // name lives in the message), so accept both `<loc>.<name>` and a
     // bare location token.
@@ -3365,13 +3360,10 @@ mod tests {
         assert!(result.is_err(), "request must fail validation");
 
         let buffer = mockforge_foundation::conformance_violations::snapshot();
-        let mine: Vec<_> = buffer
-            .iter()
-            .filter(|v| v.path == "/v1/things" && v.method == "POST")
-            .collect();
+        let mine: Vec<_> =
+            buffer.iter().filter(|v| v.path == "/v1/things" && v.method == "POST").collect();
         assert!(
-            mine.iter().any(|v| v.category == "query"
-                && v.reason.contains("kind")),
+            mine.iter().any(|v| v.category == "query" && v.reason.contains("kind")),
             "expected a query entry naming 'kind', got {:?}",
             mine.iter().map(|v| (&v.category, &v.reason)).collect::<Vec<_>>()
         );

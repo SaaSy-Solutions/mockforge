@@ -395,9 +395,7 @@ fn create_app(state: AppState, rate_limiter: RateLimiterState) -> Router {
             tracing::info!(
                 "CORS configured with strict same-origin policy (no CORS_ALLOWED_ORIGINS set)"
             );
-            CorsLayer::new()
-                .allow_methods(Any)
-                .allow_headers(Any)
+            CorsLayer::new().allow_methods(Any).allow_headers(Any)
         }
     };
 

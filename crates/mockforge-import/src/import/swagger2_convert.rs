@@ -57,10 +57,7 @@ pub fn convert_swagger2_to_openapi3(spec: &Value) -> Result<Value, String> {
 
     // paths.
     let empty_map = Map::new();
-    let paths = obj
-        .get("paths")
-        .and_then(Value::as_object)
-        .unwrap_or(&empty_map);
+    let paths = obj.get("paths").and_then(Value::as_object).unwrap_or(&empty_map);
     let mut new_paths = Map::new();
     for (path, item) in paths {
         new_paths.insert(path.clone(), convert_path_item(item, &global_consumes, &global_produces));
@@ -72,7 +69,10 @@ pub fn convert_swagger2_to_openapi3(spec: &Value) -> Result<Value, String> {
 
 fn copy_matching(src: &Map<String, Value>, prefix: &str, dst: &mut Map<String, Value>) {
     for (k, v) in src {
-        if k == prefix || k.starts_with(&format!("{prefix}-")) || k.starts_with(prefix) && prefix == "x-" {
+        if k == prefix
+            || k.starts_with(&format!("{prefix}-"))
+            || k.starts_with(prefix) && prefix == "x-"
+        {
             dst.insert(k.clone(), v.clone());
         }
     }
@@ -131,10 +131,7 @@ fn convert_path_item(item: &Value, consumes: &[&str], produces: &[&str]) -> Valu
 }
 
 fn is_operation(key: &str) -> bool {
-    matches!(
-        key,
-        "get" | "put" | "post" | "delete" | "options" | "head" | "patch"
-    )
+    matches!(key, "get" | "put" | "post" | "delete" | "options" | "head" | "patch")
 }
 
 fn convert_operation(
@@ -149,10 +146,8 @@ fn convert_operation(
     let op_produces = merged_media_types(&fields, "produces", global_produces);
 
     let all_params: Vec<Value> = {
-        let mut p: Vec<Value> = path_level_params
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default();
+        let mut p: Vec<Value> =
+            path_level_params.and_then(Value::as_array).cloned().unwrap_or_default();
         if let Some(own) = fields.get("parameters").and_then(Value::as_array) {
             p.extend(own.iter().cloned());
         }
@@ -161,7 +156,12 @@ fn convert_operation(
 
     let mut out = Map::new();
     for (k, v) in &fields {
-        if k == "parameters" || k == "consumes" || k == "produces" || k == "responses" || k == "schemes" {
+        if k == "parameters"
+            || k == "consumes"
+            || k == "produces"
+            || k == "responses"
+            || k == "schemes"
+        {
             continue;
         }
         out.insert(k.clone(), v.clone());
@@ -203,9 +203,7 @@ fn convert_operation(
         };
         let mut properties = Map::new();
         let mut required_names: Vec<Value> = Vec::new();
-        for (name, prop, required) in
-            form_fields.iter().map(convert_form_param)
-        {
+        for (name, prop, required) in form_fields.iter().map(convert_form_param) {
             if required {
                 required_names.push(json!(name));
             }
@@ -223,10 +221,7 @@ fn convert_operation(
 
     // responses: wrap each response's `schema` in content.
     if let Some(responses) = fields.get("responses") {
-        out.insert(
-            "responses".into(),
-            convert_responses(responses, op_produces.first().copied()),
-        );
+        out.insert("responses".into(), convert_responses(responses, op_produces.first().copied()));
     }
 
     Value::Object(out)
@@ -251,12 +246,20 @@ fn upgrade_inline_schema(param: &Value) -> Value {
     // parameters. The boolean never reaches *schema* position because the
     // schema whitelist below excludes it; form properties strip it
     // explicitly in convert_form_param.
-    if let (Some(typ), None) = (
-        param.get("type").map(|v| v.clone()),
-        param.get("schema"),
-    ) {
+    if let (Some(typ), None) = (param.get("type").map(|v| v.clone()), param.get("schema")) {
         let mut schema = Map::new();
-        for k in ["type", "format", "items", "enum", "maximum", "minimum", "maxLength", "minLength", "pattern", "default"] {
+        for k in [
+            "type",
+            "format",
+            "items",
+            "enum",
+            "maximum",
+            "minimum",
+            "maxLength",
+            "minLength",
+            "pattern",
+            "default",
+        ] {
             if let Some(v) = param.get(k) {
                 schema.insert(k.to_string(), v.clone());
             }
@@ -273,11 +276,7 @@ fn upgrade_inline_schema(param: &Value) -> Value {
 /// property that must not survive as a boolean (`required` inside a
 /// schema is an array of names), so the caller collects it instead.
 fn convert_form_param(p: &Value) -> (String, Value, bool) {
-    let name = p
-        .get("name")
-        .and_then(Value::as_str)
-        .unwrap_or("field")
-        .to_string();
+    let name = p.get("name").and_then(Value::as_str).unwrap_or("field").to_string();
     let mut prop = upgrade_inline_schema(p);
     if let Some(o) = prop.as_object_mut() {
         o.remove("in");
@@ -302,10 +301,7 @@ fn convert_responses(responses: &Value, produce_ct: Option<&str>) -> Value {
         for (code, resp) in map {
             let mut converted = resp.as_object().cloned().unwrap_or_default();
             if let Some(schema) = converted.remove("schema") {
-                converted.insert(
-                    "content".into(),
-                    json!({ ct: { "schema": schema } }),
-                );
+                converted.insert("content".into(), json!({ ct: { "schema": schema } }));
             }
             // Headers in 2.0 carry type inline; wrap them too.
             if let Some(Value::Object(headers)) = converted.get_mut("headers") {
@@ -329,14 +325,8 @@ fn convert_security_schemes(defs: &Value) -> Value {
                 "apiKey" => {
                     let mut o = Map::new();
                     o.insert("type".into(), json!("apiKey"));
-                    o.insert(
-                        "name".into(),
-                        def.get("name").cloned().unwrap_or(json!("api_key")),
-                    );
-                    o.insert(
-                        "in".into(),
-                        def.get("in").cloned().unwrap_or(json!("header")),
-                    );
+                    o.insert("name".into(), def.get("name").cloned().unwrap_or(json!("api_key")));
+                    o.insert("in".into(), def.get("in").cloned().unwrap_or(json!("header")));
                     Value::Object(o)
                 }
                 "oauth2" => {
@@ -444,19 +434,12 @@ mod tests {
         assert_eq!(out["openapi"], "3.0.0");
         assert_eq!(out["info"]["title"], "Pets");
         assert_eq!(
-            out["servers"][0]["url"],
-            "https://pets.example.com/v1",
+            out["servers"][0]["url"], "https://pets.example.com/v1",
             "host+basePath+scheme fold into one server URL"
         );
         assert_eq!(out["components"]["schemas"]["Pet"]["type"], "object");
-        assert_eq!(
-            out["components"]["securitySchemes"]["api_key"]["in"],
-            "header"
-        );
-        assert_eq!(
-            out["components"]["securitySchemes"]["basic"]["scheme"],
-            "basic"
-        );
+        assert_eq!(out["components"]["securitySchemes"]["api_key"]["in"], "header");
+        assert_eq!(out["components"]["securitySchemes"]["basic"]["scheme"], "basic");
     }
 
     #[test]
@@ -490,7 +473,8 @@ mod tests {
     fn form_params_become_urlencoded_request_body() {
         let out = convert_swagger2_to_openapi3(&petstore_20()).unwrap();
         let post = &out["paths"]["/pets"]["post"];
-        let props = &post["requestBody"]["content"]["application/x-www-form-urlencoded"]["schema"]["properties"];
+        let props = &post["requestBody"]["content"]["application/x-www-form-urlencoded"]["schema"]
+            ["properties"];
         assert!(props.get("name").is_some());
         assert!(props.get("status").is_some());
     }
@@ -501,8 +485,7 @@ mod tests {
     fn converted_spec_feeds_standard_openapi_import() {
         let converted = convert_swagger2_to_openapi3(&petstore_20()).unwrap();
         let text = serde_json::to_string(&converted).unwrap();
-        let result =
-            crate::import::openapi_import::import_openapi_spec(&text, None);
+        let result = crate::import::openapi_import::import_openapi_spec(&text, None);
         assert!(result.is_ok(), "converted spec should import: {:?}", result.err());
         let imported = result.unwrap();
         assert_eq!(imported.spec_info.title, "Pets");

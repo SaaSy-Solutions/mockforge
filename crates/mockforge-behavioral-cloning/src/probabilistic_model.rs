@@ -265,10 +265,7 @@ impl ProbabilisticModel {
         model
             .status_code_distribution
             .iter()
-            .max_by(|a, b| {
-                a.1.partial_cmp(b.1)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            })
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))
             .map_or(200, |(code, _)| *code)
     }
 

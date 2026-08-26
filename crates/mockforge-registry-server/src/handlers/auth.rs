@@ -104,9 +104,8 @@ fn with_session_cookie<T>(
     axum::response::AppendHeaders<[(axum::http::header::HeaderName, axum::http::HeaderValue); 2]>,
     Json<T>,
 ) {
-    let pair = |value: String| {
-        axum::http::HeaderValue::from_str(&value).expect("cookie value is ASCII")
-    };
+    let pair =
+        |value: String| axum::http::HeaderValue::from_str(&value).expect("cookie value is ASCII");
     (
         // AppendHeaders (not a bare array) so BOTH Set-Cookie headers survive —
         // a bare [(k, v); N] replaces earlier values of the same header name.
@@ -266,7 +265,7 @@ pub async fn register(
         &issued_refresh_token,
         token_pair.access_token_expires_at,
     ))
- }
+}
 
 pub async fn login(
     State(state): State<AppState>,
@@ -456,13 +455,10 @@ pub async fn refresh_token(
     let supplied_refresh_token = request
         .refresh_token
         .or_else(|| cookie_value(&headers, REFRESH_COOKIE))
-        .ok_or_else(|| {
-            ApiError::InvalidRequest("Missing refresh token".to_string())
-        })?;
+        .ok_or_else(|| ApiError::InvalidRequest("Missing refresh token".to_string()))?;
 
     // Verify the refresh token (not just any token)
-    let (claims, old_jti) =
-        verify_refresh_token(&supplied_refresh_token, &state.config.jwt_secret)
+    let (claims, old_jti) = verify_refresh_token(&supplied_refresh_token, &state.config.jwt_secret)
         .map_err(|e| {
             tracing::debug!("Refresh token validation failed: {}", e);
             ApiError::InvalidRequest("Invalid or expired refresh token".to_string())
@@ -551,9 +547,8 @@ pub async fn logout(
         }
     }
 
-    let pair = |value: String| {
-        axum::http::HeaderValue::from_str(&value).expect("cookie value is ASCII")
-    };
+    let pair =
+        |value: String| axum::http::HeaderValue::from_str(&value).expect("cookie value is ASCII");
     let cleared = clear_auth_cookies();
     Ok((
         // AppendHeaders so both expiring Set-Cookie headers are sent.

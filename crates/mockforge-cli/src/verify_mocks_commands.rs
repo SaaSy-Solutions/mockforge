@@ -346,8 +346,7 @@ fn check_response_drift(
     });
 
     let declared = declared_schema.or_else(|| {
-        (!responses.responses.is_empty() || responses.default.is_some())
-            .then_some(Value::Null)
+        (!responses.responses.is_empty() || responses.default.is_some()).then_some(Value::Null)
     })?;
     if declared.is_null() {
         return None;
