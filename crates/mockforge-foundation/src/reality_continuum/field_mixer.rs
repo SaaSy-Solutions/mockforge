@@ -125,7 +125,7 @@ impl FieldRealityConfig {
     pub fn add_field_pattern(mut self, pattern: FieldPattern) -> Self {
         // Sort by priority (higher priority first)
         self.field_patterns.push(pattern);
-        self.field_patterns.sort_by(|a, b| b.priority.cmp(&a.priority));
+        self.field_patterns.sort_by_key(|p| std::cmp::Reverse(p.priority));
         self
     }
 

@@ -58,13 +58,17 @@ impl ProxyServer {
                 .unwrap_or(false);
             match std::env::var("MOCKFORGE_PROXY_SPEC") {
                 Ok(path) if !path.trim().is_empty() => {
-                    match std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(|raw| {
-                        serde_json::from_str::<serde_json::Value>(&raw)
-                            .or_else(|_| serde_yaml::from_str::<serde_json::Value>(&raw))
-                            .map_err(|e| e.to_string())
-                    }) {
+                    match std::fs::read_to_string(&path).map_err(|e| e.to_string()).and_then(
+                        |raw| {
+                            serde_json::from_str::<serde_json::Value>(&raw)
+                                .or_else(|_| serde_yaml::from_str::<serde_json::Value>(&raw))
+                                .map_err(|e| e.to_string())
+                        },
+                    ) {
                         Ok(spec_value) => {
-                            match crate::conformance::ConformanceTap::from_spec_value(spec_value, strict) {
+                            match crate::conformance::ConformanceTap::from_spec_value(
+                                spec_value, strict,
+                            ) {
                                 Ok(tap) => {
                                     info!(
                                         spec = %path,
@@ -175,19 +179,54 @@ async fn proxy_handler(
 
     // Get the base upstream URL and construct the full URL
     let base_upstream_url = config.get_upstream_url(uri.path());
-    let full_upstream_url =
-        if stripped_path.starts_with("http://") || stripped_path.starts_with("https://") {
-            stripped_path.clone()
-        } else {
-            let base = base_upstream_url.trim_end_matches('/');
-            let path = stripped_path.trim_start_matches('/');
-            let query = uri.query().map(|q| format!("?{}", q)).unwrap_or_default();
-            if path.is_empty() || path == "/" {
-                format!("{}{}", base, query)
-            } else {
-                format!("{}/{}", base, path) + &query
+    // strip_prefix re-adds a leading slash, so tolerate both `http://…`
+    // and `/http://…` spellings before testing for an absolute URL.
+    let candidate = stripped_path.trim_start_matches('/');
+    let is_absolute_upstream =
+        candidate.starts_with("http://") || candidate.starts_with("https://");
+
+    // #1012 / MF-002: an absolute URL embedded in the request path used to be
+    // forwarded verbatim — an open proxy/SSRF vector. It now requires the
+    // explicit `allow_absolute_url_upstream` opt-in, and even then passes the
+    // egress guard (denylisted IPs/metadata hosts, DNS re-check).
+    if is_absolute_upstream && !config.allow_absolute_url_upstream {
+        warn!(
+            path = %uri.path(),
+            "Rejected absolute-URL-in-path proxying; set allow_absolute_url_upstream=true to opt in (#1012)"
+        );
+        let body = format!(
+            "Forbidden: absolute-URL proxying is disabled (allow_absolute_url_upstream=false)"
+        );
+        return Ok(Response::builder()
+            .status(StatusCode::FORBIDDEN)
+            .body(body)
+            .unwrap_or_else(|_| Response::new(String::new())));
+    }
+
+    let full_upstream_url = if is_absolute_upstream {
+        use crate::egress::{EgressDecision, EgressGuard};
+        let guard = EgressGuard::new(config.upstream_allowlist.clone());
+        match guard.check(&candidate).await {
+            EgressDecision::Allowed => candidate.to_string(),
+            EgressDecision::Blocked(reason) => {
+                warn!(target = %stripped_path, %reason, "Blocked request-derived upstream by egress guard");
+                let body = format!("Forbidden: upstream blocked by egress guard ({})", reason);
+                return Ok(Response::builder()
+                    .status(StatusCode::FORBIDDEN)
+                    .body(body)
+                    .unwrap_or_else(|_| Response::new(String::new())));
             }
-        };
+        }
+    } else {
+        let base = base_upstream_url.trim_end_matches('/');
+        let path = stripped_path.trim_start_matches('/');
+        let query = uri.query().map(|q| format!("?{}", q)).unwrap_or_default();
+        if path.is_empty() || path == "/" {
+            format!("{}{}", base, query)
+        } else {
+            format!("{}/{}", base, path) + &query
+        }
+    };
 
     // Create a new URI with the full upstream URL for the proxy handler
     let _modified_uri = full_upstream_url.parse::<http::Uri>().unwrap_or_else(|_| uri.clone());
@@ -481,6 +520,77 @@ mod tests {
         // Test that the server can be created
         assert!(server.log_requests);
         assert!(server.log_responses);
+    }
+
+    #[tokio::test]
+    async fn test_absolute_url_in_path_rejected_by_default() {
+        let mut config = ProxyConfig::default();
+        config.enabled = true;
+        config.prefix = Some("/proxy/".to_string());
+        // allow_absolute_url_upstream defaults to false (#1012)
+        let server = Arc::new(ProxyServer::new(config, false, false));
+
+        let request = http::Request::builder()
+            .method("GET")
+            .uri("/proxy/http://169.254.169.254/latest/meta-data/")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let response = proxy_handler(axum::extract::State(server), request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_optin_absolute_url_still_blocked_for_metadata_ip() {
+        let mut config = ProxyConfig::default();
+        config.enabled = true;
+        config.prefix = Some("/proxy/".to_string());
+        config.allow_absolute_url_upstream = true;
+        let server = Arc::new(ProxyServer::new(config, false, false));
+
+        let request = http::Request::builder()
+            .method("GET")
+            .uri("/proxy/http://169.254.169.254/latest/meta-data/")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let response = proxy_handler(axum::extract::State(server), request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        assert!(response.into_body().contains("egress guard"));
+    }
+
+    #[tokio::test]
+    async fn test_optin_absolute_url_blocked_for_loopback() {
+        let mut config = ProxyConfig::default();
+        config.enabled = true;
+        config.prefix = Some("/proxy/".to_string());
+        config.allow_absolute_url_upstream = true;
+        let server = Arc::new(ProxyServer::new(config, false, false));
+
+        let request = http::Request::builder()
+            .method("GET")
+            .uri("/proxy/http://127.0.0.1:9090/admin")
+            .body(axum::body::Body::empty())
+            .unwrap();
+        let response = proxy_handler(axum::extract::State(server), request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn test_allowlisted_private_host_bypasses_guard() {
+        use crate::egress::{EgressDecision, EgressGuard, UpstreamAllowlist};
+
+        // Explicit operator opt-in re-opens SSRF by design; verify it wins.
+        let allowlist = UpstreamAllowlist {
+            url_prefixes: vec!["http://internal.local".to_string()],
+            hosts: Vec::new(),
+        };
+        let guard = EgressGuard::new(Some(allowlist));
+        match guard.check_without_dns("http://internal.local/v1") {
+            EgressDecision::Allowed => {}
+            EgressDecision::Blocked(e) => panic!("allowlisted host blocked: {}", e),
+        }
     }
 
     #[tokio::test]
