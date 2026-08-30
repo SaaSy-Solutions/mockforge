@@ -1351,7 +1351,9 @@ impl BenchCommand {
     /// Reuses the same loader as the payload path, so every input form keeps
     /// working: a single file, a directory (recursive), or a glob. Only the
     /// interpretation changes.
-    fn load_verbatim_templates(&self) -> Result<Vec<crate::request_gen::RequestTemplate>> {
+    pub(crate) fn load_verbatim_templates(
+        &self,
+    ) -> Result<Vec<crate::request_gen::RequestTemplate>> {
         let Some(pattern) = self.wafbench_dir.as_ref() else {
             return Err(BenchError::Other(
                 "--wafbench-verbatim requires --wafbench-dir pointing at your traffic file(s)"
@@ -4819,6 +4821,7 @@ mod tests {
     #[test]
     fn security_testing_enabled_has_a_single_definition() {
         let src = include_str!("command.rs");
+        let parallel = include_str!("parallel_executor.rs");
         // Assembled at runtime: a literal needle would match itself in this file.
         let a = format!("self.{} || self.{}.is_some()", "security_test", "wafbench_dir");
         let b = format!("self.{}.is_some() || self.{}", "wafbench_dir", "security_test");
@@ -4827,6 +4830,39 @@ mod tests {
             inline, 1,
             "expected the security_testing_enabled() method to be the only place this is \
              computed, found {inline} inline copies -- collapse them or the render paths drift"
+        );
+
+        // ParallelExecutor used to recompute this as
+        // `security_test || wafbench_dir.is_some()`, which ignored
+        // --wafbench-verbatim and re-enabled payload injection on
+        // --targets-file runs (#79).
+        let parallel_inline = format!(
+            "{}.{} || {}.{}.is_some()",
+            "base_command", "security_test", "self.base_command", "wafbench_dir"
+        );
+        assert!(
+            !parallel.contains(&parallel_inline),
+            "ParallelExecutor must not recompute the security flag inline"
+        );
+        assert!(
+            parallel.contains("security_testing_enabled()"),
+            "ParallelExecutor must call security_testing_enabled() so --wafbench-verbatim \
+             turns injection off on --targets-file runs too"
+        );
+    }
+
+    /// #79: --targets-file dispatched into ParallelExecutor before the
+    /// single-target verbatim path ran, so the flag required a spec and
+    /// still sent spec-derived (fuzzed) URLs. A behavioural test cannot
+    /// reach that executor without k6, so this guards the source.
+    #[test]
+    fn multi_target_path_honors_verbatim_templates() {
+        let src = include_str!("parallel_executor.rs");
+        assert!(
+            src.contains("load_verbatim_templates"),
+            "ParallelExecutor must load traffic-file requests under --wafbench-verbatim. \
+             Requiring a spec and generating templates from its operations is how \
+             --targets-file ignored the flag and fuzzed spec URLs (#79)."
         );
     }
 }

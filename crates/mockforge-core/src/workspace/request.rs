@@ -753,7 +753,7 @@ impl RequestProcessor {
 
         // Get popular requests (top 5)
         let mut popular_requests: Vec<_> = request_counts.into_iter().collect();
-        popular_requests.sort_by(|a, b| b.1.cmp(&a.1));
+        popular_requests.sort_by_key(|b| std::cmp::Reverse(b.1));
         popular_requests.truncate(5);
 
         RequestMetrics {

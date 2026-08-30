@@ -373,6 +373,7 @@ impl SelfTestReport {
     ///   2. ANY probe, positive or negative, that drew a 5xx — the target
     ///      crashed instead of replying cleanly (a bad request should get a
     ///      clean 4xx, never a 500).
+    ///
     /// Deliberately EXCLUDES "missed" negatives on spec-valid probes: those are
     /// the ones that genuinely need per-probe analysis (see the caught/missed
     /// legend), so keeping them out is the whole point of this view.
@@ -2497,7 +2498,7 @@ mod tests {
             label: label.into(),
             expected_4xx: true,
             actual_status: status,
-            passed: status >= 400 && status < 500,
+            passed: (400..500).contains(&status),
         };
         let mut r = SelfTestReport::default();
         r.operations.push(OperationResult {

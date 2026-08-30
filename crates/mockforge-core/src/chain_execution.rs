@@ -617,18 +617,15 @@ impl ChainExecutionEngine {
                 Value::Object(map) => {
                     current = map.get(*part)?;
                 }
-                Value::Array(arr) => {
-                    if part.starts_with('[') && part.ends_with(']') {
-                        let index_str = &part[1..part.len() - 1];
-                        if let Ok(index) = index_str.parse::<usize>() {
-                            current = arr.get(index)?;
-                        } else {
-                            return None;
-                        }
+                Value::Array(arr) if part.starts_with('[') && part.ends_with(']') => {
+                    let index_str = &part[1..part.len() - 1];
+                    if let Ok(index) = index_str.parse::<usize>() {
+                        current = arr.get(index)?;
                     } else {
                         return None;
                     }
                 }
+                Value::Array(_) => return None,
                 _ => return None,
             }
         }

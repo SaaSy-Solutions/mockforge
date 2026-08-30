@@ -363,15 +363,12 @@ mod tests {
     async fn dns_rebinding_to_private_is_blocked() {
         let guard = EgressGuard::new(None);
         let decision = guard
-            .check_with_resolver("http://evil.example.com/", |host| {
-                let host = host;
-                async move {
-                    assert_eq!(host, "evil.example.com");
-                    Ok(vec![
-                        IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34)),
-                        IpAddr::V4(Ipv4Addr::LOCALHOST),
-                    ])
-                }
+            .check_with_resolver("http://evil.example.com/", |host| async move {
+                assert_eq!(host, "evil.example.com");
+                Ok(vec![
+                    IpAddr::V4(Ipv4Addr::new(93, 184, 216, 34)),
+                    IpAddr::V4(Ipv4Addr::LOCALHOST),
+                ])
             })
             .await;
         assert_eq!(

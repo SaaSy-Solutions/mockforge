@@ -631,7 +631,7 @@ impl WorkspacePersistence {
         }
 
         // Sort by modification time (newest first)
-        backup_files.sort_by(|a, b| b.1.cmp(&a.1));
+        backup_files.sort_by_key(|b| std::cmp::Reverse(b.1));
 
         // Remove old backups
         let mut removed_count = 0;

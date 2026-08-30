@@ -14,6 +14,7 @@ use crate::scenarios::LoadScenario;
 use crate::spec_parser::SpecParser;
 use crate::target_parser::TargetConfig;
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use mockforge_openapi::spec::OpenApiSpec;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
@@ -204,39 +205,77 @@ impl ParallelExecutor {
             return Err(BenchError::K6NotFound);
         }
 
-        // Load and parse spec(s) (shared across all targets)
-        TerminalReporter::print_progress("Loading OpenAPI specification(s)...");
-        let merged_spec = self.base_command.load_and_merge_specs().await?;
-        let parser = SpecParser::from_spec(merged_spec);
-        TerminalReporter::print_success("Specification(s) loaded");
+        // #79: --targets-file used to ignore --wafbench-verbatim. It always
+        // required a spec and built templates from spec operations, so the
+        // command either died with "No spec files provided" or fuzzed spec
+        // URLs instead of sending the traffic file as written.
+        let spec_supplied =
+            !self.base_command.spec.is_empty() || self.base_command.spec_dir.is_some();
+        let verbatim = self.base_command.wafbench_verbatim;
 
-        // Get operations
-        let operations = if let Some(filter) = &self.base_command.operations {
-            parser.filter_operations(filter)?
+        let (templates, parser) = if verbatim {
+            let verbatim_templates = self.base_command.load_verbatim_templates()?;
+            if verbatim_templates.is_empty() {
+                return Err(BenchError::Other(
+                    "--wafbench-verbatim was set but no traffic cases were loaded. Check \
+                     --wafbench-dir points at a file, directory or glob containing cases with \
+                     a `request.uri`."
+                        .to_string(),
+                ));
+            }
+            TerminalReporter::print_success(&format!(
+                "Verbatim mode: {} request(s) will be sent exactly as written (spec endpoints not used)",
+                verbatim_templates.len()
+            ));
+            let parser = if spec_supplied {
+                TerminalReporter::print_progress("Loading OpenAPI specification(s)...");
+                let merged_spec = self.base_command.load_and_merge_specs().await?;
+                TerminalReporter::print_success("Specification(s) loaded (base path only)");
+                SpecParser::from_spec(merged_spec)
+            } else {
+                SpecParser::from_spec(OpenApiSpec {
+                    spec: Default::default(),
+                    file_path: None,
+                    raw_document: None,
+                })
+            };
+            (verbatim_templates, parser)
         } else {
-            parser.get_operations()
+            TerminalReporter::print_progress("Loading OpenAPI specification(s)...");
+            let merged_spec = self.base_command.load_and_merge_specs().await?;
+            let parser = SpecParser::from_spec(merged_spec);
+            TerminalReporter::print_success("Specification(s) loaded");
+
+            let operations = if let Some(filter) = &self.base_command.operations {
+                parser.filter_operations(filter)?
+            } else {
+                parser.get_operations()
+            };
+
+            if operations.is_empty() {
+                return Err(BenchError::Other("No operations found in spec".to_string()));
+            }
+
+            TerminalReporter::print_success(&format!("Found {} operations", operations.len()));
+
+            TerminalReporter::print_progress("Generating request templates...");
+            let templates: Vec<_> = operations
+                .iter()
+                .map(RequestGenerator::generate_template)
+                .collect::<Result<Vec<_>>>()?;
+            TerminalReporter::print_success("Request templates generated");
+            (templates, parser)
         };
 
-        if operations.is_empty() {
-            return Err(BenchError::Other("No operations found in spec".to_string()));
-        }
-
-        TerminalReporter::print_success(&format!("Found {} operations", operations.len()));
-
-        // Generate request templates (shared across all targets)
-        TerminalReporter::print_progress("Generating request templates...");
-        let templates: Vec<_> = operations
-            .iter()
-            .map(RequestGenerator::generate_template)
-            .collect::<Result<Vec<_>>>()?;
-        TerminalReporter::print_success("Request templates generated");
-
-        // Pre-load per-target specs
+        // Pre-load per-target specs. In verbatim mode a per-target spec may
+        // still resolve --base-path, but it must not replace the traffic-file
+        // templates. That swap is how --targets-file kept fuzzing spec URLs
+        // after --wafbench-verbatim was added (#79).
         let mut per_target_data: HashMap<
             PathBuf,
             (Vec<crate::request_gen::RequestTemplate>, Option<String>),
         > = HashMap::new();
-        {
+        if !verbatim {
             let mut unique_specs: Vec<PathBuf> = Vec::new();
             for t in &self.targets {
                 if let Some(spec_path) = &t.spec {
@@ -325,16 +364,13 @@ impl ParallelExecutor {
 
         let duration_secs_val = BenchCommand::parse_duration(&self.base_command.duration)?;
 
-        // Compute security testing flag
-        let security_testing_enabled_val =
-            self.base_command.security_test || self.base_command.wafbench_dir.is_some();
+        let security_testing_enabled_val = self.base_command.security_testing_enabled();
 
         // Pre-compute enhancement code once (same for all targets)
         let has_advanced_features = self.base_command.data_file.is_some()
             || self.base_command.error_rate.is_some()
-            || self.base_command.security_test
-            || self.base_command.parallel_create.is_some()
-            || self.base_command.wafbench_dir.is_some();
+            || self.base_command.security_testing_enabled()
+            || self.base_command.parallel_create.is_some();
 
         let enhancement_code = if has_advanced_features {
             let dummy_script = "export const options = {};";
@@ -403,8 +439,12 @@ impl ParallelExecutor {
             let geo_source_ips = self.base_command.geo_source_ips.clone();
             let geo_source_headers = self.base_command.geo_source_headers.clone();
 
-            // Select per-target templates/base_path if this target has a custom spec
-            let (templates, base_path) = if let Some(spec_path) = &target.spec {
+            // Select per-target templates/base_path if this target has a custom spec.
+            // Verbatim templates stay the traffic file's requests even when a
+            // target lists its own spec.
+            let (templates, base_path) = if verbatim {
+                (templates.clone(), base_path.clone())
+            } else if let Some(spec_path) = &target.spec {
                 if let Some((t, bp)) = per_target_data.get(spec_path) {
                     (t.clone(), bp.clone())
                 } else {

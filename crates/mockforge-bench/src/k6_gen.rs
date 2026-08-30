@@ -367,11 +367,7 @@ impl K6ScriptGenerator {
                 // Process path for dynamic placeholders
                 // Prepend base_path if configured
                 let raw_path = template.generate_path();
-                let full_path = if base_path.is_empty() {
-                    raw_path
-                } else {
-                    format!("{}{}", base_path, raw_path)
-                };
+                let full_path = join_base_path(base_path, &raw_path);
                 let processed_path = DynamicParamProcessor::process_path(&full_path);
                 all_placeholders.extend(processed_path.placeholders.clone());
 
@@ -611,9 +607,42 @@ impl K6ScriptGenerator {
     }
 }
 
+/// Join `--base-path` onto a request path without producing `//`.
+///
+/// `--base-path /` means root, not a prefix named `/`. Concatenating it
+/// with a traffic-file URI that already starts with `/` sent
+/// `//oauth/authorize` on Srikanth's --targets-file + verbatim command (#79).
+fn join_base_path(base_path: &str, raw_path: &str) -> String {
+    match base_path {
+        "" | "/" => raw_path.to_string(),
+        bp => {
+            let bp = bp.trim_end_matches('/');
+            if raw_path.starts_with('/') {
+                format!("{}{}", bp, raw_path)
+            } else {
+                format!("{}/{}", bp, raw_path)
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn root_base_path_does_not_double_slash() {
+        assert_eq!(
+            join_base_path(
+                "/",
+                "/oauth/authorize?redirect_uri=https%3A%2F%2Fevil.example%2Flanding"
+            ),
+            "/oauth/authorize?redirect_uri=https%3A%2F%2Fevil.example%2Flanding"
+        );
+        assert_eq!(join_base_path("", "/pets"), "/pets");
+        assert_eq!(join_base_path("/v1", "/pets"), "/v1/pets");
+        assert_eq!(join_base_path("/v1/", "pets"), "/v1/pets");
+    }
 
     #[test]
     fn test_k6_config_creation() {
