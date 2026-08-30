@@ -177,6 +177,11 @@ Host binding for the gRPC server is YAML-only (`grpc.host`).
 - `MOCKFORGE_KAFKA_FIXTURES_DIR=path/to/kafka-fixtures` — directory of pre-recorded Kafka topic fixtures.
 - `MOCKFORGE_KAFKA_RECORDING_DB=path/to/recording.sqlite` — SQLite file for recording produce/consume exchanges; when set, every Kafka exchange is persisted for replay.
 
+## AMQP / MQTT Protocol
+
+- `MOCKFORGE_AMQP_RECORDING_DB=path/to/recording.sqlite` — SQLite file for recording AMQP publish/deliver exchanges; when set, every exchange is persisted for replay. Unset or unusable path is a no-op.
+- `MOCKFORGE_MQTT_RECORDING_DB=path/to/recording.sqlite` — SQLite file for recording MQTT publish/deliver exchanges; when set, every exchange is persisted for replay. Unset or unusable path is a no-op.
+
 ## Federation
 
 - `MOCKFORGE_FEDERATION_POLL_URL=<url>` — upstream MockForge instance to poll for shared workspaces.
