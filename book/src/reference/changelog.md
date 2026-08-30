@@ -1,5 +1,13 @@
 > This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
 
+## [Unreleased]
+
+## [0.3.215] - 2026-08-30
+
+### Fixed
+
+- **[Reality]** `--wafbench-verbatim` now works with `--targets-file` (#79). The single-target path already sent traffic-file requests as written and made `--spec` optional, but `--targets-file` dispatched into `ParallelExecutor` first. That path still required a spec and built templates from spec operations, so the same command either died with `No spec files provided` or fuzzed spec URLs. `ParallelExecutor` now loads verbatim templates, keeps `--spec` optional, and calls `security_testing_enabled()` instead of recomputing the injection flag inline. `--base-path /` no longer prefixes a second slash onto paths that already start with `/`.
+
 ## [0.3.214] - 2026-08-23
 
 ### Added

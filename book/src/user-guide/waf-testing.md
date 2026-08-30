@@ -92,6 +92,7 @@ reaches the wire.
 | `--wafbench-dir` + `--spec` + `--wafbench-cycle-all` | Same targets; every payload is used in turn instead of sampled at random |
 | `--wafbench-dir` + `--wafbench-verbatim` | Only the traffic file's own requests, as written. No spec needed |
 | `--wafbench-dir` + `--wafbench-verbatim` + `--spec` | Same as above. The spec is used only to resolve `--base-path` |
+| `--wafbench-dir` + `--wafbench-verbatim` + `--targets-file` | Same YAML requests, one k6 run per target. Spec still optional |
 
 `--wafbench-cycle-all` affects **payload selection only**. It does not change
 which URLs are targeted, and it has no effect in verbatim mode, where there is
