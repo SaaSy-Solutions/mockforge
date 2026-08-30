@@ -265,7 +265,7 @@ pub async fn list_fixtures(fixtures_dir: &Path) -> Result<Vec<RecordedRequest>> 
     }
 
     // Sort by timestamp (newest first)
-    fixtures.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    fixtures.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
 
     Ok(fixtures)
 }
@@ -352,7 +352,7 @@ pub async fn list_ready_fixtures(fixtures_dir: &Path) -> Result<Vec<RecordedRequ
     }
 
     // Sort by timestamp (newest first)
-    fixtures.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    fixtures.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
 
     Ok(fixtures)
 }

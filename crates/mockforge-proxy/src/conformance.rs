@@ -191,7 +191,7 @@ impl ConformanceTap {
         }
 
         // 2. Declared + JSON body → schema check.
-        let Some(schema_value) = declared_json_schema(responses, status as u16) else {
+        let Some(schema_value) = declared_json_schema(responses, status) else {
             return;
         };
         let Some(bytes) = body else { return };
@@ -283,7 +283,7 @@ fn urlencoding_decode(v: &str) -> Result<String, ()> {
 fn parse_body(body: Option<&[u8]>) -> (Option<Value>, bool) {
     match body {
         None => (None, false),
-        Some(b) if b.is_empty() => (None, false),
+        Some([]) => (None, false),
         Some(b) => (serde_json::from_slice::<Value>(b).ok(), true),
     }
 }

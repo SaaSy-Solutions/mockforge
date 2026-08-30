@@ -194,9 +194,9 @@ async fn proxy_handler(
             path = %uri.path(),
             "Rejected absolute-URL-in-path proxying; set allow_absolute_url_upstream=true to opt in (#1012)"
         );
-        let body = format!(
+        let body =
             "Forbidden: absolute-URL proxying is disabled (allow_absolute_url_upstream=false)"
-        );
+                .to_string();
         return Ok(Response::builder()
             .status(StatusCode::FORBIDDEN)
             .body(body)
@@ -206,7 +206,7 @@ async fn proxy_handler(
     let full_upstream_url = if is_absolute_upstream {
         use crate::egress::{EgressDecision, EgressGuard};
         let guard = EgressGuard::new(config.upstream_allowlist.clone());
-        match guard.check(&candidate).await {
+        match guard.check(candidate).await {
             EgressDecision::Allowed => candidate.to_string(),
             EgressDecision::Blocked(reason) => {
                 warn!(target = %stripped_path, %reason, "Blocked request-derived upstream by egress guard");
@@ -303,7 +303,7 @@ async fn proxy_handler(
             .validate_request(
                 method.as_str(),
                 uri.path(),
-                uri.query().as_deref(),
+                uri.query(),
                 &headers,
                 Some(transformed_request_body.as_deref().unwrap_or(&[])),
             )
@@ -524,9 +524,11 @@ mod tests {
 
     #[tokio::test]
     async fn test_absolute_url_in_path_rejected_by_default() {
-        let mut config = ProxyConfig::default();
-        config.enabled = true;
-        config.prefix = Some("/proxy/".to_string());
+        let config = ProxyConfig {
+            enabled: true,
+            prefix: Some("/proxy/".to_string()),
+            ..Default::default()
+        };
         // allow_absolute_url_upstream defaults to false (#1012)
         let server = Arc::new(ProxyServer::new(config, false, false));
 
@@ -541,11 +543,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_optin_absolute_url_still_blocked_for_metadata_ip() {
-        let mut config = ProxyConfig::default();
-        config.enabled = true;
-        config.prefix = Some("/proxy/".to_string());
-        config.allow_absolute_url_upstream = true;
+    async fn test_opt_in_absolute_url_still_blocked_for_metadata_ip() {
+        let config = ProxyConfig {
+            enabled: true,
+            prefix: Some("/proxy/".to_string()),
+            allow_absolute_url_upstream: true,
+            ..Default::default()
+        };
         let server = Arc::new(ProxyServer::new(config, false, false));
 
         let request = http::Request::builder()
@@ -560,11 +564,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_optin_absolute_url_blocked_for_loopback() {
-        let mut config = ProxyConfig::default();
-        config.enabled = true;
-        config.prefix = Some("/proxy/".to_string());
-        config.allow_absolute_url_upstream = true;
+    async fn test_opt_in_absolute_url_blocked_for_loopback() {
+        let config = ProxyConfig {
+            enabled: true,
+            prefix: Some("/proxy/".to_string()),
+            allow_absolute_url_upstream: true,
+            ..Default::default()
+        };
         let server = Arc::new(ProxyServer::new(config, false, false));
 
         let request = http::Request::builder()

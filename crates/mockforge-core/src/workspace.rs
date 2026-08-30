@@ -1158,7 +1158,7 @@ impl MockRequest {
             self.response_history.remove(0);
         }
         // Sort by execution time (newest first)
-        self.response_history.sort_by(|a, b| b.executed_at.cmp(&a.executed_at));
+        self.response_history.sort_by_key(|b| std::cmp::Reverse(b.executed_at));
     }
 
     /// Get response history (sorted by execution time, newest first)

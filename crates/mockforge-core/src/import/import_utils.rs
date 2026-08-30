@@ -70,15 +70,12 @@ pub fn detect_format(content: &str, file_path: Option<&Path>) -> FormatDetection
                         };
                     }
                 }
-                "txt" | "sh" | "bash" => {
-                    // Could be curl commands
-                    if is_curl_content(content) {
-                        return FormatDetection {
-                            format: ImportFormat::Curl,
-                            confidence: 0.8,
-                            details: "File contains curl commands".to_string(),
-                        };
-                    }
+                "txt" | "sh" | "bash" if is_curl_content(content) => {
+                    return FormatDetection {
+                        format: ImportFormat::Curl,
+                        confidence: 0.8,
+                        details: "File contains curl commands".to_string(),
+                    };
                 }
                 _ => {}
             }

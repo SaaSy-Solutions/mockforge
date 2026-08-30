@@ -141,7 +141,7 @@ impl IncidentStore {
         }
 
         // Sort by detected_at descending (newest first)
-        results.sort_by(|a, b| b.detected_at.cmp(&a.detected_at));
+        results.sort_by_key(|b| std::cmp::Reverse(b.detected_at));
 
         // Apply pagination
         let offset = query.offset.unwrap_or(0);

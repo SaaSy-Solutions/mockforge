@@ -120,12 +120,10 @@ impl StreamBody {
             // One synthetic file part, framed by the multipart boundary
             // declared in BodyKind::content_type().
             Multipart => (
-                format!(
-                    "--mockforge-pipeline\r\n\
+                b"--mockforge-pipeline\r\n\
                      Content-Disposition: form-data; name=\"file\"; filename=\"synthetic.bin\"\r\n\
                      Content-Type: application/octet-stream\r\n\r\n"
-                )
-                .into_bytes(),
+                    .to_vec(),
                 b"\r\n--mockforge-pipeline--\r\n".to_vec(),
             ),
         };
@@ -309,10 +307,7 @@ async fn read_response(stream: &mut TcpStream, buf: &mut Vec<u8>) -> std::io::Re
         .and_then(|v| v.trim().parse().ok());
     let chunked = lower.contains("transfer-Encoding:")
         || lower.contains("transfer-encoding:")
-            && lower
-                .split("transfer-encoding:")
-                .nth(1)
-                .map_or(false, |v| v.contains("chunked"));
+            && lower.split("transfer-encoding:").nth(1).is_some_and(|v| v.contains("chunked"));
 
     // --- body ---
     if chunked {

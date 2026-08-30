@@ -427,10 +427,8 @@ impl Scrubber {
                     field,
                     replacement,
                     target,
-                } => {
-                    if *target == location || *target == ScrubTarget::All {
-                        result = self.scrub_json_field(&result, field, replacement);
-                    }
+                } if *target == location || *target == ScrubTarget::All => {
+                    result = self.scrub_json_field(&result, field, replacement);
                 }
                 _ => {}
             }

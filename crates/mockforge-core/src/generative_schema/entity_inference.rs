@@ -224,11 +224,8 @@ impl EntityInference {
         // Handle both nested structure (with "properties") and flat structure
         let properties = if let Some(props) = schema.get("properties").and_then(|p| p.as_object()) {
             props
-        } else if let Some(obj) = schema.as_object() {
-            // Flat structure - treat the object itself as properties
-            obj
         } else {
-            return None;
+            schema.as_object()?
         };
 
         // Common primary key patterns
