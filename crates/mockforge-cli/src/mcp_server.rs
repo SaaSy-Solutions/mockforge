@@ -254,10 +254,8 @@ async fn tools_call(name: &str, args: &Value) -> Result<String, String> {
                         };
                         let media = response.content.get("application/json")?;
                         match &media.schema {
-                            Some(openapiv3::ReferenceOr::Item(schema)) => {
-                                serde_json::to_value(schema).ok()
-                            }
-                            Some(openapiv3::ReferenceOr::Reference { reference }) => {
+                            Some(ReferenceOr::Item(schema)) => serde_json::to_value(schema).ok(),
+                            Some(ReferenceOr::Reference { reference }) => {
                                 Some(json!({ "$ref": reference }))
                             }
                             None => None,

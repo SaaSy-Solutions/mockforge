@@ -12,7 +12,7 @@ async fn main() -> anyhow::Result<()> {
     let db = RecorderDatabase::new(&db_path).await?;
     let recorder = Recorder::new(db);
 
-    let mut exchange =
+    let exchange =
         |id: &str, path: &str, status: i32, body: String| -> (RecordedRequest, RecordedResponse) {
             (
                 RecordedRequest {

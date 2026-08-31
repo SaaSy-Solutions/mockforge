@@ -767,8 +767,15 @@ impl SecurityTestGenerator {
             // Cycle through all payload groups sequentially
             code.push_str("// Cycle through ALL payload groups sequentially\n");
             code.push_str("// Each VU starts at a different offset based on its VU number for better payload distribution\n");
-            code.push_str("let __payloadIndex = (__VU - 1) % groupedPayloads.length;\n");
+            // #79: empty pool used to do `% 0` → NaN → undefined, and k6's
+            // goja threw `Cannot convert undefined or null to object` on
+            // `for (const p of secPayloadGroup)` instead of naming the
+            // missing --wafbench-dir file.
+            code.push_str(
+                "let __payloadIndex = groupedPayloads.length === 0 ? 0 : (__VU - 1) % groupedPayloads.length;\n",
+            );
             code.push_str("function getNextSecurityPayload() {\n");
+            code.push_str("  if (groupedPayloads.length === 0) return [];\n");
             code.push_str("  const group = groupedPayloads[__payloadIndex];\n");
             code.push_str("  __payloadIndex = (__payloadIndex + 1) % groupedPayloads.length;\n");
             code.push_str("  return group;\n");
@@ -777,6 +784,7 @@ impl SecurityTestGenerator {
             // Random selection (original behavior)
             code.push_str("// Select random security payload group\n");
             code.push_str("function getNextSecurityPayload() {\n");
+            code.push_str("  if (groupedPayloads.length === 0) return [];\n");
             code.push_str(
                 "  return groupedPayloads[Math.floor(Math.random() * groupedPayloads.length)];\n",
             );
@@ -1015,6 +1023,25 @@ mod tests {
         assert!(code.contains("getNextSecurityPayload"));
         // getNextSecurityPayload should return from groupedPayloads (arrays)
         assert!(code.contains("groupedPayloads[Math.floor"));
+    }
+
+    /// #79 (b): a missing traffic file used to emit `groupedPayloads = []`
+    /// and `return groupedPayloads[NaN]`, which k6 surfaced as
+    /// `Cannot convert undefined or null to object` at the for-of. An
+    /// empty pool must return `[]` so the loop is a no-op even if we
+    /// fail to abort earlier.
+    #[test]
+    fn empty_payload_pool_returns_empty_group_not_undefined() {
+        let random = SecurityTestGenerator::generate_payload_selection(&[], false);
+        assert!(
+            random.contains("if (groupedPayloads.length === 0) return [];"),
+            "random selector must guard the empty pool: {random}"
+        );
+        let cycle = SecurityTestGenerator::generate_payload_selection(&[], true);
+        assert!(
+            cycle.contains("if (groupedPayloads.length === 0) return [];"),
+            "cycle-all selector must guard the empty pool: {cycle}"
+        );
     }
 
     #[test]

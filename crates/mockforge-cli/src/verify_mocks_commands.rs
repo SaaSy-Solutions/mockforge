@@ -337,8 +337,8 @@ fn check_response_drift(
         };
         let media = response.content.get("application/json")?;
         match &media.schema {
-            Some(openapiv3::ReferenceOr::Item(schema)) => serde_json::to_value(schema).ok(),
-            Some(openapiv3::ReferenceOr::Reference { reference }) => {
+            Some(ReferenceOr::Item(schema)) => serde_json::to_value(schema).ok(),
+            Some(ReferenceOr::Reference { reference }) => {
                 Some(serde_json::json!({ "$ref": reference }))
             }
             None => None,

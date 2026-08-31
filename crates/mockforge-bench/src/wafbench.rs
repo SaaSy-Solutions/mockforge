@@ -480,6 +480,9 @@ pub fn parse_traffic_file(content: &str, source: &str) -> Result<WafBenchFile> {
                         .enumerate()
                         .map(|(i, c)| c.into_wafbench_test(i))
                         .collect(),
+                    // #79: Srikanth wants omitted cases in the per-file
+                    // breakdown, not only in a tracing line he may miss.
+                    omitted_count: omitted.len(),
                 })
             }
             Err(simple_err) => Err(BenchError::Other(format!(
@@ -499,6 +502,10 @@ pub struct WafBenchFile {
     /// Test cases
     #[serde(default)]
     pub tests: Vec<WafBenchTest>,
+    /// Cases dropped for `omit_rule: true`. Not in the YAML; filled by
+    /// `parse_traffic_file` so the per-file breakdown can report them.
+    #[serde(default, skip)]
+    pub omitted_count: usize,
 }
 
 /// A parsed WAFBench test case ready for use in security testing
@@ -560,6 +567,24 @@ pub struct WafBenchLoader {
     stats: WafBenchStats,
 }
 
+/// Per-file counts so a multi-YAML run can say how many attacks vs
+/// baseline vs omitted cases each file contributed (#79).
+#[derive(Debug, Clone, Default)]
+pub struct TrafficFileSummary {
+    /// Path as loaded (`--wafbench-dir` entry or glob match).
+    pub file: String,
+    /// Cases that will actually be sent.
+    pub sent: usize,
+    /// Sent cases whose expected status includes 403 (treated as attacks).
+    pub attack: usize,
+    /// Sent cases whose expected status includes 200 and not 403.
+    pub normal: usize,
+    /// Cases skipped for `omit_rule: true`.
+    pub omitted: usize,
+    /// Sent cases with neither 200 nor 403 in `expected`.
+    pub other: usize,
+}
+
 /// Statistics about loaded WAFBench tests
 #[derive(Debug, Clone, Default)]
 pub struct WafBenchStats {
@@ -573,6 +598,41 @@ pub struct WafBenchStats {
     pub by_category: HashMap<SecurityCategory, usize>,
     /// Files that failed to parse
     pub parse_errors: Vec<String>,
+    /// One row per loaded traffic file.
+    pub per_file: Vec<TrafficFileSummary>,
+}
+
+/// Classify a parsed file into the attack / normal / omitted buckets
+/// Srikanth asked for: expected 403 = attack, expected 200 = normal.
+pub fn summarize_traffic_file(file: &WafBenchFile, source: &str) -> TrafficFileSummary {
+    let mut attack = 0;
+    let mut normal = 0;
+    let mut other = 0;
+    for test in &file.tests {
+        let mut has_403 = false;
+        let mut has_200 = false;
+        for stage in &test.stages {
+            if let Some(output) = stage.get_output() {
+                has_403 |= output.status.contains(&403);
+                has_200 |= output.status.contains(&200);
+            }
+        }
+        if has_403 {
+            attack += 1;
+        } else if has_200 {
+            normal += 1;
+        } else {
+            other += 1;
+        }
+    }
+    TrafficFileSummary {
+        file: source.to_string(),
+        sent: file.tests.len(),
+        attack,
+        normal,
+        omitted: file.omitted_count,
+        other,
+    }
 }
 
 impl WafBenchLoader {
@@ -678,13 +738,15 @@ impl WafBenchLoader {
             BenchError::Other(format!("Failed to read WAFBench file {}: {}", path.display(), e))
         })?;
 
-        let wafbench_file = parse_traffic_file(&content, &path.display().to_string())?;
+        let source = path.display().to_string();
+        let wafbench_file = parse_traffic_file(&content, &source)?;
 
         // Skip disabled test files
         if !wafbench_file.meta.enabled {
             return Ok(());
         }
 
+        self.stats.per_file.push(summarize_traffic_file(&wafbench_file, &source));
         self.stats.files_processed += 1;
 
         // Determine the rule category from the file path or name
@@ -1871,5 +1933,47 @@ mod verbatim_tests {
             titles.iter().any(|t| t.contains("unsupported response_type blocked")),
             "omit_rule:false must not be treated as omitted: {titles:?}"
         );
+        assert_eq!(parsed.omitted_count, 1, "omitted_count must match the dropped baseline");
+    }
+
+    /// #79: per-file breakdown so a directory of YAML files reports
+    /// attack (403) vs normal (200) vs omitted before k6 starts.
+    #[test]
+    fn traffic_file_summary_splits_attack_normal_omitted() {
+        let yaml = r#"
+- title: blocked
+  request:
+    method: GET
+    uri: /oauth/authorize?response_type=totally-unsupported
+  expected: 403
+- title: allowed
+  request:
+    method: GET
+    uri: /oauth/authorize?response_type=code
+  expected: 200
+- title: baseline
+  omit_rule: true
+  request:
+    method: GET
+    uri: /oauth/authorize?response_type=totally-unsupported
+  expected: 200
+"#;
+        let parsed = parse_traffic_file(yaml, "oauth.yaml").expect("parse");
+        let summary = summarize_traffic_file(&parsed, "oauth.yaml");
+        assert_eq!(summary.sent, 2);
+        assert_eq!(summary.attack, 1);
+        assert_eq!(summary.normal, 1);
+        assert_eq!(summary.omitted, 1);
+        assert_eq!(summary.other, 0);
+    }
+
+    #[test]
+    fn missing_wafbench_path_is_an_error() {
+        let mut loader = WafBenchLoader::new();
+        let err = loader
+            .load_from_pattern("definitely-not-a-real-file-apisix.yaml")
+            .expect_err("missing path must not look like an empty payload pool");
+        let msg = err.to_string();
+        assert!(msg.contains("does not exist"), "error must name the missing path, got: {msg}");
     }
 }
