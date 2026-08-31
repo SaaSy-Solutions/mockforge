@@ -154,7 +154,7 @@ pub struct KafkaMockBroker {
     /// #715 — optional traffic recorder. Set from
     /// MOCKFORGE_KAFKA_RECORDING_DB (sqlite path) at construction; when
     /// unset no exchange is recorded and behaviour is unchanged.
-    recorder: Option<std::sync::Arc<mockforge_recorder::Recorder>>,
+    recorder: Option<Arc<mockforge_recorder::Recorder>>,
 }
 
 impl KafkaMockBroker {
@@ -227,7 +227,7 @@ impl KafkaMockBroker {
             recorder: match std::env::var("MOCKFORGE_KAFKA_RECORDING_DB") {
                 Ok(path) if !path.trim().is_empty() => {
                     match mockforge_recorder::RecorderDatabase::new(path.as_str()).await {
-                        Ok(db) => Some(std::sync::Arc::new(mockforge_recorder::Recorder::new(db))),
+                        Ok(db) => Some(Arc::new(mockforge_recorder::Recorder::new(db))),
                         Err(e) => {
                             tracing::warn!(
                                 error = %e,
@@ -243,7 +243,7 @@ impl KafkaMockBroker {
     }
 
     /// #715 — attach a recorder after construction (programmatic setup).
-    pub fn set_recorder(&mut self, recorder: std::sync::Arc<mockforge_recorder::Recorder>) {
+    pub fn set_recorder(&mut self, recorder: Arc<mockforge_recorder::Recorder>) {
         self.recorder = Some(recorder);
     }
 
@@ -1566,7 +1566,7 @@ mod tests {
             .await
             .expect("in-memory db");
         let probe_db = db.clone();
-        let recorder = std::sync::Arc::new(mockforge_recorder::Recorder::new(db));
+        let recorder = Arc::new(mockforge_recorder::Recorder::new(db));
 
         let event = mockforge_recorder::protocols::async_brokers::kafka_event(
             "produce",
