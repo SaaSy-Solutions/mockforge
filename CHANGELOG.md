@@ -1,5 +1,19 @@
 ## [Unreleased]
 
+## [0.3.216] - 2026-08-31
+
+### Fixed
+
+- **[Reality]** A missing `--wafbench-dir` path is now a hard error instead of a warning plus an empty payload pool (#79). On 0.3.215, `mockforge bench --wafbench-dir missing.yaml --spec ... --targets-file ...` still generated a k6 script; `getNextSecurityPayload()` then returned `undefined` and goja threw `Cannot convert undefined or null to object`. The command now exits with `WAFBench path does not exist`. Defense in depth: an empty pool returns `[]` rather than `undefined`.
+
+### Added
+
+- **[Reality]** After a traffic file loads, print per-file `sent` / `attack(expected 403)` / `normal(expected 200)` / `omitted` counts so a multi-YAML run has a checklist for proxy-log review (#79).
+
+### Security
+
+- **[Security]** RUSTSEC-2026-0269: bumped `wasmtime` 36.0.13 to 36.0.14 (filesystem sandbox escape on trailing slashes). Same 36.x line as the rest of the plugin-loader pin.
+
 ## [0.3.215] - 2026-08-30
 
 ### Fixed
