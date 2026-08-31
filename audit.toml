@@ -110,4 +110,11 @@ ignore = [
     { id = "RUSTSEC-2026-0258", reason = "h2 0.3.27 empty-DATA-frame DoS (LOW) — client-only via aws-sdk; 0.3.x is unpatched upstream (fix is 0.4.16+, and our 0.4 instance is bumped to 0.4.17)" },
 
     { id = "RUSTSEC-2026-0235", reason = "rkyv OOB read — unenabled optional feature of rust_decimal, absent from the compiled graph (cargo tree -e normal finds 0); rust_decimal 1.42.1 (latest) still pins rkyv ^0.7.46 so there is no version to upgrade to" },
+
+    # suppaftp 5.4.0 CRLF injection in client control-channel arguments
+    # (published 2026-08-18, fixed in >=10.0.2). Pulled only as the FTP
+    # *client* used by mockforge-ftp tests against our own mock server.
+    # The mock server is not this crate. 10.x is a breaking API jump with
+    # no 5.x backport.
+    { id = "RUSTSEC-2026-0271", reason = "suppaftp CRLF in client commands — test-only FTP client against our own mock server; fix is 10.x (breaking) with no 5.x backport" },
 ]
