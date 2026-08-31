@@ -1363,6 +1363,7 @@ impl BenchCommand {
 
         let mut loader = WafBenchLoader::new();
         loader.load_from_pattern(pattern)?;
+        Self::print_traffic_file_breakdown(loader.stats());
 
         Ok(crate::wafbench::traffic_cases_to_templates(loader.test_cases()))
     }
@@ -1599,40 +1600,63 @@ impl BenchCommand {
         Some(ParallelConfig::new(count))
     }
 
-    /// Load WAFBench payloads from the specified directory or pattern
-    fn load_wafbench_payloads(&self) -> Vec<SecurityPayload> {
+    /// Print attack / normal / omitted counts per YAML file so a
+    /// `--wafbench-dir` of many files tells you what to look for in
+    /// the proxy logs (#79).
+    fn print_traffic_file_breakdown(stats: &crate::wafbench::WafBenchStats) {
+        if stats.per_file.is_empty() {
+            return;
+        }
+        TerminalReporter::print_success("Traffic file breakdown (what to expect in proxy logs):");
+        for file in &stats.per_file {
+            let other = if file.other > 0 {
+                format!("  other={}", file.other)
+            } else {
+                String::new()
+            };
+            TerminalReporter::print_progress(&format!(
+                "  {}: sent={}  attack(expected 403)={}  normal(expected 200)={}  omitted={}{other}",
+                file.file, file.sent, file.attack, file.normal, file.omitted
+            ));
+        }
+    }
+
+    /// Load WAFBench payloads from the specified directory or pattern.
+    ///
+    /// #79: a missing `--wafbench-dir` path used to be a warning plus an
+    /// empty payload pool. The k6 script still enabled security testing and
+    /// crashed with `Cannot convert undefined or null to object` instead of
+    /// saying the file was missing. Missing or empty is now an error.
+    fn load_wafbench_payloads(&self) -> Result<Vec<SecurityPayload>> {
         let Some(ref wafbench_dir) = self.wafbench_dir else {
-            return Vec::new();
+            return Ok(Vec::new());
         };
 
         let mut loader = WafBenchLoader::new();
-
-        if let Err(e) = loader.load_from_pattern(wafbench_dir) {
-            TerminalReporter::print_warning(&format!("Failed to load WAFBench tests: {}", e));
-            return Vec::new();
-        }
+        loader.load_from_pattern(wafbench_dir)?;
 
         let stats = loader.stats();
 
         if stats.files_processed == 0 {
-            TerminalReporter::print_warning(&format!(
-                "No WAFBench YAML files found matching '{}'",
-                wafbench_dir
-            ));
-            // Also report any parse errors that may explain why no files were processed
+            let mut msg = format!(
+                "No WAFBench YAML files found matching '{wafbench_dir}'. \
+                 --wafbench-dir is a file, a directory or a glob. A missing \
+                 file is an error, not an empty payload pool."
+            );
             if !stats.parse_errors.is_empty() {
-                TerminalReporter::print_warning("Some files were found but failed to parse:");
+                msg.push_str(" Parse errors:");
                 for error in &stats.parse_errors {
-                    TerminalReporter::print_warning(&format!("  - {}", error));
+                    msg.push_str(&format!("\n  - {error}"));
                 }
             }
-            return Vec::new();
+            return Err(BenchError::Other(msg));
         }
 
         TerminalReporter::print_progress(&format!(
             "Loaded {} WAFBench files, {} test cases, {} payloads",
             stats.files_processed, stats.test_cases_loaded, stats.payloads_extracted
         ));
+        Self::print_traffic_file_breakdown(stats);
 
         // Print category breakdown
         for (category, count) in &stats.by_category {
@@ -1644,7 +1668,7 @@ impl BenchCommand {
             TerminalReporter::print_warning(&format!("  Parse error: {}", error));
         }
 
-        loader.to_security_payloads()
+        Ok(loader.to_security_payloads())
     }
 
     /// Generate enhanced k6 script with advanced features
@@ -1699,7 +1723,7 @@ impl BenchCommand {
         let wafbench_payloads = if verbatim {
             Vec::new()
         } else {
-            self.load_wafbench_payloads()
+            self.load_wafbench_payloads()?
         };
         let security_requested =
             !verbatim && (security_config.is_some() || self.wafbench_dir.is_some());
@@ -4848,6 +4872,25 @@ mod tests {
             parallel.contains("security_testing_enabled()"),
             "ParallelExecutor must call security_testing_enabled() so --wafbench-verbatim \
              turns injection off on --targets-file runs too"
+        );
+    }
+
+    /// #79 (b): swallowing `load_from_pattern` errors produced Srikanth's
+    /// k6 TypeError. The `?` on the call site is what makes a missing
+    /// file fail the command instead of generating a broken script.
+    #[test]
+    fn missing_wafbench_dir_is_not_swallowed() {
+        let src = include_str!("command.rs");
+        // Assembled at runtime so this test file does not match itself.
+        let swallowed = format!("Failed to {} WAFBench tests", "load");
+        let impl_line = src
+            .lines()
+            .filter(|l| !l.trim_start().starts_with("//"))
+            .any(|l| l.contains(&swallowed));
+        assert!(!impl_line, "missing --wafbench-dir must not be downgraded to a warning");
+        assert!(
+            src.contains("self.load_wafbench_payloads()?"),
+            "payload load errors must reach generate_enhanced_script"
         );
     }
 
