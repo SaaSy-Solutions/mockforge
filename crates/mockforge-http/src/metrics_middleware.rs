@@ -21,8 +21,8 @@ use tracing::debug;
 /// `X-MockForge-Persona` names the persona under test; the optional
 /// `X-MockForge-CI-Run` identifies the CI run stamping it. Blank values
 /// count as absent.
-fn detect_persona_headers(headers: &axum::http::HeaderMap) -> (Option<String>, Option<String>) {
-    let clean = |v: Option<&axum::http::HeaderValue>| {
+fn detect_persona_headers(headers: &http::HeaderMap) -> (Option<String>, Option<String>) {
+    let clean = |v: Option<&http::HeaderValue>| {
         v.and_then(|v| v.to_str().ok())
             .map(str::trim)
             .filter(|v| !v.is_empty())
@@ -553,7 +553,7 @@ mod persona_ci_hit_tests {
 
     #[test]
     fn persona_and_run_detected() {
-        let mut h = axum::http::HeaderMap::new();
+        let mut h = http::HeaderMap::new();
         h.insert("x-mockforge-persona", "checkout-user".parse().unwrap());
         h.insert("x-mockforge-ci-run", "gh-run-123".parse().unwrap());
         let (persona, run) = detect_persona_headers(&h);
@@ -563,7 +563,7 @@ mod persona_ci_hit_tests {
 
     #[test]
     fn blank_and_absent_are_none() {
-        let mut h = axum::http::HeaderMap::new();
+        let mut h = http::HeaderMap::new();
         h.insert("x-mockforge-persona", "  ".parse().unwrap());
         let (persona, run) = detect_persona_headers(&h);
         assert_eq!(persona, None);
