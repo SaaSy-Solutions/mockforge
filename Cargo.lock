@@ -7719,7 +7719,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ai-core"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "async-trait",
  "chrono",
@@ -7736,7 +7736,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-amqp"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7760,7 +7760,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-analytics"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "chrono",
@@ -7782,7 +7782,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-behavioral-cloning"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "async-trait",
  "chrono",
@@ -7795,7 +7795,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-bench"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -7835,7 +7835,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-chaos"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7876,7 +7876,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-chaos-ml"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "chrono",
@@ -7891,7 +7891,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-chaos-orchestration"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7914,7 +7914,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-chaos-proxy"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "axum 0.8.9",
  "mockforge-bench",
@@ -7930,7 +7930,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-cli"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -8011,7 +8011,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-collab"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "argon2",
@@ -8056,7 +8056,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-config"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "schemars 0.8.22",
  "serde",
@@ -8066,7 +8066,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-contracts"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "async-trait",
  "bytes",
@@ -8091,7 +8091,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-core"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -8164,7 +8164,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-data"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8198,7 +8198,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-desktop"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -8231,7 +8231,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-federation"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8254,7 +8254,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-foundation"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "async-trait",
  "chrono",
@@ -8279,7 +8279,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ftp"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8306,7 +8306,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-graphql"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-graphql",
@@ -8344,7 +8344,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-grpc"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -8388,7 +8388,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-http"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8471,7 +8471,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-import"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "axum 0.8.9",
  "base64 0.22.1",
@@ -8489,7 +8489,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-integration-tests"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -8518,7 +8518,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-intelligence"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8553,7 +8553,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-k8s-operator"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8575,7 +8575,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-kafka"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8603,7 +8603,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-mqtt"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8629,7 +8629,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-observability"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -8652,7 +8652,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-openapi"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -8678,7 +8678,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-performance"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8694,7 +8694,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-pipelines"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8724,7 +8724,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-platform-signing"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "async-trait",
  "aws-config",
@@ -8743,7 +8743,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-cli"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "base64 0.21.7",
@@ -8773,7 +8773,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-core"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8802,7 +8802,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-egress"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "ipnet",
@@ -8817,7 +8817,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-host"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -8841,7 +8841,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-loader"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8881,7 +8881,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-registry"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "chrono",
  "dirs 5.0.1",
@@ -8899,7 +8899,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-response-graphql"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8918,7 +8918,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-sdk"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8943,7 +8943,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-proxy"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -8967,7 +8967,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-recorder"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9001,7 +9001,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-registry-core"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9039,7 +9039,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-registry-server"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-nats",
@@ -9117,7 +9117,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-reporting"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "chrono",
@@ -9137,7 +9137,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-route-chaos"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -9150,7 +9150,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-runtime-daemon"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -9172,7 +9172,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-scenarios"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9209,7 +9209,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-sdk"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -9237,7 +9237,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-security-core"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -9267,7 +9267,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-smtp"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9294,7 +9294,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tcp"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9317,14 +9317,14 @@ dependencies = [
 
 [[package]]
 name = "mockforge-template-expansion"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "mockforge-test"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -9351,7 +9351,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-test-integration-examples"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "mockforge-test",
  "tokio",
@@ -9362,7 +9362,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-test-runner"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9384,7 +9384,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tracing"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "axum 0.8.9",
  "http 1.4.2",
@@ -9402,7 +9402,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tui"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "arboard",
@@ -9426,7 +9426,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tunnel"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9457,7 +9457,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ui"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9509,7 +9509,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-vbr"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9544,7 +9544,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-workspace"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "globwalk",
  "mockforge-core",
@@ -9555,7 +9555,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-world-state"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9572,7 +9572,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ws"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -15464,7 +15464,7 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
 name = "test-openapi"
-version = "0.3.216"
+version = "0.3.217"
 dependencies = [
  "mockforge-core",
  "serde_json",

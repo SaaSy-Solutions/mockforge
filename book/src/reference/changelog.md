@@ -2,6 +2,18 @@
 
 ## [Unreleased]
 
+## [0.3.217] - 2026-09-04
+
+### Fixed
+
+- **[Reality]** OpenAPI header parameters named `Content-Length`, `Host`, or `Transfer-Encoding` are no longer invented from the schema (#79). Srikanth's Amazon S3 spec listed `Content-Length` as an integer header; generation filled `42` on empty-body POSTs and k6 dropped every request (`Content-Length header \"42\" doesn't match actual body length of 0`). k6 now owns those headers. Verbatim / user-overridden values are kept.
+
+- **[Reality]** Colliding WAFBench case titles no longer emit duplicate k6 `const` names (#79). A 32-target `--wafbench-verbatim` run with 31 YAML files sharing titles like `normal request allowed` failed every target with k6 exit 107 (ScriptException) and 0 requests. Identifiers and metric names now get a `_2`, `_3`, ... suffix.
+
+### Added
+
+- **[Reality]** Traffic-file breakdown reprints at end of run with unique vs total (`unique * RPS`) and writes `traffic-breakdown.json` under the output dir for automation (#79).
+
 ## [0.3.216] - 2026-08-31
 
 ### Fixed
