@@ -149,7 +149,19 @@ impl RequestGenerator {
                 template.path_params.insert(param_data.name.clone(), value);
             }
             "header" => {
-                template.headers.insert(param_data.name.clone(), value);
+                // Issue #79 (f) — S3 (and others) list Content-Length / Host as
+                // header parameters. Filling those from the schema invents
+                // `Content-Length: 42` on a 0-byte body. k6 then drops the
+                // request: the declared length does not match the body.
+                // Skip hop-by-hop / transport-owned names unless the user
+                // overrode them on purpose (WAF CL-mismatch cases).
+                let from_override =
+                    overrides.and_then(|o| o.get_header(&param_data.name)).is_some();
+                if Self::is_transport_owned_header(&param_data.name) && !from_override {
+                    // Leave it to k6 / the HTTP client.
+                } else {
+                    template.headers.insert(param_data.name.clone(), value);
+                }
             }
             "cookie" => {
                 // Append cookie to existing Cookie header or create new one
@@ -167,6 +179,24 @@ impl RequestGenerator {
         }
 
         Ok(())
+    }
+
+    /// Headers the HTTP client computes. Auto-filling them from an OpenAPI
+    /// schema is how Srikanth's Amazon S3 spec produced `Content-Length: 42`
+    /// on every empty POST and sent no useful traffic (#79 (f)).
+    pub(crate) fn is_transport_owned_header(name: &str) -> bool {
+        matches!(
+            name.to_ascii_lowercase().as_str(),
+            "content-length"
+                | "transfer-encoding"
+                | "host"
+                | "connection"
+                | "keep-alive"
+                | "te"
+                | "trailer"
+                | "upgrade"
+                | "proxy-connection"
+        )
     }
 
     /// Generate a value for a parameter
@@ -350,5 +380,67 @@ mod tests {
         assert_eq!(RequestGenerator::default_param_value("id"), "1");
         assert_eq!(RequestGenerator::default_param_value("limit"), "10");
         assert_eq!(RequestGenerator::default_param_value("unknown"), "test-value");
+    }
+
+    /// #79 (f): an integer `Content-Length` header param must not be
+    /// invented as `"42"`. k6 owns that header.
+    #[test]
+    fn spec_content_length_header_is_not_invented() {
+        use openapiv3::{HeaderStyle, IntegerType, ParameterData, Schema, SchemaData, SchemaKind};
+
+        let mut operation = Operation::default();
+        operation.parameters.push(ReferenceOr::Item(Parameter::Header {
+            parameter_data: ParameterData {
+                name: "Content-Length".to_string(),
+                description: None,
+                required: false,
+                deprecated: None,
+                format: ParameterSchemaOrContent::Schema(ReferenceOr::Item(Schema {
+                    schema_data: SchemaData::default(),
+                    schema_kind: SchemaKind::Type(Type::Integer(IntegerType::default())),
+                })),
+                example: None,
+                examples: Default::default(),
+                explode: None,
+                extensions: Default::default(),
+            },
+            style: HeaderStyle::Simple,
+        }));
+        // A normal header still comes through so we know the loop ran.
+        operation.parameters.push(ReferenceOr::Item(Parameter::Header {
+            parameter_data: ParameterData {
+                name: "x-amz-request-route".to_string(),
+                description: None,
+                required: false,
+                deprecated: None,
+                format: ParameterSchemaOrContent::Schema(ReferenceOr::Item(Schema {
+                    schema_data: SchemaData::default(),
+                    schema_kind: SchemaKind::Type(Type::String(openapiv3::StringType::default())),
+                })),
+                example: None,
+                examples: Default::default(),
+                explode: None,
+                extensions: Default::default(),
+            },
+            style: HeaderStyle::Simple,
+        }));
+
+        let api_op = ApiOperation {
+            method: "post".to_string(),
+            path: "/WriteGetObjectResponse".to_string(),
+            operation,
+            operation_id: Some("WriteGetObjectResponse".to_string()),
+        };
+        let template = RequestGenerator::generate_template(&api_op).expect("template");
+        let headers = template.get_headers();
+        assert!(
+            !headers.keys().any(|k| k.eq_ignore_ascii_case("content-length")),
+            "invented Content-Length={:?} would make k6 drop empty-body POSTs",
+            headers.get("Content-Length")
+        );
+        assert_eq!(headers.get("x-amz-request-route").map(String::as_str), Some("test-value"));
+        assert!(RequestGenerator::is_transport_owned_header("Content-Length"));
+        assert!(RequestGenerator::is_transport_owned_header("HOST"));
+        assert!(!RequestGenerator::is_transport_owned_header("x-amz-request-route"));
     }
 }

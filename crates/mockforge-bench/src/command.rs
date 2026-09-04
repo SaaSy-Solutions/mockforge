@@ -1054,6 +1054,7 @@ impl BenchCommand {
             Some(num_ops),
         );
 
+        self.reprint_traffic_file_breakdown();
         println!("\nResults saved to: {}", self.output.display());
 
         Ok(())
@@ -1308,6 +1309,7 @@ impl BenchCommand {
         }
         let _ = std::fs::write(&csv_path, &csv);
 
+        self.reprint_traffic_file_breakdown();
         println!("\nResults saved to: {}", self.output.display());
         println!("  - Per-target results: {}", self.output.join("target_*").display());
         println!("  - All targets CSV:    {}", csv_path.display());
@@ -1363,7 +1365,7 @@ impl BenchCommand {
 
         let mut loader = WafBenchLoader::new();
         loader.load_from_pattern(pattern)?;
-        Self::print_traffic_file_breakdown(loader.stats());
+        self.emit_traffic_file_breakdown(loader.stats(), "what to expect in proxy logs");
 
         Ok(crate::wafbench::traffic_cases_to_templates(loader.test_cases()))
     }
@@ -1600,14 +1602,42 @@ impl BenchCommand {
         Some(ParallelConfig::new(count))
     }
 
-    /// Print attack / normal / omitted counts per YAML file so a
-    /// `--wafbench-dir` of many files tells you what to look for in
-    /// the proxy logs (#79).
-    fn print_traffic_file_breakdown(stats: &crate::wafbench::WafBenchStats) {
+    /// Unique vs total for one bucket. When `--rps` is set, total is
+    /// unique * RPS (Srikanth's #79 (d) example: 5 unique at 50 RPS → 250).
+    fn format_unique_total(unique: usize, rps: Option<u32>) -> String {
+        match rps {
+            Some(r) if r > 0 => {
+                let total = unique.saturating_mul(r as usize);
+                format!("unique={unique} total={total} ({unique} * {r} RPS)")
+            }
+            _ => format!("unique={unique}"),
+        }
+    }
+
+    fn traffic_bucket_json(
+        unique: usize,
+        rps: Option<u32>,
+        duration_secs: Option<u64>,
+    ) -> serde_json::Value {
+        let multiplier = rps.filter(|&r| r > 0).unwrap_or(1) as u64;
+        let total = (unique as u64).saturating_mul(multiplier);
+        let expected_over_duration =
+            duration_secs.map(|d| (unique as u64).saturating_mul(multiplier).saturating_mul(d));
+        serde_json::json!({
+            "unique": unique,
+            "total": total,
+            "expected_over_duration": expected_over_duration,
+        })
+    }
+
+    /// Print attack / normal / omitted counts per YAML file and write
+    /// `traffic-breakdown.json` next to the other bench artifacts (#79 (d)(e)).
+    fn emit_traffic_file_breakdown(&self, stats: &crate::wafbench::WafBenchStats, phase: &str) {
         if stats.per_file.is_empty() {
             return;
         }
-        TerminalReporter::print_success("Traffic file breakdown (what to expect in proxy logs):");
+        let rps = self.target_rps.filter(|&r| r > 0);
+        TerminalReporter::print_success(&format!("Traffic file breakdown ({phase}):"));
         for file in &stats.per_file {
             let other = if file.other > 0 {
                 format!("  other={}", file.other)
@@ -1615,10 +1645,100 @@ impl BenchCommand {
                 String::new()
             };
             TerminalReporter::print_progress(&format!(
-                "  {}: sent={}  attack(expected 403)={}  normal(expected 200)={}  omitted={}{other}",
-                file.file, file.sent, file.attack, file.normal, file.omitted
+                "  {}: sent {}  attack(expected 403) {}  normal(expected 200) {}  omitted={}{other}",
+                file.file,
+                Self::format_unique_total(file.sent, rps),
+                Self::format_unique_total(file.attack, rps),
+                Self::format_unique_total(file.normal, rps),
+                file.omitted
             ));
         }
+        self.write_traffic_breakdown_json(stats);
+    }
+
+    /// Persist the same breakdown for automation (#79 (e)).
+    fn write_traffic_breakdown_json(&self, stats: &crate::wafbench::WafBenchStats) {
+        if stats.per_file.is_empty() {
+            return;
+        }
+        let rps = self.target_rps.filter(|&r| r > 0);
+        let duration_secs = Self::parse_duration(&self.duration).ok();
+        let files: Vec<serde_json::Value> = stats
+            .per_file
+            .iter()
+            .map(|file| {
+                serde_json::json!({
+                    "file": file.file,
+                    "sent": Self::traffic_bucket_json(file.sent, rps, duration_secs),
+                    "attack": Self::traffic_bucket_json(file.attack, rps, duration_secs),
+                    "normal": Self::traffic_bucket_json(file.normal, rps, duration_secs),
+                    "omitted": file.omitted,
+                    "other": file.other,
+                })
+            })
+            .collect();
+        let payload = serde_json::json!({
+            "rps": rps,
+            "duration_secs": duration_secs,
+            "files": files,
+        });
+        if let Some(parent) = self.output.parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        let _ = std::fs::create_dir_all(&self.output);
+        let path = self.output.join("traffic-breakdown.json");
+        if let Ok(body) = serde_json::to_string_pretty(&payload) {
+            if std::fs::write(&path, body).is_ok() {
+                TerminalReporter::print_progress(&format!(
+                    "Traffic breakdown written to: {}",
+                    path.display()
+                ));
+            }
+        }
+    }
+
+    /// Long runs scroll the load-time breakdown off the screen. Print it
+    /// again after k6 finishes, from the JSON we already wrote (#79 (d)).
+    fn reprint_traffic_file_breakdown(&self) {
+        let path = self.output.join("traffic-breakdown.json");
+        let Ok(raw) = std::fs::read_to_string(&path) else {
+            return;
+        };
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(&raw) else {
+            return;
+        };
+        let Some(files) = v.get("files").and_then(|f| f.as_array()) else {
+            return;
+        };
+        if files.is_empty() {
+            return;
+        }
+        TerminalReporter::print_success("Traffic file breakdown (end of run):");
+        for file in files {
+            let name = file.get("file").and_then(|x| x.as_str()).unwrap_or("?");
+            let bucket = |key: &str| -> String {
+                let unique = file
+                    .get(key)
+                    .and_then(|b| b.get("unique"))
+                    .and_then(|u| u.as_u64())
+                    .unwrap_or(0) as usize;
+                Self::format_unique_total(unique, self.target_rps.filter(|&r| r > 0))
+            };
+            let omitted = file.get("omitted").and_then(|o| o.as_u64()).unwrap_or(0);
+            let other = file.get("other").and_then(|o| o.as_u64()).unwrap_or(0);
+            let other = if other > 0 {
+                format!("  other={other}")
+            } else {
+                String::new()
+            };
+            TerminalReporter::print_progress(&format!(
+                "  {name}: sent {}  attack(expected 403) {}  normal(expected 200) {}  omitted={omitted}{other}",
+                bucket("sent"),
+                bucket("attack"),
+                bucket("normal"),
+            ));
+        }
+        TerminalReporter::print_progress(&format!("  (also in {})", path.display()));
     }
 
     /// Load WAFBench payloads from the specified directory or pattern.
@@ -1656,7 +1776,7 @@ impl BenchCommand {
             "Loaded {} WAFBench files, {} test cases, {} payloads",
             stats.files_processed, stats.test_cases_loaded, stats.payloads_extracted
         ));
-        Self::print_traffic_file_breakdown(stats);
+        self.emit_traffic_file_breakdown(stats, "what to expect in proxy logs");
 
         // Print category breakdown
         for (category, count) in &stats.by_category {
@@ -4907,5 +5027,50 @@ mod tests {
              Requiring a spec and generating templates from its operations is how \
              --targets-file ignored the flag and fuzzed spec URLs (#79)."
         );
+    }
+
+    /// #79 (d)(e): unique vs total (unique * RPS) plus a JSON sidecar.
+    #[test]
+    fn traffic_breakdown_json_multiplies_unique_by_rps() {
+        let dir = std::env::temp_dir().join(format!(
+            "mf-traffic-breakdown-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        let mut cmd = sample_bench_command();
+        cmd.output = dir.clone();
+        cmd.target_rps = Some(50);
+        cmd.duration = "1200s".to_string();
+        let stats = crate::wafbench::WafBenchStats {
+            per_file: vec![crate::wafbench::TrafficFileSummary {
+                file: "apisix_cve-2026-44087.yaml".into(),
+                sent: 5,
+                attack: 3,
+                normal: 2,
+                omitted: 1,
+                other: 0,
+            }],
+            ..Default::default()
+        };
+        cmd.emit_traffic_file_breakdown(&stats, "what to expect in proxy logs");
+        let raw = std::fs::read_to_string(dir.join("traffic-breakdown.json"))
+            .expect("traffic-breakdown.json");
+        let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert_eq!(v["rps"], 50);
+        assert_eq!(v["duration_secs"], 1200);
+        assert_eq!(v["files"][0]["sent"]["unique"], 5);
+        assert_eq!(v["files"][0]["sent"]["total"], 250);
+        assert_eq!(v["files"][0]["sent"]["expected_over_duration"], 300000);
+        assert_eq!(v["files"][0]["attack"]["total"], 150);
+        assert_eq!(v["files"][0]["normal"]["total"], 100);
+        assert_eq!(
+            BenchCommand::format_unique_total(5, Some(50)),
+            "unique=5 total=250 (5 * 50 RPS)"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
