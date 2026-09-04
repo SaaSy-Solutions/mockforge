@@ -286,6 +286,37 @@ impl K6ScriptGenerator {
         format!("{}_{}", prefix, hash_suffix)
     }
 
+    /// Deduplicate a sanitized identifier among `used`.
+    ///
+    /// Two WAFBench YAML files often share titles like "normal request
+    /// allowed". Those collapse to the same JS identifier, and k6 exits
+    /// 107 (ScriptException: Identifier has already been declared) before
+    /// sending a single request. Srikanth's 32-target verbatim run (#79
+    /// (g)) hit this: 10 colliding `const` names in one script.
+    fn uniquify_name(base: String, used: &mut HashSet<String>) -> String {
+        if used.insert(base.clone()) {
+            return base;
+        }
+        let mut n = 2u32;
+        loop {
+            let candidate = format!("{base}_{n}");
+            if used.insert(candidate.clone()) {
+                return candidate;
+            }
+            n = n.saturating_add(1);
+            if n == u32::MAX {
+                use std::collections::hash_map::DefaultHasher;
+                use std::hash::{Hash, Hasher};
+                let mut hasher = DefaultHasher::new();
+                base.hash(&mut hasher);
+                used.len().hash(&mut hasher);
+                let fallback = format!("{base}_{:08x}", hasher.finish() as u32);
+                used.insert(fallback.clone());
+                return fallback;
+            }
+        }
+    }
+
     /// Sanitize a name to be a valid JavaScript identifier
     ///
     /// Replaces invalid characters (dots, spaces, special chars) with underscores.
@@ -341,67 +372,75 @@ impl K6ScriptGenerator {
 
         // Track all placeholders used across all operations
         let mut all_placeholders: HashSet<DynamicPlaceholder> = HashSet::new();
+        // Issue #79 (g) — colliding titles across many YAML files must not
+        // emit two `const foo_latency = new Trend(...)` lines.
+        let mut used_js_names: HashSet<String> = HashSet::new();
+        let mut used_metric_names: HashSet<String> = HashSet::new();
 
-        let operations = self
-            .templates
-            .iter()
-            .enumerate()
-            .map(|(idx, template)| {
-                let display_name = template.operation.display_name();
-                let sanitized_name = Self::sanitize_js_identifier(&display_name);
-                // metric_name must satisfy k6's 128-char limit AND leave room
-                // for suffixes like `_latency` / `_errors` / `_stepN_*`.
-                // Long deeply-nested operationIds (e.g. Microsoft Graph) exceed
-                // this; sanitize_k6_metric_name truncates with a hash suffix
-                // for uniqueness. (See issue #79 — Srikanth's microsoft-graph.yaml run.)
-                let metric_name = Self::sanitize_k6_metric_name(&display_name);
-                // k6 uses 'del' instead of 'delete' for HTTP DELETE method
-                let k6_method = match template.operation.method.to_lowercase().as_str() {
-                    "delete" => "del".to_string(),
-                    m => m.to_string(),
-                };
-                // GET and HEAD methods only take 2 arguments in k6: http.get(url, params)
-                // Other methods take 3 arguments: http.post(url, body, params)
-                let is_get_or_head = matches!(k6_method.as_str(), "get" | "head");
+        let mut operations = Vec::with_capacity(self.templates.len());
+        for (idx, template) in self.templates.iter().enumerate() {
+            let display_name = template.operation.display_name();
+            let sanitized_name = Self::uniquify_name(
+                Self::sanitize_js_identifier(&display_name),
+                &mut used_js_names,
+            );
+            // metric_name must satisfy k6's 128-char limit AND leave room
+            // for suffixes like `_latency` / `_errors` / `_stepN_*`.
+            // Long deeply-nested operationIds (e.g. Microsoft Graph) exceed
+            // this; sanitize_k6_metric_name truncates with a hash suffix
+            // for uniqueness. (See issue #79 — Srikanth's microsoft-graph.yaml run.)
+            // uniquify_name then splits short-name collisions that the hash
+            // path does not see (two "normal request allowed" cases).
+            let metric_name = Self::uniquify_name(
+                Self::sanitize_k6_metric_name(&display_name),
+                &mut used_metric_names,
+            );
+            // k6 uses 'del' instead of 'delete' for HTTP DELETE method
+            let k6_method = match template.operation.method.to_lowercase().as_str() {
+                "delete" => "del".to_string(),
+                m => m.to_string(),
+            };
+            // GET and HEAD methods only take 2 arguments in k6: http.get(url, params)
+            // Other methods take 3 arguments: http.post(url, body, params)
+            let is_get_or_head = matches!(k6_method.as_str(), "get" | "head");
 
-                // Process path for dynamic placeholders
-                // Prepend base_path if configured
-                let raw_path = template.generate_path();
-                let full_path = join_base_path(base_path, &raw_path);
-                let processed_path = DynamicParamProcessor::process_path(&full_path);
-                all_placeholders.extend(processed_path.placeholders.clone());
+            // Process path for dynamic placeholders
+            // Prepend base_path if configured
+            let raw_path = template.generate_path();
+            let full_path = join_base_path(base_path, &raw_path);
+            let processed_path = DynamicParamProcessor::process_path(&full_path);
+            all_placeholders.extend(processed_path.placeholders.clone());
 
-                // Process body for dynamic placeholders
-                let (body_value, body_is_dynamic) = if let Some(body) = &template.body {
-                    let processed_body = DynamicParamProcessor::process_json_body(body);
-                    all_placeholders.extend(processed_body.placeholders.clone());
-                    (Some(processed_body.value), processed_body.is_dynamic)
-                } else {
-                    (None, false)
-                };
+            // Process body for dynamic placeholders
+            let (body_value, body_is_dynamic) = if let Some(body) = &template.body {
+                let processed_body = DynamicParamProcessor::process_json_body(body);
+                all_placeholders.extend(processed_body.placeholders.clone());
+                (Some(processed_body.value), processed_body.is_dynamic)
+            } else {
+                (None, false)
+            };
 
-                let path_value = if processed_path.is_dynamic {
-                    processed_path.value
-                } else {
-                    full_path
-                };
+            let path_value = if processed_path.is_dynamic {
+                processed_path.value
+            } else {
+                full_path
+            };
 
-                K6OperationData {
-                    index: idx,
-                    name: sanitized_name,
-                    metric_name,
-                    display_name,
-                    method: k6_method,
-                    path: Value::String(path_value),
-                    path_is_dynamic: processed_path.is_dynamic,
-                    headers: Value::String(self.build_headers_json(template)),
-                    body: body_value.map(Value::String),
-                    body_is_dynamic,
-                    has_body: template.body.is_some(),
-                    is_get_or_head,
-                }
-            })
-            .collect::<Vec<_>>();
+            operations.push(K6OperationData {
+                index: idx,
+                name: sanitized_name,
+                metric_name,
+                display_name,
+                method: k6_method,
+                path: Value::String(path_value),
+                path_is_dynamic: processed_path.is_dynamic,
+                headers: Value::String(self.build_headers_json(template)),
+                body: body_value.map(Value::String),
+                body_is_dynamic,
+                has_body: template.body.is_some(),
+                is_get_or_head,
+            });
+        }
 
         // Get required imports and global initializations based on placeholders used
         let required_imports: Vec<String> =
@@ -520,11 +559,30 @@ impl K6ScriptGenerator {
         // k6 metric names must only contain ASCII letters, numbers, or underscores
         // and start with a letter or underscore
         let lines: Vec<&str> = script.lines().collect();
+        let mut seen_metric_consts: HashSet<String> = HashSet::new();
         for (line_num, line) in lines.iter().enumerate() {
             let trimmed = line.trim();
 
             // Check for Trend/Rate constructors with invalid metric names
             if trimmed.contains("new Trend(") || trimmed.contains("new Rate(") {
+                // Duplicate `const foo_latency = new Trend(...)` is a parse
+                // error in k6 (exit 107). Catch it here so generate() fails
+                // in-process instead of after a 32-target spawn.
+                if let Some(name) = trimmed
+                    .strip_prefix("const ")
+                    .and_then(|rest| rest.split('=').next())
+                    .map(str::trim)
+                    .filter(|n| {
+                        !n.is_empty() && n.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                    })
+                {
+                    if !seen_metric_consts.insert(name.to_string()) {
+                        errors.push(format!(
+                            "Line {}: duplicate const '{name}'. k6 exits 107 (ScriptException) when two traffic cases sanitize to the same identifier.",
+                            line_num + 1
+                        ));
+                    }
+                }
                 // Extract the metric name from the string literal
                 // Pattern: new Trend('metric_name') or new Rate("metric_name")
                 if let Some(start) = trimmed.find('\'') {
@@ -696,6 +754,75 @@ mod tests {
         let generator = K6ScriptGenerator::new(config, templates);
 
         assert_eq!(generator.templates.len(), 0);
+    }
+
+    #[test]
+    fn colliding_operation_titles_get_unique_const_names() {
+        // #79 (g): two YAML cases titled "normal request allowed" used to
+        // emit `const normal_request_allowed_latency` twice. k6 then exited
+        // 107 on every target with 0 requests.
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+
+        fn tmpl(id: &str, path: &str) -> RequestTemplate {
+            RequestTemplate {
+                operation: ApiOperation {
+                    method: "get".to_string(),
+                    path: path.to_string(),
+                    operation: Operation::default(),
+                    operation_id: Some(id.to_string()),
+                },
+                path_params: HashMap::new(),
+                query_params: HashMap::new(),
+                headers: HashMap::new(),
+                body: None,
+            }
+        }
+
+        let config = K6Config {
+            target_url: "https://example.test".to_string(),
+            base_path: None,
+            scenario: LoadScenario::Constant,
+            duration_secs: 5,
+            max_vus: 1,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+            security_testing_enabled: false,
+            chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
+        };
+        let generator = K6ScriptGenerator::new(
+            config,
+            vec![
+                tmpl("normal request allowed", "/a"),
+                tmpl("normal request allowed", "/b"),
+            ],
+        );
+        let script = generator.generate().expect("script generates");
+        let latency = script
+            .lines()
+            .filter(|l| l.contains("new Trend(") && l.contains("normal_request_allowed"))
+            .collect::<Vec<_>>();
+        assert_eq!(latency.len(), 2, "expected two Trend consts, got {latency:#?}");
+        assert!(
+            script.contains("const normal_request_allowed_latency = new Trend"),
+            "first collision keeps the base name"
+        );
+        assert!(
+            script.contains("const normal_request_allowed_2_latency = new Trend")
+                || script.contains("const normal_request_allowed_latency_2 = new Trend"),
+            "second collision must be renamed, script snippet:\n{}",
+            latency.join("\n")
+        );
+        let errors = K6ScriptGenerator::validate_script(&script);
+        assert!(errors.is_empty(), "validate_script: {errors:#?}");
     }
 
     #[test]
