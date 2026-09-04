@@ -16,7 +16,7 @@ permissions:
 jobs:
   release:
     name: Create Release
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     env:
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_CACHE_SIZE: "2G"
@@ -128,7 +128,7 @@ jobs:
 
   release-windows:
     name: Windows binaries (#884)
-    runs-on: windows-latest
+    runs-on: blacksmith-4vcpu-windows-2025
     needs: release
     steps:
     - name: Checkout repository
@@ -180,7 +180,7 @@ jobs:
 
   publish:
     name: Publish to crates.io
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # Same gating rationale as deploy-registry: publishing to crates.io
     # with broken tests yanks our reputation, not just our deploy.
     needs: release
@@ -222,7 +222,7 @@ jobs:
 
   deploy-registry:
     name: Deploy Registry Server to Fly.io
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # Block Fly auto-deploy on the `release` job (which runs `cargo test
     # --workspace --release` + builds the binary). Without this, a tag push
     # would deploy whatever the build pipeline produced even if tests had
@@ -244,7 +244,7 @@ jobs:
 
   helm:
     name: Package and Publish Helm Chart
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     # Same gating rationale as deploy-registry + publish.
     needs: release
     if: '!contains(github.ref_name, ''rc'') && !contains(github.ref_name, ''alpha'') && !contains(github.ref_name, ''beta'')'
