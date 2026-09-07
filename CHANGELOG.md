@@ -1,5 +1,14 @@
 ## [Unreleased]
 
+## [0.3.218] - 2026-09-07
+
+### Fixed
+
+- **[Reality]** Static k6 paths are JSON-encoded and concatenated onto `BASE_URL`, so WAF URIs containing `\x` (Werkzeug UNC `/static/\\attacker.com\share\x`) no longer land in a JS template literal. k6/goja treated `\x` as a hex escape and exited before sending any request (`invalid escape: \x: len("") != 2`). The wire URI is unchanged. `validate_script` now rejects a bare `\x` hex escape in-process. (#79)
+
+- **[Reality]** `traffic-breakdown.json` field `expected_over_duration` is now `expected_requests` (HTTP count over the run, not seconds). When `--rps` is unset the value is `null` instead of inventing rps=1, which made a 60s run look like a duration of 300. (#79)
+
+
 ## [0.3.217] - 2026-09-04
 
 ### Fixed
