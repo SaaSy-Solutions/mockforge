@@ -1619,14 +1619,22 @@ impl BenchCommand {
         rps: Option<u32>,
         duration_secs: Option<u64>,
     ) -> serde_json::Value {
-        let multiplier = rps.filter(|&r| r > 0).unwrap_or(1) as u64;
-        let total = (unique as u64).saturating_mul(multiplier);
-        let expected_over_duration =
-            duration_secs.map(|d| (unique as u64).saturating_mul(multiplier).saturating_mul(d));
+        // `total` is unique * RPS when --rps is set (Srikanth's unique vs
+        // total ask). Do not invent rps=1 when --rps is absent: that made
+        // `expected_over_duration` look like a duration (5 unique * 1 * 60s
+        // = 300 on a 60s run). `expected_requests` is HTTP count over the
+        // whole run, not seconds, and is null without an explicit RPS.
+        let per_second = rps.filter(|&r| r > 0).map(|r| (unique as u64).saturating_mul(r as u64));
+        let total = per_second.unwrap_or(unique as u64);
+        let expected_requests = match (rps.filter(|&r| r > 0), duration_secs) {
+            (Some(r), Some(d)) => Some((unique as u64).saturating_mul(r as u64).saturating_mul(d)),
+            _ => None,
+        };
         serde_json::json!({
             "unique": unique,
             "total": total,
-            "expected_over_duration": expected_over_duration,
+            "expected_requests": expected_requests,
+            "expected_requests_unit": "http",
         })
     }
 
@@ -1680,6 +1688,7 @@ impl BenchCommand {
         let payload = serde_json::json!({
             "rps": rps,
             "duration_secs": duration_secs,
+            "expected_requests_note": "HTTP requests over the run, not seconds. unique * rps * duration_secs, assuming each k6 iteration sends every unique case. null when --rps is unset.",
             "files": files,
         });
         if let Some(parent) = self.output.parent() {
@@ -5064,13 +5073,55 @@ mod tests {
         assert_eq!(v["duration_secs"], 1200);
         assert_eq!(v["files"][0]["sent"]["unique"], 5);
         assert_eq!(v["files"][0]["sent"]["total"], 250);
-        assert_eq!(v["files"][0]["sent"]["expected_over_duration"], 300000);
+        assert_eq!(v["files"][0]["sent"]["expected_requests"], 300000);
+        assert_eq!(v["files"][0]["sent"]["expected_requests_unit"], "http");
         assert_eq!(v["files"][0]["attack"]["total"], 150);
         assert_eq!(v["files"][0]["normal"]["total"], 100);
+        assert!(v["expected_requests_note"].as_str().unwrap().contains("HTTP requests"));
         assert_eq!(
             BenchCommand::format_unique_total(5, Some(50)),
             "unique=5 total=250 (5 * 50 RPS)"
         );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    /// #79 (e): without --rps, do not invent rps=1. unique*1*60 looked
+    /// like a duration (300) on a 60s run.
+    #[test]
+    fn traffic_breakdown_json_omits_expected_requests_without_rps() {
+        let dir = std::env::temp_dir().join(format!(
+            "mf-traffic-breakdown-norps-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = std::fs::create_dir_all(&dir);
+        let mut cmd = sample_bench_command();
+        cmd.output = dir.clone();
+        cmd.target_rps = None;
+        cmd.duration = "60s".to_string();
+        let stats = crate::wafbench::WafBenchStats {
+            per_file: vec![crate::wafbench::TrafficFileSummary {
+                file: "apisix_cve-2026-44087.yaml".into(),
+                sent: 5,
+                attack: 3,
+                normal: 2,
+                omitted: 1,
+                other: 0,
+            }],
+            ..Default::default()
+        };
+        cmd.emit_traffic_file_breakdown(&stats, "what to expect in proxy logs");
+        let raw = std::fs::read_to_string(dir.join("traffic-breakdown.json"))
+            .expect("traffic-breakdown.json");
+        let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        assert!(v["rps"].is_null());
+        assert_eq!(v["duration_secs"], 60);
+        assert_eq!(v["files"][0]["sent"]["unique"], 5);
+        assert_eq!(v["files"][0]["sent"]["total"], 5);
+        assert!(v["files"][0]["sent"]["expected_requests"].is_null());
         let _ = std::fs::remove_dir_all(&dir);
     }
 }

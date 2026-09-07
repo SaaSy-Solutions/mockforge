@@ -420,10 +420,19 @@ impl K6ScriptGenerator {
                 (None, false)
             };
 
+            // Issue #79 (g) round 2: Werkzeug UNC uri
+            // `/static/\\attacker.com\share\x` was interpolated into a JS
+            // template literal. `\x` is a hex escape that needs two digits;
+            // k6/goja then exits on `invalid escape: \x: len("") != 2` and
+            // sends 0 requests (Srikanth's 31-YAML verbatim run on 0.3.217).
+            // JSON-encode static paths *including the surrounding quotes*
+            // so the template can do `BASE_URL + {{{this.path}}}` and the
+            // runtime URI stays byte-identical. Dynamic paths are already
+            // JS expressions (backtick template literals) — leave them.
             let path_value = if processed_path.is_dynamic {
                 processed_path.value
             } else {
-                full_path
+                serde_json::to_string(&full_path).unwrap_or_else(|_| "\"/\"".to_string())
             };
 
             operations.push(K6OperationData {
@@ -610,6 +619,22 @@ impl K6ScriptGenerator {
                 }
             }
 
+            // Issue #79 (g): k6/goja rejects `\x` without two hex digits
+            // (`invalid escape: \x: len("") != 2`). Catch it here so a
+            // WAF URI with a trailing `\x` fails in-process instead of
+            // after a 32-target spawn with 0 requests. Skip `//` comments:
+            // they are not string literals, and a generated comment that
+            // mentions the escape must not trip this check.
+            if !trimmed.starts_with("//") {
+                if let Some(col) = Self::invalid_js_hex_escape_column(trimmed) {
+                    errors.push(format!(
+                        "Line {}:{}: invalid JS hex escape \\x (k6 requires two hex digits). Static paths must be JSON-encoded, not dumped into a template literal.",
+                        line_num + 1,
+                        col + 1
+                    ));
+                }
+            }
+
             // Check for invalid JavaScript variable names (containing dots)
             if trimmed.starts_with("const ") || trimmed.starts_with("let ") {
                 if let Some(equals_pos) = trimmed.find('=') {
@@ -632,6 +657,39 @@ impl K6ScriptGenerator {
         }
 
         errors
+    }
+
+    /// Column of an unescaped `\x` that is not followed by two hex digits.
+    ///
+    /// k6 (goja) treats `\x` as a 2-digit hex escape in string and template
+    /// literals. A WAF URI like `/static/\\attacker.com\share\x` dumped raw
+    /// into `` `${BASE_URL}...` `` trips `invalid escape: \x: len("") != 2`.
+    /// A doubled backslash (`\\x`) is a real backslash plus `x` and is fine.
+    fn invalid_js_hex_escape_column(line: &str) -> Option<usize> {
+        let bytes = line.as_bytes();
+        let mut i = 0;
+        while i + 1 < bytes.len() {
+            if bytes[i] == b'\\' && bytes[i + 1] == b'x' {
+                let mut preceding = 0usize;
+                let mut j = i;
+                while j > 0 && bytes[j - 1] == b'\\' {
+                    preceding += 1;
+                    j -= 1;
+                }
+                // The `\` at i is a real escape iff it is not itself escaped
+                // (even number of backslashes in front of it).
+                if preceding.is_multiple_of(2) {
+                    let hex_ok = i + 3 < bytes.len()
+                        && bytes[i + 2].is_ascii_hexdigit()
+                        && bytes[i + 3].is_ascii_hexdigit();
+                    if !hex_ok {
+                        return Some(i);
+                    }
+                }
+            }
+            i += 1;
+        }
+        None
     }
 
     /// Check if a string is a valid k6 metric name
@@ -823,6 +881,91 @@ mod tests {
         );
         let errors = K6ScriptGenerator::validate_script(&script);
         assert!(errors.is_empty(), "validate_script: {errors:#?}");
+    }
+
+    #[test]
+    fn werkzeug_unc_backslash_x_is_json_encoded_not_template_literal() {
+        // #79 (g) round 2: werkzeug_cve-2026-48818.yaml uri
+        // `/static/\\attacker.com\share\x` dumped into a template literal
+        // made k6/goja exit on `invalid escape: \x: len("") != 2`.
+        // Static paths are now JSON strings concatenated onto BASE_URL.
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+
+        let path = "/static/\\\\attacker.com\\share\\x";
+        let template = RequestTemplate {
+            operation: ApiOperation {
+                method: "get".to_string(),
+                path: path.to_string(),
+                operation: Operation::default(),
+                operation_id: Some("literal UNC double-backslash path blocked".to_string()),
+            },
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+        };
+        let config = K6Config {
+            target_url: "https://example.test".to_string(),
+            base_path: None,
+            scenario: LoadScenario::Constant,
+            duration_secs: 5,
+            max_vus: 1,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+            security_testing_enabled: false,
+            chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
+        };
+        let script = K6ScriptGenerator::new(config, vec![template])
+            .generate()
+            .expect("script generates");
+        let encoded = serde_json::to_string(path).expect("path JSON");
+        assert!(
+            script.contains(&format!("BASE_URL + {encoded}")),
+            "expected BASE_URL + {encoded} in script:\n{script}"
+        );
+        assert!(
+            !script.contains("${BASE_URL}/static/"),
+            "must not dump the raw path into a template literal:\n{script}"
+        );
+        let errors = K6ScriptGenerator::validate_script(&script);
+        assert!(errors.is_empty(), "validate_script: {errors:#?}\n{script}");
+    }
+
+    #[test]
+    fn validate_script_flags_bare_hex_escape_in_template_literal() {
+        // The 0.3.217 smoking gun, reduced: a template literal with a
+        // trailing `\x` must fail validation before k6 is spawned.
+        let bad = r#"
+import http from 'k6/http';
+import { check, sleep } from 'k6';
+import { Rate, Trend } from 'k6/metrics';
+const t_latency = new Trend('t_latency');
+export default function() {
+    const res = http.get(`${BASE_URL}/static/\\attacker.com\share\x`);
+}
+"#;
+        let errors = K6ScriptGenerator::validate_script(bad);
+        assert!(
+            errors.iter().any(|e| e.contains("invalid JS hex escape")),
+            "expected hex-escape error, got {errors:#?}"
+        );
+        assert!(K6ScriptGenerator::invalid_js_hex_escape_column(
+            r#"http.get(`${BASE_URL}/static/\\attacker.com\share\x`)"#
+        )
+        .is_some());
+        assert!(K6ScriptGenerator::invalid_js_hex_escape_column(
+            r#"BASE_URL + "/static/\\\\attacker.com\\share\\x""#
+        )
+        .is_none());
     }
 
     #[test]
