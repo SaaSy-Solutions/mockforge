@@ -171,7 +171,9 @@ export default function () {
     const __path = {{{this.path}}};
     let requestUrl = `${BASE_URL}${__path}`;
     {{else}}
-    let requestUrl = `${BASE_URL}{{{this.path}}}`;
+    // Issue #79 (g): JSON-encoded path (quotes included) so backslash-x
+    // in WAF URIs is a JS string, not a template-literal hex escape.
+    let requestUrl = BASE_URL + {{{this.path}}};
     {{/if}}
     let secBodyPayload = null;
     let hasSecCookie = false;
@@ -235,7 +237,7 @@ export default function () {
     const url = {{{this.path}}};
     const res = http.{{this.method}}(`${BASE_URL}${url}`, JSON.stringify(payload), { headers: requestHeaders, jar: new http.CookieJar() });
     {{else}}
-    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, JSON.stringify(payload), { headers: requestHeaders, jar: new http.CookieJar() });
+    const res = http.{{this.method}}(BASE_URL + {{{this.path}}}, JSON.stringify(payload), { headers: requestHeaders, jar: new http.CookieJar() });
     {{/if}}
     {{/if}}
     {{else if this.is_get_or_head}}
@@ -247,7 +249,7 @@ export default function () {
     const url = {{{this.path}}};
     const res = http.{{this.method}}(`${BASE_URL}${url}`, { headers: requestHeaders, jar: new http.CookieJar() });
     {{else}}
-    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, { headers: requestHeaders, jar: new http.CookieJar() });
+    const res = http.{{this.method}}(BASE_URL + {{{this.path}}}, { headers: requestHeaders, jar: new http.CookieJar() });
     {{/if}}
     {{/if}}
     {{else}}
@@ -265,7 +267,7 @@ export default function () {
     const url = {{{this.path}}};
     const res = http.{{this.method}}(`${BASE_URL}${url}`, null, { headers: requestHeaders, jar: new http.CookieJar() });
     {{else}}
-    const res = http.{{this.method}}(`${BASE_URL}{{{this.path}}}`, null, { headers: requestHeaders, jar: new http.CookieJar() });
+    const res = http.{{this.method}}(BASE_URL + {{{this.path}}}, null, { headers: requestHeaders, jar: new http.CookieJar() });
     {{/if}}
     {{/if}}
     {{/if}}
