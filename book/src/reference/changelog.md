@@ -2,6 +2,19 @@
 
 ## [Unreleased]
 
+## [0.3.219] - 2026-09-10
+
+### Fixed
+
+- **[Reality]** HTTPS + ALPN HTTP/2 was rejecting WAF `Connection` headers (`http2: invalid Connection request header`). The header stays on the wire (it is the hop-by-hop test); k6 is forced onto HTTP/1.1 via `GODEBUG=http2client=0` when `--wafbench-verbatim` is set or any request has a `Connection` header. generate-only prints the same prefix for a manual `k6 run`. (#79)
+
+- **[Reality]** `traffic-breakdown.json` fields are the plan, not k6 counters: `unique_cases` (YAML case count), `projected_per_second` (`unique_cases * rps`), `projected_over_run` (`unique_cases * rps * duration`). `unique` / `total` / `expected_requests` stay as aliases for one release. `expected_requests_unit` is dropped. (#79)
+
+### Added
+
+- **[Reality]** Multi-target runs print estimated wall clock: `ceil(targets / max-concurrency) * duration`. `--vus` and `--rps` are per target, not shared. (#79)
+
+
 ## [0.3.218] - 2026-09-07
 
 ### Fixed
