@@ -830,6 +830,14 @@ impl BenchCommand {
         // Parse headers
         let custom_headers = self.parse_headers()?;
 
+        // Round 63 (#79): WAF `Connection` headers are hop-by-hop. HTTP/2
+        // rejects them; keep the header and force HTTP/1.1 for k6.
+        let force_http1 = crate::request_gen::should_force_k6_http1(
+            self.wafbench_verbatim,
+            &templates,
+            &custom_headers,
+        );
+
         // Resolve base path (CLI option takes priority over spec's servers URL)
         let base_path = self.resolve_base_path(&parser);
         if let Some(ref bp) = base_path {
@@ -962,7 +970,8 @@ impl BenchCommand {
         };
 
         let generator = K6ScriptGenerator::new(k6_config, templates)
-            .with_abort_valve(self.abort_on_error, self.abort_on_error_rate);
+            .with_abort_valve(self.abort_on_error, self.abort_on_error_rate)
+            .with_force_http1(force_http1);
         let mut script = generator.generate()?;
         TerminalReporter::print_success("k6 script generated");
 
@@ -1026,20 +1035,25 @@ impl BenchCommand {
 
         // If generate-only mode, exit here
         if self.generate_only {
-            println!("\nScript generated successfully. Run it with:");
-            println!("  k6 run {}", script_path.display());
+            Self::print_k6_run_hint(&script_path, force_http1);
             return Ok(());
         }
 
         // Execute k6
         TerminalReporter::print_progress("Executing load test...");
+        if force_http1 {
+            TerminalReporter::print_progress(
+                "Forcing HTTP/1.1 (GODEBUG=http2client=0): Connection headers are hop-by-hop and HTTP/2 rejects them. The header stays on the wire.",
+            );
+        }
         // Round 57 (#79) — `--discard-response-bodies` opts a single-target
         // load run into K6_DISCARD_RESPONSE_BODIES. Safe here: this is the
         // plain load path (status/latency only), not conformance/extraction.
         let executor = K6Executor::new()?
             .with_local_ips(self.source_ips.join(","))
             .with_dns_policy(self.dns_policy.clone().unwrap_or_default())
-            .with_discard_response_bodies(self.discard_response_bodies);
+            .with_discard_response_bodies(self.discard_response_bodies)
+            .with_force_http1(force_http1);
 
         std::fs::create_dir_all(&self.output)?;
 
@@ -1347,6 +1361,21 @@ impl BenchCommand {
         }
     }
 
+    /// Round 63 (#79): generate-only still has to tell the user how to run
+    /// the script. Connection-header cases need GODEBUG=http2client=0 or
+    /// k6/Go ALPN-negotiates HTTP/2 and rejects the header.
+    fn print_k6_run_hint(script_path: &Path, force_http1: bool) {
+        println!("\nScript generated successfully. Run it with:");
+        if force_http1 {
+            println!("  GODEBUG=http2client=0 k6 run {}", script_path.display());
+            println!(
+                "  (HTTP/1.1: a Connection header is on the wire; HTTP/2 rejects it. mockforge bench sets this automatically when it invokes k6.)"
+            );
+        } else {
+            println!("  k6 run {}", script_path.display());
+        }
+    }
+
     /// Load traffic cases from `--wafbench-dir` and turn them into templates
     /// that are sent exactly as written (#994).
     ///
@@ -1607,10 +1636,12 @@ impl BenchCommand {
     fn format_unique_total(unique: usize, rps: Option<u32>) -> String {
         match rps {
             Some(r) if r > 0 => {
-                let total = unique.saturating_mul(r as usize);
-                format!("unique={unique} total={total} ({unique} * {r} RPS)")
+                let projected = unique.saturating_mul(r as usize);
+                format!(
+                    "unique_cases={unique} projected_per_second={projected} ({unique} * {r} RPS)"
+                )
             }
-            _ => format!("unique={unique}"),
+            _ => format!("unique_cases={unique}"),
         }
     }
 
@@ -1619,22 +1650,25 @@ impl BenchCommand {
         rps: Option<u32>,
         duration_secs: Option<u64>,
     ) -> serde_json::Value {
-        // `total` is unique * RPS when --rps is set (Srikanth's unique vs
-        // total ask). Do not invent rps=1 when --rps is absent: that made
-        // `expected_over_duration` look like a duration (5 unique * 1 * 60s
-        // = 300 on a 60s run). `expected_requests` is HTTP count over the
-        // whole run, not seconds, and is null without an explicit RPS.
+        // Round 63 (#79): these are the *plan*, not k6 counters. Srikanth
+        // read `expected_requests` as "actually sent on the wire". Honest
+        // names: unique_cases / projected_per_second / projected_over_run.
+        // unique / total / expected_requests stay as one-release aliases.
+        // Do not invent rps=1 when --rps is absent. Do not put "sent" in
+        // the new names. Drop expected_requests_unit (the only unit is HTTP).
         let per_second = rps.filter(|&r| r > 0).map(|r| (unique as u64).saturating_mul(r as u64));
         let total = per_second.unwrap_or(unique as u64);
-        let expected_requests = match (rps.filter(|&r| r > 0), duration_secs) {
+        let projected_over_run = match (rps.filter(|&r| r > 0), duration_secs) {
             (Some(r), Some(d)) => Some((unique as u64).saturating_mul(r as u64).saturating_mul(d)),
             _ => None,
         };
         serde_json::json!({
+            "unique_cases": unique,
             "unique": unique,
+            "projected_per_second": per_second,
             "total": total,
-            "expected_requests": expected_requests,
-            "expected_requests_unit": "http",
+            "projected_over_run": projected_over_run,
+            "expected_requests": projected_over_run,
         })
     }
 
@@ -1688,7 +1722,7 @@ impl BenchCommand {
         let payload = serde_json::json!({
             "rps": rps,
             "duration_secs": duration_secs,
-            "expected_requests_note": "HTTP requests over the run, not seconds. unique * rps * duration_secs, assuming each k6 iteration sends every unique case. null when --rps is unset.",
+            "note": "Plan, not k6 counters: unique_cases is YAML case count, projected_per_second is unique_cases * rps, projected_over_run is unique_cases * rps * duration_secs. Assumes each k6 iteration sends every unique case. projected_* are null when --rps is unset. unique/total/expected_requests are aliases for one release.",
             "files": files,
         });
         if let Some(parent) = self.output.parent() {
@@ -2394,6 +2428,12 @@ impl BenchCommand {
 
         let security_testing_enabled = self.security_testing_enabled();
 
+        let force_http1 = crate::request_gen::should_force_k6_http1(
+            self.wafbench_verbatim,
+            &templates,
+            &custom_headers,
+        );
+
         let k6_config = K6Config {
             target_url: self.target.clone(),
             base_path,
@@ -2425,7 +2465,8 @@ impl BenchCommand {
         };
 
         let generator = K6ScriptGenerator::new(k6_config, templates)
-            .with_abort_valve(self.abort_on_error, self.abort_on_error_rate);
+            .with_abort_valve(self.abort_on_error, self.abort_on_error_rate)
+            .with_force_http1(force_http1);
         let mut script = generator.generate()?;
 
         // Enhance script with advanced features (security testing, etc.)
@@ -2451,7 +2492,8 @@ impl BenchCommand {
             let executor = K6Executor::new()?
                 .with_local_ips(self.source_ips.join(","))
                 .with_dns_policy(self.dns_policy.clone().unwrap_or_default())
-                .with_discard_response_bodies(self.discard_response_bodies);
+                .with_discard_response_bodies(self.discard_response_bodies)
+                .with_force_http1(force_http1);
             let output_dir = self.output.join(format!("{}_results", spec_name.replace('.', "_")));
             std::fs::create_dir_all(&output_dir)?;
 
@@ -5038,6 +5080,19 @@ mod tests {
         );
     }
 
+    #[test]
+    fn single_target_k6_spawn_sets_force_http1() {
+        let src = include_str!("command.rs");
+        assert!(
+            src.contains("with_force_http1(force_http1)"),
+            "single-target k6 spawn must set GODEBUG=http2client=0 for Connection-header WAF cases"
+        );
+        assert!(
+            src.contains("print_k6_run_hint"),
+            "generate-only must print GODEBUG=http2client=0 when HTTP/1.1 is required"
+        );
+    }
+
     /// #79 (d)(e): unique vs total (unique * RPS) plus a JSON sidecar.
     #[test]
     fn traffic_breakdown_json_multiplies_unique_by_rps() {
@@ -5071,16 +5126,19 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
         assert_eq!(v["rps"], 50);
         assert_eq!(v["duration_secs"], 1200);
+        assert_eq!(v["files"][0]["sent"]["unique_cases"], 5);
         assert_eq!(v["files"][0]["sent"]["unique"], 5);
+        assert_eq!(v["files"][0]["sent"]["projected_per_second"], 250);
         assert_eq!(v["files"][0]["sent"]["total"], 250);
+        assert_eq!(v["files"][0]["sent"]["projected_over_run"], 300000);
         assert_eq!(v["files"][0]["sent"]["expected_requests"], 300000);
-        assert_eq!(v["files"][0]["sent"]["expected_requests_unit"], "http");
+        assert!(v["files"][0]["sent"].get("expected_requests_unit").is_none());
         assert_eq!(v["files"][0]["attack"]["total"], 150);
         assert_eq!(v["files"][0]["normal"]["total"], 100);
-        assert!(v["expected_requests_note"].as_str().unwrap().contains("HTTP requests"));
+        assert!(v["note"].as_str().unwrap().contains("Plan, not k6 counters"));
         assert_eq!(
             BenchCommand::format_unique_total(5, Some(50)),
-            "unique=5 total=250 (5 * 50 RPS)"
+            "unique_cases=5 projected_per_second=250 (5 * 50 RPS)"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -5119,8 +5177,11 @@ mod tests {
         let v: serde_json::Value = serde_json::from_str(&raw).unwrap();
         assert!(v["rps"].is_null());
         assert_eq!(v["duration_secs"], 60);
+        assert_eq!(v["files"][0]["sent"]["unique_cases"], 5);
         assert_eq!(v["files"][0]["sent"]["unique"], 5);
+        assert!(v["files"][0]["sent"]["projected_per_second"].is_null());
         assert_eq!(v["files"][0]["sent"]["total"], 5);
+        assert!(v["files"][0]["sent"]["projected_over_run"].is_null());
         assert!(v["files"][0]["sent"]["expected_requests"].is_null());
         let _ = std::fs::remove_dir_all(&dir);
     }

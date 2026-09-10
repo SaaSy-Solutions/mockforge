@@ -2190,7 +2190,7 @@ mod tests {
             header_params: headers.into_iter().map(|(a, b)| (a.into(), b.into())).collect(),
             path_params: path_params.into_iter().map(|(a, b)| (a.into(), b.into())).collect(),
             response_schema: None,
-            response_schemas: std::collections::BTreeMap::new(),
+            response_schemas: BTreeMap::new(),
             request_body_schema: None,
             security_schemes: Vec::new(),
         }

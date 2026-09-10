@@ -38,6 +38,15 @@ impl RequestTemplate {
         path
     }
 
+    /// True when this template sets a `Connection` header (any casing).
+    ///
+    /// Round 63 (#79): HTTP/2 forbids `Connection`. WAF hop-by-hop cases
+    /// must keep the header on the wire, so k6 is forced onto HTTP/1.1
+    /// instead of stripping it.
+    pub fn has_connection_header(&self) -> bool {
+        header_map_has_connection(&self.headers)
+    }
+
     /// Get all headers including content-type
     pub fn get_headers(&self) -> HashMap<String, String> {
         let mut headers = self.headers.clone();
@@ -50,6 +59,25 @@ impl RequestTemplate {
 
         headers
     }
+}
+
+/// Case-insensitive `Connection` lookup. HTTP/2 rejects this header;
+/// HTTP/1.1 is the only way to send the WAF smuggling cases as written.
+pub fn header_map_has_connection(headers: &HashMap<String, String>) -> bool {
+    headers.keys().any(|k| k.eq_ignore_ascii_case("connection"))
+}
+
+/// Round 63 (#79): force k6 onto HTTP/1.1 (`GODEBUG=http2client=0`) when
+/// `--wafbench-verbatim` is set (those files routinely set `Connection`)
+/// or when any request actually has a `Connection` header.
+pub fn should_force_k6_http1(
+    wafbench_verbatim: bool,
+    templates: &[RequestTemplate],
+    extra_headers: &HashMap<String, String>,
+) -> bool {
+    wafbench_verbatim
+        || header_map_has_connection(extra_headers)
+        || templates.iter().any(RequestTemplate::has_connection_header)
 }
 
 /// Request template generator
@@ -442,5 +470,17 @@ mod tests {
         assert!(RequestGenerator::is_transport_owned_header("Content-Length"));
         assert!(RequestGenerator::is_transport_owned_header("HOST"));
         assert!(!RequestGenerator::is_transport_owned_header("x-amz-request-route"));
+    }
+
+    #[test]
+    fn connection_header_detection_is_case_insensitive() {
+        let mut headers = HashMap::new();
+        headers.insert("connection".to_string(), "x-real-ip".to_string());
+        assert!(header_map_has_connection(&headers));
+        headers.clear();
+        headers.insert("X-Custom".to_string(), "1".to_string());
+        assert!(!header_map_has_connection(&headers));
+        assert!(should_force_k6_http1(true, &[], &HashMap::new()));
+        assert!(!should_force_k6_http1(false, &[], &HashMap::new()));
     }
 }

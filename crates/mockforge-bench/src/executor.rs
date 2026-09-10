@@ -115,6 +115,22 @@ fn extract_network_event_json(line: &str) -> Option<String> {
     extract_mockforge_marker_json(line, "MOCKFORGE_NETWORK_EVENT:")
 }
 
+/// Merge `http2client=0` into `GODEBUG` without clobbering other flags.
+///
+/// Round 63 (#79) / grafana/k6#2222: k6 has no per-request HTTP/1.1 API.
+/// An explicit `http2client=` already in the environment is left alone.
+pub(crate) fn merge_godebug_http2client_off(existing: Option<&str>) -> String {
+    const FLAG: &str = "http2client=0";
+    let existing = existing.unwrap_or("").trim();
+    if existing.is_empty() {
+        return FLAG.to_string();
+    }
+    if existing.split(',').any(|part| part.trim().starts_with("http2client=")) {
+        return existing.to_string();
+    }
+    format!("{existing},{FLAG}")
+}
+
 /// k6 executor
 pub struct K6Executor {
     k6_path: String,
@@ -139,6 +155,11 @@ pub struct K6Executor {
     /// `--local-ips` source ("no suitable address found"). `preferIPv6` /
     /// `onlyIPv6` fix that while keeping the hostname on the wire.
     dns_policy: String,
+    /// Round 63 (#79) — set `GODEBUG=http2client=0` so k6/Go does not
+    /// ALPN-negotiate HTTP/2. HTTP/2 forbids `Connection`; WAF hop-by-hop
+    /// cases must keep that header. grafana/k6#2222: no per-request HTTP/1.1
+    /// API, process-wide GODEBUG is the workaround.
+    force_http1: bool,
 }
 
 impl K6Executor {
@@ -154,6 +175,7 @@ impl K6Executor {
             local_ips: String::new(),
             discard_response_bodies: false,
             dns_policy: String::new(),
+            force_http1: false,
         })
     }
 
@@ -179,6 +201,24 @@ impl K6Executor {
     pub fn with_dns_policy(mut self, policy: impl Into<String>) -> Self {
         self.dns_policy = policy.into();
         self
+    }
+
+    /// Round 63 (#79) — force HTTP/1.1 for this k6 process via
+    /// `GODEBUG=http2client=0`. Use when the script sets a `Connection`
+    /// header or when `--wafbench-verbatim` is on.
+    pub fn with_force_http1(mut self, force: bool) -> Self {
+        self.force_http1 = force;
+        self
+    }
+
+    /// `GODEBUG` value this executor will set, or `None` when HTTP/2 is left
+    /// alone. Used by tests; `execute_with_port` applies the same string.
+    #[cfg(test)]
+    pub(crate) fn godebug_env_value(&self) -> Option<String> {
+        if !self.force_http1 {
+            return None;
+        }
+        Some(merge_godebug_http2client_off(std::env::var("GODEBUG").ok().as_deref()))
     }
 
     /// Check if k6 is installed
@@ -279,6 +319,14 @@ impl K6Executor {
         // high-concurrency runs (guards against the SIGKILL/OOM Srikanth hit).
         if self.discard_response_bodies {
             cmd.env("K6_DISCARD_RESPONSE_BODIES", "true");
+        }
+
+        // Round 63 (#79) — disable the Go HTTP/2 client so WAF `Connection`
+        // headers are not rejected as `http2: invalid Connection request
+        // header`. Merge with an existing GODEBUG rather than clobbering it.
+        if self.force_http1 {
+            let existing = std::env::var("GODEBUG").ok();
+            cmd.env("GODEBUG", merge_godebug_http2client_off(existing.as_deref()));
         }
 
         // Round 61 (#79) — force a DNS resolution policy so hostname targets can
@@ -686,6 +734,7 @@ mod tests {
             local_ips: String::new(),
             discard_response_bodies: false,
             dns_policy: String::new(),
+            force_http1: false,
         };
         assert!(!exec.discard_response_bodies);
         let exec = exec.with_discard_response_bodies(true);
@@ -702,6 +751,7 @@ mod tests {
             local_ips: String::new(),
             discard_response_bodies: false,
             dns_policy: String::new(),
+            force_http1: false,
         };
         assert!(exec.dns_policy.is_empty());
         let exec = exec.with_dns_policy("preferIPv6");
@@ -781,5 +831,49 @@ mod tests {
         let result = extract_exchange_json(line).unwrap();
         let parsed: serde_json::Value = serde_json::from_str(&result).unwrap();
         assert_eq!(parsed["k"], r#"a\"x""#);
+    }
+
+    #[test]
+    fn merge_godebug_appends_http2client_off_and_honors_existing() {
+        assert_eq!(merge_godebug_http2client_off(None), "http2client=0");
+        assert_eq!(merge_godebug_http2client_off(Some("")), "http2client=0");
+        assert_eq!(merge_godebug_http2client_off(Some("netdns=go")), "netdns=go,http2client=0");
+        assert_eq!(
+            merge_godebug_http2client_off(Some("http2client=1")),
+            "http2client=1",
+            "an explicit http2client= in the environment wins"
+        );
+        assert_eq!(merge_godebug_http2client_off(Some("http2client=0")), "http2client=0");
+    }
+
+    #[test]
+    fn force_http1_builder_sets_godebug_env_value() {
+        let exec = K6Executor {
+            k6_path: "k6".to_string(),
+            local_ips: String::new(),
+            discard_response_bodies: false,
+            dns_policy: String::new(),
+            force_http1: false,
+        };
+        assert!(exec.godebug_env_value().is_none());
+        let exec = exec.with_force_http1(true);
+        let value = exec.godebug_env_value().expect("force_http1 must set GODEBUG");
+        assert!(
+            value.split(',').any(|p| p.trim() == "http2client=0"),
+            "spawn env must contain http2client=0, got {value}"
+        );
+    }
+
+    #[test]
+    fn execute_with_port_applies_godebug_when_force_http1() {
+        let src = include_str!("executor.rs");
+        assert!(
+            src.contains("merge_godebug_http2client_off"),
+            "k6 spawn must merge GODEBUG=http2client=0 so Connection headers survive HTTPS ALPN"
+        );
+        assert!(
+            src.contains("if self.force_http1"),
+            "GODEBUG must be gated on force_http1, not applied to every k6 run"
+        );
     }
 }

@@ -1,3 +1,10 @@
+{{#if force_http1}}
+// HTTP/2 forbids Connection. k6/Go ALPN-negotiates HTTP/2 on HTTPS, then
+// rejects hop-by-hop WAF cases (`http2: invalid Connection request header`).
+// mockforge bench sets GODEBUG=http2client=0 when it invokes k6. For a
+// manual run:
+//   GODEBUG=http2client=0 k6 run this-script.js
+{{/if}}
 import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Rate, Trend, Counter } from 'k6/metrics';
