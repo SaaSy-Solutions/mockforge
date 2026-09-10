@@ -1364,7 +1364,7 @@ impl BenchCommand {
     /// Round 63 (#79): generate-only still has to tell the user how to run
     /// the script. Connection-header cases need GODEBUG=http2client=0 or
     /// k6/Go ALPN-negotiates HTTP/2 and rejects the header.
-    fn print_k6_run_hint(script_path: &std::path::Path, force_http1: bool) {
+    fn print_k6_run_hint(script_path: &Path, force_http1: bool) {
         println!("\nScript generated successfully. Run it with:");
         if force_http1 {
             println!("  GODEBUG=http2client=0 k6 run {}", script_path.display());
