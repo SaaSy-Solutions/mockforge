@@ -188,6 +188,38 @@ impl ParallelExecutor {
         }
     }
 
+    /// Round 63 (#79): `--max-concurrency` is a semaphore, not a shared VU
+    /// pool. Each batch of up to `max_concurrency` targets runs the full
+    /// duration, then the next batch starts. Wall clock ≈
+    /// ceil(targets / concurrency) * duration.
+    pub(crate) fn estimated_wall_clock(
+        n_targets: usize,
+        max_concurrency: usize,
+        duration_secs: u64,
+    ) -> (usize, u64) {
+        let conc = max_concurrency.max(1);
+        let batches = if n_targets == 0 {
+            0
+        } else {
+            n_targets.div_ceil(conc)
+        };
+        (batches, (batches as u64).saturating_mul(duration_secs))
+    }
+
+    /// Human-readable duration for the wall-clock estimate (`35m00s`).
+    pub(crate) fn format_wall_clock(secs: u64) -> String {
+        let hours = secs / 3600;
+        let mins = (secs % 3600) / 60;
+        let rem = secs % 60;
+        if hours > 0 {
+            format!("{hours}h{mins:02}m{rem:02}s")
+        } else if mins > 0 {
+            format!("{mins}m{rem:02}s")
+        } else {
+            format!("{rem}s")
+        }
+    }
+
     /// Execute tests against all targets in parallel
     pub async fn execute_all(&self) -> Result<AggregatedResults> {
         let total_targets = self.targets.len();
@@ -364,7 +396,23 @@ impl ParallelExecutor {
 
         let duration_secs_val = BenchCommand::parse_duration(&self.base_command.duration)?;
 
+        // Round 63 (#79): batches of `--max-concurrency` each run the full
+        // `--duration`. Wall clock is ceil(targets / concurrency) * duration,
+        // not duration alone. --vus and --rps are per target, not shared.
+        let (batches, wall_secs) =
+            Self::estimated_wall_clock(total_targets, self.max_concurrency, duration_secs_val);
+        TerminalReporter::print_progress(&format!(
+            "Estimated wall clock: {batches} batch(es) × {duration_secs_val}s ≈ {} ({wall_secs}s). --vus and --rps are per target, not shared.",
+            Self::format_wall_clock(wall_secs),
+        ));
+
         let security_testing_enabled_val = self.base_command.security_testing_enabled();
+
+        if crate::request_gen::should_force_k6_http1(verbatim, &templates, &base_headers) {
+            TerminalReporter::print_progress(
+                "Forcing HTTP/1.1 (GODEBUG=http2client=0): Connection headers are hop-by-hop and HTTP/2 rejects them. The header stays on the wire.",
+            );
+        }
 
         // Pre-compute enhancement code once (same for all targets)
         let has_advanced_features = self.base_command.data_file.is_some()
@@ -504,6 +552,7 @@ impl ParallelExecutor {
                     &dns_policy,
                     &geo_source_ips,
                     &geo_source_headers,
+                    verbatim,
                 )
                 .await;
 
@@ -614,12 +663,20 @@ impl ParallelExecutor {
         dns_policy: &str,
         geo_source_ips: &[String],
         geo_source_headers: &[String],
+        wafbench_verbatim: bool,
     ) -> Result<TargetResult> {
         // Merge target-specific headers with base headers
         let mut custom_headers = base_headers.clone();
         if let Some(target_headers) = &target.headers {
             custom_headers.extend(target_headers.clone());
         }
+
+        // Round 63 (#79): keep Connection on the wire; force HTTP/1.1.
+        let force_http1 = crate::request_gen::should_force_k6_http1(
+            wafbench_verbatim,
+            templates,
+            &custom_headers,
+        );
 
         // Use target-specific auth if provided, otherwise use base auth
         let auth_header = target.auth.as_ref().or(auth.as_ref()).cloned();
@@ -647,7 +704,8 @@ impl ParallelExecutor {
 
         // Generate k6 script
         let generator = K6ScriptGenerator::new(k6_config, templates.to_vec())
-            .with_abort_valve(abort_on_error, abort_on_error_rate);
+            .with_abort_valve(abort_on_error, abort_on_error_rate)
+            .with_force_http1(force_http1);
         let mut script = generator.generate()?;
 
         // Apply pre-computed enhancement code (security definitions, etc.)
@@ -702,7 +760,8 @@ impl ParallelExecutor {
         let executor = K6Executor::new()?
             .with_local_ips(local_ips.to_string())
             .with_dns_policy(dns_policy.to_string())
-            .with_discard_response_bodies(true);
+            .with_discard_response_bodies(true)
+            .with_force_http1(force_http1);
         let results = executor
             .execute_with_port(&script_path, Some(&output_dir), verbose, Some(api_port))
             .await;
@@ -895,5 +954,31 @@ mod tests {
         // p99 should be the 99th percentile of [200, 300, 400] = index 2 = 400
         assert_eq!(metrics.p95_duration_ms, 350.0);
         assert_eq!(metrics.p99_duration_ms, 400.0);
+    }
+
+    #[test]
+    fn estimated_wall_clock_is_batches_times_duration() {
+        // Srikanth: 64 IPs, --max-concurrency 10, -d 300 → 7 batches × 300s.
+        let (batches, wall) = ParallelExecutor::estimated_wall_clock(64, 10, 300);
+        assert_eq!(batches, 7);
+        assert_eq!(wall, 2100);
+        assert_eq!(ParallelExecutor::format_wall_clock(2100), "35m00s");
+        assert_eq!(ParallelExecutor::estimated_wall_clock(10, 10, 300), (1, 300));
+        assert_eq!(ParallelExecutor::estimated_wall_clock(0, 10, 300), (0, 0));
+        assert_eq!(ParallelExecutor::format_wall_clock(45), "45s");
+        assert_eq!(ParallelExecutor::format_wall_clock(3661), "1h01m01s");
+    }
+
+    #[test]
+    fn parallel_k6_spawn_sets_force_http1() {
+        let src = include_str!("parallel_executor.rs");
+        assert!(
+            src.contains("with_force_http1(force_http1)"),
+            "multi-target k6 spawn must pass GODEBUG=http2client=0 when Connection headers are present"
+        );
+        assert!(
+            src.contains("Estimated wall clock"),
+            "multi-target start must print ceil(targets/concurrency)*duration"
+        );
     }
 }

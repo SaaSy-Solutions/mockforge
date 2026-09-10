@@ -99,6 +99,11 @@ pub struct K6ScriptTemplateData {
     pub geo_source_ips_json: String,
     /// JSON-array string of `geo_source_headers` ready for embedding.
     pub geo_source_headers_json: String,
+    /// Round 63 (#79): when true, the rendered script documents
+    /// `GODEBUG=http2client=0`. HTTP/2 forbids `Connection`; WAF hop-by-hop
+    /// cases need HTTP/1.1. mockforge bench also sets the env when it
+    /// invokes k6. Must be present on every render path (#79).
+    pub force_http1: bool,
 }
 
 /// Typed template data for `k6_crud_flow.hbs`.
@@ -197,6 +202,10 @@ pub struct K6ScriptGenerator {
     /// Round 62 (#79) — failure-rate threshold for the abort valve. Default
     /// 0.95. Tunable via `--abort-on-error-rate`.
     abort_on_error_rate: f64,
+    /// Round 63 (#79) — force HTTP/1.1 even when this run's templates do
+    /// not currently set `Connection` (`--wafbench-verbatim` files routinely
+    /// do). Combined with auto-detect on template / custom headers.
+    force_http1: bool,
 }
 
 impl K6ScriptGenerator {
@@ -211,7 +220,17 @@ impl K6ScriptGenerator {
             templates,
             abort_on_error: true,
             abort_on_error_rate: 0.95,
+            force_http1: false,
         }
+    }
+
+    /// Round 63 (#79) — opt the generated script into the HTTP/1.1 comment
+    /// (`GODEBUG=http2client=0`). Also auto-detected when any template or
+    /// custom header is named `Connection`.
+    #[must_use]
+    pub fn with_force_http1(mut self, force_http1: bool) -> Self {
+        self.force_http1 = force_http1;
+        self
     }
 
     /// Configure the k6 abort-on-error memory safety valve (round 62 / #79).
@@ -226,6 +245,16 @@ impl K6ScriptGenerator {
         self.abort_on_error = abort_on_error;
         self.abort_on_error_rate = abort_on_error_rate;
         self
+    }
+
+    /// HTTP/2 forbids `Connection`. Keep the header (it IS the WAF case)
+    /// and force HTTP/1.1 instead.
+    pub fn should_force_http1(&self) -> bool {
+        crate::request_gen::should_force_k6_http1(
+            self.force_http1,
+            &self.templates,
+            &self.config.custom_headers,
+        )
     }
 
     /// Generate the k6 script
@@ -513,6 +542,7 @@ impl K6ScriptGenerator {
                 .unwrap_or_else(|_| "[]".to_string()),
             geo_source_headers_json: serde_json::to_string(&self.config.geo_source_headers)
                 .unwrap_or_else(|_| "[]".to_string()),
+            force_http1: self.should_force_http1(),
         })
     }
 
@@ -2710,5 +2740,95 @@ export default function() {{}}
             !script.contains("EMPTY_JAR"),
             "Script should NOT use shared EMPTY_JAR (accumulates Set-Cookie responses)"
         );
+    }
+
+    /// Round 63 (#79): a `Connection` header stays in the script (it is the
+    /// WAF case) and `force_http1` documents GODEBUG=http2client=0. Stripping
+    /// the header would skip the hop-by-hop test.
+    #[test]
+    fn connection_header_forces_http1_comment_and_stays_on_the_wire() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+
+        let operation = ApiOperation {
+            method: "get".to_string(),
+            path: "/hop".to_string(),
+            operation: Operation::default(),
+            operation_id: Some("hop".to_string()),
+        };
+        let mut headers = HashMap::new();
+        headers.insert("Connection".to_string(), "Transfer-Encoding, keep-alive".to_string());
+        let template = RequestTemplate {
+            operation,
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers,
+            body: None,
+        };
+        let config = K6Config {
+            target_url: "https://waf.example.com".to_string(),
+            base_path: None,
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 1,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: true,
+            security_testing_enabled: false,
+            chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
+        };
+        let generator = K6ScriptGenerator::new(config, vec![template]);
+        assert!(generator.should_force_http1());
+        let data = generator.build_template_data().expect("template data");
+        assert!(data.force_http1);
+        let script = generator.generate().expect("script generates");
+        assert!(
+            script.contains("GODEBUG=http2client=0"),
+            "script must tell a manual k6 run to disable HTTP/2"
+        );
+        assert!(
+            script.contains("Transfer-Encoding, keep-alive"),
+            "Connection value must stay in the script; stripping it skips the WAF case"
+        );
+        assert!(
+            script.contains("\"Connection\"") || script.contains("Connection"),
+            "Connection header key must stay on the wire"
+        );
+    }
+
+    /// `--wafbench-verbatim` forces the HTTP/1.1 comment even when this
+    /// particular file has no Connection header (the mix usually does).
+    #[test]
+    fn verbatim_flag_forces_http1_comment_without_connection_header() {
+        let config = K6Config {
+            target_url: "https://waf.example.com".to_string(),
+            base_path: None,
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 1,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: true,
+            security_testing_enabled: false,
+            chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
+        };
+        let generator = K6ScriptGenerator::new(config, vec![]).with_force_http1(true);
+        assert!(generator.should_force_http1());
+        let script = generator.generate().expect("script generates");
+        assert!(script.contains("GODEBUG=http2client=0"));
     }
 }
