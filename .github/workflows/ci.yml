@@ -38,7 +38,7 @@ jobs:
   # stay mergeable without burning self-hosted runner time on a full Rust build.
   changes:
     name: Detect change scope
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     outputs:
       code: ${{ steps.filter.outputs.code }}
@@ -468,7 +468,7 @@ jobs:
     # GitHub-hosted: a pure text check needs no Rust toolchain, and the repo is
     # public so standard runners are free. Keeps the contended self-hosted Rust
     # slot for jobs that actually compile. (No per-runner CARGO_HOME needed.)
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     steps:
     - name: Checkout repository
@@ -481,7 +481,7 @@ jobs:
     name: Changelog Validation
     # GitHub-hosted: a git-diff + shell check needs no Rust toolchain; public
     # repo → free standard runner, and it frees the self-hosted Rust slot.
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 15
     if: github.event_name == 'pull_request'
     steps:
@@ -527,19 +527,19 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: blacksmith-4vcpu-ubuntu-2404
             target: x86_64-unknown-linux-gnu
             name: linux-x64
-          - os: ubuntu-latest
+          - os: blacksmith-4vcpu-ubuntu-2404
             target: aarch64-unknown-linux-gnu
             name: linux-arm64
-          - os: macos-latest
+          - os: blacksmith-6vcpu-macos-15
             target: x86_64-apple-darwin
             name: macOS-x64
-          - os: macos-latest
+          - os: blacksmith-6vcpu-macos-15
             target: aarch64-apple-darwin
             name: macOS-arm64
-          - os: windows-latest
+          - os: blacksmith-4vcpu-windows-2025
             target: x86_64-pc-windows-msvc
             name: windows-x64
 

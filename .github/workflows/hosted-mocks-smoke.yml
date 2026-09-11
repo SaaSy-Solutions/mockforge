@@ -50,7 +50,7 @@ jobs:
     # #1000: GitHub-hosted, not the self-hosted pool. Pure HTTP checks with no
     # Rust toolchain needed, and mockforge has only two self-hosted runners.
     # The repo is public, so hosted minutes are free.
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     timeout-minutes: 25
 
     env:
