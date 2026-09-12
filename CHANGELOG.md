@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+## [0.3.220] - 2026-09-12
+
+### Fixed
+
+- **[Reality]** `traffic-breakdown.json` no longer repeats `unique` / `total` / `expected_requests` next to `unique_cases` / `projected_*`. Those aliases were a one-release bridge and got read as k6 wire counts. `unique_cases` is still the YAML case count (not traffic on the wire). `projected_per_second` / `projected_over_run` stay the plan. (#79)
+
+
 ## [0.3.219] - 2026-09-10
 
 ### Fixed
