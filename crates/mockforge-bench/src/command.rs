@@ -1650,25 +1650,21 @@ impl BenchCommand {
         rps: Option<u32>,
         duration_secs: Option<u64>,
     ) -> serde_json::Value {
-        // Round 63 (#79): these are the *plan*, not k6 counters. Srikanth
-        // read `expected_requests` as "actually sent on the wire". Honest
-        // names: unique_cases / projected_per_second / projected_over_run.
-        // unique / total / expected_requests stay as one-release aliases.
-        // Do not invent rps=1 when --rps is absent. Do not put "sent" in
-        // the new names. Drop expected_requests_unit (the only unit is HTTP).
+        // #79 (e): this sidecar is the *plan*, not k6 counters. unique_cases
+        // is the YAML case count, not "sent on the wire". projected_* is
+        // unique_cases * rps [* duration]. Do not invent rps=1 when --rps
+        // is absent. Do not put "sent" in the names. The 0.3.219 aliases
+        // (unique / total / expected_requests) are gone: they duplicated
+        // the honest keys and people read unique_* as observed traffic.
         let per_second = rps.filter(|&r| r > 0).map(|r| (unique as u64).saturating_mul(r as u64));
-        let total = per_second.unwrap_or(unique as u64);
         let projected_over_run = match (rps.filter(|&r| r > 0), duration_secs) {
             (Some(r), Some(d)) => Some((unique as u64).saturating_mul(r as u64).saturating_mul(d)),
             _ => None,
         };
         serde_json::json!({
             "unique_cases": unique,
-            "unique": unique,
             "projected_per_second": per_second,
-            "total": total,
             "projected_over_run": projected_over_run,
-            "expected_requests": projected_over_run,
         })
     }
 
@@ -1722,7 +1718,7 @@ impl BenchCommand {
         let payload = serde_json::json!({
             "rps": rps,
             "duration_secs": duration_secs,
-            "note": "Plan, not k6 counters: unique_cases is YAML case count, projected_per_second is unique_cases * rps, projected_over_run is unique_cases * rps * duration_secs. Assumes each k6 iteration sends every unique case. projected_* are null when --rps is unset. unique/total/expected_requests are aliases for one release.",
+            "note": "Plan, not k6 counters. unique_cases is the YAML case count (not traffic on the wire). projected_per_second is unique_cases * rps. projected_over_run is unique_cases * rps * duration_secs, assuming each k6 iteration sends every unique case. projected_* are null when --rps is unset.",
             "files": files,
         });
         if let Some(parent) = self.output.parent() {
@@ -1760,9 +1756,13 @@ impl BenchCommand {
         for file in files {
             let name = file.get("file").and_then(|x| x.as_str()).unwrap_or("?");
             let bucket = |key: &str| -> String {
+                // End-of-run reprint reads unique_cases from the sidecar we
+                // just wrote. Fall back to the 0.3.219 `unique` alias so a
+                // leftover traffic-breakdown.json from that release still
+                // prints instead of all zeros.
                 let unique = file
                     .get(key)
-                    .and_then(|b| b.get("unique"))
+                    .and_then(|b| b.get("unique_cases").or_else(|| b.get("unique")))
                     .and_then(|u| u.as_u64())
                     .unwrap_or(0) as usize;
                 Self::format_unique_total(unique, self.target_rps.filter(|&r| r > 0))
@@ -5127,15 +5127,23 @@ mod tests {
         assert_eq!(v["rps"], 50);
         assert_eq!(v["duration_secs"], 1200);
         assert_eq!(v["files"][0]["sent"]["unique_cases"], 5);
-        assert_eq!(v["files"][0]["sent"]["unique"], 5);
         assert_eq!(v["files"][0]["sent"]["projected_per_second"], 250);
-        assert_eq!(v["files"][0]["sent"]["total"], 250);
         assert_eq!(v["files"][0]["sent"]["projected_over_run"], 300000);
-        assert_eq!(v["files"][0]["sent"]["expected_requests"], 300000);
-        assert!(v["files"][0]["sent"].get("expected_requests_unit").is_none());
-        assert_eq!(v["files"][0]["attack"]["total"], 150);
-        assert_eq!(v["files"][0]["normal"]["total"], 100);
+        assert_eq!(v["files"][0]["attack"]["projected_per_second"], 150);
+        assert_eq!(v["files"][0]["normal"]["projected_per_second"], 100);
+        for gone in [
+            "unique",
+            "total",
+            "expected_requests",
+            "expected_requests_unit",
+        ] {
+            assert!(
+                v["files"][0]["sent"].get(gone).is_none(),
+                "{gone} alias must not appear in traffic-breakdown.json"
+            );
+        }
         assert!(v["note"].as_str().unwrap().contains("Plan, not k6 counters"));
+        assert!(v["note"].as_str().unwrap().contains("not traffic on the wire"));
         assert_eq!(
             BenchCommand::format_unique_total(5, Some(50)),
             "unique_cases=5 projected_per_second=250 (5 * 50 RPS)"
@@ -5146,7 +5154,7 @@ mod tests {
     /// #79 (e): without --rps, do not invent rps=1. unique*1*60 looked
     /// like a duration (300) on a 60s run.
     #[test]
-    fn traffic_breakdown_json_omits_expected_requests_without_rps() {
+    fn traffic_breakdown_json_omits_projected_without_rps() {
         let dir = std::env::temp_dir().join(format!(
             "mf-traffic-breakdown-norps-{}-{}",
             std::process::id(),
@@ -5178,11 +5186,14 @@ mod tests {
         assert!(v["rps"].is_null());
         assert_eq!(v["duration_secs"], 60);
         assert_eq!(v["files"][0]["sent"]["unique_cases"], 5);
-        assert_eq!(v["files"][0]["sent"]["unique"], 5);
         assert!(v["files"][0]["sent"]["projected_per_second"].is_null());
-        assert_eq!(v["files"][0]["sent"]["total"], 5);
         assert!(v["files"][0]["sent"]["projected_over_run"].is_null());
-        assert!(v["files"][0]["sent"]["expected_requests"].is_null());
+        for gone in ["unique", "total", "expected_requests"] {
+            assert!(
+                v["files"][0]["sent"].get(gone).is_none(),
+                "{gone} alias must not appear when --rps is unset"
+            );
+        }
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
