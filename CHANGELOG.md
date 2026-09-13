@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+## [0.3.221] - 2026-09-12
+
+### Fixed
+
+- **[Contracts]** OpenAPI 3.1 schema `type` arrays (`["string", "null"]`) are coerced to OAS 3.0 `type` + `nullable` so the spec loads. LLM-generated specs failed with `invalid type: sequence, expected a string` and never extracted operations. (#79)
+
+
 ## [0.3.220] - 2026-09-12
 
 ### Fixed
