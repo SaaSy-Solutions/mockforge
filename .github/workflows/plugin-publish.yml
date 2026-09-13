@@ -29,7 +29,7 @@ env:
 jobs:
   validate:
     name: Validate Plugin
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     outputs:
       plugin_name: ${{ steps.manifest.outputs.name }}
       plugin_version: ${{ steps.manifest.outputs.version }}
@@ -67,7 +67,7 @@ jobs:
   security-scan:
     name: Security Scan
     needs: validate
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
 
     steps:
       - name: Checkout code
@@ -105,15 +105,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
+        os: [blacksmith-4vcpu-ubuntu-2404, blacksmith-6vcpu-macos-15, blacksmith-4vcpu-windows-2025]
         include:
-          - os: ubuntu-latest
+          - os: blacksmith-4vcpu-ubuntu-2404
             target: x86_64-unknown-linux-gnu
             ext: so
-          - os: macos-latest
+          - os: blacksmith-6vcpu-macos-15
             target: aarch64-apple-darwin
             ext: dylib
-          - os: windows-latest
+          - os: blacksmith-4vcpu-windows-2025
             target: x86_64-pc-windows-msvc
             ext: dll
 
@@ -154,7 +154,7 @@ jobs:
   publish:
     name: Publish to Registry
     needs: [validate, build]
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)
 
     steps:
@@ -208,7 +208,7 @@ jobs:
   dry-run:
     name: Dry Run (Validation Only)
     needs: [validate, security-scan, build]
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: github.event_name == 'workflow_dispatch' && inputs.dry_run
 
     steps:
@@ -238,7 +238,7 @@ jobs:
   notify:
     name: Notify
     needs: [publish]
-    runs-on: ubuntu-latest
+    runs-on: blacksmith-4vcpu-ubuntu-2404
     if: always()
 
     steps:
