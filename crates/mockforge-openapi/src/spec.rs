@@ -66,8 +66,98 @@ fn fill_missing_operation_responses(raw: &mut serde_json::Value) -> usize {
     repaired
 }
 
-/// Apply [`fill_missing_operation_responses`] and warn once if anything was
-/// repaired, so a non-conformant spec is visible rather than silently accepted.
+/// JSON Schema primitive names that OAS 3.1 may put in a `type` array.
+/// Anything else under a key named `type` is left alone (security schemes
+/// use a string; vendor junk should not be rewritten).
+const JSON_SCHEMA_TYPE_NAMES: &[&str] = &[
+    "null", "boolean", "object", "array", "number", "string", "integer",
+];
+
+fn is_json_schema_type_name(name: &str) -> bool {
+    JSON_SCHEMA_TYPE_NAMES.contains(&name)
+}
+
+/// Convert OAS 3.1 JSON Schema `type` arrays into OAS 3.0 `type` + `nullable`.
+///
+/// `openapiv3` deserializes schema `type` as a string. OAS 3.1 (JSON Schema
+/// 2020-12) allows `type: ["string", "null"]`. LLM-generated specs do this
+/// constantly. Serde then fails with `invalid type: sequence, expected a
+/// string` and no JSON path, so a 1.8MB document is unusable.
+///
+/// Reported by Srikanth on #79 (i): `custom_limit_oas.json` (openapi 3.1.0)
+/// had exactly two such arrays (`taxId`, `nickname`) and `mockforge bench`
+/// died before extracting any of its 1750 operations.
+///
+/// The repair is narrow:
+/// - only rewrite `type` when every array element is a JSON Schema type name
+/// - `["string", "null"]` (either order) becomes `type: "string"` plus
+///   `nullable: true`
+/// - `["string"]` becomes `type: "string"`
+/// - a union of two non-null primitives takes the first; `openapiv3` cannot
+///   represent that union, and failing the whole spec is worse
+/// - `required: ["a", "b"]` and other string arrays are not `type`, so they
+///   are not touched
+fn coerce_json_schema_type_arrays(raw: &mut serde_json::Value) -> usize {
+    fn walk(value: &mut serde_json::Value) -> usize {
+        let mut repaired = 0;
+        match value {
+            serde_json::Value::Object(map) => {
+                repaired += coerce_type_array_in_object(map);
+                for child in map.values_mut() {
+                    repaired += walk(child);
+                }
+            }
+            serde_json::Value::Array(items) => {
+                for child in items {
+                    repaired += walk(child);
+                }
+            }
+            _ => {}
+        }
+        repaired
+    }
+    walk(raw)
+}
+
+fn coerce_type_array_in_object(map: &mut serde_json::Map<String, serde_json::Value>) -> usize {
+    let Some(serde_json::Value::Array(items)) = map.get("type") else {
+        return 0;
+    };
+    if items.is_empty() {
+        return 0;
+    }
+
+    // Reject anything that is not a JSON Schema type-name array. A `required`
+    // list lives under a different key; this guard is for a `type` that
+    // happens to be an array of something else.
+    let mut names = Vec::with_capacity(items.len());
+    for item in items {
+        let Some(name) = item.as_str() else {
+            return 0;
+        };
+        if !is_json_schema_type_name(name) {
+            return 0;
+        }
+        names.push(name.to_string());
+    }
+
+    let nullable = names.iter().any(|n| n == "null");
+    let mut non_null = names.into_iter().filter(|n| n != "null");
+    // `type: ["null"]` has no remaining primitive. `string` is the least-wrong
+    // stand-in so the document still deserializes.
+    let primary = non_null.next().unwrap_or_else(|| "string".to_string());
+
+    map.insert("type".to_string(), serde_json::Value::String(primary));
+    if nullable {
+        // OAS 3.0 equivalent of including "null" in a 3.1 type union.
+        map.insert("nullable".to_string(), serde_json::Value::Bool(true));
+    }
+    1
+}
+
+/// Apply [`fill_missing_operation_responses`] and
+/// [`coerce_json_schema_type_arrays`], warning once per kind so a
+/// non-conformant spec is visible rather than silently accepted.
 fn repair_spec_for_parsing(raw: &mut serde_json::Value, source: &str) {
     let repaired = fill_missing_operation_responses(raw);
     if repaired > 0 {
@@ -76,6 +166,15 @@ fn repair_spec_for_parsing(raw: &mut serde_json::Value, source: &str) {
              requires. Treating them as having no declared responses so the spec can load. \
              Request generation does not use `responses`, but response-schema validation \
              will have nothing to check for these operations."
+        );
+    }
+
+    let type_arrays = coerce_json_schema_type_arrays(raw);
+    if type_arrays > 0 {
+        tracing::warn!(
+            "{source}: {type_arrays} schema `type` value(s) were OpenAPI 3.1 type arrays \
+             (for example `[\"string\", \"null\"]`). Coerced them to OpenAPI 3.0 `type` + \
+             `nullable` so the spec can load."
         );
     }
 }
@@ -221,10 +320,11 @@ impl OpenApiSpec {
             })?;
             (converted, spec)
         } else {
-            let json_for_doc = json.clone();
-            let spec: OpenAPI = serde_json::from_value(json)
+            let mut json = json;
+            repair_spec_for_parsing(&mut json, "OpenAPI spec");
+            let spec: OpenAPI = serde_json::from_value(json.clone())
                 .map_err(|e| Error::config(format!("Failed to parse JSON OpenAPI spec: {}", e)))?;
-            (json_for_doc, spec)
+            (json, spec)
         };
 
         Ok(Self {
@@ -856,5 +956,103 @@ mod missing_responses_tests {
         assert!(path["parameters"].is_array(), "parameters untouched");
         assert!(path["servers"].is_array(), "servers untouched");
         assert!(path["get"]["responses"].is_object(), "get repaired");
+    }
+}
+
+#[cfg(test)]
+mod oas31_type_array_tests {
+    use super::*;
+    use openapiv3::{SchemaKind, Type};
+
+    /// Srikanth #79 (i): OAS 3.1 `type: ["string", "null"]` must load, because
+    /// that is what LLM-generated specs emit and `openapiv3` cannot deserialize
+    /// a sequence into a string `type`.
+    #[test]
+    fn oas31_nullable_type_array_loads() {
+        let raw = r#"{
+            "openapi": "3.1.0",
+            "info": { "title": "limit", "version": "1" },
+            "paths": {
+                "/companies": {
+                    "post": {
+                        "responses": { "200": { "description": "ok" } },
+                        "requestBody": {
+                            "content": {
+                                "application/json": {
+                                    "schema": {
+                                        "type": "object",
+                                        "properties": {
+                                            "taxId": { "type": ["string", "null"] }
+                                        },
+                                        "required": ["taxId"]
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "components": {
+                "schemas": {
+                    "ResourceBase": {
+                        "type": "object",
+                        "properties": {
+                            "nickname": { "type": ["null", "string"] }
+                        }
+                    }
+                }
+            }
+        }"#;
+
+        let spec = OpenApiSpec::from_string(raw, Some("json"))
+            .expect("OAS 3.1 type: [string, null] must load for bench use");
+
+        let schema = spec
+            .resolve_schema_ref("#/components/schemas/ResourceBase")
+            .expect("ResourceBase present");
+        let SchemaKind::Type(Type::Object(obj)) = schema.schema_kind else {
+            panic!("ResourceBase should be an object after the type-array coerce");
+        };
+        let nickname = obj.properties.get("nickname").expect("nickname property");
+        let ReferenceOr::Item(nickname) = nickname else {
+            panic!("nickname should be inline");
+        };
+        assert!(
+            nickname.schema_data.nullable,
+            "`null` in the 3.1 type union becomes OAS 3.0 nullable"
+        );
+        assert!(
+            matches!(nickname.schema_kind, SchemaKind::Type(Type::String(_))),
+            "remaining primitive is string"
+        );
+    }
+
+    /// `required` is a string array too. The walker must not treat it as `type`.
+    #[test]
+    fn required_arrays_are_not_rewritten() {
+        let mut raw: serde_json::Value = serde_json::from_str(
+            r#"{
+                "components": {
+                    "schemas": {
+                        "A": { "type": "object", "required": ["a", "b"] }
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+        let before = raw.clone();
+        assert_eq!(coerce_json_schema_type_arrays(&mut raw), 0);
+        assert_eq!(raw, before, "required arrays must stay arrays of strings");
+    }
+
+    /// A lone `["string"]` (legal OAS 3.1) becomes a 3.0 string type, with no
+    /// `nullable` flag invented.
+    #[test]
+    fn singleton_type_array_becomes_string() {
+        let mut raw: serde_json::Value =
+            serde_json::from_str(r#"{"properties": {"id": {"type": ["string"]}}}"#).unwrap();
+        assert_eq!(coerce_json_schema_type_arrays(&mut raw), 1);
+        assert_eq!(raw["properties"]["id"]["type"], "string");
+        assert!(raw["properties"]["id"].get("nullable").is_none());
     }
 }
