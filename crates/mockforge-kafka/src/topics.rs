@@ -68,27 +68,41 @@ impl Topic {
         }
     }
 
-    /// Produce a record to the appropriate partition
+    /// Produce a record to the appropriate partition.
     pub async fn produce(
         &mut self,
         partition: i32,
         record: crate::partitions::KafkaMessage,
     ) -> mockforge_core::Result<i64> {
+        self.produce_with_retention_decision(partition, record, true).await
+    }
+
+    /// Produce a record while deciding whether it should be retained in memory.
+    pub async fn produce_with_retention_decision(
+        &mut self,
+        partition: i32,
+        record: crate::partitions::KafkaMessage,
+        keep_in_memory: bool,
+    ) -> mockforge_core::Result<i64> {
         let retention_ms = self.config.retention_ms;
         if let Some(partition) = self.partitions.get_mut(partition as usize) {
-            let offset = partition.append(record);
-            // Enforce per-partition retention/size caps so the log can't grow
-            // unbounded (#753).
-            let now_ms = std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .map(|d| d.as_millis() as i64)
-                .unwrap_or(0);
-            partition.trim(
-                retention_ms,
-                now_ms,
-                crate::partitions::MAX_LOG_MESSAGES,
-                crate::partitions::MAX_LOG_BYTES,
-            );
+            let offset = partition.append_with_retention(record, keep_in_memory);
+
+            if keep_in_memory {
+                // Enforce per-partition retention/size caps so the log can't grow
+                // unbounded (#753).
+                let now_ms = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_millis() as i64)
+                    .unwrap_or(0);
+                partition.trim(
+                    retention_ms,
+                    now_ms,
+                    crate::partitions::MAX_LOG_MESSAGES,
+                    crate::partitions::MAX_LOG_BYTES,
+                );
+            }
+
             Ok(offset)
         } else {
             Err(mockforge_core::Error::internal(format!(
@@ -257,5 +271,28 @@ mod tests {
         let debug = format!("{:?}", config);
         assert!(debug.contains("TopicConfig"));
         assert!(debug.contains("num_partitions"));
+    }
+
+    #[tokio::test]
+    async fn test_produce_with_retention_decision_can_drop_from_memory() {
+        let mut topic = Topic::new("filtered".to_string(), TopicConfig::default());
+        let offset = topic
+            .produce_with_retention_decision(
+                0,
+                crate::partitions::KafkaMessage {
+                    offset: 0,
+                    timestamp: 0,
+                    key: Some(b"k".to_vec()),
+                    value: b"v".to_vec(),
+                    headers: vec![],
+                },
+                false,
+            )
+            .await
+            .expect("produce");
+
+        assert_eq!(offset, 0);
+        assert_eq!(topic.partitions[0].high_watermark, 1);
+        assert!(topic.partitions[0].messages.is_empty());
     }
 }
