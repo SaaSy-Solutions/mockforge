@@ -104,6 +104,11 @@ pub struct K6ScriptTemplateData {
     /// cases need HTTP/1.1. mockforge bench also sets the env when it
     /// invokes k6. Must be present on every render path (#79).
     pub force_http1: bool,
+    /// Round 65 (#79): when true, emit a Trend+Rate pair per operation.
+    /// Huge OAS / long longevity runs leave this false so k6 RSS stays
+    /// bounded (Srikanth's 1750-op / 24h SIGKILL). Must be present on every
+    /// render path (#79).
+    pub per_op_metrics: bool,
 }
 
 /// Typed template data for `k6_crud_flow.hbs`.
@@ -192,6 +197,87 @@ pub struct K6Config {
     pub geo_source_headers: Vec<String>,
 }
 
+/// Op-count at/above which per-op Trend/Rate metrics auto-disable unless
+/// `--per-op-metrics` forces them on. Srikanth #79 longevity: 1750 ops × 2
+/// metrics × 10 parallel k6 OOMed an 8–14GB client after ~5h.
+pub const PER_OP_METRICS_AUTO_OPS_THRESHOLD: usize = 500;
+
+/// Duration (seconds) at/above which per-op metrics auto-disable. Longevity
+/// runs grow k6 RSS from metric samples even with modest op counts.
+pub const PER_OP_METRICS_AUTO_DURATION_SECS: u64 = 3600;
+
+/// Default `--max-concurrency` when unset and the spec is not huge.
+pub const MAX_CONCURRENCY_DEFAULT: usize = 10;
+
+/// Default `--max-concurrency` when unset and `op_count` is huge. Caps how
+/// many heavyweight k6 processes share one box.
+pub const MAX_CONCURRENCY_HUGE_SPEC: usize = 3;
+
+/// Op-count at/above which the huge-spec concurrency default applies.
+pub const HUGE_SPEC_OPS_THRESHOLD: usize = 500;
+
+/// Resolve whether the rendered script should emit per-operation metrics.
+///
+/// `explicit`: `Some(true)` / `Some(false)` from `--per-op-metrics` /
+/// `--no-per-op-metrics`. `None` uses the auto rule. Returns `(emit, warn)`
+/// where `warn` explains an auto-off decision.
+pub fn resolve_per_op_metrics(
+    explicit: Option<bool>,
+    op_count: usize,
+    duration_secs: u64,
+) -> (bool, Option<String>) {
+    if let Some(force) = explicit {
+        return (force, None);
+    }
+    if op_count >= PER_OP_METRICS_AUTO_OPS_THRESHOLD {
+        return (
+            false,
+            Some(format!(
+                "Auto-disabled per-operation k6 metrics ({op_count} ops >= \
+                 {PER_OP_METRICS_AUTO_OPS_THRESHOLD}). Huge metric sets grow RSS \
+                 on long runs and can OOM (SIGKILL). Force on with --per-op-metrics; \
+                 keep off with --no-per-op-metrics."
+            )),
+        );
+    }
+    if duration_secs >= PER_OP_METRICS_AUTO_DURATION_SECS {
+        return (
+            false,
+            Some(format!(
+                "Auto-disabled per-operation k6 metrics (duration {duration_secs}s >= \
+                 {PER_OP_METRICS_AUTO_DURATION_SECS}s). Longevity runs accumulate metric \
+                 samples until the OOM killer fires. Force on with --per-op-metrics."
+            )),
+        );
+    }
+    (true, None)
+}
+
+/// Resolve multi-target concurrency. `explicit` is `Some(n)` when the user
+/// passed `--max-concurrency`; `None` picks 10 normally or 3 for huge specs.
+pub fn resolve_max_concurrency(
+    explicit: Option<usize>,
+    op_count: usize,
+    n_targets: usize,
+) -> (usize, Option<String>) {
+    let n_targets = n_targets.max(1);
+    if let Some(n) = explicit {
+        return (n.max(1).min(n_targets), None);
+    }
+    if op_count >= HUGE_SPEC_OPS_THRESHOLD {
+        let conc = MAX_CONCURRENCY_HUGE_SPEC.min(n_targets);
+        return (
+            conc,
+            Some(format!(
+                "Auto-capped --max-concurrency to {conc} ({op_count} ops >= \
+                 {HUGE_SPEC_OPS_THRESHOLD}). Parallel heavyweight k6 scripts share \
+                 RAM; override with --max-concurrency N."
+            )),
+        );
+    }
+    (MAX_CONCURRENCY_DEFAULT.min(n_targets), None)
+}
+
 /// Generate k6 load test script
 pub struct K6ScriptGenerator {
     config: K6Config,
@@ -206,6 +292,9 @@ pub struct K6ScriptGenerator {
     /// not currently set `Connection` (`--wafbench-verbatim` files routinely
     /// do). Combined with auto-detect on template / custom headers.
     force_http1: bool,
+    /// Round 65 (#79) — emit per-op Trend/Rate metrics. Defaults to true;
+    /// callers apply [`resolve_per_op_metrics`] before setting this.
+    per_op_metrics: bool,
 }
 
 impl K6ScriptGenerator {
@@ -221,6 +310,9 @@ impl K6ScriptGenerator {
             abort_on_error: true,
             abort_on_error_rate: 0.95,
             force_http1: false,
+            // Default on; callers that know op count / duration should set
+            // via with_per_op_metrics(resolve_per_op_metrics(...).0).
+            per_op_metrics: true,
         }
     }
 
@@ -230,6 +322,14 @@ impl K6ScriptGenerator {
     #[must_use]
     pub fn with_force_http1(mut self, force_http1: bool) -> Self {
         self.force_http1 = force_http1;
+        self
+    }
+
+    /// Round 65 (#79) — enable or disable per-operation Trend/Rate metrics
+    /// in the rendered script.
+    #[must_use]
+    pub fn with_per_op_metrics(mut self, per_op_metrics: bool) -> Self {
+        self.per_op_metrics = per_op_metrics;
         self
     }
 
@@ -543,6 +643,7 @@ impl K6ScriptGenerator {
             geo_source_headers_json: serde_json::to_string(&self.config.geo_source_headers)
                 .unwrap_or_else(|_| "[]".to_string()),
             force_http1: self.should_force_http1(),
+            per_op_metrics: self.per_op_metrics,
         })
     }
 
@@ -2830,5 +2931,130 @@ export default function() {{}}
         assert!(generator.should_force_http1());
         let script = generator.generate().expect("script generates");
         assert!(script.contains("GODEBUG=http2client=0"));
+    }
+
+    /// Round 65 (#79) — auto-off when op count or duration is huge.
+    #[test]
+    fn resolve_per_op_metrics_auto_and_explicit() {
+        let (on, warn) = resolve_per_op_metrics(None, 10, 60);
+        assert!(on);
+        assert!(warn.is_none());
+
+        let (off, warn) = resolve_per_op_metrics(None, PER_OP_METRICS_AUTO_OPS_THRESHOLD, 60);
+        assert!(!off);
+        assert!(warn.as_ref().unwrap().contains("Auto-disabled"));
+
+        let (off, warn) = resolve_per_op_metrics(None, 10, PER_OP_METRICS_AUTO_DURATION_SECS);
+        assert!(!off);
+        assert!(warn.as_ref().unwrap().contains("duration"));
+
+        let (forced_on, warn) =
+            resolve_per_op_metrics(Some(true), PER_OP_METRICS_AUTO_OPS_THRESHOLD, 86_400);
+        assert!(forced_on);
+        assert!(warn.is_none());
+
+        let (forced_off, warn) = resolve_per_op_metrics(Some(false), 1, 1);
+        assert!(!forced_off);
+        assert!(warn.is_none());
+    }
+
+    #[test]
+    fn resolve_max_concurrency_auto_caps_huge_specs() {
+        let (n, warn) = resolve_max_concurrency(None, 10, 50);
+        assert_eq!(n, MAX_CONCURRENCY_DEFAULT);
+        assert!(warn.is_none());
+
+        let (n, warn) = resolve_max_concurrency(None, HUGE_SPEC_OPS_THRESHOLD, 50);
+        assert_eq!(n, MAX_CONCURRENCY_HUGE_SPEC);
+        assert!(warn.as_ref().unwrap().contains("Auto-capped"));
+
+        let (n, warn) = resolve_max_concurrency(Some(20), HUGE_SPEC_OPS_THRESHOLD, 50);
+        assert_eq!(n, 20);
+        assert!(warn.is_none());
+
+        // Never exceed target count.
+        let (n, _) = resolve_max_concurrency(Some(100), 10, 3);
+        assert_eq!(n, 3);
+    }
+
+    /// Round 65 (#79) — huge-op scripts omit Trend/Rate per operation.
+    #[test]
+    fn per_op_metrics_false_omits_trend_rate_declarations() {
+        use crate::spec_parser::ApiOperation;
+        use openapiv3::Operation;
+
+        let config = K6Config {
+            target_url: "http://localhost:3000".to_string(),
+            base_path: None,
+            scenario: LoadScenario::Constant,
+            duration_secs: 30,
+            max_vus: 1,
+            threshold_percentile: "p(95)".to_string(),
+            threshold_ms: 500,
+            max_error_rate: 0.05,
+            auth_header: None,
+            custom_headers: HashMap::new(),
+            skip_tls_verify: false,
+            security_testing_enabled: false,
+            chunked_request_bodies: false,
+            target_rps: None,
+            no_keep_alive: false,
+            geo_source_ips: Vec::new(),
+            geo_source_headers: Vec::new(),
+        };
+        let template = RequestTemplate {
+            operation: ApiOperation {
+                method: "get".to_string(),
+                path: "/users".to_string(),
+                operation: Operation::default(),
+                operation_id: Some("get_users".to_string()),
+            },
+            path_params: HashMap::new(),
+            query_params: HashMap::new(),
+            headers: HashMap::new(),
+            body: None,
+        };
+        let on_script = K6ScriptGenerator::new(
+            K6Config {
+                target_url: "http://localhost:3000".to_string(),
+                base_path: None,
+                scenario: LoadScenario::Constant,
+                duration_secs: 30,
+                max_vus: 1,
+                threshold_percentile: "p(95)".to_string(),
+                threshold_ms: 500,
+                max_error_rate: 0.05,
+                auth_header: None,
+                custom_headers: HashMap::new(),
+                skip_tls_verify: false,
+                security_testing_enabled: false,
+                chunked_request_bodies: false,
+                target_rps: None,
+                no_keep_alive: false,
+                geo_source_ips: Vec::new(),
+                geo_source_headers: Vec::new(),
+            },
+            vec![template.clone()],
+        )
+        .with_per_op_metrics(true)
+        .generate()
+        .unwrap();
+        assert!(
+            on_script.contains("new Trend(") && on_script.contains("_latency"),
+            "per_op_metrics=true must emit per-op Trend"
+        );
+
+        let off_script = K6ScriptGenerator::new(config, vec![template])
+            .with_per_op_metrics(false)
+            .generate()
+            .unwrap();
+        assert!(
+            off_script.contains("Per-operation Trend/Rate metrics omitted"),
+            "per_op_metrics=false must document the omission"
+        );
+        assert!(
+            !off_script.contains("get_users_latency") && !off_script.contains("get_users_errors"),
+            "per_op_metrics=false must not declare per-op Trend/Rate vars"
+        );
     }
 }

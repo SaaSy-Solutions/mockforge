@@ -463,11 +463,36 @@ impl K6Executor {
 
         // k6 exit code 99 = thresholds crossed. The test DID run and summary.json
         // should still be present. Only treat non-99 failures as hard errors.
+        //
+        // Round 65 (#79): when the OS OOM-kills k6, `ExitStatus::code()` is
+        // None and Unix reports signal 9 (SIGKILL). Surface that hint so the
+        // next run uses --no-per-op-metrics / lower --max-concurrency /
+        // --discard-response-bodies instead of chasing a phantom k6 bug.
         let exit_code = status.code().unwrap_or(-1);
         if !status.success() && exit_code != 99 {
+            let oom_hint = {
+                #[cfg(unix)]
+                {
+                    use std::os::unix::process::ExitStatusExt;
+                    if status.signal() == Some(9) {
+                        " — process received SIGKILL (signal 9). This is usually the \
+                         Linux OOM killer, not a k6 bug. For huge OpenAPI specs or \
+                         multi-hour longevity runs: pass --no-per-op-metrics, lower \
+                         --max-concurrency, and/or --discard-response-bodies; ensure \
+                         the client has enough RAM (see docs.mockforge.dev/reference/\
+                         bench-capacity-sizing.html)."
+                    } else {
+                        ""
+                    }
+                }
+                #[cfg(not(unix))]
+                {
+                    ""
+                }
+            };
             return Err(BenchError::K6ExecutionFailed(format!(
-                "k6 exited with status: {}",
-                status
+                "k6 exited with status: {}{}",
+                status, oom_hint
             )));
         }
         if exit_code == 99 {
