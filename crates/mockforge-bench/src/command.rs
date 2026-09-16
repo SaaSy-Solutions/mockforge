@@ -140,6 +140,10 @@ pub struct BenchCommand {
     /// Default 0.95. Tunable via `--abort-on-error-rate`; ignored when
     /// `abort_on_error` is false.
     pub abort_on_error_rate: f64,
+    /// Round 65 (#79) — per-op Trend/Rate metrics in the rendered k6 script.
+    /// `None` = auto (off when ops >= 500 or duration >= 1h). `Some(true)` /
+    /// `Some(false)` from `--per-op-metrics` / `--no-per-op-metrics`.
+    pub per_op_metrics: Option<bool>,
     pub verbose: bool,
     pub skip_tls_verify: bool,
     /// When true, set `Transfer-Encoding: chunked` on every k6 request body so
@@ -969,9 +973,22 @@ impl BenchCommand {
             },
         };
 
+        // Round 65 (#79) — collapse per-op metrics on huge / longevity runs
+        // so k6 RSS stays bounded (Srikanth's 1750-op / 24h SIGKILL).
+        let duration_secs = Self::parse_duration(&self.duration)?;
+        let (per_op_metrics, per_op_warn) = crate::k6_gen::resolve_per_op_metrics(
+            self.per_op_metrics,
+            templates.len(),
+            duration_secs,
+        );
+        if let Some(msg) = per_op_warn {
+            TerminalReporter::print_warning(&msg);
+        }
+
         let generator = K6ScriptGenerator::new(k6_config, templates)
             .with_abort_valve(self.abort_on_error, self.abort_on_error_rate)
-            .with_force_http1(force_http1);
+            .with_force_http1(force_http1)
+            .with_per_op_metrics(per_op_metrics);
         let mut script = generator.generate()?;
         TerminalReporter::print_success("k6 script generated");
 
@@ -1085,9 +1102,10 @@ impl BenchCommand {
             return Err(BenchError::Other("No targets found in file".to_string()));
         }
 
-        // Determine max concurrency
-        let max_concurrency = self.max_concurrency.unwrap_or(10) as usize;
-        let max_concurrency = max_concurrency.min(num_targets); // Don't exceed number of targets
+        // Round 65 (#79) — pass the explicit override (or None for auto).
+        // ParallelExecutor resolves the final concurrency after it knows
+        // the op count from the shared / per-target specs.
+        let max_concurrency = self.max_concurrency.map(|n| n as usize);
 
         // Print header for multi-target mode
         TerminalReporter::print_header(
@@ -1126,6 +1144,7 @@ impl BenchCommand {
                 max_error_rate: self.max_error_rate,
                 abort_on_error: self.abort_on_error,
                 abort_on_error_rate: self.abort_on_error_rate,
+                per_op_metrics: self.per_op_metrics,
                 verbose: self.verbose,
                 skip_tls_verify: self.skip_tls_verify,
                 chunked_request_bodies: self.chunked_request_bodies,
@@ -2434,11 +2453,21 @@ impl BenchCommand {
             &custom_headers,
         );
 
+        let duration_secs = Self::parse_duration(&self.duration)?;
+        let (per_op_metrics, per_op_warn) = crate::k6_gen::resolve_per_op_metrics(
+            self.per_op_metrics,
+            templates.len(),
+            duration_secs,
+        );
+        if let Some(msg) = per_op_warn {
+            TerminalReporter::print_warning(&msg);
+        }
+
         let k6_config = K6Config {
             target_url: self.target.clone(),
             base_path,
             scenario,
-            duration_secs: Self::parse_duration(&self.duration)?,
+            duration_secs,
             max_vus: self.vus,
             threshold_percentile: self.threshold_percentile.clone(),
             threshold_ms: self.threshold_ms,
@@ -2466,7 +2495,8 @@ impl BenchCommand {
 
         let generator = K6ScriptGenerator::new(k6_config, templates)
             .with_abort_valve(self.abort_on_error, self.abort_on_error_rate)
-            .with_force_http1(force_http1);
+            .with_force_http1(force_http1)
+            .with_per_op_metrics(per_op_metrics);
         let mut script = generator.generate()?;
 
         // Enhance script with advanced features (security testing, etc.)
@@ -4518,6 +4548,7 @@ mod tests {
             max_error_rate: 0.05,
             abort_on_error: true,
             abort_on_error_rate: 0.95,
+            per_op_metrics: None,
             verbose: false,
             skip_tls_verify: false,
             chunked_request_bodies: false,
@@ -4703,6 +4734,7 @@ mod tests {
             max_error_rate: 0.05,
             abort_on_error: true,
             abort_on_error_rate: 0.95,
+            per_op_metrics: None,
             verbose: false,
             skip_tls_verify: false,
             chunked_request_bodies: false,
@@ -4791,6 +4823,7 @@ mod tests {
             max_error_rate: 0.05,
             abort_on_error: true,
             abort_on_error_rate: 0.95,
+            per_op_metrics: None,
             verbose: false,
             skip_tls_verify: false,
             chunked_request_bodies: false,
@@ -4914,6 +4947,7 @@ mod tests {
             max_error_rate: 0.05,
             abort_on_error: true,
             abort_on_error_rate: 0.95,
+            per_op_metrics: None,
             verbose: false,
             skip_tls_verify: false,
             chunked_request_bodies: false,
@@ -5090,6 +5124,14 @@ mod tests {
         assert!(
             src.contains("print_k6_run_hint"),
             "generate-only must print GODEBUG=http2client=0 when HTTP/1.1 is required"
+        );
+        assert!(
+            src.contains("with_per_op_metrics(per_op_metrics)"),
+            "single-target k6 generation must apply Round-65 per-op metrics collapse (#79)"
+        );
+        assert!(
+            src.contains("resolve_per_op_metrics"),
+            "single-target path must resolve auto/forced per-op metrics (#79)"
         );
     }
 

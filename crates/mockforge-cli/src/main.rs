@@ -1882,6 +1882,18 @@ enum Commands {
         #[arg(long = "abort-on-error-rate", default_value = "0.95")]
         abort_on_error_rate: f64,
 
+        /// Force per-operation Trend/Rate metrics in the generated k6 script.
+        /// Default is auto: on for small specs/short runs; off when the spec
+        /// has >=500 operations or duration is >=1h (huge metric sets grow
+        /// k6 RSS until the OOM killer fires on longevity runs — #79).
+        #[arg(long = "per-op-metrics", overrides_with = "no_per_op_metrics")]
+        per_op_metrics: bool,
+
+        /// Disable per-operation Trend/Rate metrics (use k6 built-ins only).
+        /// Preferred for huge OpenAPI specs and multi-hour longevity runs.
+        #[arg(long = "no-per-op-metrics", overrides_with = "per_op_metrics")]
+        no_per_op_metrics: bool,
+
         /// Enable verbose output
         #[arg(short = 'V', long)]
         verbose: bool,
@@ -1899,10 +1911,12 @@ enum Commands {
         #[arg(long)]
         chunked_request_bodies: bool,
 
-        /// Maximum number of parallel test executions (for multi-target mode)
-        /// Only used when --targets-file is specified
-        #[arg(long, default_value = "10")]
-        max_concurrency: u32,
+        /// Maximum number of parallel test executions (for multi-target mode).
+        /// Only used when --targets-file is specified. Default: 10, or 3 when
+        /// the spec has >=500 operations (auto-cap so parallel heavyweight k6
+        /// scripts do not share-RAM themselves into an OOM — #79).
+        #[arg(long)]
+        max_concurrency: Option<u32>,
 
         /// Results format: "per-target", "aggregated", or "both" (default: "both")
         /// Only used when --targets-file is specified
@@ -3401,6 +3415,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             max_error_rate,
             no_abort_on_error,
             abort_on_error_rate,
+            per_op_metrics,
+            no_per_op_metrics,
             verbose,
             insecure,
             chunked_request_bodies,
@@ -3506,11 +3522,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 max_error_rate,
                 abort_on_error: !no_abort_on_error,
                 abort_on_error_rate,
+                per_op_metrics: if per_op_metrics {
+                    Some(true)
+                } else if no_per_op_metrics {
+                    Some(false)
+                } else {
+                    None
+                },
                 verbose,
                 skip_tls_verify: insecure,
                 chunked_request_bodies,
                 targets_file,
-                max_concurrency: Some(max_concurrency),
+                max_concurrency,
                 results_format,
                 params_file,
                 crud_flow,

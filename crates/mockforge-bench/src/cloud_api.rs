@@ -726,6 +726,7 @@ fn default_bench_command(output_dir: &Path) -> BenchCommand {
         max_error_rate: 0.01,
         abort_on_error: true,
         abort_on_error_rate: 0.95,
+        per_op_metrics: None,
         verbose: false,
         skip_tls_verify: false,
         chunked_request_bodies: false,

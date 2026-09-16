@@ -166,8 +166,9 @@ pub struct ParallelExecutor {
     base_command: BenchCommand,
     /// List of targets to test
     targets: Vec<TargetConfig>,
-    /// Maximum number of concurrent executions
-    max_concurrency: usize,
+    /// Explicit `--max-concurrency` override. `None` means auto (10, or 3
+    /// for huge specs — round 65 / #79).
+    max_concurrency_override: Option<usize>,
     /// Base output directory
     base_output: PathBuf,
 }
@@ -177,13 +178,13 @@ impl ParallelExecutor {
     pub fn new(
         base_command: BenchCommand,
         targets: Vec<TargetConfig>,
-        max_concurrency: usize,
+        max_concurrency: Option<usize>,
     ) -> Self {
         let base_output = base_command.output.clone();
         Self {
             base_command,
             targets,
-            max_concurrency,
+            max_concurrency_override: max_concurrency,
             base_output,
         }
     }
@@ -224,8 +225,8 @@ impl ParallelExecutor {
     pub async fn execute_all(&self) -> Result<AggregatedResults> {
         let total_targets = self.targets.len();
         TerminalReporter::print_progress(&format!(
-            "Starting parallel execution for {} targets (max concurrency: {})",
-            total_targets, self.max_concurrency
+            "Starting parallel execution for {} targets",
+            total_targets
         ));
 
         // Validate k6 installation
@@ -396,11 +397,39 @@ impl ParallelExecutor {
 
         let duration_secs_val = BenchCommand::parse_duration(&self.base_command.duration)?;
 
+        // Round 65 (#79) — resolve concurrency after we know op count so huge
+        // specs auto-cap parallel heavyweight k6 processes.
+        let (max_concurrency, conc_warn) = crate::k6_gen::resolve_max_concurrency(
+            self.max_concurrency_override,
+            templates.len(),
+            total_targets,
+        );
+        if let Some(msg) = conc_warn {
+            TerminalReporter::print_warning(&msg);
+        } else {
+            TerminalReporter::print_progress(&format!(
+                "Max concurrency: {} ({} target{})",
+                max_concurrency,
+                total_targets,
+                if total_targets == 1 { "" } else { "s" },
+            ));
+        }
+
+        // Round 65 (#79) — collapse per-op metrics once for all targets.
+        let (per_op_metrics, per_op_warn) = crate::k6_gen::resolve_per_op_metrics(
+            self.base_command.per_op_metrics,
+            templates.len(),
+            duration_secs_val,
+        );
+        if let Some(msg) = per_op_warn {
+            TerminalReporter::print_warning(&msg);
+        }
+
         // Round 63 (#79): batches of `--max-concurrency` each run the full
         // `--duration`. Wall clock is ceil(targets / concurrency) * duration,
         // not duration alone. --vus and --rps are per target, not shared.
         let (batches, wall_secs) =
-            Self::estimated_wall_clock(total_targets, self.max_concurrency, duration_secs_val);
+            Self::estimated_wall_clock(total_targets, max_concurrency, duration_secs_val);
         TerminalReporter::print_progress(&format!(
             "Estimated wall clock: {batches} batch(es) × {duration_secs_val}s ≈ {} ({wall_secs}s). --vus and --rps are per target, not shared.",
             Self::format_wall_clock(wall_secs),
@@ -433,7 +462,7 @@ impl ParallelExecutor {
         };
 
         // Create semaphore for concurrency control
-        let semaphore = Arc::new(Semaphore::new(self.max_concurrency));
+        let semaphore = Arc::new(Semaphore::new(max_concurrency));
         let multi_progress = MultiProgress::new();
 
         // Create progress bars for each target
@@ -533,6 +562,7 @@ impl ParallelExecutor {
                     max_error_rate,
                     abort_on_error,
                     abort_on_error_rate,
+                    per_op_metrics,
                     verbose,
                     skip_tls_verify,
                     base_path.as_ref(),
@@ -644,6 +674,7 @@ impl ParallelExecutor {
         max_error_rate: f64,
         abort_on_error: bool,
         abort_on_error_rate: f64,
+        per_op_metrics: bool,
         verbose: bool,
         skip_tls_verify: bool,
         base_path: Option<&String>,
@@ -705,7 +736,8 @@ impl ParallelExecutor {
         // Generate k6 script
         let generator = K6ScriptGenerator::new(k6_config, templates.to_vec())
             .with_abort_valve(abort_on_error, abort_on_error_rate)
-            .with_force_http1(force_http1);
+            .with_force_http1(force_http1)
+            .with_per_op_metrics(per_op_metrics);
         let mut script = generator.generate()?;
 
         // Apply pre-computed enhancement code (security definitions, etc.)
@@ -979,6 +1011,14 @@ mod tests {
         assert!(
             src.contains("Estimated wall clock"),
             "multi-target start must print ceil(targets/concurrency)*duration"
+        );
+        assert!(
+            src.contains("with_per_op_metrics(per_op_metrics)"),
+            "multi-target k6 spawn must apply Round-65 per-op metrics collapse (#79)"
+        );
+        assert!(
+            src.contains("resolve_max_concurrency"),
+            "multi-target must auto-cap concurrency for huge specs (#79)"
         );
     }
 }
