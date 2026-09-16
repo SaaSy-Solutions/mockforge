@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+## [0.3.222] - 2026-09-16
+
+### Fixed
+
+- **[Reality]** Longevity / huge-spec k6 runs no longer emit a Trend+Rate pair per OpenAPI operation by default when ops >= 500 or duration >= 1h (`--per-op-metrics` / `--no-per-op-metrics` to force). `--max-concurrency` auto-caps to 3 for huge specs, and SIGKILL gets an OOM hint. (#79)
+
+
 ## [0.3.221] - 2026-09-12
 
 ### Fixed
