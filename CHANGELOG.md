@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+## [0.3.223] - 2026-09-18
+
+### Added
+
+- **[Reality]** Multi-target `--repeat-until <duration>` and `--rounds N` cycle the full targets list so low concurrency can still stress every server over a longevity window without manual restarts. Pair with a short `--duration` (per-batch k6 lifetime). (#79)
+
+
 ## [0.3.222] - 2026-09-16
 
 ### Fixed
