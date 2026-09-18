@@ -428,12 +428,48 @@ impl ParallelExecutor {
         // Round 63 (#79): batches of `--max-concurrency` each run the full
         // `--duration`. Wall clock is ceil(targets / concurrency) * duration,
         // not duration alone. --vus and --rps are per target, not shared.
-        let (batches, wall_secs) =
+        let (batches, one_pass_wall_secs) =
             Self::estimated_wall_clock(total_targets, max_concurrency, duration_secs_val);
         TerminalReporter::print_progress(&format!(
-            "Estimated wall clock: {batches} batch(es) × {duration_secs_val}s ≈ {} ({wall_secs}s). --vus and --rps are per target, not shared.",
-            Self::format_wall_clock(wall_secs),
+            "One pass: {batches} batch(es) × {duration_secs_val}s ≈ {} ({one_pass_wall_secs}s). --vus and --rps are per target, not shared.",
+            Self::format_wall_clock(one_pass_wall_secs),
         ));
+
+        // Round 66 (#79) — optional campaign loop so low concurrency can still
+        // hit every target over a longevity window without manual restarts.
+        let repeat_until_secs = match &self.base_command.repeat_until {
+            Some(d) => Some(BenchCommand::parse_duration(d)?),
+            None => None,
+        };
+        if let Some(n) = self.base_command.rounds {
+            if n == 0 {
+                return Err(BenchError::Other(
+                    "--rounds must be >= 1 (or omit it for a single pass / --repeat-until)".into(),
+                ));
+            }
+        }
+        let max_rounds = self.base_command.rounds.unwrap_or(if repeat_until_secs.is_some() {
+            u32::MAX
+        } else {
+            1
+        });
+        let looping = max_rounds > 1 || repeat_until_secs.is_some();
+        if let Some(until) = repeat_until_secs {
+            TerminalReporter::print_progress(&format!(
+                "Campaign loop: will re-run all targets until wall clock reaches {} \
+                 (or --rounds {}). Each k6 process only lives `--duration` ({duration_secs_val}s), \
+                 so RSS resets between batches.",
+                Self::format_wall_clock(until),
+                self.base_command
+                    .rounds
+                    .map(|n| n.to_string())
+                    .unwrap_or_else(|| "unlimited".into()),
+            ));
+        } else if max_rounds > 1 {
+            TerminalReporter::print_progress(&format!(
+                "Campaign loop: will re-run all targets for {max_rounds} round(s)."
+            ));
+        }
 
         let security_testing_enabled_val = self.base_command.security_testing_enabled();
 
@@ -461,189 +497,232 @@ impl ParallelExecutor {
             String::new()
         };
 
-        // Create semaphore for concurrency control
-        let semaphore = Arc::new(Semaphore::new(max_concurrency));
-        let multi_progress = MultiProgress::new();
+        let campaign_start = std::time::Instant::now();
+        let mut last_results: Option<AggregatedResults> = None;
+        let mut round: u32 = 0;
 
-        // Create progress bars for each target
-        let progress_bars: Vec<ProgressBar> = (0..total_targets)
-            .map(|i| {
-                let pb = multi_progress.add(ProgressBar::new(1));
-                pb.set_style(
-                    ProgressStyle::default_bar()
-                        .template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} {msg}")
-                        .unwrap(),
-                );
-                pb.set_message(format!("Target {}", i + 1));
-                pb
-            })
-            .collect();
-
-        // Spawn tasks for each target
-        let mut handles: Vec<JoinHandle<Result<TargetResult>>> = Vec::new();
-
-        for (index, target) in self.targets.iter().enumerate() {
-            let target = target.clone();
-            // Clone necessary fields from base_command instead of passing reference
-            let duration = self.base_command.duration.clone();
-            let vus = self.base_command.vus;
-            let scenario_str = self.base_command.scenario.clone();
-            let operations = self.base_command.operations.clone();
-            let auth = self.base_command.auth.clone();
-            let headers = self.base_command.headers.clone();
-            let threshold_percentile = self.base_command.threshold_percentile.clone();
-            let threshold_ms = self.base_command.threshold_ms;
-            let max_error_rate = self.base_command.max_error_rate;
-            // Issue #79 r62 (Srikanth on 0.3.209): the round-60 abort valve
-            // stopped his WAF stress runs at ~2min because a legitimate high
-            // rejection rate crossed 0.95. Thread the opt-out/threshold through
-            // the per-target path so `--no-abort-on-error` reaches the k6 script.
-            let abort_on_error = self.base_command.abort_on_error;
-            let abort_on_error_rate = self.base_command.abort_on_error_rate;
-            let verbose = self.base_command.verbose;
-            let skip_tls_verify = self.base_command.skip_tls_verify;
-            let chunked_request_bodies = self.base_command.chunked_request_bodies;
-            let target_rps = self.base_command.target_rps;
-            let no_keep_alive = self.base_command.no_keep_alive;
-            // Issue #79 r54 (Srikanth on 0.3.200): `--source-ip` was silently
-            // dropped in multi-target (`--targets-file`) mode because this
-            // executor built `K6Executor::new()` without `.with_local_ips` and
-            // the per-target BenchCommand clone zeroed `source_ips`. Thread the
-            // source IPs (as the k6 `--local-ips` list) and geo config through
-            // to each target's run.
-            let local_ips = self.base_command.source_ips.join(",");
-            let dns_policy = self.base_command.dns_policy.clone().unwrap_or_default();
-            let geo_source_ips = self.base_command.geo_source_ips.clone();
-            let geo_source_headers = self.base_command.geo_source_headers.clone();
-
-            // Select per-target templates/base_path if this target has a custom spec.
-            // Verbatim templates stay the traffic file's requests even when a
-            // target lists its own spec.
-            let (templates, base_path) = if verbatim {
-                (templates.clone(), base_path.clone())
-            } else if let Some(spec_path) = &target.spec {
-                if let Some((t, bp)) = per_target_data.get(spec_path) {
-                    (t.clone(), bp.clone())
-                } else {
-                    (templates.clone(), base_path.clone())
-                }
-            } else {
-                (templates.clone(), base_path.clone())
-            };
-
-            let base_headers = base_headers.clone();
-            let scenario = scenario.clone();
-            let duration_secs = duration_secs_val;
-            let base_output = self.base_output.clone();
-            let semaphore = semaphore.clone();
-            let progress_bar = progress_bars[index].clone();
-            let target_index = index;
-            let security_testing_enabled = security_testing_enabled_val;
-            let enhancement_code = enhancement_code.clone();
-
-            let handle = tokio::spawn(async move {
-                // Acquire semaphore permit
-                let _permit = semaphore.acquire().await.map_err(|e| {
-                    BenchError::Other(format!("Failed to acquire semaphore: {}", e))
-                })?;
-
-                progress_bar.set_message(format!("Testing {}", target.url));
-
-                // Execute test for this target
-                let result = Self::execute_single_target_internal(
-                    &duration,
-                    vus,
-                    &scenario_str,
-                    &operations,
-                    &auth,
-                    &headers,
-                    &threshold_percentile,
-                    threshold_ms,
-                    max_error_rate,
-                    abort_on_error,
-                    abort_on_error_rate,
-                    per_op_metrics,
-                    verbose,
-                    skip_tls_verify,
-                    base_path.as_ref(),
-                    &target,
-                    target_index,
-                    &templates,
-                    &base_headers,
-                    &scenario,
-                    duration_secs,
-                    &base_output,
-                    security_testing_enabled,
-                    chunked_request_bodies,
-                    target_rps,
-                    no_keep_alive,
-                    &enhancement_code,
-                    &local_ips,
-                    &dns_policy,
-                    &geo_source_ips,
-                    &geo_source_headers,
-                    verbatim,
-                )
-                .await;
-
-                progress_bar.inc(1);
-                progress_bar.finish_with_message(format!("Completed {}", target.url));
-
-                result
-            });
-
-            handles.push(handle);
-        }
-
-        // Wait for all tasks to complete and collect results
-        let mut target_results = Vec::new();
-        for (index, handle) in handles.into_iter().enumerate() {
-            match handle.await {
-                Ok(Ok(result)) => {
-                    target_results.push(result);
-                }
-                Ok(Err(e)) => {
-                    // Create error result
-                    let target_url = self.targets[index].url.clone();
-                    target_results.push(TargetResult {
-                        target_url: target_url.clone(),
-                        target_index: index,
-                        results: K6Results::default(),
-                        output_dir: self.base_output.join(format!("target_{}", index + 1)),
-                        success: false,
-                        error: Some(e.to_string()),
-                    });
-                }
-                Err(e) => {
-                    // Join error
-                    let target_url = self.targets[index].url.clone();
-                    target_results.push(TargetResult {
-                        target_url: target_url.clone(),
-                        target_index: index,
-                        results: K6Results::default(),
-                        output_dir: self.base_output.join(format!("target_{}", index + 1)),
-                        success: false,
-                        error: Some(format!("Task join error: {}", e)),
-                    });
+        while round < max_rounds {
+            // Stop before starting a new round once wall clock is exhausted.
+            if let Some(until) = repeat_until_secs {
+                if round > 0 && campaign_start.elapsed().as_secs() >= until {
+                    TerminalReporter::print_progress(&format!(
+                        "Reached --repeat-until wall clock ({}); stopping after {} round(s).",
+                        Self::format_wall_clock(until),
+                        round,
+                    ));
+                    break;
                 }
             }
+
+            round += 1;
+            let round_output = if looping {
+                let dir = self.base_output.join(format!("round_{round}"));
+                let wall_note = repeat_until_secs
+                    .map(|u| {
+                        format!(
+                            " (wall {} / {})",
+                            Self::format_wall_clock(campaign_start.elapsed().as_secs()),
+                            Self::format_wall_clock(u)
+                        )
+                    })
+                    .unwrap_or_default();
+                TerminalReporter::print_progress(&format!(
+                    "Round {round}{wall_note} — results under {}",
+                    dir.display()
+                ));
+                dir
+            } else {
+                self.base_output.clone()
+            };
+
+            // Create semaphore for concurrency control
+            let semaphore = Arc::new(Semaphore::new(max_concurrency));
+            let multi_progress = MultiProgress::new();
+
+            // Create progress bars for each target
+            let progress_bars: Vec<ProgressBar> = (0..total_targets)
+                .map(|i| {
+                    let pb = multi_progress.add(ProgressBar::new(1));
+                    pb.set_style(
+                        ProgressStyle::default_bar()
+                            .template("{spinner:.green} [{elapsed_precise}] [{wide_bar:.cyan/blue}] {pos}/{len} {msg}")
+                            .unwrap(),
+                    );
+                    pb.set_message(format!("Target {}", i + 1));
+                    pb
+                })
+                .collect();
+
+            // Spawn tasks for each target
+            let mut handles: Vec<JoinHandle<Result<TargetResult>>> = Vec::new();
+
+            for (index, target) in self.targets.iter().enumerate() {
+                let target = target.clone();
+                // Clone necessary fields from base_command instead of passing reference
+                let duration = self.base_command.duration.clone();
+                let vus = self.base_command.vus;
+                let scenario_str = self.base_command.scenario.clone();
+                let operations = self.base_command.operations.clone();
+                let auth = self.base_command.auth.clone();
+                let headers = self.base_command.headers.clone();
+                let threshold_percentile = self.base_command.threshold_percentile.clone();
+                let threshold_ms = self.base_command.threshold_ms;
+                let max_error_rate = self.base_command.max_error_rate;
+                // Issue #79 r62 (Srikanth on 0.3.209): the round-60 abort valve
+                // stopped his WAF stress runs at ~2min because a legitimate high
+                // rejection rate crossed 0.95. Thread the opt-out/threshold through
+                // the per-target path so `--no-abort-on-error` reaches the k6 script.
+                let abort_on_error = self.base_command.abort_on_error;
+                let abort_on_error_rate = self.base_command.abort_on_error_rate;
+                let verbose = self.base_command.verbose;
+                let skip_tls_verify = self.base_command.skip_tls_verify;
+                let chunked_request_bodies = self.base_command.chunked_request_bodies;
+                let target_rps = self.base_command.target_rps;
+                let no_keep_alive = self.base_command.no_keep_alive;
+                // Issue #79 r54 (Srikanth on 0.3.200): `--source-ip` was silently
+                // dropped in multi-target (`--targets-file`) mode because this
+                // executor built `K6Executor::new()` without `.with_local_ips` and
+                // the per-target BenchCommand clone zeroed `source_ips`. Thread the
+                // source IPs (as the k6 `--local-ips` list) and geo config through
+                // to each target's run.
+                let local_ips = self.base_command.source_ips.join(",");
+                let dns_policy = self.base_command.dns_policy.clone().unwrap_or_default();
+                let geo_source_ips = self.base_command.geo_source_ips.clone();
+                let geo_source_headers = self.base_command.geo_source_headers.clone();
+
+                // Select per-target templates/base_path if this target has a custom spec.
+                // Verbatim templates stay the traffic file's requests even when a
+                // target lists its own spec.
+                let (templates, base_path) = if verbatim {
+                    (templates.clone(), base_path.clone())
+                } else if let Some(spec_path) = &target.spec {
+                    if let Some((t, bp)) = per_target_data.get(spec_path) {
+                        (t.clone(), bp.clone())
+                    } else {
+                        (templates.clone(), base_path.clone())
+                    }
+                } else {
+                    (templates.clone(), base_path.clone())
+                };
+
+                let base_headers = base_headers.clone();
+                let scenario = scenario.clone();
+                let duration_secs = duration_secs_val;
+                let base_output = round_output.clone();
+                let semaphore = semaphore.clone();
+                let progress_bar = progress_bars[index].clone();
+                let target_index = index;
+                let security_testing_enabled = security_testing_enabled_val;
+                let enhancement_code = enhancement_code.clone();
+
+                let handle = tokio::spawn(async move {
+                    // Acquire semaphore permit
+                    let _permit = semaphore.acquire().await.map_err(|e| {
+                        BenchError::Other(format!("Failed to acquire semaphore: {}", e))
+                    })?;
+
+                    progress_bar.set_message(format!("Testing {}", target.url));
+
+                    // Execute test for this target
+                    let result = Self::execute_single_target_internal(
+                        &duration,
+                        vus,
+                        &scenario_str,
+                        &operations,
+                        &auth,
+                        &headers,
+                        &threshold_percentile,
+                        threshold_ms,
+                        max_error_rate,
+                        abort_on_error,
+                        abort_on_error_rate,
+                        per_op_metrics,
+                        verbose,
+                        skip_tls_verify,
+                        base_path.as_ref(),
+                        &target,
+                        target_index,
+                        &templates,
+                        &base_headers,
+                        &scenario,
+                        duration_secs,
+                        &base_output,
+                        security_testing_enabled,
+                        chunked_request_bodies,
+                        target_rps,
+                        no_keep_alive,
+                        &enhancement_code,
+                        &local_ips,
+                        &dns_policy,
+                        &geo_source_ips,
+                        &geo_source_headers,
+                        verbatim,
+                    )
+                    .await;
+
+                    progress_bar.inc(1);
+                    progress_bar.finish_with_message(format!("Completed {}", target.url));
+
+                    result
+                });
+
+                handles.push(handle);
+            }
+
+            // Wait for all tasks to complete and collect results
+            let mut target_results = Vec::new();
+            for (index, handle) in handles.into_iter().enumerate() {
+                match handle.await {
+                    Ok(Ok(result)) => {
+                        target_results.push(result);
+                    }
+                    Ok(Err(e)) => {
+                        // Create error result
+                        let target_url = self.targets[index].url.clone();
+                        target_results.push(TargetResult {
+                            target_url: target_url.clone(),
+                            target_index: index,
+                            results: K6Results::default(),
+                            output_dir: round_output.join(format!("target_{}", index + 1)),
+                            success: false,
+                            error: Some(e.to_string()),
+                        });
+                    }
+                    Err(e) => {
+                        // Join error
+                        let target_url = self.targets[index].url.clone();
+                        target_results.push(TargetResult {
+                            target_url: target_url.clone(),
+                            target_index: index,
+                            results: K6Results::default(),
+                            output_dir: round_output.join(format!("target_{}", index + 1)),
+                            success: false,
+                            error: Some(format!("Task join error: {}", e)),
+                        });
+                    }
+                }
+            }
+
+            // Sort results by target index
+            target_results.sort_by_key(|r| r.target_index);
+
+            // Calculate aggregated metrics
+            let aggregated_metrics = AggregatedMetrics::from_results(&target_results);
+
+            let successful_targets = target_results.iter().filter(|r| r.success).count();
+            let failed_targets = total_targets - successful_targets;
+
+            last_results = Some(AggregatedResults {
+                target_results,
+                total_targets,
+                successful_targets,
+                failed_targets,
+                aggregated_metrics,
+            });
         }
 
-        // Sort results by target index
-        target_results.sort_by_key(|r| r.target_index);
-
-        // Calculate aggregated metrics
-        let aggregated_metrics = AggregatedMetrics::from_results(&target_results);
-
-        let successful_targets = target_results.iter().filter(|r| r.success).count();
-        let failed_targets = total_targets - successful_targets;
-
-        Ok(AggregatedResults {
-            target_results,
-            total_targets,
-            successful_targets,
-            failed_targets,
-            aggregated_metrics,
+        last_results.ok_or_else(|| {
+            BenchError::Other("No rounds executed (check --rounds / --repeat-until)".to_string())
         })
     }
 
@@ -1009,8 +1088,12 @@ mod tests {
             "multi-target k6 spawn must pass GODEBUG=http2client=0 when Connection headers are present"
         );
         assert!(
-            src.contains("Estimated wall clock"),
+            src.contains("One pass:") || src.contains("Estimated wall clock"),
             "multi-target start must print ceil(targets/concurrency)*duration"
+        );
+        assert!(
+            src.contains("repeat_until") && src.contains("Campaign loop"),
+            "multi-target must support --repeat-until campaign looping (#79)"
         );
         assert!(
             src.contains("with_per_op_metrics(per_op_metrics)"),

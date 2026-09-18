@@ -155,6 +155,15 @@ pub struct BenchCommand {
     pub targets_file: Option<PathBuf>,
     /// Maximum number of parallel executions (for multi-target mode)
     pub max_concurrency: Option<u32>,
+    /// Round 66 (#79) — multi-target only. Re-run the full target list until
+    /// this wall-clock duration elapses. Pair with a short `--duration` (the
+    /// per-batch k6 run) so every target keeps getting traffic without one
+    /// batch holding the box for the whole longevity window.
+    pub repeat_until: Option<String>,
+    /// Round 66 (#79) — multi-target only. Re-run the full target list this
+    /// many times. Combines with `--repeat-until` (stop at whichever hits
+    /// first). `None` means a single pass unless `--repeat-until` is set.
+    pub rounds: Option<u32>,
     /// Results format: "per-target", "aggregated", or "both"
     pub results_format: String,
     /// Optional file containing parameter value overrides (JSON or YAML)
@@ -1150,6 +1159,8 @@ impl BenchCommand {
                 chunked_request_bodies: self.chunked_request_bodies,
                 targets_file: None,
                 max_concurrency: None,
+                repeat_until: self.repeat_until.clone(),
+                rounds: self.rounds,
                 results_format: self.results_format.clone(),
                 params_file: self.params_file.clone(),
                 crud_flow: self.crud_flow,
@@ -4556,6 +4567,8 @@ mod tests {
             no_keep_alive: false,
             targets_file: None,
             max_concurrency: None,
+            repeat_until: None,
+            rounds: None,
             results_format: "both".to_string(),
             params_file: None,
             crud_flow: false,
@@ -4742,6 +4755,8 @@ mod tests {
             no_keep_alive: false,
             targets_file: None,
             max_concurrency: None,
+            repeat_until: None,
+            rounds: None,
             results_format: "both".to_string(),
             params_file: None,
             crud_flow: false,
@@ -4831,6 +4846,8 @@ mod tests {
             no_keep_alive: false,
             targets_file: None,
             max_concurrency: None,
+            repeat_until: None,
+            rounds: None,
             results_format: "both".to_string(),
             params_file: None,
             crud_flow: false,
@@ -4955,6 +4972,8 @@ mod tests {
             no_keep_alive: false,
             targets_file: None,
             max_concurrency: None,
+            repeat_until: None,
+            rounds: None,
             results_format: "both".to_string(),
             params_file: None,
             crud_flow: false,

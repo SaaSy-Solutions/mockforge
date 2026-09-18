@@ -732,6 +732,8 @@ fn default_bench_command(output_dir: &Path) -> BenchCommand {
         chunked_request_bodies: false,
         targets_file: None,
         max_concurrency: None,
+        repeat_until: None,
+        rounds: None,
         results_format: "aggregated".to_string(),
         params_file: None,
         crud_flow: false,

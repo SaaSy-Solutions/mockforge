@@ -1918,6 +1918,19 @@ enum Commands {
         #[arg(long)]
         max_concurrency: Option<u32>,
 
+        /// Multi-target only: keep re-running the full target list until this
+        /// wall-clock duration elapses (e.g. `24h`). Pair with a short
+        /// `--duration` (per-batch k6 run) and a low `--max-concurrency` so
+        /// every target gets traffic repeatedly without one batch holding the
+        /// box for the whole longevity window (#79).
+        #[arg(long = "repeat-until")]
+        repeat_until: Option<String>,
+
+        /// Multi-target only: re-run the full target list this many times.
+        /// Combines with `--repeat-until` (stop at whichever hits first).
+        #[arg(long)]
+        rounds: Option<u32>,
+
         /// Results format: "per-target", "aggregated", or "both" (default: "both")
         /// Only used when --targets-file is specified
         #[arg(long, default_value = "both")]
@@ -3421,6 +3434,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             insecure,
             chunked_request_bodies,
             max_concurrency,
+            repeat_until,
+            rounds,
             results_format,
             params_file,
             crud_flow,
@@ -3534,6 +3549,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 chunked_request_bodies,
                 targets_file,
                 max_concurrency,
+                repeat_until,
+                rounds,
                 results_format,
                 params_file,
                 crud_flow,
