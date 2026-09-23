@@ -329,10 +329,10 @@ impl DashboardQuery {
     /// Parse bucket size
     pub fn parse_bucket(&self) -> TimeBucket {
         match self.bucket.as_deref() {
-            Some("minute") | Some("1m") => TimeBucket::Minute,
-            Some("5minutes") | Some("5m") => TimeBucket::FiveMinutes,
-            Some("hour") | Some("1h") => TimeBucket::Hour,
-            Some("day") | Some("1d") => TimeBucket::Day,
+            Some("minute" | "1m") => TimeBucket::Minute,
+            Some("5minutes" | "5m") => TimeBucket::FiveMinutes,
+            Some("hour" | "1h") => TimeBucket::Hour,
+            Some("day" | "1d") => TimeBucket::Day,
             _ => TimeBucket::Minute,
         }
     }

@@ -160,6 +160,97 @@ impl AggregatedMetrics {
     }
 }
 
+/// Round 67 (#79) — aggregated-metrics JSON object shared by
+/// `aggregated_summary.json`, per-round `round_summary.json` and the
+/// `campaign.jsonl` lines so the three can't drift.
+fn aggregated_metrics_json(m: &AggregatedMetrics) -> serde_json::Value {
+    serde_json::json!({
+        "total_requests": m.total_requests,
+        "total_failed_requests": m.total_failed_requests,
+        "avg_duration_ms": m.avg_duration_ms,
+        "p95_duration_ms": m.p95_duration_ms,
+        "p99_duration_ms": m.p99_duration_ms,
+        "error_rate": m.error_rate,
+        "total_rps": m.total_rps,
+        "avg_rps": m.avg_rps,
+        "total_vus_max": m.total_vus_max,
+        "total_connections_opened": m.total_connections_opened,
+        "total_iterations_completed": m.total_iterations_completed,
+    })
+}
+
+/// Round 67 (#79) — per-target JSON rows shared by every stats file.
+fn target_results_json(results: &AggregatedResults) -> Vec<serde_json::Value> {
+    results
+        .target_results
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "target_url": r.target_url,
+                "target_index": r.target_index,
+                "success": r.success,
+                "error": r.error,
+                "total_requests": r.results.total_requests,
+                "failed_requests": r.results.failed_requests,
+                "avg_duration_ms": r.results.avg_duration_ms,
+                "min_duration_ms": r.results.min_duration_ms,
+                "med_duration_ms": r.results.med_duration_ms,
+                "p90_duration_ms": r.results.p90_duration_ms,
+                "p95_duration_ms": r.results.p95_duration_ms,
+                "p99_duration_ms": r.results.p99_duration_ms,
+                "max_duration_ms": r.results.max_duration_ms,
+                "rps": r.results.rps,
+                "vus_max": r.results.vus_max,
+                "output_dir": r.output_dir.to_string_lossy(),
+            })
+        })
+        .collect()
+}
+
+/// JSON body of `aggregated_summary.json` (the campaign-level file written
+/// once at the end of a multi-target run).
+pub(crate) fn targets_summary_json(
+    results: &AggregatedResults,
+    elapsed_secs: u64,
+) -> serde_json::Value {
+    serde_json::json!({
+        "total_elapsed_seconds": elapsed_secs,
+        "total_targets": results.total_targets,
+        "successful_targets": results.successful_targets,
+        "failed_targets": results.failed_targets,
+        "aggregated_metrics": aggregated_metrics_json(&results.aggregated_metrics),
+        "target_results": target_results_json(results),
+    })
+}
+
+/// Per-target CSV rows shared by `all_targets.csv` (base output and the
+/// per-round copy inside each `round_*` dir).
+pub(crate) fn targets_csv(results: &AggregatedResults) -> String {
+    let mut csv = String::from(
+        "target_url,success,requests,failed,rps,vus,min_ms,avg_ms,med_ms,p90_ms,p95_ms,p99_ms,max_ms,error\n",
+    );
+    for r in &results.target_results {
+        csv.push_str(&format!(
+            "{},{},{},{},{:.1},{},{:.1},{:.1},{:.1},{:.1},{:.1},{:.1},{:.1},{}\n",
+            r.target_url,
+            r.success,
+            r.results.total_requests,
+            r.results.failed_requests,
+            r.results.rps,
+            r.results.vus_max,
+            r.results.min_duration_ms,
+            r.results.avg_duration_ms,
+            r.results.med_duration_ms,
+            r.results.p90_duration_ms,
+            r.results.p95_duration_ms,
+            r.results.p99_duration_ms,
+            r.results.max_duration_ms,
+            r.error.as_deref().unwrap_or(""),
+        ));
+    }
+    csv
+}
+
 /// Parallel executor for multi-target bench testing
 pub struct ParallelExecutor {
     /// Base command configuration (shared across all targets)
@@ -454,6 +545,25 @@ impl ParallelExecutor {
             1
         });
         let looping = max_rounds > 1 || repeat_until_secs.is_some();
+        // Round 67 (#79) — campaign disk control. Scripts are identical every
+        // round, so they get written once per target under `<out>/scripts/`
+        // instead of a fresh copy per `round_*/target_*`. `keep_rounds`
+        // bounds how many `round_*` dirs survive (rotation); per-round stats
+        // always land in `campaign.jsonl` + `round-summaries/` first.
+        let keep_rounds = self.base_command.keep_rounds;
+        let no_k6_logs = self.base_command.no_k6_logs;
+        let scripts_base = looping.then(|| self.base_output.join("scripts"));
+        if let Some(keep) = keep_rounds {
+            if !looping {
+                TerminalReporter::print_warning(
+                    "--keep-rounds only applies to campaign runs (--repeat-until / --rounds > 1); ignoring.",
+                );
+            } else {
+                TerminalReporter::print_progress(&format!(
+                    "Round pruning: keeping newest {keep} round_* dir(s); per-round stats persist in campaign.jsonl + round-summaries/"
+                ));
+            }
+        }
         if let Some(until) = repeat_until_secs {
             TerminalReporter::print_progress(&format!(
                 "Campaign loop: will re-run all targets until wall clock reaches {} \
@@ -614,6 +724,10 @@ impl ParallelExecutor {
                 let target_index = index;
                 let security_testing_enabled = security_testing_enabled_val;
                 let enhancement_code = enhancement_code.clone();
+                // Round 67 (#79) — one stable script file per target for the
+                // whole campaign instead of a per-round duplicate.
+                let script_dir =
+                    scripts_base.as_ref().map(|d| d.join(format!("target_{}", index + 1)));
 
                 let handle = tokio::spawn(async move {
                     // Acquire semaphore permit
@@ -657,6 +771,8 @@ impl ParallelExecutor {
                         &geo_source_ips,
                         &geo_source_headers,
                         verbatim,
+                        no_k6_logs,
+                        script_dir.as_deref(),
                     )
                     .await;
 
@@ -719,11 +835,115 @@ impl ParallelExecutor {
                 failed_targets,
                 aggregated_metrics,
             });
+
+            // Round 67 (#79) — persist per-round stats before any pruning so
+            // a killed or rotated campaign still leaves an auditable trail.
+            if looping {
+                let agg = last_results.as_ref().expect("just assigned");
+                Self::write_round_artifacts(
+                    round,
+                    &round_output,
+                    &self.base_output,
+                    agg,
+                    campaign_start.elapsed(),
+                )?;
+                if let Some(keep) = keep_rounds {
+                    Self::prune_old_rounds(&self.base_output, keep);
+                }
+                TerminalReporter::print_success(&format!(
+                    "Round {round} done: {}/{} targets ok, {} requests ({:.2}% err) — stats in {}",
+                    agg.successful_targets,
+                    agg.total_targets,
+                    agg.aggregated_metrics.total_requests,
+                    agg.aggregated_metrics.error_rate,
+                    self.base_output.join("campaign.jsonl").display(),
+                ));
+            }
         }
 
         last_results.ok_or_else(|| {
             BenchError::Other("No rounds executed (check --rounds / --repeat-until)".to_string())
         })
+    }
+
+    /// Round 67 (#79) — per-round stats for campaign mode. Writes
+    /// `round_summary.json` + `all_targets.csv` inside the round dir, a
+    /// pruning-proof copy under `<out>/round-summaries/`, and appends one
+    /// JSON line to `<out>/campaign.jsonl`.
+    fn write_round_artifacts(
+        round: u32,
+        round_output: &Path,
+        base_output: &Path,
+        results: &AggregatedResults,
+        campaign_elapsed: std::time::Duration,
+    ) -> Result<()> {
+        let summary = serde_json::json!({
+            "round": round,
+            "campaign_elapsed_seconds": campaign_elapsed.as_secs(),
+            "total_targets": results.total_targets,
+            "successful_targets": results.successful_targets,
+            "failed_targets": results.failed_targets,
+            "aggregated_metrics": aggregated_metrics_json(&results.aggregated_metrics),
+            "target_results": target_results_json(results),
+        });
+        let pretty =
+            serde_json::to_string_pretty(&summary).map_err(|e| BenchError::Other(e.to_string()))?;
+
+        std::fs::write(round_output.join("round_summary.json"), &pretty)?;
+        std::fs::write(round_output.join("all_targets.csv"), targets_csv(results))?;
+
+        // Persistent copy — survives --keep-rounds pruning.
+        let summaries_dir = base_output.join("round-summaries");
+        std::fs::create_dir_all(&summaries_dir)?;
+        std::fs::write(summaries_dir.join(format!("round_{round}.json")), &pretty)?;
+
+        // Append-only campaign log: one compact record per round, greppable
+        // and complete even if the campaign is killed mid-run.
+        let mut line =
+            serde_json::to_string(&summary).map_err(|e| BenchError::Other(e.to_string()))?;
+        line.push('\n');
+        use std::io::Write;
+        let mut f = std::fs::OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(base_output.join("campaign.jsonl"))?;
+        f.write_all(line.as_bytes())
+            .map_err(|e| BenchError::Other(format!("failed to append campaign.jsonl: {e}")))?;
+        Ok(())
+    }
+
+    /// Round 67 (#79) — log rotation for campaign mode: delete all but the
+    /// newest `keep` `round_*` dirs under `base_output`. `round-summaries/`
+    /// and `campaign.jsonl` live outside the round dirs and are untouched.
+    fn prune_old_rounds(base_output: &Path, keep: u32) {
+        let mut round_dirs: Vec<(u32, PathBuf)> = match std::fs::read_dir(base_output) {
+            Ok(rd) => rd
+                .filter_map(|e| e.ok())
+                .filter_map(|e| {
+                    let name = e.file_name().to_string_lossy().to_string();
+                    let n = name.strip_prefix("round_")?.parse::<u32>().ok()?;
+                    if e.file_type().ok()?.is_dir() {
+                        Some((n, e.path()))
+                    } else {
+                        None
+                    }
+                })
+                .collect(),
+            Err(_) => return,
+        };
+        round_dirs.sort_by_key(|(n, _)| *n);
+        let removable = round_dirs.len().saturating_sub(keep as usize);
+        let mut pruned = 0usize;
+        for (_, path) in round_dirs.into_iter().take(removable) {
+            if std::fs::remove_dir_all(&path).is_ok() {
+                pruned += 1;
+            }
+        }
+        if pruned > 0 {
+            TerminalReporter::print_progress(&format!(
+                "Pruned {pruned} old round dir(s) (keeping newest {keep})"
+            ));
+        }
     }
 
     /// Resolve the effective base path for API endpoints
@@ -774,6 +994,8 @@ impl ParallelExecutor {
         geo_source_ips: &[String],
         geo_source_headers: &[String],
         wafbench_verbatim: bool,
+        no_k6_logs: bool,
+        script_dir: Option<&Path>,
     ) -> Result<TargetResult> {
         // Merge target-specific headers with base headers
         let mut custom_headers = base_headers.clone();
@@ -840,8 +1062,16 @@ impl ParallelExecutor {
         let output_dir = base_output.join(format!("target_{}", target_index + 1));
         std::fs::create_dir_all(&output_dir)?;
 
-        // Write script to file
-        let script_path = output_dir.join("k6-script.js");
+        // Write script to file. Round 67 (#79): in campaign mode the script
+        // is identical every round, so it lives once per target under
+        // `<out>/scripts/target_N/` instead of a per-round duplicate.
+        let script_path = match script_dir {
+            Some(d) => {
+                std::fs::create_dir_all(d)?;
+                d.join("k6-script.js")
+            }
+            None => output_dir.join("k6-script.js"),
+        };
         std::fs::write(&script_path, script)?;
 
         // Execute k6 with its own REST API server port per target. k6 defaults
@@ -872,7 +1102,8 @@ impl ParallelExecutor {
             .with_local_ips(local_ips.to_string())
             .with_dns_policy(dns_policy.to_string())
             .with_discard_response_bodies(true)
-            .with_force_http1(force_http1);
+            .with_force_http1(force_http1)
+            .with_capture_logs(!no_k6_logs);
         let results = executor
             .execute_with_port(&script_path, Some(&output_dir), verbose, Some(api_port))
             .await;
@@ -1103,5 +1334,139 @@ mod tests {
             src.contains("resolve_max_concurrency"),
             "multi-target must auto-cap concurrency for huge specs (#79)"
         );
+        assert!(
+            src.contains("with_capture_logs(!no_k6_logs)"),
+            "multi-target k6 spawn must honour --no-k6-logs (#79)"
+        );
+    }
+
+    fn sample_aggregated_results() -> AggregatedResults {
+        let target_results = vec![
+            TargetResult {
+                target_url: "http://api1.com".to_string(),
+                target_index: 0,
+                results: K6Results {
+                    total_requests: 100,
+                    failed_requests: 5,
+                    avg_duration_ms: 100.0,
+                    p95_duration_ms: 200.0,
+                    p99_duration_ms: 300.0,
+                    ..Default::default()
+                },
+                output_dir: PathBuf::from("output1"),
+                success: true,
+                error: None,
+            },
+            TargetResult {
+                target_url: "http://api2.com".to_string(),
+                target_index: 1,
+                results: K6Results::default(),
+                output_dir: PathBuf::from("output2"),
+                success: false,
+                error: Some("boom".to_string()),
+            },
+        ];
+        AggregatedResults {
+            aggregated_metrics: AggregatedMetrics::from_results(&target_results),
+            total_targets: 2,
+            successful_targets: 1,
+            failed_targets: 1,
+            target_results,
+        }
+    }
+
+    /// Round 67 (#79) — each campaign round must drop a summary + CSV into
+    /// the round dir, a pruning-proof copy under round-summaries/, and one
+    /// JSONL line per round in campaign.jsonl.
+    #[test]
+    fn write_round_artifacts_writes_all_surfaces() {
+        let base = tempfile::tempdir().unwrap();
+        let round_dir = base.path().join("round_3");
+        std::fs::create_dir_all(&round_dir).unwrap();
+        let results = sample_aggregated_results();
+
+        ParallelExecutor::write_round_artifacts(
+            3,
+            &round_dir,
+            base.path(),
+            &results,
+            std::time::Duration::from_secs(42),
+        )
+        .unwrap();
+        ParallelExecutor::write_round_artifacts(
+            4,
+            &round_dir,
+            base.path(),
+            &results,
+            std::time::Duration::from_secs(84),
+        )
+        .unwrap();
+
+        let summary_raw = std::fs::read_to_string(round_dir.join("round_summary.json")).unwrap();
+        let summary: serde_json::Value = serde_json::from_str(&summary_raw).unwrap();
+        assert_eq!(summary["round"], 4);
+        assert_eq!(summary["total_targets"], 2);
+        assert_eq!(summary["successful_targets"], 1);
+        assert_eq!(summary["aggregated_metrics"]["total_requests"], 100);
+
+        assert!(base.path().join("round-summaries/round_3.json").exists());
+        assert!(base.path().join("round-summaries/round_4.json").exists());
+
+        let csv = std::fs::read_to_string(round_dir.join("all_targets.csv")).unwrap();
+        assert!(csv.contains("http://api1.com"));
+        assert!(csv.contains("boom"));
+
+        // Two artifact writes → two JSONL lines.
+        let jsonl = std::fs::read_to_string(base.path().join("campaign.jsonl")).unwrap();
+        let lines: Vec<&str> = jsonl.lines().collect();
+        assert_eq!(lines.len(), 2);
+        let first: serde_json::Value = serde_json::from_str(lines[0]).unwrap();
+        assert_eq!(first["round"], 3);
+        assert_eq!(first["campaign_elapsed_seconds"], 42);
+        let second: serde_json::Value = serde_json::from_str(lines[1]).unwrap();
+        assert_eq!(second["round"], 4);
+    }
+
+    /// Round 67 (#79) — --keep-rounds prunes only `round_*` dirs and always
+    /// leaves the newest N plus the campaign-level stats.
+    #[test]
+    fn prune_old_rounds_keeps_newest_and_stats() {
+        let base = tempfile::tempdir().unwrap();
+        for n in 1..=5 {
+            std::fs::create_dir_all(base.path().join(format!("round_{n}"))).unwrap();
+        }
+        // Things that must survive pruning.
+        std::fs::create_dir_all(base.path().join("round-summaries")).unwrap();
+        std::fs::write(base.path().join("campaign.jsonl"), "{}\n").unwrap();
+        std::fs::create_dir_all(base.path().join("scripts")).unwrap();
+        std::fs::create_dir_all(base.path().join("target_1")).unwrap();
+        // A round dir that is not a dir must not be deleted.
+        std::fs::write(base.path().join("round_9.txt"), "x").unwrap();
+
+        ParallelExecutor::prune_old_rounds(base.path(), 2);
+
+        for n in 1..=3 {
+            assert!(!base.path().join(format!("round_{n}")).exists(), "round_{n} pruned");
+        }
+        assert!(base.path().join("round_4").exists());
+        assert!(base.path().join("round_5").exists());
+        assert!(base.path().join("round-summaries").exists());
+        assert!(base.path().join("campaign.jsonl").exists());
+        assert!(base.path().join("scripts").exists());
+        assert!(base.path().join("target_1").exists());
+        assert!(base.path().join("round_9.txt").exists());
+    }
+
+    /// Round 67 (#79) — keep=0 prunes every round dir (campaign stats only).
+    #[test]
+    fn prune_old_rounds_zero_keeps_stats_only() {
+        let base = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(base.path().join("round_1")).unwrap();
+        std::fs::write(base.path().join("campaign.jsonl"), "{}\n").unwrap();
+
+        ParallelExecutor::prune_old_rounds(base.path(), 0);
+
+        assert!(!base.path().join("round_1").exists());
+        assert!(base.path().join("campaign.jsonl").exists());
     }
 }

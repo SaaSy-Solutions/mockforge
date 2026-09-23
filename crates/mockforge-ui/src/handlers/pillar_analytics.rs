@@ -293,7 +293,7 @@ fn build_summary(metrics: PillarUsageMetrics) -> PillarUsageSummary {
         }
     }
 
-    rankings.sort_by(|a, b| b.usage.cmp(&a.usage));
+    rankings.sort_by_key(|b| std::cmp::Reverse(b.usage));
 
     let rankings_len = rankings.len();
     if let Some(first) = rankings.first_mut() {

@@ -313,7 +313,7 @@ impl DistributedCoordinator {
         }
 
         // Simple election: node with lowest ID becomes leader
-        let leader = active_nodes.iter().min_by(|a, b| a.id.cmp(&b.id)).unwrap();
+        let leader = active_nodes.iter().min_by(|a, b| a.id.cmp(&b.id)).expect("checked non-empty");
 
         let mut state = leader_state.write();
         state.leader_id = Some(leader.id.clone());

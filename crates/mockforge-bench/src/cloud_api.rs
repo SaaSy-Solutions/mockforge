@@ -778,6 +778,8 @@ fn default_bench_command(output_dir: &Path) -> BenchCommand {
         report_missed_cap: None,
         discard_response_bodies: false,
         dns_policy: None,
+        no_k6_logs: false,
+        keep_rounds: None,
         owasp_api_top10: false,
         owasp_categories: None,
         owasp_auth_header: "Authorization".to_string(),

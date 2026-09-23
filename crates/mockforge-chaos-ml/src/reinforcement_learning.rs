@@ -95,7 +95,7 @@ impl RLAgent {
 
         for action in actions {
             let key = (state.clone(), action.clone());
-            let value = q_table.get(&key).map(|q| q.value).unwrap_or(0.0);
+            let value = q_table.get(&key).map_or(0.0, |q| q.value);
 
             if value > best_value {
                 best_value = value;
@@ -143,7 +143,7 @@ impl RLAgent {
 
         // Get current Q-value
         let key = (state.clone(), action.clone());
-        let current_q = q_table.get(&key).map(|q| q.value).unwrap_or(0.0);
+        let current_q = q_table.get(&key).map_or(0.0, |q| q.value);
 
         // Get max Q-value for next state
         let actions = self.possible_actions();
@@ -151,7 +151,7 @@ impl RLAgent {
             .iter()
             .map(|a| {
                 let next_key = (next_state.clone(), a.clone());
-                q_table.get(&next_key).map(|q| q.value).unwrap_or(0.0)
+                q_table.get(&next_key).map_or(0.0, |q| q.value)
             })
             .fold(f64::NEG_INFINITY, f64::max);
 
@@ -316,10 +316,7 @@ impl AdaptiveRiskAssessor {
         // Calculate confidence based on Q-table visit counts
         let q_table = agent.q_table.read().await;
         let key = (state.clone(), action.clone());
-        let confidence = q_table
-            .get(&key)
-            .map(|q| (q.visit_count as f64 / 100.0).min(1.0))
-            .unwrap_or(0.1);
+        let confidence = q_table.get(&key).map_or(0.1, |q| (q.visit_count as f64 / 100.0).min(1.0));
 
         let assessment = RiskAssessment {
             timestamp: chrono::Utc::now(),

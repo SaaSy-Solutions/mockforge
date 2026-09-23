@@ -2367,16 +2367,14 @@ impl AmqpConnection {
         let mut flags: u16 = 0;
         let mut props_data = Vec::new();
 
-        if message.properties.content_type.is_some() {
+        if let Some(ct) = message.properties.content_type.as_ref() {
             flags |= 0x8000;
-            let ct = message.properties.content_type.as_ref().unwrap();
             props_data.push(ct.len() as u8);
             props_data.extend_from_slice(ct.as_bytes());
         }
 
-        if message.properties.content_encoding.is_some() {
+        if let Some(ce) = message.properties.content_encoding.as_ref() {
             flags |= 0x4000;
-            let ce = message.properties.content_encoding.as_ref().unwrap();
             props_data.push(ce.len() as u8);
             props_data.extend_from_slice(ce.as_bytes());
         }

@@ -239,11 +239,11 @@ impl MultiArmedBandit {
         match &self.strategy {
             BanditStrategy::ThompsonSampling => {
                 let ts = self.thompson_sampling.read().await;
-                ts.as_ref().unwrap().select_arm()
+                ts.as_ref().expect("initialized in constructor").select_arm()
             }
             BanditStrategy::UCB1 => {
                 let ucb = self.ucb1.read().await;
-                ucb.as_ref().unwrap().select_arm()
+                ucb.as_ref().expect("initialized in constructor").select_arm()
             }
             BanditStrategy::EpsilonGreedy { .. } => {
                 if rand::random::<f64>() < self.epsilon {
@@ -342,7 +342,9 @@ impl MultiArmedBandit {
             })
             .collect();
 
-        arm_reports.sort_by(|a, b| b.mean_reward.partial_cmp(&a.mean_reward).unwrap());
+        arm_reports.sort_by(|a, b| {
+            b.mean_reward.partial_cmp(&a.mean_reward).unwrap_or(std::cmp::Ordering::Equal)
+        });
 
         let total_pulls: u64 = arms.values().map(|a| a.pulls).sum();
         let best_arm = arm_reports.first().map(|r| r.id.clone());

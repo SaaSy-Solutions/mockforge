@@ -246,7 +246,7 @@ fn upgrade_inline_schema(param: &Value) -> Value {
     // parameters. The boolean never reaches *schema* position because the
     // schema whitelist below excludes it; form properties strip it
     // explicitly in convert_form_param.
-    if let (Some(typ), None) = (param.get("type").map(|v| v.clone()), param.get("schema")) {
+    if let (Some(typ), None) = (param.get("type").cloned(), param.get("schema")) {
         let mut schema = Map::new();
         for k in [
             "type",

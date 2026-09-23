@@ -1931,6 +1931,23 @@ enum Commands {
         #[arg(long)]
         rounds: Option<u32>,
 
+        /// Campaign mode only (--repeat-until / --rounds): keep only the
+        /// newest N `round_*` directories; older rounds are pruned after each
+        /// round (log rotation for 24-48h runs). Per-round stats survive in
+        /// `campaign.jsonl` and `round-summaries/` at the output dir. `0`
+        /// keeps only the campaign-level stats (#79).
+        #[arg(long, value_name = "N")]
+        keep_rounds: Option<u32>,
+
+        /// Suppress per-run k6 artifacts: `k6-output.log` plus the automatic
+        /// debug sidecars (conformance-failure-details.json,
+        /// conformance-network-events.json). Also stops buffering k6's whole
+        /// output in memory. For longevity campaigns where per-run logs
+        /// bloat the disk; summary.json and --export-requests output still
+        /// write (#79).
+        #[arg(long)]
+        no_k6_logs: bool,
+
         /// Results format: "per-target", "aggregated", or "both" (default: "both")
         /// Only used when --targets-file is specified
         #[arg(long, default_value = "both")]
@@ -3436,6 +3453,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             max_concurrency,
             repeat_until,
             rounds,
+            keep_rounds,
+            no_k6_logs,
             results_format,
             params_file,
             crud_flow,
@@ -3551,6 +3570,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 max_concurrency,
                 repeat_until,
                 rounds,
+                keep_rounds,
+                no_k6_logs,
                 results_format,
                 params_file,
                 crud_flow,

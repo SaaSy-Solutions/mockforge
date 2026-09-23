@@ -1,7 +1,11 @@
 //! Chaos engineering orchestration
 //!
 //! Provides scenario management, scheduling, distributed coordination,
-//! and experiment management for MockForge chaos engineering.
+//! and experiment management for `MockForge` chaos engineering.
+
+// Public API surface is still stabilizing (merged in #1005); per-item doc
+// coverage is a tracked follow-up rather than a merge gate.
+#![allow(missing_docs)]
 
 pub mod config;
 

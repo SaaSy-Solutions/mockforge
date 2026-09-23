@@ -240,7 +240,7 @@ impl SmtpSpecRegistry {
             .collect();
 
         // Sort by received_at descending (newest first)
-        results.sort_by(|a, b| b.received_at.cmp(&a.received_at));
+        results.sort_by_key(|b| std::cmp::Reverse(b.received_at));
 
         Ok(results)
     }

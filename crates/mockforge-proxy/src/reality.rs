@@ -239,15 +239,22 @@ enum ProxyError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    // These tests mutate MOCKFORGE_PROXY_UPSTREAM, which is process-global;
+    // serialize them so parallel test threads can't race set/remove_var.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
 
     #[test]
     fn from_env_disabled_when_unset() {
+        let _guard = ENV_LOCK.lock().unwrap();
         std::env::remove_var("MOCKFORGE_PROXY_UPSTREAM");
         assert!(RealityProxyConfig::from_env().is_none());
     }
 
     #[test]
     fn from_env_disabled_when_blank() {
+        let _guard = ENV_LOCK.lock().unwrap();
         std::env::set_var("MOCKFORGE_PROXY_UPSTREAM", "   ");
         assert!(RealityProxyConfig::from_env().is_none());
         std::env::remove_var("MOCKFORGE_PROXY_UPSTREAM");
@@ -255,6 +262,7 @@ mod tests {
 
     #[test]
     fn from_env_strips_trailing_slash() {
+        let _guard = ENV_LOCK.lock().unwrap();
         std::env::set_var("MOCKFORGE_PROXY_UPSTREAM", "https://api.example.com/");
         let cfg = RealityProxyConfig::from_env().expect("config");
         assert_eq!(cfg.upstream_base, "https://api.example.com");

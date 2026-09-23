@@ -111,6 +111,15 @@ ignore = [
 
     { id = "RUSTSEC-2026-0235", reason = "rkyv OOB read — unenabled optional feature of rust_decimal, absent from the compiled graph (cargo tree -e normal finds 0); rust_decimal 1.42.1 (latest) still pins rkyv ^0.7.46 so there is no version to upgrade to" },
 
+    # azure_core 0.21 writes the `authorization` header value to logs
+    # (published 2026-08-15, fixed in >=0.22.0). The legacy azure_storage /
+    # azure_storage_blobs / azure_identity line ends at 0.21 — there is no
+    # 0.22 release; the fix is migrating to the rewritten Azure SDK
+    # (azure_storage_blob 1.x), a breaking API change tracked separately.
+    # Reached only via mockforge-collab's optional `azure` feature for
+    # workspace-backup export to Azure Blob Storage.
+    { id = "RUSTSEC-2026-0275", reason = "azure_core 0.21 logs authorization header — no 0.22 release of the legacy azure_storage/azure_identity crates; needs migration to the rewritten Azure SDK (optional azure backup feature only)" },
+
     # suppaftp 5.4.0 CRLF injection in client control-channel arguments
     # (published 2026-08-18, fixed in >=10.0.2). Pulled only as the FTP
     # *client* used by mockforge-ftp tests against our own mock server.

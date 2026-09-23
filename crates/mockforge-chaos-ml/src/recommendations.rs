@@ -491,7 +491,7 @@ impl RecommendationEngine {
 
     /// Create latency recommendation
     fn create_latency_recommendation(&self, pattern: &ChaosPattern) -> Recommendation {
-        let endpoint = pattern.affected.first().map(|s| s.as_str()).unwrap_or("unknown");
+        let endpoint = pattern.affected.first().map_or("unknown", String::as_str);
 
         Recommendation {
             id: format!("rec-latency-{}", uuid::Uuid::new_v4()),
@@ -536,7 +536,7 @@ impl RecommendationEngine {
 
     /// Create fault recommendation
     fn create_fault_recommendation(&self, pattern: &ChaosPattern) -> Recommendation {
-        let endpoint = pattern.affected.first().map(|s| s.as_str()).unwrap_or("unknown");
+        let endpoint = pattern.affected.first().map_or("unknown", String::as_str);
 
         Recommendation {
             id: format!("rec-fault-{}", uuid::Uuid::new_v4()),

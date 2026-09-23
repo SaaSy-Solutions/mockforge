@@ -186,7 +186,7 @@ pub async fn get_showcase_projects(
         projects.retain(|p| p.featured == featured);
     }
 
-    projects.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    projects.sort_by_key(|b| std::cmp::Reverse(b.updated_at));
     let projects = projects.into_iter().skip(offset).take(limit).collect();
 
     Json(ApiResponse::success(projects))
@@ -237,7 +237,7 @@ pub async fn get_success_stories(
         stories.retain(|story| story.featured == featured);
     }
 
-    stories.sort_by(|a, b| b.date.cmp(&a.date));
+    stories.sort_by_key(|b| std::cmp::Reverse(b.date));
     stories.truncate(limit);
 
     Json(ApiResponse::success(stories))
@@ -266,7 +266,7 @@ pub async fn get_learning_resources(
         resources.retain(|r| r.difficulty == difficulty);
     }
 
-    resources.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+    resources.sort_by_key(|b| std::cmp::Reverse(b.updated_at));
     resources.truncate(limit);
 
     Json(ApiResponse::success(resources))
