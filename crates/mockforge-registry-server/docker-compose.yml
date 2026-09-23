@@ -21,7 +21,7 @@ services:
 
   # MinIO (S3-compatible storage)
   minio:
-    image: minio/minio:latest
+    image: quay.io/minio/minio:latest
     container_name: mockforge-registry-minio
     command: server /data --console-address ":9001"
     environment:
@@ -40,7 +40,7 @@ services:
 
   # MinIO client - create bucket on startup
   minio-init:
-    image: minio/mc:latest
+    image: quay.io/minio/mc:latest
     container_name: mockforge-registry-minio-init
     depends_on:
       - minio
