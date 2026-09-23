@@ -294,8 +294,11 @@ mod tests {
     #[tokio::test]
     async fn test_database_connect() {
         // This test would require a real Postgres database
-        // We can test that the function exists and has the right signature
-        let database_url = "postgresql://test:test@localhost/test_db";
+        // We can test that the function exists and has the right signature.
+        // Port 1 is never listening, so the connect must fail even on
+        // runners where a real Postgres happens to serve localhost:5432
+        // (e.g. CI boxes shared with the registry E2E compose stack).
+        let database_url = "postgresql://test:test@localhost:1/test_db";
 
         // Attempt to connect (will fail without a real database, which is expected)
         let result = Database::connect(database_url).await;
