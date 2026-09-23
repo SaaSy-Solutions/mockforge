@@ -3343,7 +3343,7 @@ mod tests {
                 }
             }
         });
-        let spec = crate::spec::OpenApiSpec::from_json(spec_json).expect("spec parses");
+        let spec = OpenApiSpec::from_json(spec_json).expect("spec parses");
         let router = OpenApiRouteRegistry::new(spec);
 
         // kind violates the enum AND the body misses `email`.

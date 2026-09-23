@@ -295,7 +295,7 @@ mod tests {
         .await;
 
         // Give async task time to complete
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
 
         let recorded = events.read().await;
         assert_eq!(recorded.len(), 1);

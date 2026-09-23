@@ -861,7 +861,7 @@ mod tests {
         let err = Frame::read_from_stream(&mut cursor)
             .await
             .expect_err("oversized frame should be rejected");
-        assert_eq!(err.kind(), std::io::ErrorKind::InvalidData);
+        assert_eq!(err.kind(), io::ErrorKind::InvalidData);
     }
 
     #[tokio::test]
