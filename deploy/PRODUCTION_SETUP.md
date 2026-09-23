@@ -82,13 +82,15 @@ fly secrets set -a mockforge-registry \
   MOCKFORGE_BASE_URL="https://mocks.mockforge.dev"
 
 # Cloudflare R2 storage (for spec/plugin uploads)
-# Create an R2 bucket named "mockforge-storage" in Cloudflare Dashboard
+# Production uses the R2 bucket "mockforge-cloud-storage". Create it in the
+# Cloudflare Dashboard if standing up a new environment.
 # Then create an R2 API Token: R2 → Manage R2 API Tokens → Create API Token
 #   - Permission: Object Read & Write
-#   - Scope: mockforge-storage bucket only
+#   - Scope: mockforge-cloud-storage bucket only (never "all buckets" —
+#     one account-wide key reached every product's storage until 2026-09-23)
 # The token gives you an Access Key ID and Secret Access Key
 fly secrets set -a mockforge-registry \
-  S3_BUCKET="mockforge-storage" \
+  S3_BUCKET="mockforge-cloud-storage" \
   S3_REGION="auto" \
   S3_ENDPOINT="https://<CLOUDFLARE_ACCOUNT_ID>.r2.cloudflarestorage.com" \
   AWS_ACCESS_KEY_ID="<R2_TOKEN_ACCESS_KEY_ID>" \
