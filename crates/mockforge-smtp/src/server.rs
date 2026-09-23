@@ -889,7 +889,7 @@ struct SessionState {
 impl SessionState {
     #[cfg(test)]
     fn new() -> Self {
-        Self::with_max_message_bytes(crate::SmtpConfig::default().max_message_bytes)
+        Self::with_max_message_bytes(SmtpConfig::default().max_message_bytes)
     }
 
     fn with_max_message_bytes(max_message_bytes: usize) -> Self {
