@@ -41,7 +41,7 @@ pub struct JiraConfig {
     pub assignee: Option<String>,
 }
 
-/// PagerDuty integration configuration
+/// `PagerDuty` integration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PagerDutyConfig {
     pub routing_key: String,
@@ -309,7 +309,7 @@ impl JiraIntegration {
     }
 }
 
-/// PagerDuty integration
+/// `PagerDuty` integration
 pub struct PagerDutyIntegration {
     config: PagerDutyConfig,
     client: reqwest::Client,

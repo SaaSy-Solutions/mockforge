@@ -367,7 +367,7 @@ impl Default for IncidentReplayGenerator {
 pub struct IncidentFormatAdapter;
 
 impl IncidentFormatAdapter {
-    /// Convert PagerDuty incident format to IncidentTimeline
+    /// Convert `PagerDuty` incident format to `IncidentTimeline`
     pub fn from_pagerduty(pagerduty_data: &Value) -> Result<IncidentTimeline, String> {
         // Extract incident data from PagerDuty format
         // This is a simplified implementation - real implementation would parse
@@ -392,8 +392,7 @@ impl IncidentFormatAdapter {
             .and_then(|i| i.get("resolved_at"))
             .and_then(|ts| ts.as_str())
             .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
-            .map(|dt| dt.with_timezone(&Utc))
-            .unwrap_or_else(Utc::now);
+            .map_or_else(Utc::now, |dt| dt.with_timezone(&Utc));
 
         // Extract events from PagerDuty log entries or metrics
         let events = Self::extract_pagerduty_events(pagerduty_data)?;
@@ -407,7 +406,7 @@ impl IncidentFormatAdapter {
         })
     }
 
-    /// Extract events from PagerDuty data
+    /// Extract events from `PagerDuty` data
     fn extract_pagerduty_events(pagerduty_data: &Value) -> Result<Vec<IncidentEvent>, String> {
         let mut events = Vec::new();
 
@@ -442,7 +441,7 @@ impl IncidentFormatAdapter {
         Ok(events)
     }
 
-    /// Convert Datadog incident format to IncidentTimeline
+    /// Convert Datadog incident format to `IncidentTimeline`
     pub fn from_datadog(datadog_data: &Value) -> Result<IncidentTimeline, String> {
         // Extract incident data from Datadog format
         let incident_id = datadog_data
@@ -453,15 +452,16 @@ impl IncidentFormatAdapter {
 
         let created_at = datadog_data
             .get("created")
-            .and_then(|ts| ts.as_i64())
+            .and_then(Value::as_i64)
             .map(|ts| DateTime::from_timestamp(ts / 1000, 0).unwrap_or_else(Utc::now))
             .ok_or_else(|| "Missing or invalid created timestamp".to_string())?;
 
         let resolved_at = datadog_data
             .get("resolved")
-            .and_then(|ts| ts.as_i64())
-            .map(|ts| DateTime::from_timestamp(ts / 1000, 0).unwrap_or_else(Utc::now))
-            .unwrap_or_else(Utc::now);
+            .and_then(Value::as_i64)
+            .map_or_else(Utc::now, |ts| {
+                DateTime::from_timestamp(ts / 1000, 0).unwrap_or_else(Utc::now)
+            });
 
         // Extract events from Datadog metrics or logs
         let events = Self::extract_datadog_events(datadog_data)?;
@@ -593,7 +593,7 @@ mod tests {
         let scenario = generator.generate_scenario(&timeline);
 
         assert!(scenario.name.starts_with("replay_INC-123"));
-        assert!(scenario.description.as_ref().map(|d| d.contains("INC-123")).unwrap_or(false));
+        assert!(scenario.description.as_ref().is_some_and(|d| d.contains("INC-123")));
         assert!(!scenario.steps.is_empty());
     }
 

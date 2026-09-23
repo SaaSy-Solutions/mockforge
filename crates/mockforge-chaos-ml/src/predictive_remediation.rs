@@ -174,7 +174,7 @@ impl AnomalyDetector {
             return vec![];
         }
 
-        values.sort_by(|a, b| a.partial_cmp(b).unwrap());
+        values.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
 
         let q1_idx = values.len() / 4;
         let q3_idx = (values.len() * 3) / 4;
@@ -374,32 +374,27 @@ impl PredictiveRemediationEngine {
         let error_rate = series_map
             .get(&MetricType::ErrorRate)
             .and_then(|s| s.data.back())
-            .map(|p| p.value as u8)
-            .unwrap_or(0);
+            .map_or(0, |p| p.value as u8);
 
         let latency_level = series_map
             .get(&MetricType::Latency)
             .and_then(|s| s.data.back())
-            .map(|p| p.value as u8)
-            .unwrap_or(0);
+            .map_or(0, |p| p.value as u8);
 
         let cpu_usage = series_map
             .get(&MetricType::CpuUsage)
             .and_then(|s| s.data.back())
-            .map(|p| p.value as u8)
-            .unwrap_or(0);
+            .map_or(0, |p| p.value as u8);
 
         let memory_usage = series_map
             .get(&MetricType::MemoryUsage)
             .and_then(|s| s.data.back())
-            .map(|p| p.value as u8)
-            .unwrap_or(0);
+            .map_or(0, |p| p.value as u8);
 
         let active_failures = series_map
             .get(&MetricType::FailureCount)
             .and_then(|s| s.data.back())
-            .map(|p| p.value as u8)
-            .unwrap_or(0);
+            .map_or(0, |p| p.value as u8);
 
         let service_health = if error_rate > 80 || active_failures > 5 {
             "critical".to_string()

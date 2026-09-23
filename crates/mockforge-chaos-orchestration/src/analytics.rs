@@ -27,10 +27,10 @@ impl TimeBucket {
     /// Get duration for this bucket
     pub fn duration(&self) -> Duration {
         match self {
-            TimeBucket::Minute => Duration::minutes(1),
-            TimeBucket::FiveMinutes => Duration::minutes(5),
-            TimeBucket::Hour => Duration::hours(1),
-            TimeBucket::Day => Duration::days(1),
+            Self::Minute => Duration::minutes(1),
+            Self::FiveMinutes => Duration::minutes(5),
+            Self::Hour => Duration::hours(1),
+            Self::Day => Duration::days(1),
         }
     }
 
@@ -203,8 +203,8 @@ impl ChaosImpact {
             return Self::empty();
         }
 
-        let start_time = buckets.first().unwrap().timestamp;
-        let end_time = buckets.last().unwrap().timestamp;
+        let start_time = buckets.first().expect("checked non-empty").timestamp;
+        let end_time = buckets.last().expect("checked non-empty").timestamp;
 
         let mut total_events = 0;
         let mut endpoint_counts: HashMap<String, usize> = HashMap::new();
@@ -238,7 +238,7 @@ impl ChaosImpact {
 
         // Get top affected endpoints
         let mut top_affected: Vec<_> = endpoint_counts.into_iter().collect();
-        top_affected.sort_by(|a, b| b.1.cmp(&a.1));
+        top_affected.sort_by_key(|b| std::cmp::Reverse(b.1));
         top_affected.truncate(10); // Top 10
 
         // Calculate degradation (simplified: based on latency and faults)

@@ -353,7 +353,7 @@ impl AlertHandler for ConsoleAlertHandler {
             AlertSeverity::Info => info!("[ALERT] {}: {}", alert.id, alert.message),
             AlertSeverity::Warning => warn!("[ALERT] {}: {}", alert.id, alert.message),
             AlertSeverity::Critical => {
-                tracing::error!("[ALERT] {}: {}", alert.id, alert.message)
+                tracing::error!("[ALERT] {}: {}", alert.id, alert.message);
             }
         }
     }
@@ -442,22 +442,24 @@ impl AlertManager {
             active.insert(alert.id.clone(), alert.clone());
         }
 
+        // Notify handlers
+        {
+            let handlers = self.handlers.read();
+            for handler in handlers.iter() {
+                handler.handle(&alert);
+            }
+        }
+
         // Add to history
         {
             let mut history = self.alert_history.write();
-            history.push(alert.clone());
+            history.push(alert);
 
             // Trim history if needed
             if history.len() > self.max_history {
                 let excess = history.len() - self.max_history;
                 history.drain(0..excess);
             }
-        }
-
-        // Notify handlers
-        let handlers = self.handlers.read();
-        for handler in handlers.iter() {
-            handler.handle(&alert);
         }
     }
 
