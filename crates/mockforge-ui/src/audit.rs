@@ -182,7 +182,7 @@ impl AuditLogStore {
         }
 
         // Sort by timestamp (newest first)
-        filtered.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+        filtered.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
 
         // Apply offset
         let start = offset.unwrap_or(0);

@@ -132,7 +132,7 @@ pub async fn list_pipelines(
         pipelines.retain(|p| p.definition.enabled == enabled);
     }
 
-    pipelines.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+    pipelines.sort_by_key(|b| std::cmp::Reverse(b.created_at));
 
     Ok(Json(pipelines))
 }
@@ -266,7 +266,7 @@ pub async fn list_executions(
     }
 
     // Sort by started_at (most recent first)
-    executions.sort_by(|a, b| b.started_at.cmp(&a.started_at));
+    executions.sort_by_key(|b| std::cmp::Reverse(b.started_at));
 
     // Apply pagination
     let offset = params.offset.unwrap_or(0) as usize;

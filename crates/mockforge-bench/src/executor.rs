@@ -160,6 +160,15 @@ pub struct K6Executor {
     /// cases must keep that header. grafana/k6#2222: no per-request HTTP/1.1
     /// API, process-wide GODEBUG is the workaround.
     force_http1: bool,
+    /// Round 67 (#79) — when false, do not buffer every k6 stdout/stderr
+    /// line and do not write `k6-output.log` or the automatic detail
+    /// sidecars (`conformance-failure-details.json`,
+    /// `conformance-network-events.json`). Srikanth's 24–48h
+    /// `--repeat-until` campaigns wrote a full k6 output dump per
+    /// round × target and filled the disk. `summary.json` (needed for
+    /// results) and an explicitly-requested `--export-requests` dump are
+    /// unaffected.
+    capture_logs: bool,
 }
 
 impl K6Executor {
@@ -176,6 +185,7 @@ impl K6Executor {
             discard_response_bodies: false,
             dns_policy: String::new(),
             force_http1: false,
+            capture_logs: true,
         })
     }
 
@@ -208,6 +218,15 @@ impl K6Executor {
     /// header or when `--wafbench-verbatim` is on.
     pub fn with_force_http1(mut self, force: bool) -> Self {
         self.force_http1 = force;
+        self
+    }
+
+    /// Round 67 (#79) — pass `false` to skip writing `k6-output.log` and the
+    /// automatic detail sidecars, and to stop buffering k6's whole output in
+    /// memory. Use for long campaigns where per-run logs outgrow the disk.
+    /// `summary.json` and `--export-requests` output still write.
+    pub fn with_capture_logs(mut self, capture: bool) -> Self {
+        self.capture_logs = capture;
         self
     }
 
@@ -415,16 +434,29 @@ impl K6Executor {
         let log_stdout = Arc::clone(&log_lines);
         let log_stderr = Arc::clone(&log_lines);
 
+        // Round 67 (#79): when capture_logs is off, lines are drained (k6's
+        // pipes must be emptied or it blocks) and echoed, but nothing is
+        // buffered for the on-disk log / detail sidecars.
+        let capture_logs = self.capture_logs;
+        let capture_stdout = capture_logs;
+        let capture_stderr = capture_logs;
+
         // Read stdout lines, capturing MOCKFORGE_FAILURE / MOCKFORGE_EXCHANGE / MOCKFORGE_NETWORK_EVENT markers
         let stdout_handle = tokio::spawn(async move {
             while let Ok(Some(line)) = stdout_lines.next_line().await {
-                log_stdout.lock().await.push(format!("[stdout] {}", line));
+                if capture_stdout {
+                    log_stdout.lock().await.push(format!("[stdout] {}", line));
+                }
                 if let Some(json_str) = extract_failure_json(&line) {
-                    fd_stdout.lock().await.push(json_str);
+                    if capture_stdout {
+                        fd_stdout.lock().await.push(json_str);
+                    }
                 } else if let Some(json_str) = extract_exchange_json(&line) {
                     ex_stdout.lock().await.push(json_str);
                 } else if let Some(json_str) = extract_network_event_json(&line) {
-                    ne_stdout.lock().await.push(json_str);
+                    if capture_stdout {
+                        ne_stdout.lock().await.push(json_str);
+                    }
                 } else {
                     spinner.set_message(line.clone());
                     if !line.is_empty() && !line.contains("running") && !line.contains("default") {
@@ -439,13 +471,19 @@ impl K6Executor {
         let stderr_handle = tokio::spawn(async move {
             while let Ok(Some(line)) = stderr_lines.next_line().await {
                 if !line.is_empty() {
-                    log_stderr.lock().await.push(format!("[stderr] {}", line));
+                    if capture_stderr {
+                        log_stderr.lock().await.push(format!("[stderr] {}", line));
+                    }
                     if let Some(json_str) = extract_failure_json(&line) {
-                        fd_stderr.lock().await.push(json_str);
+                        if capture_stderr {
+                            fd_stderr.lock().await.push(json_str);
+                        }
                     } else if let Some(json_str) = extract_exchange_json(&line) {
                         ex_stderr.lock().await.push(json_str);
                     } else if let Some(json_str) = extract_network_event_json(&line) {
-                        ne_stderr.lock().await.push(json_str);
+                        if capture_stderr {
+                            ne_stderr.lock().await.push(json_str);
+                        }
                     } else {
                         eprintln!("{}", line);
                     }
@@ -501,17 +539,21 @@ impl K6Executor {
 
         // Write failure details to file if any were captured
         if let Some(dir) = output_dir {
-            let details = failure_details.lock().await;
-            if !details.is_empty() {
-                let failure_path = dir.join("conformance-failure-details.json");
-                let parsed: Vec<serde_json::Value> =
-                    details.iter().filter_map(|s| serde_json::from_str(s).ok()).collect();
-                if let Ok(json) = serde_json::to_string_pretty(&parsed) {
-                    let _ = std::fs::write(&failure_path, json);
+            if capture_logs {
+                let details = failure_details.lock().await;
+                if !details.is_empty() {
+                    let failure_path = dir.join("conformance-failure-details.json");
+                    let parsed: Vec<serde_json::Value> =
+                        details.iter().filter_map(|s| serde_json::from_str(s).ok()).collect();
+                    if let Ok(json) = serde_json::to_string_pretty(&parsed) {
+                        let _ = std::fs::write(&failure_path, json);
+                    }
                 }
             }
 
-            // Write exchange details (--export-requests) if any were captured
+            // Write exchange details (--export-requests) if any were captured.
+            // Deliberately NOT gated on capture_logs: --export-requests is an
+            // explicit output request, not an automatic debug sidecar.
             let exchanges = exchange_details.lock().await;
             if !exchanges.is_empty() {
                 let exchange_path = dir.join("conformance-requests.json");
@@ -527,31 +569,35 @@ impl K6Executor {
                 }
             }
 
-            // Round 47 (#79) — write the wire-level events sink. We
-            // ALWAYS write the file (empty array when nothing failed)
-            // so a caller can tell "everything succeeded" from "nobody
-            // looked" at a glance.
-            let net_events = network_events.lock().await;
-            let net_path = dir.join("conformance-network-events.json");
-            let parsed: Vec<serde_json::Value> =
-                net_events.iter().filter_map(|s| serde_json::from_str(s).ok()).collect();
-            if let Ok(json) = serde_json::to_string_pretty(&parsed) {
-                let _ = std::fs::write(&net_path, json);
-                if !parsed.is_empty() {
-                    tracing::warn!(
-                        "Recorded {} wire-level network event(s) to {}",
-                        parsed.len(),
-                        net_path.display()
-                    );
+            if capture_logs {
+                // Round 47 (#79) — write the wire-level events sink. We
+                // ALWAYS write the file (empty array when nothing failed)
+                // so a caller can tell "everything succeeded" from "nobody
+                // looked" at a glance. (Round 67: skipped under
+                // --no-k6-logs, where the caller opted out of per-run
+                // artifacts entirely.)
+                let net_events = network_events.lock().await;
+                let net_path = dir.join("conformance-network-events.json");
+                let parsed: Vec<serde_json::Value> =
+                    net_events.iter().filter_map(|s| serde_json::from_str(s).ok()).collect();
+                if let Ok(json) = serde_json::to_string_pretty(&parsed) {
+                    let _ = std::fs::write(&net_path, json);
+                    if !parsed.is_empty() {
+                        tracing::warn!(
+                            "Recorded {} wire-level network event(s) to {}",
+                            parsed.len(),
+                            net_path.display()
+                        );
+                    }
                 }
-            }
 
-            // Save full k6 output to a log file for debugging
-            let lines = log_lines.lock().await;
-            if !lines.is_empty() {
-                let log_path = dir.join("k6-output.log");
-                let _ = std::fs::write(&log_path, lines.join("\n"));
-                println!("k6 output log saved to: {}", log_path.display());
+                // Save full k6 output to a log file for debugging
+                let lines = log_lines.lock().await;
+                if !lines.is_empty() {
+                    let log_path = dir.join("k6-output.log");
+                    let _ = std::fs::write(&log_path, lines.join("\n"));
+                    println!("k6 output log saved to: {}", log_path.display());
+                }
             }
         }
 
@@ -760,6 +806,7 @@ mod tests {
             discard_response_bodies: false,
             dns_policy: String::new(),
             force_http1: false,
+            capture_logs: true,
         };
         assert!(!exec.discard_response_bodies);
         let exec = exec.with_discard_response_bodies(true);
@@ -777,10 +824,29 @@ mod tests {
             discard_response_bodies: false,
             dns_policy: String::new(),
             force_http1: false,
+            capture_logs: true,
         };
         assert!(exec.dns_policy.is_empty());
         let exec = exec.with_dns_policy("preferIPv6");
         assert_eq!(exec.dns_policy, "preferIPv6");
+    }
+
+    #[test]
+    fn capture_logs_defaults_on_and_builder_disables() {
+        // Round 67 (#79) — the default keeps writing k6-output.log and the
+        // detail sidecars; --no-k6-logs opts a run out so longevity
+        // campaigns do not buffer/write a full k6 dump per round × target.
+        let exec = K6Executor {
+            k6_path: "k6".to_string(),
+            local_ips: String::new(),
+            discard_response_bodies: false,
+            dns_policy: String::new(),
+            force_http1: false,
+            capture_logs: true,
+        };
+        assert!(exec.capture_logs);
+        let exec = exec.with_capture_logs(false);
+        assert!(!exec.capture_logs);
     }
 
     #[test]
@@ -879,6 +945,7 @@ mod tests {
             discard_response_bodies: false,
             dns_policy: String::new(),
             force_http1: false,
+            capture_logs: true,
         };
         assert!(exec.godebug_env_value().is_none());
         let exec = exec.with_force_http1(true);

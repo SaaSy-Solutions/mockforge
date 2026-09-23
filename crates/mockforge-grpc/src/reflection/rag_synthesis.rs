@@ -163,14 +163,14 @@ impl RagDataSynthesizer {
     /// Create a new RAG data synthesizer
     pub fn new(config: RagSynthesisConfig) -> Self {
         #[cfg(feature = "data-faker")]
-        let rag_engine = if config.enabled && config.rag_config.is_some() {
-            let rag_config = config.rag_config.as_ref().unwrap();
-            match Self::initialize_rag_engine(rag_config) {
-                Ok(engine) => Some(engine),
-                Err(e) => {
+        let rag_engine = if config.enabled {
+            match config.rag_config.as_ref().map(Self::initialize_rag_engine) {
+                Some(Ok(engine)) => Some(engine),
+                Some(Err(e)) => {
                     warn!("Failed to initialize RAG engine: {}", e);
                     None
                 }
+                None => None,
             }
         } else {
             None
