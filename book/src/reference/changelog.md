@@ -2,6 +2,27 @@
 
 ## [Unreleased]
 
+## [0.3.224] - 2026-09-24
+
+### Added
+
+- **[Reality]** Campaign mode now supports `--no-k6-logs` (skips `k6-output.log` and conformance debug sidecars; k6 output is drained instead of buffered) plus per-round aggregate artifacts: `round_N/round_summary.json`, `round_N/all_targets.csv`, durable `campaign.jsonl`, and `round-summaries/` copies. New `--keep-rounds N` prunes old round directories during a campaign while preserving campaign-level stats, and k6 scripts are generated once per target and reused across rounds. (#79)
+
+
+## [0.3.223] - 2026-09-18
+
+### Added
+
+- **[Reality]** Multi-target `--repeat-until <duration>` and `--rounds N` cycle the full targets list so low concurrency can still stress every server over a longevity window without manual restarts. Pair with a short `--duration` (per-batch k6 lifetime). (#79)
+
+
+## [0.3.222] - 2026-09-16
+
+### Fixed
+
+- **[Reality]** Longevity / huge-spec k6 runs no longer emit a Trend+Rate pair per OpenAPI operation by default when ops >= 500 or duration >= 1h (`--per-op-metrics` / `--no-per-op-metrics` to force). `--max-concurrency` auto-caps to 3 for huge specs, and SIGKILL gets an OOM hint. (#79)
+
+
 ## [0.3.221] - 2026-09-12
 
 ### Fixed
