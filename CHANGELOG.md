@@ -1,5 +1,12 @@
 ## [Unreleased]
 
+## [0.3.224] - 2026-09-24
+
+### Added
+
+- **[Reality]** Campaign mode now supports `--no-k6-logs` (skips `k6-output.log` and conformance debug sidecars; k6 output is drained instead of buffered) plus per-round aggregate artifacts: `round_N/round_summary.json`, `round_N/all_targets.csv`, durable `campaign.jsonl`, and `round-summaries/` copies. New `--keep-rounds N` prunes old round directories during a campaign while preserving campaign-level stats, and k6 scripts are generated once per target and reused across rounds. (#79)
+
+
 ## [0.3.223] - 2026-09-18
 
 ### Added
