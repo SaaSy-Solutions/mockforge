@@ -4,9 +4,25 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
+FILENAMES = ['ashburn-images.yml', 'docker-build.yml']
 
 
 class AshburnImagesTest(unittest.TestCase):
+    def test_publisher_requires_isolated_runner(self) -> None:
+        smoke = (ROOT / ".github/workflows/ashburn-image-smoke.yml").read_text()
+        guard = (ROOT / "scripts/verify-image-publisher.sh").read_text()
+        self.assertIn("name=rootless", guard)
+        self.assertIn("isolated-host", guard)
+        self.assertIn("saasy-ci-fsn-02", guard)
+        self.assertNotIn("packages: write", smoke)
+        for filename in FILENAMES:
+            workflow = (ROOT / ".github/workflows" / filename).read_text()
+            self.assertIn("group: mockforge-image-publish", workflow)
+            self.assertIn("labels: [self-hosted, linux, x64, mockforge-image-publish]", workflow)
+            self.assertIn("Verify isolated rootless Docker", workflow)
+            self.assertIn("persist-credentials: false", workflow)
+            self.assertIn("DOCKER_CONFIG", workflow)
+
     def test_registry_and_tunnel_dockerfiles_are_published_serially(self) -> None:
         workflow = (ROOT / ".github/workflows/ashburn-images.yml").read_text()
         core_workflow = (ROOT / ".github/workflows/docker-build.yml").read_text()
