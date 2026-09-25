@@ -22,7 +22,7 @@ permissions:
 
 jobs:
   plan:
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' && github.ref_protected
     runs-on: [self-hosted, linux, x64, rust]
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}

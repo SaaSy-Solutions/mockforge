@@ -34,7 +34,7 @@ class AshburnImagesTest(unittest.TestCase):
         self.assertIn("max-parallel: 1", workflow)
         self.assertIn("group: mockforge-image-builds", workflow)
         self.assertIn("group: mockforge-image-builds", core_workflow)
-        self.assertIn("if: github.ref == 'refs/heads/main'", workflow)
+        self.assertIn("if: github.ref == 'refs/heads/main' && github.ref_protected", workflow)
         self.assertIn("github.ref == 'refs/heads/main'", core_workflow)
         self.assertIn("github.ref_protected", core_workflow)
         self.assertNotIn("refs/heads/develop", core_workflow)
