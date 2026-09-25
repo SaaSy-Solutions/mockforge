@@ -23,6 +23,7 @@ permissions:
 
 jobs:
   plan:
+    if: github.ref == 'refs/heads/main'
     runs-on: [self-hosted, linux, x64, rust]
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
@@ -87,7 +88,7 @@ jobs:
   images-built:
     name: MockForge Ashburn images built
     needs: [plan, build]
-    if: always()
+    if: always() && github.ref == 'refs/heads/main'
     runs-on: [self-hosted, linux, x64, rust]
     steps:
       - run: |

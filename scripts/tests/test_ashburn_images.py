@@ -17,6 +17,7 @@ class AshburnImagesTest(unittest.TestCase):
         self.assertIn("max-parallel: 1", workflow)
         self.assertIn("group: mockforge-image-builds", workflow)
         self.assertIn("group: mockforge-image-builds", core_workflow)
+        self.assertIn("if: github.ref == 'refs/heads/main'", workflow)
         for publish in (workflow, core_workflow):
             self.assertNotIn("  pull_request:", publish)
             self.assertIn("packages: write", publish)
