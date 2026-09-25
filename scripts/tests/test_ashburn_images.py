@@ -1,0 +1,47 @@
+"""Guard MockForge's Ashburn image supply inventory and demo command."""
+
+from pathlib import Path
+import unittest
+
+ROOT = Path(__file__).resolve().parents[2]
+
+
+class AshburnImagesTest(unittest.TestCase):
+    def test_registry_and_tunnel_dockerfiles_are_published_serially(self) -> None:
+        workflow = (ROOT / ".github/workflows/ashburn-images.yml").read_text()
+        core_workflow = (ROOT / ".github/workflows/docker-build.yml").read_text()
+        smoke = (ROOT / ".github/workflows/ashburn-image-smoke.yml").read_text()
+        for dockerfile in ("Dockerfile.registry", "Dockerfile.tunnel"):
+            self.assertTrue((ROOT / dockerfile).is_file())
+            self.assertIn(dockerfile, workflow)
+        self.assertIn("max-parallel: 1", workflow)
+        self.assertIn("group: mockforge-image-builds", workflow)
+        self.assertIn("group: mockforge-image-builds", core_workflow)
+        for publish in (workflow, core_workflow):
+            self.assertNotIn("  pull_request:", publish)
+            self.assertIn("packages: write", publish)
+            self.assertIn("memory=20g", publish)
+            self.assertIn("docker inspect", publish)
+        self.assertIn("pull_request:", smoke)
+        self.assertIn("contents: read", smoke)
+        self.assertNotIn("packages: write", smoke)
+        self.assertNotIn("docker/login-action", smoke)
+        self.assertIn("push: false", smoke)
+        self.assertIn("Dockerfile.registry", smoke)
+        self.assertIn("BUILD_DATE=${{ steps.build-date.outputs.value }}", core_workflow)
+
+    def test_demo_command_is_documented_before_repointing_image(self) -> None:
+        fly_config = (ROOT / "fly.demo.toml").read_text()
+        guide = (ROOT / "docs/ASHBURN_IMAGE_SUPPLY.md").read_text()
+        self.assertIn("serve --spec", fly_config)
+        for path in (
+            "ecommerce-store/openapi.json",
+            "weather-geo/openapi.json",
+            "chat-api/openapi.json",
+        ):
+            self.assertIn(path, guide)
+        self.assertIn("command:", guide)
+
+
+if __name__ == "__main__":
+    unittest.main()
