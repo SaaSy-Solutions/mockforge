@@ -18,6 +18,7 @@ from unittest import mock
 SCRIPT = Path(__file__).resolve().parents[1] / "deploy-ashburn-ui.py"
 sys.path.insert(0, str(SCRIPT.parent))
 artifact = importlib.import_module("ashburn_ui_artifact")
+permissions = importlib.import_module("ashburn_ui_permissions")
 release = importlib.import_module("ashburn_ui_release")
 
 SPEC = importlib.util.spec_from_file_location("deploy_ashburn_ui", SCRIPT)
@@ -62,7 +63,7 @@ class AshburnUiReleaseTest(unittest.TestCase):
         self.assertEqual(target, f"releases/{sha}/dist")
         self.assertEqual(os.readlink(self.base / "current"), target)
         self.assertIsNone(
-            release.valid_release_target(
+            permissions.valid_release_target(
                 self.base, self.base / "previous", self.owner_uid
             )
         )
@@ -217,10 +218,11 @@ class AshburnUiReleaseTest(unittest.TestCase):
         upload = run.call_args_list[0].args[0]
         self.assertEqual(upload[0], "scp")
         self.assertEqual(
-            [Path(path).name for path in upload[3:6]],
+            [Path(path).name for path in upload[3:7]],
             [
                 "deploy-ashburn-ui.py",
                 "ashburn_ui_artifact.py",
+                "ashburn_ui_permissions.py",
                 "ashburn_ui_release.py",
             ],
         )

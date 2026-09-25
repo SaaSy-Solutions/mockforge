@@ -15,9 +15,9 @@ import tarfile
 import tempfile
 
 from ashburn_ui_artifact import API_BASE_URL, package_dist
+from ashburn_ui_permissions import TARGET_PATTERN
 from ashburn_ui_release import (
     SHA_PATTERN,
-    TARGET_PATTERN,
     install_release,
     rollback_release,
 )
@@ -117,6 +117,7 @@ def deploy(sha: str, *, rollback: bool = False) -> None:
                     "BatchMode=yes",
                     str(Path(__file__).resolve()),
                     str(Path(__file__).with_name("ashburn_ui_artifact.py")),
+                    str(Path(__file__).with_name("ashburn_ui_permissions.py")),
                     str(Path(__file__).with_name("ashburn_ui_release.py")),
                     f"{REMOTE_HOST}:{stage}/",
                 ],
