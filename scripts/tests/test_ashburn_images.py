@@ -13,6 +13,7 @@ class AshburnImagesTest(unittest.TestCase):
         guard = (ROOT / "scripts/verify-image-publisher.sh").read_text()
         self.assertIn("name=rootless", guard)
         self.assertIn("isolated-host", guard)
+        self.assertIn("attestation directory must be root owned", guard)
         self.assertIn("saasy-ci-fsn-02", guard)
         self.assertNotIn("packages: write", smoke)
         for filename in FILENAMES:

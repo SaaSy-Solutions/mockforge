@@ -35,7 +35,12 @@ security_options="$(docker info --format '{{json .SecurityOptions}}')" || die 'r
 [[ "$(hostname -s)" != saasy-ci-fsn-02 ]] || die 'publisher cannot share fsn-02 with rootful PR runners'
 [[ "$(hostname -s)" != saasy-ci-runner ]] || die 'publisher cannot share the old CI host with rootful PR runners'
 marker=/etc/mockforge-image-publish/isolated-host
-[[ -f "$marker" ]] || die 'publisher host isolation has not been attested'
+[[ ! -L "$marker" ]] || die 'publisher attestation must not be a symlink'
+  marker_dir="$(dirname "$marker")"
+  [[ "$(stat -c %u "$marker_dir")" == 0 ]] || die 'publisher attestation directory must be root owned'
+  dir_mode="$(stat -c %a "$marker_dir")"
+  (( (8#$dir_mode & 022) == 0 )) || die 'publisher attestation directory is writable by another user'
+  [[ -f "$marker" ]] || die 'publisher host isolation has not been attested'
 [[ "$(stat -c %u "$marker")" == 0 ]] || die 'publisher attestation must be root owned'
 mode="$(stat -c %a "$marker")"
 (( (8#$mode & 022) == 0 )) || die 'publisher attestation is writable by another user'
