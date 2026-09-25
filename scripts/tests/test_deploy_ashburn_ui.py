@@ -1,5 +1,6 @@
 """Release artifact, atomic pointer, and protected-main guard regressions."""
 
+import importlib
 import importlib.util
 import hashlib
 import io
@@ -7,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tarfile
 import tempfile
 import unittest
@@ -14,6 +16,10 @@ from unittest import mock
 
 
 SCRIPT = Path(__file__).resolve().parents[1] / "deploy-ashburn-ui.py"
+sys.path.insert(0, str(SCRIPT.parent))
+artifact = importlib.import_module("ashburn_ui_artifact")
+release = importlib.import_module("ashburn_ui_release")
+
 SPEC = importlib.util.spec_from_file_location("deploy_ashburn_ui", SCRIPT)
 assert SPEC is not None and SPEC.loader is not None
 deploy = importlib.util.module_from_spec(SPEC)
@@ -35,13 +41,13 @@ class AshburnUiReleaseTest(unittest.TestCase):
         self.owner_uid = os.geteuid()
 
     def install(self, sha: str, digest: str, artifact: Path) -> str:
-        return deploy.install_release(
+        return release.install_release(
             self.base, sha, digest, artifact, owner_uid=self.owner_uid
         )
 
     def artifact(self, name: str):
         archive = self.root / name
-        digest = deploy.package_dist(self.dist, archive)
+        digest = artifact.package_dist(self.dist, archive)
         return archive, digest
 
     def test_deterministic_artifact_and_immutable_release(self) -> None:
@@ -56,7 +62,7 @@ class AshburnUiReleaseTest(unittest.TestCase):
         self.assertEqual(target, f"releases/{sha}/dist")
         self.assertEqual(os.readlink(self.base / "current"), target)
         self.assertIsNone(
-            deploy.valid_release_target(
+            release.valid_release_target(
                 self.base, self.base / "previous", self.owner_uid
             )
         )
@@ -89,7 +95,7 @@ class AshburnUiReleaseTest(unittest.TestCase):
             os.readlink(self.base / "current"), f"releases/{second_sha}/dist"
         )
         self.assertEqual(
-            deploy.rollback_release(self.base, owner_uid=self.owner_uid),
+            release.rollback_release(self.base, owner_uid=self.owner_uid),
             f"releases/{first_sha}/dist",
         )
         self.assertEqual(
@@ -153,7 +159,7 @@ class AshburnUiReleaseTest(unittest.TestCase):
             self.install(sha, digest, artifact)
         self.assertEqual(os.readlink(self.base / "current"), f"releases/{sha}/dist")
         with self.assertRaisesRegex(RuntimeError, "unsafe owner or permissions"):
-            deploy.rollback_release(self.base, owner_uid=self.owner_uid)
+            release.rollback_release(self.base, owner_uid=self.owner_uid)
 
     def test_linked_lock_file_is_refused_without_writing_target(self) -> None:
         artifact, digest = self.artifact("first.tar.gz")
@@ -191,6 +197,33 @@ class AshburnUiReleaseTest(unittest.TestCase):
         ):
             with self.assertRaisesRegex(RuntimeError, "not exactly origin/main"):
                 deploy.require_protected_main()
+
+    def test_remote_upload_includes_installer_modules(self) -> None:
+        sha = "a" * 40
+        with (
+            mock.patch.object(deploy, "build_ui", return_value=self.dist),
+            mock.patch.object(deploy, "package_dist", return_value="b" * 64),
+            mock.patch.object(
+                deploy,
+                "remote_stage",
+                return_value="/var/lib/saasy/mockforge-ui/.incoming.abcdefgh",
+            ),
+            mock.patch.object(
+                deploy, "remote_command", return_value=f"releases/{sha}/dist"
+            ),
+            mock.patch.object(deploy.subprocess, "run") as run,
+        ):
+            deploy.deploy(sha)
+        upload = run.call_args_list[0].args[0]
+        self.assertEqual(upload[0], "scp")
+        self.assertEqual(
+            [Path(path).name for path in upload[3:6]],
+            [
+                "deploy-ashburn-ui.py",
+                "ashburn_ui_artifact.py",
+                "ashburn_ui_release.py",
+            ],
+        )
 
 
 if __name__ == "__main__":

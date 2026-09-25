@@ -20,7 +20,7 @@ branch protection, then uses Corepack's pinned pnpm 10.15.0 to run a frozen
 install and a cloud-mode Vite build. It sets `VITE_MOCKFORGE_MODE=cloud` and
 `VITE_API_BASE_URL=https://api.mockforge.dev` explicitly. It packages `dist`
 as a deterministic gzip tar archive and uploads only that archive and the
-installer to `saasy-ash-01`. No build runs on Ashburn.
+release installer modules to `saasy-ash-01`. No build runs on Ashburn.
 
 The root-owned installed tree is:
 
