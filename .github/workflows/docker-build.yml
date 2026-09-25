@@ -6,7 +6,7 @@ on:
   # broad `crates/**` path is correct there because any code change affects
   # the final binary that's shipped.
   push:
-    branches: [main, develop]
+    branches: [main]
     tags:
       - 'v*'
     paths:
@@ -35,11 +35,11 @@ jobs:
   build-and-push:
     name: Build and Push Docker Image
     if: >-
-      (github.event_name == 'push' &&
+      github.ref_protected &&
+      ((github.event_name == 'push' &&
         (github.ref == 'refs/heads/main' ||
-         github.ref == 'refs/heads/develop' ||
          startsWith(github.ref, 'refs/tags/v'))) ||
-      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main')
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
     runs-on:
       group: mockforge-image-publish
       labels: [self-hosted, linux, x64, mockforge-image-publish]
