@@ -18,6 +18,7 @@ class AshburnImagesTest(unittest.TestCase):
         self.assertIn("group: mockforge-image-builds", workflow)
         self.assertIn("group: mockforge-image-builds", core_workflow)
         self.assertIn("if: github.ref == 'refs/heads/main'", workflow)
+        self.assertIn("if: github.event_name == 'push' || github.ref == 'refs/heads/main'", core_workflow)
         for publish in (workflow, core_workflow):
             self.assertNotIn("  pull_request:", publish)
             self.assertIn("packages: write", publish)
