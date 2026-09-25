@@ -4,8 +4,14 @@ The image publisher needs a dedicated VM because the current CI hosts run untrus
 
 Issue #1056 tracks provisioning. Keep `mockforge-image-publish` unregistered until the dedicated VM has:
 
-- A restricted GitHub Actions runner group named `mockforge-image-publish`, allowed only for `ashburn-images.yml`, `docker-build.yml` at trusted refs, with the selected-workflow allowlist verified through the organization API.
+- A restricted GitHub Actions runner group named `mockforge-image-publish`, limited to this repository. Set `restricted_to_workflows: true` and allow these exact workflow refs:
+  - `SaaSy-Solutions/mockforge/.github/workflows/ashburn-images.yml@refs/heads/main`
+  - `SaaSy-Solutions/mockforge/.github/workflows/docker-build.yml@refs/heads/main`
+  - `SaaSy-Solutions/mockforge/.github/workflows/docker-build.yml@refs/heads/develop`
+  - Before each `v*` release tag is pushed, add its exact ref, for example `SaaSy-Solutions/mockforge/.github/workflows/docker-build.yml@refs/tags/v1.2.3`. Verify the selected-workflow allowlist through the organization API before creating the tag. Remove retired tag entries after the build. The tag job queues if its exact ref is absent.
 - A `mockforge-image-publish` Unix account without sudo or Docker group membership, a private rootless Docker socket at `unix:///run/user/<uid>/docker.sock`, and private runner work/temp paths.
 - A root-owned `/etc/mockforge-image-publish/isolated-host` marker containing exactly `SaaSy-Solutions/mockforge:mockforge-image-publish`. Confirm no PR runner is registered on this host.
 
 The publisher jobs use `packages: write` only at job scope and private Docker auth directories. PR smoke has no GHCR write token. Verify the workflow attestation before any live publish; a queued job is the expected state until provisioning is complete.
+
+Runner-group selected workflows are pinned to a branch, tag, or SHA; a `v*` wildcard is not a selected-workflow ref. The group controls which workflow ref can use the publisher, while repository branch and tag rulesets control who may update `main`, `develop`, and `v*` tags. Protect both branches and release tags, and review the release commit before adding a tag ref to the group. The workflow itself accepts only pushes to `main`, `develop`, and `v*` tags, or a manual run on `main`.

@@ -35,7 +35,19 @@ class AshburnImagesTest(unittest.TestCase):
         self.assertIn("group: mockforge-image-builds", workflow)
         self.assertIn("group: mockforge-image-builds", core_workflow)
         self.assertIn("if: github.ref == 'refs/heads/main'", workflow)
-        self.assertIn("if: github.event_name == 'push' || github.ref == 'refs/heads/main'", core_workflow)
+        self.assertIn("github.ref == 'refs/heads/main'", core_workflow)
+        self.assertIn("github.ref == 'refs/heads/develop'", core_workflow)
+        self.assertIn("startsWith(github.ref, 'refs/tags/v')", core_workflow)
+        self.assertIn("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'", core_workflow)
+        isolation = (ROOT / "docs/IMAGE_PUBLISHER_ISOLATION.md").read_text()
+        for ref in (
+            'ashburn-images.yml@refs/heads/main',
+            'docker-build.yml@refs/heads/main',
+            'docker-build.yml@refs/heads/develop',
+            'docker-build.yml@refs/tags/v1.2.3',
+        ):
+            self.assertIn(ref, isolation)
+        self.assertIn('Before each `v*` release tag is pushed', isolation)
         for publish in (workflow, core_workflow):
             self.assertNotIn("  pull_request:", publish)
             self.assertIn("packages: write", publish)
