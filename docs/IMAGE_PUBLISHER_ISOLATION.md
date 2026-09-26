@@ -1,16 +1,38 @@
 # GHCR publisher isolation
 
-The image publisher needs a dedicated VM because the current CI hosts run untrusted PR work with rootful Docker. A rootful Docker client can mount host paths and read another runner's package-write credentials, regardless of Unix account separation.
+MockForge image writes run only in protected `main` or protected `v*` release
+jobs. The GitHub-hosted job creates a disposable Fly Machine from a pinned
+`moby/buildkit:rootless` image, builds with UID 1000 through `buildctl`,
+records the immutable GHCR digest, and destroys the Machine. No self-hosted
+publisher runner is registered on the old rootful CI host. PR smoke retains
+its separate no-write build path.
 
-Issue #1056 tracks provisioning. Keep `mockforge-image-publish` unregistered until the dedicated VM has:
+Provision a new `mockforge-image-publisher` Fly app in the existing MockForge
+organization, with no public service. Store a **deploy token scoped only to
+that app** as the repository secret `FLY_IMAGE_PUBLISHER_TOKEN`. The existing
+production Fly token must not be used. The trusted job's ephemeral
+`GITHUB_TOKEN` has package-write permission; the script writes a mode-0600
+Docker config, transfers it over Fly SSH/SFTP, and deletes it before destroying
+the guest. Source comes from `git archive HEAD` after an exact SHA check.
 
-- A restricted GitHub Actions runner group named `mockforge-image-publish`, limited to this repository. Set `restricted_to_workflows: true` and allow these exact workflow refs:
-  - `SaaSy-Solutions/mockforge/.github/workflows/ashburn-images.yml@refs/heads/main`
-  - `SaaSy-Solutions/mockforge/.github/workflows/docker-build.yml@refs/heads/main`
-  - Before each `v*` release tag is pushed, add its exact ref, for example `SaaSy-Solutions/mockforge/.github/workflows/docker-build.yml@refs/tags/v1.2.3`. Verify the selected-workflow allowlist through the organization API before creating the tag. Remove retired tag entries after the build. The tag job queues if its exact ref is absent.
-- A `mockforge-image-publish` Unix account without sudo or Docker group membership, a private rootless Docker socket at `unix:///run/user/<uid>/docker.sock`, and private runner work/temp paths.
-- A root-owned `/etc/mockforge-image-publish/isolated-host` marker containing exactly `SaaSy-Solutions/mockforge:mockforge-image-publish`. Confirm no PR runner is registered on this host.
+Each image build creates an 8-vCPU/64-GiB/100-GB-rootfs Machine with a unique
+run/attempt/image name. `finally` and an `if: always()` workflow step search
+that name and destroy remaining Machines. Monitor app inventory after
+cancelled jobs or a Fly API outage and destroy stale Machines; a stopped
+Machine's rootfs still costs money. Matrix builds are serial and the root
+publisher shares a GitHub concurrency group with registry/tunnel publishing.
 
-The publisher jobs use `packages: write` only at job scope and private Docker auth directories. PR smoke has no GHCR write token. Verify the workflow attestation before any live publish; a queued job is the expected state until provisioning is complete.
+Before enabling full publishing, prove one protected-main canary with the
+app-scoped token: Machine creation, SFTP handoff, BuildKit registry cache,
+GHCR push and immutable digest, root image metadata aliases/signature/SBOM,
+Ashburn read-token pull, and zero remaining builder Machines. A secret-free
+2-vCPU/4-GiB proof on 2026-09-26 ran rootless BuildKit and exported a real
+Alpine build; rootless Docker daemon failed on denied tap setup. The proof app
+and Machines were destroyed. See #1056 for the supply and canary gate.
 
-Runner-group selected workflows are pinned to a branch, tag, or SHA; a `v*` wildcard is not a selected-workflow ref. The group controls which workflow ref can use the publisher. The workflow also requires `github.ref_protected`, so a release tag cannot publish unless a tag ruleset protects it. The active `Trusted MockForge release tags` ruleset limits `v*` creation, updates, and deletion to organization admins. Review the release commit before adding its exact tag ref to the group. The workflow accepts only pushes to protected `main` and protected `v*` tags, or a manual run on protected `main`.
+The workflow accepts only pushes to protected `main` and protected `v*` tags,
+or a manual run on protected `main`. The active `Trusted MockForge release
+tags` ruleset limits `v*` creation, updates, and deletion to organization
+admins. Review the release commit before creating a tag. The old selected
+self-hosted runner workflow allowlist no longer applies because the package
+write job is on GitHub-hosted infrastructure.

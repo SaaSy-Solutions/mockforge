@@ -8,7 +8,7 @@ FILENAMES = ['ashburn-images.yml', 'docker-build.yml']
 
 
 class AshburnImagesTest(unittest.TestCase):
-    def test_publisher_requires_isolated_runner(self) -> None:
+    def test_publisher_uses_trusted_hosted_orchestrator(self) -> None:
         smoke = (ROOT / ".github/workflows/ashburn-image-smoke.yml").read_text()
         guard = (ROOT / "scripts/verify-image-publisher.sh").read_text()
         self.assertIn("name=rootless", guard)
@@ -18,11 +18,13 @@ class AshburnImagesTest(unittest.TestCase):
         self.assertNotIn("packages: write", smoke)
         for filename in FILENAMES:
             workflow = (ROOT / ".github/workflows" / filename).read_text()
-            self.assertIn("group: mockforge-image-publish", workflow)
-            self.assertIn("labels: [self-hosted, linux, x64, mockforge-image-publish]", workflow)
-            self.assertIn("Verify isolated rootless Docker", workflow)
+            self.assertIn("runs-on: ubuntu-latest", workflow)
+            self.assertNotIn("group: mockforge-image-publish", workflow)
+            self.assertIn("fly_buildkit_publish.py", workflow)
+            self.assertIn("FLY_IMAGE_PUBLISHER_TOKEN", workflow)
             self.assertIn("persist-credentials: false", workflow)
-            self.assertIn("DOCKER_CONFIG", workflow)
+            self.assertIn("--cleanup-only", workflow)
+            self.assertIn("packages: write", workflow)
 
     def test_registry_and_tunnel_dockerfiles_are_published_serially(self) -> None:
         workflow = (ROOT / ".github/workflows/ashburn-images.yml").read_text()
@@ -41,25 +43,21 @@ class AshburnImagesTest(unittest.TestCase):
         self.assertIn("startsWith(github.ref, 'refs/tags/v')", core_workflow)
         self.assertIn("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'", core_workflow)
         isolation = (ROOT / "docs/IMAGE_PUBLISHER_ISOLATION.md").read_text()
-        for ref in (
-            'ashburn-images.yml@refs/heads/main',
-            'docker-build.yml@refs/heads/main',
-            'docker-build.yml@refs/tags/v1.2.3',
-        ):
-            self.assertIn(ref, isolation)
-        self.assertIn('Before each `v*` release tag is pushed', isolation)
+        self.assertIn('mockforge-image-publisher', isolation)
+        self.assertIn('FLY_IMAGE_PUBLISHER_TOKEN', isolation)
+        self.assertIn('protected `v*`', isolation)
         for publish in (workflow, core_workflow):
             self.assertNotIn("  pull_request:", publish)
             self.assertIn("packages: write", publish)
-            self.assertIn("memory=20g", publish)
-            self.assertIn("docker inspect", publish)
+            self.assertIn("fly_buildkit_publish.py", publish)
         self.assertIn("pull_request:", smoke)
         self.assertIn("contents: read", smoke)
         self.assertNotIn("packages: write", smoke)
         self.assertNotIn("docker/login-action", smoke)
         self.assertIn("push: false", smoke)
         self.assertIn("Dockerfile.registry", smoke)
-        self.assertIn("BUILD_DATE=${{ steps.build-date.outputs.value }}", core_workflow)
+        self.assertIn("BUILD_DATE: ${{ steps.build-date.outputs.value }}", core_workflow)
+        self.assertIn("docker buildx imagetools create", core_workflow)
 
     def test_no_write_planner_and_summary_use_hosted_runners(self) -> None:
         workflow = (ROOT / ".github/workflows/ashburn-images.yml").read_text()
@@ -70,7 +68,7 @@ class AshburnImagesTest(unittest.TestCase):
             self.assertIn("runs-on: ubuntu-latest", no_write_job)
             self.assertNotIn("packages: write", no_write_job)
             self.assertNotIn("docker/login-action", no_write_job)
-        self.assertIn("group: mockforge-image-publish", build)
+        self.assertIn("runs-on: ubuntu-latest", build)
         self.assertIn("packages: write", build)
 
     def test_demo_command_is_documented_before_repointing_image(self) -> None:
