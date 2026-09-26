@@ -16,6 +16,8 @@ import signal
 import subprocess
 import sys
 import tempfile
+import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 APP = "mockforge-image-publisher"
@@ -27,6 +29,8 @@ BUILDKIT_IMAGE = (
 SOCKET = "unix:///run/user/1000/buildkit/buildkitd.sock"
 MACHINE_ID_RE = re.compile(r"Machine ID:\s*([0-9a-f]{14})")
 DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}")
+PUBLISHER_NAME_RE = re.compile(r"pub-[0-9]+-[0-9]+-[a-z0-9-]+")
+STALE_AFTER = timedelta(hours=6)
 
 
 def fly(*args: str, capture: bool = False, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -72,20 +76,69 @@ def machine_name() -> str:
     return name
 
 
-def live_machine_ids(name: str) -> list[str]:
+def machine_rows() -> list[dict[str, object]]:
     result = fly("machine", "list", "-a", APP, "--json", capture=True)
     rows = json.loads(result.stdout)
     if not isinstance(rows, list):
         raise RuntimeError("unexpected Fly machine list")
-    return [str(row["id"]) for row in rows if row.get("name") == name]
+    return rows
 
 
-def destroy_named(name: str) -> None:
-    for machine_id in live_machine_ids(name):
-        fly("machine", "destroy", machine_id, "-a", APP, "--force")
-    remaining = live_machine_ids(name)
-    if remaining:
-        raise RuntimeError(f"Fly publisher cleanup incomplete: {remaining}")
+def live_machine_ids(name: str) -> list[str]:
+    return [str(row["id"]) for row in machine_rows() if row.get("name") == name]
+
+
+def destroy_named(name: str, known_id: str | None = None, *, attempts: int = 12) -> None:
+    """Delete a returned ID first, then observe a timed-out create by unique name.
+
+    Empty early listings are insufficient after a failed create: Fly may have
+    accepted the request but not yet exposed the Machine in a list response.
+    The hourly stale cleanup is the backstop after this bounded observation.
+    """
+    if not PUBLISHER_NAME_RE.fullmatch(name):
+        raise ValueError("invalid publisher Machine name")
+    if known_id:
+        try:
+            fly("machine", "destroy", known_id, "-a", APP, "--force")
+        except subprocess.CalledProcessError:
+            pass  # Readback below decides whether the Machine is gone.
+    empty_reads = 0
+    for attempt in range(attempts):
+        ids = live_machine_ids(name)
+        if ids:
+            empty_reads = 0
+            for machine_id in ids:
+                try:
+                    fly("machine", "destroy", machine_id, "-a", APP, "--force")
+                except subprocess.CalledProcessError:
+                    pass  # A stale list may still show an already destroyed ID.
+        else:
+            empty_reads += 1
+            if empty_reads >= 3:
+                return
+        if attempt + 1 < attempts:
+            time.sleep(5)
+    raise RuntimeError(f"Fly publisher cleanup did not settle for {name}")
+
+
+def cleanup_stale(now: datetime | None = None) -> list[str]:
+    """Delete only this app's old publisher Machines; never touch active builds."""
+    now = now or datetime.now(timezone.utc)
+    stale: list[tuple[str, str]] = []
+    for row in machine_rows():
+        name, machine_id, created = row.get("name"), row.get("id"), row.get("created_at")
+        if not isinstance(name, str) or not PUBLISHER_NAME_RE.fullmatch(name):
+            continue
+        if not isinstance(machine_id, str) or not isinstance(created, str):
+            raise RuntimeError(f"publisher Machine {name} lacks ID or creation time")
+        created_at = datetime.fromisoformat(created.replace("Z", "+00:00"))
+        if created_at.tzinfo is None:
+            raise RuntimeError(f"publisher Machine {name} has naive creation time")
+        if now - created_at >= STALE_AFTER:
+            stale.append((name, machine_id))
+    for name, machine_id in stale:
+        destroy_named(name, machine_id)
+    return [name for name, _ in stale]
 
 
 def archive_head(path: Path, sha: str) -> None:
@@ -154,6 +207,7 @@ def publish() -> str:
         auth = scratch / "config.json"
         archive_head(source, sha)
         write_auth(auth)
+        machine_id: str | None = None
         try:
             # A unique name lets cleanup recover a Machine even if flyctl fails
             # after creation but before returning its ID.
@@ -218,23 +272,35 @@ def publish() -> str:
                 with Path(github_output).open("a", encoding="utf-8") as output:
                     output.write(f"digest={digest}\n")
             return digest
+        except subprocess.CalledProcessError as exc:
+            output = exc.stdout or ""
+            if isinstance(output, bytes):
+                output = output.decode(errors="replace")
+            found = MACHINE_ID_RE.search(output)
+            if found:
+                machine_id = found.group(1)
+            raise
         finally:
             try:
-                for machine_id in live_machine_ids(name):
+                for candidate in ([machine_id] if machine_id else []):
                     try:
-                        guest(machine_id, "sh -lc 'rm -rf /tmp/publisher'", user="root")
+                        guest(candidate, "sh -lc 'rm -rf /tmp/publisher'", user="root")
                     except Exception as exc:  # cleanup still destroys the guest
                         print(f"guest auth cleanup failed: {exc}", file=sys.stderr)
             finally:
-                destroy_named(name)
+                destroy_named(name, machine_id)
 
 
 def main() -> None:
     if len(sys.argv) == 2 and sys.argv[1] == "--cleanup-only":
         destroy_named(machine_name())
         return
+    if len(sys.argv) == 2 and sys.argv[1] == "--cleanup-stale":
+        for name in cleanup_stale():
+            print(f"destroyed stale publisher Machine {name}")
+        return
     if len(sys.argv) != 1:
-        raise SystemExit("usage: fly_buildkit_publish.py [--cleanup-only]")
+        raise SystemExit("usage: fly_buildkit_publish.py [--cleanup-only|--cleanup-stale]")
     signal.signal(signal.SIGTERM, lambda _sig, _frame: (_ for _ in ()).throw(InterruptedError()))
     publish()
 
