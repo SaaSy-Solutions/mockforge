@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 # Also used by docker-build.yml for the root MockForge image. Expensive Rust
-# Docker builds share the same self-hosted host and must run one at a time.
+# Docker builds share a constrained Fly publisher app and run one at a time.
 concurrency:
   group: mockforge-image-builds
   cancel-in-progress: false
