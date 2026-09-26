@@ -16,10 +16,12 @@ Docker config, transfers it over Fly SSH/SFTP, and deletes it before destroying
 the guest. Source comes from `git archive HEAD` after an exact SHA check.
 
 Each image build creates an 8-vCPU/64-GiB/100-GB-rootfs Machine with a unique
-run/attempt/image name. `finally` and an `if: always()` workflow step search
-that name and destroy remaining Machines. Monitor app inventory after
-cancelled jobs or a Fly API outage and destroy stale Machines; a stopped
-Machine's rootfs still costs money. Matrix builds are serial and the root
+run/attempt/image name. `finally` destroys the returned ID directly and
+repeatedly checks the unique name; an `if: always()` workflow step repeats the
+check. The hourly `fly-publisher-cleanup.yml` job destroys only publisher-named
+Machines older than six hours, beyond the 90-minute build timeout. Check app
+inventory after an API outage or failed cleanup job; a stopped Machine's
+rootfs still costs money. Matrix builds are serial and the root
 publisher shares a GitHub concurrency group with registry/tunnel publishing.
 
 Before enabling full publishing, prove one protected-main canary with the

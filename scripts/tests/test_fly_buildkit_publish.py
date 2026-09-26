@@ -10,6 +10,7 @@ import os
 import subprocess
 import tempfile
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -63,6 +64,8 @@ class FlyBuildkitPublishTest(unittest.TestCase):
         rows = iter([
             json.dumps([{"id": "d8911154b66358", "name": name}]),
             json.dumps([]),
+            json.dumps([]),
+            json.dumps([]),
         ])
         calls: list[tuple[str, ...]] = []
 
@@ -72,9 +75,37 @@ class FlyBuildkitPublishTest(unittest.TestCase):
                 return subprocess.CompletedProcess([], 0, next(rows), "")
             return subprocess.CompletedProcess([], 0, "", "")
 
-        with patch.object(publisher, "fly", side_effect=fake_fly):
+        with patch.object(publisher, "fly", side_effect=fake_fly), patch.object(publisher.time, "sleep"):
             publisher.destroy_named(name)
         self.assertIn(("machine", "destroy", "d8911154b66358", "-a", publisher.APP, "--force"), calls)
+
+    def test_cleanup_observes_delayed_machine_after_failed_create(self) -> None:
+        name = "pub-123-1-delayed"
+        rows = iter([[], [{"id": "d8911154b66358", "name": name}], [], [], []])
+        destroyed: list[str] = []
+
+        def fake_fly(*args: str, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            if args[:2] == ("machine", "list"):
+                return subprocess.CompletedProcess([], 0, json.dumps(next(rows)), "")
+            if args[:2] == ("machine", "destroy"):
+                destroyed.append(args[2])
+            return subprocess.CompletedProcess([], 0, "", "")
+
+        with patch.object(publisher, "fly", side_effect=fake_fly), patch.object(publisher.time, "sleep"):
+            publisher.destroy_named(name)
+        self.assertEqual(destroyed, ["d8911154b66358"])
+
+    def test_stale_cleanup_preserves_recent_and_unrelated_machines(self) -> None:
+        now = datetime(2026, 9, 26, 20, tzinfo=timezone.utc)
+        old = {"id": "d8911154b66358", "name": "pub-123-1-old", "created_at": "2026-09-26T12:00:00Z"}
+        recent = {"id": "d8911154b66359", "name": "pub-124-1-current", "created_at": "2026-09-26T19:00:00Z"}
+        unrelated = {"id": "d8911154b66360", "name": "production", "created_at": "2026-09-25T00:00:00Z"}
+        with (
+            patch.object(publisher, "machine_rows", return_value=[old, recent, unrelated]),
+            patch.object(publisher, "destroy_named") as destroy,
+        ):
+            self.assertEqual(publisher.cleanup_stale(now), ["pub-123-1-old"])
+        destroy.assert_called_once_with("pub-123-1-old", "d8911154b66358")
 
     def test_guest_build_failure_still_deletes_machine(self) -> None:
         sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
@@ -93,8 +124,8 @@ class FlyBuildkitPublishTest(unittest.TestCase):
         }
         assert (ROOT / env["IMAGE_DOCKERFILE"]).is_file()
         rows = iter([
-            [{"id": "d8911154b66358", "name": "pub-123-1-mockforge-registry"}],
-            [{"id": "d8911154b66358", "name": "pub-123-1-mockforge-registry"}],
+            [],
+            [],
             [],
         ])
         destroyed: list[str] = []
@@ -120,6 +151,7 @@ class FlyBuildkitPublishTest(unittest.TestCase):
             patch.object(publisher, "archive_head", side_effect=lambda p, _s: p.write_bytes(b"tar")),
             patch.object(publisher, "write_auth", side_effect=lambda p: p.write_bytes(b"auth")),
             patch.object(publisher, "upload"),
+            patch.object(publisher.time, "sleep"),
             patch.object(publisher.Path, "is_file", return_value=True),
         ):
             with self.assertRaisesRegex(RuntimeError, "synthetic build failure"):
@@ -144,8 +176,8 @@ class FlyBuildkitPublishTest(unittest.TestCase):
             "BUILD_DATE": "2026-09-26T20:00:00Z",
         }
         rows = iter([
-            [{"id": "d8911154b66358", "name": "pub-124-1-mockforge"}],
-            [{"id": "d8911154b66358", "name": "pub-124-1-mockforge"}],
+            [],
+            [],
             [],
         ])
         commands: list[str] = []
@@ -173,6 +205,7 @@ class FlyBuildkitPublishTest(unittest.TestCase):
             patch.object(publisher, "archive_head", side_effect=lambda p, _s: p.write_bytes(b"tar")),
             patch.object(publisher, "write_auth", side_effect=lambda p: p.write_bytes(b"auth")),
             patch.object(publisher, "upload"),
+            patch.object(publisher.time, "sleep"),
             patch.object(publisher.Path, "is_file", return_value=True),
         ):
             digest = publisher.publish()
