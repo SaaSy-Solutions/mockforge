@@ -1,6 +1,9 @@
 """Guard MockForge's Ashburn image supply inventory and demo command."""
 
 from pathlib import Path
+import json
+import os
+import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -72,6 +75,20 @@ class AshburnImagesTest(unittest.TestCase):
             self.assertNotIn("docker/login-action", no_write_job)
         self.assertIn("runs-on: ubuntu-latest", build)
         self.assertIn("packages: write", build)
+
+    def test_manual_canary_selects_one_known_image(self) -> None:
+        workflow = (ROOT / ".github/workflows/ashburn-images.yml").read_text()
+        script = workflow.split("python3 - <<'PY' >> \"$GITHUB_OUTPUT\"\n", 1)[1].split("\n          PY", 1)[0]
+        script = "\n".join(line.removeprefix("          ") for line in script.splitlines())
+        env = {**os.environ, "WANTED_IMAGE": "mockforge-tunnel-relay"}
+        result = subprocess.run(["python3", "-c", script], env=env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        matrix = json.loads(result.stdout.removeprefix("matrix="))
+        self.assertEqual(matrix["include"], [{"app": "mockforge-tunnel-relay", "dockerfile": "Dockerfile.tunnel"}])
+        env["WANTED_IMAGE"] = "not-an-image"
+        invalid = subprocess.run(["python3", "-c", script], env=env, text=True, capture_output=True)
+        self.assertNotEqual(invalid.returncode, 0)
+        self.assertIn("unknown image", invalid.stderr)
 
     def test_demo_command_is_documented_before_repointing_image(self) -> None:
         fly_config = (ROOT / "fly.demo.toml").read_text()

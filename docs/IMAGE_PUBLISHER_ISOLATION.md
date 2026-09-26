@@ -24,8 +24,9 @@ inventory after an API outage or failed cleanup job; a stopped Machine's
 rootfs still costs money. Matrix builds are serial and the root
 publisher shares a GitHub concurrency group with registry/tunnel publishing.
 
-Before enabling full publishing, prove one protected-main canary with the
-app-scoped token: Machine creation, SFTP handoff, BuildKit registry cache,
+Before enabling full publishing, dispatch `ashburn-images.yml` on protected
+`main` with `image=mockforge-tunnel-relay` for a single-image canary. Prove
+with the app-scoped token: Machine creation, SFTP handoff, BuildKit registry cache,
 GHCR push and immutable digest, root image metadata aliases/signature/SBOM,
 Ashburn read-token pull, and zero remaining builder Machines. A secret-free
 2-vCPU/4-GiB proof on 2026-09-26 ran rootless BuildKit and exported a real

@@ -10,6 +10,11 @@ on:
       - 'crates/**'
       - 'Cargo.lock'
   workflow_dispatch:
+    inputs:
+      image:
+        description: 'One image for a canary (mockforge-tunnel-relay or mockforge-registry); blank builds both'
+        required: false
+        default: ''
 
 # Also used by docker-build.yml for the root MockForge image. Expensive Rust
 # Docker builds share a constrained Fly publisher app and run one at a time.
@@ -29,14 +34,21 @@ jobs:
       matrix: ${{ steps.plan.outputs.matrix }}
     steps:
       - id: plan
+        env:
+          WANTED_IMAGE: ${{ inputs.image }}
         run: |
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json
+          import os
           sources = {
               'mockforge-registry': 'Dockerfile.registry',
               'mockforge-tunnel-relay': 'Dockerfile.tunnel',
           }
-          include = [{'app': app, 'dockerfile': dockerfile} for app, dockerfile in sorted(sources.items())]
+          wanted = os.environ.get('WANTED_IMAGE', '')
+          if wanted and wanted not in sources:
+              raise SystemExit(f'unknown image: {wanted}')
+          chosen = {wanted: sources[wanted]} if wanted else sources
+          include = [{'app': app, 'dockerfile': dockerfile} for app, dockerfile in sorted(chosen.items())]
           print('matrix=' + json.dumps({'include': include}))
           PY
 
