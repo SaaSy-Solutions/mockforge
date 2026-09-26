@@ -47,6 +47,19 @@ class FlyBuildkitPublishTest(unittest.TestCase):
             encoded = json.loads(path.read_text())["auths"]["ghcr.io"]["auth"]
             self.assertEqual(base64.b64decode(encoded), b"release-bot:fixture-token")
 
+    def test_only_build_guest_command_streams_output(self) -> None:
+        with (
+            patch.dict(os.environ, {"FLY_IMAGE_PUBLISHER_TOKEN": "fixture-fly-token"}),
+            patch.object(publisher.subprocess, "run") as run,
+        ):
+            run.return_value = subprocess.CompletedProcess([], 0, None, None)
+            self.assertEqual(publisher.guest("d8911154b66358", "buildctl build", stream=True), "")
+            self.assertFalse(run.call_args.kwargs["capture_output"])
+            self.assertEqual(run.call_args.kwargs["timeout"], 3600)
+            run.return_value = subprocess.CompletedProcess([], 0, "metadata", "")
+            self.assertEqual(publisher.guest("d8911154b66358", "cat metadata"), "metadata")
+            self.assertTrue(run.call_args.kwargs["capture_output"])
+
     def test_archive_requires_exact_checkout_sha(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(RuntimeError, "differs from requested main SHA"):
@@ -141,6 +154,7 @@ class FlyBuildkitPublishTest(unittest.TestCase):
 
         def fake_guest(_machine: str, command: str, **_kwargs: object) -> str:
             if "buildctl" in command:
+                self.assertTrue(_kwargs.get("stream"))
                 raise RuntimeError("synthetic build failure")
             return ""
 
@@ -194,6 +208,8 @@ class FlyBuildkitPublishTest(unittest.TestCase):
 
         def fake_guest(_machine: str, command: str, **_kwargs: object) -> str:
             commands.append(command)
+            if "buildctl" in command:
+                self.assertTrue(_kwargs.get("stream"))
             if "cat /tmp/publisher/metadata.json" in command:
                 return json.dumps({"containerimage.digest": "sha256:" + "a" * 64})
             return ""

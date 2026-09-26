@@ -44,22 +44,28 @@ def fly(*args: str, capture: bool = False, check: bool = True) -> subprocess.Com
     )
 
 
-def guest(machine_id: str, command: str, *, user: str = "user", timeout: int = 3600) -> str:
+def guest(
+    machine_id: str, command: str, *, user: str = "user", timeout: int = 3600,
+    stream: bool = False,
+) -> str:
     result = subprocess.run(
         [
             "flyctl", "ssh", "console", "-a", APP, "--machine", machine_id,
             "-u", user, "-C", command,
         ],
         env={**os.environ, "FLY_API_TOKEN": os.environ["FLY_IMAGE_PUBLISHER_TOKEN"]},
-        capture_output=True,
+        capture_output=not stream,
         text=True,
         timeout=timeout,
         check=False,
     )
     if result.returncode:
         # Fly/BuildKit errors are useful, but never print the Docker auth file.
-        raise RuntimeError(f"guest command failed ({result.returncode}): {result.stderr[-3000:]}")
-    return result.stdout
+        # The streamed build has no captured stderr. Its live Actions log has
+        # the full failure context; never echo the private Docker auth file.
+        detail = result.stderr[-3000:] if result.stderr else "see streamed build log"
+        raise RuntimeError(f"guest command failed ({result.returncode}): {detail}")
+    return result.stdout or ""
 
 
 def machine_name() -> str:
@@ -254,7 +260,7 @@ def publish() -> str:
                 f"--output type=image,name={image},push=true "
                 "--metadata-file /tmp/publisher/metadata.json'"
             )
-            guest(machine_id, build, timeout=3900)
+            guest(machine_id, build, timeout=3900, stream=True)
             metadata = guest(
                 machine_id,
                 "sh -lc 'cat /tmp/publisher/metadata.json'",
