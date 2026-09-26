@@ -4,10 +4,13 @@
 from __future__ import annotations
 
 import base64
+import io
+from contextlib import redirect_stderr
 import importlib.util
 import json
 import os
 import subprocess
+import tarfile
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -64,6 +67,14 @@ class FlyBuildkitPublishTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(RuntimeError, "differs from requested main SHA"):
                 publisher.archive_head(Path(directory) / "source.tar.gz", "0" * 40)
+
+    def test_archive_head_is_a_readable_gzip_tar(self) -> None:
+        sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "source.tar.gz"
+            publisher.archive_head(archive, sha)
+            with tarfile.open(archive, "r:gz") as source:
+                self.assertIn("Dockerfile.tunnel", source.getnames())
 
     def test_machine_name_rejects_untrusted_fields(self) -> None:
         with patch.dict(os.environ, {"GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "1", "IMAGE_APP": "mockforge-registry"}):
@@ -171,6 +182,50 @@ class FlyBuildkitPublishTest(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "synthetic build failure"):
                 publisher.publish()
         self.assertEqual(destroyed, ["d8911154b66358"])
+
+    def test_failed_machine_create_reports_reason_without_token(self) -> None:
+        sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+        env = {
+            "GITHUB_SHA": sha,
+            "GITHUB_REPOSITORY": "SaaSy-Solutions/mockforge",
+            "GITHUB_REF": "refs/heads/main",
+            "GITHUB_REF_PROTECTED": "true",
+            "GITHUB_RUN_ID": "125",
+            "GITHUB_RUN_ATTEMPT": "1",
+            "GITHUB_ACTOR": "tester",
+            "GITHUB_TOKEN": "fake-package-token",
+            "FLY_IMAGE_PUBLISHER_TOKEN": "fixture-fly-token",
+            "IMAGE_APP": "mockforge-tunnel-relay",
+            "IMAGE_DOCKERFILE": "Dockerfile.tunnel",
+        }
+        calls: list[tuple[str, ...]] = []
+
+        def fake_fly(*args: str, **_kwargs: object) -> subprocess.CompletedProcess[str]:
+            calls.append(args)
+            if args[:2] == ("machine", "run"):
+                self.assertEqual(args[args.index("--rootfs-size") + 1], "50")
+                raise subprocess.CalledProcessError(
+                    1, args, output="", stderr="invalid rootfs fixture-fly-token"
+                )
+            if args[:2] == ("machine", "list"):
+                return subprocess.CompletedProcess([], 0, "[]", "")
+            return subprocess.CompletedProcess([], 0, "", "")
+
+        logged = io.StringIO()
+        with (
+            patch.dict(os.environ, env),
+            patch.object(publisher, "fly", side_effect=fake_fly),
+            patch.object(publisher.time, "sleep"),
+            patch.object(publisher, "archive_head", side_effect=lambda p, _s: p.write_bytes(b"tar")),
+            patch.object(publisher, "write_auth", side_effect=lambda p: p.write_bytes(b"auth")),
+            patch.object(publisher.Path, "is_file", return_value=True),
+            redirect_stderr(logged),
+        ):
+            with self.assertRaises(subprocess.CalledProcessError):
+                publisher.publish()
+        self.assertIn("invalid rootfs", logged.getvalue())
+        self.assertNotIn("fixture-fly-token", logged.getvalue())
+        self.assertTrue(any(args[:2] == ("machine", "list") for args in calls))
 
     def test_root_image_preserves_release_build_args_and_digest(self) -> None:
         sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()

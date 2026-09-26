@@ -12,6 +12,7 @@ import gzip
 import json
 import os
 import re
+import shutil
 import signal
 import subprocess
 import sys
@@ -151,8 +152,15 @@ def archive_head(path: Path, sha: str) -> None:
     head = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
     if head != sha:
         raise RuntimeError(f"checkout {head} differs from requested main SHA {sha}")
-    with path.open("wb") as raw, gzip.GzipFile(fileobj=raw, mode="wb") as compressed:
-        subprocess.run(["git", "archive", "--format=tar", "HEAD"], stdout=compressed, check=True)
+    with gzip.open(path, "wb") as compressed:
+        with subprocess.Popen(
+            ["git", "archive", "--format=tar", "HEAD"], stdout=subprocess.PIPE
+        ) as process:
+            if process.stdout is None:
+                raise RuntimeError("git archive did not open a source stream")
+            shutil.copyfileobj(process.stdout, compressed, length=1024 * 1024)
+            if process.wait() != 0:
+                raise RuntimeError("git archive failed")
 
 
 def write_auth(path: Path) -> None:
@@ -221,7 +229,7 @@ def publish() -> str:
                 "machine", "run", BUILDKIT_IMAGE, "-a", APP,
                 "--name", name, "--region", REGION,
                 "--vm-cpu-kind", "performance", "--vm-cpus", "8",
-                "--vm-memory", "65536", "--rootfs-size", "100",
+                "--vm-memory", "65536", "--rootfs-size", "50",
                 "--restart", "no", "--rm", "--detach", "--skip-dns-registration",
                 capture=True,
             )
@@ -285,6 +293,15 @@ def publish() -> str:
             found = MACHINE_ID_RE.search(output)
             if found:
                 machine_id = found.group(1)
+            detail = exc.stderr or ""
+            if isinstance(detail, bytes):
+                detail = detail.decode(errors="replace")
+            token = os.environ["FLY_IMAGE_PUBLISHER_TOKEN"]
+            if detail:
+                print(
+                    f"Fly Machine creation failed: {detail.replace(token, '[redacted]')[-1200:]}",
+                    file=sys.stderr,
+                )
             raise
         finally:
             try:
