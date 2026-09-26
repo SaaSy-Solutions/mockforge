@@ -47,6 +47,8 @@ jobs:
       packages: write
       id-token: write  # For OIDC token
       security-events: write  # For Trivy scan results
+    outputs:
+      image_digest: ${{ steps.build-and-push.outputs.digest }}
 
     steps:
       - name: Checkout repository
@@ -216,7 +218,7 @@ jobs:
       - name: Run Grype vulnerability scanner
         uses: anchore/scan-action@v7
         with:
-          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-and-push.outputs.image_digest }}
           fail-build: false
           severity-cutoff: high
 
@@ -230,7 +232,7 @@ jobs:
             -v /var/run/docker.sock:/var/run/docker.sock \
             goodwithtech/dockle:latest \
             --exit-level fatal \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ needs.build-and-push.outputs.image_digest }}
 
   # Removed: the old `update-deployment` job that auto-committed image
   # tag bumps to k8s/deployment.yaml and helm/mockforge/values.yaml. It

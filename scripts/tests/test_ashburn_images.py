@@ -58,6 +58,8 @@ class AshburnImagesTest(unittest.TestCase):
         self.assertIn("Dockerfile.registry", smoke)
         self.assertIn("BUILD_DATE: ${{ steps.build-date.outputs.value }}", core_workflow)
         self.assertIn("docker buildx imagetools create", core_workflow)
+        self.assertIn("image_digest: ${{ steps.build-and-push.outputs.digest }}", core_workflow)
+        self.assertIn("@${{ needs.build-and-push.outputs.image_digest }}", core_workflow)
 
     def test_no_write_planner_and_summary_use_hosted_runners(self) -> None:
         workflow = (ROOT / ".github/workflows/ashburn-images.yml").read_text()
