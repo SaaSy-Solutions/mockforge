@@ -221,7 +221,7 @@ def publish() -> str:
                 "machine", "run", BUILDKIT_IMAGE, "-a", APP,
                 "--name", name, "--region", REGION,
                 "--vm-cpu-kind", "performance", "--vm-cpus", "8",
-                "--vm-memory", "65536", "--rootfs-size", "100",
+                "--vm-memory", "65536", "--rootfs-size", "50",
                 "--restart", "no", "--rm", "--detach", "--skip-dns-registration",
                 capture=True,
             )
@@ -285,6 +285,15 @@ def publish() -> str:
             found = MACHINE_ID_RE.search(output)
             if found:
                 machine_id = found.group(1)
+            detail = exc.stderr or ""
+            if isinstance(detail, bytes):
+                detail = detail.decode(errors="replace")
+            token = os.environ["FLY_IMAGE_PUBLISHER_TOKEN"]
+            if detail:
+                print(
+                    f"Fly Machine creation failed: {detail.replace(token, '[redacted]')[-1200:]}",
+                    file=sys.stderr,
+                )
             raise
         finally:
             try:

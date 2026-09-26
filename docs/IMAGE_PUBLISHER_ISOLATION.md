@@ -15,7 +15,7 @@ production Fly token must not be used. The trusted job's ephemeral
 Docker config, transfers it over Fly SSH/SFTP, and deletes it before destroying
 the guest. Source comes from `git archive HEAD` after an exact SHA check.
 
-Each image build creates an 8-vCPU/64-GiB/100-GB-rootfs Machine with a unique
+Each image build creates an 8-vCPU/64-GiB/50-GB-rootfs Machine with a unique
 run/attempt/image name. `finally` destroys the returned ID directly and
 repeatedly checks the unique name; an `if: always()` workflow step repeats the
 check. The hourly `fly-publisher-cleanup.yml` job destroys only publisher-named
