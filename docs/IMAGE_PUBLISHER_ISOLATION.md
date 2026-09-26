@@ -24,6 +24,11 @@ inventory after an API outage or failed cleanup job; a stopped Machine's
 rootfs still costs money. Matrix builds are serial and the root
 publisher shares a GitHub concurrency group with registry/tunnel publishing.
 
+Automatic main/tag publishing is initially disabled by the unset
+`MOCKFORGE_AUTO_IMAGE_PUBLISH` repository variable; both publisher workflows
+allow manual dispatch on protected `main`. Enable the variable with value
+`true` only after the canaries below pass.
+
 Before enabling full publishing, dispatch `ashburn-images.yml` on protected
 `main` with `image=mockforge-tunnel-relay` for a single-image canary. Prove
 with the app-scoped token: Machine creation, SFTP handoff, BuildKit registry cache,

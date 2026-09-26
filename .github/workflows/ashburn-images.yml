@@ -27,7 +27,9 @@ permissions:
 
 jobs:
   plan:
-    if: github.ref == 'refs/heads/main' && github.ref_protected
+    if: >-
+      github.ref == 'refs/heads/main' && github.ref_protected &&
+      (github.event_name == 'workflow_dispatch' || vars.MOCKFORGE_AUTO_IMAGE_PUBLISH == 'true')
     # This job only computes a JSON matrix; it needs no trusted publisher VM.
     runs-on: ubuntu-latest
     outputs:
@@ -55,7 +57,9 @@ jobs:
   build:
     needs: plan
     name: ${{ matrix.app }}
-    if: github.ref == 'refs/heads/main' && github.ref_protected
+    if: >-
+      github.ref == 'refs/heads/main' && github.ref_protected &&
+      (github.event_name == 'workflow_dispatch' || vars.MOCKFORGE_AUTO_IMAGE_PUBLISH == 'true')
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -87,7 +91,9 @@ jobs:
   images-built:
     name: MockForge Ashburn images built
     needs: [plan, build]
-    if: always() && github.ref == 'refs/heads/main'
+    if: >-
+      always() && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' || vars.MOCKFORGE_AUTO_IMAGE_PUBLISH == 'true')
     # Report the publisher result without waiting for old CI listeners.
     runs-on: ubuntu-latest
     steps:

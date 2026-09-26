@@ -39,7 +39,7 @@ class AshburnImagesTest(unittest.TestCase):
         self.assertIn("max-parallel: 1", workflow)
         self.assertIn("group: mockforge-image-builds", workflow)
         self.assertIn("group: mockforge-image-builds", core_workflow)
-        self.assertIn("if: github.ref == 'refs/heads/main' && github.ref_protected", workflow)
+        self.assertIn("github.ref == 'refs/heads/main' && github.ref_protected", workflow)
         self.assertIn("github.ref == 'refs/heads/main'", core_workflow)
         self.assertIn("github.ref_protected", core_workflow)
         self.assertNotIn("refs/heads/develop", core_workflow)
@@ -75,6 +75,14 @@ class AshburnImagesTest(unittest.TestCase):
             self.assertNotIn("docker/login-action", no_write_job)
         self.assertIn("runs-on: ubuntu-latest", build)
         self.assertIn("packages: write", build)
+
+    def test_auto_publish_is_opt_in_without_blocking_manual_canary(self) -> None:
+        ashburn = (ROOT / ".github/workflows/ashburn-images.yml").read_text()
+        root_image = (ROOT / ".github/workflows/docker-build.yml").read_text()
+        self.assertEqual(ashburn.count("vars.MOCKFORGE_AUTO_IMAGE_PUBLISH == 'true'"), 3)
+        self.assertIn("vars.MOCKFORGE_AUTO_IMAGE_PUBLISH == 'true'", root_image)
+        self.assertIn("github.event_name == 'workflow_dispatch'", ashburn)
+        self.assertIn("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'", root_image)
 
     def test_manual_canary_selects_one_known_image(self) -> None:
         workflow = (ROOT / ".github/workflows/ashburn-images.yml").read_text()

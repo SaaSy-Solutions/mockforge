@@ -38,7 +38,8 @@ jobs:
       github.ref_protected &&
       ((github.event_name == 'push' &&
         (github.ref == 'refs/heads/main' ||
-         startsWith(github.ref, 'refs/tags/v'))) ||
+         startsWith(github.ref, 'refs/tags/v')) &&
+        vars.MOCKFORGE_AUTO_IMAGE_PUBLISH == 'true') ||
       (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'))
     runs-on: ubuntu-latest
     timeout-minutes: 90
