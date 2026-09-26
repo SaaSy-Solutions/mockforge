@@ -5,8 +5,8 @@ The repository publishes the root `Dockerfile` to
 supplies both the persistent `mockforge-server` and the `mockforge-demo` services.
 `ashburn-images.yml` publishes `Dockerfile.registry` as
 `ghcr.io/saasy-solutions/mockforge-registry` and `Dockerfile.tunnel` as
-`ghcr.io/saasy-solutions/mockforge-tunnel-relay`. Both workflows build on the
-same Rust runner and share one concurrency group. Production image tags are
+`ghcr.io/saasy-solutions/mockforge-tunnel-relay`. Both workflows build in
+disposable rootless BuildKit Fly Machines and share one concurrency group. Production image tags are
 source commit SHAs; Ashburn should pin the resulting immutable digests.
 
 The demo's Fly configuration supplies a process command that is **not part of
