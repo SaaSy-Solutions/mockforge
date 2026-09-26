@@ -23,7 +23,8 @@ permissions:
 jobs:
   plan:
     if: github.ref == 'refs/heads/main' && github.ref_protected
-    runs-on: [self-hosted, linux, x64, rust]
+    # This job only computes a JSON matrix; it needs no trusted publisher VM.
+    runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.plan.outputs.matrix }}
     steps:
@@ -119,7 +120,8 @@ jobs:
     name: MockForge Ashburn images built
     needs: [plan, build]
     if: always() && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, linux, x64, rust]
+    # Report the publisher result without waiting for old CI listeners.
+    runs-on: ubuntu-latest
     steps:
       - run: |
           test "${{ needs.plan.result }}" = success
