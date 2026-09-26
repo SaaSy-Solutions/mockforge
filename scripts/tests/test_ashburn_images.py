@@ -1,6 +1,9 @@
 """Guard MockForge's Ashburn image supply inventory and demo command."""
 
 from pathlib import Path
+import json
+import os
+import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -8,7 +11,7 @@ FILENAMES = ['ashburn-images.yml', 'docker-build.yml']
 
 
 class AshburnImagesTest(unittest.TestCase):
-    def test_publisher_requires_isolated_runner(self) -> None:
+    def test_publisher_uses_trusted_hosted_orchestrator(self) -> None:
         smoke = (ROOT / ".github/workflows/ashburn-image-smoke.yml").read_text()
         guard = (ROOT / "scripts/verify-image-publisher.sh").read_text()
         self.assertIn("name=rootless", guard)
@@ -18,11 +21,13 @@ class AshburnImagesTest(unittest.TestCase):
         self.assertNotIn("packages: write", smoke)
         for filename in FILENAMES:
             workflow = (ROOT / ".github/workflows" / filename).read_text()
-            self.assertIn("group: mockforge-image-publish", workflow)
-            self.assertIn("labels: [self-hosted, linux, x64, mockforge-image-publish]", workflow)
-            self.assertIn("Verify isolated rootless Docker", workflow)
+            self.assertIn("runs-on: ubuntu-latest", workflow)
+            self.assertNotIn("group: mockforge-image-publish", workflow)
+            self.assertIn("fly_buildkit_publish.py", workflow)
+            self.assertIn("FLY_IMAGE_PUBLISHER_TOKEN", workflow)
             self.assertIn("persist-credentials: false", workflow)
-            self.assertIn("DOCKER_CONFIG", workflow)
+            self.assertIn("--cleanup-only", workflow)
+            self.assertIn("packages: write", workflow)
 
     def test_registry_and_tunnel_dockerfiles_are_published_serially(self) -> None:
         workflow = (ROOT / ".github/workflows/ashburn-images.yml").read_text()
@@ -34,32 +39,30 @@ class AshburnImagesTest(unittest.TestCase):
         self.assertIn("max-parallel: 1", workflow)
         self.assertIn("group: mockforge-image-builds", workflow)
         self.assertIn("group: mockforge-image-builds", core_workflow)
-        self.assertIn("if: github.ref == 'refs/heads/main' && github.ref_protected", workflow)
+        self.assertIn("github.ref == 'refs/heads/main' && github.ref_protected", workflow)
         self.assertIn("github.ref == 'refs/heads/main'", core_workflow)
         self.assertIn("github.ref_protected", core_workflow)
         self.assertNotIn("refs/heads/develop", core_workflow)
         self.assertIn("startsWith(github.ref, 'refs/tags/v')", core_workflow)
         self.assertIn("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'", core_workflow)
         isolation = (ROOT / "docs/IMAGE_PUBLISHER_ISOLATION.md").read_text()
-        for ref in (
-            'ashburn-images.yml@refs/heads/main',
-            'docker-build.yml@refs/heads/main',
-            'docker-build.yml@refs/tags/v1.2.3',
-        ):
-            self.assertIn(ref, isolation)
-        self.assertIn('Before each `v*` release tag is pushed', isolation)
+        self.assertIn('mockforge-image-publisher', isolation)
+        self.assertIn('FLY_IMAGE_PUBLISHER_TOKEN', isolation)
+        self.assertIn('protected `v*`', isolation)
         for publish in (workflow, core_workflow):
             self.assertNotIn("  pull_request:", publish)
             self.assertIn("packages: write", publish)
-            self.assertIn("memory=20g", publish)
-            self.assertIn("docker inspect", publish)
+            self.assertIn("fly_buildkit_publish.py", publish)
         self.assertIn("pull_request:", smoke)
         self.assertIn("contents: read", smoke)
         self.assertNotIn("packages: write", smoke)
         self.assertNotIn("docker/login-action", smoke)
         self.assertIn("push: false", smoke)
         self.assertIn("Dockerfile.registry", smoke)
-        self.assertIn("BUILD_DATE=${{ steps.build-date.outputs.value }}", core_workflow)
+        self.assertIn("BUILD_DATE: ${{ steps.build-date.outputs.value }}", core_workflow)
+        self.assertIn("docker buildx imagetools create", core_workflow)
+        self.assertIn("image_digest: ${{ steps.build-and-push.outputs.digest }}", core_workflow)
+        self.assertIn("@${{ needs.build-and-push.outputs.image_digest }}", core_workflow)
 
     def test_no_write_planner_and_summary_use_hosted_runners(self) -> None:
         workflow = (ROOT / ".github/workflows/ashburn-images.yml").read_text()
@@ -70,8 +73,30 @@ class AshburnImagesTest(unittest.TestCase):
             self.assertIn("runs-on: ubuntu-latest", no_write_job)
             self.assertNotIn("packages: write", no_write_job)
             self.assertNotIn("docker/login-action", no_write_job)
-        self.assertIn("group: mockforge-image-publish", build)
+        self.assertIn("runs-on: ubuntu-latest", build)
         self.assertIn("packages: write", build)
+
+    def test_auto_publish_is_opt_in_without_blocking_manual_canary(self) -> None:
+        ashburn = (ROOT / ".github/workflows/ashburn-images.yml").read_text()
+        root_image = (ROOT / ".github/workflows/docker-build.yml").read_text()
+        self.assertEqual(ashburn.count("vars.MOCKFORGE_AUTO_IMAGE_PUBLISH == 'true'"), 3)
+        self.assertIn("vars.MOCKFORGE_AUTO_IMAGE_PUBLISH == 'true'", root_image)
+        self.assertIn("github.event_name == 'workflow_dispatch'", ashburn)
+        self.assertIn("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'", root_image)
+
+    def test_manual_canary_selects_one_known_image(self) -> None:
+        workflow = (ROOT / ".github/workflows/ashburn-images.yml").read_text()
+        script = workflow.split("python3 - <<'PY' >> \"$GITHUB_OUTPUT\"\n", 1)[1].split("\n          PY", 1)[0]
+        script = "\n".join(line.removeprefix("          ") for line in script.splitlines())
+        env = {**os.environ, "WANTED_IMAGE": "mockforge-tunnel-relay"}
+        result = subprocess.run(["python3", "-c", script], env=env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        matrix = json.loads(result.stdout.removeprefix("matrix="))
+        self.assertEqual(matrix["include"], [{"app": "mockforge-tunnel-relay", "dockerfile": "Dockerfile.tunnel"}])
+        env["WANTED_IMAGE"] = "not-an-image"
+        invalid = subprocess.run(["python3", "-c", script], env=env, text=True, capture_output=True)
+        self.assertNotEqual(invalid.returncode, 0)
+        self.assertIn("unknown image", invalid.stderr)
 
     def test_demo_command_is_documented_before_repointing_image(self) -> None:
         fly_config = (ROOT / "fly.demo.toml").read_text()
