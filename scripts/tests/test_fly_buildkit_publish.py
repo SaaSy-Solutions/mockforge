@@ -10,6 +10,7 @@ import importlib.util
 import json
 import os
 import subprocess
+import tarfile
 import tempfile
 import unittest
 from datetime import datetime, timezone
@@ -66,6 +67,14 @@ class FlyBuildkitPublishTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             with self.assertRaisesRegex(RuntimeError, "differs from requested main SHA"):
                 publisher.archive_head(Path(directory) / "source.tar.gz", "0" * 40)
+
+    def test_archive_head_is_a_readable_gzip_tar(self) -> None:
+        sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "source.tar.gz"
+            publisher.archive_head(archive, sha)
+            with tarfile.open(archive, "r:gz") as source:
+                self.assertIn("Dockerfile.tunnel", source.getnames())
 
     def test_machine_name_rejects_untrusted_fields(self) -> None:
         with patch.dict(os.environ, {"GITHUB_RUN_ID": "123", "GITHUB_RUN_ATTEMPT": "1", "IMAGE_APP": "mockforge-registry"}):
