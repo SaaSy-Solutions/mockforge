@@ -4,6 +4,7 @@ import importlib.util
 import json
 import tempfile
 import unittest
+import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
@@ -34,6 +35,19 @@ def rows():
 
 
 class FlyLegacyCutoverTests(unittest.TestCase):
+    def test_fly_failure_reports_app_without_stderr(self):
+        failure = subprocess.CalledProcessError(
+            1,
+            ["flyctl", "machine", "list"],
+            stderr="permission denied secret-account-detail",
+        )
+        with patch.dict("os.environ", {"FLY_API_TOKEN": "private-token"}):
+            with patch.object(cutover.subprocess, "run", side_effect=failure):
+                with self.assertRaisesRegex(RuntimeError, "reason=access_denied") as caught:
+                    cutover.fly("machine", "list", "-a", "mockforge-demo", "--json")
+        self.assertIn("app=mockforge-demo", str(caught.exception))
+        self.assertNotIn("secret-account-detail", str(caught.exception))
+
     def test_inventory_fails_on_missing_machine(self):
         machines = rows()
         machines[cutover.APPS[1]].pop()

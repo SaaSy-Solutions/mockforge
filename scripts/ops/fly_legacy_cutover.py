@@ -27,13 +27,30 @@ LIVE_STATES = {"started"}
 def fly(*args: str) -> str:
     if not os.environ.get("FLY_API_TOKEN"):
         raise RuntimeError("FLY_API_TOKEN is required")
-    result = subprocess.run(
-        ["flyctl", *args],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
+    try:
+        result = subprocess.run(
+            ["flyctl", *args],
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+    except subprocess.CalledProcessError as error:
+        # Report only a fixed failure class and app name; flyctl's raw stderr
+        # may contain account details and must stay out of Actions logs.
+        stderr = (error.stderr or "").lower()
+        if "not authorized" in stderr or "permission" in stderr or "forbidden" in stderr:
+            reason = "access_denied"
+        elif "not found" in stderr or "could not find" in stderr:
+            reason = "app_not_found"
+        elif "unauthorized" in stderr or "invalid token" in stderr:
+            reason = "invalid_token"
+        else:
+            reason = "flyctl_error"
+        app = args[args.index("-a") + 1] if "-a" in args else "unknown"
+        raise RuntimeError(
+            f"flyctl {args[0]} {args[1]} app={app} exit={error.returncode} reason={reason}"
+        ) from error
     return result.stdout
 
 
@@ -182,12 +199,13 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
+    except RuntimeError as error:
+        raise SystemExit("Fly cutover refused: " + str(error)) from error
     except (
         OSError,
         ValueError,
         KeyError,
         TypeError,
-        RuntimeError,
         subprocess.SubprocessError,
     ) as error:
         raise SystemExit("Fly cutover refused: " + type(error).__name__) from error
