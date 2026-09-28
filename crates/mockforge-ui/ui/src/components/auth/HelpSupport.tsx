@@ -241,14 +241,14 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
               Contact support
             </Link>
             <Link
-              to="/terms"
+              to="/legal/terms"
               onClick={() => onOpenChange(false)}
               className="flex items-center gap-1 text-muted-foreground hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
             >
               Terms
             </Link>
             <Link
-              to="/privacy"
+              to="/legal/privacy"
               onClick={() => onOpenChange(false)}
               className="flex items-center gap-1 text-muted-foreground hover:text-orange-600 dark:hover:text-orange-400 transition-colors"
             >

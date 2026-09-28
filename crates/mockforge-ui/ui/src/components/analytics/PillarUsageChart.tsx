@@ -15,7 +15,7 @@ import {
 } from 'chart.js';
 import { Doughnut } from 'react-chartjs-2';
 import { getChartPalette } from '../../utils/chartTheme';
-import type { PillarUsageMetrics } from '@/hooks/usePillarAnalytics';
+import { computePillarScores, type PillarUsageMetrics } from '@/hooks/usePillarAnalytics';
 
 ChartJS.register(
   ArcElement,
@@ -36,7 +36,7 @@ export const PillarUsageChart: React.FC<PillarUsageChartProps> = ({
   data,
   isLoading,
 }) => {
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
       <div className="h-64 flex items-center justify-center">
         <div className="text-muted-foreground">Loading chart data...</div>
@@ -44,16 +44,21 @@ export const PillarUsageChart: React.FC<PillarUsageChartProps> = ({
     );
   }
 
-  const palette = getChartPalette();
+  // No response (query idle or failed) or a response with no recorded usage:
+  // say so rather than implying data is still on its way.
+  const pillarScores = data ? computePillarScores(data) : null;
+  if (!pillarScores || Object.values(pillarScores).every((score) => score === 0)) {
+    return (
+      <div className="h-64 flex items-center justify-center" data-testid="pillar-usage-chart-empty">
+        <div className="text-center text-muted-foreground">
+          <p>No pillar usage recorded for this time range.</p>
+          <p className="text-sm mt-1">Usage appears here as mocks are served and features are used.</p>
+        </div>
+      </div>
+    );
+  }
 
-  // Calculate pillar usage scores (normalized 0-100)
-  const pillarScores = {
-    reality: data.reality?.blended_reality_percent ?? 0,
-    contracts: data.contracts?.validation_enforce_percent ?? 0,
-    devx: data.devx ? (data.devx.sdk_installations > 0 ? 50 : 0) : 0,
-    cloud: data.cloud ? (data.cloud.shared_scenarios_count > 0 ? 50 : 0) : 0,
-    ai: data.ai ? (data.ai.ai_generated_mocks > 0 ? 50 : 0) : 0,
-  };
+  const palette = getChartPalette();
 
   const chartData = {
     labels: ['Reality', 'Contracts', 'DevX', 'Cloud', 'AI'],

@@ -20,14 +20,12 @@ interface AuthGuardProps {
  */
 const SELF_AUTHED_PREFIXES = isCloudMode() ? [] : ['/registry-login', '/registry-admin'];
 
-// Public pages that render without any auth check — legal docs, pricing, support,
+// Public pages that render without any auth check — pricing, support,
 // verification landings, and the SSO callback (user is not yet authenticated when
 // the IdP redirects back here). These render the same shell (via AuthGuard passing
-// through) but don't require an authenticated user.
+// through) but don't require an authenticated user. Legal documents (/legal/*)
+// are routed in App.tsx outside AuthGuard and AppShell entirely.
 const PUBLIC_PREFIXES = [
-  '/terms',
-  '/privacy',
-  '/dpa',
   '/pricing',
   '/faq',
   '/support',
