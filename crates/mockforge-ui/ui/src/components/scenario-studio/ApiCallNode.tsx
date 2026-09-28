@@ -16,7 +16,7 @@ export type ApiCallNodeData = {
   expectedStatus?: number;
 };
 
-export type ApiCallNodeType = Node<ApiCallNodeData, 'apiCall'>;
+export type ApiCallNodeType = Node<ApiCallNodeData, 'api_call'>;
 
 export function ApiCallNode({ data, selected }: NodeProps<ApiCallNodeType>) {
   const method = data.method || 'GET';
