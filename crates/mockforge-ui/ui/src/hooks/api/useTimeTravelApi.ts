@@ -58,7 +58,7 @@ export function useUpdatePersonaLifecycles() {
 export function useLivePreviewLifecycleUpdates(workspace: string = 'default', enabled: boolean = true) {
   const { data: timeStatus } = useTimeTravelStatus();
   const updateLifecycles = useUpdatePersonaLifecycles();
-  const previousTimeRef = React.useRef<string | undefined>();
+  const previousTimeRef = React.useRef<string | undefined>(undefined);
 
   React.useEffect(() => {
     if (!enabled || !timeStatus?.enabled) {

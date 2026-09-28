@@ -23,7 +23,6 @@ import type { DriftIncident, IncidentStatus, IncidentSeverity, IncidentType } fr
 import {
   PageHeader,
   ModernCard,
-  ModernBadge,
   Alert,
   EmptyState,
 } from '../components/ui/DesignSystem';
@@ -353,18 +352,18 @@ function IncidentRow({
                     </div>
                   )}
                   {/* Show protocol-specific operation info */}
-                  {incident.details.operation_id && (
+                  {!!incident.details.operation_id && (
                     <div className="text-xs text-muted-foreground">
                       <span className="font-semibold">Operation:</span> {String(incident.details.operation_id)}
                     </div>
                   )}
-                  {incident.details.operation_type && (
+                  {!!incident.details.operation_type && (
                     <div className="text-xs text-muted-foreground">
                       <span className="font-semibold">Type:</span> {String(incident.details.operation_type)}
                     </div>
                   )}
                   {/* Show schema format if available */}
-                  {incident.details.schema_format && (
+                  {!!incident.details.schema_format && (
                     <div className="p-2 rounded text-xs bg-info-50 dark:bg-info-900/20 border border-info-200 dark:border-info-800">
                       <span className="font-semibold text-info-700 dark:text-info-300">
                         Schema Format: {String(incident.details.schema_format).replace(/_/g, ' ').toUpperCase()}
@@ -372,10 +371,10 @@ function IncidentRow({
                     </div>
                   )}
                   {/* Show service/method info for gRPC */}
-                  {incident.protocol === 'grpc' && incident.details.service && (
+                  {incident.protocol === 'grpc' && !!incident.details.service && (
                     <div className="text-xs text-muted-foreground">
                       <span className="font-semibold">Service:</span> {String(incident.details.service)}
-                      {incident.details.method && (
+                      {!!incident.details.method && (
                         <> • <span className="font-semibold">Method:</span> {String(incident.details.method)}</>
                       )}
                     </div>

@@ -72,9 +72,9 @@ export function SmtpMailboxPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['smtp-emails'] });
       setSelectedId(null);
-      showToast('Mailbox cleared', 'success');
+      showToast('success', 'Mailbox cleared');
     },
-    onError: (err: Error) => showToast(err.message, 'error'),
+    onError: (err: Error) => showToast('error', err.message),
   });
 
   const applySearch = (e: React.FormEvent) => {

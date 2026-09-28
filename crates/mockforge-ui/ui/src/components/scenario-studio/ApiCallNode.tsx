@@ -2,22 +2,23 @@
 //!
 //! Custom React Flow node component for representing API call steps in a flow.
 
-import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import type { NodeProps } from '@xyflow/react';
+import type { Node, NodeProps } from '@xyflow/react';
 import { Badge } from '../ui/Badge';
 import { Globe } from 'lucide-react';
 import { cn } from '@/utils/cn';
 
-export interface ApiCallNodeData {
+export type ApiCallNodeData = {
   id: string;
   name: string;
   method?: string;
   endpoint?: string;
   expectedStatus?: number;
-}
+};
 
-export function ApiCallNode({ data, selected }: NodeProps<ApiCallNodeData>) {
+export type ApiCallNodeType = Node<ApiCallNodeData, 'apiCall'>;
+
+export function ApiCallNode({ data, selected }: NodeProps<ApiCallNodeType>) {
   const method = data.method || 'GET';
   const endpoint = data.endpoint || '/api/endpoint';
   const status = data.expectedStatus;

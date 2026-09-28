@@ -257,7 +257,7 @@ export const PublishPluginModal: React.FC<PublishPluginModalProps> = ({
               <Select
                 value={formData.category}
                 label="Category"
-                onChange={(e) => handleInputChange('category', e.target.value)}
+                onChange={(e) => handleInputChange('category', String(e.target.value))}
               >
                 {PLUGIN_CATEGORIES.map((cat) => (
                   <MenuItem key={cat.value} value={cat.value}>
@@ -285,7 +285,7 @@ export const PublishPluginModal: React.FC<PublishPluginModalProps> = ({
               <Select
                 value={formData.license}
                 label="License"
-                onChange={(e) => handleInputChange('license', e.target.value)}
+                onChange={(e) => handleInputChange('license', String(e.target.value))}
               >
                 {PLUGIN_LICENSES.map((license) => (
                   <MenuItem key={license} value={license}>

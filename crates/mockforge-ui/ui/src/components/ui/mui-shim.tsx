@@ -208,6 +208,10 @@ function sxToStyle(sx: SxObject | undefined | null): React.CSSProperties | undef
 interface BoxProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'color'> {
   sx?: SxObject;
   component?: keyof React.JSX.IntrinsicElements | React.ComponentType<any>;
+  /** Forwarded when `component="img"`. */
+  src?: string;
+  /** Forwarded when `component="img"`. */
+  alt?: string;
 }
 
 export const Box = React.forwardRef<HTMLDivElement, BoxProps>(function Box(
@@ -311,11 +315,12 @@ interface DividerProps extends Omit<React.HTMLAttributes<HTMLHRElement | HTMLDiv
   flexItem?: boolean;
   textAlign?: 'left' | 'center' | 'right';
   variant?: 'fullWidth' | 'inset' | 'middle';
+  component?: 'hr' | 'li' | 'div';
   sx?: SxObject;
   children?: React.ReactNode;
 }
 
-export function Divider({ orientation = 'horizontal', flexItem, textAlign, className, children, sx, style, ...rest }: DividerProps) {
+export function Divider({ orientation = 'horizontal', flexItem, textAlign, component = 'hr', className, children, sx, style, ...rest }: DividerProps) {
   if (children) {
     return (
       <div
@@ -332,7 +337,8 @@ export function Divider({ orientation = 'horizontal', flexItem, textAlign, class
   if (orientation === 'vertical') {
     return <div role="separator" className={cn('w-px self-stretch bg-border', flexItem && 'h-auto', className)} style={{ ...sxToStyle(sx), ...style }} {...(rest as React.HTMLAttributes<HTMLDivElement>)} />;
   }
-  return <hr className={cn('border-0 h-px bg-border my-0', className)} style={{ ...sxToStyle(sx), ...style }} {...(rest as React.HTMLAttributes<HTMLHRElement>)} />;
+  const Comp = component;
+  return <Comp role={Comp === 'hr' ? undefined : 'separator'} className={cn('border-0 h-px bg-border my-0', className)} style={{ ...sxToStyle(sx), ...style }} {...(rest as React.HTMLAttributes<HTMLElement>)} />;
 }
 
 // -----------------------------------------------------------------------------
@@ -351,6 +357,8 @@ interface TypographyProps extends React.HTMLAttributes<HTMLElement> {
   gutterBottom?: boolean;
   noWrap?: boolean;
   paragraph?: boolean;
+  display?: React.CSSProperties['display'];
+  fontFamily?: React.CSSProperties['fontFamily'];
   sx?: SxObject;
 }
 
@@ -386,6 +394,8 @@ export function Typography({
   gutterBottom,
   noWrap,
   paragraph,
+  display,
+  fontFamily,
   className,
   sx,
   style,
@@ -417,7 +427,7 @@ export function Typography({
         noWrap && 'truncate',
         className
       )}
-      style={{ color: inlineColor, ...sxToStyle(sx), ...style }}
+      style={{ color: inlineColor, display, fontFamily, ...sxToStyle(sx), ...style }}
       {...rest}
     >
       {children}
@@ -1106,7 +1116,7 @@ export function Radio({ className, size = 'medium', color: _color, ...rest }: Ra
   );
 }
 
-interface RadioGroupProps extends BoxProps {
+interface RadioGroupProps extends Omit<BoxProps, 'onChange'> {
   value?: string;
   onChange?: (event: React.ChangeEvent<HTMLInputElement>, value: string) => void;
   row?: boolean;
@@ -1128,7 +1138,6 @@ export function RadioGroup({ value, onChange, row, name, className, children, sx
           const props = child.props as any;
           const control = props.control as any;
           if (control && React.isValidElement(control)) {
-            const controlProps = control.props as any;
             return React.cloneElement(child as any, {
               control: React.cloneElement(control as any, {
                 checked: value === props.value,

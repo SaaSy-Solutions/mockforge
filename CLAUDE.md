@@ -152,7 +152,7 @@ cargo deny check licenses sources bans     # License/dependency check
 pnpm install          # Install deps
 pnpm dev              # Dev server
 pnpm build            # Production build
-pnpm type-check       # TypeScript check (tsc --noEmit)
+pnpm type-check       # TypeScript check (tsc -b: app, node configs, unit tests)
 pnpm lint             # ESLint
 pnpm test             # Vitest
 pnpm test:e2e         # Playwright E2E

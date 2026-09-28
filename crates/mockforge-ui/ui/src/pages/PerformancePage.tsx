@@ -8,21 +8,19 @@
  * - Start/stop controls
  */
 
-import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/Card';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/button';
 import { PerformanceMetrics } from '../components/performance/PerformanceMetrics';
 import { LoadProfileEditor } from '../components/performance/LoadProfileEditor';
 import { BottleneckControls } from '../components/performance/BottleneckControls';
-import { usePerformanceStatus, useStartPerformance, useStopPerformance, useUpdateRps } from '../hooks/usePerformance';
-import { Play, Square, Settings } from 'lucide-react';
+import { usePerformanceStatus, useStartPerformance, useStopPerformance } from '../hooks/usePerformance';
+import { Play, Square } from 'lucide-react';
 import type { RpsProfile } from '@/hooks/usePerformance';
 
 export default function PerformancePage() {
   const { data: status, isLoading: statusLoading } = usePerformanceStatus();
   const startPerformance = useStartPerformance();
   const stopPerformance = useStopPerformance();
-  const updateRps = useUpdateRps();
 
   const handleStart = (profile: RpsProfile) => {
     startPerformance.mutate({

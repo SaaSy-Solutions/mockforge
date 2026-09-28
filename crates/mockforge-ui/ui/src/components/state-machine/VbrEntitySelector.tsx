@@ -3,7 +3,7 @@
 //! Allows users to select VBR entities as resources for state machines.
 //! Displays available entities and their state machine status.
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';

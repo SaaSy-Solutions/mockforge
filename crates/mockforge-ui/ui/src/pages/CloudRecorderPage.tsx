@@ -14,7 +14,6 @@ import {
     Brain,
     PlayCircle,
     CassetteTape,
-    Database,
 } from 'lucide-react';
 import { isCloudMode } from '../utils/cloudMode';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';

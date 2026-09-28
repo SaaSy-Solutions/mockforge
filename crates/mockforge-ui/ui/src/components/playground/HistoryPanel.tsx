@@ -1,12 +1,12 @@
 import { logger } from '@/utils/logger';
-import React, { useState, useEffect, useMemo } from 'react';
-import { Play, Search, Filter, Clock, X, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Play, Search, Clock, X, CheckCircle, XCircle, AlertCircle } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Badge } from '../ui/Badge';
-import { usePlaygroundStore, type PlaygroundHistoryEntry } from '../../stores/usePlaygroundStore';
+import { usePlaygroundStore } from '../../stores/usePlaygroundStore';
 import { toast } from 'sonner';
 
 /**

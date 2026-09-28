@@ -45,7 +45,6 @@ import {
   Star as StarIcon,
   Download as DownloadIcon,
   Visibility as ViewIcon,
-  Category as CategoryIcon,
   Security as SecurityIcon,
   Code as CodeIcon,
   GitHub as GitHubIcon,
@@ -680,7 +679,7 @@ export const PluginRegistryPage: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 InputProps={{
-                  startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+                  startAdornment: <SearchIcon className="mr-2 text-muted-foreground" />,
                 }}
               />
             </Grid>
@@ -690,7 +689,7 @@ export const PluginRegistryPage: React.FC = () => {
                 <Select
                   value={selectedCategory}
                   label="Category"
-                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  onChange={(e) => setSelectedCategory(String(e.target.value))}
                 >
                   {categories.map((cat) => (
                     <MenuItem key={cat.value} value={cat.value}>
@@ -706,7 +705,7 @@ export const PluginRegistryPage: React.FC = () => {
                 <Select
                   value={selectedLanguage}
                   label="Language"
-                  onChange={(e) => setSelectedLanguage(e.target.value)}
+                  onChange={(e) => setSelectedLanguage(String(e.target.value))}
                 >
                   {languages.map((lang) => (
                     <MenuItem key={lang.value} value={lang.value}>
@@ -722,7 +721,7 @@ export const PluginRegistryPage: React.FC = () => {
                 <Select
                   value={sortBy}
                   label="Sort By"
-                  onChange={(e) => setSortBy(e.target.value)}
+                  onChange={(e) => setSortBy(String(e.target.value))}
                 >
                   {sortOptions.map((opt) => (
                     <MenuItem key={opt.value} value={opt.value}>
@@ -734,7 +733,7 @@ export const PluginRegistryPage: React.FC = () => {
             </Grid>
             <Grid item xs={6} md={1.5}>
               <Box>
-                <Typography variant="caption" display="block" gutterBottom>
+                <Typography variant="caption" gutterBottom sx={{ display: 'block' }}>
                   Min Rating
                 </Typography>
                 <Rating
@@ -746,7 +745,7 @@ export const PluginRegistryPage: React.FC = () => {
             </Grid>
             <Grid item xs={6} md={1.5}>
               <Box>
-                <Typography variant="caption" display="block" gutterBottom>
+                <Typography variant="caption" gutterBottom sx={{ display: 'block' }}>
                   Min Security
                 </Typography>
                 <TextField
@@ -890,10 +889,8 @@ export const PluginRegistryPage: React.FC = () => {
                   {plugin.repository && (
                     <IconButton
                       size="small"
-                      component="a"
-                      href={plugin.repository}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      aria-label="Open repository"
+                      onClick={() => window.open(plugin.repository, '_blank', 'noopener,noreferrer')}
                     >
                       <GitHubIcon />
                     </IconButton>
@@ -1058,7 +1055,7 @@ export const PluginRegistryPage: React.FC = () => {
                             precision={0.1}
                             size="small"
                           />
-                          <Typography variant="caption" color="text.secondary" display="block">
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                             {reviewStats.totalReviews} review
                             {reviewStats.totalReviews !== 1 ? 's' : ''}
                           </Typography>
@@ -1176,7 +1173,7 @@ export const PluginRegistryPage: React.FC = () => {
                                     borderRadius: 1,
                                   }}
                                 >
-                                  <Typography variant="caption" color="primary" fontWeight="bold">
+                                  <Typography variant="caption" color="primary" sx={{ fontWeight: 'bold' }}>
                                     Author response ·{' '}
                                     {new Date(review.authorResponse.createdAt).toLocaleDateString()}
                                   </Typography>
@@ -1187,7 +1184,7 @@ export const PluginRegistryPage: React.FC = () => {
                               )}
                             </Box>
                           </ListItem>
-                          <Divider component="li" />
+                          <Divider />
                         </React.Fragment>
                       ))}
                     </List>
@@ -1388,7 +1385,7 @@ export const PluginRegistryPage: React.FC = () => {
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <Box>
-              <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+              <Typography variant="caption" color="text.secondary" gutterBottom sx={{ display: 'block' }}>
                 Rating
               </Typography>
               <Rating

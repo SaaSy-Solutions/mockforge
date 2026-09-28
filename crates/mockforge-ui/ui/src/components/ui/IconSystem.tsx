@@ -1,5 +1,3 @@
-import { logger } from '@/utils/logger';
-import React from 'react';
 import { cn } from '../../utils/cn';
 import {
   // Status Icons

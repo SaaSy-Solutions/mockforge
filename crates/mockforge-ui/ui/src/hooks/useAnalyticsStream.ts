@@ -86,7 +86,7 @@ export function useAnalyticsStream(options: UseAnalyticsStreamOptions = {}) {
   const setWsState = useConnectionStore((state) => state.setWsState);
 
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const reconnectAttemptsRef = useRef(0);
   const manualDisconnectRef = useRef(false);
 

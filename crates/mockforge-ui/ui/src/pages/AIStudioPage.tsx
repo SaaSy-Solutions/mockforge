@@ -4,7 +4,7 @@
 //! including natural language mock generation, AI-guided debugging, persona generation,
 //! and artifact freezing.
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Brain,
   MessageSquare,
@@ -12,10 +12,8 @@ import {
   Bug,
   User,
   Download,
-  Settings,
   TrendingUp,
   DollarSign,
-  Zap,
   GitCompare,
   FileText,
   RefreshCw,
@@ -23,7 +21,6 @@ import {
   CheckCircle2,
   XCircle,
   Filter,
-  Plus,
   Search,
   Sparkles,
   Users,
@@ -35,7 +32,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { apiService, contractDiffApi, type CapturedRequest, type ContractDiffResult, type AnalyzeRequestPayload } from '../services/api';
+import { contractDiffApi, type ContractDiffResult, type AnalyzeRequestPayload } from '../services/api';
 import { aiStudioApi } from '../services/api/aiStudio';
 import { isCloudMode } from '../utils/cloudMode';
 import { CloudAIQuotaBanner } from '../components/ai/CloudAIQuotaBanner';
@@ -221,8 +218,9 @@ export function AIStudioPage() {
       setChatMessages(prev => [...prev, assistantMessage]);
 
       // If a spec was generated, show a success toast with download option
-      const hasSpec = result.data.data?.spec || (result.data.data?.type === 'openapi_spec' && result.data.data?.spec);
-      if (hasSpec && (result.data.intent === 'generate_mock' || result.data.intent === 'GenerateMock')) {
+      const hasSpec =
+        typeof result.data === 'object' && result.data !== null && 'spec' in result.data && Boolean(result.data.spec);
+      if (hasSpec && (result.intent === 'generate_mock' || result.intent === 'GenerateMock')) {
         toast.success('Mock API generated successfully!', {
           description: 'You can preview and download the OpenAPI spec from the chat.',
         });
@@ -1298,7 +1296,7 @@ export function AIStudioPage() {
                                   <span className="px-2 py-1 bg-muted text-foreground rounded text-xs">
                                     {correction.operation}
                                   </span>
-                                  {correction.value && (
+                                  {Boolean(correction.value) && (
                                     <div className="text-xs text-muted-foreground">
                                       Value: <code className="bg-muted px-1 rounded">{JSON.stringify(correction.value)}</code>
                                     </div>

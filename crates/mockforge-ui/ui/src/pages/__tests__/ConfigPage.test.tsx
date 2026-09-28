@@ -9,6 +9,12 @@ import { ConfigPage } from '../ConfigPage';
 import { I18nProvider } from '../../i18n/I18nProvider';
 import { toast } from 'sonner';
 
+// Query hooks may return `data: undefined` (disabled / loading queries).
+interface MockQueryResult<T> {
+  data: T | undefined;
+  isLoading: boolean;
+}
+
 const mockUseApi = vi.hoisted(() => {
   const defaultConfig = {
     latency: { base_ms: 100, jitter_ms: 50 },
@@ -40,15 +46,15 @@ const mockUseApi = vi.hoisted(() => {
     defaultValidation,
     defaultServerInfo,
     defaultReality,
-    useConfig: vi.fn(() => ({
+    useConfig: vi.fn((): MockQueryResult<typeof defaultConfig> => ({
       data: defaultConfig,
       isLoading: false,
     })),
-    useValidation: vi.fn(() => ({
+    useValidation: vi.fn((): MockQueryResult<typeof defaultValidation> => ({
       data: defaultValidation,
       isLoading: false,
     })),
-    useServerInfo: vi.fn(() => ({
+    useServerInfo: vi.fn((): MockQueryResult<typeof defaultServerInfo> => ({
       data: defaultServerInfo,
       isLoading: false,
     })),

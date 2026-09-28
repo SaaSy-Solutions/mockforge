@@ -174,12 +174,17 @@ export function ProxyInspector() {
     }
   };
 
+  // Retry without forwarding the click event as the retry operation.
+  const retryAll = () => {
+    void retry();
+  };
+
   // Rules table columns
   const rulesColumns: ResponsiveTableColumn<ProxyRule>[] = [
     {
-      header: 'Pattern',
-      accessor: 'pattern',
-      cell: (rule) => (
+      key: 'pattern',
+      label: 'Pattern',
+      render: (_value, rule) => (
         <div className="flex items-center gap-2">
           <code className="text-xs bg-muted px-2 py-1 rounded">
             {rule.pattern}
@@ -188,9 +193,9 @@ export function ProxyInspector() {
       ),
     },
     {
-      header: 'Type',
-      accessor: 'type',
-      cell: (rule) => (
+      key: 'type',
+      label: 'Type',
+      render: (_value, rule) => (
         <Badge
           variant={rule.type === 'request' ? 'info' : 'success'}
           className="text-xs"
@@ -200,9 +205,9 @@ export function ProxyInspector() {
       ),
     },
     {
-      header: 'Transforms',
-      accessor: 'body_transforms',
-      cell: (rule) => (
+      key: 'body_transforms',
+      label: 'Transforms',
+      render: (_value, rule) => (
         <div className="flex flex-col gap-1">
           {rule.body_transforms.map((transform, idx) => (
             <div key={idx} className="text-xs text-muted-foreground">
@@ -215,9 +220,9 @@ export function ProxyInspector() {
       ),
     },
     {
-      header: 'Status',
-      accessor: 'enabled',
-      cell: (rule) => (
+      key: 'enabled',
+      label: 'Status',
+      render: (_value, rule) => (
         <div className="flex items-center gap-2">
           {rule.enabled ? (
             <CheckCircle2 className="h-4 w-4 text-success-600" />
@@ -229,9 +234,9 @@ export function ProxyInspector() {
       ),
     },
     {
-      header: 'Actions',
-      accessor: 'id',
-      cell: (rule) => (
+      key: 'id',
+      label: 'Actions',
+      render: (_value, rule) => (
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -312,11 +317,10 @@ export function ProxyInspector() {
       </div>
 
       {/* Error Display */}
-      {errorState.hasError && (
+      {errorState.error && (
         <DataErrorFallback
-          error={errorState.error}
-          retry={canRetry ? retry : undefined}
-          onDismiss={clearError}
+          retry={canRetry ? retryAll : undefined}
+          resetError={clearError}
         />
       )}
 
@@ -354,10 +358,10 @@ export function ProxyInspector() {
           {/* Rules Table */}
           <Card>
             {rulesLoading ? (
-              <SkeletonTable columns={5} rows={5} />
+              <SkeletonTable cols={5} rows={5} />
             ) : rulesError ? (
               <div className="p-8 text-center text-danger-600">
-                Failed to load proxy rules. {canRetry && <Button onClick={retry}>Retry</Button>}
+                Failed to load proxy rules. {canRetry && <Button onClick={retryAll}>Retry</Button>}
               </div>
             ) : filteredRules.length === 0 ? (
               <div className="p-8 text-center text-muted-foreground">
@@ -369,7 +373,6 @@ export function ProxyInspector() {
               <ResponsiveTable
                 data={filteredRules}
                 columns={rulesColumns}
-                keyExtractor={(rule) => rule.id.toString()}
               />
             )}
           </Card>
@@ -406,7 +409,7 @@ export function ProxyInspector() {
                 </div>
               ) : inspectError ? (
                 <div className="p-8 text-center text-danger-600">
-                  Failed to load intercepted traffic. {canRetry && <Button onClick={retry}>Retry</Button>}
+                  Failed to load intercepted traffic. {canRetry && <Button onClick={retryAll}>Retry</Button>}
                 </div>
               ) : inspectData?.message ? (
                 <div className="p-8 text-center">
@@ -462,7 +465,7 @@ export function ProxyInspector() {
                                     ? 'success'
                                     : res.status_code >= 400 && res.status_code < 500
                                       ? 'warning'
-                                      : 'danger'
+                                      : 'error'
                                 }
                               >
                                 {res.status_code}

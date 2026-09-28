@@ -1,11 +1,9 @@
-import { logger } from '@/utils/logger';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { RequestPanel } from '../components/playground/RequestPanel';
 import { ResponsePanel } from '../components/playground/ResponsePanel';
 import { HistoryPanel } from '../components/playground/HistoryPanel';
 import { GraphQLIntrospection } from '../components/playground/GraphQLIntrospection';
 import { CodeSnippetGenerator } from '../components/playground/CodeSnippetGenerator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/Tabs';
 import { usePlaygroundStore } from '../stores/usePlaygroundStore';
 
 /**

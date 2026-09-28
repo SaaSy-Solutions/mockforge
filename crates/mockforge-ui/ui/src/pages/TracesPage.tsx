@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Search, Clock, AlertCircle, CheckCircle, XCircle } from 'lucide-react';
 import {
   PageHeader,
@@ -122,15 +122,14 @@ export function TracesPage() {
           type="error"
           title="Failed to load traces"
           message={error}
-          actions={
-            <button
-              onClick={fetchTraces}
-              className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
-            >
-              Retry
-            </button>
-          }
-        />
+        >
+          <button
+            onClick={fetchTraces}
+            className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"
+          >
+            Retry
+          </button>
+        </Alert>
       </div>
     );
   }
@@ -140,7 +139,7 @@ export function TracesPage() {
       <PageHeader
         title="Distributed Traces"
         subtitle="View and analyze OpenTelemetry traces"
-        actions={
+        action={
           <button
             onClick={fetchTraces}
             className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90"

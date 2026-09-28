@@ -11,10 +11,6 @@ import {
   Button,
   Card,
   CardContent,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
   Drawer,
   Grid,
   IconButton,
@@ -572,7 +568,7 @@ export const OrchestrationBuilder: React.FC = () => {
               </Button>
             </Box>
 
-            {orchestration.steps.map((step, index) => (
+            {orchestration.steps.map((step) => (
               <Card
                 key={step.id}
                 sx={{
@@ -643,7 +639,7 @@ export const OrchestrationBuilder: React.FC = () => {
           anchor="right"
           open={propertyPanelOpen}
           onClose={() => setPropertyPanelOpen(false)}
-          sx={{ '& .MuiDrawer-paper': { width: 400 } }}
+          PaperProps={{ sx: { width: 400 } }}
         >
           {selectedStep && (
             <Box sx={{ p: 3 }}>
@@ -662,7 +658,7 @@ export const OrchestrationBuilder: React.FC = () => {
               <Select
                 fullWidth
                 value={selectedStep.scenario}
-                onChange={(e) => updateStep({ ...selectedStep, scenario: e.target.value })}
+                onChange={(e) => updateStep({ ...selectedStep, scenario: String(e.target.value) })}
                 sx={{ mb: 2 }}
               >
                 <MenuItem value="network_degradation">Network Degradation</MenuItem>

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,7 +26,6 @@ export function SupportPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const { showToast } = useToast();
-  const queryClient = useQueryClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,11 +54,11 @@ export function SupportPage() {
         message: '',
         priority: 'normal',
       });
-      showToast('Support request submitted successfully! We\'ll get back to you soon.', 'success');
+      showToast('success', 'Support request submitted successfully! We\'ll get back to you soon.');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to submit support request';
       setError(errorMessage);
-      showToast(errorMessage, 'error');
+      showToast('error', errorMessage);
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,5 @@
 import { logger } from '@/utils/logger';
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   FileText,
   Download,

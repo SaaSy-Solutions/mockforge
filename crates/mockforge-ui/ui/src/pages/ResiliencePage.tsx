@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { useWebSocket } from '../hooks/useWebSocket';
 import { isCloudMode } from '../utils/cloudMode';
 import { cloudResilienceApi, type RuntimeState } from '../services/api/cloudResilience';
 import { getAuthToken } from '../services/tokenStorage';

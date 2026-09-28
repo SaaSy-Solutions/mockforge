@@ -3,10 +3,10 @@
 //! Visual UI and code editor for creating conditional transition expressions.
 //! Supports both visual builder mode and code editor mode.
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/Tabs';
+import { Tabs, TabsList, TabsTrigger } from '../ui/Tabs';
 import { Code2, Sliders } from 'lucide-react';
 
 interface ConditionBuilderProps {

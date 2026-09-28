@@ -252,7 +252,7 @@ export const CloudWorldStateView: React.FC = () => {
         <Alert
           variant="info"
           title="No deployments yet"
-          description="Create a hosted mock first to visualize its world state from the cloud dashboard."
+          message="Create a hosted mock first to visualize its world state from the cloud dashboard."
         />
       </div>
     );
@@ -300,11 +300,11 @@ export const CloudWorldStateView: React.FC = () => {
         <Alert
           variant="warning"
           title="Deployment not reachable"
-          description="The registry couldn't reach this deployment's runtime over Fly 6PN. Showing the last successful snapshot if any; polling will keep retrying. If this persists, check the deployment's status."
+          message="The registry couldn't reach this deployment's runtime over Fly 6PN. Showing the last successful snapshot if any; polling will keep retrying. If this persists, check the deployment's status."
         />
       )}
 
-      {error && !unreachable && <Alert variant="error" title="Error" description={error} />}
+      {error && !unreachable && <Alert variant="error" title="Error" message={error} />}
 
       <Section>
         <div className="flex items-center justify-between mb-4">

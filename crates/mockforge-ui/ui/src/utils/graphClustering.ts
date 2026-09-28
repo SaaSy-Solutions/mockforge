@@ -6,7 +6,7 @@ import type { GraphCluster } from '../types/graph';
  */
 export function applyClusterLayout(
   nodes: Node[],
-  edges: Edge[],
+  _edges: Edge[],
   clusters: GraphCluster[]
 ): { nodes: Node[]; clusterGroups: Map<string, Node[]> } {
   const clusterGroups = new Map<string, Node[]>();
@@ -34,7 +34,7 @@ export function applyClusterLayout(
   let clusterY = 0;
   const maxNodesPerRow = 5;
 
-  clusterGroups.forEach((clusterNodes, clusterId) => {
+  clusterGroups.forEach((clusterNodes) => {
     // Position nodes in a grid within the cluster
     clusterNodes.forEach((node, index) => {
       const row = Math.floor(index / maxNodesPerRow);

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -895,7 +895,7 @@ function AuditLogTab({ orgId }: { orgId: string }) {
                 <p className="text-sm font-medium">{log.description}</p>
                 {log.metadata && (
                   <div className="flex gap-2 mt-1 flex-wrap">
-                    {log.metadata.provider && (
+                    {Boolean(log.metadata.provider) && (
                       <Badge variant="secondary">
                         {String(log.metadata.provider)}
                       </Badge>

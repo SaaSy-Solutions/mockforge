@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { ServiceToggleCard } from './ServiceToggleCard';
 import { NewServiceDialog } from './NewServiceDialog';

@@ -62,6 +62,7 @@ function computeFailureCounters(logs: unknown): { total2xx: number; total4xx: nu
   const validLogs = logs.filter(isLogEntry);
   return validLogs.reduce((acc: { total2xx: number; total4xx: number; total5xx: number }, log) => {
     const code = log.status_code;
+    if (code === undefined) return acc;
     if (code >= 500) acc.total5xx++;
     else if (code >= 400) acc.total4xx++;
     else if (code >= 200) acc.total2xx++;

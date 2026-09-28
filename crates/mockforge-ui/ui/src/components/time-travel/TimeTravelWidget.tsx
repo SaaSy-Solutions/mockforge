@@ -6,9 +6,9 @@
  * with smooth animations and intuitive interactions.
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, Play, Pause, RotateCcw, FastForward, Settings, Calendar, User, ArrowRight } from 'lucide-react';
+import { Clock, Play, Pause, RotateCcw, FastForward, Settings, Calendar, User } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import {
   useTimeTravelStatus,
@@ -52,7 +52,6 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
   const [dateTimeInput, setDateTimeInput] = useState('');
   const [timeScale, setTimeScale] = useState(1.0);
   const [sliderValue, setSliderValue] = useState(0);
-  const [lifecycleUpdates, setLifecycleUpdates] = useState<Array<{ personaId: string; oldState: string; newState: string; time: string }>>([]);
 
   // Enable live preview of lifecycle updates when time changes
   useLivePreviewLifecycleUpdates(workspace, status?.enabled ?? false);

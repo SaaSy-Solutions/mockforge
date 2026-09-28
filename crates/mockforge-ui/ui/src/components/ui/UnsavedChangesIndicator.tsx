@@ -1,4 +1,3 @@
-import React from 'react';
 import { AlertCircle, Save, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 

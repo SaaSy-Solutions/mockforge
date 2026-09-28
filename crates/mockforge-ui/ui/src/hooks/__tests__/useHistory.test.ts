@@ -2,13 +2,18 @@
  * @vitest-environment jsdom
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useHistory } from '../useHistory';
 
+interface GraphState {
+  nodes: { id: string }[];
+  edges: { id: string }[];
+}
+
 describe('useHistory', () => {
   it('should initialize with initial state', () => {
-    const initialState = { nodes: [], edges: [] };
+    const initialState: GraphState = { nodes: [], edges: [] };
     const { result } = renderHook(() => useHistory(initialState));
 
     expect(result.current.history).toEqual(initialState);
@@ -17,7 +22,7 @@ describe('useHistory', () => {
   });
 
   it('should push new state to history', () => {
-    const initialState = { nodes: [], edges: [] };
+    const initialState: GraphState = { nodes: [], edges: [] };
     const { result } = renderHook(() => useHistory(initialState));
 
     const newState = { nodes: [{ id: '1' }], edges: [] };
@@ -32,7 +37,7 @@ describe('useHistory', () => {
   });
 
   it('should undo to previous state', () => {
-    const initialState = { nodes: [], edges: [] };
+    const initialState: GraphState = { nodes: [], edges: [] };
     const { result } = renderHook(() => useHistory(initialState));
 
     const newState = { nodes: [{ id: '1' }], edges: [] };
@@ -51,7 +56,7 @@ describe('useHistory', () => {
   });
 
   it('should redo to next state', () => {
-    const initialState = { nodes: [], edges: [] };
+    const initialState: GraphState = { nodes: [], edges: [] };
     const { result } = renderHook(() => useHistory(initialState));
 
     const newState = { nodes: [{ id: '1' }], edges: [] };
@@ -74,7 +79,7 @@ describe('useHistory', () => {
   });
 
   it('should clear future when new state is pushed after undo', () => {
-    const initialState = { nodes: [], edges: [] };
+    const initialState: GraphState = { nodes: [], edges: [] };
     const { result } = renderHook(() => useHistory(initialState));
 
     const state1 = { nodes: [{ id: '1' }], edges: [] };
@@ -91,7 +96,7 @@ describe('useHistory', () => {
   });
 
   it('should respect capacity limit', () => {
-    const initialState = { nodes: [], edges: [] };
+    const initialState: GraphState = { nodes: [], edges: [] };
     const { result } = renderHook(() => useHistory(initialState, 2));
 
     act(() => {
@@ -111,7 +116,7 @@ describe('useHistory', () => {
   });
 
   it('should clear history', () => {
-    const initialState = { nodes: [], edges: [] };
+    const initialState: GraphState = { nodes: [], edges: [] };
     const { result } = renderHook(() => useHistory(initialState));
 
     act(() => {

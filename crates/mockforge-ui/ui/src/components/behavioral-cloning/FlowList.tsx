@@ -1,8 +1,6 @@
-import React from 'react';
 import { Eye, Tag, FileCode, Clock, GitBranch } from 'lucide-react';
 import type { Flow } from '../../types';
 import { ModernCard, ModernBadge } from '../ui/DesignSystem';
-import { cn } from '../../utils/cn';
 
 interface FlowListProps {
   flows: Flow[];
@@ -37,7 +35,7 @@ export function FlowList({ flows, onView, onTag, onCompile }: FlowListProps) {
                 {flow.tags && flow.tags.length > 0 && (
                   <div className="flex gap-2">
                     {flow.tags.map((tag) => (
-                      <ModernBadge key={tag} variant="secondary" size="sm">
+                      <ModernBadge key={tag} variant="default" size="sm">
                         {tag}
                       </ModernBadge>
                     ))}
@@ -87,4 +85,3 @@ export function FlowList({ flows, onView, onTag, onCompile }: FlowListProps) {
     </div>
   );
 }
-

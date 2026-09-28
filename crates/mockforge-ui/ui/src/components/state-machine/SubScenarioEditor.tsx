@@ -3,15 +3,13 @@
 //! Allows users to create and configure nested sub-scenarios within state machines.
 //! Supports input/output mapping and sub-scenario selection.
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
-import { Badge } from '../ui/Badge';
 import { X, Plus, Trash2, ArrowRight, Loader2 } from 'lucide-react';
 import { apiService } from '../../services/api';
 import { logger } from '@/utils/logger';
-import { cn } from '@/utils/cn';
 
 interface SubScenarioEditorProps {
   subScenarioId?: string;

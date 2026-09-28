@@ -4,7 +4,7 @@
 //! with filters, preview, and confidence scores.
 
 import { logger } from '@/utils/logger';
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
   FileText,
   Database,
@@ -12,8 +12,6 @@ import {
   Download,
   Loader2,
   CheckCircle2,
-  AlertTriangle,
-  Calendar,
   Code,
   BarChart3,
   TrendingUp,
@@ -24,7 +22,6 @@ import { isCloudMode } from '../utils/cloudMode';
 import { useCloudOrgId } from '../hooks/useCloudOrgId';
 import {
   PageHeader,
-  Section,
   Alert,
   Button,
   Card,
@@ -199,8 +196,7 @@ export function MockAIOpenApiGeneratorPage() {
     <div className="space-y-6">
       <PageHeader
         title="Generate OpenAPI from Traffic"
-        description="Analyze recorded HTTP traffic and generate OpenAPI 3.0 specifications using AI-powered pattern detection"
-        icon={<FileText className="h-6 w-6" />}
+        subtitle="Analyze recorded HTTP traffic and generate OpenAPI 3.0 specifications using AI-powered pattern detection"
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -486,37 +482,38 @@ export function MockAIOpenApiGeneratorPage() {
               icon={<Database className="h-12 w-12 text-muted-foreground" />}
               title="No OpenAPI Specification Generated"
               description="Configure filters and click 'Generate OpenAPI Spec' to analyze recorded traffic and generate an OpenAPI specification."
-            >
-              <div className="mt-6 space-y-3 text-sm text-muted-foreground">
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-success-500 mt-0.5" />
-                  <div>
-                    <div className="font-medium">Record Traffic First</div>
-                    <div className="text-xs">
-                      Use the API Flight Recorder to capture HTTP traffic before generating specs
+              action={
+                <div className="mt-6 space-y-3 text-sm text-muted-foreground">
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-success-500 mt-0.5" />
+                    <div>
+                      <div className="font-medium">Record Traffic First</div>
+                      <div className="text-xs">
+                        Use the API Flight Recorder to capture HTTP traffic before generating specs
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-success-500 mt-0.5" />
+                    <div>
+                      <div className="font-medium">Configure Filters</div>
+                      <div className="text-xs">
+                        Filter by time range, path patterns, or minimum confidence to focus on specific API endpoints
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <CheckCircle2 className="h-5 w-5 text-success-500 mt-0.5" />
+                    <div>
+                      <div className="font-medium">Review & Download</div>
+                      <div className="text-xs">
+                        Review the generated spec, check confidence scores, and download as JSON or YAML
+                      </div>
                     </div>
                   </div>
                 </div>
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-success-500 mt-0.5" />
-                  <div>
-                    <div className="font-medium">Configure Filters</div>
-                    <div className="text-xs">
-                      Filter by time range, path patterns, or minimum confidence to focus on specific API endpoints
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-start gap-2">
-                  <CheckCircle2 className="h-5 w-5 text-success-500 mt-0.5" />
-                  <div>
-                    <div className="font-medium">Review & Download</div>
-                    <div className="text-xs">
-                      Review the generated spec, check confidence scores, and download as JSON or YAML
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </EmptyState>
+              }
+            />
           )}
         </div>
       </div>

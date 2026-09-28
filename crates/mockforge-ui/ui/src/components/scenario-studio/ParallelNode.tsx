@@ -2,20 +2,21 @@
 //!
 //! Custom React Flow node component for representing parallel execution steps in a flow.
 
-import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import type { NodeProps } from '@xyflow/react';
+import type { Node, NodeProps } from '@xyflow/react';
 import { Badge } from '../ui/Badge';
 import { Layers } from 'lucide-react';
 import { cn } from '@/utils/cn';
 
-export interface ParallelNodeData {
+export type ParallelNodeData = {
   id: string;
   name: string;
   branches?: number;
-}
+};
 
-export function ParallelNode({ data, selected }: NodeProps<ParallelNodeData>) {
+export type ParallelNodeType = Node<ParallelNodeData, 'parallel'>;
+
+export function ParallelNode({ data, selected }: NodeProps<ParallelNodeType>) {
   const branches = data.branches || 2;
 
   return (

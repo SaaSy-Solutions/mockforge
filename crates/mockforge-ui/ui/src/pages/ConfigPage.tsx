@@ -254,6 +254,7 @@ export function ConfigPage() {
       setFormData(prev => ({
         ...prev,
         general: {
+          ...prev.general,
           http_port: parseInt(extractPort(serverInfo.http_server)) || 3000,
           ws_port: parseInt(extractPort(serverInfo.ws_server)) || 3001,
           grpc_port: parseInt(extractPort(serverInfo.grpc_server)) || 50051,

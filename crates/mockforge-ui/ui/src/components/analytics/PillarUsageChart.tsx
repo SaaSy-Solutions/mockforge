@@ -13,7 +13,7 @@ import {
   BarElement,
   Title,
 } from 'chart.js';
-import { Doughnut, Bar } from 'react-chartjs-2';
+import { Doughnut } from 'react-chartjs-2';
 import { getChartPalette } from '../../utils/chartTheme';
 import type { PillarUsageMetrics } from '@/hooks/usePillarAnalytics';
 

@@ -271,7 +271,7 @@ const TestExecutionDashboard: React.FC = () => {
       <Box sx={{ my: 4 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h4">
-            <AssessmentIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+            <AssessmentIcon className="mr-2 inline align-middle" />
             Test Execution Dashboard
           </Typography>
           <Button startIcon={<RefreshIcon />} onClick={handleRefresh} disabled={loading}>

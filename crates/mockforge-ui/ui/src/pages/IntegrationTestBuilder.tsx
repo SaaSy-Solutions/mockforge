@@ -21,10 +21,6 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
   Stepper,
   Step,
   StepLabel,
@@ -33,9 +29,7 @@ import {
 import {
   Add as AddIcon,
   Delete as DeleteIcon,
-  PlayArrow as PlayArrowIcon,
   Code as CodeIcon,
-  ArrowDownward as ArrowDownwardIcon,
   Edit as EditIcon,
 } from '@mui/icons-material';
 import { isCloudMode } from '../utils/cloudMode';
@@ -295,7 +289,7 @@ const IntegrationTestBuilder: React.FC = () => {
     <Container maxWidth="xl">
       <Box sx={{ my: 4 }}>
         <Typography variant="h4" gutterBottom>
-          <CodeIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+          <CodeIcon className="mr-2 align-middle" />
           Integration Test Builder
         </Typography>
         <Typography variant="body1" color="text.secondary" paragraph>
@@ -403,7 +397,7 @@ const IntegrationTestBuilder: React.FC = () => {
                     {cloudBusy === 'run' ? 'Enqueueing…' : 'Run on cloud'}
                   </Button>
                   {cloudMessage && (
-                    <Typography variant="caption" color="text.secondary" display="block">
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                       {cloudMessage}
                     </Typography>
                   )}
@@ -548,7 +542,7 @@ const IntegrationTestBuilder: React.FC = () => {
                       onChange={(e) =>
                         setCurrentStep({
                           ...currentStep,
-                          request: { ...currentStep.request, method: e.target.value },
+                          request: { ...currentStep.request, method: String(e.target.value) },
                         })
                       }
                       label="Method"

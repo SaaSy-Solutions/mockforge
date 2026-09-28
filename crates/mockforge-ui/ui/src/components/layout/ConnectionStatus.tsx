@@ -9,7 +9,6 @@
  * - Tooltip with detailed status
  */
 
-import React from 'react';
 import { Wifi, WifiOff, Loader2, Cloud } from 'lucide-react';
 import { cn } from '../../utils/cn';
 

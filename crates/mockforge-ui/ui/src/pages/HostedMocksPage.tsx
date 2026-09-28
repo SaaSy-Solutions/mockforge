@@ -26,8 +26,6 @@ import { getAuthToken } from '@/services/tokenStorage';
 import {
   Box,
   Card,
-  CardContent,
-  CardActions,
   Grid,
   Typography,
   Button,
@@ -1236,7 +1234,7 @@ export const HostedMocksPage: React.FC = () => {
             <FormControl fullWidth>
               <InputLabel id="hosted-mock-project-label">Project (optional)</InputLabel>
               <Select
-                labelId="hosted-mock-project-label"
+                aria-labelledby="hosted-mock-project-label"
                 label="Project (optional)"
                 value={formData.project_id}
                 onChange={(e) =>
@@ -1264,7 +1262,7 @@ export const HostedMocksPage: React.FC = () => {
             <FormControl fullWidth>
               <InputLabel id="hosted-mock-region-label">Region</InputLabel>
               <Select
-                labelId="hosted-mock-region-label"
+                aria-labelledby="hosted-mock-region-label"
                 label="Region"
                 value={formData.region}
                 onChange={(e) => setFormData({ ...formData, region: e.target.value as string })}
@@ -1526,7 +1524,7 @@ export const HostedMocksPage: React.FC = () => {
                       <Typography variant="caption" color="text.secondary">
                         Upstream URL{' '}
                         <Tooltip title="Real backend the deployment proxies to when the reality slider is > 0. Configured at create time inside config_json.">
-                          <InfoOutlinedIcon sx={{ fontSize: 12, verticalAlign: 'middle' }} />
+                          <InfoOutlinedIcon size={12} className="align-middle" />
                         </Tooltip>
                       </Typography>
                       <Typography variant="body2">
@@ -2022,7 +2020,7 @@ export const HostedMocksPage: React.FC = () => {
                     >
                       <Chip
                         size="small"
-                        icon={<FiberManualRecordIcon sx={{ fontSize: 12 }} />}
+                        icon={<FiberManualRecordIcon size={12} />}
                         label={
                           recorderEnabled === null
                             ? 'Recorder: …'

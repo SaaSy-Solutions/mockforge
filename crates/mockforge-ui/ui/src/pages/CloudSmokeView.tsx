@@ -121,13 +121,12 @@ export function CloudSmokeView() {
     <div className="space-y-6 p-6">
       <PageHeader
         title="Smoke tests (cloud)"
-        description="Probe every declared route on a hosted-mock deployment. Each route gets a 2xx-class assertion plus a per-route latency budget."
-        icon={Play}
+        subtitle="Probe every declared route on a hosted-mock deployment. Each route gets a 2xx-class assertion plus a per-route latency budget."
       />
 
       <Section
         title="Pick a deployment"
-        actions={
+        action={
           <Button variant="ghost" size="sm" onClick={reloadDeployments} disabled={loading}>
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             <span className="ml-2">Reload</span>

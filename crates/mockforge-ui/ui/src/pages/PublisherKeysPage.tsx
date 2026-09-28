@@ -191,7 +191,7 @@ function normalizeBase64(s: string): string {
 ///   2. Users behind corporate CSPs that block `subtle` at import time.
 /// The fallback is not timing-safe, but fingerprinting a *public* key
 /// has no secret input to protect, so the tradeoff is fine.
-async function sha256(bytes: Uint8Array): Promise<Uint8Array> {
+async function sha256(bytes: Uint8Array<ArrayBuffer>): Promise<Uint8Array> {
   if (typeof crypto !== 'undefined' && crypto.subtle && crypto.subtle.digest) {
     try {
       const buf = await crypto.subtle.digest('SHA-256', bytes);
@@ -345,7 +345,7 @@ const CliSnippet: React.FC<{ command: string; description: string }> = ({
 /// the UI even though the server depends on it. Collapsed by default
 /// so users who already know the flow aren't visually taxed.
 const CliQuickReference: React.FC = () => (
-  <Accordion variant="outlined" sx={{ mb: 3 }}>
+  <Accordion sx={{ mb: 3 }}>
     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
       <Stack direction="row" alignItems="center" spacing={1}>
         <TerminalIcon fontSize="small" color="action" />
@@ -526,7 +526,7 @@ const PublisherKeysPage: React.FC = () => {
 
   return (
     <Paper sx={{ p: 3, m: 2 }}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={2}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 2 }}>
         <Stack direction="row" alignItems="center" spacing={1}>
           <KeyIcon color="primary" />
           <Typography variant="h5">Publisher Attestation Keys</Typography>
@@ -553,7 +553,7 @@ const PublisherKeysPage: React.FC = () => {
         </Stack>
       </Stack>
 
-      <Typography variant="body2" color="text.secondary" mb={2}>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Register an Ed25519 public key to sign SBOMs at publish time. The
         registry verifies signatures against any of your active keys and
         surfaces a <b>verified publisher attestation</b> finding on each
@@ -566,7 +566,7 @@ const PublisherKeysPage: React.FC = () => {
 
       {isLoading && <LinearProgress />}
       {isError && (
-        <Typography color="error" variant="body2" mb={2}>
+        <Typography color="error" variant="body2" sx={{ mb: 2 }}>
           {(queryError as Error)?.message ?? 'Failed to load keys.'}
         </Typography>
       )}
@@ -592,7 +592,7 @@ const PublisherKeysPage: React.FC = () => {
                   fontSize="large"
                 />
                 <div style={{ flexGrow: 1 }}>
-                  <Stack direction="row" alignItems="center" spacing={1} mb={0.5}>
+                  <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.5 }}>
                     <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
                       {key.label}
                     </Typography>
@@ -735,10 +735,10 @@ const PublisherKeysPage: React.FC = () => {
               <FormControl fullWidth>
                 <InputLabel id="key-org-label">Scope</InputLabel>
                 <Select
-                  labelId="key-org-label"
+                  aria-labelledby="key-org-label"
                   label="Scope"
                   value={selectedOrgId}
-                  onChange={(e) => setSelectedOrgId(e.target.value)}
+                  onChange={(e) => setSelectedOrgId(String(e.target.value))}
                 >
                   <MenuItem value="">
                     <em>Personal — only me</em>

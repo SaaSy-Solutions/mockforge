@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { ThemePalette } from '../themes';
