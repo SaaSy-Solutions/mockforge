@@ -387,7 +387,9 @@ mockforge bench-chunked --target http://localhost:3000/upload [OPTIONS]
 
 #### Options
 
-- `--target <URL>` — Target URL (required).
+- `--target <URL>` — Target URL. Required unless `--targets-file` is given.
+- `--targets-file <FILE>` — Bench every target in the file in parallel (same text/JSON format as `bench --targets-file`, including per-target `auth`, `headers`, `spec`). Mutually exclusive with `--target`.
+- `--max-concurrency <N>` — Max targets benched at once with `--targets-file` (default: 10).
 - `--method <METHOD>` — `POST` (default), `PUT`, or `PATCH`.
 - `-c, --concurrency <N>` — Concurrent workers (default: 10).
 - `-d, --duration <SECS>` — Run length (default: 30).
