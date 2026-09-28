@@ -15,6 +15,7 @@ import type { ConditionNodeData } from './ConditionNode';
 import type { DelayNodeData } from './DelayNode';
 import type { LoopNodeData } from './LoopNode';
 import type { ParallelNodeData } from './ParallelNode';
+import { normalizeStepType } from './stepTypes';
 
 interface FlowPropertiesPanelProps {
   selectedNode: Node | null;
@@ -31,11 +32,11 @@ export function FlowPropertiesPanel({
     return null;
   }
 
-  const nodeType = selectedNode.type || 'apiCall';
+  const nodeType = normalizeStepType(selectedNode.type);
   const data = selectedNode.data;
 
   // API Call Node Properties
-  if (nodeType === 'apiCall') {
+  if (nodeType === 'api_call') {
     const apiData = data as ApiCallNodeData;
     const [name, setName] = useState(apiData.name || '');
     const [method, setMethod] = useState(apiData.method || 'GET');

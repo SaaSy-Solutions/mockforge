@@ -37,11 +37,17 @@ import {
   Repeat,
   Layers,
 } from 'lucide-react';
-import { ApiCallNode, type ApiCallNodeData } from '@/components/scenario-studio/ApiCallNode';
-import { ConditionNode, type ConditionNodeData } from '@/components/scenario-studio/ConditionNode';
-import { DelayNode, type DelayNodeData } from '@/components/scenario-studio/DelayNode';
-import { LoopNode, type LoopNodeData } from '@/components/scenario-studio/LoopNode';
-import { ParallelNode, type ParallelNodeData } from '@/components/scenario-studio/ParallelNode';
+import type { ApiCallNodeData } from '@/components/scenario-studio/ApiCallNode';
+import type { ConditionNodeData } from '@/components/scenario-studio/ConditionNode';
+import type { DelayNodeData } from '@/components/scenario-studio/DelayNode';
+import type { LoopNodeData } from '@/components/scenario-studio/LoopNode';
+import type { ParallelNodeData } from '@/components/scenario-studio/ParallelNode';
+import {
+  scenarioNodeTypes,
+  normalizeStepType,
+  STEP_TYPE_COLORS,
+  type StepType,
+} from '@/components/scenario-studio/stepTypes';
 import { FlowPropertiesPanel } from '@/components/scenario-studio/FlowPropertiesPanel';
 import { FlowExecutor } from '@/components/scenario-studio/FlowExecutor';
 import { useHistory } from '@/hooks/useHistory';
@@ -65,7 +71,7 @@ interface FlowDefinition {
 interface FlowStep {
   id: string;
   name: string;
-  step_type: 'api_call' | 'condition' | 'delay' | 'loop' | 'parallel';
+  step_type: StepType;
   method?: string;
   endpoint?: string;
   delay_ms?: number;
@@ -91,14 +97,8 @@ type StudioNodeData =
   | ParallelNodeData;
 type StudioNode = Node<StudioNodeData>;
 
-// Node type mapping
-const nodeTypes: NodeTypes = {
-  apiCall: ApiCallNode,
-  condition: ConditionNode,
-  delay: DelayNode,
-  loop: LoopNode,
-  parallel: ParallelNode,
-};
+// Node type mapping, keyed by the backend's snake_case step_type
+const nodeTypes: NodeTypes = scenarioNodeTypes;
 
 // Cloud-mode flows store the full scenario payload (flow_type / steps /
 // connections / tags) inside the current FlowVersion.config object. We
@@ -261,8 +261,10 @@ export function ScenarioStudioPage() {
         name: step.name,
       };
 
+      const stepType = normalizeStepType(step.step_type);
+
       // Add type-specific data
-      switch (step.step_type) {
+      switch (stepType) {
         case 'api_call':
           nodeData = {
             ...nodeData,
@@ -300,7 +302,7 @@ export function ScenarioStudioPage() {
 
       return {
         id: step.id,
-        type: step.step_type,
+        type: stepType,
         position,
         data: nodeData,
       };
@@ -383,12 +385,12 @@ export function ScenarioStudioPage() {
         const baseStep: FlowStep = {
           id: node.id,
           name: node.data.name,
-          step_type: (node.type as FlowStep['step_type'] | undefined) || 'api_call',
+          step_type: normalizeStepType(node.type),
           position: { x: node.position.x, y: node.position.y },
         };
 
         // Add type-specific fields
-        switch (node.type) {
+        switch (baseStep.step_type) {
           case 'api_call':
             const apiData = node.data as ApiCallNodeData;
             return {
@@ -805,14 +807,7 @@ export function ScenarioStudioPage() {
                 <Controls />
                 <MiniMap
                   nodeColor={(node) => {
-                    const colors: Record<string, string> = {
-                      apiCall: '#3b82f6',
-                      condition: '#a855f7',
-                      delay: '#eab308',
-                      loop: '#6366f1',
-                      parallel: '#14b8a6',
-                    };
-                    return colors[node.type || 'apiCall'] || '#6b7280';
+                    return STEP_TYPE_COLORS[normalizeStepType(node.type)];
                   }}
                 />
               </ReactFlow>
@@ -820,7 +815,9 @@ export function ScenarioStudioPage() {
               {/* Properties Panel */}
               {showProperties && selectedNode && (
                 <div className="absolute top-4 right-4 z-10">
+                  {/* key remounts per node: the panel's hooks differ by step type */}
                   <FlowPropertiesPanel
+                    key={selectedNode.id}
                     selectedNode={selectedNode}
                     onUpdate={handleNodeUpdate}
                     onClose={() => setShowProperties(false)}
