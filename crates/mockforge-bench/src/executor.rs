@@ -251,7 +251,7 @@ impl K6Executor {
     /// unparsable `k6 version` never blocks a run.
     pub async fn warn_if_pre_v1() {
         const DOCS: &str =
-            "See https://mockforge.dev/docs/reference/bench-capacity-sizing#tooling-requirements";
+            "See https://docs.mockforge.dev/reference/bench-capacity-sizing.html#tooling-requirements";
         let output = match TokioCommand::new("k6").arg("version").output().await {
             Ok(o) if o.status.success() => o,
             _ => return,
