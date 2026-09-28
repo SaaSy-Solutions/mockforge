@@ -31,13 +31,11 @@ We will notify Customer without undue delay, and in any event within 72 hours, a
 
 Customer authorizes the Sub-processors below. We impose data-protection obligations on each Sub-processor that are no less protective than this DPA and remain responsible for their performance. We will announce new Sub-processors on this page at least 30 days before they begin processing; Customer may object on reasonable data-protection grounds, and if we cannot address the objection, Customer may terminate the affected Service and receive a pro-rata refund of prepaid fees.
 
-- **Data-center provider for our Ashburn, Virginia infrastructure:** application compute and hosted mock runtime (United States).
-- **Neon:** managed PostgreSQL database (United States).
-- **Cloudflare:** DNS, CDN, TLS termination, DDoS/WAF protection and object storage (United States and global edge).
+- **Hetzner Online GmbH:** servers in Ashburn, Virginia that run the MockForge Cloud application and its PostgreSQL database, which we operate ourselves (United States).
+- **Cloudflare:** object storage (R2) for customer uploads and artifacts, plus DNS, CDN, TLS termination, tunneling and DDoS/WAF protection (United States and global edge).
+- **Fly.io:** compute for customer-deployed hosted mocks served at `*.mocks.mockforge.dev` (United States).
 - **Stripe:** payment processing and subscription billing (United States).
-- **Sentry:** error monitoring and diagnostics (United States).
-- **Brevo:** transactional email (European Union).
-- **Fly.io:** legacy application hosting, being retired (United States).
+- **Brevo:** transactional email delivery (European Union).
 
 ## 8. Assistance and data subject requests
 

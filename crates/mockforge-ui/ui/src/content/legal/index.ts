@@ -6,18 +6,13 @@
  * To change a document: edit its .md file and bump `version` /
  * `lastUpdated` below.
  *
- * REVIEW STATUS: DRAFT, pending legal review (September 2026). Items counsel
- * must confirm before these are treated as final:
- *   - Governing law / venue (Terms §15): the state of organization of
- *     SaaSy Solutions LLC is referenced generically.
- *   - Sub-processor list (DPA §7): compiled from the codebase and
- *     infrastructure docs. Confirm the Ashburn, Virginia hosting provider,
- *     the transactional email provider actually configured in production
- *     (code supports Postmark, Brevo, SMTP), whether Cloudflare R2 holds
- *     customer uploads, whether hosted AI features send customer content to
- *     OpenAI/Anthropic, and remove Fly.io once the legacy machines are retired.
- *   - Contact mailboxes (legal@, privacy@, security@, support@mockforge.dev)
- *     must exist and be monitored.
+ * Status: approved for launch (September 2026); counsel should review after
+ * launch, notably governing law / venue (Terms §15, which names the state of
+ * organization of SaaSy Solutions LLC generically).
+ *
+ * The sub-processor list (DPA §7) reflects production as verified on the
+ * Ashburn host. Keep it in sync with infrastructure: adding a provider
+ * requires 30 days' notice to customers (DPA §7).
  */
 import termsMarkdown from './terms.md?raw';
 import privacyMarkdown from './privacy.md?raw';
