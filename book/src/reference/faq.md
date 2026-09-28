@@ -467,9 +467,9 @@ mockforge serve --admin-embed --admin-mount-path /admin
 
 ### Is authentication available?
 
-**Not yet.** Role-based authentication (Admin/Viewer) is planned for v1.1. The frontend UI components are built, but backend JWT/OAuth integration is pending.
+**Yes.** The Admin UI uses JWT login with three roles: Admin (full access), Editor (manage mocks and fixtures), and Viewer (read-only). Mutating admin endpoints are permission-checked per role; read-only `GET /__mockforge/*` endpoints stay open so the TUI can poll them.
 
-Currently, the Admin UI is accessible without authentication.
+Without `JWT_SECRET`, MockForge seeds local development users (`admin` / `admin123`, `editor` / `editor123`, `viewer` / `viewer123`). Set `JWT_SECRET` and `MOCKFORGE_DISABLE_DEV_SEED_USERS=true` for shared deployments. OAuth/SSO login is not available in the local Admin UI; MockForge Cloud supports OIDC and SAML SSO.
 
 ### What can I do in the Admin UI?
 

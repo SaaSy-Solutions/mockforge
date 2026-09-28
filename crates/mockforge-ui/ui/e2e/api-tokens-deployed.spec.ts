@@ -1,9 +1,52 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type APIRequestContext } from '@playwright/test';
 
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'https://app.mockforge.dev';
 function mainContent(page: import('@playwright/test').Page) { return page.getByRole('main'); }
 
+// Tokens this spec creates are named `${E2E_TOKEN_PREFIX}<ms epoch>`. The sweep
+// below matches that exact shape so it can never touch a user-named token.
+const E2E_TOKEN_PREFIX = 'E2E Token ';
+const E2E_TOKEN_NAME = /^E2E Token \d{13}$/;
+
+/**
+ * Delete API tokens whose name matches `predicate`.
+ *
+ * Uses `page.request`, which shares the browser context's cookies, so the
+ * HttpOnly `mockforge_session` cookie authenticates the call. Do NOT send an
+ * Authorization header: the JWT is memory-only since #1005, and a
+ * `Bearer null` header takes precedence over the cookie and 401s.
+ */
+async function deleteE2ETokens(
+  request: APIRequestContext,
+  predicate: (name: string) => boolean,
+): Promise<void> {
+  const list = await request.get(`${BASE_URL}/api/v1/tokens`);
+  if (!list.ok()) {
+    throw new Error(`E2E token cleanup: GET /api/v1/tokens -> ${list.status()}`);
+  }
+  const tokens = (await list.json()) as Array<{ id: string; name: string }>;
+  for (const t of tokens.filter((t) => predicate(t.name))) {
+    const res = await request.delete(`${BASE_URL}/api/v1/tokens/${t.id}`);
+    // 404: another worker's sweep already removed it.
+    if (!res.ok() && res.status() !== 404) {
+      throw new Error(`E2E token cleanup: DELETE ${t.id} -> ${res.status()}`);
+    }
+  }
+}
+
 test.describe('API Tokens — Deployed Site', () => {
+  // Belt-and-braces sweep for tokens leaked by runs that died before their
+  // `finally` (killed worker, timeout) or by pre-fix versions of this spec.
+  test.afterAll(async ({ browser }) => {
+    // Reuse the project's signed-in state (see playwright-deployed.config.ts).
+    const context = await browser.newContext({ storageState: test.info().project.use.storageState });
+    try {
+      await deleteE2ETokens(context.request, (name) => E2E_TOKEN_NAME.test(name));
+    } finally {
+      await context.close();
+    }
+  });
+
   test.beforeEach(async ({ page }) => {
     await page.goto(`${BASE_URL}/api-tokens`, { waitUntil: 'domcontentloaded', timeout: 30000 });
     await page.waitForSelector('nav[aria-label="Main navigation"]', { state: 'visible', timeout: 15000 });
@@ -177,39 +220,32 @@ test.describe('API Tokens — Deployed Site', () => {
     });
 
     test('should create a token and show it in the list', async ({ page }) => {
-      const tokenName = `E2E Token ${Date.now()}`;
-      await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
-      await page.waitForTimeout(500);
+      const tokenName = `${E2E_TOKEN_PREFIX}${Date.now()}`;
+      try {
+        await mainContent(page).getByRole('button', { name: 'Create Token' }).click();
+        await page.waitForTimeout(500);
 
-      const dialog = page.getByRole('dialog');
-      await dialog.getByRole('textbox', { name: 'Token Name' }).fill(tokenName);
-      // Check at least one scope (click the labeled wrapper)
-      await dialog.getByText('Read Packages').click();
-      await page.waitForTimeout(300);
+        const dialog = page.getByRole('dialog');
+        await dialog.getByRole('textbox', { name: 'Token Name' }).fill(tokenName);
+        // Check at least one scope (click the labeled wrapper)
+        await dialog.getByText('Read Packages').click();
+        await page.waitForTimeout(300);
 
-      await dialog.getByRole('button', { name: 'Create Token' }).click();
-      await page.waitForTimeout(3000);
+        await dialog.getByRole('button', { name: 'Create Token' }).click();
+        await page.waitForTimeout(3000);
 
-      // Token should appear in the list (or a success dialog)
-      const main = mainContent(page);
-      const hasNewToken = await main.getByText(tokenName)
-        .isVisible({ timeout: 5000 }).catch(() => false);
-      const hasTokenPrefix = await main.getByText(/mfx_/)
-        .first().isVisible({ timeout: 3000 }).catch(() => false);
-      expect(hasNewToken || hasTokenPrefix).toBeTruthy();
-
-      // Clean up: delete the token via API
-      const token = await page.evaluate(() => localStorage.getItem('auth_token'));
-      const listResponse = await page.evaluate(async (authToken) => {
-        const res = await fetch('/api/v1/tokens', { headers: { 'Authorization': `Bearer ${authToken}` } });
-        return res.json();
-      }, token);
-
-      const testToken = (listResponse as Array<{ name: string; id: string }>).find(t => t.name === tokenName);
-      if (testToken) {
-        await page.evaluate(async ({ id, authToken }) => {
-          await fetch(`/api/v1/tokens/${id}`, { method: 'DELETE', headers: { 'Authorization': `Bearer ${authToken}` } });
-        }, { id: testToken.id, authToken: token });
+        // Token should appear in the list (or a success dialog)
+        const main = mainContent(page);
+        const hasNewToken = await main.getByText(tokenName)
+          .isVisible({ timeout: 5000 }).catch(() => false);
+        const hasTokenPrefix = await main.getByText(/mfx_/)
+          .first().isVisible({ timeout: 3000 }).catch(() => false);
+        expect(hasNewToken || hasTokenPrefix).toBeTruthy();
+      } finally {
+        // Always clean up, even when an assertion above failed; otherwise every
+        // failed attempt (and each of the config's retries) leaks a live token
+        // into whatever account E2E_EMAIL points at.
+        await deleteE2ETokens(page.request, (name) => name === tokenName);
       }
     });
   });

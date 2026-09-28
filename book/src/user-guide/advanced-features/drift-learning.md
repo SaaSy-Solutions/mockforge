@@ -1,5 +1,7 @@
 # Synthetic → Recorded Drift Learning
 
+> **Planned / not yet available.** `mockforge drift-learning enable/disable/status` can set configuration, but the learning engine is not yet wired into request handling, so no drift is learned at runtime; several commands shown below do not exist. This page describes the intended design and is kept for reference; do not rely on it in a released build. Track progress at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 **Pillars:** [Reality]
 
 The Drift Learning System allows mocks to gradually learn from recorded traffic and adapt their behavior. Instead of static synthetic data, mocks can evolve to match real-world patterns observed in traffic.
