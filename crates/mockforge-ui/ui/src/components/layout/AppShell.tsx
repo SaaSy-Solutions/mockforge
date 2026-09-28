@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { cn } from '../../utils/cn';
 import { Button } from '../ui/button';
@@ -304,9 +304,8 @@ const cloudNavItemIds = new Set([
   // clustered by the active workspace. Phase 1 returns no edges; SSE
   // updates are local-only for now (cloud falls back to 30s polling).
   'graph',
-  // Observability dashboard (#465) — Phase 1 lists the org's saved
-  // queries and runs them on-demand via cloudObservabilityApi.execute
-  // SavedQuery. Live dashboard tiles + event stream are a follow-up.
+  // Observability dashboard (#465): each org saved query renders as a
+  // live tile that re-executes via cloudObservabilityApi.executeSavedQuery.
   'observability',
   // Scenario Studio uses cloudFlowsApi with kind='scenario'. Each flow
   // version stores the full {flow_type, steps, connections, tags}
@@ -450,6 +449,45 @@ const effectiveNavSections = navSections
   }))
   .filter(section => section.items.length > 0);
 
+// Extra search terms for the sidebar page filter, so users can find a page
+// by the concept they have in mind rather than its exact nav label (e.g.
+// "overrides" lands on Fixtures / Config, "team" on Organization).
+const navSearchKeywords: Record<string, string[]> = {
+  dashboard: ['home', 'overview'],
+  'hosted-mocks': ['deploy', 'deployments', 'cloud mocks'],
+  fixtures: ['overrides', 'responses', 'stubs', 'canned'],
+  config: ['settings', 'overrides', 'latency', 'validation', 'reality', 'environment', 'env vars'],
+  organization: ['team', 'teams', 'members', 'invite', 'roles', 'sso', 'audit log'],
+  billing: ['plan', 'subscription', 'invoices', 'payment', 'upgrade'],
+  'api-tokens': ['keys', 'personal access tokens', 'pat', 'credentials'],
+  'publisher-keys': ['signing', 'signatures'],
+  byok: ['llm', 'openai', 'anthropic', 'api key', 'bring your own key'],
+  usage: ['quota', 'limits', 'consumption'],
+  'notification-channels': ['alerts', 'slack', 'pagerduty', 'email', 'webhooks'],
+  observability: ['monitoring', 'dashboards', 'tiles', 'metrics'],
+  status: ['health', 'uptime', 'services'],
+  'cloud-incidents': ['alerts', 'outages'],
+  'cloud-traces': ['tracing', 'otel', 'opentelemetry', 'spans'],
+  'pillar-analytics': ['analytics', 'metrics', 'traffic'],
+  'plugin-registry': ['plugins', 'extensions', 'marketplace'],
+  'cloud-chaos': ['fault injection', 'failures', 'latency'],
+  tunnels: ['expose', 'public url', 'ngrok'],
+  support: ['help', 'contact'],
+  faq: ['help', 'questions'],
+};
+
+function matchesNavQuery(item: { id: string }, label: string, query: string): boolean {
+  if (!query) return true;
+  const haystack = [label, item.id.replace(/-/g, ' '), ...(navSearchKeywords[item.id] ?? [])]
+    .join(' ')
+    .toLowerCase();
+  return query
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((term) => haystack.includes(term));
+}
+
 // Flattened items for title lookup (includes non-sidebar pages for breadcrumb
 // resolution). Apply the same cloud-mode label overrides so the breadcrumb
 // matches the nav label users clicked on.
@@ -467,6 +505,47 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
   const navigate = useNavigate();
   const activeTab = location.pathname.replace(/^\//, '') || 'dashboard';
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [navQuery, setNavQuery] = useState('');
+  const visibleNavSections = useMemo(() => {
+    const query = navQuery.trim();
+    if (!query) return effectiveNavSections;
+    return effectiveNavSections
+      .map((section) => ({
+        ...section,
+        items: section.items.filter((item) => matchesNavQuery(item, t(item.labelKey), query)),
+      }))
+      .filter((section) => section.items.length > 0);
+  }, [navQuery, t]);
+  const firstNavMatch = visibleNavSections
+    .flatMap((section) => section.items)
+    .find((item) => !item.localOnly);
+  const renderNavFilter = (onNavigate?: () => void) => (
+    <div className="relative">
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+      <input
+        type="search"
+        value={navQuery}
+        onChange={(e) => setNavQuery(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && firstNavMatch) {
+            navigate('/' + firstNavMatch.id);
+            setNavQuery('');
+            onNavigate?.();
+          } else if (e.key === 'Escape') {
+            setNavQuery('');
+          }
+        }}
+        placeholder="Find a page"
+        aria-label="Find a page"
+        className="h-8 w-full rounded-md border border-border bg-bg-secondary pl-8 pr-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+      />
+    </div>
+  );
+  const navEmptyState = (
+    <p className="px-3 text-sm text-muted-foreground">
+      No pages match &ldquo;{navQuery.trim()}&rdquo;.
+    </p>
+  );
   const { setFilter: setLogFilter } = useLogStore();
   const { setGlobalSearch } = useServiceStore();
   const [globalQuery, setGlobalQuery] = useState('');
@@ -554,7 +633,9 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
               </Button>
             </div>
             <nav className="p-6 space-y-6 overflow-y-auto h-[calc(100%-88px)]">
-              {effectiveNavSections.map((section, sectionIndex) => (
+              {renderNavFilter(() => setSidebarOpen(false))}
+              {visibleNavSections.length === 0 && navEmptyState}
+              {visibleNavSections.map((section, sectionIndex) => (
                 <div key={section.titleKey} className="space-y-2">
                   <h3 className="px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     {t(section.titleKey)}
@@ -631,7 +712,9 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
               </Button>
             </div>
             <nav id="main-navigation" className="flex-1 px-2 py-6 space-y-6 overflow-y-auto" role="navigation" aria-label={t('a11y.mainNavigation')}>
-              {effectiveNavSections.map((section) => (
+              {!sidebarCollapsed && <div className="px-1">{renderNavFilter()}</div>}
+              {visibleNavSections.length === 0 && navEmptyState}
+              {visibleNavSections.map((section) => (
                 <div key={section.titleKey} className="space-y-2">
                   {!sidebarCollapsed && (
                     <h3 className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
@@ -692,15 +775,15 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
           </div>
         </aside>
 
-        <div className={cn('flex flex-col flex-1 min-h-screen', sidebarCollapsed ? 'md:pl-16' : 'md:pl-64')}>
+        <div className={cn('flex flex-col flex-1 min-w-0 min-h-screen', sidebarCollapsed ? 'md:pl-16' : 'md:pl-64')}>
           <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center border-b border-border bg-bg-primary shadow-sm">
-            <div className="w-full max-w-[1400px] mx-auto flex items-center gap-x-4 px-4 sm:gap-x-6 sm:px-6 lg:px-8">
+            <div className="w-full max-w-[1400px] mx-auto flex items-center gap-x-2 px-4 sm:gap-x-6 sm:px-6 lg:px-8">
               <Button variant="ghost" size="sm" className="md:hidden" onClick={() => setSidebarOpen(true)}>
                 <Menu className="h-5 w-5" />
               </Button>
               <div className="flex items-center gap-3 min-w-0">
-                <span className="text-sm text-gray-600 dark:text-gray-400">{t('app.home')}</span>
-                <span className="text-gray-600 dark:text-gray-400">/</span>
+                <span className="hidden sm:inline text-sm text-gray-600 dark:text-gray-400">{t('app.home')}</span>
+                <span className="hidden sm:inline text-gray-600 dark:text-gray-400">/</span>
                 <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate capitalize">
                   {t(allNavItems.find(n => n.id === activeTab)?.labelKey ?? '', activeTab)}
                 </span>
@@ -751,7 +834,7 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-x-4 lg:gap-x-6">
+              <div className="flex shrink-0 items-center gap-x-2 sm:gap-x-4 lg:gap-x-6">
                 <GlobalConnectionStatus className="hidden sm:flex" />
                 {workspaces.length > 0 && (
                   <select

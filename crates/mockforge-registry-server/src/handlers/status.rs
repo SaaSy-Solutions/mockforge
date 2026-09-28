@@ -49,7 +49,9 @@ pub async fn get_status(State(state): State<AppState>) -> ApiResult<Json<StatusR
         message: db_status.1,
     });
 
-    // Check Redis (if configured)
+    // Check Redis only when this deployment uses it. Redis is an optional
+    // internal cache, so an unconfigured instance is not a customer-facing
+    // service and is omitted rather than listed as "Not configured".
     if let Some(redis) = &state.redis {
         let redis_status = match redis.ping().await {
             Ok(_) => ("operational", None),
@@ -59,12 +61,6 @@ pub async fn get_status(State(state): State<AppState>) -> ApiResult<Json<StatusR
             name: "Redis".to_string(),
             status: redis_status.0.to_string(),
             message: redis_status.1,
-        });
-    } else {
-        services.push(ServiceStatus {
-            name: "Redis".to_string(),
-            status: "operational".to_string(),
-            message: Some("Not configured".to_string()),
         });
     }
 

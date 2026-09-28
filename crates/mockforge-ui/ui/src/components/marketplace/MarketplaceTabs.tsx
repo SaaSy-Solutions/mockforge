@@ -33,6 +33,7 @@ export const MarketplaceTabs: React.FC = () => {
         value={current === -1 ? 0 : current}
         onChange={(_, idx) => navigate(tabs[idx].path)}
         aria-label="Marketplace sections"
+        variant="scrollable"
       >
         {tabs.map((t) => (
           <Tab

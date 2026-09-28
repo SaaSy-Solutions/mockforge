@@ -1,6 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useCloudOrgId } from '@/hooks/useCloudOrgId';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Input } from '@/components/ui/input';
@@ -470,7 +471,7 @@ function MembersTab({ org }: { org: Organization }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex gap-2 justify-end">
+      <div className="flex flex-wrap gap-2 justify-end">
         <Button size="sm" variant="outline" onClick={() => setShowInvite(true)}>
           <Link className="w-4 h-4 mr-2" />
           Invite Link
@@ -1935,13 +1936,27 @@ export function OrganizationPage() {
   const { showToast } = useToast();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [selectedOrgId, setSelectedOrgId] = useState<string | null>(null);
+  const defaultOrgId = useCloudOrgId();
+  const detailsRef = useRef<HTMLDivElement>(null);
   const [showCreateOrg, setShowCreateOrg] = useState(false);
   const [newOrgName, setNewOrgName] = useState('');
   const [newOrgSlug, setNewOrgSlug] = useState('');
 
   const tabParam = searchParams.get('tab');
   const activeTab = tabParam && VALID_TABS.has(tabParam) ? tabParam : 'members';
+  const orgParam = searchParams.get('org');
+  const selectOrg = (orgId: string, opts: { scroll?: boolean } = {}) => {
+    const params = new URLSearchParams(searchParams);
+    params.set('org', orgId);
+    setSearchParams(params, { replace: true });
+    // On narrow layouts the details panel stacks below the list, so bring
+    // it into view; otherwise the click looks like it did nothing.
+    if (opts.scroll && typeof window !== 'undefined' && window.innerWidth < 1024) {
+      requestAnimationFrame(() =>
+        detailsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      );
+    }
+  };
   const handleTabChange = (next: string) => {
     const params = new URLSearchParams(searchParams);
     if (next === 'members') {
@@ -1967,7 +1982,7 @@ export function OrganizationPage() {
       setShowCreateOrg(false);
       setNewOrgName('');
       setNewOrgSlug('');
-      setSelectedOrgId(newOrg.id);
+      selectOrg(newOrg.id);
       queryClient.invalidateQueries({ queryKey: ['organizations'] });
     },
     onError: (err: Error) => showToast('error', 'Failed to create organization', err.message),
@@ -1992,7 +2007,14 @@ export function OrganizationPage() {
     );
   }
 
-  const selectedOrg = organizations?.find((org) => org.id === selectedOrgId);
+  // Selection precedence: explicit ?org= param, then the account's default
+  // org, then the first org. Always landing on a selected org means the
+  // Members / Settings tabs (and ?tab= deep links) are reachable immediately.
+  const selectedOrg =
+    organizations?.find((org) => org.id === orgParam) ??
+    organizations?.find((org) => org.id === defaultOrgId) ??
+    organizations?.[0];
+  const selectedOrgId = selectedOrg?.id ?? null;
 
   return (
     <div className="mx-auto max-w-screen-2xl p-6 space-y-6">
@@ -2003,7 +2025,7 @@ export function OrganizationPage() {
         </p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_1fr] [&>*]:min-w-0">
         {/* Organizations List */}
         <Card>
           <CardHeader>
@@ -2017,29 +2039,34 @@ export function OrganizationPage() {
                 New
               </Button>
             </div>
-            <CardDescription>Select an organization to manage</CardDescription>
+            <CardDescription>Select an organization to manage its members and settings</CardDescription>
           </CardHeader>
           <CardContent>
             {organizations && organizations.length > 0 ? (
               <div className="space-y-2">
                 {organizations.map((org) => (
-                  <div
+                  <button
+                    type="button"
                     key={org.id}
-                    className={`p-4 border rounded-lg cursor-pointer transition-colors ${
+                    aria-current={selectedOrgId === org.id ? 'true' : undefined}
+                    className={`w-full text-left p-4 border rounded-lg cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                       selectedOrgId === org.id
                         ? 'border-primary bg-primary/5'
                         : 'hover:bg-accent'
                     }`}
-                    onClick={() => setSelectedOrgId(org.id)}
+                    onClick={() => selectOrg(org.id, { scroll: true })}
                   >
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <div className="font-semibold">{org.name}</div>
-                        <div className="text-sm text-muted-foreground">@{org.slug}</div>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="font-semibold truncate">{org.name}</div>
+                        <div className="text-sm text-muted-foreground truncate">@{org.slug}</div>
                       </div>
                       {getPlanBadge(org.plan)}
                     </div>
-                  </div>
+                    {selectedOrgId !== org.id && (
+                      <div className="mt-2 text-xs text-muted-foreground">Manage members and settings</div>
+                    )}
+                  </button>
                 ))}
               </div>
             ) : (
@@ -2052,6 +2079,7 @@ export function OrganizationPage() {
 
         {/* Organization Details */}
         {selectedOrg ? (
+          <div ref={detailsRef} className="scroll-mt-20 min-w-0">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center justify-between">
@@ -2062,7 +2090,9 @@ export function OrganizationPage() {
             </CardHeader>
             <CardContent>
               <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-                <TabsList className="flex w-full overflow-x-auto">
+                {/* justify-start: the default centered layout clips the first tabs
+                    (Members) off the left edge once the list overflows. */}
+                <TabsList className="flex w-full justify-start overflow-x-auto">
                   <TabsTrigger value="members">
                     <Users className="w-4 h-4 mr-1" />
                     Members
@@ -2139,14 +2169,19 @@ export function OrganizationPage() {
               </Tabs>
             </CardContent>
           </Card>
+          </div>
         ) : (
           <Card>
             <CardContent className="p-12 text-center">
               <Building2 className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
-              <h3 className="text-lg font-semibold mb-2">Select an Organization</h3>
-              <p className="text-muted-foreground">
-                Choose an organization from the list to view details and manage members
+              <h3 className="text-lg font-semibold mb-2">No organization yet</h3>
+              <p className="text-muted-foreground mb-4">
+                Create an organization to invite teammates, manage roles, and share hosted mocks.
               </p>
+              <Button onClick={() => setShowCreateOrg(true)}>
+                <Plus className="w-4 h-4 mr-1" />
+                Create organization
+              </Button>
             </CardContent>
           </Card>
         )}

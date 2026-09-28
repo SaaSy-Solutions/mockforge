@@ -126,12 +126,11 @@ const CloudView: React.FC = () => {
 
 const BetaBanner: React.FC = () => (
   <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
-    <p className="font-medium">Cloud plugin runtime — beta</p>
+    <p className="font-medium">Cloud plugin runtime (beta)</p>
     <p className="mt-1">
-      Cloud plugin management is rolling out alongside the cloud plugin
-      runtime. Attach, permission, and detach controls land in the next
-      sub-PRs of Phase 3. Today this page lists deployments and any plugins
-      already wired up.
+      This page lists each hosted-mock deployment and the plugins attached
+      to it. Attaching and detaching plugins from the dashboard opens with
+      the cloud plugin runtime beta; request access from the Plugin Registry.
     </p>
   </div>
 );

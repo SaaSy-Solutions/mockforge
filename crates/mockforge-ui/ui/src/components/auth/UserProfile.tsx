@@ -62,7 +62,7 @@ export function UserProfile() {
           <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-foreground-foreground text-sm font-medium">
             {(user.username || user.email || 'U').charAt(0).toUpperCase()}
           </div>
-          <div className="text-left">
+          <div className="hidden sm:block text-left">
             <div className="text-sm font-medium">{user.username}</div>
             <div className={`text-xs px-2 py-0.5 rounded-full inline-flex items-center space-x-1 ${getRoleColor(user.role)}`}>
               <span>{getRoleIcon(user.role)}</span>

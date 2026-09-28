@@ -168,6 +168,7 @@ const CtaBanner: React.FC<{ onClick: () => void }> = ({ onClick }) => (
       display: 'flex',
       alignItems: 'center',
       gap: 2,
+      flexWrap: 'wrap',
       p: 2,
       mb: 3,
       borderRadius: 2,
@@ -178,12 +179,12 @@ const CtaBanner: React.FC<{ onClick: () => void }> = ({ onClick }) => (
     data-testid="cloud-plugins-beta-cta"
   >
     <CloudIcon className="text-primary" />
-    <Box sx={{ flex: 1 }}>
+    <Box sx={{ flex: '1 1 220px', minWidth: 0 }}>
       <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
         Coming soon: run plugins in your cloud workspace
       </Typography>
       <Typography variant="body2" color="text.secondary">
-        Help us decide what ships first — request beta access in 30 seconds.
+        Help us decide what ships first. Requesting beta access takes 30 seconds.
       </Typography>
     </Box>
     <Button variant="contained" size="small" onClick={onClick}>
