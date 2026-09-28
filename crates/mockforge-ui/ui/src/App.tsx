@@ -1,5 +1,5 @@
-import { useEffect, Suspense } from 'react';
-import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { useEffect, Suspense, lazy } from 'react';
+import { Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { AppShell } from './components/layout/AppShell';
 import { AuthGuard } from './components/auth/AuthGuard';
 import { ErrorBoundary } from './components/error/ErrorBoundary';
@@ -11,6 +11,15 @@ import { usePreferencesStore } from './stores/usePreferencesStore';
 import { useThemeSync } from './hooks/useThemeSync';
 import { useI18n } from './i18n/I18nProvider';
 import { routes } from './routes';
+import { PostAuthRedirect } from './components/auth/PostAuthRedirect';
+import { AUTH_ENTRY_PATHS } from './utils/postAuthRedirect';
+
+const LegalDocumentPage = lazy(() =>
+  import('./pages/LegalDocumentPage').then((m) => ({ default: m.LegalDocumentPage })),
+);
+
+/** Paths moved under /legal/; old links keep working. */
+const LEGACY_LEGAL_PATHS = ['terms', 'privacy', 'dpa'] as const;
 
 function NotFoundPage() {
   const { t } = useI18n();
@@ -37,6 +46,14 @@ function NotFoundPage() {
       </div>
     </div>
   );
+}
+
+function LegalRoute() {
+  const { docId } = useParams();
+  if (docId === 'terms' || docId === 'privacy' || docId === 'dpa') {
+    return <LegalDocumentPage id={docId} />;
+  }
+  return <Navigate to="/legal/privacy" replace />;
 }
 
 function App() {
@@ -135,36 +152,64 @@ function App() {
     // Refresh data for the current page
   };
 
+  const loadingFallback = (
+    <div className="flex items-center justify-center h-64">
+      <div className="text-center">
+        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-info-600"></div>
+        <p className="mt-4 text-muted-foreground">{t('app.loading')}</p>
+      </div>
+    </div>
+  );
+
+  const guardedApp = (
+    <AuthGuard>
+      <AppShell onRefresh={handleRefresh}>
+        <ErrorBoundary>
+          <Suspense fallback={loadingFallback}>
+            <Routes>
+              {/* Redirect root to the user's preferred default page (falls back to /dashboard). */}
+              <Route path="/" element={<Navigate to={rootRedirect} replace />} />
+
+              {/* Auth entry points: AuthGuard shows the login form while signed out,
+                  so these only render once auth succeeds. Forward to ?redirect=
+                  (or the default page) instead of falling through to Not Found. */}
+              {AUTH_ENTRY_PATHS.map((path) => (
+                <Route key={path} path={path} element={<PostAuthRedirect fallback={rootRedirect} />} />
+              ))}
+
+              {/* All page routes */}
+              {routes.map((route) => (
+                <Route key={route.path} path={route.path} element={route.element} />
+              ))}
+
+              {/* Catch-all: show not found page */}
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </Suspense>
+        </ErrorBoundary>
+      </AppShell>
+    </AuthGuard>
+  );
+
   return (
     <ErrorBoundary>
       <ToastProvider>
-        <AuthGuard>
-          <AppShell onRefresh={handleRefresh}>
-            <ErrorBoundary>
-              <Suspense fallback={
-                <div className="flex items-center justify-center h-64">
-                  <div className="text-center">
-                    <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-info-600"></div>
-                    <p className="mt-4 text-muted-foreground">{t('app.loading')}</p>
-                  </div>
-                </div>
-              }>
-                <Routes>
-                  {/* Redirect root to the user's preferred default page (falls back to /dashboard). */}
-                  <Route path="/" element={<Navigate to={rootRedirect} replace />} />
-
-                  {/* All page routes */}
-                  {routes.map((route) => (
-                    <Route key={route.path} path={route.path} element={route.element} />
-                  ))}
-
-                  {/* Catch-all: show not found page */}
-                  <Route path="*" element={<NotFoundPage />} />
-                </Routes>
+        <Routes>
+          {/* Public legal documents: outside AuthGuard and AppShell so anonymous
+              visitors (and links from mockforge.dev) can read them. */}
+          <Route
+            path="/legal/:docId"
+            element={
+              <Suspense fallback={loadingFallback}>
+                <LegalRoute />
               </Suspense>
-            </ErrorBoundary>
-          </AppShell>
-        </AuthGuard>
+            }
+          />
+          {LEGACY_LEGAL_PATHS.map((id) => (
+            <Route key={id} path={`/${id}`} element={<Navigate to={`/legal/${id}`} replace />} />
+          ))}
+          <Route path="*" element={guardedApp} />
+        </Routes>
       </ToastProvider>
     </ErrorBoundary>
   );

@@ -79,32 +79,30 @@ pub async fn get_subscription(
     Ok(Json(SubscriptionResponse {
         org_id: org_ctx.org_id,
         plan: org_ctx.org.plan().to_string(),
+        // `plan` above is authoritative. The fields below describe the Stripe
+        // subscription and are empty when there is none (Free, or a paid plan
+        // assigned administratively); reporting "free" / a fabricated renewal
+        // date there contradicted `plan` in the billing UI.
         status: subscription
             .as_ref()
             .map(|s| s.status().to_string())
-            .unwrap_or_else(|| "free".to_string()),
+            .unwrap_or_else(|| NO_SUBSCRIPTION_STATUS.to_string()),
         // Derived from the stored Stripe price ID (no dedicated column) — annual
         // subs are recognised by matching the configured annual price IDs.
-        billing_interval: subscription
-            .as_ref()
-            .map(|s| {
-                interval_label_from_price_id(
-                    &s.price_id,
-                    state.config.stripe_price_id_pro_annual.as_deref(),
-                    state.config.stripe_price_id_team_annual.as_deref(),
-                )
-                .to_string()
-            })
-            .unwrap_or_else(|| BillingInterval::Monthly.as_str().to_string()),
+        billing_interval: subscription.as_ref().map(|s| {
+            interval_label_from_price_id(
+                &s.price_id,
+                state.config.stripe_price_id_pro_annual.as_deref(),
+                state.config.stripe_price_id_team_annual.as_deref(),
+            )
+            .to_string()
+        }),
         cancel_at_period_end: subscription
             .as_ref()
             .map(|s| s.cancel_at_period_end)
             .unwrap_or(false),
         current_period_start: subscription.as_ref().map(|s| s.current_period_start),
-        current_period_end: subscription.as_ref().map(|s| s.current_period_end).or_else(|| {
-            // For free plan, return None or far future
-            Some(chrono::Utc::now() + chrono::Duration::days(365))
-        }),
+        current_period_end: subscription.as_ref().map(|s| s.current_period_end),
         usage: UsageStats {
             requests: usage.requests,
             requests_limit: limits
@@ -131,14 +129,21 @@ pub async fn get_subscription(
     }))
 }
 
+/// `status` reported by [`get_subscription`] when the org has no Stripe
+/// subscription row.
+pub const NO_SUBSCRIPTION_STATUS: &str = "none";
+
 #[derive(Debug, Serialize)]
 pub struct SubscriptionResponse {
     pub org_id: Uuid,
+    /// The org's plan. Authoritative; `status` and the period fields only
+    /// describe the Stripe subscription backing it, if any.
     pub plan: String,
+    /// Stripe subscription status, or [`NO_SUBSCRIPTION_STATUS`].
     pub status: String,
-    /// Billing cadence of the active subscription: "month" or "year".
-    /// Defaults to "month" for free orgs / when no subscription exists.
-    pub billing_interval: String,
+    /// Billing cadence of the Stripe subscription: "month" or "year".
+    /// `None` when no subscription exists.
+    pub billing_interval: Option<String>,
     pub cancel_at_period_end: bool,
     pub current_period_start: Option<chrono::DateTime<chrono::Utc>>,
     pub current_period_end: Option<chrono::DateTime<chrono::Utc>>,
