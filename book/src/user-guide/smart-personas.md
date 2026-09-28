@@ -1,5 +1,7 @@
 # Smart Personas
 
+> **Experimental.** This feature ships in MockForge but is early: persona generation and the `/api/v1/consistency/persona*` endpoints exist, but the configuration keys and `{{persona.*}}` template helpers shown below are not all implemented; the current keys are `data.persona_domain`, `persona_consistency_enabled`, and `persona_registry`. Behavior, commands, and configuration may change between releases. Report issues at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 Smart Personas enable generating coherent, consistent mock data using persona profiles with unique backstories and deterministic generation. The same persona always generates the same data, ensuring consistency across endpoints and requests.
 
 ## Overview

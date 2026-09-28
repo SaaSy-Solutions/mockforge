@@ -130,8 +130,8 @@ For detailed use case examples and code samples, see [Ecosystem & Use Cases Guid
 
 All major features listed in this README are **implemented and functional in v1.0**, with the following clarification:
 
-- ✅ **Fully Implemented**: HTTP/REST, gRPC (with HTTP Bridge), WebSocket, GraphQL, AI-powered mocking (with data drift & event streams), Plugin system (WASM + remote loading), E2E encryption, Workspace sync, Data generation (RAG-powered), Admin UI (with SSE live logs, metrics, drag-and-drop fixtures)
-- ⚠️ **Planned for v1.1**: Admin UI role-based authentication (frontend UI components are built, backend JWT/OAuth integration pending)
+- ✅ **Fully Implemented**: HTTP/REST, gRPC (with HTTP Bridge), WebSocket, GraphQL, AI-powered mocking (with data drift & event streams), Plugin system (WASM + remote loading), E2E encryption, Workspace sync, Data generation (RAG-powered), Admin UI (with SSE live logs, metrics, drag-and-drop fixtures), Admin UI role-based authentication (JWT login with Admin / Editor / Viewer roles enforced on mutating admin endpoints)
+- ⚠️ **Not yet in the local Admin UI**: OAuth / SSO login (SSO via OIDC and SAML is available in MockForge Cloud)
 
 All commands, options, and features documented in each protocol section (HTTP, gRPC, WebSocket, GraphQL, Plugins, Data Generation) have been verified to work as described.
 
@@ -201,7 +201,7 @@ All commands, options, and features documented in each protocol section (HTTP, g
   - **Chaos engineering**: latency, HTTP errors, **TCP-level connection errors** (RST / FIN at accept time), real timeouts (sleep + 504), partial responses (chunked-aware), payload corruption — all gateable by per-request matchers (source IP / CIDR, header, body size, chunked-only)
   - **Live observability**: TUI dashboard with current and lifetime peak CPU / memory / error-rate; optional CSV metrics log (`MOCKFORGE_METRICS_LOG_FILE`) for multi-day runs you can chart in Grafana / spreadsheets / anything
 - **Admin UI v2**: Modern React-based interface with:
-  - **Role-Based Authentication**: ✅ Complete JWT-based authentication with Admin, Editor, and Viewer roles
+  - **Role-Based Authentication**: ✅ JWT-based login with Admin, Editor, and Viewer roles; write operations are permission-checked per role
   - **Real-time Collaboration**: ✅ WebSocket-based collaborative editing with presence awareness and cursor tracking
   - **Real-time Monitoring**: Live logs via Server-Sent Events (SSE), metrics, and performance tracking
   - **Visual Configuration**: Drag-and-drop fixture management with tree view
@@ -1305,7 +1305,9 @@ The Admin UI provides:
 - **🎯 Fixture management** with drag-and-drop tree view for organizing fixtures
 - **🎨 Professional UI** with tabbed interface and responsive design
 
-> **Note**: Role-based authentication (Admin/Viewer access control) is planned for v1.1. The frontend UI components are ready, but backend JWT/OAuth authentication is not yet implemented in v1.0. The Admin UI is currently accessible without authentication.
+> **Authentication**: The Admin UI uses JWT login with three roles: **Admin** (full access), **Editor** (create, edit, and delete mocks and fixtures, but not server settings such as latency/fault/proxy config, or roles), and **Viewer** (read-only). Every mutating admin endpoint is permission-checked against the caller's role. Read-only `GET /__mockforge/*` endpoints stay unauthenticated so the TUI and scripts can poll them; the admin port is opt-in via `--admin`, so keep it off untrusted networks.
+>
+> When `JWT_SECRET` is not set, MockForge seeds local development users (`admin` / `admin123`, `editor` / `editor123`, `viewer` / `viewer123`). Set `JWT_SECRET` (and `MOCKFORGE_DISABLE_DEV_SEED_USERS=true`) for any shared deployment. OAuth/SSO login is not available in the local Admin UI; MockForge Cloud supports OIDC and SAML SSO.
 
 ### Embedded Admin Mode
 

@@ -1,5 +1,7 @@
 # Natural Language to System Generation
 
+> **Planned / not yet available.** The system generator and AI Studio panel exist, but the backend API is not mounted yet and there is no `mockforge ai generate-system` command. This page describes the intended design and is kept for reference; do not rely on it in a released build. Track progress at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 **Pillars:** [AI]
 
 Natural Language to System Generation allows you to describe your product in natural language and MockForge generates an entire backend system including endpoints, personas, lifecycle states, WebSocket topics, failure scenarios, and more.

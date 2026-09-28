@@ -1,5 +1,7 @@
 # Behavioral Economics Engine
 
+> **Planned / not yet available.** `mockforge behavior-rule` can write rules to config, but the rule engine is not yet attached to the request path, so rules do not affect responses. This page describes the intended design and is kept for reference; do not rely on it in a released build. Track progress at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 **Pillars:** [Reality]
 
 The Behavioral Economics Engine makes mocks react to real-world pressures like latency, load, pricing changes, fraud suspicion, and customer segments. This creates mocks that behave like real customer-driven systems, not just static endpoints.

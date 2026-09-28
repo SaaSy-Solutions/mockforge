@@ -1,5 +1,7 @@
 # Reality Continuum
 
+> **Experimental.** This feature ships in MockForge but is early: the `/__mockforge/continuum/*` API and `reality_continuum` config are live, but traffic blending is currently a per-request mock/upstream split (requires `MOCKFORGE_PROXY_UPSTREAM`); per-route ratios, time schedules, and field-level blending are not yet applied to live traffic. Behavior, commands, and configuration may change between releases. Report issues at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 The Reality Continuum feature enables gradual transition from mock to real backend data by intelligently blending responses from both sources. This allows teams to develop and test against a real backend that's still under construction, smoothly transitioning from 100% mock to 100% real over time.
 
 ## Overview
