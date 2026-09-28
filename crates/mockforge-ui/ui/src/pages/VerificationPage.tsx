@@ -1,5 +1,5 @@
 import { logger } from '@/utils/logger';
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { CheckCircle2, XCircle, Search, Play, RefreshCw, AlertCircle, Cloud } from 'lucide-react';
 import { verificationApi } from '../services/api';
 import { cloudVerificationApi, type TimeWindow } from '../services/api/cloudVerification';

@@ -6,7 +6,7 @@
  * - Configure severity and endpoint patterns
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/Card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';

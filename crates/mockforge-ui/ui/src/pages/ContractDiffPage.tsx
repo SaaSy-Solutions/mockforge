@@ -1,29 +1,25 @@
 import { logger } from '@/utils/logger';
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   FileText,
-  Search,
   Play,
   RefreshCw,
-  AlertCircle,
   CheckCircle2,
   XCircle,
   TrendingUp,
   FileCode,
   Download,
-  Upload,
   Filter,
   Plus,
   Network
 } from 'lucide-react';
-import { contractDiffApi, type CapturedRequest, type ContractDiffResult, type AnalyzeRequestPayload } from '../services/api';
+import { contractDiffApi, type ContractDiffResult, type AnalyzeRequestPayload } from '../services/api';
 import { protocolContractsApi, type ProtocolType } from '../services/protocolContractsApi';
 import { ProtocolContractEditor } from '../components/ProtocolContractEditor';
 import {
   PageHeader,
   ModernCard,
   ModernBadge,
-  Alert,
   EmptyState,
   Section
 } from '../components/ui/DesignSystem';

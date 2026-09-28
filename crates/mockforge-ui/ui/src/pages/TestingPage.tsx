@@ -1,5 +1,4 @@
-import { logger } from '@/utils/logger';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { TestTube, Play, CheckCircle, XCircle, Clock, AlertTriangle, RefreshCw } from 'lucide-react';
 import {
   PageHeader,

@@ -9,9 +9,7 @@ import {
   Search,
   Sparkles,
   CheckCircle2,
-  ArrowRight,
   TrendingUp,
-  AlertCircle,
   Loader2,
   Eye,
 } from 'lucide-react';

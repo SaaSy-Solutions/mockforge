@@ -2,7 +2,6 @@
 //!
 //! Custom React Flow node component for representing delay steps in a flow.
 
-import React from 'react';
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 import { Badge } from '../ui/Badge';

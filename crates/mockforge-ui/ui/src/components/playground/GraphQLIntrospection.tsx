@@ -1,12 +1,10 @@
-import { logger } from '@/utils/logger';
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Loader2, RefreshCw, ChevronRight, ChevronDown, Search, Code2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/Badge';
 import { usePlaygroundStore } from '../../stores/usePlaygroundStore';
-import { toast } from 'sonner';
 
 /**
  * GraphQL Introspection Component

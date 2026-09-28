@@ -4,7 +4,7 @@
 //! including natural language mock generation, AI-guided debugging, persona generation,
 //! and artifact freezing.
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Brain,
   MessageSquare,
@@ -12,10 +12,8 @@ import {
   Bug,
   User,
   Download,
-  Settings,
   TrendingUp,
   DollarSign,
-  Zap,
   GitCompare,
   FileText,
   RefreshCw,
@@ -23,7 +21,6 @@ import {
   CheckCircle2,
   XCircle,
   Filter,
-  Plus,
   Search,
   Sparkles,
   Users,
@@ -35,7 +32,7 @@ import { Input } from '../components/ui/input';
 import { Label } from '../components/ui/label';
 import { Textarea } from '../components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
-import { apiService, contractDiffApi, type CapturedRequest, type ContractDiffResult, type AnalyzeRequestPayload } from '../services/api';
+import { contractDiffApi, type ContractDiffResult, type AnalyzeRequestPayload } from '../services/api';
 import { aiStudioApi } from '../services/api/aiStudio';
 import { isCloudMode } from '../utils/cloudMode';
 import { CloudAIQuotaBanner } from '../components/ai/CloudAIQuotaBanner';

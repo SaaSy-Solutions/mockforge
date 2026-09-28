@@ -4,7 +4,7 @@
  * Form for creating and editing federations
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useCreateFederation, useUpdateFederation, type Federation, type FederationService } from '../../hooks/useFederation';
 import { Card } from '../ui/Card';
 import { ArrowLeft, Save, Plus, Trash2 } from 'lucide-react';

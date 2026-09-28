@@ -1,8 +1,6 @@
-import React from 'react';
-import { ArrowLeft, Tag, FileCode, Clock, GitBranch } from 'lucide-react';
+import { ArrowLeft, Tag, FileCode, Clock } from 'lucide-react';
 import type { Flow, FlowStep } from '../../types';
 import { ModernCard, ModernBadge, PageHeader } from '../ui/DesignSystem';
-import { cn } from '../../utils/cn';
 
 interface FlowDetailsProps {
   flow: Flow;
@@ -87,10 +85,10 @@ export function FlowDetails({ flow, onBack, onTag, onCompile }: FlowDetailsProps
         ) : (
           <div className="space-y-4">
             {steps.map((step, index) => (
-              <FlowStepItem 
-                key={step.request_id} 
-                step={step} 
-                index={index} 
+              <FlowStepItem
+                key={step.request_id}
+                step={step}
+                index={index}
                 isLast={index === steps.length - 1}
               />
             ))}
@@ -134,4 +132,3 @@ function FlowStepItem({ step, index, isLast }: { step: FlowStep; index: number; 
     </div>
   );
 }
-

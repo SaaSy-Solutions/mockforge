@@ -4,7 +4,7 @@
 //! allowing users to create mocks conversationally using natural language.
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Mic, MicOff, Loader2, CheckCircle2, XCircle, Download, Play } from 'lucide-react';
+import { Mic, MicOff, Loader2, CheckCircle2, XCircle, Download } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '../../utils/cn';
 import { apiErrorMessage } from '@/utils/errorHandling';

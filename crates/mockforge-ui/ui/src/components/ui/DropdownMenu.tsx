@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 // Re-export from DesignSystem for compatibility
 export {
   DropdownMenu,

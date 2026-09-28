@@ -3,7 +3,7 @@
 //! Visual flow editor for co-editing business flows (happy path, SLA violation, regression)
 //! with drag-and-drop React Flow integration.
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   ReactFlow,
   Background,
@@ -21,7 +21,6 @@ import type {
   NodeTypes,
   ReactFlowInstance,
 } from '@xyflow/react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -37,7 +36,6 @@ import {
   Clock,
   Repeat,
   Layers,
-  Settings,
 } from 'lucide-react';
 import { ApiCallNode, type ApiCallNodeData } from '@/components/scenario-studio/ApiCallNode';
 import { ConditionNode, type ConditionNodeData } from '@/components/scenario-studio/ConditionNode';

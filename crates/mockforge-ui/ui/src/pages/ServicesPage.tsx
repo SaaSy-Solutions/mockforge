@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import { useEffect } from 'react';
 import { Search, AlertCircle, RefreshCw } from 'lucide-react';
 import { ServicesPanel } from '../components/services/ServicesPanel';
 import { useServiceStore } from '../stores/useServiceStore';

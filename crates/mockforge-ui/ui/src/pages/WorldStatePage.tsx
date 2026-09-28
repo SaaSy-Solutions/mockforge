@@ -7,7 +7,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   PageHeader,
-  Alert,
   Section,
 } from '../components/ui/DesignSystem';
 import { WorldStateGraph } from '../components/world-state/WorldStateGraph';

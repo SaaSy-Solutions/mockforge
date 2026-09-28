@@ -1,17 +1,13 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
-  FileCode,
-  Upload,
   Save,
   X,
   Plus,
   Trash2,
-  AlertCircle,
   CheckCircle2,
 } from 'lucide-react';
 import {
   ModernCard,
-  ModernBadge,
   Alert,
   Section,
 } from './ui/DesignSystem';

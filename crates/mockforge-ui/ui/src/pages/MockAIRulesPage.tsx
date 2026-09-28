@@ -4,14 +4,11 @@
 //! filtering, search, and detailed rule information.
 
 import { logger } from '@/utils/logger';
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Search,
-  Filter,
   TrendingUp,
-  AlertCircle,
   RefreshCw,
-  Eye,
   Code,
   BarChart3,
 } from 'lucide-react';
@@ -21,11 +18,9 @@ import { isCloudMode } from '../utils/cloudMode';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 import {
   PageHeader,
-  Section,
   Alert,
   Button,
   Card,
-  Badge,
   EmptyState,
 } from '../components/ui/DesignSystem';
 import { RuleExplanationPanel } from '../components/mockai/RuleExplanationPanel';

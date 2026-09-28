@@ -1,4 +1,4 @@
-import React, { useEffect, Suspense } from 'react';
+import { useEffect, Suspense } from 'react';
 import { Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { AppShell } from './components/layout/AppShell';
 import { AuthGuard } from './components/auth/AuthGuard';

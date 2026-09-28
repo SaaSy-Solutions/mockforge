@@ -1,4 +1,3 @@
-import React from 'react';
 import { Protocol } from '../../../types';
 import { MetricCard } from './MetricCard';
 import { MetricIcon, ProtocolIcon } from '../ui/IconSystem';

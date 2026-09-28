@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import { create } from 'zustand';
 import type { LatencyMetrics, FailureMetrics, HistogramBucket } from '../types';
 

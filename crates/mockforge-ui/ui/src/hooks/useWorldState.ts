@@ -4,7 +4,7 @@
  * Provides React hooks for querying and streaming world state data
  */
 
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery } from '@tanstack/react-query';
 import { useWebSocket } from './useWebSocket';
 import { authenticatedFetch } from '../utils/apiClient';
 import { logger } from '@/utils/logger';

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Play, Pause, Square, RefreshCw, Zap, Settings, Wifi, AlertCircle, Gauge, RotateCcw, Loader2 } from 'lucide-react';
+import { Play, Square, RefreshCw, Zap, Wifi, AlertCircle, RotateCcw, Loader2 } from 'lucide-react';
 import {
   PageHeader,
   ModernCard,

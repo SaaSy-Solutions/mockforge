@@ -3,7 +3,7 @@
 //! Custom React Flow node component for representing states in a state machine.
 //! Supports editing state labels and marking initial/final states.
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 import { Badge } from '../ui/Badge';

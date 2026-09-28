@@ -6,9 +6,9 @@
  * with smooth animations and intuitive interactions.
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, Play, Pause, RotateCcw, FastForward, Settings, Calendar, User, ArrowRight } from 'lucide-react';
+import { Clock, Play, Pause, RotateCcw, FastForward, Settings, Calendar, User } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import {
   useTimeTravelStatus,

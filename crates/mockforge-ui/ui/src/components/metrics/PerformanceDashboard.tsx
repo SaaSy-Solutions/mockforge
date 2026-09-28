@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { Clock, TrendingUp, Activity, AlertCircle, BarChart3 } from 'lucide-react';
 import { useMetrics } from '../../hooks/useApi';
 import { ModernCard, MetricCard, Section, EmptyState } from '../ui/DesignSystem';

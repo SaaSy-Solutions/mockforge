@@ -5,7 +5,6 @@
  * browser proxy mode inspection and replacement rule management.
  */
 
-import React from 'react';
 import { ProxyInspector } from '../components/proxy/ProxyInspector';
 
 export function ProxyInspectorPage() {

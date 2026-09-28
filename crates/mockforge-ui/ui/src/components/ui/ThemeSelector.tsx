@@ -1,5 +1,3 @@
-import { logger } from '@/utils/logger';
-import React from 'react';
 import { Palette } from 'lucide-react';
 import { predefinedThemes } from '../../themes';
 import { useThemePaletteStore } from '../../stores/useThemePaletteStore';

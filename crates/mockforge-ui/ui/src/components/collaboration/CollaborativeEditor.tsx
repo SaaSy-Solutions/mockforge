@@ -12,7 +12,6 @@ import {
   AvatarGroup,
   Chip,
   Tooltip,
-  Badge,
   Typography,
   Alert,
   Snackbar,

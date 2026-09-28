@@ -9,7 +9,6 @@ import {
   CheckCircle2,
   XCircle,
   RefreshCw,
-  Settings,
   Globe,
   Folder,
   Tag,

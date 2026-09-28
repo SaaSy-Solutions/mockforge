@@ -4,7 +4,7 @@
 //! with filters, preview, and confidence scores.
 
 import { logger } from '@/utils/logger';
-import React, { useState, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import {
   FileText,
   Database,
@@ -12,8 +12,6 @@ import {
   Download,
   Loader2,
   CheckCircle2,
-  AlertTriangle,
-  Calendar,
   Code,
   BarChart3,
   TrendingUp,
@@ -24,7 +22,6 @@ import { isCloudMode } from '../utils/cloudMode';
 import { useCloudOrgId } from '../hooks/useCloudOrgId';
 import {
   PageHeader,
-  Section,
   Alert,
   Button,
   Card,

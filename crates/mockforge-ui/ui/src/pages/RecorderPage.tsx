@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Play, Download, Search, Filter, Clock } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Play, Download, Search, Clock } from 'lucide-react';
 import {
   PageHeader,
   ModernCard,

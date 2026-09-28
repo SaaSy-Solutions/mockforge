@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Activity, Layers, AlertCircle, TrendingUp, Clock, Zap, Play, Loader2 } from 'lucide-react';
 import {
   PageHeader,

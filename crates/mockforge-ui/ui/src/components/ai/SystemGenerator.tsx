@@ -4,7 +4,7 @@
 //! Supports draft artifacts with review + apply/freeze workflow, versioning (v1, v2, never mutates),
 //! and integration with deterministic mode settings.
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { reportAiTokenUsage } from '@/services/api/usage';
 import {
   Sparkles,
@@ -18,7 +18,6 @@ import {
   CheckCircle2,
   Loader2,
   RefreshCw,
-  Play,
   Snowflake,
   Eye,
   EyeOff,

@@ -3,7 +3,7 @@
 //! This page provides a conversational interface for creating mocks using
 //! natural language voice commands powered by LLM.
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { VoiceInput, type VoiceCommandResult } from '../components/voice/VoiceInput';
 import { NLHookEditor, type HookResult } from '../components/hooks/NLHookEditor';
 import {

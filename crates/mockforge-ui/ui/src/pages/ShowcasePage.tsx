@@ -17,7 +17,6 @@ import {
   Button,
   Chip,
   Rating,
-  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -35,12 +34,8 @@ import {
 import {
   Search as SearchIcon,
   Star as StarIcon,
-  Download as DownloadIcon,
-  Visibility as ViewIcon,
   OpenInNew as OpenIcon,
   Code as CodeIcon,
-  TrendingUp as TrendingIcon,
-  NewReleases as NewIcon,
 } from '@mui/icons-material';
 import { communityApi, type ShowcaseProject, type SuccessStory } from '../services/communityApi';
 import { isCloudMode } from '../utils/cloudMode';

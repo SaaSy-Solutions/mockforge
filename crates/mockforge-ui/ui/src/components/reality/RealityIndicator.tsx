@@ -6,7 +6,6 @@
  * a quick reality level indicator is needed.
  */
 
-import React from 'react';
 import { Gauge, Zap, Shield, AlertTriangle, Activity } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { useRealityLevel } from '../../hooks/useApi';

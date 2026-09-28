@@ -45,7 +45,6 @@ import {
   Star as StarIcon,
   Download as DownloadIcon,
   Visibility as ViewIcon,
-  Category as CategoryIcon,
   Security as SecurityIcon,
   Code as CodeIcon,
   GitHub as GitHubIcon,

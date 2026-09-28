@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '../../utils/cn';

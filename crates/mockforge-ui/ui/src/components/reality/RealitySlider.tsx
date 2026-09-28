@@ -8,7 +8,7 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { Gauge, Zap, Shield, Brain, AlertTriangle, Activity } from 'lucide-react';
+import { Gauge, Zap, Shield, AlertTriangle, Activity } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import {
   useRealityLevel,
@@ -19,7 +19,6 @@ import { Slider } from '../ui/slider';
 import { Card } from '../ui/Card';
 import { Badge } from '../ui/Badge';
 import { Tooltip } from '../ui/Tooltip';
-import { Button } from '../ui/button';
 import { toast } from 'sonner';
 
 /**

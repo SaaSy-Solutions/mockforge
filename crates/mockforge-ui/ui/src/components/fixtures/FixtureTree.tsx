@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import React, { useState, useMemo, useCallback } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';

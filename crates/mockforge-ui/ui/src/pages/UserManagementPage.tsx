@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -11,17 +11,12 @@ import {
   UserPlus,
   Mail,
   Shield,
-  TrendingUp,
   Settings,
   Trash2,
-  Edit,
   CheckCircle,
   XCircle,
   Clock,
-  BarChart3,
-  UserCheck,
-  UserX
-} from 'lucide-react';
+  BarChart3} from 'lucide-react';
 import { apiService } from '@/services/api';
 import { useToast } from '@/components/ui/ToastProvider';
 

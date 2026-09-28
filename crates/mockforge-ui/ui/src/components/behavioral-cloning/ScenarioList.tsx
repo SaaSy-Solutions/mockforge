@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { Download, Eye, Play, FileCode, Snowflake, Sparkles } from 'lucide-react';
+import { useState } from 'react';
+import { Download, FileCode, Snowflake, Sparkles } from 'lucide-react';
 import type { Scenario } from '../../types';
 import { apiService } from '../../services/api';
 import { ModernCard, ModernBadge } from '../ui/DesignSystem';

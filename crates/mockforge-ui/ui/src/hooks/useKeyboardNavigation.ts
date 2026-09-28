@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import React, { useEffect, useCallback, useRef, useState } from 'react';
 
 export interface KeyboardShortcut {

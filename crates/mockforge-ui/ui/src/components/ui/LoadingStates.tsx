@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import React from 'react';
 import { cn } from '../../utils/cn';
 import { SkeletonCard, SkeletonMetricCard, SkeletonChart, SkeletonTable, SkeletonList } from './Skeleton';

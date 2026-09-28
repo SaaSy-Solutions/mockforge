@@ -1,8 +1,6 @@
-import React from 'react';
 import { Eye, Tag, FileCode, Clock, GitBranch } from 'lucide-react';
 import type { Flow } from '../../types';
 import { ModernCard, ModernBadge } from '../ui/DesignSystem';
-import { cn } from '../../utils/cn';
 
 interface FlowListProps {
   flows: Flow[];
@@ -87,4 +85,3 @@ export function FlowList({ flows, onView, onTag, onCompile }: FlowListProps) {
     </div>
   );
 }
-

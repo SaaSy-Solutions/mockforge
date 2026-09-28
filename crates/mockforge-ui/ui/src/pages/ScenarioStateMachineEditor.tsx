@@ -4,7 +4,7 @@
 //! Supports nested sub-scenarios, conditional transitions, and real-time state preview.
 
 import { logger } from '@/utils/logger';
-import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import {
   ReactFlow,
   Background,

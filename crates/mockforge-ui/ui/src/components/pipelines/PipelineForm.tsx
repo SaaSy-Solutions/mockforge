@@ -4,7 +4,7 @@
  * Form for creating and editing pipelines
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useCreatePipeline, useUpdatePipeline, type Pipeline, type PipelineDefinition } from '../../hooks/usePipelines';
 import { Card } from '../ui/Card';
 import { ArrowLeft, Save } from 'lucide-react';

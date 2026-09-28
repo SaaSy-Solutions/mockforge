@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import React from 'react';
 import { Play } from 'lucide-react';
 import { cn } from '../../utils/cn';

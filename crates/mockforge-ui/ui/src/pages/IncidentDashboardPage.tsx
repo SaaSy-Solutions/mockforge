@@ -23,7 +23,6 @@ import type { DriftIncident, IncidentStatus, IncidentSeverity, IncidentType } fr
 import {
   PageHeader,
   ModernCard,
-  ModernBadge,
   Alert,
   EmptyState,
 } from '../components/ui/DesignSystem';

@@ -3,7 +3,6 @@
 //! Custom React Flow edge component for representing state transitions.
 //! Displays condition expressions and supports editing.
 
-import React from 'react';
 import { getBezierPath } from '@xyflow/react';
 import type { EdgeProps } from '@xyflow/react';
 import { Badge } from '../ui/Badge';

@@ -1,6 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { X, FileCode, Network, GitBranch, Zap, Code2, Sparkles, CheckCircle, AlertCircle } from 'lucide-react';
-import { Button } from '../ui/button';
+import { useEffect, useState } from 'react';
+import { FileCode, Network, GitBranch, Zap, Code2, Sparkles, CheckCircle, AlertCircle } from 'lucide-react';
 import { Badge } from '../ui/Badge';
 import {
   Dialog,

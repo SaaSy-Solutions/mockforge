@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../../services/api';
 import type { ResponseHistoryEntry } from '../../types';

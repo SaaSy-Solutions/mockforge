@@ -9,7 +9,6 @@ import { PipelineList } from './PipelineList';
 import { PipelineDetail } from './PipelineDetail';
 import { PipelineForm } from './PipelineForm';
 import { PipelineExecutions } from './PipelineExecutions';
-import { Card } from '../ui/Card';
 import type { Pipeline } from '../../hooks/usePipelines';
 
 export interface PipelineDashboardProps {

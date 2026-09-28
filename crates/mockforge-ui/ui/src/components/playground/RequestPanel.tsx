@@ -1,6 +1,6 @@
 import { logger } from '@/utils/logger';
-import React, { useState, useEffect, useCallback } from 'react';
-import { Play, Loader2, Plus, Trash2, Code2 } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Play, Loader2, Plus, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
