@@ -19,6 +19,10 @@ const mockWorkspaces: WorkspaceSummary[] = [
     is_active: true,
     request_count: 10,
     folder_count: 3,
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+    config_count: 0,
+    service_count: 0,
   },
   {
     id: 'workspace-2',
@@ -27,6 +31,10 @@ const mockWorkspaces: WorkspaceSummary[] = [
     is_active: false,
     request_count: 5,
     folder_count: 2,
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+    config_count: 0,
+    service_count: 0,
   },
 ];
 
@@ -266,7 +274,7 @@ describe('WorkspacesPage', () => {
     const playButtons = screen.getAllByRole('button');
     const activateButton = playButtons.find((btn) => {
       const svg = btn.querySelector('svg');
-      return svg && svg.classList.contains('lucide-play') && !btn.disabled;
+      return svg && svg.classList.contains('lucide-play') && !(btn as HTMLButtonElement).disabled;
     });
     fireEvent.click(activateButton!);
 

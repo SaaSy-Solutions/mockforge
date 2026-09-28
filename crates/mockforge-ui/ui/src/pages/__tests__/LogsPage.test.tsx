@@ -19,6 +19,8 @@ const mockLogs: RequestLog[] = [
     response_time_ms: 45,
     client_ip: '127.0.0.1',
     user_agent: 'Mozilla/5.0',
+    headers: {},
+    response_size_bytes: 512,
   },
   {
     id: '2',
@@ -29,6 +31,8 @@ const mockLogs: RequestLog[] = [
     response_time_ms: 23,
     client_ip: '127.0.0.1',
     user_agent: 'Mozilla/5.0',
+    headers: {},
+    response_size_bytes: 512,
   },
   {
     id: '3',
@@ -39,6 +43,8 @@ const mockLogs: RequestLog[] = [
     response_time_ms: 150,
     client_ip: '192.168.1.1',
     user_agent: 'curl/7.68.0',
+    headers: {},
+    response_size_bytes: 512,
   },
 ];
 

@@ -5,23 +5,29 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { ServiceToggleCard } from '../../services/ServiceToggleCard';
+import type { ServiceInfo } from '../../../types';
 
 describe('ServiceToggleCard', () => {
-  const mockService = {
+  const mockService: ServiceInfo = {
     id: 'service-1',
     name: 'Test Service',
+    baseUrl: 'http://localhost:3000',
     enabled: true,
+    createdAt: '2024-01-01T00:00:00Z',
+    updatedAt: '2024-01-01T00:00:00Z',
     routes: [
       {
         id: 'route-1',
         method: 'GET',
         path: '/api/test',
+        statusCode: 200,
         enabled: true,
       },
       {
         id: 'route-2',
         method: 'POST',
         path: '/api/create',
+        statusCode: 200,
         enabled: false,
       },
     ],

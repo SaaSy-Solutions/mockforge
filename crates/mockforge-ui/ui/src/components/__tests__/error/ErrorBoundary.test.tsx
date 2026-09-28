@@ -155,7 +155,7 @@ describe('ErrorBoundary', () => {
   });
 
   it('renders custom fallback component when provided', () => {
-    const CustomFallback = ({ error, resetError }) => (
+    const CustomFallback = ({ error, resetError }: { error: Error; resetError: () => void }) => (
       <div data-testid="custom-fallback">
         <h1>Custom Error UI</h1>
         <p>{error.message}</p>

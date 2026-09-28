@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { usePlaygroundStore } from '../usePlaygroundStore';
-import { apiService } from '../../services/api';
+import { proxyApi } from '../../services/api';
 
 // Mock the API service
 vi.mock('../../services/api', () => ({
-  apiService: {
+  proxyApi: {
     listPlaygroundEndpoints: vi.fn(),
     executeRestRequest: vi.fn(),
     executeGraphQLQuery: vi.fn(),
@@ -80,7 +80,7 @@ describe('usePlaygroundStore', () => {
       },
     ];
 
-    (apiService.listPlaygroundEndpoints as any).mockResolvedValue(mockEndpoints);
+    vi.mocked(proxyApi.listPlaygroundEndpoints).mockResolvedValue(mockEndpoints);
 
     await usePlaygroundStore.getState().loadEndpoints();
 

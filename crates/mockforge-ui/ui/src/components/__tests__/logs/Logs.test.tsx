@@ -5,8 +5,9 @@
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import { LogEntry } from '../../logs/LogEntry';
+import type { RequestLog } from '../../../types';
 
-const mockLog = {
+const mockLog: RequestLog = {
   id: '1',
   timestamp: '2024-01-01T12:00:00Z',
   method: 'GET',
@@ -14,6 +15,7 @@ const mockLog = {
   status_code: 200,
   response_time_ms: 45,
   response_size_bytes: 1024,
+  headers: {},
 };
 
 describe('LogEntry', () => {

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
 import { CodeSnippetGenerator } from '../CodeSnippetGenerator';
 import { usePlaygroundStore } from '../../../stores/usePlaygroundStore';
-import { apiService } from '../../../services/api';
+import { proxyApi } from '../../../services/api';
 
 // Mock the stores and services
 vi.mock('../../../stores/usePlaygroundStore');
@@ -28,7 +28,7 @@ describe('CodeSnippetGenerator', () => {
       },
     });
 
-    (apiService.generateCodeSnippet as any) = vi.fn().mockResolvedValue({
+    vi.mocked(proxyApi.generateCodeSnippet).mockResolvedValue({
       snippets: {},
     });
 
@@ -53,7 +53,7 @@ describe('CodeSnippetGenerator', () => {
       },
     });
 
-    (apiService.generateCodeSnippet as any) = vi.fn().mockResolvedValue({
+    vi.mocked(proxyApi.generateCodeSnippet).mockResolvedValue({
       snippets: {
         curl: 'curl -X POST ...',
         javascript: 'fetch(...)',
@@ -64,7 +64,7 @@ describe('CodeSnippetGenerator', () => {
     render(<CodeSnippetGenerator />);
 
     await waitFor(() => {
-      expect(apiService.generateCodeSnippet).toHaveBeenCalled();
+      expect(proxyApi.generateCodeSnippet).toHaveBeenCalled();
     });
   });
 
@@ -84,7 +84,7 @@ describe('CodeSnippetGenerator', () => {
       },
     });
 
-    (apiService.generateCodeSnippet as any) = vi.fn().mockResolvedValue({
+    vi.mocked(proxyApi.generateCodeSnippet).mockResolvedValue({
       snippets: {
         curl: 'curl -X POST ...',
         javascript: 'fetch(...)',
@@ -94,7 +94,7 @@ describe('CodeSnippetGenerator', () => {
     render(<CodeSnippetGenerator />);
 
     await waitFor(() => {
-      expect(apiService.generateCodeSnippet).toHaveBeenCalled();
+      expect(proxyApi.generateCodeSnippet).toHaveBeenCalled();
     });
   });
 });

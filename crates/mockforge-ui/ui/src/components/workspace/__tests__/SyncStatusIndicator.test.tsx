@@ -9,6 +9,7 @@ import type { SyncStatus } from '../../../types';
 
 describe('SyncStatusIndicator', () => {
   const baseStatus: SyncStatus = {
+    workspace_id: 'workspace-1',
     enabled: true,
     status: 'idle',
     target_directory: '/path/to/sync',

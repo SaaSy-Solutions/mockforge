@@ -4,14 +4,14 @@
 
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { StateNode } from '../StateNode';
+import type { ReactElement } from 'react';
+import { StateNode, type StateFlowNode } from '../StateNode';
 import { ReactFlowProvider, type NodeProps } from '@xyflow/react';
 
 describe('StateNode', () => {
-  const getDefaultProps = (): NodeProps => ({
+  const getDefaultProps = (): NodeProps<StateFlowNode> => ({
     id: 'test-node',
     type: 'state',
-    position: { x: 0, y: 0 },
     data: {
       label: 'Test State',
       state: 'test-state',
@@ -19,9 +19,17 @@ describe('StateNode', () => {
       isFinal: false,
     },
     selected: false,
+    dragging: false,
+    draggable: true,
+    selectable: true,
+    deletable: true,
+    isConnectable: true,
+    zIndex: 0,
+    positionAbsoluteX: 0,
+    positionAbsoluteY: 0,
   });
 
-  const renderWithProvider = (ui: JSX.Element) =>
+  const renderWithProvider = (ui: ReactElement) =>
     render(<ReactFlowProvider>{ui}</ReactFlowProvider>);
 
   it('should render state node with label', () => {
