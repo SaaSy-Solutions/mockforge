@@ -7,6 +7,7 @@ on:
       - 'crates/mockforge-registry-server/**'
       - 'crates/mockforge-registry-core/**'
       - 'docker-compose.e2e.yml'
+      - 'docker-compose.rls-gate.yml'
       - '.github/workflows/registry-e2e.yml'
   # No `paths:` filter on pull_request — the workflow runs on EVERY PR so the
   # required "Registry E2E (Postgres + MinIO)" check always reports a status.
@@ -63,7 +64,7 @@ jobs:
           while IFS= read -r f; do
             [ -z "$f" ] && continue
             case "$f" in
-              crates/mockforge-registry-server/*|crates/mockforge-registry-core/*|docker-compose.e2e.yml|.github/workflows/registry-e2e.yml) registry=true ;;
+              crates/mockforge-registry-server/*|crates/mockforge-registry-core/*|docker-compose.e2e.yml|docker-compose.rls-gate.yml|.github/workflows/registry-e2e.yml) registry=true ;;
             esac
           done <<< "$files"
           echo "Registry E2E required: registry=$registry"
