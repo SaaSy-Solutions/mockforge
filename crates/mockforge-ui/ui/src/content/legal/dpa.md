@@ -21,7 +21,7 @@ Personnel with access to Customer Personal Data are bound by confidentiality obl
 
 ## 5. Security
 
-We maintain technical and organizational measures appropriate to the risk, including: TLS in transit; encryption at rest for databases and backups; hashed credentials; role-based access and least-privilege administrative access; tenant isolation in the application and database; audit logging; vulnerability scanning and dependency auditing; backups; and an incident-response process.
+We maintain technical and organizational measures appropriate to the risk, including: TLS 1.2+ for data in transit, including between Cloudflare's edge and our origin; storage of uploaded files and off-host database backups in Cloudflare R2, which encrypts stored data at rest; a primary database on a dedicated server with restricted administrative access; hashed credentials; role-based access control; per-organization tenant isolation in the application; audit logging; vulnerability scanning and dependency auditing; and an incident-response process.
 
 ## 6. Personal data breaches
 

@@ -49,7 +49,7 @@ MockForge Cloud is hosted in the United States. If you access it from outside th
 
 ## 6. Security
 
-We use TLS for data in transit, encryption at rest for databases and backups, hashed passwords, scoped API tokens, role-based access control, tenant isolation, and audit logging. No system is perfectly secure; report suspected vulnerabilities to security@mockforge.dev.
+All traffic is encrypted in transit with TLS 1.2+, including the hop from Cloudflare's edge to our origin. Uploaded files and off-host database backups are stored in Cloudflare R2, which encrypts stored data at rest. The primary database runs on a dedicated server with restricted administrative access. We also use hashed passwords, scoped API tokens, role-based access control, tenant isolation, and audit logging. No system is perfectly secure; report suspected vulnerabilities to security@mockforge.dev.
 
 ## 7. Your rights
 
