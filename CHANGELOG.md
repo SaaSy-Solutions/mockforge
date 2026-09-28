@@ -1,8 +1,11 @@
 ## [Unreleased]
 
+## [0.3.225] - 2026-09-27
+
 ### Added
 
 - **[Reality]** `mockforge bench-chunked --targets-file <file>` sends real `Transfer-Encoding: chunked` traffic to every target in a multi-target file in parallel (`--max-concurrency`, default 10). It uses the same file format as `bench --targets-file`, including per-target `auth`/`headers`/`spec`. Per-target artifacts go to `<output>/target_N/`, with a roll-up in `chunked-multi-target-summary.json`. (#79)
+
 
 ## [0.3.224] - 2026-09-24
 
