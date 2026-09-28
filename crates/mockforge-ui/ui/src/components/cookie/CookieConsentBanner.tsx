@@ -156,7 +156,7 @@ export function CookieConsentBanner() {
                   By clicking "Accept All", you consent to our use of cookies. You can also customize your preferences
                   or learn more in our{' '}
                   <a
-                    href="/privacy"
+                    href="/legal/privacy"
                     className="text-primary hover:underline"
                     onClick={(e) => {
                       e.preventDefault();

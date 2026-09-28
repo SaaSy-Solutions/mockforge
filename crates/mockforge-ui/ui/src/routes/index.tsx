@@ -134,10 +134,7 @@ const MqttBrokerPage = lazy(() => import('../pages/MqttBrokerPage').then(m => ({
 const KafkaBrokerPage = lazy(() => import('../pages/KafkaBrokerPage').then(m => ({ default: m.KafkaBrokerPage })));
 const AmqpBrokerPage = lazy(() => import('../pages/AmqpBrokerPage').then(m => ({ default: m.AmqpBrokerPage })));
 
-// Public / legal / marketing pages
-const TermsPage = lazy(() => import('../pages/TermsPage').then(m => ({ default: m.TermsPage })));
-const PrivacyPage = lazy(() => import('../pages/PrivacyPage').then(m => ({ default: m.PrivacyPage })));
-const DPAPage = lazy(() => import('../pages/DPAPage').then(m => ({ default: m.DPAPage })));
+// Public / marketing pages (legal docs are routed in App.tsx, outside AuthGuard)
 const FAQPage = lazy(() => import('../pages/FAQPage').then(m => ({ default: m.FAQPage })));
 const SupportPage = lazy(() => import('../pages/SupportPage').then(m => ({ default: m.SupportPage })));
 const PricingPage = lazy(() => import('../pages/PricingPage').then(m => ({ default: m.PricingPage })));
@@ -290,10 +287,7 @@ export const routes: RouteConfig[] = [
   { path: '/kafka-broker', element: <KafkaBrokerPage /> },
   { path: '/amqp-broker', element: <AmqpBrokerPage /> },
 
-  // Public / legal / marketing (render pre-auth via AuthGuard bypass)
-  { path: '/terms', element: <TermsPage /> },
-  { path: '/privacy', element: <PrivacyPage /> },
-  { path: '/dpa', element: <DPAPage /> },
+  // Public / marketing (render pre-auth via AuthGuard bypass)
   { path: '/faq', element: <FAQPage /> },
   { path: '/support', element: <SupportPage /> },
   { path: '/pricing', element: <PricingPage /> },

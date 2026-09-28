@@ -1,6 +1,6 @@
 import { logger } from '@/utils/logger';
 import { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useLocation, useSearchParams } from 'react-router-dom';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Logo } from '../ui/Logo';
@@ -21,7 +21,14 @@ interface SsoDiscoverResponse {
 
 export function LoginForm({ onSuccess }: LoginFormProps) {
   const [searchParams] = useSearchParams();
-  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const location = useLocation();
+  // Marketing CTAs deep-link to /register (and older ones to /signup); open
+  // the sign-up tab there instead of making the visitor find it.
+  const [mode, setMode] = useState<'login' | 'register'>(() =>
+    isCloud && (location.pathname === '/register' || location.pathname === '/signup')
+      ? 'register'
+      : 'login',
+  );
   // ssoMode: 'hidden' | 'email' (showing email input) | 'slug' (showing slug fallback input)
   const [ssoMode, setSsoMode] = useState<'hidden' | 'email' | 'slug'>('hidden');
   const [ssoEmail, setSsoEmail] = useState('');
@@ -229,6 +236,14 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
                 ? mode === 'register' ? 'Creating account...' : 'Signing in...'
                 : mode === 'register' ? 'Create Account' : 'Sign In'}
             </Button>
+            {isCloud && mode === 'register' && (
+              <p className="text-xs text-muted-foreground text-center">
+                By creating an account you agree to the{' '}
+                <Link to="/legal/terms" className="text-primary hover:underline">Terms of Service</Link>
+                {' '}and{' '}
+                <Link to="/legal/privacy" className="text-primary hover:underline">Privacy Policy</Link>.
+              </p>
+            )}
           </form>
 
           {isCloud && (
