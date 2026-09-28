@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
 import { CheckCircle2, XCircle, Mail, Loader2 } from 'lucide-react';
 import { apiErrorMessage } from '@/utils/errorHandling';
@@ -17,9 +16,11 @@ export function EmailVerificationPage() {
 
   const [phase, setPhase] = useState<Phase>(token ? 'verifying' : 'resend');
   const [error, setError] = useState<string | null>(null);
-  const [resendEmail, setResendEmail] = useState('');
   const [resending, setResending] = useState(false);
   const [resendSent, setResendSent] = useState(false);
+  // The resend endpoint is authenticated (bearer token or session cookie).
+  // This page is public, so we only learn the user is signed out on a 401.
+  const [needsSignIn, setNeedsSignIn] = useState(false);
 
   useEffect(() => {
     if (!token) return;
@@ -54,11 +55,21 @@ export function EmailVerificationPage() {
         'Content-Type': 'application/json',
         ...(authToken && { Authorization: `Bearer ${authToken}` }),
       },
-      body: JSON.stringify({ email: resendEmail || undefined }), });
+      body: JSON.stringify({}), });
 
+      const data = await response.json().catch(() => ({ error: 'Failed to resend verification' }));
+      if (response.status === 401) {
+        setNeedsSignIn(true);
+        return;
+      }
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Failed to resend verification' }));
-        throw new Error(apiErrorMessage(response, errorData, 'Failed to resend verification'));
+        throw new Error(apiErrorMessage(response, data, 'Failed to resend verification'));
+      }
+      // 200 with `success: false` means the email could not be sent.
+      if (data && data.success === false) {
+        throw new Error(
+          typeof data.message === 'string' && data.message ? data.message : 'Failed to resend verification',
+        );
       }
 
       setResendSent(true);
@@ -89,7 +100,7 @@ export function EmailVerificationPage() {
             </div>
             <h2 className="mb-2 text-2xl font-bold">Email verified</h2>
             <p className="mb-6 text-muted-foreground">
-              Your email is confirmed. You can now access all features of MockForge.
+              Thanks for confirming your address. Security alerts and billing notices will reach you here.
             </p>
             <Button onClick={() => navigate('/dashboard')} className="w-full">
               Continue to dashboard
@@ -130,9 +141,11 @@ export function EmailVerificationPage() {
             <div className="mx-auto mb-2 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
               <Mail className="h-8 w-8 text-primary" />
             </div>
-            <CardTitle>Check your email</CardTitle>
+            <CardTitle>Get a new verification link</CardTitle>
             <CardDescription>
-              We'll send a verification link. Enter your email if you're not signed in.
+              {needsSignIn
+                ? 'Sign in first, then request a new link from Account Settings.'
+                : "We'll send a fresh link to the email address on your account."}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -148,33 +161,24 @@ export function EmailVerificationPage() {
                 <span className="text-danger-700 dark:text-danger-200">{error}</span>
               </Alert>
             )}
-            <form onSubmit={handleResend} className="space-y-4">
-              <div>
-                <label htmlFor="resend-email" className="block text-sm font-medium mb-2">
-                  Email
-                </label>
-                <Input
-                  id="resend-email"
-                  type="email"
-                  value={resendEmail}
-                  onChange={(e) => setResendEmail(e.target.value)}
-                  placeholder="you@company.com"
-                />
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Leave blank to resend to your signed-in account.
-                </p>
-              </div>
-              <Button type="submit" className="w-full" disabled={resending}>
-                {resending ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Sending…
-                  </>
-                ) : (
-                  'Send verification email'
-                )}
+            {!needsSignIn ? (
+              <form onSubmit={handleResend}>
+                <Button type="submit" className="w-full" disabled={resending}>
+                  {resending ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Sending…
+                    </>
+                  ) : (
+                    'Send verification email'
+                  )}
+                </Button>
+              </form>
+            ) : (
+              <Button className="w-full" onClick={() => navigate('/dashboard')}>
+                Sign in
               </Button>
-            </form>
+            )}
           </CardContent>
         </Card>
       )}

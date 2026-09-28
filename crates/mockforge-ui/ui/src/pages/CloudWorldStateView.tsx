@@ -310,10 +310,9 @@ export const CloudWorldStateView: React.FC = () => {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-4">
             {/* The local mode toggle is "Real-time updates"; cloud mode
-                doesn't have a WS proxy yet (Phase 2 work), so we show a
-                static label noting the polling cadence instead. */}
+                has no WS proxy, so we show the polling cadence instead. */}
             <span className="text-xs text-muted-foreground">
-              Polling every {POLL_MS / 1000}s — WebSocket stream not yet proxied in cloud mode.
+              Refreshes every {POLL_MS / 1000}s
             </span>
             <Button variant="outline" size="sm" onClick={refresh} disabled={!selectedDeploymentId}>
               <RefreshCw className="h-4 w-4 mr-1" />
