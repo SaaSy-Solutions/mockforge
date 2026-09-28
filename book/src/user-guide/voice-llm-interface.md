@@ -1,5 +1,7 @@
 # Voice + LLM Interface
 
+> **Experimental.** This feature ships in MockForge but is early. It needs an LLM provider (Ollama, OpenAI, or Anthropic) to interpret commands. Voice input in the admin UI uses the browser's speech recognition, so it only works in browsers that support it (for example Chrome and Edge). The CLI does not capture from a microphone: it takes typed commands, or a path to an audio file when the CLI is built with the `stt-cloud` feature and an OpenAI Whisper or Google Speech key is set. Behavior, commands, and configuration may change between releases. Report issues at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 The Voice + LLM Interface allows you to create mock APIs conversationally using natural language commands, powered by LLM interpretation. Generate OpenAPI specifications and mock APIs from voice or text commands.
 
 ## Overview

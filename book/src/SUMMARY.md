@@ -79,8 +79,6 @@
   - [Chaos Lab](user-guide/chaos-lab.md)
   - [Reality Slider](user-guide/reality-slider.md)
   - [Scenario Marketplace](user-guide/scenario-marketplace.md)
-  - [Deceptive Deploys](user-guide/deceptive-deploys.md)
-  - [Voice + LLM Interface](user-guide/voice-llm-interface.md)
   - [Mock-Oriented Development](user-guide/devx/mock-oriented-development.md)
   - [VBR Engine (Experimental)](user-guide/vbr-engine.md)
   - [Reality Profiles Marketplace (Experimental)](user-guide/advanced-features/reality-profiles-marketplace.md)
@@ -91,6 +89,8 @@
   - [Semantic Drift Notifications (Experimental)](user-guide/contracts/semantic-drift.md)
   - [Contract Threat Modeling (Experimental)](user-guide/contracts/threat-modeling.md)
   - [Snapshot Diff (Experimental)](user-guide/devx/snapshot-diff.md)
+  - [Deceptive Deploys (Experimental)](user-guide/deceptive-deploys.md)
+  - [Voice + LLM Interface (Experimental)](user-guide/voice-llm-interface.md)
 
 ## Experimental / Roadmap
 
