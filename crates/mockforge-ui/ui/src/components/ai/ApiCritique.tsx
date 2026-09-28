@@ -213,21 +213,6 @@ export function ApiCritique({ onUsageUpdate }: ApiCritiqueProps) {
     URL.revokeObjectURL(url);
   };
 
-  const getSeverityColor = (severity: string) => {
-    switch (severity.toLowerCase()) {
-      case 'critical':
-        return 'text-danger-600 dark:text-danger-400';
-      case 'high':
-        return 'text-orange-600 dark:text-orange-400';
-      case 'medium':
-        return 'text-warning-600 dark:text-warning-400';
-      case 'low':
-        return 'text-info-600 dark:text-info-400';
-      default:
-        return 'text-muted-foreground';
-    }
-  };
-
   const getSeverityBadgeClasses = (severity: string) => {
     switch (severity.toLowerCase()) {
       case 'critical':

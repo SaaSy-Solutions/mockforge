@@ -5,20 +5,22 @@
 
 import { useState } from 'react';
 import { Handle, Position } from '@xyflow/react';
-import type { NodeProps } from '@xyflow/react';
+import type { Node, NodeProps } from '@xyflow/react';
 import { Badge } from '../ui/Badge';
 import { Input } from '../ui/input';
 import { Circle, CheckCircle2 } from 'lucide-react';
 import { cn } from '@/utils/cn';
 
-interface StateNodeData {
+export type StateNodeData = {
   label: string;
   state: string;
   isInitial?: boolean;
   isFinal?: boolean;
-}
+};
 
-export function StateNode({ data, selected }: NodeProps<StateNodeData>) {
+export type StateFlowNode = Node<StateNodeData>;
+
+export function StateNode({ data, selected }: NodeProps<StateFlowNode>) {
   const [isEditing, setIsEditing] = useState(false);
   const [label, setLabel] = useState(data.label || data.state);
 

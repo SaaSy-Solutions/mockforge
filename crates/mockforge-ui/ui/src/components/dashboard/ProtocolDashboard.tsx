@@ -1,6 +1,13 @@
-import { Protocol } from '../../../types';
+import { BarChart3, CheckCircle, Network } from 'lucide-react';
+import type { GraphNode } from '../../types/graph';
 import { MetricCard } from './MetricCard';
-import { MetricIcon, ProtocolIcon } from '../ui/IconSystem';
+import { Icon, MetricIcon, type iconSizes } from '../ui/IconSystem';
+
+export type Protocol = NonNullable<GraphNode['protocol']>;
+
+function ProtocolIcon({ protocol, size }: { protocol: Protocol; size: keyof typeof iconSizes }) {
+  return <Icon icon={Network} size={size} color="primary" aria-label={`${protocol} protocol`} />;
+}
 
 export interface ProtocolMetrics {
   protocol: Protocol;
@@ -16,7 +23,7 @@ export interface ProtocolMetrics {
 export interface ProtocolDashboardProps {
   metrics: ProtocolMetrics[];
   selectedProtocol?: Protocol;
-  onProtocolChange?: (protocol: Protocol) => void;
+  onProtocolChange?: (protocol: Protocol | undefined) => void;
   className?: string;
 }
 
@@ -41,7 +48,7 @@ export function ProtocolDashboard({
       {onProtocolChange && (
         <div className="flex flex-wrap gap-2">
           <button
-            onClick={() => onProtocolChange(undefined as any)}
+            onClick={() => onProtocolChange(undefined)}
             className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               !selectedProtocol
                 ? 'bg-primary text-primary-foreground'
@@ -74,13 +81,13 @@ export function ProtocolDashboard({
             title="Total Requests"
             value={totalRequests.toLocaleString()}
             subtitle="across all protocols"
-            icon={<MetricIcon metric="requests" size="lg" />}
+            icon={<Icon icon={BarChart3} size="lg" color="primary" />}
           />
           <MetricCard
             title="Average Success Rate"
             value={`${averageSuccessRate.toFixed(1)}%`}
             subtitle="across all protocols"
-            icon={<MetricIcon metric="success" size="lg" />}
+            icon={<Icon icon={CheckCircle} size="lg" color="primary" />}
           />
           <MetricCard
             title="Active Protocols"

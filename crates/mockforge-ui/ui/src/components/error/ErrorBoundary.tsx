@@ -40,7 +40,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
     // Report error to error reporting service
     try {
-      reportError(error, errorInfo);
+      reportError(error, { componentStack: errorInfo.componentStack });
     } catch (e) {
       // Error reporting failed - log but don't crash
       logger.error('Failed to report error',e);

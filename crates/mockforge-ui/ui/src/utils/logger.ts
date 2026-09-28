@@ -53,7 +53,7 @@ class Logger {
   error(message: string, error?: unknown, context?: unknown): void {
     if (this.shouldLog('error') && this.config.enableConsole) {
       const errorContext = {
-        ...context,
+        ...(typeof context === 'object' && context !== null ? context : undefined),
         error: error instanceof Error ? {
           message: error.message,
           stack: error.stack,

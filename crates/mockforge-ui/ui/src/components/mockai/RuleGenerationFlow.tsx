@@ -155,7 +155,7 @@ export function RuleGenerationFlow({
 
         {/* Steps */}
         <div className="relative z-10 grid grid-cols-4 gap-4">
-          {steps.map((step, index) => (
+          {steps.map((step) => (
             <div key={step.id} className="flex flex-col items-center">
               <button
                 onClick={() =>

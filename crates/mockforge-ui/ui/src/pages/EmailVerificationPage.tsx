@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
 import { CheckCircle2, XCircle, Mail, Loader2 } from 'lucide-react';
 import { apiErrorMessage } from '@/utils/errorHandling';
+import { getAuthToken } from '@/services/tokenStorage';
 
 type Phase = 'verifying' | 'success' | 'failed' | 'resend';
 

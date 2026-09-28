@@ -218,8 +218,9 @@ export function AIStudioPage() {
       setChatMessages(prev => [...prev, assistantMessage]);
 
       // If a spec was generated, show a success toast with download option
-      const hasSpec = result.data.data?.spec || (result.data.data?.type === 'openapi_spec' && result.data.data?.spec);
-      if (hasSpec && (result.data.intent === 'generate_mock' || result.data.intent === 'GenerateMock')) {
+      const hasSpec =
+        typeof result.data === 'object' && result.data !== null && 'spec' in result.data && Boolean(result.data.spec);
+      if (hasSpec && (result.intent === 'generate_mock' || result.intent === 'GenerateMock')) {
         toast.success('Mock API generated successfully!', {
           description: 'You can preview and download the OpenAPI spec from the chat.',
         });
@@ -1295,7 +1296,7 @@ export function AIStudioPage() {
                                   <span className="px-2 py-1 bg-muted text-foreground rounded text-xs">
                                     {correction.operation}
                                   </span>
-                                  {correction.value && (
+                                  {Boolean(correction.value) && (
                                     <div className="text-xs text-muted-foreground">
                                       Value: <code className="bg-muted px-1 rounded">{JSON.stringify(correction.value)}</code>
                                     </div>

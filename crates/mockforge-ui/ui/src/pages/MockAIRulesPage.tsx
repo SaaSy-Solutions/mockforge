@@ -10,7 +10,6 @@ import {
   TrendingUp,
   RefreshCw,
   Code,
-  BarChart3,
 } from 'lucide-react';
 import { apiService } from '../services/api';
 import { aiStudioApi } from '../services/api/aiStudio';
@@ -48,7 +47,7 @@ export function MockAIRulesPage() {
     RuleExplanation[]
   >([]);
   const [error, setError] = useState<string | null>(null);
-  const [selectedRule, setSelectedRule] = useState<string | null>(null);
+  const [, setSelectedRule] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [ruleTypeFilter, setRuleTypeFilter] = useState<string>('all');
   const [minConfidence, setMinConfidence] = useState<number>(0);
@@ -149,51 +148,11 @@ export function MockAIRulesPage() {
     setFilteredExplanations(filtered);
   }, [searchQuery, explanations]);
 
-  const getRuleTypeColor = (ruleType: string) => {
-    switch (ruleType.toLowerCase()) {
-      case 'consistency':
-        return 'bg-info-100 text-info-700 dark:bg-info-900/30 dark:text-info-300';
-      case 'validation':
-        return 'bg-warning-100 text-warning-700 dark:bg-warning-900/30 dark:text-warning-300';
-      case 'pagination':
-        return 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200';
-      case 'statetransition':
-      case 'state_transition':
-        return 'bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-300';
-      case 'crud':
-        return 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-200';
-      default:
-        return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200';
-    }
-  };
-
-  const formatRuleType = (ruleType: string) => {
-    return ruleType
-      .split('_')
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
-
   const handleExampleClick = (exampleId: string) => {
-    // Find the explanation that contains this example
-    const explanation = explanations.find(exp =>
-      exp.examples?.some(ex => ex.id === exampleId)
-    );
-
-    if (explanation) {
-      const example = explanation.examples?.find(ex => ex.id === exampleId);
-      if (example) {
-        // Show example details in a modal or expandable section
-        toast.info(
-          `Example: ${example.description || exampleId}\nRequest: ${JSON.stringify(example.request, null, 2)}\nResponse: ${JSON.stringify(example.response, null, 2)}`,
-          { duration: 8000 }
-        );
-      } else {
-        toast.info(`Viewing example: ${exampleId}`);
-      }
-    } else {
-      toast.info(`Viewing example: ${exampleId}`);
-    }
+    // The rule-explanation payload only carries example IDs
+    // (`source_examples`), not the example bodies, so there is nothing
+    // richer to show here than the ID itself.
+    toast.info(`Viewing example: ${exampleId}`);
   };
 
   if (loading && explanations.length === 0) {
@@ -211,8 +170,7 @@ export function MockAIRulesPage() {
     <div className="space-y-6">
       <PageHeader
         title="MockAI Rules Dashboard"
-        description="View and explore all generated behavioral rules with detailed explanations, confidence scores, and source examples"
-        icon={<BarChart3 className="h-6 w-6" />}
+        subtitle="View and explore all generated behavioral rules with detailed explanations, confidence scores, and source examples"
       />
 
       {/* Filters and Search */}

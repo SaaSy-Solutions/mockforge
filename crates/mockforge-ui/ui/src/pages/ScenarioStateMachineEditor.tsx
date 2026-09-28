@@ -16,18 +16,16 @@ import {
   MarkerType,
 } from '@xyflow/react';
 import type {
-  Node,
-  Edge,
   Connection,
+  EdgeTypes,
   NodeTypes,
-  ReactFlowInstance,
 } from '@xyflow/react';
 import { Loader2, Save, Download, Upload, Undo2, Redo2, Play, Square, Plus, Trash2, Database, Layers } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/button';
 import { apiService } from '../services/api';
-import { StateNode } from '../components/state-machine/StateNode';
-import { TransitionEdge } from '../components/state-machine/TransitionEdge';
+import { StateNode, type StateFlowNode } from '../components/state-machine/StateNode';
+import { TransitionEdge, type TransitionFlowEdge } from '../components/state-machine/TransitionEdge';
 import { ConditionBuilder } from '../components/state-machine/ConditionBuilder';
 import { StatePreviewPanel } from '../components/state-machine/StatePreviewPanel';
 import { VbrEntitySelector } from '../components/state-machine/VbrEntitySelector';
@@ -88,7 +86,7 @@ const nodeTypes: NodeTypes = {
   final: StateNode,
 };
 
-const edgeTypes = {
+const edgeTypes: EdgeTypes = {
   default: TransitionEdge,
 };
 
@@ -100,28 +98,26 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [stateMachine, setStateMachine] = useState<StateMachineDefinition | null>(null);
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
-  const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
-  const [editingCondition, setEditingCondition] = useState<Edge | null>(null);
+  const [selectedNode, setSelectedNode] = useState<StateFlowNode | null>(null);
+  const [editingCondition, setEditingCondition] = useState<TransitionFlowEdge | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [showVbrSelector, setShowVbrSelector] = useState(false);
   const [showSubScenarioEditor, setShowSubScenarioEditor] = useState(false);
   const [editingSubScenario, setEditingSubScenario] = useState<string | undefined>(undefined);
-  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
 
   // React Flow state
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<StateFlowNode>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<TransitionFlowEdge>([]);
 
   // History for undo/redo
-  const { history, push, undo, redo, canUndo, canRedo } = useHistory<{
-    nodes: Node[];
-    edges: Edge[];
+  const { push, undo, redo, canUndo, canRedo } = useHistory<{
+    nodes: StateFlowNode[];
+    edges: TransitionFlowEdge[];
   }>({ nodes: [], edges: [] }, 50);
 
   // WebSocket for real-time updates (no-op in cloud mode — useWebSocket
   // skips relative paths when VITE_API_BASE_URL is set).
-  const { lastMessage, sendMessage, connected } = useWebSocket('/__mockforge/ws');
+  const { lastMessage } = useWebSocket('/__mockforge/ws');
 
   // Cloud-mode flow picker. In cloud mode the editor scopes to one
   // cloudFlow (kind='state_machine') at a time; selecting a different
@@ -212,7 +208,7 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
           sm.visual_layout;
         setStateMachine(sm);
 
-        const flowNodes: Node[] = sm.states.map((state, index) => {
+        const flowNodes: StateFlowNode[] = sm.states.map((state, index) => {
           const layoutNode = layout?.nodes?.find((n) => n.id === state);
           const position = layoutNode
             ? { x: layoutNode.position_x, y: layoutNode.position_y }
@@ -235,7 +231,7 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
             },
           };
         });
-        const flowEdges: Edge[] = sm.transitions.map((transition, index) => {
+        const flowEdges: TransitionFlowEdge[] = sm.transitions.map((transition, index) => {
           const layoutEdge = layout?.edges?.find(
             (e) =>
               e.source === transition.from_state &&
@@ -288,7 +284,11 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
           if (showPreview) {
             // StatePreviewPanel will handle the update
           }
-        } else if (event.type === 'state_machine_updated' && event.resource_type === resourceType) {
+        } else if (
+          resourceType &&
+          event.type === 'state_machine_updated' &&
+          event.resource_type === resourceType
+        ) {
           // Reload state machine if it was updated externally
           loadStateMachine(resourceType);
         }
@@ -315,7 +315,7 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
     setStateMachine(newStateMachine);
 
     // Create initial node
-    const initialNode: Node = {
+    const initialNode: StateFlowNode = {
       id: 'initial',
       type: 'initial',
       position: { x: 250, y: 250 },
@@ -339,12 +339,12 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
 
       const response = await apiService.getStateMachine(rt);
       const sm = response.state_machine as StateMachineDefinition;
-      const layout = response.visual_layout;
+      const layout = response.visual_layout as StateMachineDefinition['visual_layout'];
 
       setStateMachine(sm);
 
       // Convert state machine to React Flow nodes and edges
-      const flowNodes: Node[] = sm.states.map((state, index) => {
+      const flowNodes: StateFlowNode[] = sm.states.map((state, index) => {
         // Use layout if available, otherwise use default positioning
         const layoutNode = layout?.nodes?.find((n) => n.id === state);
         const position = layoutNode
@@ -367,7 +367,7 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
         };
       });
 
-      const flowEdges: Edge[] = sm.transitions.map((transition, index) => {
+      const flowEdges: TransitionFlowEdge[] = sm.transitions.map((transition, index) => {
         const layoutEdge = layout?.edges?.find(
           (e) => e.source === transition.from_state && e.target === transition.to_state
         );
@@ -544,7 +544,7 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
   // Handle node creation
   const handleAddNode = useCallback(() => {
     const newNodeId = `state-${Date.now()}`;
-    const newNode: Node = {
+    const newNode: StateFlowNode = {
       id: newNodeId,
       type: 'state',
       position: { x: Math.random() * 400 + 100, y: Math.random() * 400 + 100 },
@@ -570,8 +570,8 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
   // Handle edge connection
   const onConnect = useCallback(
     (params: Connection) => {
-      const newEdge: Edge = {
-        ...addEdge(params, []),
+      const newEdge = {
+        ...params,
         type: 'default',
         data: {
           condition: '',
@@ -580,21 +580,19 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
           type: MarkerType.ArrowClosed,
         },
       };
-      setEdges((eds) => [...eds, newEdge]);
+      setEdges((eds) => addEdge(newEdge, eds));
     },
     [setEdges]
   );
 
   // Handle node click
-  const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
+  const onNodeClick = useCallback((_event: React.MouseEvent, node: StateFlowNode) => {
     setSelectedNode(node);
-    setSelectedEdge(null);
     setEditingCondition(null);
   }, []);
 
   // Handle edge click
-  const onEdgeClick = useCallback((_event: React.MouseEvent, edge: Edge) => {
-    setSelectedEdge(edge);
+  const onEdgeClick = useCallback((_event: React.MouseEvent, edge: TransitionFlowEdge) => {
     setSelectedNode(null);
     setEditingCondition(edge);
   }, []);
@@ -602,7 +600,6 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
   // Handle pane click (deselect)
   const onPaneClick = useCallback(() => {
     setSelectedNode(null);
-    setSelectedEdge(null);
     setEditingCondition(null);
   }, []);
 
@@ -803,9 +800,11 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
               }}
               className="hidden"
             />
-            <Button as="span" size="sm" variant="outline">
-              <Upload className="h-4 w-4 mr-2" />
-              Import
+            <Button asChild size="sm" variant="outline">
+              <span>
+                <Upload className="h-4 w-4 mr-2" />
+                Import
+              </span>
             </Button>
           </label>
           <Button
@@ -853,7 +852,6 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
               onNodeClick={onNodeClick}
               onEdgeClick={onEdgeClick}
               onPaneClick={onPaneClick}
-              onInit={setReactFlowInstance}
               nodeTypes={nodeTypes}
               edgeTypes={edgeTypes}
               fitView

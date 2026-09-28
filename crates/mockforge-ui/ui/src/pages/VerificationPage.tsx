@@ -382,7 +382,7 @@ export function VerificationPage() {
                           id="count-value"
                           type="number"
                           min="0"
-                          value={expectedCount.type !== 'never' && expectedCount.type !== 'at_least_once' ? (expectedCount as any).value || 0 : ''}
+                          value={expectedCount.value || 0}
                           onChange={(e) => {
                             const value = parseInt(e.target.value, 10);
                             if (!isNaN(value)) {

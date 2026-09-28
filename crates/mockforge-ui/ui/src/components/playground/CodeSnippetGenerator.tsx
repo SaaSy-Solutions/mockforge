@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/Tabs';
 import { Badge } from '../ui/Badge';
 import { usePlaygroundStore } from '../../stores/usePlaygroundStore';
-import { apiService } from '../../services/api';
+import { proxyApi } from '../../services/api';
 import { toast } from 'sonner';
 
 /**
@@ -64,7 +64,7 @@ export function CodeSnippetGenerator() {
         base_url: baseUrl,
       };
 
-      const response = await apiService.generateCodeSnippet(request);
+      const response = await proxyApi.generateCodeSnippet(request);
       setSnippets(response.snippets);
     } catch (error) {
       logger.error('Failed to generate code snippets', error);

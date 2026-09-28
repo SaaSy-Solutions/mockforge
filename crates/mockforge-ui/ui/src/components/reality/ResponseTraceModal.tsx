@@ -354,7 +354,7 @@ export function ResponseTraceModal({ requestId, open, onOpenChange }: ResponseTr
             )}
 
             {/* Final Resolved Payload */}
-            {traceData.final_payload && (
+            {!!traceData.final_payload && (
               <div>
                 <h3 className="text-sm font-semibold mb-3 flex items-center gap-2">
                   <FileCode className="h-4 w-4" />

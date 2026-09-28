@@ -202,32 +202,6 @@ function MismatchTable({ mismatches }: { mismatches: ContractDiffResult['mismatc
   );
 }
 
-// Diff viewer component
-function DiffViewer({ mismatch }: { mismatch: ContractDiffResult['mismatches'][0] }) {
-  return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-4">
-        {mismatch.expected && (
-          <div>
-            <Label className="text-xs font-semibold text-muted-foreground mb-2 block">Expected</Label>
-            <div className="bg-success-50 border border-success-200 rounded p-3 font-mono text-xs">
-              <pre className="whitespace-pre-wrap">{mismatch.expected}</pre>
-            </div>
-          </div>
-        )}
-        {mismatch.actual && (
-          <div>
-            <Label className="text-xs font-semibold text-muted-foreground mb-2 block">Actual</Label>
-            <div className="bg-danger-50 border border-danger-200 rounded p-3 font-mono text-xs">
-              <pre className="whitespace-pre-wrap">{mismatch.actual}</pre>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // Recommendations component
 function RecommendationsList({ recommendations }: { recommendations: ContractDiffResult['recommendations'] }) {
   if (recommendations.length === 0) {
@@ -284,7 +258,7 @@ function CorrectionProposals({ corrections }: { corrections: ContractDiffResult[
               <p className="text-xs text-muted-foreground font-mono mb-2">Path: {correction.path}</p>
               <div className="flex items-center gap-2">
                 <ModernBadge variant="outline">{correction.operation}</ModernBadge>
-                {correction.value && (
+                {Boolean(correction.value) && (
                   <div className="text-xs text-muted-foreground">
                     Value: <code className="bg-muted px-1 rounded">{JSON.stringify(correction.value)}</code>
                   </div>
@@ -417,8 +391,7 @@ export function ContractDiffPage() {
       <div className="flex items-center justify-between">
         <PageHeader
           title="Contract Diff Analysis"
-          description="Analyze front-end requests against backend contract specifications"
-          icon={<FileText className="w-6 h-6" />}
+          subtitle="Analyze front-end requests against backend contract specifications"
         />
         <div className="flex items-center gap-4">
           <Select value={selectedProtocol} onValueChange={(value) => setSelectedProtocol(value as 'http' | ProtocolType)}>
@@ -691,14 +664,8 @@ export function ContractDiffPage() {
                       {(analysisResult.mismatches ?? []).length} mismatch(es) found
                     </p>
                     {/* Show protocol and schema format info if available */}
-                    {(analysisResult.metadata?.contract_format || selectedProtocol !== 'http') && (
+                    {analysisResult.metadata?.contract_format && (
                       <div className="flex items-center gap-2 mt-1">
-                        {selectedProtocol !== 'http' && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-info-100 text-info-700 dark:bg-info-900/20 dark:text-info-300">
-                            <Network className="w-3 h-3 mr-1" />
-                            {selectedProtocol.toUpperCase()}
-                          </span>
-                        )}
                         {analysisResult.metadata?.contract_format && (
                           <span className="text-xs text-muted-foreground">
                             Format: {analysisResult.metadata.contract_format}

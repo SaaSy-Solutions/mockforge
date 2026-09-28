@@ -4,15 +4,17 @@
 //! Displays condition expressions and supports editing.
 
 import { getBezierPath } from '@xyflow/react';
-import type { EdgeProps } from '@xyflow/react';
+import type { Edge, EdgeProps } from '@xyflow/react';
 import { Badge } from '../ui/Badge';
 import { cn } from '@/utils/cn';
 
-interface TransitionEdgeData {
+export type TransitionEdgeData = {
   condition?: string;
   subScenarioRef?: string;
   probability?: number;
-}
+};
+
+export type TransitionFlowEdge = Edge<TransitionEdgeData>;
 
 export function TransitionEdge({
   id,
@@ -26,7 +28,7 @@ export function TransitionEdge({
   markerEnd,
   data,
   selected,
-}: EdgeProps<TransitionEdgeData>) {
+}: EdgeProps<TransitionFlowEdge>) {
   const [edgePath, labelX, labelY] = getBezierPath({
     sourceX,
     sourceY,

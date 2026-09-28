@@ -153,7 +153,8 @@ export const PublishTemplateModal: React.FC<PublishTemplateModalProps> = ({
         throw new Error(apiErrorMessage(response, errorData, `Failed to publish: ${response.statusText}`));
       }
 
-      const result = await response.json();
+      // Parse the body so a malformed success response still surfaces as an error.
+      await response.json();
 
       // Success
       if (onSuccess) {
@@ -243,7 +244,7 @@ export const PublishTemplateModal: React.FC<PublishTemplateModalProps> = ({
               <Select
                 value={formData.category}
                 label="Category"
-                onChange={(e) => handleInputChange('category', e.target.value)}
+                onChange={(e) => handleInputChange('category', String(e.target.value))}
               >
                 {TEMPLATE_CATEGORIES.map((cat) => (
                   <MenuItem key={cat.value} value={cat.value}>

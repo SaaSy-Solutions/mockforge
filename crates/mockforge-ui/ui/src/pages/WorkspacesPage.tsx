@@ -4,8 +4,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { apiService, importApi } from '../services/api';
 import { useUpdateWorkspacesOrder } from '../hooks/useApi';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';
+import type { WorkspaceSummary } from '../schemas/api';
 import type {
-  WorkspaceSummary,
   WorkspaceDetail,
   FolderDetail,
   CreateWorkspaceRequest,

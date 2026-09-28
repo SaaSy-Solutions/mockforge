@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Download, FileCode, Snowflake, Sparkles } from 'lucide-react';
 import type { Scenario } from '../../types';
-import { apiService } from '../../services/api';
+import { proxyApi } from '../../services/api';
 import { ModernCard, ModernBadge } from '../ui/DesignSystem';
 import { logger } from '../../utils/logger';
 
@@ -10,13 +10,13 @@ interface ScenarioListProps {
   onRefresh: () => void;
 }
 
-export function ScenarioList({ scenarios, onRefresh }: ScenarioListProps) {
+export function ScenarioList({ scenarios }: ScenarioListProps) {
   const [exporting, setExporting] = useState<string | null>(null);
 
   const handleExport = async (scenario: Scenario, format: 'yaml' | 'json') => {
     try {
       setExporting(scenario.id);
-      const content = await apiService.exportScenario(scenario.id, format);
+      const content = await proxyApi.exportScenario(scenario.id, format);
 
       // Create download link
       const blob = new Blob([content], { type: 'text/plain' });
@@ -58,31 +58,33 @@ export function ScenarioList({ scenarios, onRefresh }: ScenarioListProps) {
                 <h3 className="text-lg font-semibold">{scenario.name}</h3>
                 <ModernBadge variant="outline">v{scenario.version}</ModernBadge>
                 {scenario.ai_generated && (
-                  <ModernBadge
-                    variant="secondary"
-                    size="sm"
-                    className="flex items-center gap-1"
-                    title="AI-generated scenario"
-                  >
-                    <Sparkles className="h-3 w-3" />
-                    AI
-                  </ModernBadge>
+                  <span title="AI-generated scenario">
+                    <ModernBadge
+                      variant="default"
+                      size="sm"
+                      className="flex items-center gap-1"
+                    >
+                      <Sparkles className="h-3 w-3" />
+                      AI
+                    </ModernBadge>
+                  </span>
                 )}
                 {scenario.frozen && (
-                  <ModernBadge
-                    variant="outline"
-                    size="sm"
-                    className="flex items-center gap-1 border-info-300 text-info-700"
-                    title={`Frozen artifact (deterministic mode)${scenario.frozen_path ? `: ${scenario.frozen_path}` : ''}`}
-                  >
-                    <Snowflake className="h-3 w-3" />
-                    Frozen
-                  </ModernBadge>
+                  <span title={`Frozen artifact (deterministic mode)${scenario.frozen_path ? `: ${scenario.frozen_path}` : ''}`}>
+                    <ModernBadge
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center gap-1 border-info-300 text-info-700"
+                    >
+                      <Snowflake className="h-3 w-3" />
+                      Frozen
+                    </ModernBadge>
+                  </span>
                 )}
                 {scenario.tags && scenario.tags.length > 0 && (
                   <div className="flex gap-2">
                     {scenario.tags.map((tag) => (
-                      <ModernBadge key={tag} variant="secondary" size="sm">
+                      <ModernBadge key={tag} variant="default" size="sm">
                         {tag}
                       </ModernBadge>
                     ))}

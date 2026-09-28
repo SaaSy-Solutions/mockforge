@@ -113,31 +113,31 @@ export function AmqpBrokerPage() {
     mutationFn: (body: { name: string; type: string; durable: boolean }) =>
       jsonPost(`${API_BASE}/exchanges`, body),
     onSuccess: () => {
-      showToast('Exchange declared', 'success');
+      showToast('success', 'Exchange declared');
       setExName('');
       invalidateAll();
     },
-    onError: (err: Error) => showToast(err.message, 'error'),
+    onError: (err: Error) => showToast('error', err.message),
   });
 
   const deleteExchangeMutation = useMutation({
     mutationFn: (name: string) =>
       apiFetch<unknown>(`${API_BASE}/exchanges/${encodeURIComponent(name)}`, { method: 'DELETE' }),
     onSuccess: () => {
-      showToast('Exchange deleted', 'success');
+      showToast('success', 'Exchange deleted');
       invalidateAll();
     },
-    onError: (err: Error) => showToast(err.message, 'error'),
+    onError: (err: Error) => showToast('error', err.message),
   });
 
   const declareQueueMutation = useMutation({
     mutationFn: (body: { name: string; durable: boolean }) => jsonPost(`${API_BASE}/queues`, body),
     onSuccess: () => {
-      showToast('Queue declared', 'success');
+      showToast('success', 'Queue declared');
       setQueueName('');
       invalidateAll();
     },
-    onError: (err: Error) => showToast(err.message, 'error'),
+    onError: (err: Error) => showToast('error', err.message),
   });
 
   const addBindingMutation = useMutation({
@@ -147,12 +147,12 @@ export function AmqpBrokerPage() {
         routing_key: body.routing_key,
       }),
     onSuccess: () => {
-      showToast('Binding added', 'success');
+      showToast('success', 'Binding added');
       setBindQueue('');
       setBindRoutingKey('');
       invalidateAll();
     },
-    onError: (err: Error) => showToast(err.message, 'error'),
+    onError: (err: Error) => showToast('error', err.message),
   });
 
   const publishMutation = useMutation({
@@ -161,19 +161,19 @@ export function AmqpBrokerPage() {
     onSuccess: (data) => {
       const queued = (data as { queued_to?: string[] })?.queued_to ?? [];
       showToast(
-        queued.length > 0 ? `Published → ${queued.join(', ')}` : 'Published (no matching queue)',
-        queued.length > 0 ? 'success' : 'info'
+        queued.length > 0 ? 'success' : 'info',
+        queued.length > 0 ? `Published → ${queued.join(', ')}` : 'Published (no matching queue)'
       );
       setPubPayload('');
       invalidateAll();
     },
-    onError: (err: Error) => showToast(err.message, 'error'),
+    onError: (err: Error) => showToast('error', err.message),
   });
 
   const handleDeclareExchange = (e: React.FormEvent) => {
     e.preventDefault();
     if (!exName.trim()) {
-      showToast('Exchange name is required', 'error');
+      showToast('error', 'Exchange name is required');
       return;
     }
     declareExchangeMutation.mutate({ name: exName.trim(), type: exType, durable: exDurable });
@@ -182,7 +182,7 @@ export function AmqpBrokerPage() {
   const handleDeclareQueue = (e: React.FormEvent) => {
     e.preventDefault();
     if (!queueName.trim()) {
-      showToast('Queue name is required', 'error');
+      showToast('error', 'Queue name is required');
       return;
     }
     declareQueueMutation.mutate({ name: queueName.trim(), durable: queueDurable });
@@ -191,7 +191,7 @@ export function AmqpBrokerPage() {
   const handleAddBinding = (e: React.FormEvent) => {
     e.preventDefault();
     if (!bindExchange.trim() || !bindQueue.trim()) {
-      showToast('Exchange and queue are required', 'error');
+      showToast('error', 'Exchange and queue are required');
       return;
     }
     addBindingMutation.mutate({
@@ -204,7 +204,7 @@ export function AmqpBrokerPage() {
   const handlePublish = (e: React.FormEvent) => {
     e.preventDefault();
     if (!pubRoutingKey.trim()) {
-      showToast('Routing key is required', 'error');
+      showToast('error', 'Routing key is required');
       return;
     }
     publishMutation.mutate({

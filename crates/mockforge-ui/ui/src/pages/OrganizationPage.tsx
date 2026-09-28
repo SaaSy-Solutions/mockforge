@@ -922,9 +922,9 @@ function SecurityActivityTab({ org }: { org: Organization }) {
     mutationFn: (activityId: string) => resolveSuspiciousActivity(org.id, activityId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['suspicious-activities', org.id] });
-      showToast('Marked as resolved', 'success');
+      showToast('success', 'Marked as resolved');
     },
-    onError: (err: Error) => showToast(err.message, 'error'),
+    onError: (err: Error) => showToast('error', err.message),
   });
 
   const severityBadge = (severity: string) => {

@@ -2,7 +2,7 @@
 //!
 //! Allows users to create complete workspace scenarios from natural language descriptions.
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Loader2, CheckCircle2, XCircle, Download, Copy, Building2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card } from '../ui/Card';
@@ -127,11 +127,6 @@ export function WorkspaceScenarioCreator({
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  const handleTextSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    processDescription();
   };
 
   const copyToClipboard = (text: string) => {

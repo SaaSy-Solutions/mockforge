@@ -55,13 +55,6 @@ interface SystemMetadata {
   generated_at: string;
 }
 
-interface AppliedSystem {
-  system_id: string;
-  version: string;
-  applied_artifacts: string[];
-  frozen: boolean;
-}
-
 interface SystemGeneratorProps {
   onUsageUpdate?: () => void;
 }
@@ -187,7 +180,7 @@ export function SystemGenerator({ onUsageUpdate }: SystemGeneratorProps) {
         throw new Error(error.error || `HTTP ${response.status}`);
       }
 
-      const result = await response.json();
+      await response.json();
 
       toast.success(`Artifacts frozen successfully!`);
     } catch (error: any) {

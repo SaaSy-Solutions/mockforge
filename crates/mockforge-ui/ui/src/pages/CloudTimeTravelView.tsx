@@ -262,7 +262,7 @@ export const CloudTimeTravelView: React.FC = () => {
         <Alert
           variant="info"
           title="No deployments yet"
-          description="Create a hosted mock first to control its virtual clock from the cloud dashboard."
+          message="Create a hosted mock first to control its virtual clock from the cloud dashboard."
         />
       </div>
     );
@@ -315,12 +315,12 @@ export const CloudTimeTravelView: React.FC = () => {
         <Alert
           variant="warning"
           title="Deployment not reachable"
-          description="The registry can't reach this deployment's runtime over Fly 6PN. Showing last-known disabled state. Retry will keep polling — if this persists, check the deployment's status."
+          message="The registry can't reach this deployment's runtime over Fly 6PN. Showing last-known disabled state. Retry will keep polling — if this persists, check the deployment's status."
         />
       )}
 
       {error && !unreachable && (
-        <Alert variant="error" title="Error" description={error} />
+        <Alert variant="error" title="Error" message={error} />
       )}
 
       {loading && (
@@ -518,7 +518,7 @@ export const CloudTimeTravelView: React.FC = () => {
       <Alert
         variant="info"
         title="Cron jobs and mutation rules are local-only"
-        description="These features manage local scenario state and aren't exposed on hosted-mock deployments. Run a local MockForge instance to use them."
+        message="These features manage local scenario state and aren't exposed on hosted-mock deployments. Run a local MockForge instance to use them."
       />
     </div>
   );

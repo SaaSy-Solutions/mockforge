@@ -87,22 +87,22 @@ export function KafkaBrokerPage() {
   const produceMutation = useMutation({
     mutationFn: produceMessage,
     onSuccess: () => {
-      showToast('Message produced', 'success');
+      showToast('success', 'Message produced');
       setValue('');
       queryClient.invalidateQueries({ queryKey: ['kafka-stats'] });
     },
-    onError: (err: Error) => showToast(err.message, 'error'),
+    onError: (err: Error) => showToast('error', err.message),
   });
 
   const handleProduce = (e: React.FormEvent) => {
     e.preventDefault();
     if (!topic.trim() || !value.trim()) {
-      showToast('Topic and value are required', 'error');
+      showToast('error', 'Topic and value are required');
       return;
     }
     const partitionNum = partition.trim() ? Number(partition) : undefined;
     if (partition.trim() && Number.isNaN(partitionNum!)) {
-      showToast('Partition must be a number', 'error');
+      showToast('error', 'Partition must be a number');
       return;
     }
     produceMutation.mutate({

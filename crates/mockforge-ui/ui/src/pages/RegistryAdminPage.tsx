@@ -98,7 +98,7 @@ export function RegistryAdminPage() {
 
           {tab === 'self' && <SelfTab user={me} error={meError} />}
           {tab === 'lookup' && <LookupTab />}
-          {tab === 'members' && <MembersTab currentUser={me} />}
+          {tab === 'members' && <MembersTab />}
           {tab === 'tokens' && <TokensTab currentUser={me} />}
           {tab === 'quota' && <QuotaTab />}
           {tab === 'create' && <CreateTab currentUser={me} />}
@@ -214,7 +214,7 @@ function LookupTab() {
 // ---------------------------------------------------------------------------
 // Members tab — list, add, change role, remove
 // ---------------------------------------------------------------------------
-function MembersTab({ currentUser }: { currentUser: RegistryUser | null }) {
+function MembersTab() {
   const [orgId, setOrgId] = useState('');
   const [members, setMembers] = useState<RegistryOrgMember[]>([]);
   const [loaded, setLoaded] = useState(false);

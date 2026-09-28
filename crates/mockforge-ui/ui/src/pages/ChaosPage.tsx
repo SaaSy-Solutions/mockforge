@@ -62,14 +62,13 @@ interface ScenarioStatus {
 }
 
 export function ChaosPage() {
-  const [scenarios, setScenarios] = useState<ChaosScenario[]>([]);
+  const [, setScenarios] = useState<ChaosScenario[]>([]);
   const [status, setStatus] = useState<ScenarioStatus>({ is_enabled: false });
   const [loading, setLoading] = useState(true);
-  const [selectedScenario, setSelectedScenario] = useState<string | null>(null);
 
   // Chaos API hooks
   const { data: chaosConfig, isLoading: configLoading, isError: configError } = useChaosConfig();
-  const { data: chaosStatus, isLoading: statusLoading } = useChaosStatus();
+  useChaosStatus();
   const updateLatency = useUpdateChaosLatency();
   const updateFaults = useUpdateChaosFaults();
   const updateTraffic = useUpdateChaosTraffic();
@@ -109,7 +108,7 @@ export function ChaosPage() {
   });
 
   // Debounce timers
-  const debounceTimers = React.useRef<Record<string, NodeJS.Timeout>>({});
+  const debounceTimers = React.useRef<Record<string, ReturnType<typeof setTimeout>>>({});
 
   // Loading states for each mutation (combine local state with React Query state)
   const updatingLatency = updateLatency.isPending || updateLatency.isError;
@@ -281,7 +280,7 @@ export function ChaosPage() {
       <PageHeader
         title="Chaos Engineering"
         subtitle="Test system resilience with controlled failure injection"
-        actions={
+        action={
           <div className="flex gap-2">
             <ProfileExporter compact />
             <button
@@ -310,15 +309,14 @@ export function ChaosPage() {
           type="warning"
           title="Chaos Engineering Active"
           message={`Active scenario: ${status.active_scenario || 'Custom configuration'}`}
-          actions={
-            <button
-              onClick={() => resetChaos.mutate()}
-              className="px-4 py-2 bg-warning text-text-inverse rounded-lg hover:bg-warning-700"
-            >
-              Reset
-            </button>
-          }
-        />
+        >
+          <button
+            onClick={() => resetChaos.mutate()}
+            className="px-4 py-2 bg-warning text-text-inverse rounded-lg hover:bg-warning-700"
+          >
+            Reset
+          </button>
+        </Alert>
       ) : (
         <Alert
           type="info"
@@ -691,15 +689,7 @@ export function ChaosPage() {
           {faultConfig.enabled && (
             <ErrorPatternEditor
               currentPattern={
-                chaosConfig?.fault_injection?.error_pattern
-                  ? {
-                      type: chaosConfig.fault_injection.error_pattern.type as 'burst' | 'random' | 'sequential',
-                      count: chaosConfig.fault_injection.error_pattern.count,
-                      interval_ms: chaosConfig.fault_injection.error_pattern.interval_ms,
-                      probability: chaosConfig.fault_injection.error_pattern.probability,
-                      sequence: chaosConfig.fault_injection.error_pattern.sequence,
-                    }
-                  : null
+                chaosConfig?.fault_injection?.error_pattern ?? null
               }
               onPatternChange={(pattern) => {
                 if (pattern) {

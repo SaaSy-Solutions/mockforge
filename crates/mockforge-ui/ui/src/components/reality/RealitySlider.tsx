@@ -105,7 +105,7 @@ export function RealitySlider({ className, compact = false }: RealitySliderProps
   const Icon = levelConfig.icon;
 
   // Debounce timer for committing level changes
-  const commitTimerRef = React.useRef<NodeJS.Timeout | null>(null);
+  const commitTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const handleLevelChange = useCallback((newLevel: number) => {
     setLocalLevel(newLevel);

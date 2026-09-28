@@ -793,19 +793,18 @@ export function FitnessFunctionsPage() {
   // backend route; without it we surface a clear error before queueing
   // a request that would fail on the server.
   const createMutation = useMutation({
-    mutationFn: (request: CreateFitnessFunctionRequest) => {
+    mutationFn: async (request: CreateFitnessFunctionRequest): Promise<void> => {
       if (cloudMode) {
         if (!activeWorkspace?.id) {
-          return Promise.reject(
-            new Error('Pick a workspace before creating a fitness function.'),
-          );
+          throw new Error('Pick a workspace before creating a fitness function.');
         }
-        return cloudContractApi.createFitnessFunction(
+        await cloudContractApi.createFitnessFunction(
           activeWorkspace.id,
           localToCloudFitnessFunction(request),
         );
+        return;
       }
-      return driftApi.createFitnessFunction(request);
+      await driftApi.createFitnessFunction(request);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: fitnessFunctionsQueryKey });
@@ -820,14 +819,15 @@ export function FitnessFunctionsPage() {
 
   // Update mutation
   const updateMutation = useMutation({
-    mutationFn: ({ id, request }: { id: string; request: CreateFitnessFunctionRequest }) => {
+    mutationFn: async ({ id, request }: { id: string; request: CreateFitnessFunctionRequest }): Promise<void> => {
       if (cloudMode) {
-        return cloudContractApi.updateFitnessFunction(
+        await cloudContractApi.updateFitnessFunction(
           id,
           localToCloudFitnessFunction(request),
         );
+        return;
       }
-      return driftApi.updateFitnessFunction(id, request);
+      await driftApi.updateFitnessFunction(id, request);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: fitnessFunctionsQueryKey });
@@ -842,11 +842,12 @@ export function FitnessFunctionsPage() {
 
   // Delete mutation
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => {
+    mutationFn: async (id: string): Promise<void> => {
       if (cloudMode) {
-        return cloudContractApi.deleteFitnessFunction(id);
+        await cloudContractApi.deleteFitnessFunction(id);
+        return;
       }
-      return driftApi.deleteFitnessFunction(id);
+      await driftApi.deleteFitnessFunction(id);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: fitnessFunctionsQueryKey });
@@ -905,8 +906,7 @@ export function FitnessFunctionsPage() {
     <div className="space-y-6 p-6">
       <PageHeader
         title="Fitness Functions"
-        description="Register custom tests that run against each new contract version to enforce constraints"
-        icon={<Activity className="w-6 h-6" />}
+        subtitle="Register custom tests that run against each new contract version to enforce constraints"
       />
 
       {cloudMode && (

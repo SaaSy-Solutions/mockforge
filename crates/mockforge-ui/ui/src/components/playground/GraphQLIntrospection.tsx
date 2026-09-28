@@ -6,6 +6,9 @@ import { Input } from '../ui/input';
 import { Badge } from '../ui/Badge';
 import { usePlaygroundStore } from '../../stores/usePlaygroundStore';
 
+type IntrospectionArg = { name?: string; type?: unknown; description?: string };
+type IntrospectionField = { name?: string; type?: unknown; description?: string; args?: IntrospectionArg[] };
+
 /**
  * GraphQL Introspection Component
  *
@@ -26,7 +29,6 @@ export function GraphQLIntrospection() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedTypes, setExpandedTypes] = useState<Set<string>>(new Set());
-  const [selectedType, setSelectedType] = useState<string | null>(null);
 
   // Load introspection when GraphQL is selected
   useEffect(() => {
@@ -73,7 +75,7 @@ export function GraphQLIntrospection() {
     if (!graphQLSchema?.schema) return null;
 
     try {
-      const schema = graphQLSchema.schema as { types?: Array<{ name?: string; [key: string]: unknown }> };
+      const schema = graphQLSchema.schema as { types?: Array<{ name?: string; fields?: IntrospectionField[] }> };
       return schema.types?.find((t) => t.name === typeName);
     } catch {
       return null;
@@ -86,7 +88,7 @@ export function GraphQLIntrospection() {
 
     try {
       const schema = graphQLSchema.schema as {
-        queryType?: { fields?: Array<{ name?: string; [key: string]: unknown }> };
+        queryType?: { fields?: IntrospectionField[] };
       };
       return schema.queryType?.fields || [];
     } catch {
@@ -100,7 +102,7 @@ export function GraphQLIntrospection() {
 
     try {
       const schema = graphQLSchema.schema as {
-        mutationType?: { fields?: Array<{ name?: string; [key: string]: unknown }> };
+        mutationType?: { fields?: IntrospectionField[] };
       };
       return schema.mutationType?.fields || [];
     } catch {
@@ -114,7 +116,7 @@ export function GraphQLIntrospection() {
 
     try {
       const schema = graphQLSchema.schema as {
-        subscriptionType?: { fields?: Array<{ name?: string; [key: string]: unknown }> };
+        subscriptionType?: { fields?: IntrospectionField[] };
       };
       return schema.subscriptionType?.fields || [];
     } catch {
@@ -140,7 +142,7 @@ export function GraphQLIntrospection() {
   };
 
   // Render field
-  const renderField = (field: { name?: string; type?: unknown; description?: string; args?: unknown[] }) => {
+  const renderField = (field: IntrospectionField) => {
     if (!field.name) return null;
 
     return (
@@ -157,7 +159,7 @@ export function GraphQLIntrospection() {
         {field.args && field.args.length > 0 && (
           <div className="mt-2 ml-4">
             <div className="text-xs font-semibold text-muted-foreground mb-1">Arguments:</div>
-            {field.args.map((arg: { name?: string; type?: unknown; description?: string }, idx: number) => (
+            {field.args.map((arg, idx) => (
               <div key={idx} className="text-xs ml-2">
                 <code className="text-info-300">{arg.name}</code>
                 <span className="text-muted-foreground">: {renderFieldType(arg.type)}</span>
@@ -278,7 +280,7 @@ export function GraphQLIntrospection() {
             <div className="space-y-1">
               {queries.map((query) => (
                 <div key={query.name} className="p-2 bg-muted/30 rounded">
-                  {renderField(query as { name?: string; type?: unknown; description?: string; args?: unknown[] })}
+                  {renderField(query)}
                 </div>
               ))}
             </div>
@@ -297,7 +299,7 @@ export function GraphQLIntrospection() {
             <div className="space-y-1">
               {mutations.map((mutation) => (
                 <div key={mutation.name} className="p-2 bg-muted/30 rounded">
-                  {renderField(mutation as { name?: string; type?: unknown; description?: string; args?: unknown[] })}
+                  {renderField(mutation)}
                 </div>
               ))}
             </div>
@@ -316,7 +318,7 @@ export function GraphQLIntrospection() {
             <div className="space-y-1">
               {subscriptions.map((subscription) => (
                 <div key={subscription.name} className="p-2 bg-muted/30 rounded">
-                  {renderField(subscription as { name?: string; type?: unknown; description?: string; args?: unknown[] })}
+                  {renderField(subscription)}
                 </div>
               ))}
             </div>
@@ -331,7 +333,7 @@ export function GraphQLIntrospection() {
               const typeName = type.name || 'Unknown';
               const isExpanded = expandedTypes.has(typeName);
               const typeDetails = getTypeDetails(typeName);
-              const fields = (typeDetails as { fields?: unknown[] })?.fields || [];
+              const fields = typeDetails?.fields || [];
 
               return (
                 <div key={typeName} className="border rounded">
@@ -353,9 +355,9 @@ export function GraphQLIntrospection() {
                   </button>
                   {isExpanded && fields.length > 0 && (
                     <div className="p-2 border-t bg-muted/20">
-                      {fields.map((field: { name?: string; [key: string]: unknown }, idx: number) => (
+                      {fields.map((field, idx) => (
                         <div key={idx}>
-                          {renderField(field as { name?: string; type?: unknown; description?: string; args?: unknown[] })}
+                          {renderField(field)}
                         </div>
                       ))}
                     </div>

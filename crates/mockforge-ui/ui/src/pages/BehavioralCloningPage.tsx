@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { GitBranch, Play } from 'lucide-react';
-import { apiService } from '../services/api';
+import { proxyApi } from '../services/api';
 import type { Flow, Scenario } from '../types';
 import { FlowList } from '../components/behavioral-cloning/FlowList';
 import { FlowDetails } from '../components/behavioral-cloning/FlowDetails';
@@ -40,7 +40,7 @@ export function BehavioralCloningPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getFlows({ limit: 100 });
+      const response = await proxyApi.getFlows({ limit: 100 });
       setFlows(response?.flows || []);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load flows';
@@ -55,7 +55,7 @@ export function BehavioralCloningPage() {
     try {
       setLoading(true);
       setError(null);
-      const response = await apiService.getScenarios({ limit: 100 });
+      const response = await proxyApi.getScenarios({ limit: 100 });
       setScenarios(response?.scenarios || []);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load scenarios';
@@ -68,7 +68,7 @@ export function BehavioralCloningPage() {
 
   const handleViewFlow = async (flow: Flow) => {
     try {
-      const detailedFlow = await apiService.getFlow(flow.id);
+      const detailedFlow = await proxyApi.getFlow(flow.id);
       setSelectedFlow(detailedFlow);
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to load flow details';
@@ -115,8 +115,7 @@ export function BehavioralCloningPage() {
     <div className="space-y-6 p-6">
       <PageHeader
         title="Behavioral Cloning"
-        description="Record multi-step API flows and replay them as named scenarios"
-        icon={<GitBranch className="h-6 w-6" />}
+        subtitle="Record multi-step API flows and replay them as named scenarios"
       />
 
       {error && (

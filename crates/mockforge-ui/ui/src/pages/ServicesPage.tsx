@@ -6,7 +6,7 @@ import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';
 import { Button } from '../components/ui/button';
-import type { WorkspaceSummary } from '../types';
+import type { WorkspaceSummary } from '../schemas/api';
 
 interface ServicesHeaderProps {
   subtitle: string;

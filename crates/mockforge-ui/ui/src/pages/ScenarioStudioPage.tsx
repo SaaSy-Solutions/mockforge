@@ -83,6 +83,14 @@ interface FlowConnection {
   label?: string;
 }
 
+type StudioNodeData =
+  | ApiCallNodeData
+  | ConditionNodeData
+  | DelayNodeData
+  | LoopNodeData
+  | ParallelNodeData;
+type StudioNode = Node<StudioNodeData>;
+
 // Node type mapping
 const nodeTypes: NodeTypes = {
   apiCall: ApiCallNode,
@@ -152,19 +160,19 @@ export function ScenarioStudioPage() {
   const [newFlowName, setNewFlowName] = useState('');
   const [newFlowType, setNewFlowType] = useState<'happy_path' | 'sla_violation' | 'regression' | 'custom'>('happy_path');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [, setError] = useState<string | null>(null);
+  const [selectedNode, setSelectedNode] = useState<StudioNode | null>(null);
   const [showProperties, setShowProperties] = useState(false);
   const [showExecutor, setShowExecutor] = useState(false);
-  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
+  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<StudioNode, Edge> | null>(null);
 
   // React Flow state
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<StudioNode>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   // History for undo/redo
-  const { history, push, undo, redo, canUndo, canRedo } = useHistory<{
-    nodes: Node[];
+  const { push, undo, redo, canUndo, canRedo } = useHistory<{
+    nodes: StudioNode[];
     edges: Edge[];
   }>({ nodes: [], edges: [] }, 50);
 
@@ -245,10 +253,10 @@ export function ScenarioStudioPage() {
 
   const loadFlowIntoEditor = (flow: FlowDefinition) => {
     // Convert flow steps to React Flow nodes
-    const flowNodes: Node[] = flow.steps.map((step, index) => {
+    const flowNodes: StudioNode[] = flow.steps.map((step, index) => {
       const position = step.position || { x: (index % 5) * 250 + 100, y: Math.floor(index / 5) * 150 + 100 };
 
-      let nodeData: any = {
+      let nodeData: StudioNodeData = {
         id: step.id,
         name: step.name,
       };
@@ -375,7 +383,7 @@ export function ScenarioStudioPage() {
         const baseStep: FlowStep = {
           id: node.id,
           name: node.data.name,
-          step_type: (node.type as any) || 'api_call',
+          step_type: (node.type as FlowStep['step_type'] | undefined) || 'api_call',
           position: { x: node.position.x, y: node.position.y },
         };
 
@@ -500,7 +508,7 @@ export function ScenarioStudioPage() {
     if (!selectedFlow) return;
 
     const nodeId = `step-${Date.now()}`;
-    let nodeData: any = {
+    let nodeData: StudioNodeData = {
       id: nodeId,
       name: `New ${stepType.replace('_', ' ')}`,
     };
@@ -524,11 +532,11 @@ export function ScenarioStudioPage() {
         break;
     }
 
-    const newNode: Node = {
+    const newNode: StudioNode = {
       id: nodeId,
       type: stepType,
       position: reactFlowInstance
-        ? reactFlowInstance.project({ x: 400, y: 300 })
+        ? reactFlowInstance.screenToFlowPosition({ x: 400, y: 300 })
         : { x: 400, y: 300 },
       data: nodeData,
     };
@@ -546,18 +554,22 @@ export function ScenarioStudioPage() {
 
   const onConnect = useCallback(
     (params: Connection) => {
-      const newEdge: Edge = {
-        ...addEdge(params, []),
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-        },
-      };
-      setEdges((eds) => [...eds, newEdge]);
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...params,
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+            },
+          },
+          eds
+        )
+      );
     },
     [setEdges]
   );
 
-  const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
+  const onNodeClick = useCallback((_event: React.MouseEvent, node: StudioNode) => {
     setSelectedNode(node);
     setShowProperties(true);
   }, []);

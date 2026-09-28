@@ -15,7 +15,6 @@ import { Button } from '../ui/button';
 import {
   useNetworkProfiles,
   useApplyNetworkProfile,
-  useCreateNetworkProfile,
   useDeleteNetworkProfile,
 } from '../../hooks/useApi';
 import { toast } from 'sonner';
@@ -30,7 +29,6 @@ interface NetworkProfileSelectorProps {
 export function NetworkProfileSelector({ onProfileApplied }: NetworkProfileSelectorProps) {
   const { data: profiles, isLoading, error } = useNetworkProfiles();
   const applyProfile = useApplyNetworkProfile();
-  const createProfile = useCreateNetworkProfile();
   const deleteProfile = useDeleteNetworkProfile();
   const [showCreateModal, setShowCreateModal] = useState(false);
 

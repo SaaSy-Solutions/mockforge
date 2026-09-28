@@ -309,9 +309,11 @@ export function ProtocolContractEditor({ onClose, onSuccess }: ProtocolContractE
                     <Label>Direction</Label>
                     <Select
                       value={msgType.direction}
-                      onValueChange={(value: 'inbound' | 'outbound' | 'bidirectional') =>
-                        updateMessageType(index, { direction: value })
-                      }
+                      onValueChange={(value) => {
+                        if (value === 'inbound' || value === 'outbound' || value === 'bidirectional') {
+                          updateMessageType(index, { direction: value });
+                        }
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue />
@@ -454,11 +456,13 @@ export function ProtocolContractEditor({ onClose, onSuccess }: ProtocolContractE
                       <Label>Value Schema Format</Label>
                       <Select
                         value={topic.value_schema.format}
-                        onValueChange={(value: 'json' | 'avro' | 'protobuf') =>
-                          updateKafkaTopic(index, {
-                            value_schema: { ...topic.value_schema, format: value },
-                          })
-                        }
+                        onValueChange={(value) => {
+                          if (value === 'json' || value === 'avro' || value === 'protobuf') {
+                            updateKafkaTopic(index, {
+                              value_schema: { ...topic.value_schema, format: value },
+                            });
+                          }
+                        }}
                       >
                         <SelectTrigger>
                           <SelectValue />

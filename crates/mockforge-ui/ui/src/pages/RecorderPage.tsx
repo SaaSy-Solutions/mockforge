@@ -155,7 +155,7 @@ export function RecorderPage() {
       <PageHeader
         title="API Flight Recorder"
         subtitle="Record, replay, and analyze API interactions"
-        actions={
+        action={
           <div className="flex gap-2">
             {isRecording ? (
               <button

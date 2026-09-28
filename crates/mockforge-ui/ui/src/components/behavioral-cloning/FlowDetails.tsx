@@ -23,7 +23,7 @@ export function FlowDetails({ flow, onBack, onTag, onCompile }: FlowDetailsProps
         </button>
         <PageHeader
           title={flow.name || `Flow ${flow.id.slice(0, 8)}`}
-          description={flow.description || 'Multi-step API flow'}
+          subtitle={flow.description || 'Multi-step API flow'}
         />
       </div>
 
@@ -47,7 +47,7 @@ export function FlowDetails({ flow, onBack, onTag, onCompile }: FlowDetailsProps
             <div className="flex gap-1 flex-wrap">
               {flow.tags && flow.tags.length > 0 ? (
                 flow.tags.map((tag) => (
-                  <ModernBadge key={tag} variant="secondary" size="sm">
+                  <ModernBadge key={tag} variant="default" size="sm">
                     {tag}
                   </ModernBadge>
                 ))

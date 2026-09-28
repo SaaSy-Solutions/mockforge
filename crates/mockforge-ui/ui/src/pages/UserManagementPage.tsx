@@ -17,7 +17,7 @@ import {
   XCircle,
   Clock,
   BarChart3} from 'lucide-react';
-import { apiService } from '@/services/api';
+import { fetchJsonWithErrorBody } from '@/services/api/client';
 import { useToast } from '@/components/ui/ToastProvider';
 
 // Types
@@ -92,8 +92,7 @@ export function UserManagementPage() {
   const { data: users, isLoading: usersLoading } = useQuery({
     queryKey: ['users'],
     queryFn: async () => {
-      const response = await apiService.get('/api/users');
-      return response.data as User[];
+      return (await fetchJsonWithErrorBody('/api/users')) as User[];
     },
   });
 
@@ -101,8 +100,7 @@ export function UserManagementPage() {
   const { data: teams, isLoading: teamsLoading } = useQuery({
     queryKey: ['teams'],
     queryFn: async () => {
-      const response = await apiService.get('/api/teams');
-      return response.data as Team[];
+      return (await fetchJsonWithErrorBody('/api/teams')) as Team[];
     },
   });
 
@@ -110,8 +108,7 @@ export function UserManagementPage() {
   const { data: invitations, isLoading: invitationsLoading } = useQuery({
     queryKey: ['invitations'],
     queryFn: async () => {
-      const response = await apiService.get('/api/invitations');
-      return response.data as Invitation[];
+      return (await fetchJsonWithErrorBody('/api/invitations')) as Invitation[];
     },
   });
 
@@ -119,8 +116,7 @@ export function UserManagementPage() {
   const { data: quota } = useQuery({
     queryKey: ['quota'],
     queryFn: async () => {
-      const response = await apiService.get('/api/quota');
-      return response.data as Quota;
+      return (await fetchJsonWithErrorBody('/api/quota')) as Quota;
     },
   });
 
@@ -128,32 +124,37 @@ export function UserManagementPage() {
   const { data: analytics } = useQuery({
     queryKey: ['user-analytics'],
     queryFn: async () => {
-      const response = await apiService.get('/api/analytics/users');
-      return response.data as Analytics;
+      return (await fetchJsonWithErrorBody('/api/analytics/users')) as Analytics;
     },
   });
 
   // Invite user mutation
   const inviteUser = useMutation({
     mutationFn: async (data: { email: string; role: string; team_id?: string }) => {
-      const response = await apiService.post('/api/invitations', data);
-      return response.data;
+      return fetchJsonWithErrorBody('/api/invitations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
     },
     onSuccess: () => {
       showToast('success', 'Invitation sent', `Invitation sent to ${inviteEmail}`);
       setInviteEmail('');
       queryClient.invalidateQueries({ queryKey: ['invitations'] });
     },
-    onError: (error: any) => {
-      showToast('error', 'Failed to send invitation', error.response?.data?.message || 'An error occurred');
+    onError: (error: Error) => {
+      showToast('error', 'Failed to send invitation', error.message || 'An error occurred');
     },
   });
 
   // Update user role mutation
   const updateUserRole = useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: string }) => {
-      const response = await apiService.put(`/api/users/${userId}/role`, { role });
-      return response.data;
+      return fetchJsonWithErrorBody(`/api/users/${userId}/role`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role }),
+      });
     },
     onSuccess: () => {
       showToast('success', 'User role updated');
@@ -164,7 +165,7 @@ export function UserManagementPage() {
   // Delete user mutation
   const deleteUser = useMutation({
     mutationFn: async (userId: string) => {
-      await apiService.delete(`/api/users/${userId}`);
+      await fetchJsonWithErrorBody(`/api/users/${userId}`, { method: 'DELETE' });
     },
     onSuccess: () => {
       showToast('success', 'User deleted');
@@ -175,7 +176,7 @@ export function UserManagementPage() {
   // Resend invitation mutation
   const resendInvitation = useMutation({
     mutationFn: async (invitationId: string) => {
-      await apiService.post(`/api/invitations/${invitationId}/resend`);
+      await fetchJsonWithErrorBody(`/api/invitations/${invitationId}/resend`, { method: 'POST' });
     },
     onSuccess: () => {
       showToast('success', 'Invitation resent');
@@ -186,7 +187,7 @@ export function UserManagementPage() {
   // Cancel invitation mutation
   const cancelInvitation = useMutation({
     mutationFn: async (invitationId: string) => {
-      await apiService.delete(`/api/invitations/${invitationId}`);
+      await fetchJsonWithErrorBody(`/api/invitations/${invitationId}`, { method: 'DELETE' });
     },
     onSuccess: () => {
       showToast('success', 'Invitation cancelled');

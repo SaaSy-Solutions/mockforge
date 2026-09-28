@@ -52,7 +52,6 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
   const [dateTimeInput, setDateTimeInput] = useState('');
   const [timeScale, setTimeScale] = useState(1.0);
   const [sliderValue, setSliderValue] = useState(0);
-  const [lifecycleUpdates, setLifecycleUpdates] = useState<Array<{ personaId: string; oldState: string; newState: string; time: string }>>([]);
 
   // Enable live preview of lifecycle updates when time changes
   useLivePreviewLifecycleUpdates(workspace, status?.enabled ?? false);

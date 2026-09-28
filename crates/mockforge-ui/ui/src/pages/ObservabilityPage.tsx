@@ -62,20 +62,16 @@ function LocalObservabilityView() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [alerts, setAlerts] = useState<AlertData[]>([]);
   const [recentMetrics, setRecentMetrics] = useState<MetricsBucket[]>([]);
-  const [connected, setConnected] = useState(false);
 
   // WebSocket connection for real-time updates
-  const { lastMessage } = useWebSocket('/api/observability/ws', {
-    onOpen: () => setConnected(true),
-    onClose: () => setConnected(false),
-  });
+  const { lastMessage, connected } = useWebSocket('/api/observability/ws');
 
   // Process WebSocket messages
   useEffect(() => {
     if (!lastMessage) return;
 
     try {
-      const data = JSON.parse(lastMessage);
+      const data = JSON.parse(String(lastMessage.data));
 
       switch (data.type) {
         case 'Stats':
@@ -120,7 +116,7 @@ function LocalObservabilityView() {
       <PageHeader
         title="Observability Dashboard"
         subtitle="Real-time chaos engineering and system observability"
-        actions={
+        action={
           <ModernBadge variant={connected ? 'success' : 'error'}>
             {connected ? 'Connected' : 'Disconnected'}
           </ModernBadge>
@@ -150,17 +146,12 @@ function LocalObservabilityView() {
             value={stats?.active_alerts?.toString() || '0'}
             subtitle="current issues"
             icon={<AlertCircle className="h-6 w-6" />}
-            variant={stats && (stats.active_alerts ?? 0) > 0 ? 'warning' : 'default'}
           />
           <MetricCard
             title="Impact Score"
             value={`${(stats?.current_impact_score || 0) * 100}%`}
             subtitle="system impact"
             icon={<TrendingUp className="h-6 w-6" />}
-            variant={
-              stats && (stats.current_impact_score ?? 0) > 0.7 ? 'error' :
-              stats && (stats.current_impact_score ?? 0) > 0.3 ? 'warning' : 'default'
-            }
           />
         </div>
       </Section>

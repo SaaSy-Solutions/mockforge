@@ -52,6 +52,8 @@ export interface FixtureInfo {
   file_path?: string;
   size?: number;
   created_at?: string;
+  /** Cloud-only: last update timestamp (snake_case from the registry API). */
+  updated_at?: string;
   modified_at?: string;
   /** Resolved username of the creator; set by the cloud API when known. */
   created_by_username?: string;
@@ -113,6 +115,8 @@ export interface LogFilter {
 export interface MetricsData {
   requests_by_endpoint: Record<string, number>;
   response_time_percentiles: Record<string, number>;
+  endpoint_percentiles?: Record<string, Record<string, number>>;
+  latency_over_time?: Array<[string, number]>;
   error_rate_by_endpoint: Record<string, number>;
   memory_usage_over_time: Array<[string, number]>;
   cpu_usage_over_time: Array<[string, number]>;
@@ -181,6 +185,19 @@ export interface ChaosFaultInjectionConfig {
   payload_corruption: boolean;
   payload_corruption_probability: number;
   corruption_type: CorruptionType;
+  error_pattern?: ChaosErrorPattern | null;
+}
+
+/**
+ * Error injection pattern (serde internally tagged by `type`; fields depend on the variant:
+ * burst -> count + interval_ms, random -> probability, sequential -> sequence)
+ */
+export interface ChaosErrorPattern {
+  type: 'burst' | 'random' | 'sequential';
+  count?: number;
+  interval_ms?: number;
+  probability?: number;
+  sequence?: number[];
 }
 
 /**
@@ -441,7 +458,7 @@ export interface RouteInfo {
 // ==================== API SERVICE TYPES ====================
 
 export interface EnvironmentListResponse {
-  environments: Environment[];
+  environments: EnvironmentSummary[];
   total: number;
 }
 
@@ -521,6 +538,7 @@ export interface EnvironmentSummary {
   is_global?: boolean;
   active?: boolean;
   color?: EnvironmentColor;
+  order?: number;
 }
 
 export interface EnvironmentVariable {
@@ -1317,8 +1335,8 @@ export interface SmokeTestContext {
 }
 
 export interface FileContentRequest {
-  path: string;
-  encoding?: string;
+  file_path: string;
+  file_type: string;
 }
 
 export interface FileContentResponse {
@@ -1328,9 +1346,8 @@ export interface FileContentResponse {
 }
 
 export interface SaveFileRequest {
-  path: string;
+  file_path: string;
   content: string;
-  encoding?: string;
 }
 
 // ==================== VERIFICATION TYPES ====================

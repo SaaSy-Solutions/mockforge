@@ -155,7 +155,7 @@ export const ShowcasePage: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               InputProps={{
-                startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+                startAdornment: <SearchIcon className="mr-2 text-muted-foreground" />,
               }}
               sx={{ flexGrow: 1, minWidth: 300 }}
             />
@@ -163,7 +163,7 @@ export const ShowcasePage: React.FC = () => {
               <InputLabel>Category</InputLabel>
               <Select
                 value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
+                onChange={(e) => setSelectedCategory(String(e.target.value))}
                 label="Category"
               >
                 <MenuItem value="all">All Categories</MenuItem>

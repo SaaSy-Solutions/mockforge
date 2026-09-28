@@ -165,8 +165,7 @@ export function MockAIPage() {
       <AIStudioNav currentPage="MockAI" showQuickActions={false} />
       <PageHeader
         title={t('page.mockai.title')}
-        description={t('page.mockai.description')}
-        icon={<Brain className="h-6 w-6" />}
+        subtitle={t('page.mockai.description')}
       />
 
       {/* Stats Overview */}

@@ -3,7 +3,7 @@
 //! This component allows users to describe hook logic in natural language
 //! and see the transpiled hook configuration.
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Loader2, CheckCircle2, XCircle, Copy, Download, Code2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '../../utils/cn';
@@ -87,11 +87,6 @@ export function NLHookEditor({ onHookGenerated, className }: NLHookEditorProps) 
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  const handleTextSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    processDescription();
   };
 
   const copyToClipboard = (text: string) => {

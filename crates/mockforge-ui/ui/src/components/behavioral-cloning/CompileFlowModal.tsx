@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import type { Flow, CompileFlowRequest } from '../../types';
-import { apiService } from '../../services/api';
+import { proxyApi } from '../../services/api';
 import { logger } from '../../utils/logger';
 
 interface CompileFlowModalProps {
@@ -32,7 +32,7 @@ export function CompileFlowModal({ flow, onClose, onCompiled }: CompileFlowModal
         flex_mode: flexMode,
       };
 
-      const result = await apiService.compileFlow(flow.id, request);
+      const result = await proxyApi.compileFlow(flow.id, request);
       alert(`Scenario compiled successfully!\nID: ${result.scenario_id}\nVersion: ${result.version}`);
       onCompiled();
     } catch (err) {
@@ -120,4 +120,3 @@ export function CompileFlowModal({ flow, onClose, onCompiled }: CompileFlowModal
     </div>
   );
 }
-
