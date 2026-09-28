@@ -112,6 +112,8 @@ mockforge bench-chunked \
 | Flag | Meaning |
 |---|---|
 | `--target` | URL to POST chunked bodies at |
+| `--targets-file` | Bench every target in the file in parallel instead of one `--target` |
+| `--max-concurrency` | Max targets running at once with `--targets-file` (default 10) |
 | `--method` | `POST` (default), `PUT`, or `PATCH` |
 | `--concurrency` | Number of concurrent workers (each holds one connection) |
 | `--duration` | Run length in seconds |
@@ -142,6 +144,22 @@ mockforge bench-chunked --target http://server/upload \
   --concurrency 5 --duration 180 \
   --chunk-size-bytes 1048576 --total-size-bytes 1073741824
 ```
+
+**Multiple targets** — send chunked traffic to every server in a targets
+file at once. The file format is the same as `mockforge bench --targets-file`
+(one URL per line, or JSON with per-target `auth`, `headers` and `spec`).
+Without `--spec` each entry is a full endpoint URL; with `--spec` each entry
+is a base URL and every POST/PUT/PATCH operation runs against it:
+
+```bash
+mockforge bench-chunked --targets-file targets.txt --spec api.yaml \
+  --max-concurrency 5 --concurrency 10 --duration 10m \
+  --chunk-size-bytes 4096 --total-size-bytes 1048576 --export-requests
+```
+
+Output lines are prefixed with `[target_N]`. Per-target files go to
+`<output>/target_N/`, and `<output>/chunked-multi-target-summary.json` rolls up
+request, byte and status-code totals for every target.
 
 **Chunked + chaos matching** — pair with `chunked_only: true` in
 `fault_injection.request_matcher` (see
