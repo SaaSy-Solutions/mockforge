@@ -549,6 +549,19 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
   const { setFilter: setLogFilter } = useLogStore();
   const { setGlobalSearch } = useServiceStore();
   const [globalQuery, setGlobalQuery] = useState('');
+  const [globalSearchFocused, setGlobalSearchFocused] = useState(false);
+  const [activePageMatch, setActivePageMatch] = useState(0);
+  // The top bar also jumps to pages (same matcher as the sidebar filter), so
+  // typing "billing" + Enter works even where there are no logs or services
+  // to filter, which is always the case in cloud mode.
+  const globalPageMatches = useMemo(() => {
+    const query = globalQuery.trim();
+    if (!query) return [];
+    return effectiveNavSections
+      .flatMap((section) => section.items)
+      .filter((item) => !item.localOnly && matchesNavQuery(item, t(item.labelKey), query))
+      .slice(0, 6);
+  }, [globalQuery, t]);
   const [isMac, setIsMac] = useState(false);
 
   const helpOpen = useHelpStore(state => state.isOpen);
@@ -580,6 +593,13 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
       searchScope === 'all' || searchScope === 'services' || searchScope === 'current';
     setLogFilter({ path_pattern: wantLogs ? q : undefined });
     setGlobalSearch(wantServices ? q : undefined);
+  };
+
+  const goToSearchPage = (id: string) => {
+    navigate('/' + id);
+    setGlobalQuery('');
+    dispatchSearch(undefined);
+    (document.getElementById('global-search-input') as HTMLInputElement | null)?.blur();
   };
 
   // Setup keyboard shortcuts (user-disablable via preferences.ui.keyboardShortcuts)
@@ -816,19 +836,84 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
                     placeholder={t('app.searchPlaceholder')}
                     id="global-search-input"
                     value={globalQuery}
+                    role="combobox"
+                    aria-expanded={globalSearchFocused && globalQuery.trim().length > 0}
+                    aria-controls="global-search-pages"
+                    aria-activedescendant={
+                      globalPageMatches[activePageMatch]
+                        ? `global-search-page-${globalPageMatches[activePageMatch].id}`
+                        : undefined
+                    }
+                    autoComplete="off"
+                    onFocus={() => setGlobalSearchFocused(true)}
+                    onBlur={() => setGlobalSearchFocused(false)}
                     onChange={(e) => {
                       const q = e.target.value;
                       setGlobalQuery(q);
+                      setActivePageMatch(0);
                       dispatchSearch(q || undefined);
                     }}
                     onKeyDown={(e) => {
-                      if (e.key === 'Escape') {
+                      if (e.key === 'ArrowDown' && globalPageMatches.length > 0) {
+                        e.preventDefault();
+                        setActivePageMatch((i) => (i + 1) % globalPageMatches.length);
+                      } else if (e.key === 'ArrowUp' && globalPageMatches.length > 0) {
+                        e.preventDefault();
+                        setActivePageMatch(
+                          (i) => (i - 1 + globalPageMatches.length) % globalPageMatches.length,
+                        );
+                      } else if (e.key === 'Enter' && globalPageMatches[activePageMatch]) {
+                        e.preventDefault();
+                        goToSearchPage(globalPageMatches[activePageMatch].id);
+                      } else if (e.key === 'Escape') {
                         setGlobalQuery('');
                         dispatchSearch(undefined);
                         (document.getElementById('global-search-input') as HTMLInputElement | null)?.blur();
                       }
                     }}
                   />
+                  {globalSearchFocused && globalQuery.trim().length > 0 && (
+                    <div
+                      id="global-search-pages"
+                      role="listbox"
+                      aria-label="Pages"
+                      className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-md border border-border bg-bg-primary py-1 shadow-lg"
+                    >
+                      {globalPageMatches.length > 0 ? (
+                        globalPageMatches.map((item, index) => {
+                          const Icon = item.icon;
+                          return (
+                            <div
+                              key={item.id}
+                              id={`global-search-page-${item.id}`}
+                              role="option"
+                              aria-selected={index === activePageMatch}
+                              // mousedown fires before the input's blur closes the list.
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                goToSearchPage(item.id);
+                              }}
+                              onMouseEnter={() => setActivePageMatch(index)}
+                              className={cn(
+                                'flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-foreground',
+                                index === activePageMatch && 'bg-bg-secondary',
+                              )}
+                            >
+                              <Icon className="h-4 w-4 text-muted-foreground" />
+                              <span className="flex-1 truncate">{t(item.labelKey)}</span>
+                              {index === activePageMatch && (
+                                <span className="text-[10px] text-muted-foreground">Enter</span>
+                              )}
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <p className="px-3 py-1.5 text-sm text-muted-foreground">
+                          No pages match &ldquo;{globalQuery.trim()}&rdquo;.
+                        </p>
+                      )}
+                    </div>
+                  )}
                   <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-600 dark:text-gray-400 border border-border rounded px-1 py-0.5 bg-bg-primary">
                     {isMac ? '⌘K' : 'Ctrl K'}
                   </span>
