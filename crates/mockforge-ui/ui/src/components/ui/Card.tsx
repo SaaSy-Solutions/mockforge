@@ -10,20 +10,16 @@ export function Card({ title, icon, children, className, ...props }: CardProps) 
   return (
     <div
       className={cn(
-        "bg-bg-primary border border-border rounded-xl shadow-sm",
-        // subtle brand accent on the left edge to add color without overpowering
-        "border-l-4 border-l-brand-200",
-        "hover:shadow-lg hover:border-brand-200 transition-all duration-200 ease-out",
-        "hover:-translate-y-0.5 group",
+        "bg-bg-primary border border-border rounded-xl shadow-xs",
         className
       )}
       {...props}
     >
       {title && (
-        <div className="border-b border-border/50 px-6 py-4 bg-brand-50 dark:bg-brand-900/10 rounded-t-xl">
-          <h3 className="text-lg font-semibold text-foreground flex items-center gap-3">
+        <div className="border-b border-border px-5 py-3.5">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2.5">
             {icon && typeof title === 'string' && (
-              <span className="p-1.5 rounded-lg bg-brand-50 text-brand-600 group-hover:bg-brand-100 transition-colors duration-200 dark:bg-brand-900/20 dark:text-brand-400">
+              <span className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-muted-foreground [&_svg]:h-4 [&_svg]:w-4">
                 {icon}
               </span>
             )}
@@ -31,7 +27,7 @@ export function Card({ title, icon, children, className, ...props }: CardProps) 
           </h3>
         </div>
       )}
-      <div className={cn("p-6", title ? "" : "pt-6")}>
+      <div className="p-5">
         {children}
       </div>
     </div>
@@ -41,7 +37,7 @@ export function Card({ title, icon, children, className, ...props }: CardProps) 
 export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("flex flex-col space-y-1.5 p-6", className)}
+      className={cn("flex flex-col space-y-1 p-5", className)}
       {...props}
     />
   );
@@ -50,7 +46,7 @@ export function CardHeader({ className, ...props }: React.HTMLAttributes<HTMLDiv
 export function CardTitle({ className, ...props }: React.HTMLAttributes<HTMLHeadingElement>) {
   return (
     <h3
-      className={cn("text-2xl font-semibold leading-none tracking-tight", className)}
+      className={cn("text-base font-semibold leading-tight tracking-tight", className)}
       {...props}
     />
   );
@@ -68,7 +64,7 @@ export function CardDescription({ className, ...props }: React.HTMLAttributes<HT
 export function CardContent({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("p-6 pt-0", className)}
+      className={cn("p-5 pt-0", className)}
       {...props}
     />
   );

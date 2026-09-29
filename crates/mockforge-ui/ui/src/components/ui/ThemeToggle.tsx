@@ -83,15 +83,16 @@ export function SimpleThemeToggle({ className, size = 'md' }: ThemeToggleProps) 
 
   return (
     <Button
-      variant="outline"
+      variant="ghost"
       size="sm"
       onClick={toggleTheme}
       className={cn(
-        'btn-hover transition-all duration-200',
+        'p-0 text-muted-foreground hover:text-foreground',
         sizeClasses[size],
         className
       )}
       aria-label={`Switch to ${resolvedTheme === 'light' ? 'dark' : 'light'} mode`}
+      title={`Switch to ${resolvedTheme === 'light' ? 'dark' : 'light'} mode`}
     >
       {resolvedTheme === 'light' ? (
         <Moon className={iconSizes[size]} />

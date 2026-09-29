@@ -85,7 +85,7 @@
   --color-info-900: hsl(var(--info-900));
 
   /* Typography */
-  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+  --font-sans: Geist, Inter, ui-sans-serif, system-ui, sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, monospace;
 
   /* Animations — declared as utilities so `animate-fade-in`, `animate-fade-in-up`
@@ -113,32 +113,32 @@
   :root {
     /* base */
     --background: 0 0% 100%;
-    --foreground: 220 15% 15%;
+    --foreground: 222 24% 14%;
 
     --card: 0 0% 100%;
-    --card-foreground: 220 15% 15%;
+    --card-foreground: 222 24% 14%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 220 15% 15%;
+    --popover-foreground: 222 24% 14%;
 
     --primary: 24 86% 42%;
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 220 14% 95%;
+    --secondary-foreground: 222 24% 14%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted: 220 14% 95.5%;
+    --muted-foreground: 220 9% 42%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent: 220 14% 95.5%;
+    --accent-foreground: 222 24% 14%;
 
     --destructive: 0 84% 50%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 215 20% 65%;
+    --border: 220 13% 90%;
+    --input: 220 13% 88%;
+    --ring: 24 86% 45%;
 
     --radius: 12px;
 
@@ -192,44 +192,44 @@
 
     /* Background Hierarchy */
     --bg-primary: 0 0% 100%;
-    --bg-secondary: 210 40% 98%;
-    --bg-tertiary: 210 40% 96%;
+    --bg-secondary: 220 20% 98%;
+    --bg-tertiary: 220 14% 96%;
     --bg-overlay: 0 0% 0% / 0.5;
 
     /* Text Hierarchy */
-    --text-primary: 220 15% 15%;
-    --text-secondary: 220 10% 40%;
-    --text-tertiary: 220 10% 55%;
+    --text-primary: 222 24% 14%;
+    --text-secondary: 220 9% 38%;
+    --text-tertiary: 220 8% 50%;
     --text-inverse: 0 0% 100%;
   }
 
   .dark {
-    --background: 220 15% 7%;
-    --foreground: 210 20% 98%;
+    --background: 222 14% 6%;
+    --foreground: 220 14% 96%;
 
-    --card: 222 15% 9%;
-    --card-foreground: 210 20% 98%;
+    --card: 222 13% 8.5%;
+    --card-foreground: 220 14% 96%;
 
-    --popover: 222 16% 11%;
-    --popover-foreground: 210 20% 98%;
+    --popover: 222 13% 10%;
+    --popover-foreground: 220 14% 96%;
 
     --primary: 24 86% 52%;
     --primary-foreground: 220 15% 7%;
 
-    --secondary: 219 13% 18%;
-    --secondary-foreground: 210 20% 98%;
+    --secondary: 222 10% 15%;
+    --secondary-foreground: 220 14% 96%;
 
-    --muted: 219 13% 18%;
-    --muted-foreground: 215 16% 72%;
+    --muted: 222 10% 14%;
+    --muted-foreground: 220 9% 66%;
 
-    --accent: 219 13% 18%;
-    --accent-foreground: 210 20% 98%;
+    --accent: 222 10% 15%;
+    --accent-foreground: 220 14% 96%;
 
     --destructive: 0 84% 60%;
     --destructive-foreground: 220 15% 7%;
 
-    --border: 215 15% 20%;
-    --input: 215 15% 20%;
+    --border: 222 9% 18%;
+    --input: 222 9% 20%;
     --ring: 24 86% 52%;
 
     /* Dark Mode Brand Scale */
@@ -265,15 +265,15 @@
     --info-600: 217 93% 60%;
 
     /* Dark Mode Background Hierarchy */
-    --bg-primary: 222 15% 9%;
-    --bg-secondary: 220 15% 7%;
-    --bg-tertiary: 219 13% 12%;
+    --bg-primary: 222 13% 8.5%;
+    --bg-secondary: 222 14% 6%;
+    --bg-tertiary: 222 10% 12%;
     --bg-overlay: 0 0% 0% / 0.7;
 
     /* Dark Mode Text Hierarchy */
-    --text-primary: 210 20% 98%;
-    --text-secondary: 215 20% 82%;
-    --text-tertiary: 215 16% 70%;
+    --text-primary: 220 14% 96%;
+    --text-secondary: 220 10% 78%;
+    --text-tertiary: 220 8% 62%;
     --text-inverse: 220 15% 7%;
   }
 
@@ -296,69 +296,36 @@
     background-color: hsl(var(--card));
     color: hsl(var(--card-foreground));
     border-radius: 0.75rem;
-    box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.06), 0 1px 2px -1px rgba(0, 0, 0, 0.06);
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.04);
     padding: 1.25rem;
     border: 1px solid hsl(var(--border));
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
+  /* Product UI keeps hover feedback functional: a border/background shift,
+     never a lift, scale or slide. Operators scan these surfaces all day. */
   .card-hover {
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: border-color 150ms ease, box-shadow 150ms ease;
   }
 
   .card-hover:hover {
-    box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.12), 0 8px 16px -4px rgba(0, 0, 0, 0.08);
-    border-color: hsl(var(--ring) / 0.3);
-    transform: translateY(-2px) scale(1.01);
-  }
-
-  .card-hover:active {
-    transform: translateY(-1px) scale(1.005);
-    box-shadow: 0 4px 12px -2px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+    border-color: hsl(var(--foreground) / 0.18);
+    box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.06);
   }
 
   .btn-hover {
-    transition: all 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease;
   }
 
-  .btn-hover:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  }
-
-  .btn-hover:active {
-    transform: translateY(0);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  }
-
-  .list-item-hover {
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .list-item-hover:hover {
-    background-color: hsl(var(--muted) / 0.5);
-    transform: translateX(3px);
-    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.1);
-  }
-
-  .nav-item-hover {
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  }
-
-  .nav-item-hover:hover {
-    background-color: hsl(var(--muted) / 0.4);
-    transform: translateX(6px);
-    border-radius: 8px;
-  }
-
+  .list-item-hover,
+  .nav-item-hover,
   .table-row-hover {
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: background-color 150ms ease;
   }
 
+  .list-item-hover:hover,
+  .nav-item-hover:hover,
   .table-row-hover:hover {
-    background-color: hsl(var(--muted) / 0.3);
-    transform: scale(1.005);
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    background-color: hsl(var(--muted) / 0.6);
   }
 
   /* Loading states */
@@ -378,65 +345,39 @@
     100% { background-position: -200% 0; }
   }
 
-  /* Spring animations */
-  .spring-bounce {
-    animation: spring-bounce 0.6s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-  }
-
-  .spring-in {
-    animation: spring-in 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  }
-
-  .elastic-bounce {
-    animation: elastic-bounce 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55);
-  }
-
-  @keyframes spring-bounce {
-    0% { transform: scale(0.3); opacity: 0; }
-    50% { transform: scale(1.05); }
-    70% { transform: scale(0.9); }
-    100% { transform: scale(1); opacity: 1; }
-  }
-
-  @keyframes spring-in {
-    0% { transform: scale(0.8) translateY(20px); opacity: 0; }
-    60% { transform: scale(1.05) translateY(-5px); opacity: 0.8; }
-    100% { transform: scale(1) translateY(0); opacity: 1; }
-  }
-
-  @keyframes elastic-bounce {
-    0% { transform: scale(0) rotate(-180deg); opacity: 0; }
-    30% { transform: scale(1.1) rotate(-10deg); opacity: 0.7; }
-    60% { transform: scale(0.95) rotate(5deg); opacity: 0.9; }
-    100% { transform: scale(1) rotate(0deg); opacity: 1; }
+  /* Legacy entrance classes — kept as no-ops so existing markup is calm. */
+  .spring-bounce,
+  .spring-in,
+  .elastic-bounce,
+  .spring-hover {
+    animation: none;
   }
 
   /* Spacing utilities */
   .section-gap {
-    padding-top: 2rem;
-    padding-bottom: 2rem;
-  }
-
-  @media (min-width: 768px) {
-    .section-gap {
-      padding-top: 2.5rem;
-      padding-bottom: 2.5rem;
-    }
-  }
-
-  @media (min-width: 1024px) {
-    .section-gap {
-      padding-top: 3rem;
-      padding-bottom: 3rem;
-    }
+    padding-top: 1.5rem;
+    padding-bottom: 1.5rem;
   }
 
   .content-gap {
-    margin-top: 1.5rem;
+    margin-top: 1rem;
+  }
+
+  /* Page rhythm helpers used by older screens. */
+  .content-width {
+    width: 100%;
+  }
+
+  .space-section {
+    margin-bottom: 1.5rem;
+  }
+
+  .space-component > :not([hidden]) ~ :not([hidden]) {
+    margin-top: 1rem;
   }
 
   .content-gap > :not([hidden]) ~ :not([hidden]) {
-    margin-top: 1.5rem;
+    margin-top: 1rem;
   }
 
   /* Custom scrollbar */
@@ -496,4 +437,17 @@
 }
 @media (min-width: 1280px) {
   .mui-grid-item { grid-column: var(--gs-xl, var(--gs-lg, var(--gs-md, var(--gs-sm, var(--gs-xs, auto))))); }
+}
+
+/* Honour reduced-motion everywhere: no entrance animations, instant
+   transitions. Skeleton shimmer degrades to a static fill. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
