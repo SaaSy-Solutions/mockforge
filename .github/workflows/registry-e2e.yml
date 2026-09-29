@@ -262,6 +262,7 @@ jobs:
             --test cloud_conformance_e2e \
             --test paid_flow_e2e \
             --test hosted_mock_overrides_e2e \
+            --test audit_integrity_e2e \
             -- --ignored --nocapture --test-threads=1
 
       - name: Dump registry-server log on failure
