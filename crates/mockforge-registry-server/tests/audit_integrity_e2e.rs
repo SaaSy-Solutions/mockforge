@@ -168,11 +168,13 @@ async fn gdpr_erase_succeeds_for_user_with_audit_rows_and_chain_survives() {
     let org_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
     let tag = user_id.simple().to_string();
+    let username = format!("gdpr-{tag}");
+    let email = format!("gdpr-{tag}@example.test");
 
     sqlx::query("INSERT INTO users (id, username, email, password_hash) VALUES ($1, $2, $3, 'x')")
         .bind(user_id)
-        .bind(format!("gdpr-{tag}"))
-        .bind(format!("gdpr-{tag}@example.test"))
+        .bind(&username)
+        .bind(&email)
         .execute(&pool)
         .await
         .expect("seed user");
@@ -219,4 +221,35 @@ async fn gdpr_erase_succeeds_for_user_with_audit_rows_and_chain_survives() {
         AuditLog::verify_chain(&pool, org_id).await.expect("verify_chain"),
         "hash chain must still verify after the user is erased"
     );
+
+    // The handler's own post-erasure audit row must not reintroduce the
+    // erased user's email (or username): it identifies them by user_id only.
+    mockforge_registry_server::handlers::gdpr::record_erasure_audit(
+        &store,
+        user_id,
+        Some("smoke".to_string()),
+        0,
+    )
+    .await;
+
+    let (description, metadata): (String, Option<serde_json::Value>) = sqlx::query_as(
+        "SELECT description, metadata FROM audit_logs \
+         WHERE user_id = $1 AND metadata->>'action' = 'gdpr_data_erasure'",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .expect("erasure audit row must be recorded");
+
+    let metadata = metadata.expect("erasure row has metadata").to_string();
+    for (field, text) in [("description", &description), ("metadata", &metadata)] {
+        assert!(!text.contains(&email), "erasure {field} must not contain the email: {text}");
+        assert!(!text.contains('@'), "erasure {field} must not contain an email: {text}");
+        assert!(
+            !text.contains(&username),
+            "erasure {field} must not contain the username: {text}"
+        );
+    }
+    assert!(description.contains(&user_id.to_string()));
+    assert!(metadata.contains(&user_id.to_string()));
 }
