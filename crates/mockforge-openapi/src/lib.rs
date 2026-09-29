@@ -44,7 +44,7 @@ pub mod validation;
 
 pub use custom_fixture::CustomFixtureLoader;
 pub use request_fingerprint::RequestFingerprint;
-pub use response_rewriter::ResponseRewriter;
+pub use response_rewriter::{OverrideHook, OverrideRequest, ResponseRewriter};
 
 /// `ResponseSelectionMode` / `ResponseSelector` live in
 /// [`mockforge_foundation::response_selection`] — it's a generic selection

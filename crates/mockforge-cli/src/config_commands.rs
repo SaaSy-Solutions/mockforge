@@ -899,10 +899,17 @@ pub(crate) fn get_env_var_definitions() -> Vec<EnvVarDef> {
             required: false,
         },
         EnvVarDef {
-            name: "MOCKFORGE_OVERRIDES_ENABLED",
+            name: "MOCKFORGE_HTTP_OVERRIDES_GLOB",
             category: "traffic",
-            default: "false",
-            description: "Enable response overrides",
+            default: "",
+            description: "Comma-separated globs of YAML response-override rule files",
+            required: false,
+        },
+        EnvVarDef {
+            name: "MOCKFORGE_HTTP_OVERRIDES",
+            category: "traffic",
+            default: "",
+            description: "JSON array of response-override rules",
             required: false,
         },
         EnvVarDef {

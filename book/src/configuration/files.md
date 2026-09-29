@@ -290,10 +290,11 @@ data:
 
 ## Advanced Configuration
 
-### Request/Response Overrides
+### Response Overrides
+
+Patch generated responses without editing the spec. See [Response Override Rules](../user-guide/http-mocking/custom-responses.md#response-override-rules) for targets, conditions, and the runtime API.
 
 ```yaml
-# YAML patch overrides for requests/responses
 overrides:
   - targets: ["operation:getUser"]     # Target specific operations
     patch:

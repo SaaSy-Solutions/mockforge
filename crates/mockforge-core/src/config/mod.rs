@@ -96,6 +96,11 @@ pub struct ServerConfig {
     /// Deceptive deploy configuration for production-like mock APIs
     #[serde(default)]
     pub deceptive_deploy: DeceptiveDeployConfig,
+    /// Response override rules. Applied before rules from
+    /// `MOCKFORGE_HTTP_OVERRIDES_GLOB` and `MOCKFORGE_HTTP_OVERRIDES`, and
+    /// replaceable at runtime through the admin API.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub overrides: Vec<crate::overrides::OverrideRule>,
     /// Behavioral cloning configuration
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub behavioral_cloning: Option<BehavioralCloningConfig>,

@@ -38,12 +38,7 @@ To enable these overrides, set the `MOCKFORGE_HTTP_OVERRIDES_GLOB` environment v
 export MOCKFORGE_HTTP_OVERRIDES_GLOB="overrides/apiary-pro-fixes.yaml"
 ```
 
-Or add to your `mockforge.yaml` configuration file:
-
-```yaml
-http:
-  overrides_glob: "overrides/apiary-pro-fixes.yaml"
-```
+Rules can also live in `mockforge.yaml` under `overrides:`, or be changed at runtime through the admin API. See the book's [Response Override Rules](../book/src/user-guide/http-mocking/custom-responses.md#response-override-rules).
 
 ## File Serving
 
