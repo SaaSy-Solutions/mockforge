@@ -244,7 +244,7 @@ const es: Dictionary = {
   'shell.group.actions': 'Acciones',
   'shell.action.searchLogs': 'Buscar en registros',
   'shell.action.searchServices': 'Buscar en servicios',
-  'shell.action.toggleTheme': 'Alternar tema claro / oscuro',
+  'shell.action.toggleTheme': 'Cambiar modo claro / oscuro',
   'shell.action.refresh': 'Actualizar datos',
   'shell.action.toggleSidebar': 'Contraer / expandir barra lateral',
   'shell.action.help': 'Ayuda y atajos de teclado',
