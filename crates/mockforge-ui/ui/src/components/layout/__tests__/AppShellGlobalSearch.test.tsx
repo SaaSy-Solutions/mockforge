@@ -45,10 +45,11 @@ describe('AppShell global search', () => {
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: 'override' } });
 
-    const options = screen.getAllByRole('option').map((o) => o.id);
-    expect(options).toEqual(
-      expect.arrayContaining(['global-search-page-fixtures', 'global-search-page-config']),
-    );
+    const pages = screen
+      .getAllByRole('option')
+      .map((o) => o.id)
+      .filter((id) => id.startsWith('global-search-page-'));
+    expect(pages[0]).toBe('global-search-page-overrides');
   });
 
   it('says so when nothing matches', () => {
