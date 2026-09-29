@@ -1,4 +1,3 @@
-import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -18,7 +17,7 @@ function renderShell() {
   render(
     <I18nProvider>
       <MemoryRouter initialEntries={['/dashboard']}>
-        <AppShell>
+        <AppShell onRefresh={() => {}}>
           <div />
         </AppShell>
         <LocationProbe />
