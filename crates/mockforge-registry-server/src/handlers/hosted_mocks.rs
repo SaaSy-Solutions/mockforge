@@ -759,6 +759,10 @@ pub async fn redeploy_deployment(
                     env.insert("MOCKFORGE_CONFIG".to_string(), config_str);
                 }
                 env.insert("PORT".to_string(), "3000".to_string());
+                env.insert("MOCKFORGE_ADMIN_ENABLED".to_string(), "true".to_string());
+                env.extend(crate::handlers::hosted_mock_overrides::overrides_env(
+                    &updated_deployment,
+                ));
 
                 if let Some(ref spec_url) = updated_deployment.openapi_spec_url {
                     env.insert("MOCKFORGE_OPENAPI_SPEC_URL".to_string(), spec_url.clone());

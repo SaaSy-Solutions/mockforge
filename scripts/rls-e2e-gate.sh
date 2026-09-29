@@ -123,6 +123,7 @@ E2E_TESTS=(
   --test cloud_ai_contract_diff_e2e
   --test cloud_conformance_e2e
   --test paid_flow_e2e
+  --test hosted_mock_overrides_e2e
 )
 
 # Server + test env. Values are literals from registry-e2e.yml; none are secret.
