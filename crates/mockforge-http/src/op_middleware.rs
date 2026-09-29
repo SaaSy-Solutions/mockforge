@@ -1,15 +1,13 @@
-//! Middleware/utilities to apply latency/failure and overrides per operation.
+//! Middleware/utilities to apply latency and failure injection per operation.
 use axum::body::Body;
 use axum::extract::State;
 use axum::http::{Request, StatusCode};
 use axum::middleware::Next;
 use axum::response::Response;
-use serde_json::Value;
 
 use crate::latency_profiles::LatencyProfiles;
 use mockforge_chaos::core_failure_injection::FailureInjector;
 use mockforge_chaos::core_traffic_shaping::TrafficShaper;
-use mockforge_core::Overrides;
 
 /// Metadata for the current OpenAPI operation
 #[derive(Clone)]
@@ -27,14 +25,10 @@ pub struct OperationMeta {
 pub struct Shared {
     /// Latency profiles for request simulation
     pub profiles: LatencyProfiles,
-    /// Response overrides configuration
-    pub overrides: Overrides,
     /// Optional failure injector for chaos engineering
     pub failure_injector: Option<FailureInjector>,
     /// Optional traffic shaper for bandwidth/loss simulation
     pub traffic_shaper: Option<TrafficShaper>,
-    /// Whether overrides are enabled
-    pub overrides_enabled: bool,
     /// Whether traffic shaping is enabled
     pub traffic_shaping_enabled: bool,
 }
@@ -158,25 +152,6 @@ pub async fn fault_then_next(req: Request<Body>, next: Next) -> Response {
     response
 }
 
-/// Apply response overrides to a JSON body based on operation metadata
-///
-/// # Arguments
-/// * `shared` - Shared middleware state containing override configuration
-/// * `op` - Optional operation metadata for override matching
-/// * `body` - JSON response body to modify in-place
-pub fn apply_overrides(shared: &Shared, op: Option<&OperationMeta>, body: &mut Value) {
-    if shared.overrides_enabled {
-        if let Some(op) = op {
-            shared.overrides.apply(
-                &op.id,
-                &op.tags.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
-                &op.path,
-                body,
-            );
-        }
-    }
-}
-
 /// Calculate the approximate size of an HTTP request for bandwidth throttling
 fn calculate_request_size<B>(req: &Request<B>) -> u64 {
     let mut size = 0u64;
@@ -246,7 +221,6 @@ fn calculate_response_size(res: &Response) -> u64 {
 mod tests {
     use super::*;
     use axum::http::{Request, Response, StatusCode};
-    use serde_json::json;
 
     #[test]
     fn test_operation_meta_creation() {
@@ -265,14 +239,11 @@ mod tests {
     fn test_shared_creation() {
         let shared = Shared {
             profiles: LatencyProfiles::default(),
-            overrides: Overrides::default(),
             failure_injector: None,
             traffic_shaper: None,
-            overrides_enabled: false,
             traffic_shaping_enabled: false,
         };
 
-        assert!(!shared.overrides_enabled);
         assert!(!shared.traffic_shaping_enabled);
         assert!(shared.failure_injector.is_none());
         assert!(shared.traffic_shaper.is_none());
@@ -283,86 +254,12 @@ mod tests {
         let failure_injector = FailureInjector::new(None, true);
         let shared = Shared {
             profiles: LatencyProfiles::default(),
-            overrides: Overrides::default(),
             failure_injector: Some(failure_injector),
             traffic_shaper: None,
-            overrides_enabled: false,
             traffic_shaping_enabled: false,
         };
 
         assert!(shared.failure_injector.is_some());
-    }
-
-    #[test]
-    fn test_apply_overrides_disabled() {
-        let shared = Shared {
-            profiles: LatencyProfiles::default(),
-            overrides: Overrides::default(),
-            failure_injector: None,
-            traffic_shaper: None,
-            overrides_enabled: false,
-            traffic_shaping_enabled: false,
-        };
-
-        let op = OperationMeta {
-            id: "getUser".to_string(),
-            tags: vec![],
-            path: "/users".to_string(),
-        };
-
-        let mut body = json!({"name": "John"});
-        let original = body.clone();
-
-        apply_overrides(&shared, Some(&op), &mut body);
-
-        // Should not modify body when overrides are disabled
-        assert_eq!(body, original);
-    }
-
-    #[test]
-    fn test_apply_overrides_enabled_no_rules() {
-        let shared = Shared {
-            profiles: LatencyProfiles::default(),
-            overrides: Overrides::default(),
-            failure_injector: None,
-            traffic_shaper: None,
-            overrides_enabled: true,
-            traffic_shaping_enabled: false,
-        };
-
-        let op = OperationMeta {
-            id: "getUser".to_string(),
-            tags: vec![],
-            path: "/users".to_string(),
-        };
-
-        let mut body = json!({"name": "John"});
-        let original = body.clone();
-
-        apply_overrides(&shared, Some(&op), &mut body);
-
-        // Should not modify body when there are no override rules
-        assert_eq!(body, original);
-    }
-
-    #[test]
-    fn test_apply_overrides_with_none_operation() {
-        let shared = Shared {
-            profiles: LatencyProfiles::default(),
-            overrides: Overrides::default(),
-            failure_injector: None,
-            traffic_shaper: None,
-            overrides_enabled: true,
-            traffic_shaping_enabled: false,
-        };
-
-        let mut body = json!({"name": "John"});
-        let original = body.clone();
-
-        apply_overrides(&shared, None, &mut body);
-
-        // Should not modify body when operation is None
-        assert_eq!(body, original);
     }
 
     #[test]
@@ -433,16 +330,13 @@ mod tests {
     fn test_shared_clone() {
         let shared = Shared {
             profiles: LatencyProfiles::default(),
-            overrides: Overrides::default(),
             failure_injector: None,
             traffic_shaper: None,
-            overrides_enabled: true,
             traffic_shaping_enabled: true,
         };
 
         let cloned = shared.clone();
 
-        assert_eq!(shared.overrides_enabled, cloned.overrides_enabled);
         assert_eq!(shared.traffic_shaping_enabled, cloned.traffic_shaping_enabled);
     }
 

@@ -360,10 +360,8 @@ pub mod network_profiles;
 /// OData function call URI rewrite middleware
 pub mod odata_rewrite;
 pub mod openapi;
-/// Core's concrete [`mockforge_openapi::response_rewriter::ResponseRewriter`]
-/// implementation wrapping core's `templating::expand_tokens` +
-/// [`overrides::Overrides`]. Used by the OpenAPI router internally; consumer
-/// code rarely constructs this directly.
+/// Core's implementations of the OpenAPI router's response hooks: template
+/// expansion (`CoreResponseRewriter`) and override rules (`SharedOverrides`).
 pub mod openapi_rewriter;
 /// `openapi_routes` was moved to [`mockforge_openapi::openapi_routes`];
 /// re-exported here so every existing
@@ -553,7 +551,9 @@ pub use output_control::{
     apply_banner, apply_extension, apply_file_naming_template, build_file_naming_context,
     process_generated_file, BarrelGenerator, FileNamingContext, GeneratedFile,
 };
-pub use overrides::{OverrideMode, OverrideRule, Overrides, PatchOp};
+pub use overrides::{
+    OverrideMode, OverrideRule, Overrides, OverridesError, PatchOp, SharedOverrides,
+};
 pub use pillars::{Pillar, PillarMetadata};
 pub use priority_handler::{
     CustomFixtureStep, FailureInjectionStep, GenerationResult, MockGenerator, MockResponse,

@@ -791,36 +791,14 @@ pub async fn build_router_with_multi_tenant(
                 let extract_duration = extract_start.elapsed();
                 debug!("Extracted route information (took {:?})", extract_duration);
 
-                // Measure overrides loading
-                let overrides = if std::env::var("MOCKFORGE_HTTP_OVERRIDES_GLOB").is_ok() {
-                    tracing::debug!("Loading overrides from environment variable");
-                    let overrides_start = Instant::now();
-                    match mockforge_core::Overrides::load_from_globs(&[]).await {
-                        Ok(overrides) => {
-                            let overrides_duration = overrides_start.elapsed();
-                            info!(
-                                "Loaded {} override rules (took {:?})",
-                                overrides.rules().len(),
-                                overrides_duration
-                            );
-                            Some(overrides)
-                        }
-                        Err(e) => {
-                            tracing::warn!("Failed to load overrides: {}", e);
-                            None
-                        }
-                    }
-                } else {
-                    None
-                };
-
-                // Measure router building
+                let registry = registry.with_overrides(Arc::new(
+                    mockforge_core::SharedOverrides::load(Vec::new()).await,
+                ));
                 let router_build_start = Instant::now();
-                let overrides_enabled = overrides.is_some();
                 let response_rewriter: Option<
                     std::sync::Arc<dyn mockforge_openapi::response_rewriter::ResponseRewriter>,
                 > = Some(std::sync::Arc::new(
-                    mockforge_core::openapi_rewriter::CoreResponseRewriter::new(overrides),
+                    mockforge_core::openapi_rewriter::CoreResponseRewriter::new(),
                 ));
                 let openapi_router = if let Some(mockai_instance) = &mockai {
                     tracing::debug!("Building router with MockAI support");
@@ -831,19 +809,17 @@ pub async fn build_router_with_multi_tenant(
                 } else if let Some(failure_config) = &failure_config {
                     tracing::debug!("Building router with failure injection and overrides");
                     let failure_injector = FailureInjector::new(Some(failure_config.clone()), true);
-                    registry.build_router_with_injectors_and_overrides(
+                    registry.build_router_with_injectors_and_rewriter(
                         LatencyInjector::default(),
                         Some(failure_injector),
                         response_rewriter,
-                        overrides_enabled,
                     )
                 } else {
                     tracing::debug!("Building router with overrides");
-                    registry.build_router_with_injectors_and_overrides(
+                    registry.build_router_with_injectors_and_rewriter(
                         LatencyInjector::default(),
                         None,
                         response_rewriter,
-                        overrides_enabled,
                     )
                 };
                 let router_build_duration = router_build_start.elapsed();
@@ -1711,6 +1687,7 @@ pub async fn build_router_with_chains(
         None, // mockai
         None, // deceptive_deploy_config
         None, // proxy_config
+        mockforge_core::SharedOverrides::load(Vec::new()).await,
     )
     .await
 }
@@ -1774,10 +1751,10 @@ pub async fn build_router_with_chains_and_multi_tenant(
     mockai: Option<Arc<RwLock<mockforge_core::intelligent_behavior::MockAI>>>,
     deceptive_deploy_config: Option<mockforge_core::config::DeceptiveDeployConfig>,
     proxy_config: Option<mockforge_proxy::config::ProxyConfig>,
+    overrides: mockforge_core::SharedOverrides,
 ) -> Router {
     use crate::latency_profiles::LatencyProfiles;
     use crate::op_middleware::Shared;
-    use mockforge_core::Overrides;
 
     // Extract template expansion setting before options is moved (used in OpenAPI routes and custom routes)
     let template_expand =
@@ -1789,10 +1766,8 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     let _shared = Shared {
         profiles: LatencyProfiles::default(),
-        overrides: Overrides::default(),
         failure_injector: None,
         traffic_shaper,
-        overrides_enabled: false,
         traffic_shaping_enabled,
     };
 
@@ -1846,6 +1821,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
                         registry = registry.with_custom_fixture_loader(Arc::new(custom_loader));
                     }
                 }
+                registry = registry.with_overrides(Arc::new(overrides.clone()));
 
                 if registry
                     .routes()
