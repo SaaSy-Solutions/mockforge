@@ -65,7 +65,7 @@ impl ApiToken {
     /// Create a new API token
     /// Returns the full token (only shown once) and the ApiToken record
     pub async fn create(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         user_id: Option<Uuid>,
         name: &str,
@@ -104,7 +104,7 @@ impl ApiToken {
         .bind(&hashed_token)
         .bind(&scope_strings)
         .bind(expires_at)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await?;
 
         Ok((full_token, token))
@@ -112,7 +112,7 @@ impl ApiToken {
 
     /// Find token by prefix (for listing)
     pub async fn find_by_prefix(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         prefix: &str,
     ) -> sqlx::Result<Option<Self>> {
@@ -121,30 +121,39 @@ impl ApiToken {
         )
         .bind(org_id)
         .bind(prefix)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
     /// Find token by ID
-    pub async fn find_by_id(pool: &sqlx::PgPool, token_id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        token_id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM api_tokens WHERE id = $1")
             .bind(token_id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// Get all tokens for an organization
-    pub async fn find_by_org(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn find_by_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM api_tokens WHERE org_id = $1 ORDER BY created_at DESC",
         )
         .bind(org_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     /// Verify token and return the token record if valid
-    pub async fn verify_token(pool: &sqlx::PgPool, token: &str) -> sqlx::Result<Option<Self>> {
+    pub async fn verify_token(
+        conn: &mut sqlx::PgConnection,
+        token: &str,
+    ) -> sqlx::Result<Option<Self>> {
         // Token format: mfx_<base64>
         if !token.starts_with("mfx_") {
             return Ok(None);
@@ -159,7 +168,7 @@ impl ApiToken {
             "SELECT * FROM api_tokens WHERE token_prefix = $1 AND (expires_at IS NULL OR expires_at > NOW())",
         )
         .bind(&prefix)
-        .fetch_all(pool)
+        .fetch_all(&mut *conn)
         .await?;
 
         // Check each candidate
@@ -168,7 +177,7 @@ impl ApiToken {
                 // Update last_used_at
                 sqlx::query("UPDATE api_tokens SET last_used_at = NOW() WHERE id = $1")
                     .bind(candidate.id)
-                    .execute(pool)
+                    .execute(&mut *conn)
                     .await?;
 
                 return Ok(Some(candidate));
@@ -179,10 +188,10 @@ impl ApiToken {
     }
 
     /// Delete token
-    pub async fn delete(pool: &sqlx::PgPool, token_id: Uuid) -> sqlx::Result<()> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, token_id: Uuid) -> sqlx::Result<()> {
         sqlx::query("DELETE FROM api_tokens WHERE id = $1")
             .bind(token_id)
-            .execute(pool)
+            .execute(executor)
             .await?;
 
         Ok(())
@@ -191,13 +200,13 @@ impl ApiToken {
     /// Rotate a token (create new token with same scopes, optionally delete old)
     /// Returns the new full token (only shown once) and the new ApiToken record
     pub async fn rotate(
-        pool: &sqlx::PgPool,
+        conn: &mut sqlx::PgConnection,
         token_id: Uuid,
         new_name: Option<&str>,
         delete_old: bool,
     ) -> sqlx::Result<(String, Self, Option<Self>)> {
         // Get old token
-        let old_token = Self::find_by_id(pool, token_id)
+        let old_token = Self::find_by_id(&mut *conn, token_id)
             .await?
             .ok_or_else(|| sqlx::Error::RowNotFound)?;
 
@@ -207,7 +216,7 @@ impl ApiToken {
 
         let new_name = new_name.unwrap_or(&old_token.name);
         let (new_full_token, new_token) = Self::create(
-            pool,
+            &mut *conn,
             old_token.org_id,
             old_token.user_id,
             new_name,
@@ -219,7 +228,7 @@ impl ApiToken {
         // Optionally delete old token
         let deleted_token = if delete_old {
             let deleted = old_token.clone();
-            Self::delete(pool, token_id).await?;
+            Self::delete(&mut *conn, token_id).await?;
             Some(deleted)
         } else {
             None
@@ -230,7 +239,7 @@ impl ApiToken {
 
     /// Find tokens that need rotation (older than N days)
     pub async fn find_tokens_needing_rotation(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Option<Uuid>,
         days_old: i64,
     ) -> sqlx::Result<Vec<Self>> {
@@ -260,7 +269,7 @@ impl ApiToken {
             .bind(cutoff)
         };
 
-        query.fetch_all(pool).await
+        query.fetch_all(executor).await
     }
 }
 

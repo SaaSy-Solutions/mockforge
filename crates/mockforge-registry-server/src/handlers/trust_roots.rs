@@ -34,6 +34,7 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{permission_check::PermissionChecker, permissions::Permission, AuthUser},
+    store::with_org_context,
     AppState,
 };
 
@@ -127,9 +128,10 @@ pub async fn list_trust_roots(
 ) -> ApiResult<Json<ListTrustRootsResponse>> {
     authorize(&state, user_id, org_id).await?;
 
-    let rows = OrganizationTrustRoot::list_by_org(state.db.pool(), org_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let rows = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(OrganizationTrustRoot::list_by_org(&mut **tx, org_id).await?) })
+    })
+    .await?;
 
     Ok(Json(ListTrustRootsResponse {
         trust_roots: rows.into_iter().map(TrustRootResponse::from).collect(),
@@ -149,17 +151,21 @@ pub async fn create_trust_root(
     let name = validate_name(&request.name)?;
     let public_key = decode_public_key(&request.public_key_b64)?;
 
-    let row = OrganizationTrustRoot::create(
-        state.db.pool(),
-        CreateOrganizationTrustRoot {
-            org_id,
-            public_key: &public_key,
-            name: &name,
-            created_by: Some(user_id),
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let row = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(OrganizationTrustRoot::create(
+                &mut **tx,
+                CreateOrganizationTrustRoot {
+                    org_id,
+                    public_key: &public_key,
+                    name: &name,
+                    created_by: Some(user_id),
+                },
+            )
+            .await?)
+        })
+    })
+    .await?;
 
     let (ip, ua) = client_metadata(&headers);
     state
@@ -196,10 +202,11 @@ pub async fn revoke_trust_root(
     // "already revoked" — the SQL UPDATE in `OrganizationTrustRoot::revoke`
     // returns `None` for either of the latter two, which we want to treat
     // as 409 (already revoked) rather than 404.
-    let existing = OrganizationTrustRoot::find_by_id(state.db.pool(), root_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Trust root not found".into()))?;
+    let existing = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(OrganizationTrustRoot::find_by_id(&mut **tx, root_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Trust root not found".into()))?;
 
     if existing.org_id != org_id {
         // Cross-org access surfaces as not-found to avoid leaking
@@ -212,14 +219,19 @@ pub async fn revoke_trust_root(
 
     let reason = sanitize_reason(request.and_then(|Json(r)| r.reason).as_deref())?;
 
-    let row = OrganizationTrustRoot::revoke(
-        state.db.pool(),
-        root_id,
-        reason.as_deref(),
-        Some(user_id),
-    )
-    .await
-    .map_err(ApiError::Database)?
+    let revoke_reason = reason.clone();
+    let row = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(OrganizationTrustRoot::revoke(
+                &mut **tx,
+                root_id,
+                revoke_reason.as_deref(),
+                Some(user_id),
+            )
+            .await?)
+        })
+    })
+    .await?
     // Lost a race with another concurrent revoke — same end-state as a
     // double-revoke, surface as 409 too.
     .ok_or_else(|| ApiError::Conflict("Trust root is already revoked".into()))?;

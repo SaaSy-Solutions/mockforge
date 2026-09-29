@@ -61,7 +61,9 @@ pub struct OperatorIdentity {
 /// endpoint. Operators auditing a past rotation can replay the
 /// verification step from this row alone.
 pub async fn audited_begin_handover<C, N>(
-    pool: &PgPool,
+    // Owner pool: append-only audit write for a platform-operator action
+    // (#1087). The row's org is explicit; RLS must not be able to drop it.
+    owner_pool: &PgPool,
     operator: &OperatorIdentity,
     state_machine: &RotationStateMachine<C>,
     next: &N,
@@ -83,7 +85,7 @@ where
         "to_public_key_b64": event.payload.to_public_key_b64,
     });
     record_audit_event(
-        pool,
+        owner_pool,
         operator.org_id,
         Some(operator.user_id),
         AuditEventType::PlatformSigningRotationStarted,
@@ -105,7 +107,9 @@ where
 /// already run `aws kms disable-key` per the runbook; this just records
 /// the registry observed the retirement and updates in-memory state.
 pub async fn audited_retire_old<C: PlatformSigner>(
-    pool: &PgPool,
+    // Owner pool: append-only audit write for a platform-operator action
+    // (#1087). The row's org is explicit; RLS must not be able to drop it.
+    owner_pool: &PgPool,
     operator: &OperatorIdentity,
     state_machine: &RotationStateMachine<C>,
 ) -> Result<(), RotationError> {
@@ -119,7 +123,7 @@ pub async fn audited_retire_old<C: PlatformSigner>(
         })
     });
     record_audit_event(
-        pool,
+        owner_pool,
         operator.org_id,
         Some(operator.user_id),
         AuditEventType::PlatformSigningKeyRetired,
@@ -140,7 +144,9 @@ pub async fn audited_retire_old<C: PlatformSigner>(
 /// follow-up (notify hosted-mock owners, provision a fresh key, run
 /// [`audited_begin_handover`] once it's available).
 pub async fn audited_emergency_revoke<C: PlatformSigner>(
-    pool: &PgPool,
+    // Owner pool: append-only audit write for a platform-operator action
+    // (#1087). The row's org is explicit; RLS must not be able to drop it.
+    owner_pool: &PgPool,
     operator: &OperatorIdentity,
     state_machine: &RotationStateMachine<C>,
     reason: &str,
@@ -152,7 +158,7 @@ pub async fn audited_emergency_revoke<C: PlatformSigner>(
         "key_id_revoked": current_key_id,
     });
     record_audit_event(
-        pool,
+        owner_pool,
         operator.org_id,
         Some(operator.user_id),
         AuditEventType::PlatformSigningKeyRevoked,

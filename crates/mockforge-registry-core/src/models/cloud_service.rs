@@ -25,7 +25,7 @@ pub struct CloudService {
 impl CloudService {
     #[allow(clippy::too_many_arguments)]
     pub async fn create(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         workspace_id: Option<Uuid>,
         created_by: Uuid,
@@ -46,28 +46,34 @@ impl CloudService {
         .bind(description)
         .bind(base_url)
         .bind(created_by)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM services WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
-    pub async fn find_by_org(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn find_by_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM services WHERE org_id = $1 ORDER BY created_at DESC",
         )
         .bind(org_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     pub async fn find_by_workspace(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         workspace_id: Uuid,
     ) -> sqlx::Result<Vec<Self>> {
@@ -78,7 +84,7 @@ impl CloudService {
         )
         .bind(org_id)
         .bind(workspace_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
@@ -88,7 +94,7 @@ impl CloudService {
     /// (unassigns), and `Some(Some(id))` assigns to workspace `id`.
     #[allow(clippy::too_many_arguments)]
     pub async fn update(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         name: Option<&str>,
         description: Option<&str>,
@@ -125,12 +131,15 @@ impl CloudService {
         .bind(routes)
         .bind(workspace_value)
         .bind(update_workspace)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
-    pub async fn delete(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<()> {
-        sqlx::query("DELETE FROM services WHERE id = $1").bind(id).execute(pool).await?;
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<()> {
+        sqlx::query("DELETE FROM services WHERE id = $1")
+            .bind(id)
+            .execute(executor)
+            .await?;
         Ok(())
     }
 }

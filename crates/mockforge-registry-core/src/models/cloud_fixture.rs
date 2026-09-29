@@ -32,7 +32,7 @@ pub struct CloudFixture {
 impl CloudFixture {
     #[allow(clippy::too_many_arguments)]
     pub async fn create(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         created_by: Uuid,
         name: &str,
@@ -72,11 +72,14 @@ impl CloudFixture {
         .bind(tags_value)
         .bind(route_path)
         .bind(created_by)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>(
             r#"
             SELECT f.*, u.username AS created_by_username
@@ -86,14 +89,14 @@ impl CloudFixture {
             "#,
         )
         .bind(id)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
     /// List fixtures in an organization, optionally filtered to a single
     /// workspace. Pass `workspace_id = None` to return everything in the org.
     pub async fn find_by_org(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         workspace_id: Option<Uuid>,
     ) -> sqlx::Result<Vec<Self>> {
@@ -109,7 +112,7 @@ impl CloudFixture {
         )
         .bind(org_id)
         .bind(workspace_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
@@ -118,7 +121,7 @@ impl CloudFixture {
     /// reassigns it.
     #[allow(clippy::too_many_arguments)]
     pub async fn update(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         name: Option<&str>,
         description: Option<&str>,
@@ -171,19 +174,22 @@ impl CloudFixture {
         .bind(route_path)
         .bind(workspace_set)
         .bind(workspace_value)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
-    pub async fn delete(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<()> {
-        sqlx::query("DELETE FROM fixtures WHERE id = $1").bind(id).execute(pool).await?;
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<()> {
+        sqlx::query("DELETE FROM fixtures WHERE id = $1")
+            .bind(id)
+            .execute(executor)
+            .await?;
         Ok(())
     }
 
     /// Bulk delete by id, scoped to an org for safety. Returns the IDs that
     /// were actually deleted (filters out any not in the org or already gone).
     pub async fn delete_many(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         ids: &[Uuid],
     ) -> sqlx::Result<Vec<Uuid>> {
@@ -199,7 +205,7 @@ impl CloudFixture {
         )
         .bind(ids)
         .bind(org_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await?;
         Ok(rows.into_iter().map(|(id,)| id).collect())
     }

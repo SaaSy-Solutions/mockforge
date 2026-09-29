@@ -22,7 +22,7 @@ pub struct SAMLAssertionId {
 impl SAMLAssertionId {
     /// Check if an assertion ID has been used (replay attack prevention)
     pub async fn is_used(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         assertion_id: &str,
         org_id: Uuid,
     ) -> sqlx::Result<bool> {
@@ -31,7 +31,7 @@ impl SAMLAssertionId {
         )
         .bind(assertion_id)
         .bind(org_id)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await?;
 
         Ok(count.0 > 0)
@@ -39,7 +39,7 @@ impl SAMLAssertionId {
 
     /// Find assertion ID record by ID and org
     pub async fn find(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         assertion_id: &str,
         org_id: Uuid,
     ) -> sqlx::Result<Option<Self>> {
@@ -48,13 +48,13 @@ impl SAMLAssertionId {
         )
         .bind(assertion_id)
         .bind(org_id)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
     /// Record a used assertion ID to prevent replay attacks
     pub async fn record_used(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         assertion_id: &str,
         org_id: Uuid,
         user_id: Option<Uuid>,
@@ -75,17 +75,17 @@ impl SAMLAssertionId {
         .bind(name_id)
         .bind(issued_at)
         .bind(expires_at)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Cleanup expired assertion IDs (older than 24 hours)
     /// Should be called periodically via a scheduled task
-    pub async fn cleanup_expired(pool: &sqlx::PgPool) -> sqlx::Result<u64> {
+    pub async fn cleanup_expired(executor: impl sqlx::PgExecutor<'_>) -> sqlx::Result<u64> {
         let result = sqlx::query(
             "DELETE FROM saml_assertion_ids WHERE expires_at < NOW() - INTERVAL '24 hours'",
         )
-        .execute(pool)
+        .execute(executor)
         .await?;
 
         Ok(result.rows_affected())

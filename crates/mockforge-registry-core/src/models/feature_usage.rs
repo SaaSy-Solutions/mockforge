@@ -66,7 +66,7 @@ pub struct FeatureUsage {
 impl FeatureUsage {
     /// Record a feature usage event
     pub async fn record(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         user_id: Option<Uuid>,
         feature: FeatureType,
@@ -82,14 +82,14 @@ impl FeatureUsage {
         .bind(user_id)
         .bind(feature)
         .bind(metadata)
-        .execute(pool)
+        .execute(executor)
         .await?;
         Ok(())
     }
 
     /// Count feature usage for an org in a time period
     pub async fn count_by_org(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         feature: FeatureType,
         days: i64,
@@ -104,14 +104,14 @@ impl FeatureUsage {
         .bind(org_id)
         .bind(feature)
         .bind(since)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await?;
         Ok(count.0)
     }
 
     /// Get feature usage stats across all orgs
     pub async fn get_global_stats(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         feature: FeatureType,
         days: i64,
     ) -> sqlx::Result<(i64, i64)> {
@@ -127,14 +127,14 @@ impl FeatureUsage {
         )
         .bind(feature)
         .bind(since)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await?;
         Ok(stats)
     }
 
     /// Get feature adoption timeline (daily counts)
     pub async fn get_adoption_timeline(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         feature: FeatureType,
         days: i64,
     ) -> sqlx::Result<Vec<(chrono::NaiveDate, i64)>> {
@@ -152,17 +152,17 @@ impl FeatureUsage {
         )
         .bind(feature)
         .bind(since)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await?;
         Ok(timeline)
     }
 
     /// Clean up old feature usage events (older than N days)
-    pub async fn cleanup_old(pool: &sqlx::PgPool, days: i64) -> sqlx::Result<u64> {
+    pub async fn cleanup_old(executor: impl sqlx::PgExecutor<'_>, days: i64) -> sqlx::Result<u64> {
         let cutoff = Utc::now() - chrono::Duration::days(days);
         let result = sqlx::query("DELETE FROM feature_usage WHERE created_at < $1")
             .bind(cutoff)
-            .execute(pool)
+            .execute(executor)
             .await?;
         Ok(result.rows_affected())
     }
@@ -191,7 +191,7 @@ impl FeatureUsage {
     /// surfaces first in the UI. Returns an empty Vec when the OTLP
     /// pipeline hasn't populated any rows yet.
     pub async fn aggregate_plugin_invoke_ms_by_deployment(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         deployment_id: Uuid,
         since: DateTime<Utc>,
@@ -217,7 +217,7 @@ impl FeatureUsage {
         .bind(org_id)
         .bind(deployment_id)
         .bind(since)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 }

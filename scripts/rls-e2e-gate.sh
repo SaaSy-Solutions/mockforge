@@ -73,7 +73,10 @@ if [ "$__SUBCMD" != "up" ] && [ "$__SUBCMD" != "all" ] && [ -f "$STATE_FILE" ]; 
   . "$STATE_FILE"
 fi
 
-export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-rlsgate-$$-${RUNNER_NAME:-local}}"
+# Compose project names allow only [a-z0-9_-]. GitHub-hosted runners set
+# RUNNER_NAME to e.g. "GitHub Actions 1000071747", so normalize it.
+__RUNNER_SLUG="$(printf '%s' "${RUNNER_NAME:-local}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '-')"
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-rlsgate-$$-${__RUNNER_SLUG}}"
 
 # Free ephemeral ports, chosen now, rather than fixed ones. Explicit
 # PG_PORT/MINIO_PORT/REGISTRY_PORT still win so a local run can pin them.
@@ -101,6 +104,11 @@ PG_DB="mockforge_registry"
 APP_ROLE="${APP_ROLE:-mockforge_app}"
 APP_ROLE_PASSWORD="${APP_ROLE_PASSWORD:-rls_app_pw}"
 
+# Tables that carry an `org_id` column but are deliberately NOT RLS-forced.
+# Must match the "DELIBERATELY NOT COVERED" list in migration
+# 20250101000084_rls_tenant_isolation_coverage.sql.
+RLS_EXCLUDED_TABLES="'plugins', 'showcase_entries', 'user_public_keys', 'cloud_plugin_beta_interest'"
+
 OWNER_URL="postgres://${PG_SUPERUSER}:${PG_SUPERPASS}@localhost:${PG_PORT}/${PG_DB}"
 APP_URL="postgres://${APP_ROLE}:${APP_ROLE_PASSWORD}@localhost:${PG_PORT}/${PG_DB}"
 
@@ -124,6 +132,9 @@ E2E_TESTS=(
   --test cloud_conformance_e2e
   --test paid_flow_e2e
   --test hosted_mock_overrides_e2e
+  --test audit_integrity_e2e
+  --test rls_coverage_e2e
+  --test hosted_mock_rls_routes_e2e
 )
 
 # Server + test env. Values are literals from registry-e2e.yml; none are secret.
@@ -284,22 +295,51 @@ verify_gate_armed() {
   bypass="$(psql_owner -tAc "SELECT rolbypassrls FROM pg_roles WHERE rolname = '${APP_ROLE}'")"
   [ "$bypass" = "f" ] || die "$APP_ROLE has rolbypassrls=$bypass — RLS would be bypassed and the gate would false-pass"
 
-  local covered
-  covered="$(psql_owner -tAc "SELECT count(*) FROM pg_class WHERE relrowsecurity AND relname IN ('projects','audit_logs','hosted_mocks','templates','scenarios')")"
-  [ "$covered" = "5" ] || die "expected RLS enabled on 5 tables, found $covered — did migration 20250101000082 run?"
+  # Coverage completeness: every public table with an `org_id` column must be
+  # ENABLE + FORCE RLS, except the documented exclusions in migration
+  # 20250101000084 (global / user-scoped tables). A new org-scoped table that
+  # ships without a policy fails the gate here instead of silently sitting
+  # outside the backstop.
+  local uncovered
+  uncovered="$(psql_owner -tAc "
+    SELECT coalesce(string_agg(c.relname, ', ' ORDER BY c.relname), '')
+    FROM pg_class c
+    JOIN information_schema.columns i
+      ON i.table_schema = 'public' AND i.table_name = c.relname AND i.column_name = 'org_id'
+    WHERE c.relkind = 'r' AND c.relnamespace = 'public'::regnamespace
+      AND NOT (c.relrowsecurity AND c.relforcerowsecurity)
+      AND c.relname NOT IN (${RLS_EXCLUDED_TABLES})")"
+  [ -z "$uncovered" ] || die "org-scoped tables without ENABLE+FORCE RLS: $uncovered (add a policy, or a documented exclusion in the migration AND RLS_EXCLUDED_TABLES)"
 
   local forced
-  forced="$(psql_owner -tAc "SELECT count(*) FROM pg_class WHERE relforcerowsecurity AND relname IN ('projects','audit_logs','hosted_mocks','templates','scenarios')")"
-  [ "$forced" = "5" ] || die "expected FORCE RLS on 5 tables, found $forced"
+  forced="$(psql_owner -tAc "SELECT count(*) FROM pg_class WHERE relforcerowsecurity AND relnamespace = 'public'::regnamespace")"
+  [ "$forced" -ge 36 ] || die "expected >= 36 FORCE RLS tables, found $forced -- did migrations 20250101000082/84 run?"
 
-  # Positive control: as the app role with no GUC bound, a covered table must
-  # return 0 rows. If this returns rows the policies are not doing anything.
-  local leaked
-  leaked="$(PGPASSWORD="$APP_ROLE_PASSWORD" psql -h localhost -p "$PG_PORT" -U "$APP_ROLE" -d "$PG_DB" -tAc \
-    "SELECT count(*) FROM projects")"
-  [ "$leaked" = "0" ] || die "app role saw $leaked projects rows with no org GUC bound — RLS is not enforcing"
+  # Positive control on real rows. Seed one org + workspace + setting as the
+  # owner, then as the app role: unbound must see 0, bound must see exactly 1.
+  # With nothing seeded a "0 rows" check proves nothing.
+  local seed_org seed_user
+  seed_user="$(psql_owner -qtAc "INSERT INTO users (username, email, password_hash) VALUES ('rlsgate_' || md5(random()::text), md5(random()::text) || '@rls-gate.local', 'x') RETURNING id")"
+  seed_org="$(psql_owner -qtAc "INSERT INTO organizations (name, slug, owner_id) VALUES ('rls gate', 'rls-gate-' || md5(random()::text), '${seed_user}') RETURNING id")"
+  psql_owner -qc "INSERT INTO workspaces (org_id, name, created_by) VALUES ('${seed_org}', 'rls gate ws', '${seed_user}');
+                  INSERT INTO org_settings (org_id, setting_key, setting_value) VALUES ('${seed_org}', 'rls_gate', '{}'::jsonb);"
 
-  echo "gate armed: $APP_ROLE is NOBYPASSRLS, 5/5 covered tables ENABLE+FORCE RLS, unbound reads see 0 rows"
+  local app_psql=(psql -h localhost -p "$PG_PORT" -U "$APP_ROLE" -d "$PG_DB" -tA)
+  local t unbound bound
+  for t in workspaces org_settings; do
+    unbound="$(PGPASSWORD="$APP_ROLE_PASSWORD" "${app_psql[@]}" -c "SELECT count(*) FROM $t WHERE org_id = '${seed_org}'")"
+    # One psql session, several -c commands: bind the GUC session-wide, then
+    # count. The uuid echoed by set_config is filtered out by the grep.
+    bound="$(PGPASSWORD="$APP_ROLE_PASSWORD" "${app_psql[@]}" -q \
+      -c "SELECT set_config('app.current_org_id', '${seed_org}', false)" \
+      -c "SELECT count(*) FROM $t WHERE org_id = '${seed_org}'" | grep -E '^[0-9]+$' | head -1)"
+    [ "$unbound" = "0" ] || die "app role saw $unbound $t rows with no org GUC bound -- RLS is not enforcing"
+    [ "$bound" = "1" ] || die "app role saw ${bound:-?} $t rows WITH the org bound (expected 1) -- policy or grants are wrong"
+  done
+  # Clean up (owner bypasses RLS; FK cascades remove the children).
+  psql_owner -qc "DELETE FROM organizations WHERE id = '${seed_org}'; DELETE FROM users WHERE id = '${seed_user}';"
+
+  echo "gate armed: $APP_ROLE is NOBYPASSRLS, $forced tables FORCE RLS, every org_id table covered or excluded, seeded rows invisible unbound / visible bound"
 }
 
 cmd_up() {

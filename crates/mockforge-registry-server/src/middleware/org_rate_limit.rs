@@ -17,6 +17,7 @@ use crate::{
     middleware::resolve_org_context,
     models::{Organization, UsageCounter},
     redis::{current_month_period, RedisPool},
+    store::with_org_context,
     AppState,
 };
 
@@ -41,8 +42,14 @@ pub async fn check_org_limits(
     // Get current month period
     let period = current_month_period();
 
-    // Get or create usage counter
-    let usage = UsageCounter::get_or_create_current(pool, org.id).await.map_err(|e| {
+    // Get or create usage counter. `pool` is the request-path (RLS) pool;
+    // bind the org being checked so the usage_counters policy admits it.
+    let org_id = org.id;
+    let usage = with_org_context(pool, org_id, |tx| {
+        Box::pin(async move { Ok(UsageCounter::get_or_create_current(&mut **tx, org_id).await?) })
+    })
+    .await
+    .map_err(|e| {
         tracing::error!(org_id = %org.id, "rate limit check: failed to load usage counter: {}", e);
         ApiError::Storage("usage counter lookup failed".to_string())
     })?;
@@ -101,22 +108,22 @@ pub async fn increment_usage(
         }
     }
 
-    // Increment in database (slower, but persistent)
-    UsageCounter::increment_requests(pool, org_id, 1).await.map_err(|e| {
-        tracing::error!(org_id = %org_id, "increment_usage: requests bump failed: {}", e);
+    // Increment in database (slower, but persistent). `pool` is the
+    // request-path (RLS) pool; bind the org whose counter is bumped.
+    with_org_context(pool, org_id, |tx| {
+        Box::pin(async move {
+            UsageCounter::increment_requests(tx, org_id, 1).await?;
+            if request_size_bytes > 0 {
+                UsageCounter::increment_egress(tx, org_id, request_size_bytes).await?;
+            }
+            Ok(())
+        })
+    })
+    .await
+    .map_err(|e| {
+        tracing::error!(org_id = %org_id, "increment_usage: usage counter bump failed: {}", e);
         ApiError::Storage("usage counter increment failed".to_string())
-    })?;
-
-    if request_size_bytes > 0 {
-        UsageCounter::increment_egress(pool, org_id, request_size_bytes)
-            .await
-            .map_err(|e| {
-                tracing::error!(org_id = %org_id, "increment_usage: egress bump failed: {}", e);
-                ApiError::Storage("usage counter increment failed".to_string())
-            })?;
-    }
-
-    Ok(())
+    })
 }
 
 /// Organization-aware rate limiting middleware
@@ -161,7 +168,7 @@ pub async fn org_rate_limit_middleware(
             }
         };
 
-    let pool = state.db.pool();
+    let pool = state.db.runtime_pool();
 
     // Check org limits — propagates ApiError::UsageLimitExceeded as the
     // spec'd 429 response (#449 criterion 1).
@@ -170,7 +177,12 @@ pub async fn org_rate_limit_middleware(
     }
 
     // Get usage info for rate limit headers
-    let usage = UsageCounter::get_or_create_current(pool, org_ctx.org_id).await.ok();
+    let org_id = org_ctx.org_id;
+    let usage = with_org_context(pool, org_id, |tx| {
+        Box::pin(async move { Ok(UsageCounter::get_or_create_current(&mut **tx, org_id).await?) })
+    })
+    .await
+    .ok();
 
     let limits = &org_ctx.org.limits_json;
     let requests_limit = limits.get("requests_per_30d").and_then(|v| v.as_i64()).unwrap_or(10000);

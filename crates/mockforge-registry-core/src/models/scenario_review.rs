@@ -79,7 +79,10 @@ impl ScenarioReview {
     }
 
     /// Update rating stats for scenario
-    pub async fn update_scenario_stats(pool: &sqlx::PgPool, scenario_id: Uuid) -> sqlx::Result<()> {
+    pub async fn update_scenario_stats(
+        conn: &mut sqlx::PgConnection,
+        scenario_id: Uuid,
+    ) -> sqlx::Result<()> {
         let stats = sqlx::query_as::<_, (f64, i64)>(
             r#"
             SELECT COALESCE(AVG(rating), 0.0)::float8, COUNT(*)
@@ -88,7 +91,7 @@ impl ScenarioReview {
             "#,
         )
         .bind(scenario_id)
-        .fetch_one(pool)
+        .fetch_one(&mut *conn)
         .await?;
 
         // Update scenario rating_avg and rating_count
@@ -102,7 +105,7 @@ impl ScenarioReview {
         .bind(rust_decimal::Decimal::try_from(stats.0).unwrap_or(rust_decimal::Decimal::ZERO))
         .bind(stats.1 as i32)
         .bind(scenario_id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
 
         Ok(())

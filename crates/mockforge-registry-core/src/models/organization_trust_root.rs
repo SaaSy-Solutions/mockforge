@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[cfg(feature = "postgres")]
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 
 #[cfg_attr(feature = "postgres", derive(FromRow))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,7 +48,7 @@ impl OrganizationTrustRoot {
     }
 
     pub async fn create(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         input: CreateOrganizationTrustRoot<'_>,
     ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
@@ -62,29 +62,38 @@ impl OrganizationTrustRoot {
         .bind(input.public_key)
         .bind(input.name)
         .bind(input.created_by)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM organization_trust_roots WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
-    pub async fn list_by_org(pool: &PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_by_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM organization_trust_roots WHERE org_id = $1 ORDER BY created_at DESC",
         )
         .bind(org_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     /// Active (non-revoked) roots only. The plugin-host fetches this
     /// when verifying org-private plugin signatures.
-    pub async fn list_active_by_org(pool: &PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_active_by_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             r#"
             SELECT * FROM organization_trust_roots
@@ -93,12 +102,12 @@ impl OrganizationTrustRoot {
             "#,
         )
         .bind(org_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     pub async fn revoke(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         reason: Option<&str>,
         revoked_by: Option<Uuid>,
@@ -116,7 +125,7 @@ impl OrganizationTrustRoot {
         .bind(id)
         .bind(reason)
         .bind(revoked_by)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 }

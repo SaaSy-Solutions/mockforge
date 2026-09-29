@@ -67,7 +67,7 @@ impl Organization {
     /// Create a new organization
     /// Also creates the owner membership automatically
     pub async fn create(
-        pool: &sqlx::PgPool,
+        conn: &mut sqlx::PgConnection,
         name: &str,
         slug: &str,
         owner_id: Uuid,
@@ -76,7 +76,7 @@ impl Organization {
         let limits = get_default_limits(plan);
 
         // Use a transaction to create org and owner membership atomically
-        let mut tx = pool.begin().await?;
+        let mut tx = sqlx::Connection::begin(&mut *conn).await?;
 
         let org = sqlx::query_as::<_, Self>(
             r#"
@@ -112,23 +112,32 @@ impl Organization {
     }
 
     /// Find organization by ID
-    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM organizations WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// Find organization by slug
-    pub async fn find_by_slug(pool: &sqlx::PgPool, slug: &str) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_slug(
+        executor: impl sqlx::PgExecutor<'_>,
+        slug: &str,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM organizations WHERE slug = $1")
             .bind(slug)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// Get organizations for a user (as owner or member)
-    pub async fn find_by_user(pool: &sqlx::PgPool, user_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn find_by_user(
+        executor: impl sqlx::PgExecutor<'_>,
+        user_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             r#"
             SELECT DISTINCT o.*
@@ -139,14 +148,14 @@ impl Organization {
             "#,
         )
         .bind(user_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     /// Get or create user's personal organization
     /// This ensures every user has at least one org (backward compatibility)
     pub async fn get_or_create_personal_org(
-        pool: &sqlx::PgPool,
+        conn: &mut sqlx::PgConnection,
         user_id: Uuid,
         username: &str,
     ) -> sqlx::Result<Self> {
@@ -155,7 +164,7 @@ impl Organization {
             "SELECT * FROM organizations WHERE owner_id = $1 ORDER BY created_at ASC LIMIT 1",
         )
         .bind(user_id)
-        .fetch_optional(pool)
+        .fetch_optional(&mut *conn)
         .await?
         {
             return Ok(org);
@@ -176,13 +185,13 @@ impl Organization {
         // Ensure slug is unique
         let mut final_slug = slug.clone();
         let mut counter = 1;
-        while Organization::find_by_slug(pool, &final_slug).await?.is_some() {
+        while Organization::find_by_slug(&mut *conn, &final_slug).await?.is_some() {
             final_slug = format!("{}-{}", slug, counter);
             counter += 1;
         }
 
         Self::create(
-            pool,
+            &mut *conn,
             &format!("{}'s Organization", username),
             &final_slug,
             user_id,
@@ -253,7 +262,7 @@ impl OrgMember {
 
     /// Add a member to an organization
     pub async fn create(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         user_id: Uuid,
         role: OrgRole,
@@ -268,36 +277,39 @@ impl OrgMember {
         .bind(org_id)
         .bind(user_id)
         .bind(role.to_string())
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Find member by org and user
     pub async fn find(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         user_id: Uuid,
     ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM org_members WHERE org_id = $1 AND user_id = $2")
             .bind(org_id)
             .bind(user_id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// Get all members of an organization
-    pub async fn find_by_org(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn find_by_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM org_members WHERE org_id = $1 ORDER BY created_at ASC",
         )
         .bind(org_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     /// Update member role
     pub async fn update_role(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         user_id: Uuid,
         role: OrgRole,
@@ -308,18 +320,22 @@ impl OrgMember {
         .bind(role.to_string())
         .bind(org_id)
         .bind(user_id)
-        .execute(pool)
+        .execute(executor)
         .await?;
 
         Ok(())
     }
 
     /// Remove member from organization
-    pub async fn delete(pool: &sqlx::PgPool, org_id: Uuid, user_id: Uuid) -> sqlx::Result<()> {
+    pub async fn delete(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+        user_id: Uuid,
+    ) -> sqlx::Result<()> {
         sqlx::query("DELETE FROM org_members WHERE org_id = $1 AND user_id = $2")
             .bind(org_id)
             .bind(user_id)
-            .execute(pool)
+            .execute(executor)
             .await?;
 
         Ok(())

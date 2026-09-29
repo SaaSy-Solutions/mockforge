@@ -24,6 +24,7 @@ use uuid::Uuid;
 
 use crate::error::ApiResult;
 use crate::models::{Organization, Plan, Subscription, SubscriptionStatus};
+use crate::store::with_org_context;
 use crate::AppState;
 
 /// Past-due grace window. Mirrors the constant in
@@ -54,7 +55,11 @@ pub const PAST_DUE_GRACE_SECONDS: i64 = 24 * 60 * 60;
 /// Never mutates the stored `plan` column.
 pub async fn effective_plan(state: &AppState, org: &Organization) -> ApiResult<Plan> {
     let stored = org.plan();
-    let sub = Subscription::find_by_org(state.db.pool(), org.id).await?;
+    let org_id = org.id;
+    let sub = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(Subscription::find_by_org(&mut **tx, org_id).await?) })
+    })
+    .await?;
     Ok(resolve_effective_plan(stored, sub.as_ref(), Utc::now()))
 }
 

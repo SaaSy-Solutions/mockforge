@@ -719,8 +719,6 @@ pub async fn saml_acs(
     Path(org_slug): Path<String>,
     Form(form): Form<SAMLResponseForm>,
 ) -> Result<Response, ApiError> {
-    let pool = state.db.pool();
-
     // Find organization by slug
     let org = state
         .store
@@ -824,16 +822,26 @@ pub async fn saml_acs(
 
     // Create SSO session
     let session_expires = Utc::now() + chrono::Duration::hours(8); // 8 hour session
-    let _session = SSOSession::create(
-        pool,
-        org.id,
-        user.id,
-        user_info.session_index.as_deref(),
-        user_info.name_id.as_deref(),
-        session_expires,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+
+    // Runtime (RLS) pool bound to the org the path slug resolved to (#1087).
+    let (session_org_id, session_user_id) = (org.id, user.id);
+    let session_index = user_info.session_index.clone();
+    let name_id = user_info.name_id.clone();
+    let _session =
+        crate::store::with_org_context(state.db.runtime_pool(), session_org_id, move |tx| {
+            Box::pin(async move {
+                Ok(SSOSession::create(
+                    &mut **tx,
+                    session_org_id,
+                    session_user_id,
+                    session_index.as_deref(),
+                    name_id.as_deref(),
+                    session_expires,
+                )
+                .await?)
+            })
+        })
+        .await?;
 
     // Generate short-lived access token (1 hour) for URL redirect
     // Note: For SSO flows, we pass only an access token in the URL for security
@@ -889,8 +897,6 @@ pub async fn saml_slo(
     Path(org_slug): Path<String>,
     Form(form): Form<SAMLLogoutForm>,
 ) -> Result<Response, ApiError> {
-    let pool = state.db.pool();
-
     // Find organization by slug
     let org = state
         .store
@@ -917,12 +923,20 @@ pub async fn saml_slo(
 
         // Delete all sessions with this session index
         if let Some(session_index) = session_index {
-            sqlx::query("DELETE FROM sso_sessions WHERE org_id = $1 AND session_index = $2")
-                .bind(org.id)
-                .bind(session_index)
-                .execute(pool)
-                .await
-                .map_err(ApiError::Database)?;
+            let slo_org_id = org.id;
+            crate::store::with_org_context(state.db.runtime_pool(), slo_org_id, move |tx| {
+                Box::pin(async move {
+                    sqlx::query(
+                        "DELETE FROM sso_sessions WHERE org_id = $1 AND session_index = $2",
+                    )
+                    .bind(slo_org_id)
+                    .bind(session_index)
+                    .execute(&mut **tx)
+                    .await?;
+                    Ok(())
+                })
+            })
+            .await?;
         }
 
         // Generate logout response

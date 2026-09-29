@@ -38,6 +38,7 @@ use crate::{
         CloudWorkspace, ContractDiffFinding, ContractDiffRun, FitnessFunction, MonitoredService,
         TestRun, VerificationSuite,
     },
+    store::with_org_context,
     AppState,
 };
 
@@ -226,26 +227,28 @@ pub async fn trigger_diff_run(
         .await
         .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Monitored service not found".into()))?;
-    authorize_workspace(&state, user_id, &headers, svc.workspace_id).await?;
+    // `org_id` is the service's workspace org, verified against the caller.
+    let org_id = authorize_workspace(&state, user_id, &headers, svc.workspace_id).await?;
 
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), svc.workspace_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
-
-    let run = TestRun::enqueue(
-        state.db.pool(),
-        EnqueueTestRun {
-            suite_id: svc.id,
-            org_id: workspace.org_id,
-            kind: "contract_diff",
-            triggered_by: "manual",
-            triggered_by_user: Some(user_id),
-            git_ref: None,
-            git_sha: None,
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let svc_id = svc.id;
+    let run = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(TestRun::enqueue(
+                &mut **tx,
+                EnqueueTestRun {
+                    suite_id: svc_id,
+                    org_id,
+                    kind: "contract_diff",
+                    triggered_by: "manual",
+                    triggered_by_user: Some(user_id),
+                    git_ref: None,
+                    git_sha: None,
+                },
+            )
+            .await?)
+        })
+    })
+    .await?;
 
     if let Err(e) = crate::run_queue::enqueue(
         state.redis.as_ref(),
@@ -490,20 +493,25 @@ pub async fn delete_verification_suite(
     Ok(Json(serde_json::json!({ "deleted": true })))
 }
 
+/// Verify `workspace_id` belongs to the caller's org; returns that org id.
 async fn authorize_workspace(
     state: &AppState,
     user_id: Uuid,
     headers: &HeaderMap,
     workspace_id: Uuid,
-) -> ApiResult<()> {
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), workspace_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
+) -> ApiResult<Uuid> {
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    // Bound to the caller's org: a workspace in another org reads as absent
+    // and yields the same "Workspace not found" as an explicit mismatch.
+    let workspace = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+        Box::pin(async move { Ok(CloudWorkspace::find_by_id(&mut **tx, workspace_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
     if ctx.org_id != workspace.org_id {
         return Err(ApiError::InvalidRequest("Workspace not found".into()));
     }
-    Ok(())
+    Ok(ctx.org_id)
 }

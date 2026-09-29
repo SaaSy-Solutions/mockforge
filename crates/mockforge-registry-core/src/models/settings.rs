@@ -165,7 +165,7 @@ impl UserSetting {
 impl OrgSetting {
     /// Get an organization setting by key
     pub async fn get(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         setting_key: &str,
     ) -> sqlx::Result<Option<Self>> {
@@ -174,13 +174,13 @@ impl OrgSetting {
         )
         .bind(org_id)
         .bind(setting_key)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
     /// Set or update an organization setting
     pub async fn set(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         setting_key: &str,
         setting_value: serde_json::Value,
@@ -198,16 +198,20 @@ impl OrgSetting {
         .bind(org_id)
         .bind(setting_key)
         .bind(setting_value)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Delete an organization setting
-    pub async fn delete(pool: &sqlx::PgPool, org_id: Uuid, setting_key: &str) -> sqlx::Result<()> {
+    pub async fn delete(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+        setting_key: &str,
+    ) -> sqlx::Result<()> {
         sqlx::query("DELETE FROM org_settings WHERE org_id = $1 AND setting_key = $2")
             .bind(org_id)
             .bind(setting_key)
-            .execute(pool)
+            .execute(executor)
             .await?;
         Ok(())
     }

@@ -104,17 +104,20 @@ impl SSOConfiguration {
     }
 
     /// Find SSO configuration by organization ID
-    pub async fn find_by_org(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM sso_configurations WHERE org_id = $1")
             .bind(org_id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// Create or update SSO configuration
     #[allow(clippy::too_many_arguments)]
     pub async fn upsert(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         provider: SSOProvider,
         saml_entity_id: Option<&str>,
@@ -180,7 +183,7 @@ impl SSOConfiguration {
         .bind(oidc_client_id)
         .bind(oidc_client_secret)
         .bind(email_domain)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
@@ -188,7 +191,7 @@ impl SSOConfiguration {
     /// the config together with the org's slug. Used by the pre-login discovery
     /// endpoint. Only `enabled` configs match (a disabled config is invisible).
     pub async fn find_by_email_domain(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         domain: &str,
     ) -> sqlx::Result<Option<(Self, String)>> {
         let domain = domain.trim().to_ascii_lowercase();
@@ -207,38 +210,38 @@ impl SSOConfiguration {
             "#,
         )
         .bind(&domain)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await?;
         Ok(row.map(|r| (r.config, r.org_slug)))
     }
 
     /// Enable SSO for an organization
-    pub async fn enable(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<()> {
+    pub async fn enable(executor: impl sqlx::PgExecutor<'_>, org_id: Uuid) -> sqlx::Result<()> {
         sqlx::query(
             "UPDATE sso_configurations SET enabled = TRUE, updated_at = NOW() WHERE org_id = $1",
         )
         .bind(org_id)
-        .execute(pool)
+        .execute(executor)
         .await?;
         Ok(())
     }
 
     /// Disable SSO for an organization
-    pub async fn disable(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<()> {
+    pub async fn disable(executor: impl sqlx::PgExecutor<'_>, org_id: Uuid) -> sqlx::Result<()> {
         sqlx::query(
             "UPDATE sso_configurations SET enabled = FALSE, updated_at = NOW() WHERE org_id = $1",
         )
         .bind(org_id)
-        .execute(pool)
+        .execute(executor)
         .await?;
         Ok(())
     }
 
     /// Delete SSO configuration
-    pub async fn delete(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<()> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, org_id: Uuid) -> sqlx::Result<()> {
         sqlx::query("DELETE FROM sso_configurations WHERE org_id = $1")
             .bind(org_id)
-            .execute(pool)
+            .execute(executor)
             .await?;
         Ok(())
     }
@@ -248,7 +251,7 @@ impl SSOConfiguration {
 impl SSOSession {
     /// Create a new SSO session
     pub async fn create(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         user_id: Uuid,
         session_index: Option<&str>,
@@ -267,13 +270,13 @@ impl SSOSession {
         .bind(session_index)
         .bind(name_id)
         .bind(expires_at)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Find active session by org and user
     pub async fn find_active(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         user_id: Uuid,
     ) -> sqlx::Result<Option<Self>> {
@@ -287,23 +290,23 @@ impl SSOSession {
         )
         .bind(org_id)
         .bind(user_id)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
     /// Delete expired sessions
-    pub async fn cleanup_expired(pool: &sqlx::PgPool) -> sqlx::Result<u64> {
+    pub async fn cleanup_expired(executor: impl sqlx::PgExecutor<'_>) -> sqlx::Result<u64> {
         let result = sqlx::query("DELETE FROM sso_sessions WHERE expires_at < NOW()")
-            .execute(pool)
+            .execute(executor)
             .await?;
         Ok(result.rows_affected())
     }
 
     /// Delete session by ID
-    pub async fn delete(pool: &sqlx::PgPool, session_id: Uuid) -> sqlx::Result<()> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, session_id: Uuid) -> sqlx::Result<()> {
         sqlx::query("DELETE FROM sso_sessions WHERE id = $1")
             .bind(session_id)
-            .execute(pool)
+            .execute(executor)
             .await?;
         Ok(())
     }

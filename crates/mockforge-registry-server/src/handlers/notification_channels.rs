@@ -24,6 +24,7 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
     models::NotificationChannel,
+    store::with_org_context,
     AppState,
 };
 
@@ -37,9 +38,10 @@ pub async fn list_channels(
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<NotificationChannel>>> {
     authorize_org(&state, user_id, &headers, org_id).await?;
-    let channels = NotificationChannel::list_by_org(state.db.pool(), org_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let channels = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(NotificationChannel::list_by_org(&mut **tx, org_id).await?) })
+    })
+    .await?;
     Ok(Json(channels))
 }
 
@@ -76,18 +78,22 @@ pub async fn create_channel(
         )));
     }
 
-    let channel = NotificationChannel::create(
-        state.db.pool(),
-        CreateNotificationChannel {
-            org_id,
-            name: &request.name,
-            kind: &request.kind,
-            config: &request.config,
-            enabled: request.enabled,
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let channel = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(NotificationChannel::create(
+                &mut **tx,
+                CreateNotificationChannel {
+                    org_id,
+                    name: &request.name,
+                    kind: &request.kind,
+                    config: &request.config,
+                    enabled: request.enabled,
+                },
+            )
+            .await?)
+        })
+    })
+    .await?;
 
     Ok(Json(channel))
 }
@@ -114,15 +120,19 @@ pub async fn update_channel(
     let existing = load_authorized_channel(&state, org_id, id).await?;
     let _ = existing; // existence check; the UPDATE re-fetches
 
-    let updated = NotificationChannel::update(
-        state.db.pool(),
-        id,
-        request.name.as_deref(),
-        request.config.as_ref(),
-        request.enabled,
-    )
-    .await
-    .map_err(ApiError::Database)?
+    let updated = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(NotificationChannel::update(
+                &mut **tx,
+                id,
+                request.name.as_deref(),
+                request.config.as_ref(),
+                request.enabled,
+            )
+            .await?)
+        })
+    })
+    .await?
     .ok_or_else(|| ApiError::InvalidRequest("Notification channel not found".into()))?;
     Ok(Json(updated))
 }
@@ -159,9 +169,10 @@ pub async fn delete_channel(
     authorize_org(&state, user_id, &headers, org_id).await?;
     load_authorized_channel(&state, org_id, id).await?;
 
-    let deleted = NotificationChannel::delete(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?;
+    let deleted = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(NotificationChannel::delete(&mut **tx, id).await?) })
+    })
+    .await?;
     if !deleted {
         return Err(ApiError::InvalidRequest("Notification channel not found".into()));
     }
@@ -193,10 +204,11 @@ async fn load_authorized_channel(
     org_id: Uuid,
     id: Uuid,
 ) -> ApiResult<NotificationChannel> {
-    let channel = NotificationChannel::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Notification channel not found".into()))?;
+    let channel = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(NotificationChannel::find_by_id(&mut **tx, id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Notification channel not found".into()))?;
     if channel.org_id != org_id {
         return Err(ApiError::InvalidRequest("Notification channel not found".into()));
     }

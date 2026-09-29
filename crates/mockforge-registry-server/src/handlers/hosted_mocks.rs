@@ -67,7 +67,13 @@ pub async fn create_deployment(
     // unrelated write happens during the grace window, but for the 24h
     // threshold it's good enough; a future PR can add an explicit
     // `past_due_since` column if billing wants finer control.
-    if let Some(subscription) = Subscription::find_by_org(pool, org_ctx.org_id).await? {
+    let sub_org_id = org_ctx.org_id;
+    let subscription =
+        crate::store::with_org_context(state.db.runtime_pool(), sub_org_id, move |tx| {
+            Box::pin(async move { Ok(Subscription::find_by_org(&mut **tx, sub_org_id).await?) })
+        })
+        .await?;
+    if let Some(subscription) = subscription {
         if subscription.status() == SubscriptionStatus::PastDue {
             const PAST_DUE_GRACE_SECONDS: i64 = 24 * 60 * 60;
             let elapsed = (Utc::now() - subscription.updated_at).num_seconds();
@@ -706,25 +712,53 @@ pub async fn redeploy_deployment(
     // Trigger redeployment in background
     let pool_clone = pool.clone();
     let deployment_id_clone = deployment_id;
+    // hosted_mocks is RLS-forced. The spawned task has no request task-local,
+    // so it binds the org authorized above explicitly on the runtime pool
+    // (#1087). deployment_logs is not forced and stays on `pool`.
+    let rt_pool = state.db.runtime_pool().clone();
+    let bg_org_id = org_ctx.org_id;
     tokio::spawn(async move {
         let pool = &pool_clone;
+        let rt_pool = &rt_pool;
+        let set_status = |status: DeploymentStatus, msg: Option<String>| async move {
+            crate::store::with_org_context(rt_pool, bg_org_id, move |tx| {
+                Box::pin(async move {
+                    HostedMock::update_status(
+                        &mut **tx,
+                        deployment_id_clone,
+                        status,
+                        msg.as_deref(),
+                    )
+                    .await?;
+                    Ok(())
+                })
+            })
+            .await
+        };
 
         // Fetch the updated deployment
-        let updated_deployment = match HostedMock::find_by_id(pool, deployment_id_clone).await {
-            Ok(Some(d)) => d,
-            Ok(None) => {
-                tracing::error!("Deployment {} not found during redeploy", deployment_id_clone);
-                return;
-            }
-            Err(e) => {
-                tracing::error!(
-                    "Failed to fetch deployment {} for redeploy: {}",
-                    deployment_id_clone,
-                    e
-                );
-                return;
-            }
-        };
+        let updated_deployment =
+            match crate::store::with_org_context(rt_pool, bg_org_id, move |tx| {
+                Box::pin(async move {
+                    Ok(HostedMock::find_by_id(&mut **tx, deployment_id_clone).await?)
+                })
+            })
+            .await
+            {
+                Ok(Some(d)) => d,
+                Ok(None) => {
+                    tracing::error!("Deployment {} not found during redeploy", deployment_id_clone);
+                    return;
+                }
+                Err(e) => {
+                    tracing::error!(
+                        "Failed to fetch deployment {} for redeploy: {}",
+                        deployment_id_clone,
+                        e
+                    );
+                    return;
+                }
+            };
 
         // Try to redeploy via Fly.io if configured
         if let Ok(flyio_token) = std::env::var("FLYIO_API_TOKEN") {
@@ -854,11 +888,9 @@ pub async fn redeploy_deployment(
                     }
                     Err(e) => {
                         tracing::error!("Redeployment failed for {}: {:#}", deployment_id_clone, e);
-                        let _ = HostedMock::update_status(
-                            pool,
-                            deployment_id_clone,
+                        let _ = set_status(
                             DeploymentStatus::Failed,
-                            Some(&format!("Redeployment failed: {}", e)),
+                            Some(format!("Redeployment failed: {}", e)),
                         )
                         .await;
                         let _ = DeploymentLog::create(
@@ -877,11 +909,9 @@ pub async fn redeploy_deployment(
                     "No Fly.io machine ID found for deployment {}",
                     deployment_id_clone
                 );
-                let _ = HostedMock::update_status(
-                    pool,
-                    deployment_id_clone,
+                let _ = set_status(
                     DeploymentStatus::Failed,
-                    Some("No Fly.io machine ID found in deployment metadata"),
+                    Some("No Fly.io machine ID found in deployment metadata".to_string()),
                 )
                 .await;
                 return;
@@ -889,9 +919,7 @@ pub async fn redeploy_deployment(
         }
 
         // Mark as active
-        let _ =
-            HostedMock::update_status(pool, deployment_id_clone, DeploymentStatus::Active, None)
-                .await;
+        let _ = set_status(DeploymentStatus::Active, None).await;
 
         let _ = DeploymentLog::create(
             pool,
@@ -1081,9 +1109,11 @@ pub async fn get_deployment_logs(
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get deployment
-    let deployment = HostedMock::find_by_id(pool, deployment_id)
-        .await
-        .map_err(ApiError::Database)?
+    let deployment =
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move { Ok(HostedMock::find_by_id(&mut **tx, deployment_id).await?) })
+        })
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     // Verify access
@@ -1126,15 +1156,15 @@ pub async fn get_runtime_logs(
     Path(deployment_id): Path<Uuid>,
     Query(params): Query<RuntimeLogsQuery>,
 ) -> ApiResult<Json<Vec<LogEntry>>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let deployment = HostedMock::find_by_id(pool, deployment_id)
-        .await
-        .map_err(ApiError::Database)?
+    let deployment =
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move { Ok(HostedMock::find_by_id(&mut **tx, deployment_id).await?) })
+        })
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     if deployment.org_id != org_ctx.org_id {
@@ -1175,14 +1205,15 @@ pub async fn stream_runtime_logs(
     headers: HeaderMap,
     Path(deployment_id): Path<Uuid>,
 ) -> ApiResult<Sse<impl Stream<Item = Result<Event, Infallible>>>> {
-    let pool = state.db.pool();
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let deployment = HostedMock::find_by_id(pool, deployment_id)
-        .await
-        .map_err(ApiError::Database)?
+    let deployment =
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move { Ok(HostedMock::find_by_id(&mut **tx, deployment_id).await?) })
+        })
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     if deployment.org_id != org_ctx.org_id {
@@ -1608,9 +1639,11 @@ pub async fn get_runtime_requests(
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let deployment = HostedMock::find_by_id(pool, deployment_id)
-        .await
-        .map_err(ApiError::Database)?
+    let deployment =
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move { Ok(HostedMock::find_by_id(&mut **tx, deployment_id).await?) })
+        })
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     if deployment.org_id != org_ctx.org_id {
@@ -1849,9 +1882,11 @@ pub async fn list_recorder_captures(
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let deployment = HostedMock::find_by_id(pool, deployment_id)
-        .await
-        .map_err(ApiError::Database)?
+    let deployment =
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move { Ok(HostedMock::find_by_id(&mut **tx, deployment_id).await?) })
+        })
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     if deployment.org_id != org_ctx.org_id {
@@ -2007,9 +2042,11 @@ pub async fn get_recorder_capture(
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let deployment = HostedMock::find_by_id(pool, deployment_id)
-        .await
-        .map_err(ApiError::Database)?
+    let deployment =
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move { Ok(HostedMock::find_by_id(&mut **tx, deployment_id).await?) })
+        })
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     if deployment.org_id != org_ctx.org_id {
@@ -2114,9 +2151,11 @@ pub async fn get_recorder_capture_response(
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let deployment = HostedMock::find_by_id(pool, deployment_id)
-        .await
-        .map_err(ApiError::Database)?
+    let deployment =
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move { Ok(HostedMock::find_by_id(&mut **tx, deployment_id).await?) })
+        })
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     if deployment.org_id != org_ctx.org_id {
@@ -2225,15 +2264,15 @@ async fn check_org_access(
     headers: &HeaderMap,
     deployment_id: Uuid,
 ) -> ApiResult<HostedMock> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let deployment = HostedMock::find_by_id(pool, deployment_id)
-        .await
-        .map_err(ApiError::Database)?
+    let deployment =
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move { Ok(HostedMock::find_by_id(&mut **tx, deployment_id).await?) })
+        })
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     if deployment.org_id != org_ctx.org_id {
@@ -2346,15 +2385,15 @@ pub async fn export_recorder_captures_har(
     headers: HeaderMap,
     Path(deployment_id): Path<Uuid>,
 ) -> ApiResult<axum::http::Response<axum::body::Body>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let deployment = HostedMock::find_by_id(pool, deployment_id)
-        .await
-        .map_err(ApiError::Database)?
+    let deployment =
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move { Ok(HostedMock::find_by_id(&mut **tx, deployment_id).await?) })
+        })
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     if deployment.org_id != org_ctx.org_id {
@@ -2397,9 +2436,11 @@ pub async fn get_deployment_metrics(
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     // Get deployment
-    let deployment = HostedMock::find_by_id(pool, deployment_id)
-        .await
-        .map_err(ApiError::Database)?
+    let deployment =
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move { Ok(HostedMock::find_by_id(&mut **tx, deployment_id).await?) })
+        })
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     // Verify access
@@ -2700,9 +2741,11 @@ pub async fn set_domain(
         .await?;
 
     // Get deployment
-    let deployment = HostedMock::find_by_id(pool, deployment_id)
-        .await
-        .map_err(ApiError::Database)?
+    let deployment =
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move { Ok(HostedMock::find_by_id(&mut **tx, deployment_id).await?) })
+        })
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
     // Verify ownership
@@ -2809,9 +2852,11 @@ pub async fn clear_custom_domain(
         .require_permission(user_id, org_ctx.org_id, Permission::HostedMockCreate)
         .await?;
 
-    let deployment = HostedMock::find_by_id(pool, deployment_id)
-        .await
-        .map_err(ApiError::Database)?
+    let deployment =
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move { Ok(HostedMock::find_by_id(&mut **tx, deployment_id).await?) })
+        })
+        .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
     if deployment.org_id != org_ctx.org_id {
         return Err(ApiError::InvalidRequest("Deployment not found".to_string()));
@@ -2947,9 +2992,11 @@ pub async fn trigger_smoke_run(
         ));
     }
     if max_concurrent > 0 {
-        let inflight = TestRun::count_inflight(state.db.pool(), org_ctx.org_id)
-            .await
-            .map_err(ApiError::Database)?;
+        let org_id = org_ctx.org_id;
+        let inflight = crate::store::with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+            Box::pin(async move { Ok(TestRun::count_inflight(tx, org_id).await?) })
+        })
+        .await?;
         if inflight.total() >= max_concurrent {
             return Err(ApiError::ResourceLimitExceeded(format!(
                 "Concurrent run limit reached ({}/{}).",
@@ -2963,20 +3010,25 @@ pub async fn trigger_smoke_run(
     let payload = build_smoke_payload(&deployment, &req)?;
 
     // ─── Enqueue test_runs row ───────────────────────────────────
-    let run = TestRun::enqueue(
-        state.db.pool(),
-        EnqueueTestRun {
-            suite_id: deployment.id,
-            org_id: org_ctx.org_id,
-            kind: "smoke",
-            triggered_by: "manual",
-            triggered_by_user: Some(user_id),
-            git_ref: None,
-            git_sha: None,
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let (run_org_id, suite_id) = (org_ctx.org_id, deployment.id);
+    let run = crate::store::with_org_context(state.db.runtime_pool(), run_org_id, move |tx| {
+        Box::pin(async move {
+            Ok(TestRun::enqueue(
+                &mut **tx,
+                EnqueueTestRun {
+                    suite_id,
+                    org_id: run_org_id,
+                    kind: "smoke",
+                    triggered_by: "manual",
+                    triggered_by_user: Some(user_id),
+                    git_ref: None,
+                    git_sha: None,
+                },
+            )
+            .await?)
+        })
+    })
+    .await?;
 
     // ─── Push onto the Redis queue for the runner ────────────────
     if let Err(e) = crate::run_queue::enqueue(

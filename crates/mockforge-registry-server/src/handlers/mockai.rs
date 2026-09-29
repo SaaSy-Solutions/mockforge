@@ -28,6 +28,7 @@ use crate::{
     error::{ApiError, ApiResult},
     handlers::ai_studio::{extract_json_payload, run_completion, PromptInputs, UsageMeta},
     middleware::{resolve_org_context, AuthUser},
+    store::with_org_context,
     AppState,
 };
 
@@ -40,12 +41,16 @@ async fn authorize_workspace(
     headers: &HeaderMap,
     workspace_id: Uuid,
 ) -> ApiResult<()> {
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), workspace_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    // Bound to the caller's org: a workspace in another org reads as absent
+    // and yields the same "Workspace not found" as an explicit mismatch.
+    let workspace = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+        Box::pin(async move { Ok(CloudWorkspace::find_by_id(&mut **tx, workspace_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
     if ctx.org_id != workspace.org_id {
         return Err(ApiError::InvalidRequest("Workspace not found".into()));
     }
@@ -327,15 +332,28 @@ pub async fn generate_openapi_from_traffic(
     Json(request): Json<GenerateFromTrafficRequest>,
 ) -> ApiResult<Json<GenerateFromTrafficResponse>> {
     let started = std::time::Instant::now();
-    let pool = state.db.pool();
 
     // Pull (method, path, hits, sample_status) tuples scoped to this org's
     // hosted mocks. We aggregate up-front so the prompt we send to the LLM
     // is bounded — without this, busy orgs could blow past the token limit.
-    let path_filter = request.path_pattern.as_deref().unwrap_or("");
+    //
+    // The caller must be acting in the path org. Previously there was no
+    // check at all (any user could read any org's traffic by id); RLS alone
+    // is not enough because it is inert when the runtime role bypasses it.
+    let ctx = resolve_org_context(&state, user_id, &headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
+    if ctx.org_id != org_id {
+        return Err(ApiError::PermissionDenied);
+    }
+    let path_filter = request.path_pattern.clone().unwrap_or_default();
+    let (since, until) = (request.since, request.until);
     let min_hits: i64 = 1;
-    let rows: Vec<(String, String, i64, Option<i32>)> = sqlx::query_as(
-        r#"
+    let rows: Vec<(String, String, i64, Option<i32>)> =
+        with_org_context(state.db.runtime_pool(), org_id, |tx| {
+            Box::pin(async move {
+                Ok(sqlx::query_as(
+                    r#"
         SELECT r.method,
                r.path,
                COUNT(*)::bigint AS hits,
@@ -351,15 +369,17 @@ pub async fn generate_openapi_from_traffic(
         ORDER BY hits DESC
         LIMIT 250
         "#,
-    )
-    .bind(org_id)
-    .bind(request.since)
-    .bind(request.until)
-    .bind(path_filter)
-    .bind(min_hits)
-    .fetch_all(pool)
-    .await
-    .map_err(ApiError::Database)?;
+                )
+                .bind(org_id)
+                .bind(since)
+                .bind(until)
+                .bind(path_filter)
+                .bind(min_hits)
+                .fetch_all(&mut **tx)
+                .await?)
+            })
+        })
+        .await?;
 
     let requests_analyzed: i64 = rows.iter().map(|(_, _, hits, _)| *hits).sum();
     let paths_inferred = rows.len();

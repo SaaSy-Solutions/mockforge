@@ -36,7 +36,7 @@ async fn pool() -> PgPool {
 /// tamper detection (its FK was likewise dropped in migration 085, #1087).
 async fn insert_event(pool: &PgPool, org_id: Uuid, n: usize) -> AuditLog {
     AuditLog::create(
-        pool,
+        &mut pool.acquire().await.expect("acquire"),
         org_id,
         None,
         AuditEventType::LoginSucceeded,
@@ -131,7 +131,7 @@ async fn new_event_types_insert_and_extend_chain() {
 
     for event_type in [AuditEventType::AiUsage, AuditEventType::PaymentFailed] {
         AuditLog::create(
-            &pool,
+            &mut pool.acquire().await.expect("acquire"),
             org_id,
             None,
             event_type,
@@ -181,7 +181,7 @@ async fn gdpr_erase_succeeds_for_user_with_audit_rows_and_chain_survives() {
 
     for n in 0..3 {
         AuditLog::create(
-            &pool,
+            &mut pool.acquire().await.expect("acquire"),
             org_id,
             Some(user_id),
             AuditEventType::LoginSucceeded,

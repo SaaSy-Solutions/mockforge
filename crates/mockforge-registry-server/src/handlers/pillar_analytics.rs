@@ -15,6 +15,7 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
+    store::with_org_context,
     AppState,
 };
 use mockforge_analytics::{Pillar, PillarUsageEvent, PillarUsageMetrics};
@@ -37,9 +38,12 @@ pub async fn get_workspace_pillar_metrics(
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::AuthRequired)?;
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), workspace_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
+    // Bound to the caller's org: a cross-org workspace reads as absent.
+    let workspace = with_org_context(state.db.runtime_pool(), org_ctx.org_id, |tx| {
+        Box::pin(async move { Ok(CloudWorkspace::find_by_id(&mut **tx, workspace_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
     if org_ctx.org_id != workspace.org_id {
         return Err(ApiError::InvalidRequest("Workspace not found".into()));
     }

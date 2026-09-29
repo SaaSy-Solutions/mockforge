@@ -22,12 +22,16 @@ pub async fn authenticate_api_token(
     state: &AppState,
     token: &str,
 ) -> Result<Option<TokenAuthResult>, StatusCode> {
+    // Owner pool, deliberately: this is the pre-auth lookup that PRODUCES the
+    // org (the token names it), so there is no org to bind yet (#1087).
     let pool = state.db.pool();
 
     // Verify token
-    let api_token = ApiToken::verify_token(pool, token)
+    let mut conn = pool.acquire().await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let api_token = ApiToken::verify_token(&mut conn, token)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    drop(conn);
 
     let api_token = match api_token {
         Some(t) => t,

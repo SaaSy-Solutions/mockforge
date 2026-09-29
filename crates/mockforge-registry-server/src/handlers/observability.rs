@@ -30,6 +30,7 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
     models::{ObservabilityDashboard, ObservabilitySavedQuery},
+    store::with_org_context,
     AppState,
 };
 
@@ -48,9 +49,12 @@ pub async fn list_saved_queries(
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<ObservabilitySavedQuery>>> {
     authorize_org(&state, user_id, &headers, org_id).await?;
-    let rows = ObservabilitySavedQuery::list_by_org(state.db.pool(), org_id, query.kind.as_deref())
-        .await
-        .map_err(ApiError::Database)?;
+    let rows = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(ObservabilitySavedQuery::list_by_org(tx, org_id, query.kind.as_deref()).await?)
+        })
+    })
+    .await?;
     Ok(Json(rows))
 }
 
@@ -84,20 +88,24 @@ pub async fn create_saved_query(
         )));
     }
 
-    let row = ObservabilitySavedQuery::create(
-        state.db.pool(),
-        CreateSavedQuery {
-            org_id,
-            workspace_id: request.workspace_id,
-            name: &request.name,
-            description: request.description.as_deref(),
-            kind: &request.kind,
-            filters: &request.filters,
-            created_by: Some(user_id),
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let row = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(ObservabilitySavedQuery::create(
+                &mut **tx,
+                CreateSavedQuery {
+                    org_id,
+                    workspace_id: request.workspace_id,
+                    name: &request.name,
+                    description: request.description.as_deref(),
+                    kind: &request.kind,
+                    filters: &request.filters,
+                    created_by: Some(user_id),
+                },
+            )
+            .await?)
+        })
+    })
+    .await?;
     Ok(Json(row))
 }
 
@@ -118,15 +126,18 @@ pub async fn update_saved_query(
     Json(request): Json<UpdateSavedQueryRequest>,
 ) -> ApiResult<Json<ObservabilitySavedQuery>> {
     let existing = load_authorized_query(&state, user_id, &headers, id).await?;
-    let _ = existing;
-    let updated = ObservabilitySavedQuery::update(
-        state.db.pool(),
-        id,
-        request.name.as_deref(),
-        request.filters.as_ref(),
-    )
-    .await
-    .map_err(ApiError::Database)?
+    let updated = with_org_context(state.db.runtime_pool(), existing.org_id, |tx| {
+        Box::pin(async move {
+            Ok(ObservabilitySavedQuery::update(
+                &mut **tx,
+                id,
+                request.name.as_deref(),
+                request.filters.as_ref(),
+            )
+            .await?)
+        })
+    })
+    .await?
     .ok_or_else(|| ApiError::InvalidRequest("Saved query not found".into()))?;
     Ok(Json(updated))
 }
@@ -138,10 +149,11 @@ pub async fn delete_saved_query(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    load_authorized_query(&state, user_id, &headers, id).await?;
-    let deleted = ObservabilitySavedQuery::delete(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?;
+    let existing = load_authorized_query(&state, user_id, &headers, id).await?;
+    let deleted = with_org_context(state.db.runtime_pool(), existing.org_id, |tx| {
+        Box::pin(async move { Ok(ObservabilitySavedQuery::delete(&mut **tx, id).await?) })
+    })
+    .await?;
     if !deleted {
         return Err(ApiError::InvalidRequest("Saved query not found".into()));
     }
@@ -158,9 +170,10 @@ pub async fn list_dashboards(
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<ObservabilityDashboard>>> {
     authorize_org(&state, user_id, &headers, org_id).await?;
-    let rows = ObservabilityDashboard::list_by_org(state.db.pool(), org_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let rows = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(ObservabilityDashboard::list_by_org(&mut **tx, org_id).await?) })
+    })
+    .await?;
     Ok(Json(rows))
 }
 
@@ -187,20 +200,24 @@ pub async fn create_dashboard(
     if request.name.trim().is_empty() {
         return Err(ApiError::InvalidRequest("name must not be empty".into()));
     }
-    let row = ObservabilityDashboard::create(
-        state.db.pool(),
-        CreateDashboard {
-            org_id,
-            workspace_id: request.workspace_id,
-            name: &request.name,
-            description: request.description.as_deref(),
-            layout: &request.layout,
-            queries: &request.queries,
-            created_by: Some(user_id),
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let row = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(ObservabilityDashboard::create(
+                &mut **tx,
+                CreateDashboard {
+                    org_id,
+                    workspace_id: request.workspace_id,
+                    name: &request.name,
+                    description: request.description.as_deref(),
+                    layout: &request.layout,
+                    queries: &request.queries,
+                    created_by: Some(user_id),
+                },
+            )
+            .await?)
+        })
+    })
+    .await?;
     Ok(Json(row))
 }
 
@@ -222,16 +239,20 @@ pub async fn update_dashboard(
     headers: HeaderMap,
     Json(request): Json<UpdateDashboardRequest>,
 ) -> ApiResult<Json<ObservabilityDashboard>> {
-    load_authorized_dashboard(&state, user_id, &headers, id).await?;
-    let updated = ObservabilityDashboard::update(
-        state.db.pool(),
-        id,
-        request.name.as_deref(),
-        request.layout.as_ref(),
-        request.queries.as_ref(),
-    )
-    .await
-    .map_err(ApiError::Database)?
+    let existing = load_authorized_dashboard(&state, user_id, &headers, id).await?;
+    let updated = with_org_context(state.db.runtime_pool(), existing.org_id, |tx| {
+        Box::pin(async move {
+            Ok(ObservabilityDashboard::update(
+                &mut **tx,
+                id,
+                request.name.as_deref(),
+                request.layout.as_ref(),
+                request.queries.as_ref(),
+            )
+            .await?)
+        })
+    })
+    .await?
     .ok_or_else(|| ApiError::InvalidRequest("Dashboard not found".into()))?;
     Ok(Json(updated))
 }
@@ -243,10 +264,11 @@ pub async fn delete_dashboard(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    load_authorized_dashboard(&state, user_id, &headers, id).await?;
-    let deleted = ObservabilityDashboard::delete(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?;
+    let existing = load_authorized_dashboard(&state, user_id, &headers, id).await?;
+    let deleted = with_org_context(state.db.runtime_pool(), existing.org_id, |tx| {
+        Box::pin(async move { Ok(ObservabilityDashboard::delete(&mut **tx, id).await?) })
+    })
+    .await?;
     if !deleted {
         return Err(ApiError::InvalidRequest("Dashboard not found".into()));
     }
@@ -276,13 +298,16 @@ async fn load_authorized_query(
     headers: &HeaderMap,
     id: Uuid,
 ) -> ApiResult<ObservabilitySavedQuery> {
-    let row = ObservabilitySavedQuery::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Saved query not found".into()))?;
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    // Loaded under the caller's org: another org's row is invisible under
+    // RLS and surfaces as the same "not found".
+    let row = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+        Box::pin(async move { Ok(ObservabilitySavedQuery::find_by_id(&mut **tx, id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Saved query not found".into()))?;
     if ctx.org_id != row.org_id {
         return Err(ApiError::InvalidRequest("Saved query not found".into()));
     }
@@ -295,13 +320,16 @@ async fn load_authorized_dashboard(
     headers: &HeaderMap,
     id: Uuid,
 ) -> ApiResult<ObservabilityDashboard> {
-    let row = ObservabilityDashboard::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Dashboard not found".into()))?;
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    // Loaded under the caller's org: another org's row is invisible under
+    // RLS and surfaces as the same "not found".
+    let row = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+        Box::pin(async move { Ok(ObservabilityDashboard::find_by_id(&mut **tx, id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Dashboard not found".into()))?;
     if ctx.org_id != row.org_id {
         return Err(ApiError::InvalidRequest("Dashboard not found".into()));
     }
@@ -393,8 +421,10 @@ pub async fn query_traces(
         .as_ref()
         .map(|s| format!("%{}%", s.replace('%', r"\%").replace('_', r"\_")));
 
-    let rows = sqlx::query_as::<_, TraceSpanRow>(
-        r#"
+    let rows = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(sqlx::query_as::<_, TraceSpanRow>(
+                r#"
         SELECT t.deployment_id, t.trace_id, t.span_id, t.parent_span_id,
                t.service_name, t.name, t.kind,
                t.start_unix_nano, t.end_unix_nano, t.occurred_at,
@@ -411,18 +441,20 @@ pub async fn query_traces(
          ORDER BY t.occurred_at DESC
          LIMIT $8
         "#,
-    )
-    .bind(org_id)
-    .bind(since)
-    .bind(until)
-    .bind(req.deployment_id)
-    .bind(req.service_name)
-    .bind(name_pattern)
-    .bind(status_filter)
-    .bind(limit)
-    .fetch_all(state.db.pool())
-    .await
-    .map_err(ApiError::Database)?;
+            )
+            .bind(org_id)
+            .bind(since)
+            .bind(until)
+            .bind(req.deployment_id)
+            .bind(req.service_name)
+            .bind(name_pattern)
+            .bind(status_filter)
+            .bind(limit)
+            .fetch_all(&mut **tx)
+            .await?)
+        })
+    })
+    .await?;
 
     Ok(Json(rows))
 }
@@ -489,27 +521,32 @@ pub async fn execute_saved_query(
         .clamp(1, 24 * 60);
     let workspace_filter = req.workspace_id.or(query.workspace_id);
 
-    let pool = state.db.pool();
-    let response = match kind.as_str() {
-        "request_count" => run_request_count(pool, query.org_id, workspace_filter, window_minutes)
-            .await
-            .map_err(ApiError::Database)?,
-        "request_count_by_status" => {
-            run_request_count_by_status(pool, query.org_id, workspace_filter, window_minutes)
-                .await
-                .map_err(ApiError::Database)?
-        }
-        "incident_count" => {
-            run_incident_count(pool, query.org_id, workspace_filter, window_minutes)
-                .await
-                .map_err(ApiError::Database)?
-        }
-        other => {
-            return Err(ApiError::InvalidRequest(format!(
-                "Unsupported saved-query kind '{other}'. Supported: request_count, request_count_by_status, incident_count"
-            )));
-        }
-    };
+    let org_id = query.org_id;
+    let metric = kind.clone();
+    let response = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            let conn: &mut sqlx::PgConnection = tx;
+            Ok(match metric.as_str() {
+                "request_count" => {
+                    Some(run_request_count(conn, org_id, workspace_filter, window_minutes).await?)
+                }
+                "request_count_by_status" => Some(
+                    run_request_count_by_status(conn, org_id, workspace_filter, window_minutes)
+                        .await?,
+                ),
+                "incident_count" => {
+                    Some(run_incident_count(conn, org_id, workspace_filter, window_minutes).await?)
+                }
+                _ => None,
+            })
+        })
+    })
+    .await?
+    .ok_or_else(|| {
+        ApiError::InvalidRequest(format!(
+            "Unsupported saved-query kind '{kind}'. Supported: request_count, request_count_by_status, incident_count"
+        ))
+    })?;
 
     Ok(Json(response))
 }
@@ -522,7 +559,7 @@ pub async fn execute_saved_query(
 /// with `workspace_id IS NULL` today, so workspace-scoped counts only
 /// reflect `--cloud-ship` traffic until the shipper backfill ships.
 async fn run_request_count(
-    pool: &sqlx::PgPool,
+    conn: &mut sqlx::PgConnection,
     org_id: Uuid,
     workspace_id: Option<Uuid>,
     window_minutes: i64,
@@ -538,7 +575,7 @@ async fn run_request_count(
         )
         .bind(ws)
         .bind(window_minutes as i32)
-        .fetch_one(pool)
+        .fetch_one(&mut *conn)
         .await?
     } else {
         sqlx::query_scalar(
@@ -552,7 +589,7 @@ async fn run_request_count(
         )
         .bind(org_id)
         .bind(window_minutes as i32)
-        .fetch_one(pool)
+        .fetch_one(&mut *conn)
         .await?
     };
 
@@ -568,7 +605,7 @@ async fn run_request_count(
 }
 
 async fn run_request_count_by_status(
-    pool: &sqlx::PgPool,
+    conn: &mut sqlx::PgConnection,
     org_id: Uuid,
     workspace_id: Option<Uuid>,
     window_minutes: i64,
@@ -590,7 +627,7 @@ async fn run_request_count_by_status(
         )
         .bind(ws)
         .bind(window_minutes as i32)
-        .fetch_all(pool)
+        .fetch_all(&mut *conn)
         .await?
     } else {
         sqlx::query_as(
@@ -607,7 +644,7 @@ async fn run_request_count_by_status(
         )
         .bind(org_id)
         .bind(window_minutes as i32)
-        .fetch_all(pool)
+        .fetch_all(&mut *conn)
         .await?
     };
 
@@ -629,7 +666,7 @@ async fn run_request_count_by_status(
 }
 
 async fn run_incident_count(
-    pool: &sqlx::PgPool,
+    conn: &mut sqlx::PgConnection,
     org_id: Uuid,
     workspace_id: Option<Uuid>,
     window_minutes: i64,
@@ -654,7 +691,7 @@ async fn run_incident_count(
         )
         .bind(ws)
         .bind(window_minutes as i32)
-        .fetch_all(pool)
+        .fetch_all(&mut *conn)
         .await?
     } else {
         sqlx::query_as(
@@ -676,7 +713,7 @@ async fn run_incident_count(
         )
         .bind(org_id)
         .bind(window_minutes as i32)
-        .fetch_all(pool)
+        .fetch_all(&mut *conn)
         .await?
     };
 

@@ -7,15 +7,130 @@ use sqlx::{postgres::PgPoolOptions, Connection, PgPool};
 pub struct Database {
     /// Owner/elevated pool. Runs migrations (only the table owner can
     /// `ENABLE ROW LEVEL SECURITY`) and cross-org background workers that
-    /// legitimately sweep every tenant. On the current Neon setup this role
-    /// has `BYPASSRLS`, so it is NOT subject to the #832 RLS policies.
+    /// legitimately sweep every tenant. This role MUST have `BYPASSRLS` (or be
+    /// a superuser); `check_rls_roles` logs an ERROR at startup when it does
+    /// not, and migration 20250101000084 refuses to apply.
     pool: PgPool,
-    /// Request-path pool. When `APP_DATABASE_URL` is set this is a separate
-    /// `NOSUPERUSER NOBYPASSRLS` role, so the #832 RLS policies actually bite
-    /// for handler queries; when it is unset this simply aliases `pool` so
-    /// behavior is unchanged. Handlers that rely on the RLS backstop MUST run
+    /// Request-path pool. When `APP_DATABASE_URL` is set this is its own pool,
+    /// which SHOULD connect as a `NOSUPERUSER NOBYPASSRLS` role so the RLS
+    /// policies bite for handler queries (`check_rls_roles` verifies that);
+    /// when it is unset this simply aliases `pool`. Handlers that rely on the RLS backstop MUST run
     /// their queries through `with_org_context` to bind `app.current_org_id`.
     runtime_pool: PgPool,
+    /// True when `APP_DATABASE_URL` was set, i.e. `runtime_pool` is its own
+    /// pool (which may still point at the same role; see `check_rls_roles`).
+    runtime_is_separate: bool,
+}
+
+/// Role attributes that decide whether RLS applies to a connection.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RoleInfo {
+    pub name: String,
+    pub superuser: bool,
+    pub bypass_rls: bool,
+}
+
+impl RoleInfo {
+    async fn fetch(pool: &PgPool) -> sqlx::Result<Self> {
+        let (name, superuser, bypass_rls): (String, bool, bool) = sqlx::query_as(
+            "SELECT rolname::text, rolsuper, rolbypassrls FROM pg_roles WHERE rolname = current_user",
+        )
+        .fetch_one(pool)
+        .await?;
+        Ok(Self {
+            name,
+            superuser,
+            bypass_rls,
+        })
+    }
+
+    /// Superusers bypass RLS regardless of the BYPASSRLS attribute.
+    pub fn bypasses_rls(&self) -> bool {
+        self.superuser || self.bypass_rls
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RoleCheckLevel {
+    Info,
+    Warn,
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RoleCheckFinding {
+    pub level: RoleCheckLevel,
+    pub message: String,
+}
+
+/// Pure decision core for [`Database::check_rls_roles`]. `runtime` is `None`
+/// when `APP_DATABASE_URL` is unset (the request path shares the owner pool).
+pub fn assess_rls_roles(
+    owner: &RoleInfo,
+    runtime: Option<&RoleInfo>,
+    forced_tables: i64,
+) -> Vec<RoleCheckFinding> {
+    let mut out = Vec::new();
+    let mut push = |level, message: String| out.push(RoleCheckFinding { level, message });
+
+    match runtime {
+        None => push(
+            RoleCheckLevel::Warn,
+            format!(
+                "RLS: APP_DATABASE_URL is not set, so request-path queries run as the owner role \
+                 '{}' (bypass_rls={}). Tenant isolation is enforced in the application only; \
+                 the database policies are not applied to handler queries.",
+                owner.name,
+                owner.bypasses_rls()
+            ),
+        ),
+        Some(rt) if rt.name == owner.name => push(
+            RoleCheckLevel::Error,
+            format!(
+                "RLS: APP_DATABASE_URL and DATABASE_URL both connect as role '{}'. There is no \
+                 separate runtime role: {}",
+                rt.name,
+                if rt.bypasses_rls() {
+                    "the request path bypasses RLS, so the database policies are inert."
+                } else {
+                    "the owner pool is subject to RLS too, so workers, webhooks and cross-org \
+                     paths fail closed on forced tables."
+                }
+            ),
+        ),
+        Some(rt) if rt.bypasses_rls() => push(
+            RoleCheckLevel::Error,
+            format!(
+                "RLS: the request-path role '{}' (APP_DATABASE_URL) bypasses RLS \
+                 (superuser={}, bypassrls={}). The tenant-isolation policies are NOT enforced on \
+                 handler queries. Run: ALTER ROLE {} NOSUPERUSER NOBYPASSRLS;",
+                rt.name, rt.superuser, rt.bypass_rls, rt.name
+            ),
+        ),
+        Some(rt) => push(
+            RoleCheckLevel::Info,
+            format!(
+                "RLS: APP_DATABASE_URL set; request-path queries run as '{}' (RLS enforced on {} \
+                 forced tables); migrations, workers and elevated paths run as owner '{}'.",
+                rt.name, forced_tables, owner.name
+            ),
+        ),
+    }
+
+    if forced_tables > 0 && !owner.bypasses_rls() {
+        push(
+            RoleCheckLevel::Error,
+            format!(
+                "RLS: the owner role '{}' (DATABASE_URL) does not bypass RLS, but {} tables are \
+                 FORCE ROW LEVEL SECURITY. Workers, webhooks, pre-auth lookups and cross-org \
+                 admin paths run on this role with no org bound and will see zero rows / fail \
+                 WITH CHECK. Run: ALTER ROLE {} BYPASSRLS;",
+                owner.name, forced_tables, owner.name
+            ),
+        );
+    }
+
+    out
 }
 
 impl Database {
@@ -37,11 +152,17 @@ impl Database {
         // policies enforce org scoping. Migrations and cross-org workers keep
         // using the owner `pool`. Unset (or empty) => runtime aliases the owner
         // pool, preserving the pre-#832 single-role behavior exactly.
+        //
+        // What this actually means for tenant isolation depends on the ROLES
+        // behind the two URLs, not on whether the variable is set, so the
+        // truthful log line comes from `check_rls_roles` once the roles are
+        // known (#1087: a single NOBYPASSRLS role behind both URLs used to be
+        // reported as "dedicated runtime role").
         let runtime_pool = match std::env::var("APP_DATABASE_URL") {
             Ok(url) if !url.trim().is_empty() => {
                 tracing::info!(
-                    "APP_DATABASE_URL set: request-path queries will use the dedicated \
-                     runtime role (RLS-enforced); migrations/workers stay on the owner role"
+                    "APP_DATABASE_URL set: request-path queries use a separate connection pool; \
+                     role check follows"
                 );
                 PgPoolOptions::new()
                     .max_connections(max_connections)
@@ -50,8 +171,70 @@ impl Database {
             }
             _ => pool.clone(),
         };
+        let runtime_is_separate =
+            std::env::var("APP_DATABASE_URL").map(|u| !u.trim().is_empty()).unwrap_or(false);
 
-        Ok(Self { pool, runtime_pool })
+        Ok(Self {
+            pool,
+            runtime_pool,
+            runtime_is_separate,
+        })
+    }
+
+    /// Report, truthfully, which roles the owner and request-path pools run as
+    /// and whether that matches what the RLS backstop needs (#1087).
+    ///
+    /// The backstop needs two things:
+    /// * the request-path role must NOT bypass RLS, or the policies are inert
+    ///   for every handler query;
+    /// * the owner role MUST bypass RLS, because migrations, workers, webhooks,
+    ///   pre-auth lookups and cross-org admin paths run on it without an org
+    ///   bound. If it does not, every one of those silently sees zero rows on
+    ///   forced tables (the 2026-09 Ashburn cutover regression).
+    ///
+    /// Warn-only by design: it never refuses to boot. A misconfigured role is
+    /// logged at ERROR so it pages, but taking the API down over it would turn
+    /// a degraded-isolation state into an outage.
+    pub async fn check_rls_roles(&self) {
+        let owner = match RoleInfo::fetch(&self.pool).await {
+            Ok(r) => r,
+            Err(e) => {
+                tracing::warn!("RLS role check: could not read owner role attributes: {e}");
+                return;
+            }
+        };
+        let runtime = if self.runtime_is_separate {
+            match RoleInfo::fetch(&self.runtime_pool).await {
+                Ok(r) => Some(r),
+                Err(e) => {
+                    tracing::warn!("RLS role check: could not read runtime role attributes: {e}");
+                    return;
+                }
+            }
+        } else {
+            None
+        };
+        let forced_tables: i64 = match sqlx::query_scalar(
+            "SELECT count(*) FROM pg_class \
+             WHERE relforcerowsecurity AND relnamespace = 'public'::regnamespace",
+        )
+        .fetch_one(&self.pool)
+        .await
+        {
+            Ok(n) => n,
+            Err(e) => {
+                tracing::warn!("RLS role check: could not count FORCE RLS tables: {e}");
+                return;
+            }
+        };
+
+        for finding in assess_rls_roles(&owner, runtime.as_ref(), forced_tables) {
+            match finding.level {
+                RoleCheckLevel::Info => tracing::info!("{}", finding.message),
+                RoleCheckLevel::Warn => tracing::warn!("{}", finding.message),
+                RoleCheckLevel::Error => tracing::error!("{}", finding.message),
+            }
+        }
     }
 
     pub async fn migrate(&self) -> Result<()> {
@@ -283,6 +466,61 @@ impl Database {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn role(name: &str, superuser: bool, bypass_rls: bool) -> RoleInfo {
+        RoleInfo {
+            name: name.to_string(),
+            superuser,
+            bypass_rls,
+        }
+    }
+
+    fn levels(f: &[RoleCheckFinding]) -> Vec<RoleCheckLevel> {
+        f.iter().map(|x| x.level).collect()
+    }
+
+    #[test]
+    fn rls_roles_healthy_split_is_info_only() {
+        let owner = role("mockforge", false, true);
+        let app = role("mockforge_app", false, false);
+        let f = assess_rls_roles(&owner, Some(&app), 36);
+        assert_eq!(levels(&f), vec![RoleCheckLevel::Info]);
+        assert!(f[0].message.contains("mockforge_app"));
+        assert!(f[0].message.contains("APP_DATABASE_URL set"), "rls-e2e-gate greps for this");
+    }
+
+    #[test]
+    fn rls_roles_runtime_bypass_is_error() {
+        let owner = role("mockforge", false, true);
+        let app = role("mockforge_app", false, true);
+        let f = assess_rls_roles(&owner, Some(&app), 36);
+        assert_eq!(levels(&f), vec![RoleCheckLevel::Error]);
+        assert!(f[0].message.contains("NOBYPASSRLS"));
+        // Superuser bypasses too, even without the attribute.
+        let su = role("postgres", true, false);
+        assert_eq!(levels(&assess_rls_roles(&owner, Some(&su), 36)), vec![RoleCheckLevel::Error]);
+    }
+
+    #[test]
+    fn rls_roles_owner_without_bypass_is_error_when_tables_forced() {
+        // The 2026-09 Ashburn state: one NOBYPASSRLS role behind both URLs.
+        let owner = role("mockforge", false, false);
+        let app = role("mockforge", false, false);
+        let f = assess_rls_roles(&owner, Some(&app), 5);
+        assert_eq!(levels(&f), vec![RoleCheckLevel::Error, RoleCheckLevel::Error]);
+        assert!(f[0].message.contains("both connect as role 'mockforge'"));
+        assert!(f[1].message.contains("BYPASSRLS"));
+        // No forced tables: the owner attribute does not matter yet.
+        assert_eq!(levels(&assess_rls_roles(&owner, None, 0)), vec![RoleCheckLevel::Warn]);
+    }
+
+    #[test]
+    fn rls_roles_unset_app_url_warns_application_only() {
+        let owner = role("neondb_owner", false, true);
+        let f = assess_rls_roles(&owner, None, 36);
+        assert_eq!(levels(&f), vec![RoleCheckLevel::Warn]);
+        assert!(f[0].message.contains("application only"));
+    }
 
     #[test]
     fn test_database_clone() {

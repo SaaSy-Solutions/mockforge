@@ -264,12 +264,18 @@ async fn authorize_deployment(
     headers: &HeaderMap,
     deployment_id: Uuid,
 ) -> ApiResult<HostedMock> {
-    let deployment = HostedMock::find_by_id(state.db.pool(), deployment_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".into()))?;
+    // Resolve the caller's org first, then load under it on the runtime (RLS)
+    // pool (#1087): a deployment in another org reads as absent and gets the
+    // same "not found" as the explicit mismatch check below.
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    let org_id = ctx.org_id;
+    let deployment = crate::store::with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+        Box::pin(async move { Ok(HostedMock::find_by_id(&mut **tx, deployment_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".into()))?;
     if ctx.org_id != deployment.org_id {
         return Err(ApiError::InvalidRequest("Deployment not found".into()));
     }

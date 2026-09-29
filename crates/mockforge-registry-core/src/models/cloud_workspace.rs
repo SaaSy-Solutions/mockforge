@@ -57,7 +57,7 @@ pub struct WorkspaceSummaryResponse {
 impl Workspace {
     /// Create a new workspace
     pub async fn create(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         created_by: Uuid,
         name: &str,
@@ -74,33 +74,39 @@ impl Workspace {
         .bind(name)
         .bind(description)
         .bind(created_by)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Find a workspace by ID
-    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM workspaces WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// Find all workspaces for an organization.
     /// `sort_order` (added in migration 20250101000038) honors drag-to-reorder; ties fall back
     /// to `created_at DESC` so new workspaces surface first until a user reorders.
-    pub async fn find_by_org(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn find_by_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM workspaces WHERE org_id = $1 ORDER BY sort_order ASC, created_at DESC",
         )
         .bind(org_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     /// Update a workspace
     pub async fn update(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         name: Option<&str>,
         description: Option<&str>,
@@ -125,22 +131,22 @@ impl Workspace {
         .bind(description)
         .bind(is_active)
         .bind(settings)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
     /// Delete a workspace
-    pub async fn delete(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<()> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<()> {
         sqlx::query("DELETE FROM workspaces WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?;
         Ok(())
     }
 
     /// Flip encryption_enabled and stamp key_rotated_at when turning on.
     pub async fn set_encryption_enabled(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         enabled: bool,
     ) -> sqlx::Result<Option<Self>> {
@@ -157,13 +163,13 @@ impl Workspace {
         )
         .bind(id)
         .bind(enabled)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
     /// Overwrite the JSONB encryption_config blob.
     pub async fn set_encryption_config(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         config: &serde_json::Value,
     ) -> sqlx::Result<Option<Self>> {
@@ -175,7 +181,7 @@ impl Workspace {
         )
         .bind(id)
         .bind(config)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 

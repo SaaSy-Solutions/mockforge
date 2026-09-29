@@ -20,6 +20,7 @@ use crate::{
         },
         CloudWorkspace,
     },
+    store::with_org_context,
     AppState,
 };
 
@@ -33,9 +34,11 @@ async fn require_workspace(
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), workspace_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".to_string()))?;
+    let workspace = with_org_context(state.db.runtime_pool(), org_ctx.org_id, |tx| {
+        Box::pin(async move { Ok(CloudWorkspace::find_by_id(&mut **tx, workspace_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".to_string()))?;
 
     if workspace.org_id != org_ctx.org_id {
         return Err(ApiError::InvalidRequest(

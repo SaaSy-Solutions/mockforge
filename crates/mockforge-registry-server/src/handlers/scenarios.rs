@@ -355,9 +355,7 @@ pub async fn publish_scenario(
     let storage_limit_gb = limits.get("storage_gb").and_then(|v| v.as_i64()).unwrap_or(1);
     let storage_limit_bytes = storage_limit_gb * 1_000_000_000;
 
-    let usage = UsageCounter::get_or_create_current(pool, org_ctx.org_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let usage = state.store.get_or_create_current_usage_counter(org_ctx.org_id).await?;
 
     let new_storage = usage.storage_bytes + request.size as i64;
     if new_storage > storage_limit_bytes {
@@ -487,10 +485,15 @@ pub async fn publish_scenario(
     .await
     .map_err(ApiError::Database)?;
 
-    // Update storage usage
-    UsageCounter::update_storage(pool, org_ctx.org_id, new_storage)
-        .await
-        .map_err(ApiError::Database)?;
+    // Update storage usage (runtime pool, bound to the publishing org)
+    let storage_org_id = org_ctx.org_id;
+    crate::store::with_org_context(state.db.runtime_pool(), storage_org_id, move |tx| {
+        Box::pin(async move {
+            UsageCounter::update_storage(tx, storage_org_id, new_storage).await?;
+            Ok(())
+        })
+    })
+    .await?;
 
     // Track feature usage
     state
