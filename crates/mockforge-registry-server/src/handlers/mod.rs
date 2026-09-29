@@ -21,6 +21,7 @@ pub mod federations;
 pub mod flows;
 pub mod graph;
 pub mod health;
+pub mod hosted_mock_overrides;
 pub mod hosted_mocks;
 pub mod incidents;
 pub mod internal_contract_diff;
