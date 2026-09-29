@@ -27,10 +27,26 @@ export function Card({ title, icon, children, className, ...props }: CardProps) 
           </h3>
         </div>
       )}
-      <div className="p-5">
-        {children}
-      </div>
+      {usesComposedParts(children) ? (
+        children
+      ) : (
+        <div className="p-5">
+          {children}
+        </div>
+      )}
     </div>
+  );
+}
+
+/**
+ * shadcn-style usage (<Card><CardHeader/><CardContent/></Card>) lets the parts
+ * own their padding; wrapping them again would double it.
+ */
+function usesComposedParts(children: React.ReactNode): boolean {
+  return React.Children.toArray(children).some(
+    (child) =>
+      React.isValidElement(child) &&
+      (child.type === CardHeader || child.type === CardContent),
   );
 }
 

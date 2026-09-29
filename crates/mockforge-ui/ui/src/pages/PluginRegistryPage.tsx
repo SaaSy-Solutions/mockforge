@@ -648,7 +648,7 @@ export const PluginRegistryPage: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box>
       <MarketplaceTabs />
 
       {/* Phase 0 demand-validation CTA — only renders in cloud mode. */}

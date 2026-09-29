@@ -903,7 +903,7 @@ export function FitnessFunctionsPage() {
   const functions = data?.functions || [];
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <PageHeader
         title="Fitness Functions"
         subtitle="Register custom tests that run against each new contract version to enforce constraints"

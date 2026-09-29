@@ -219,10 +219,10 @@ export function AmqpBrokerPage() {
   const queues = queuesQuery.data?.queues ?? [];
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-7xl">
+    <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
             <Network className="h-6 w-6" />
             AMQP Broker
           </h1>

@@ -462,7 +462,7 @@ export function FixturesPage() {
               <select
                 value={selectedMethod}
                 onChange={(e) => setSelectedMethod(e.target.value)}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-ring/30 focus:border-transparent"
               >
                 <option value="all">All Methods</option>
                 <option value="GET">GET</option>
@@ -482,7 +482,7 @@ export function FixturesPage() {
                 value={selectedTag}
                 onChange={(e) => setSelectedTag(e.target.value)}
                 disabled={allTags.length === 0}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-blue-500 focus:border-transparent disabled:opacity-50"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-ring/30 focus:border-transparent disabled:opacity-50"
               >
                 <option value="all">All Tags</option>
                 {allTags.map((tag) => (
@@ -736,7 +736,7 @@ export function FixturesPage() {
                 <select
                   value={createForm.method}
                   onChange={(e) => setCreateForm({ ...createForm, method: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-ring/30 focus:border-transparent"
                 >
                   <option value="GET">GET</option>
                   <option value="POST">POST</option>
@@ -780,7 +780,7 @@ export function FixturesPage() {
                 <select
                   value={createForm.protocol}
                   onChange={(e) => setCreateForm({ ...createForm, protocol: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-ring/30 focus:border-transparent"
                 >
                   <option value="">— unspecified —</option>
                   <option value="http">http</option>
@@ -891,7 +891,7 @@ export function FixturesPage() {
                 <select
                   value={editForm.method}
                   onChange={(e) => setEditForm({ ...editForm, method: e.target.value })}
-                  className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-ring/30 focus:border-transparent"
                 >
                   <option value="GET">GET</option>
                   <option value="POST">POST</option>
@@ -918,7 +918,7 @@ export function FixturesPage() {
               <select
                 value={editForm.protocol}
                 onChange={(e) => setEditForm({ ...editForm, protocol: e.target.value })}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-ring/30 focus:border-transparent"
               >
                 <option value="">— unspecified —</option>
                 <option value="http">http</option>

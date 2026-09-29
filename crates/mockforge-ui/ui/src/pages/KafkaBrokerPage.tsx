@@ -116,10 +116,10 @@ export function KafkaBrokerPage() {
   const error = statsQuery.error || topicsQuery.error || groupsQuery.error;
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-7xl">
+    <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
             <Database className="h-6 w-6" />
             Kafka Broker
           </h1>

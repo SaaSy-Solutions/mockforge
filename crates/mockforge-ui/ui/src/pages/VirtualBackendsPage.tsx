@@ -160,7 +160,7 @@ export const VirtualBackendsPage: React.FC = () => {
             <div className="flex justify-between items-start mb-6">
                 <div>
                     <div className="flex items-center gap-2 mb-2">
-                        <h1 className="text-2xl font-bold text-foreground">
+                        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
                             Virtual Backend
                         </h1>
                         <span className="px-2 py-0.5 rounded-full bg-success-100 text-success-700 dark:bg-success-900/30 dark:text-success-400 text-xs font-medium border border-success-200 dark:border-success-900/50">
@@ -323,7 +323,7 @@ export const VirtualBackendsPage: React.FC = () => {
                                     placeholder="Search records..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
-                                    className="w-full pl-9 pr-4 py-2 bg-card border border-border rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                    className="w-full pl-9 pr-4 py-2 bg-card border border-border rounded-lg text-sm focus:ring-2 focus:ring-ring/30 outline-none"
                                 />
                             </div>
                         </div>

@@ -386,7 +386,7 @@ export function ContractDiffPage() {
   const methods = Array.isArray(captures) ? Array.from(new Set(captures.map(c => c.method))).filter(Boolean) : [];
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <AIStudioNav currentPage="Contract Diff" showQuickActions={false} />
       <div className="flex items-center justify-between">
         <PageHeader

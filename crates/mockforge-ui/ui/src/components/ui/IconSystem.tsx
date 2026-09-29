@@ -66,7 +66,7 @@ export const iconSizes = {
 
 // Semantic color mappings
 export const iconColors = {
-  default: 'text-secondary',
+  default: 'text-muted-foreground',
   primary: 'text-primary',
   brand: 'text-brand',
   success: 'text-success',

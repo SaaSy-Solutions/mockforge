@@ -112,7 +112,7 @@ export function BehavioralCloningPage() {
   }
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <PageHeader
         title="Behavioral Cloning"
         subtitle="Record multi-step API flows and replay them as named scenarios"

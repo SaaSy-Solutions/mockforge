@@ -22,7 +22,7 @@ export function Spinner({ size = 'md', className, color = 'primary' }: SpinnerPr
   const colors = {
     primary: 'text-primary',
     brand: 'text-brand',
-    muted: 'text-secondary',
+    muted: 'text-muted-foreground',
   };
 
   return (

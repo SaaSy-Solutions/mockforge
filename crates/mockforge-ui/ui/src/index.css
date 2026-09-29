@@ -65,6 +65,7 @@
   --color-warning-400: hsl(var(--warning-400));
   --color-warning-500: hsl(var(--warning-500));
   --color-warning-600: hsl(var(--warning-600));
+  --color-warning-700: hsl(var(--warning-700));
   --color-warning-900: hsl(var(--warning-900));
 
   --color-danger: hsl(var(--danger));
@@ -82,6 +83,7 @@
   --color-info-400: hsl(var(--info-400));
   --color-info-500: hsl(var(--info-500));
   --color-info-600: hsl(var(--info-600));
+  --color-info-700: hsl(var(--info-700));
   --color-info-900: hsl(var(--info-900));
 
   /* Typography */
@@ -171,6 +173,7 @@
     --warning-400: 42 96% 60%;
     --warning-500: 42 96% 50%;
     --warning-600: 42 98% 45%;
+    --warning-700: 30 92% 30%;
     --warning-900: 42 95% 18%;
 
     --danger: 0 84% 50%;
@@ -188,6 +191,7 @@
     --info-400: 217 91% 70%;
     --info-500: 217 91% 60%;
     --info-600: 217 93% 55%;
+    --info-700: 221 83% 40%;
     --info-900: 217 80% 18%;
 
     /* Background Hierarchy */
@@ -251,6 +255,7 @@
     --warning-100: 42 20% 18%;
     --warning-500: 42 96% 60%;
     --warning-600: 42 98% 55%;
+    --warning-700: 42 96% 70%;
 
     --danger: 0 84% 60%;
     --danger-50: 0 15% 12%;
@@ -263,6 +268,7 @@
     --info-100: 217 20% 18%;
     --info-500: 217 91% 65%;
     --info-600: 217 93% 60%;
+    --info-700: 217 91% 75%;
 
     /* Dark Mode Background Hierarchy */
     --bg-primary: 222 13% 8.5%;

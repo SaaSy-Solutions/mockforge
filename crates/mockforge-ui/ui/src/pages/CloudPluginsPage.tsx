@@ -47,7 +47,7 @@ export const CloudPluginsPage: React.FC = () => {
 const LocalModeNotice: React.FC = () => {
   const navigate = useNavigate();
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div>
       <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-900/20 dark:text-blue-300">
         Cloud plugin management only applies to cloud-hosted deployments. For
         plugins on a local MockForge runtime, open the{' '}
@@ -73,10 +73,10 @@ const CloudView: React.FC = () => {
   });
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="space-y-6">
       <header className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
             <Puzzle className="w-6 h-6" />
             {t('page.cloudPlugins.title')}
           </h1>

@@ -555,7 +555,7 @@ export const OrchestrationBuilder: React.FC = () => {
         </Grid>
 
         {/* Center Panel - Canvas */}
-        <Grid item xs={6} sx={{ overflow: 'auto', bgcolor: '#f5f5f5' }}>
+        <Grid item xs={6} sx={{ overflow: 'auto', bgcolor: 'grey.50' }}>
           <Box sx={{ p: 3 }}>
             <Box sx={{ mb: 2 }}>
               <Button
