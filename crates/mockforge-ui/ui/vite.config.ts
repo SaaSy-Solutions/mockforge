@@ -6,6 +6,7 @@ import path from 'path'
 // https://vite.dev/config/
 export default defineConfig(({ command, mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
+  const isCloudBuild = env.VITE_MOCKFORGE_MODE === 'cloud'
 
   // Guard: a cloud-mode production build MUST have VITE_API_BASE_URL set.
   // Without it the compiled bundle sees `isCloud === false` at runtime, the
@@ -67,13 +68,18 @@ export default defineConfig(({ command, mode }) => {
       rollupOptions: {
         output: {
           entryFileNames: (chunkInfo) => {
-            // Don't hash the main index file for easier embedding
-            return chunkInfo.name === 'index' ? 'assets/index.js' : 'assets/[name].[hash].js'
+            // The embedded admin (crates/mockforge-ui routes.rs) serves the entry
+            // by a fixed name. The cloud bundle is never embedded, so hash it:
+            // an unhashed entry cached by browsers keeps importing chunks that
+            // the next release deleted.
+            return chunkInfo.name === 'index' && !isCloudBuild
+              ? 'assets/index.js'
+              : 'assets/[name].[hash].js'
           },
           chunkFileNames: `assets/[name].[hash].js`,
           assetFileNames: (assetInfo) => {
-            // Don't hash the main CSS file for easier embedding
-            if (assetInfo.name === 'index.css') {
+            // Unhashed for the embedded admin only; see entryFileNames.
+            if (assetInfo.name === 'index.css' && !isCloudBuild) {
               return 'assets/index.css'
             }
             return 'assets/[name].[hash].[ext]'
