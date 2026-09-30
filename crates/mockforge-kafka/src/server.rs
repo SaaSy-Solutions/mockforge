@@ -6,6 +6,8 @@ use mockforge_core::protocol_abstraction::Protocol;
 use mockforge_core::protocol_server::MockProtocolServer;
 
 use crate::broker::KafkaMockBroker;
+use crate::filter::MessageFilter;
+use std::sync::Arc;
 
 /// A `MockProtocolServer` wrapper around [`KafkaMockBroker`].
 ///
@@ -14,12 +16,23 @@ use crate::broker::KafkaMockBroker;
 /// the broker is created inside `start()` rather than at construction time.
 pub struct KafkaMockServer {
     config: KafkaConfig,
+    message_filter: Option<Arc<dyn MessageFilter>>,
 }
 
 impl KafkaMockServer {
     /// Create a new `KafkaMockServer` with the given configuration.
     pub fn new(config: KafkaConfig) -> Self {
-        Self { config }
+        Self {
+            config,
+            message_filter: None,
+        }
+    }
+
+    /// Install a Produce-message retention filter for the broker instance
+    /// started by this server.
+    pub fn with_filter(mut self, filter: Arc<dyn MessageFilter>) -> Self {
+        self.message_filter = Some(filter);
+        self
     }
 }
 
@@ -33,7 +46,9 @@ impl MockProtocolServer for KafkaMockServer {
         &self,
         mut shutdown: tokio::sync::watch::Receiver<()>,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        let broker = KafkaMockBroker::new(self.config.clone()).await?;
+        let broker =
+            KafkaMockBroker::new_with_filter(self.config.clone(), self.message_filter.clone())
+                .await?;
 
         tokio::select! {
             result = broker.start() => {
@@ -58,6 +73,7 @@ impl MockProtocolServer for KafkaMockServer {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::partitions::KafkaMessage;
 
     #[test]
     fn test_kafka_mock_server_new() {
@@ -70,6 +86,21 @@ mod tests {
     fn test_kafka_mock_server_protocol() {
         let server = KafkaMockServer::new(KafkaConfig::default());
         assert_eq!(server.protocol(), Protocol::Kafka);
+    }
+
+    struct KeepAllFilter;
+
+    impl MessageFilter for KeepAllFilter {
+        fn should_keep(&self, _topic: &str, _partition: i32, _message: &KafkaMessage) -> bool {
+            true
+        }
+    }
+
+    #[test]
+    fn test_kafka_mock_server_with_filter() {
+        let server =
+            KafkaMockServer::new(KafkaConfig::default()).with_filter(Arc::new(KeepAllFilter));
+        assert!(server.message_filter.is_some());
     }
 
     #[test]
