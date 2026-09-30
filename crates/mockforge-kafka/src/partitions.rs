@@ -143,10 +143,13 @@ impl Partition {
 
     /// Fetch messages from a given offset
     pub fn fetch(&self, offset: i64, max_bytes: i32) -> Vec<&KafkaMessage> {
+        // Retained offsets are ascending but may be sparse when a
+        // `MessageFilter` dropped records, so binary-search for the start.
+        let start_idx = self.messages.partition_point(|m| m.offset < offset);
         let mut result = Vec::new();
         let mut total_bytes = 0;
 
-        for message in self.messages.iter().filter(|m| m.offset >= offset) {
+        for message in self.messages.iter().skip(start_idx) {
             if total_bytes + message.value.len() as i32 > max_bytes && !result.is_empty() {
                 break;
             }
@@ -164,7 +167,7 @@ impl Partition {
 
     /// Check if partition has messages from offset
     pub fn has_offset(&self, offset: i64) -> bool {
-        self.messages.iter().any(|message| message.offset == offset)
+        self.messages.binary_search_by_key(&offset, |message| message.offset).is_ok()
     }
 }
 
