@@ -23,7 +23,7 @@ primary_region = "iad"
 #   FLYIO_API_TOKEN       - Fly.io API token for deploying hosted mocks
 #   FLYIO_ORG_SLUG        - Fly.io organization slug
 #   REDIS_URL             - Optional: Redis connection string
-#   S3_BUCKET             - R2 bucket name (e.g. "mockforge-storage")
+#   S3_BUCKET             - R2 bucket name (production: "mockforge-cloud-storage")
 #   S3_REGION             - "auto" for Cloudflare R2
 #   S3_ENDPOINT           - R2 endpoint (https://<ACCOUNT_ID>.r2.cloudflarestorage.com)
 #   AWS_ACCESS_KEY_ID     - R2 API token Access Key ID
