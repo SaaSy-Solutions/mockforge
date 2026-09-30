@@ -101,7 +101,7 @@ jobs:
 
       - name: Upload mutation results
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: mutation-results-${{ matrix.crate }}
           path: |

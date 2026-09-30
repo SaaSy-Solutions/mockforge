@@ -2335,6 +2335,10 @@ pub async fn handle_serve(
         ));
     }
 
+    // Outermost, after every router is merged: on hosted mocks, control-plane
+    // writes need the deployment's management token (#1085).
+    let http_app = mockforge_http::management_auth::gate_control_plane_writes(http_app);
+
     // Note: OData URI rewrite is applied at the service level in serve_router_with_tls()
 
     println!(

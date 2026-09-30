@@ -9014,6 +9014,7 @@ dependencies = [
  "data-encoding",
  "ed25519-dalek",
  "hex",
+ "hmac 0.12.1",
  "jsonwebtoken",
  "pep440_rs",
  "proptest",

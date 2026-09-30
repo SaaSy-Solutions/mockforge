@@ -94,7 +94,7 @@ jobs:
 
       - name: Upload proptest regression seeds on failure
         if: failure() && steps.fuzz.outcome == 'failure'
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: jcs-fuzz-proptest-regressions
           # `proptest` writes shrunken counter-examples to

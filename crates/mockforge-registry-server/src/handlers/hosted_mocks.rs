@@ -794,6 +794,7 @@ pub async fn redeploy_deployment(
                 }
                 env.insert("PORT".to_string(), "3000".to_string());
                 env.insert("MOCKFORGE_ADMIN_ENABLED".to_string(), "true".to_string());
+                env.extend(crate::handlers::management_token::env_entry(updated_deployment.id));
                 env.extend(crate::handlers::hosted_mock_overrides::overrides_env(
                     &updated_deployment,
                 ));
@@ -1752,10 +1753,11 @@ async fn proxy_to_deployment_recorder(
     };
     let url = format!("{}{}", base.trim_end_matches('/'), path_and_query);
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("HTTP client init failed: {}", e)))?;
+    let client = crate::handlers::management_token::proxy_client(
+        deployment.id,
+        std::time::Duration::from_secs(10),
+    )
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("HTTP client init failed: {}", e)))?;
 
     let resp =
         client.get(&url).send().await.map_err(|e| {
@@ -1791,10 +1793,11 @@ async fn proxy_to_deployment_state_machines(
     };
     let url = format!("{}{}", base.trim_end_matches('/'), path_and_query);
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("HTTP client init failed: {}", e)))?;
+    let client = crate::handlers::management_token::proxy_client(
+        deployment.id,
+        std::time::Duration::from_secs(10),
+    )
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("HTTP client init failed: {}", e)))?;
 
     let resp = client.get(&url).send().await.map_err(|e| {
         ApiError::Internal(anyhow::anyhow!("State-machine proxy fetch failed: {}", e))
@@ -2233,10 +2236,11 @@ async fn proxy_post_to_deployment_recorder(
     };
     let url = format!("{}{}", base.trim_end_matches('/'), path);
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("HTTP client init failed: {}", e)))?;
+    let client = crate::handlers::management_token::proxy_client(
+        deployment.id,
+        std::time::Duration::from_secs(10),
+    )
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("HTTP client init failed: {}", e)))?;
 
     let resp =
         client.post(&url).send().await.map_err(|e| {
@@ -2335,10 +2339,11 @@ pub async fn clear_recorder(
         return Err(ApiError::InvalidRequest("Deployment has no resolved URL yet".to_string()));
     };
     let url = format!("{}/api/recorder/clear", base.trim_end_matches('/'));
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .build()
-        .map_err(|e| ApiError::Internal(anyhow::anyhow!("HTTP client init failed: {}", e)))?;
+    let client = crate::handlers::management_token::proxy_client(
+        deployment.id,
+        std::time::Duration::from_secs(10),
+    )
+    .map_err(|e| ApiError::Internal(anyhow::anyhow!("HTTP client init failed: {}", e)))?;
     let resp =
         client.delete(&url).send().await.map_err(|e| {
             ApiError::Internal(anyhow::anyhow!("Recorder clear proxy failed: {}", e))

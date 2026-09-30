@@ -189,7 +189,8 @@ fn runtime_base_url(deployment: &HostedMock) -> String {
 /// GET a JSON value, wrap in envelope. 2xx + valid JSON → live; anything
 /// else → unreachable + warning log.
 async fn proxy_get(url: &str, deployment_id: Uuid, op: &'static str) -> WorldStateEnvelope {
-    let client = match reqwest::Client::builder().timeout(PROXY_TIMEOUT).build() {
+    let client = match crate::handlers::management_token::proxy_client(deployment_id, PROXY_TIMEOUT)
+    {
         Ok(c) => c,
         Err(err) => {
             tracing::warn!(%deployment_id, op, error = %err, "reqwest client build failed");
@@ -226,7 +227,8 @@ async fn proxy_post_json<B: Serialize>(
     deployment_id: Uuid,
     op: &'static str,
 ) -> WorldStateEnvelope {
-    let client = match reqwest::Client::builder().timeout(PROXY_TIMEOUT).build() {
+    let client = match crate::handlers::management_token::proxy_client(deployment_id, PROXY_TIMEOUT)
+    {
         Ok(c) => c,
         Err(err) => {
             tracing::warn!(%deployment_id, op, error = %err, "reqwest client build failed");

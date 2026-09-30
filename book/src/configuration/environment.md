@@ -439,6 +439,13 @@ managed stack. Defaults below are the values the code falls back to.
 - `MOCKFORGE_HOSTED_OVERAGE_CEILING_MULT` (default: `0`)
   - Multiple of the plan limit at which hosted traffic is cut off. `0` disables
     the ceiling. Values must be positive to take effect
+- `MOCKFORGE_MANAGEMENT_TOKEN` (default: unset)
+  - Set by the registry on every hosted mock. When set, `mockforge serve`
+    rejects writes (anything but GET, HEAD, OPTIONS) to MockForge's own control
+    routes (`/__mockforge/*`, `/api/chaos`, `/api/recorder`, `/api/world-state`,
+    and the other management APIs) with 401 unless the request carries the
+    token in `X-MockForge-Management-Token` or `Authorization: Bearer`. Reads
+    and your mocked API are unaffected. Leave it unset for self-hosted servers
 
 ### Incident dispatch
 

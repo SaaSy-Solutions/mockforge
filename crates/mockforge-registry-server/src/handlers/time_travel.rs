@@ -155,7 +155,7 @@ pub async fn get_status(
 ) -> ApiResult<Json<TimeTravelEnvelope<TimeTravelStatusResponse>>> {
     let deployment = authorize_deployment(&state, user_id, &headers, deployment_id).await?;
     let url = format!("{}/__mockforge/time-travel/status", runtime_base_url(&deployment));
-    Ok(Json(match proxy_get::<TimeTravelStatusResponse>(&url).await {
+    Ok(Json(match proxy_get::<TimeTravelStatusResponse>(&url, deployment_id).await {
         Ok(data) => TimeTravelEnvelope::live(data),
         Err(err) => {
             tracing::warn!(%deployment_id, error = %err, "time-travel proxy GET status failed");
@@ -246,10 +246,11 @@ fn runtime_base_url(deployment: &HostedMock) -> String {
 }
 
 /// GET a JSON object. 2xx + valid JSON → Ok; anything else → Err.
-async fn proxy_get<T: for<'de> Deserialize<'de>>(url: &str) -> reqwest::Result<T> {
-    reqwest::Client::builder()
-        .timeout(PROXY_TIMEOUT)
-        .build()?
+async fn proxy_get<T: for<'de> Deserialize<'de>>(
+    url: &str,
+    deployment_id: Uuid,
+) -> reqwest::Result<T> {
+    crate::handlers::management_token::proxy_client(deployment_id, PROXY_TIMEOUT)?
         .get(url)
         .send()
         .await?
@@ -269,7 +270,8 @@ async fn proxy_post_json<B: Serialize>(
     deployment_id: Uuid,
     op: &'static str,
 ) -> Value {
-    let client = match reqwest::Client::builder().timeout(PROXY_TIMEOUT).build() {
+    let client = match crate::handlers::management_token::proxy_client(deployment_id, PROXY_TIMEOUT)
+    {
         Ok(c) => c,
         Err(err) => {
             tracing::warn!(%deployment_id, op, error = %err, "reqwest client build failed");

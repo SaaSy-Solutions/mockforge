@@ -151,3 +151,39 @@ async fn overrides_round_trip_validate_and_stay_tenant_scoped() {
     let res = owner.request(reqwest::Method::GET, &path).send().await.unwrap();
     assert_eq!(res.json::<Value>().await.unwrap()["rules"].as_array().unwrap().len(), 1);
 }
+
+#[tokio::test]
+#[ignore]
+async fn management_token_is_owner_only_and_stable() {
+    let base_url = std::env::var("REGISTRY_URL").expect("REGISTRY_URL must be set");
+    let pool = PgPoolOptions::new()
+        .max_connections(2)
+        .connect(&std::env::var("DATABASE_URL").expect("DATABASE_URL must be set"))
+        .await
+        .expect("DB connect failed");
+
+    let owner = register(&base_url, "t").await;
+    let deployment = insert_deployment(&pool, &owner.org_id).await;
+    let path = format!("/api/v1/hosted-mocks/{deployment}/management-token");
+
+    let res = owner.request(reqwest::Method::GET, &path).send().await.unwrap();
+    assert_eq!(res.status(), StatusCode::OK);
+    let body: Value = res.json().await.unwrap();
+    let token = body["token"].as_str().expect("token").to_string();
+    assert!(token.starts_with("mfm_"), "{body}");
+    assert_eq!(body["header"], "X-MockForge-Management-Token");
+
+    let again: Value = owner
+        .request(reqwest::Method::GET, &path)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    assert_eq!(again["token"], token.as_str(), "derived, so stable across calls");
+
+    let outsider = register(&base_url, "u").await;
+    let res = outsider.request(reqwest::Method::GET, &path).send().await.unwrap();
+    assert!(res.status().is_client_error(), "other org: {}", res.status());
+}
