@@ -73,7 +73,10 @@ if [ "$__SUBCMD" != "up" ] && [ "$__SUBCMD" != "all" ] && [ -f "$STATE_FILE" ]; 
   . "$STATE_FILE"
 fi
 
-export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-rlsgate-$$-${RUNNER_NAME:-local}}"
+# Compose project names allow only [a-z0-9_-]; hosted runners are named
+# like "GitHub Actions 1000072017".
+runner_slug="$(printf '%s' "${RUNNER_NAME:-local}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '-')"
+export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-rlsgate-$$-${runner_slug}}"
 
 # Free ephemeral ports, chosen now, rather than fixed ones. Explicit
 # PG_PORT/MINIO_PORT/REGISTRY_PORT still win so a local run can pin them.
