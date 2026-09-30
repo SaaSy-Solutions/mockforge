@@ -47,16 +47,16 @@ export const GraphPage: React.FC<GraphPageProps> = ({ className }) => {
   const [graphData, setGraphData] = useState<GraphData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [selectedEdge, setSelectedEdge] = useState<GraphEdge | null>(null);
   const [layout, setLayout] = useState<LayoutType>('force-directed');
   const [nodeFilter, setNodeFilter] = useState<FilterType>('all');
   const [protocolFilter, setProtocolFilter] = useState<ProtocolFilter>('all');
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
-  const refreshIntervalRef = useRef<NodeJS.Timeout | null>(null);
-  const [useRealtime, setUseRealtime] = useState(true);
+  const refreshIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [useRealtime] = useState(true);
 
   // SSE for real-time updates — local only. Cloud mode polls instead;
   // a workspace-scoped SSE endpoint is a follow-up to the read endpoint.

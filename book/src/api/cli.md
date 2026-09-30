@@ -387,15 +387,21 @@ mockforge bench-chunked --target http://localhost:3000/upload [OPTIONS]
 
 #### Options
 
-- `--target <URL>` — Target URL (required).
+- `--target <URL>` — Target URL. Required unless `--targets-file` is given.
+- `--targets-file <FILE>` — Bench every target in the file in parallel (same text/JSON format as `bench --targets-file`, including per-target `auth`, `headers`, `spec`). Mutually exclusive with `--target`.
+- `--max-concurrency <N>` — Max targets benched at once with `--targets-file` (default: 10).
 - `--method <METHOD>` — `POST` (default), `PUT`, or `PATCH`.
-- `-c, --concurrency <N>` — Concurrent workers (default: 10).
-- `-d, --duration <SECS>` — Run length (default: 30).
+- `-c, --concurrency <N>` — Concurrent workers per target (default: 10).
+- `-d, --duration <DURATION>` — Run length, per operation with `--spec` (default: 30s).
 - `--chunk-size-bytes <N>` — Bytes per chunk (default: 1024).
 - `--total-size-bytes <N>` — Total body size per request (default: 1048576 = 1 MiB).
 - `--chunk-interval-ms <MS>` — Sleep between chunks (default: 0 = back-to-back).
 - `--header <NAME: VALUE>` — Extra header (repeatable).
 - `--insecure` — Skip TLS verification.
+- `--rps <N>` — Cap on request starts per second, per target.
+- `--cps` — Open a new connection for every request (connections/s = requests/s).
+- `--rounds <N>` / `--repeat-until <DURATION>` — Campaign: re-run the whole pass; rounds go to `<output>/round_N/`, stats to `campaign.jsonl` and `round-summaries/`.
+- `--keep-rounds <N>` — Campaign only: keep the newest N `round_*` dirs.
 
 Reports req/s, p50/p95/p99 latency, and a status-code distribution at the end.
 

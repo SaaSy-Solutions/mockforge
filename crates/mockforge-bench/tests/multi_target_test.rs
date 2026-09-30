@@ -147,6 +147,7 @@ async fn test_bench_command_parse_headers() {
         max_error_rate: 0.05,
         abort_on_error: true,
         abort_on_error_rate: 0.95,
+        per_op_metrics: None,
         verbose: false,
         skip_tls_verify: false,
         chunked_request_bodies: false,
@@ -154,6 +155,8 @@ async fn test_bench_command_parse_headers() {
         no_keep_alive: false,
         targets_file: None,
         max_concurrency: None,
+        repeat_until: None,
+        rounds: None,
         results_format: "both".to_string(),
         params_file: None,
         crud_flow: false,
@@ -207,6 +210,8 @@ async fn test_bench_command_parse_headers() {
         report_missed_cap: None,
         discard_response_bodies: false,
         dns_policy: None,
+        no_k6_logs: false,
+        keep_rounds: None,
     };
 
     let headers = cmd.parse_headers().unwrap();
@@ -241,6 +246,7 @@ async fn test_bench_command_parse_headers_invalid_format() {
         max_error_rate: 0.05,
         abort_on_error: true,
         abort_on_error_rate: 0.95,
+        per_op_metrics: None,
         verbose: false,
         skip_tls_verify: false,
         chunked_request_bodies: false,
@@ -248,6 +254,8 @@ async fn test_bench_command_parse_headers_invalid_format() {
         no_keep_alive: false,
         targets_file: None,
         max_concurrency: None,
+        repeat_until: None,
+        rounds: None,
         results_format: "both".to_string(),
         params_file: None,
         crud_flow: false,
@@ -301,6 +309,8 @@ async fn test_bench_command_parse_headers_invalid_format() {
         report_missed_cap: None,
         discard_response_bodies: false,
         dns_policy: None,
+        no_k6_logs: false,
+        keep_rounds: None,
     };
 
     let result = cmd.parse_headers();

@@ -2,7 +2,7 @@
 //!
 //! Displays AI-generated failure narratives with stack traces and contributing factors.
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { AlertCircle, CheckCircle2, XCircle, ChevronDown, ChevronRight, Lightbulb } from 'lucide-react';
 import { Card } from '../ui/Card';
 

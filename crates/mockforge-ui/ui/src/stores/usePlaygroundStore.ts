@@ -1,7 +1,7 @@
 import { logger } from '@/utils/logger';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { apiService } from '../services/api';
+import { proxyApi } from '../services/api';
 import { useWorkspaceStore } from './useWorkspaceStore';
 
 /**
@@ -170,7 +170,7 @@ export const usePlaygroundStore = create<PlaygroundState & PlaygroundActions>()(
           const activeWorkspace = useWorkspaceStore.getState().activeWorkspace;
           const workspaceId = activeWorkspace?.id;
 
-          const endpoints = await apiService.listPlaygroundEndpoints(workspaceId);
+          const endpoints = await proxyApi.listPlaygroundEndpoints(workspaceId);
 
           set({ endpoints, endpointsLoading: false });
         } catch (error) {
@@ -198,7 +198,7 @@ export const usePlaygroundStore = create<PlaygroundState & PlaygroundActions>()(
           const activeWorkspace = useWorkspaceStore.getState().activeWorkspace;
           const workspaceId = activeWorkspace?.id;
 
-          const response = await apiService.executeRestRequest({
+          const response = await proxyApi.executeRestRequest({
             method: restRequest.method,
             path: restRequest.path,
             headers: Object.keys(restRequest.headers).length > 0 ? restRequest.headers : undefined,
@@ -241,7 +241,7 @@ export const usePlaygroundStore = create<PlaygroundState & PlaygroundActions>()(
           const activeWorkspace = useWorkspaceStore.getState().activeWorkspace;
           const workspaceId = activeWorkspace?.id;
 
-          const response = await apiService.executeGraphQLQuery({
+          const response = await proxyApi.executeGraphQLQuery({
             query: graphQLRequest.query,
             variables: Object.keys(graphQLRequest.variables).length > 0 ? graphQLRequest.variables : undefined,
             operation_name: graphQLRequest.operation_name,
@@ -279,7 +279,7 @@ export const usePlaygroundStore = create<PlaygroundState & PlaygroundActions>()(
             workspace_id: workspaceId,
           };
 
-          const history = await apiService.getPlaygroundHistory(historyParams);
+          const history = await proxyApi.getPlaygroundHistory(historyParams);
 
           set({ history, historyLoading: false });
         } catch (error) {
@@ -295,7 +295,7 @@ export const usePlaygroundStore = create<PlaygroundState & PlaygroundActions>()(
       replayRequest: async (requestId) => {
         set({ responseLoading: true, responseError: null });
         try {
-          const response = await apiService.replayRequest(requestId);
+          const response = await proxyApi.replayRequest(requestId);
           set({ currentResponse: response, responseLoading: false });
 
           // Reload history
@@ -317,7 +317,7 @@ export const usePlaygroundStore = create<PlaygroundState & PlaygroundActions>()(
       loadGraphQLIntrospection: async () => {
         set({ introspectionLoading: true, introspectionError: null });
         try {
-          const schema = await apiService.graphQLIntrospect();
+          const schema = await proxyApi.graphQLIntrospect();
           set({ graphQLSchema: schema, introspectionLoading: false });
         } catch (error) {
           logger.error('Failed to load GraphQL introspection', error);

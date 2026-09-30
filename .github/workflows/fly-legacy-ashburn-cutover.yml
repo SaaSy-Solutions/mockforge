@@ -1,0 +1,53 @@
+name: Fly legacy Ashburn cutover control
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "inventory, quiesce, or verify three legacy MockForge apps"
+        required: true
+        type: choice
+        options: [inventory, quiesce, verify]
+      expected_sha:
+        description: "Inventory identity SHA-256 from a prior inventory run; required for quiesce"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mockforge-fly-legacy-ashburn-cutover
+  cancel-in-progress: false
+
+jobs:
+  control:
+    if: github.ref == 'refs/heads/main' && github.repository == 'SaaSy-Solutions/mockforge'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      # actions/checkout@v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+      - name: Inspect or quiesce the exact legacy Machine set
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+          CUTOVER_ACTION: ${{ inputs.action }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: |
+          set -euo pipefail
+          test -n "$FLY_API_TOKEN"
+          test "$CUTOVER_ACTION" = inventory -o "$CUTOVER_ACTION" = quiesce -o "$CUTOVER_ACTION" = verify
+          if test "$CUTOVER_ACTION" = quiesce; then
+            test "${#EXPECTED_SHA}" -eq 64
+          fi
+          python3 scripts/ops/fly_legacy_cutover.py "$CUTOVER_ACTION" \
+            --expected-sha "$EXPECTED_SHA" --output fly-legacy-cutover-receipt.json
+      # actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: always()
+        with:
+          name: fly-legacy-cutover-receipt-${{ github.run_id }}
+          path: fly-legacy-cutover-receipt*.json
+          if-no-files-found: ignore
+          retention-days: 30

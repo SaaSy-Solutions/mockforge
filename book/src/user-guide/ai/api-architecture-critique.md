@@ -1,5 +1,7 @@
 # API Architecture Critique
 
+> **Planned / not yet available.** The critique engine and AI Studio panel exist, but the backend API is not mounted yet and there is no `mockforge ai critique` command. This page describes the intended design and is kept for reference; do not rely on it in a released build. Track progress at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 **Pillars:** [AI]
 
 API Architecture Critique feeds entire API schemas into an LLM and produces comprehensive analysis including anti-pattern detection, redundancy detection, poor naming, emotional tone assessment, and recommended restructuring. This positions MockForge as an **API Architect AI**.

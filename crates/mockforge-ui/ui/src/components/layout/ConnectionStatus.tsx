@@ -9,9 +9,9 @@
  * - Tooltip with detailed status
  */
 
-import React from 'react';
 import { Wifi, WifiOff, Loader2, Cloud } from 'lucide-react';
 import { cn } from '../../utils/cn';
+import { isCloudMode as detectCloudMode } from '../../utils/cloudMode';
 
 export type ConnectionState = 'connected' | 'connecting' | 'disconnected' | 'reconnecting' | 'cloud';
 
@@ -27,7 +27,7 @@ interface ConnectionStatusProps {
 const stateConfig: Record<ConnectionState, { color: string; label: string; icon: 'wifi' | 'wifi-off' | 'loader' | 'cloud' }> = {
   connected: {
     color: 'bg-success-500',
-    label: 'Connected',
+    label: 'Live',
     icon: 'wifi',
   },
   connecting: {
@@ -65,22 +65,19 @@ export function ConnectionStatus({
   return (
     <div
       className={cn(
-        'flex items-center gap-2',
+        'flex items-center gap-1.5',
+        showLabel && 'h-7 rounded-full border border-border bg-bg-primary px-2.5',
         className
       )}
       role="status"
       aria-live="polite"
+      aria-label={config.label}
       title={lastConnected ? `Last connected: ${lastConnected.toLocaleTimeString()}` : config.label}
     >
-      <span className="relative flex h-2.5 w-2.5">
-        {state === 'connected' && (
-          <span className={cn('animate-ping absolute inline-flex h-full w-full rounded-full opacity-75', config.color)} />
-        )}
-        <span className={cn('relative inline-flex rounded-full h-2.5 w-2.5', config.color)} />
-      </span>
+      <span className={cn('inline-flex h-2 w-2 shrink-0 rounded-full', config.color)} aria-hidden />
       {showLabel && (
-        <span className="text-xs text-muted-foreground flex items-center gap-1">
-          <Icon className={cn('h-3 w-3', (state === 'connecting' || state === 'reconnecting') && 'animate-spin')} />
+        <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
+          <Icon className={cn('h-3 w-3', (state === 'connecting' || state === 'reconnecting') && 'animate-spin')} aria-hidden />
           {config.label}
         </span>
       )}
@@ -94,11 +91,9 @@ export function ConnectionStatus({
  */
 import { create } from 'zustand';
 
-// Detect cloud mode — in cloud mode WebSocket to a local server is not expected
-const isCloudMode = (() => {
-  const apiBase = import.meta.env.VITE_API_BASE_URL;
-  return !!apiBase && apiBase !== '';
-})();
+// In cloud mode a WebSocket to a local server is not expected. Use the shared
+// detector so VITE_MOCKFORGE_MODE=cloud builds are recognised too.
+const isCloudMode = detectCloudMode();
 
 interface ConnectionStore {
   backendState: ConnectionState;
@@ -161,7 +156,7 @@ export function GlobalConnectionStatus({ className }: { className?: string }) {
     <ConnectionStatus
       state={overallState}
       className={className}
-      showLabel={overallState !== 'connected'}
+      showLabel
     />
   );
 }

@@ -3,16 +3,13 @@
 //! Displays detailed information about a generated rule, including
 //! confidence scores, reasoning, source examples, and pattern matches.
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import {
   ChevronDown,
   ChevronRight,
   Info,
   TrendingUp,
   FileText,
-  Code,
-  CheckCircle2,
-  AlertCircle,
   Clock,
 } from 'lucide-react';
 import { Card, Badge, Button } from '../ui/DesignSystem';

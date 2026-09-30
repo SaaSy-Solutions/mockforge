@@ -1,5 +1,17 @@
-import React, { useEffect, useState } from 'react';
-import { Activity, Layers, AlertCircle, TrendingUp, Clock, Zap, Play, Loader2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+  Activity,
+  Layers,
+  AlertCircle,
+  TrendingUp,
+  Clock,
+  Zap,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Trash2,
+  BarChart3,
+} from 'lucide-react';
 import {
   PageHeader,
   ModernCard,
@@ -17,7 +29,7 @@ import {
   type ObservabilitySavedQuery,
   type ExecuteSavedQueryResponse,
 } from '../services/api/cloudObservability';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 interface DashboardStats {
   timestamp: string;
@@ -62,20 +74,16 @@ function LocalObservabilityView() {
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [alerts, setAlerts] = useState<AlertData[]>([]);
   const [recentMetrics, setRecentMetrics] = useState<MetricsBucket[]>([]);
-  const [connected, setConnected] = useState(false);
 
   // WebSocket connection for real-time updates
-  const { lastMessage } = useWebSocket('/api/observability/ws', {
-    onOpen: () => setConnected(true),
-    onClose: () => setConnected(false),
-  });
+  const { lastMessage, connected } = useWebSocket('/api/observability/ws');
 
   // Process WebSocket messages
   useEffect(() => {
     if (!lastMessage) return;
 
     try {
-      const data = JSON.parse(lastMessage);
+      const data = JSON.parse(String(lastMessage.data));
 
       switch (data.type) {
         case 'Stats':
@@ -120,7 +128,7 @@ function LocalObservabilityView() {
       <PageHeader
         title="Observability Dashboard"
         subtitle="Real-time chaos engineering and system observability"
-        actions={
+        action={
           <ModernBadge variant={connected ? 'success' : 'error'}>
             {connected ? 'Connected' : 'Disconnected'}
           </ModernBadge>
@@ -150,17 +158,12 @@ function LocalObservabilityView() {
             value={stats?.active_alerts?.toString() || '0'}
             subtitle="current issues"
             icon={<AlertCircle className="h-6 w-6" />}
-            variant={stats && (stats.active_alerts ?? 0) > 0 ? 'warning' : 'default'}
           />
           <MetricCard
             title="Impact Score"
             value={`${(stats?.current_impact_score || 0) * 100}%`}
             subtitle="system impact"
             icon={<TrendingUp className="h-6 w-6" />}
-            variant={
-              stats && (stats.current_impact_score ?? 0) > 0.7 ? 'error' :
-              stats && (stats.current_impact_score ?? 0) > 0.3 ? 'warning' : 'default'
-            }
           />
         </div>
       </Section>
@@ -292,131 +295,360 @@ function LocalObservabilityView() {
 
 // --- Cloud-mode view (#465) -----------------------------------------------
 //
-// Lists the org's saved queries and lets the user run any of them
-// on-demand. Phase 1 supports three `kind`s in the saved query's
-// `filters` payload — `request_count`, `request_count_by_status`,
-// `incident_count` — and renders the flat
-// {metric,total,window_minutes,series:[{label,count}]} response as a
-// small bar list. Live event-stream tiles + dashboard layouts land in a
-// follow-up slice.
+// Each saved query renders as a live tile: it executes on mount and
+// re-executes every TILE_REFRESH_MS through cloudObservabilityApi
+// .executeSavedQuery. Tiles are created in-page (preset metrics +
+// window) so users never need to hand-craft the saved-query JSON.
+
+const TILE_REFRESH_MS = 60_000;
+
+type TileMetric = 'request_count' | 'request_count_by_status' | 'incident_count';
+
+const TILE_METRICS: Array<{ value: TileMetric; label: string; description: string }> = [
+  {
+    value: 'request_count',
+    label: 'Request volume',
+    description: 'Total requests served by your hosted mocks.',
+  },
+  {
+    value: 'request_count_by_status',
+    label: 'Requests by status code',
+    description: 'Request counts grouped by HTTP status code.',
+  },
+  {
+    value: 'incident_count',
+    label: 'Incidents',
+    description: 'Incidents opened in your organization, by severity.',
+  },
+];
+
+const TILE_WINDOWS: Array<{ value: number; label: string }> = [
+  { value: 15, label: 'Last 15 minutes' },
+  { value: 60, label: 'Last hour' },
+  { value: 24 * 60, label: 'Last 24 hours' },
+];
+
+const STARTER_TILES: Array<{ name: string; metric: TileMetric; window: number }> = [
+  { name: 'Requests (last hour)', metric: 'request_count', window: 60 },
+  { name: 'Status codes (last hour)', metric: 'request_count_by_status', window: 60 },
+  { name: 'Incidents (last 24 hours)', metric: 'incident_count', window: 24 * 60 },
+];
+
+function isTileMetric(kind: string | null): kind is TileMetric {
+  return !!kind && TILE_METRICS.some((m) => m.value === kind);
+}
+
+function formatWindow(minutes: number): string {
+  if (minutes % (24 * 60) === 0) {
+    const days = minutes / (24 * 60);
+    return days === 1 ? '24 hours' : `${days} days`;
+  }
+  if (minutes % 60 === 0) {
+    const hours = minutes / 60;
+    return hours === 1 ? '1 hour' : `${hours} hours`;
+  }
+  return `${minutes} minutes`;
+}
+
 function CloudObservabilityView() {
   const orgId = useCloudOrgId();
+  const queryClient = useQueryClient();
+  const [showCreate, setShowCreate] = useState(false);
+
+  const savedQueriesKey = ['cloud', 'observability', 'saved-queries', orgId];
   const savedQueriesQuery = useQuery({
-    queryKey: ['cloud', 'observability', 'saved-queries', orgId],
+    queryKey: savedQueriesKey,
     queryFn: () => cloudObservabilityApi.listSavedQueries(orgId!),
     enabled: !!orgId,
+  });
+
+  const createTiles = useMutation({
+    mutationFn: async (tiles: Array<{ name: string; metric: TileMetric; window: number }>) => {
+      for (const tile of tiles) {
+        await cloudObservabilityApi.createSavedQuery(orgId!, {
+          name: tile.name,
+          kind: 'metrics',
+          filters: { kind: tile.metric, window_minutes: tile.window },
+        });
+      }
+    },
+    onSuccess: () => {
+      setShowCreate(false);
+      queryClient.invalidateQueries({ queryKey: savedQueriesKey });
+    },
   });
 
   if (!orgId) {
     return (
       <div className="space-y-8">
-        <PageHeader title="Observability" subtitle="Run saved queries against your cloud workspace data." />
-        <Alert type="info" message="No active organization. Sign in or select an org to view saved queries." />
+        <PageHeader title="Observability" subtitle="Live metrics for your hosted mocks and incidents." />
+        <Alert type="info" message="No active organization. Sign in or select an organization to view metrics." />
       </div>
     );
   }
+
+  const queries = savedQueriesQuery.data ?? [];
 
   return (
     <div className="space-y-8">
       <PageHeader
         title="Observability"
-        subtitle="Saved queries over request captures and incidents. Execute on-demand; live tiles ship in a follow-up."
+        subtitle="Live tiles for request volume, status codes, and incidents across your hosted mocks. Tiles refresh every minute."
+        action={
+          queries.length > 0 && !showCreate ? (
+            <Button size="sm" onClick={() => setShowCreate(true)}>
+              <Plus className="h-4 w-4 mr-1" /> Add tile
+            </Button>
+          ) : undefined
+        }
       />
-      <Section title="Saved queries">
-        <ModernCard>
-          {savedQueriesQuery.isLoading ? (
-            <div className="flex items-center justify-center py-8 text-muted-foreground">
-              <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading saved queries…
+
+      {createTiles.error && (
+        <Alert type="error" message={`Could not create tile: ${(createTiles.error as Error).message}`} />
+      )}
+
+      {showCreate && (
+        <CreateTileForm
+          submitting={createTiles.isPending}
+          onCancel={() => setShowCreate(false)}
+          onSubmit={(tile) => createTiles.mutate([tile])}
+        />
+      )}
+
+      {savedQueriesQuery.isLoading ? (
+        <div className="flex items-center justify-center py-12 text-muted-foreground">
+          <Loader2 className="h-5 w-5 animate-spin mr-2" /> Loading tiles…
+        </div>
+      ) : savedQueriesQuery.error ? (
+        <Alert type="error" message={`Failed to load tiles: ${(savedQueriesQuery.error as Error).message}`} />
+      ) : queries.length === 0 ? (
+        !showCreate && (
+          <ModernCard>
+            <div className="flex flex-col items-center text-center py-10 px-4">
+              <div className="p-4 rounded-full bg-muted text-muted-foreground mb-4">
+                <BarChart3 className="h-8 w-8" />
+              </div>
+              <h3 className="text-lg font-semibold text-foreground mb-2">No tiles yet</h3>
+              <p className="text-sm text-muted-foreground max-w-md mb-6">
+                Tiles track request volume, status codes, and incidents for your hosted mocks. Start with
+                the recommended set or build your own.
+              </p>
+              <div className="flex flex-wrap justify-center gap-2">
+                <Button onClick={() => createTiles.mutate(STARTER_TILES)} disabled={createTiles.isPending}>
+                  {createTiles.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                  ) : (
+                    <Plus className="h-4 w-4 mr-1" />
+                  )}
+                  Add recommended tiles
+                </Button>
+                <Button variant="outline" onClick={() => setShowCreate(true)}>
+                  Build a custom tile
+                </Button>
+              </div>
             </div>
-          ) : savedQueriesQuery.error ? (
-            <Alert type="error" message={`Failed to load saved queries: ${(savedQueriesQuery.error as Error).message}`} />
-          ) : (savedQueriesQuery.data ?? []).length === 0 ? (
-            <div className="text-center py-8 text-muted-foreground">
-              No saved queries yet. Create one with{' '}
-              <code className="text-xs bg-muted px-1 py-0.5 rounded">
-                POST /api/v1/organizations/{'{'}org_id{'}'}/observability/saved-queries
-              </code>{' '}
-              and it will appear here.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {savedQueriesQuery.data!.map((q) => (
-                <SavedQueryCard key={q.id} query={q} />
-              ))}
-            </div>
-          )}
-        </ModernCard>
-      </Section>
+          </ModernCard>
+        )
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {queries.map((q) => (
+            <SavedQueryTile
+              key={q.id}
+              query={q}
+              onDeleted={() => queryClient.invalidateQueries({ queryKey: savedQueriesKey })}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
 
-function SavedQueryCard({ query }: { query: ObservabilitySavedQuery }) {
-  const [result, setResult] = useState<ExecuteSavedQueryResponse | null>(null);
-  const [running, setRunning] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+function CreateTileForm({
+  submitting,
+  onCancel,
+  onSubmit,
+}: {
+  submitting: boolean;
+  onCancel: () => void;
+  onSubmit: (tile: { name: string; metric: TileMetric; window: number }) => void;
+}) {
+  const [metric, setMetric] = useState<TileMetric>('request_count');
+  const [windowMinutes, setWindowMinutes] = useState(60);
+  const [name, setName] = useState('');
 
-  const kind = (query.filters?.kind as string | undefined) ?? null;
-  const supportedKinds = ['request_count', 'request_count_by_status', 'incident_count'];
-  const isSupported = !!kind && supportedKinds.includes(kind);
-
-  const onRun = async () => {
-    setRunning(true);
-    setError(null);
-    try {
-      const res = await cloudObservabilityApi.executeSavedQuery(query.id);
-      setResult(res);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Execute failed');
-    } finally {
-      setRunning(false);
-    }
-  };
+  const metricMeta = TILE_METRICS.find((m) => m.value === metric)!;
+  const windowLabel = TILE_WINDOWS.find((w) => w.value === windowMinutes)?.label ?? formatWindow(windowMinutes);
+  const effectiveName = name.trim() || `${metricMeta.label} (${windowLabel.toLowerCase()})`;
+  const fieldClass =
+    'w-full px-3 py-2 text-sm bg-background border border-border rounded-md focus:outline-none focus:ring-2 focus:ring-ring';
 
   return (
-    <div className="border border-border rounded-md p-4 space-y-3">
-      <div className="flex items-center justify-between gap-4">
+    <ModernCard>
+      <form
+        className="space-y-4"
+        onSubmit={(e) => {
+          e.preventDefault();
+          onSubmit({ name: effectiveName, metric, window: windowMinutes });
+        }}
+      >
+        <h3 className="text-base font-semibold text-foreground">New tile</h3>
+        <div className="grid gap-4 md:grid-cols-3">
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-foreground">Metric</span>
+            <select className={fieldClass} value={metric} onChange={(e) => setMetric(e.target.value as TileMetric)}>
+              {TILE_METRICS.map((m) => (
+                <option key={m.value} value={m.value}>
+                  {m.label}
+                </option>
+              ))}
+            </select>
+            <span className="block text-xs text-muted-foreground">{metricMeta.description}</span>
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-foreground">Time window</span>
+            <select className={fieldClass} value={windowMinutes} onChange={(e) => setWindowMinutes(Number(e.target.value))}>
+              {TILE_WINDOWS.map((w) => (
+                <option key={w.value} value={w.value}>
+                  {w.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="font-medium text-foreground">Name</span>
+            <input
+              className={fieldClass}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder={effectiveName}
+              maxLength={120}
+            />
+          </label>
+        </div>
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={onCancel}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={submitting}>
+            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Add tile'}
+          </Button>
+        </div>
+      </form>
+    </ModernCard>
+  );
+}
+
+function SavedQueryTile({ query, onDeleted }: { query: ObservabilitySavedQuery; onDeleted: () => void }) {
+  const kind = (query.filters?.kind as string | undefined) ?? null;
+  const supported = isTileMetric(kind);
+  const metricLabel = TILE_METRICS.find((m) => m.value === kind)?.label;
+  const [confirmDelete, setConfirmDelete] = useState(false);
+
+  const result = useQuery({
+    queryKey: ['cloud', 'observability', 'execute', query.id, query.updated_at],
+    queryFn: () => cloudObservabilityApi.executeSavedQuery(query.id),
+    enabled: supported,
+    refetchInterval: TILE_REFRESH_MS,
+  });
+
+  const remove = useMutation({
+    mutationFn: () => cloudObservabilityApi.deleteSavedQuery(query.id),
+    onSuccess: onDeleted,
+  });
+
+  const data: ExecuteSavedQueryResponse | undefined = result.data;
+  const maxCount = data ? Math.max(1, ...data.series.map((s) => s.count)) : 1;
+
+  return (
+    <ModernCard className="flex flex-col gap-3">
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="font-medium truncate">{query.name}</div>
-          {query.description && (
-            <div className="text-sm text-muted-foreground truncate">{query.description}</div>
-          )}
-          <div className="text-xs text-muted-foreground mt-1">
-            kind: <code>{kind ?? '(missing)'}</code>
-            {!isSupported && (
-              <span className="ml-2 text-warning-700 dark:text-warning-400">
-                (Phase 1 supports {supportedKinds.join(', ')})
-              </span>
-            )}
+          <div className="font-medium text-foreground truncate" title={query.name}>
+            {query.name}
+          </div>
+          <div className="text-xs text-muted-foreground truncate">
+            {query.description ?? metricLabel ?? 'Custom query'}
           </div>
         </div>
-        <Button onClick={onRun} disabled={running || !isSupported} size="sm">
-          {running ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
+        <div className="flex items-center gap-1 flex-shrink-0">
+          {supported && (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 w-8 p-0"
+              onClick={() => result.refetch()}
+              disabled={result.isFetching}
+              aria-label={`Refresh ${query.name}`}
+              title="Refresh now"
+            >
+              <RefreshCw className={`h-4 w-4 ${result.isFetching ? 'animate-spin' : ''}`} />
+            </Button>
+          )}
+          {confirmDelete ? (
             <>
-              <Play className="h-4 w-4 mr-1" /> Run
+              <Button size="sm" variant="destructive" onClick={() => remove.mutate()} disabled={remove.isPending}>
+                Remove
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(false)}>
+                Keep
+              </Button>
             </>
+          ) : (
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+              onClick={() => setConfirmDelete(true)}
+              aria-label={`Remove ${query.name}`}
+              title="Remove tile"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
           )}
-        </Button>
-      </div>
-      {error && <Alert type="error" message={error} />}
-      {result && (
-        <div className="text-sm space-y-2">
-          <div>
-            <span className="text-muted-foreground">total over {result.window_minutes}m:</span>{' '}
-            <span className="font-medium">{result.total.toLocaleString()}</span>
-          </div>
-          <div className="space-y-1">
-            {result.series.map((s) => (
-              <div key={s.label} className="flex justify-between text-xs">
-                <code className="text-muted-foreground">{s.label}</code>
-                <span>{s.count.toLocaleString()}</span>
-              </div>
-            ))}
-          </div>
         </div>
-      )}
-    </div>
+      </div>
+
+      {remove.error && <Alert type="error" message={(remove.error as Error).message} />}
+
+      {!supported ? (
+        <p className="text-sm text-muted-foreground">
+          This saved query uses a filter this dashboard can't chart. Tiles support request volume, status
+          codes, and incidents.
+        </p>
+      ) : result.isLoading ? (
+        <div className="flex items-center text-sm text-muted-foreground py-4">
+          <Loader2 className="h-4 w-4 animate-spin mr-2" /> Loading…
+        </div>
+      ) : result.error ? (
+        <Alert type="error" message={(result.error as Error).message} />
+      ) : data ? (
+        <>
+          <div>
+            <div className="text-3xl font-bold text-foreground">{data.total.toLocaleString()}</div>
+            <div className="text-xs text-muted-foreground">in the last {formatWindow(data.window_minutes)}</div>
+          </div>
+          {kind === 'request_count' ? null : data.series.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No activity in this window.</p>
+          ) : (
+            <div className="space-y-1.5">
+              {data.series.slice(0, 6).map((s) => (
+                <div key={s.label} className="text-xs">
+                  <div className="flex justify-between gap-2">
+                    <code className="text-muted-foreground truncate" title={s.label}>
+                      {s.label}
+                    </code>
+                    <span className="font-medium text-foreground">{s.count.toLocaleString()}</span>
+                  </div>
+                  <div className="h-1.5 rounded bg-muted overflow-hidden mt-0.5">
+                    <div className="h-full rounded bg-brand-500" style={{ width: `${(s.count / maxCount) * 100}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      ) : null}
+    </ModernCard>
   );
 }

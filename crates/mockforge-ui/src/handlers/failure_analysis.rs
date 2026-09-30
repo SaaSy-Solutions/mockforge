@@ -190,7 +190,7 @@ pub async fn list_recent_failures(
         })
         .collect();
 
-    failures.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    failures.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
     failures.truncate(50); // Limit to 50 most recent
 
     Ok(ResponseJson(ApiResponse::success(failures)))

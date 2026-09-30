@@ -1890,6 +1890,10 @@ pub async fn handle_serve(
         None
     };
 
+    // One live rule set, applied by the HTTP router and editable through
+    // the admin server's /__mockforge/overrides API.
+    let overrides = mockforge_core::SharedOverrides::load(config.overrides.clone()).await;
+
     // Use standard router
     let mut http_app = mockforge_http::build_router_with_chains_and_multi_tenant(
         final_spec_path,
@@ -1909,6 +1913,7 @@ pub async fn handle_serve(
         mockai.clone(),                        // mockai
         Some(config.deceptive_deploy.clone()), // deceptive_deploy_config
         None,                                  // proxy_config (ProxyConfig not in ServerConfig)
+        overrides.clone(),
     )
     .await;
 
@@ -3183,6 +3188,7 @@ pub async fn handle_serve(
                     federation_clone,
                     vbr_engine_clone,
                     Some(resilience_api_state.clone()),
+                    Some(overrides.clone()),
                     Some(admin_bound_tx),
                 ) => {
                     result.map_err(|e| format!("Admin UI server error: {}", e))

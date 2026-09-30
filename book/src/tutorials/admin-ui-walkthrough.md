@@ -302,7 +302,7 @@ Now:
 ## What's Next?
 
 - [Custom Response Configuration](../user-guide/http-mocking/custom-responses.md) - Build advanced mock responses
-- [Security Features](../user-guide/security.md) - Add authentication to Admin UI (v1.1+)
+- [Security Features](../user-guide/security.md) - Admin UI authentication and roles
 - [Workspace Sync](../user-guide/sync.md) - Share fixtures with your team
 - [Plugin System](../user-guide/plugins.md) - Extend Admin UI functionality
 

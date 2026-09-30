@@ -21,8 +21,6 @@ import {
   LinearProgress,
   Card,
   CardContent,
-  IconButton,
-  Tooltip,
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
@@ -203,7 +201,7 @@ const TestGeneratorPage: React.FC = () => {
     <Container maxWidth="xl">
       <Box sx={{ my: 4 }}>
         <Typography variant="h4" gutterBottom>
-          <CodeIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+          <CodeIcon className="mr-2 align-middle" />
           Test Generator
         </Typography>
         <Typography variant="body1" color="text.secondary" paragraph>
@@ -220,7 +218,7 @@ const TestGeneratorPage: React.FC = () => {
 
               <FormControl fullWidth sx={{ mb: 2 }}>
                 <InputLabel>Test Format</InputLabel>
-                <Select value={format} onChange={(e) => setFormat(e.target.value)} label="Test Format">
+                <Select value={format} onChange={(e) => setFormat(String(e.target.value))} label="Test Format">
                   {testFormats.map((f) => (
                     <MenuItem key={f.value} value={f.value}>
                       {f.label}
@@ -231,7 +229,7 @@ const TestGeneratorPage: React.FC = () => {
 
               <FormControl fullWidth sx={{ mb: 2 }}>
                 <InputLabel>Protocol</InputLabel>
-                <Select value={protocol} onChange={(e) => setProtocol(e.target.value)} label="Protocol">
+                <Select value={protocol} onChange={(e) => setProtocol(String(e.target.value))} label="Protocol">
                   <MenuItem value="Http">HTTP</MenuItem>
                   <MenuItem value="Grpc">gRPC</MenuItem>
                   <MenuItem value="GraphQL">GraphQL</MenuItem>
@@ -348,7 +346,7 @@ const TestGeneratorPage: React.FC = () => {
                   <Accordion sx={{ mt: 2 }}>
                     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                       <Typography>
-                        <AutoFixHighIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                        <AutoFixHighIcon className="mr-2 align-middle" />
                         Test Fixtures ({fixtures.length})
                       </Typography>
                     </AccordionSummary>
@@ -369,7 +367,7 @@ const TestGeneratorPage: React.FC = () => {
                   <Accordion sx={{ mt: 2 }}>
                     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                       <Typography>
-                        <BugReportIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                        <BugReportIcon className="mr-2 align-middle" />
                         Edge Case Suggestions ({edgeCases.length})
                       </Typography>
                     </AccordionSummary>
@@ -399,7 +397,7 @@ const TestGeneratorPage: React.FC = () => {
                   <Accordion sx={{ mt: 2 }}>
                     <AccordionSummary expandIcon={<ExpandMoreIcon />}>
                       <Typography>
-                        <AssessmentIcon sx={{ mr: 1, verticalAlign: 'middle' }} />
+                        <AssessmentIcon className="mr-2 align-middle" />
                         Test Gap Analysis ({gapAnalysis.coverage_percentage.toFixed(1)}% Coverage)
                       </Typography>
                     </AccordionSummary>
@@ -442,7 +440,7 @@ const TestGeneratorPage: React.FC = () => {
 
             {!generatedTests && !loading && (
               <Paper sx={{ p: 6, textAlign: 'center' }}>
-                <CodeIcon sx={{ fontSize: 64, color: 'text.disabled', mb: 2 }} />
+                <CodeIcon size={64} className="mb-4 text-muted-foreground/60" />
                 <Typography variant="h6" color="text.secondary">
                   Configure and generate tests
                 </Typography>

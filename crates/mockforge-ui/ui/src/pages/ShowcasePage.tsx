@@ -17,7 +17,6 @@ import {
   Button,
   Chip,
   Rating,
-  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -35,12 +34,8 @@ import {
 import {
   Search as SearchIcon,
   Star as StarIcon,
-  Download as DownloadIcon,
-  Visibility as ViewIcon,
   OpenInNew as OpenIcon,
   Code as CodeIcon,
-  TrendingUp as TrendingIcon,
-  NewReleases as NewIcon,
 } from '@mui/icons-material';
 import { communityApi, type ShowcaseProject, type SuccessStory } from '../services/communityApi';
 import { isCloudMode } from '../utils/cloudMode';
@@ -138,7 +133,7 @@ export const ShowcasePage: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box>
       <Typography variant="h4" gutterBottom>
         Community Showcase
       </Typography>
@@ -160,7 +155,7 @@ export const ShowcasePage: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               InputProps={{
-                startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+                startAdornment: <SearchIcon className="mr-2 text-muted-foreground" />,
               }}
               sx={{ flexGrow: 1, minWidth: 300 }}
             />
@@ -168,7 +163,7 @@ export const ShowcasePage: React.FC = () => {
               <InputLabel>Category</InputLabel>
               <Select
                 value={selectedCategory}
-                onChange={(e) => setSelectedCategory(e.target.value)}
+                onChange={(e) => setSelectedCategory(String(e.target.value))}
                 label="Category"
               >
                 <MenuItem value="all">All Categories</MenuItem>

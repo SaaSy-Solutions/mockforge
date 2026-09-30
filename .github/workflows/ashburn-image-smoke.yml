@@ -1,0 +1,48 @@
+name: MockForge image smoke
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - '.github/workflows/ashburn-images.yml'
+      - '.github/workflows/ashburn-image-smoke.yml'
+      - '.github/workflows/docker-build.yml'
+      - 'Dockerfile*'
+      - '.dockerignore'
+
+concurrency:
+  group: mockforge-image-builds
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build root and registry images without publishing
+    runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+      - uses: docker/setup-buildx-action@v4
+        with:
+          name: mockforge-smoke-${{ github.run_id }}
+          driver-opts: |
+            memory=20g
+            memory-swap=20g
+      - name: Verify BuildKit memory cap
+        run: |
+          actual="$(docker inspect 'buildx_buildkit_mockforge-smoke-${{ github.run_id }}0' --format '{{.HostConfig.Memory}}')"
+          test "$actual" = "$(( 20 * 1024 * 1024 * 1024 ))"
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64
+          push: false
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.registry
+          platforms: linux/amd64
+          push: false

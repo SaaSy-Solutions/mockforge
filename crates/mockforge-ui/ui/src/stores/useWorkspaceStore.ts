@@ -1,8 +1,7 @@
-import { logger } from '@/utils/logger';
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { apiService } from '../services/api';
-import type { WorkspaceSummary } from '../types';
+import type { WorkspaceSummary } from '../schemas/api';
 
 interface WorkspaceState {
   activeWorkspace: WorkspaceSummary | null;

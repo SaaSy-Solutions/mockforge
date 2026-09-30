@@ -1,15 +1,16 @@
-import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import type { NodeProps } from '@xyflow/react';
+import type { Node, NodeProps } from '@xyflow/react';
 import { Server, Package } from 'lucide-react';
 
-interface ServiceNodeData {
+type ServiceNodeData = {
   label: string;
   nodeType: string;
   metadata: Record<string, unknown>;
-}
+};
 
-export function ServiceNode({ data }: NodeProps<ServiceNodeData>) {
+type ServiceFlowNode = Node<ServiceNodeData, 'service'>;
+
+export function ServiceNode({ data }: NodeProps<ServiceFlowNode>) {
   const endpointCount = (data.metadata?.endpointCount as number) || 0;
   const serviceId = data.metadata?.serviceId as string | undefined;
 

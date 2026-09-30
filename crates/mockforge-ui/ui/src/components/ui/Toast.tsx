@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { cn } from '../../utils/cn';
 import { CheckCircle, XCircle, AlertCircle, Info, X } from 'lucide-react';
-import { useToastStore, type Toast as ToastData, type ToastType } from '../../stores/useToastStore';
+import { useToastStore, type ToastType } from '../../stores/useToastStore';
 
 export type { ToastType };
 

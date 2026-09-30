@@ -1,5 +1,7 @@
 # Contract Threat Modeling
 
+> **Experimental.** This feature ships in MockForge but is early: the `/api/v1/threats/*` endpoints exist (assessment is `POST /api/v1/threats/assess`) and the CLI is `mockforge governance threat assess`; the `threat-model` subcommands shown below are not implemented yet. Behavior, commands, and configuration may change between releases. Report issues at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 **Pillars:** [Contracts]
 
 Contract Threat Modeling is a new category: **contract security posture**. MockForge becomes not only a contract tool, but an **API safety platform**.

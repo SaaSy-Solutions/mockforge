@@ -2,7 +2,6 @@
  * @jest-environment jsdom
  */
 
-import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { FixtureEditor } from '../../fixtures/FixtureEditor';
@@ -15,6 +14,7 @@ const mockFixture: FixtureInfo = {
   content: '{"message": "Hello, World!"}',
   size_bytes: 32,
   last_modified: '2024-01-01T00:00:00Z',
+  createdAt: '2024-01-01T00:00:00Z',
   updatedAt: '2024-01-01T00:00:00Z',
   route_path: '/api/test',
   method: 'GET',

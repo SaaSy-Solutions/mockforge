@@ -49,7 +49,7 @@ describe('Spinner', () => {
     expect(container.firstChild).toHaveClass('text-brand');
 
     rerender(<Spinner color="muted" />);
-    expect(container.firstChild).toHaveClass('text-secondary');
+    expect(container.firstChild).toHaveClass('text-muted-foreground');
   });
 });
 

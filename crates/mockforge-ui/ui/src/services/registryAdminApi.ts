@@ -9,7 +9,7 @@
 // JWT stored under `mockforge_registry_admin_token`.
 
 import { isCloudMode as detectCloudMode } from '../utils/cloudMode';
-import { getAuthToken } from './tokenStorage';
+import { getAuthToken, setAuthToken } from './tokenStorage';
 
 const TOKEN_STORAGE_KEY = 'mockforge_registry_admin_token';
 

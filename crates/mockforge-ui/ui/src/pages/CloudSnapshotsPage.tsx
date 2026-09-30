@@ -107,7 +107,7 @@ const CloudView: React.FC = () => {
         <div className="p-6 max-w-7xl mx-auto">
             <div className="flex justify-between items-start mb-8">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">
                         Workspace Snapshots
                     </h1>
                     <p className="text-gray-600 dark:text-gray-400">
@@ -326,7 +326,7 @@ const CaptureModal: React.FC<{
                         value={state.name}
                         onChange={(e) => setState({ ...state, name: e.target.value })}
                         placeholder="e.g., Pre-chaos baseline"
-                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-ring/30"
                     />
                 </div>
                 <div className="space-y-2">
@@ -336,7 +336,7 @@ const CaptureModal: React.FC<{
                         onChange={(e) => setState({ ...state, description: e.target.value })}
                         rows={3}
                         placeholder="What's the snapshot for?"
-                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-ring/30"
                     />
                 </div>
             </div>

@@ -2,7 +2,7 @@ import { logger } from '@/utils/logger';
 import React, { Component } from 'react';
 import type { ReactNode } from 'react';
 import { Button } from '../ui/DesignSystem';
-import { StatusIcon, ActionIcon } from '../ui/IconSystem';
+import { AlertTriangle, Home, RotateCcw } from 'lucide-react';
 import { reportError } from '../../services/errorReporting';
 
 interface FallbackProps {
@@ -40,7 +40,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
     // Report error to error reporting service
     try {
-      reportError(error, errorInfo);
+      reportError(error, { componentStack: errorInfo.componentStack });
     } catch (e) {
       // Error reporting failed - log but don't crash
       logger.error('Failed to report error',e);
@@ -69,59 +69,52 @@ export class ErrorBoundary extends Component<Props, State> {
       }
 
       return (
-        <div className="min-h-screen bg-background flex items-center justify-center p-4" data-testid="error-boundary-fallback">
-          <div className="max-w-lg w-full bg-card border border-border rounded-xl shadow-xl p-8 spring-in">
-            <div className="text-center">
-              <div className="p-4 rounded-full bg-danger-50 dark:bg-danger-900/20 mb-6 inline-flex">
-                <StatusIcon status="error" size="3xl" />
+        <div className="flex min-h-[60vh] items-center justify-center p-4" data-testid="error-boundary-fallback">
+          <div className="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-sm">
+            <div className="flex items-start gap-3">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-danger-50 text-danger-600 dark:bg-danger-900/20 dark:text-danger-400">
+                <AlertTriangle className="h-5 w-5" aria-hidden />
               </div>
+              <div className="min-w-0">
+                <h2 className="text-base font-semibold text-foreground">
+                  Something went wrong
+                </h2>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  This page hit an unexpected error. Try again, or head back to the dashboard. If it keeps happening, contact support.
+                </p>
+              </div>
+            </div>
 
-              <h2 className="text-3xl font-bold text-foreground mb-3">
-                Something went wrong
-              </h2>
-              <p className="text-lg text-muted-foreground mb-8">
-                An unexpected error occurred in the application. Please try refreshing the page or contact support if the issue persists.
-              </p>
-
-              {import.meta.env.DEV && this.state.error && (
-                <div className="mb-6 p-4 bg-danger-50 dark:bg-danger-900/20 border border-danger-200 dark:border-danger-800 rounded-lg text-left">
-                  <div className="text-sm font-semibold text-danger-700 dark:text-danger-400 mb-2">Error Details:</div>
-                  <div className="text-sm font-mono text-danger-700 dark:text-danger-500 whitespace-pre-wrap break-all max-h-32 overflow-y-auto">
+            {import.meta.env.DEV && this.state.error && (
+              <details open className="mt-4 rounded-lg border border-border bg-bg-secondary text-left">
+                <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground">
+                  Error details (development only)
+                </summary>
+                <div className="border-t border-border px-3 py-2">
+                  <div className="max-h-32 overflow-y-auto whitespace-pre-wrap break-all font-mono text-xs text-danger-700 dark:text-danger-400">
                     {this.state.error.message}
                   </div>
                   {this.state.errorInfo && (
-                    <div className="mt-3 pt-3 border-t border-danger-200 dark:border-danger-800">
-                      <div className="text-xs font-semibold text-danger-700 dark:text-danger-400 mb-1">Component Stack:</div>
-                      <div className="text-xs font-mono text-danger-700 dark:text-danger-500 whitespace-pre-wrap break-all max-h-24 overflow-y-auto">
+                    <div className="mt-2 border-t border-border pt-2">
+                      <div className="mb-1 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">Component stack</div>
+                      <div className="max-h-24 overflow-y-auto whitespace-pre-wrap break-all font-mono text-[11px] text-muted-foreground">
                         {this.state.errorInfo.componentStack}
                       </div>
                     </div>
                   )}
                 </div>
-              )}
+              </details>
+            )}
 
-              <div className="flex gap-3 justify-center">
-                <Button
-                  onClick={this.handleRetry}
-                  className="flex items-center gap-2 spring-hover"
-                  variant="primary"
-                >
-                  <ActionIcon action="view" />
-                  Try Again
-                </Button>
-                <Button
-                  onClick={this.handleGoHome}
-                  variant="secondary"
-                  className="flex items-center gap-2 spring-hover"
-                >
-                  <ActionIcon action="view" />
-                  Go Home
-                </Button>
-              </div>
-
-              <div className="mt-6 text-sm text-muted-foreground">
-                If this problem persists, please contact support with the error details above.
-              </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <Button onClick={this.handleGoHome} variant="outline" size="sm">
+                <Home className="mr-2 h-4 w-4" aria-hidden />
+                Go to dashboard
+              </Button>
+              <Button onClick={this.handleRetry} variant="primary" size="sm">
+                <RotateCcw className="mr-2 h-4 w-4" aria-hidden />
+                Try Again
+              </Button>
             </div>
           </div>
         </div>

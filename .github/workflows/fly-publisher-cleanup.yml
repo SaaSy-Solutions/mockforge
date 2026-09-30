@@ -1,0 +1,23 @@
+name: Clean up stale Fly publisher Machines
+
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-flyctl
+      - name: Destroy publisher Machines older than six hours
+        env:
+          FLY_IMAGE_PUBLISHER_TOKEN: ${{ secrets.FLY_IMAGE_PUBLISHER_TOKEN }}
+        run: python3 scripts/ci/fly_buildkit_publish.py --cleanup-stale

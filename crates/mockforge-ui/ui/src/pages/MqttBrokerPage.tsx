@@ -79,25 +79,25 @@ export function MqttBrokerPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['mqtt-clients'] });
       queryClient.invalidateQueries({ queryKey: ['mqtt-stats'] });
-      showToast('Client disconnected', 'success');
+      showToast('success', 'Client disconnected');
     },
-    onError: (err: Error) => showToast(err.message, 'error'),
+    onError: (err: Error) => showToast('error', err.message),
   });
 
   const publishMutation = useMutation({
     mutationFn: publishMessage,
     onSuccess: () => {
-      showToast('Message published', 'success');
+      showToast('success', 'Message published');
       setPayload('');
       queryClient.invalidateQueries({ queryKey: ['mqtt-topics'] });
     },
-    onError: (err: Error) => showToast(err.message, 'error'),
+    onError: (err: Error) => showToast('error', err.message),
   });
 
   const handlePublish = (e: React.FormEvent) => {
     e.preventDefault();
     if (!topic.trim() || !payload.trim()) {
-      showToast('Topic and payload are required', 'error');
+      showToast('error', 'Topic and payload are required');
       return;
     }
     publishMutation.mutate({ topic: topic.trim(), payload, qos, retain });
@@ -111,10 +111,10 @@ export function MqttBrokerPage() {
     typeof c === 'string' ? c : c.client_id;
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-7xl">
+    <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
             <Radio className="h-6 w-6" />
             MQTT Broker
           </h1>

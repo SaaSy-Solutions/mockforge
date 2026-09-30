@@ -85,15 +85,17 @@ pub fn import_postman_environment(content: &str) -> Result<EnvironmentImportResu
     for env_value in environment.values {
         total_count += 1;
 
-        if env_value.enabled && env_value.value.is_some() {
-            enabled_count += 1;
-            let variable = EnvironmentVariable {
-                value: env_value.value.unwrap(),
-                description: env_value.description,
-                enabled: env_value.enabled,
-                source: VariableSource::Environment(env_name.clone()),
-            };
-            variables.insert(env_value.key, variable);
+        if env_value.enabled {
+            if let Some(value) = env_value.value {
+                enabled_count += 1;
+                let variable = EnvironmentVariable {
+                    value,
+                    description: env_value.description,
+                    enabled: env_value.enabled,
+                    source: VariableSource::Environment(env_name.clone()),
+                };
+                variables.insert(env_value.key, variable);
+            }
         }
     }
 

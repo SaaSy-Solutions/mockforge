@@ -2,7 +2,6 @@
  * @jest-environment jsdom
  */
 
-import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ErrorBoundary } from '../../error/ErrorBoundary';
@@ -156,7 +155,7 @@ describe('ErrorBoundary', () => {
   });
 
   it('renders custom fallback component when provided', () => {
-    const CustomFallback = ({ error, resetError }) => (
+    const CustomFallback = ({ error, resetError }: { error: Error; resetError: () => void }) => (
       <div data-testid="custom-fallback">
         <h1>Custom Error UI</h1>
         <p>{error.message}</p>

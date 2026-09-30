@@ -6,9 +6,9 @@
  * with smooth animations and intuitive interactions.
  */
 
-import React, { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Clock, Play, Pause, RotateCcw, FastForward, Settings, Calendar, User, ArrowRight } from 'lucide-react';
+import { Clock, Play, Pause, RotateCcw, FastForward, Settings, Calendar, User } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import {
   useTimeTravelStatus,
@@ -52,7 +52,6 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
   const [dateTimeInput, setDateTimeInput] = useState('');
   const [timeScale, setTimeScale] = useState(1.0);
   const [sliderValue, setSliderValue] = useState(0);
-  const [lifecycleUpdates, setLifecycleUpdates] = useState<Array<{ personaId: string; oldState: string; newState: string; time: string }>>([]);
 
   // Enable live preview of lifecycle updates when time changes
   useLivePreviewLifecycleUpdates(workspace, status?.enabled ?? false);
@@ -200,25 +199,24 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
   return (
     <Card
       className={cn(
-        'p-6 transition-all duration-300 ease-out',
-        'hover:shadow-lg hover:-translate-y-0.5',
-        isEnabled && 'border-brand-300 dark:border-brand-600 bg-brand-50/50 dark:bg-brand-900/10'
+        'h-full',
+        isEnabled && 'border-brand-300 dark:border-brand-600'
       )}
     >
       <div className="flex items-start justify-between mb-4">
         <div className="flex items-center gap-3">
           <div
             className={cn(
-              'p-2.5 rounded-xl transition-all duration-200',
+              'flex h-8 w-8 items-center justify-center rounded-md',
               isEnabled
                 ? 'bg-brand-100 text-brand-600 dark:bg-brand-900/30 dark:text-brand-400'
-                : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'
+                : 'bg-muted text-muted-foreground'
             )}
           >
-            <Clock className="h-5 w-5" />
+            <Clock className="h-4 w-4" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-foreground">
+            <h3 className="text-sm font-semibold text-foreground">
               Time Travel
             </h3>
             <p className="text-sm text-muted-foreground">

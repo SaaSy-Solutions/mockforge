@@ -384,7 +384,7 @@ mod tests {
                             received.lock().unwrap().push(id.to_string());
                         }
                     }
-                    axum::Json(serde_json::json!({ "accepted": 1 }))
+                    Json(serde_json::json!({ "accepted": 1 }))
                 }
             }),
         );

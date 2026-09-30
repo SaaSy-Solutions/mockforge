@@ -1,5 +1,5 @@
 import { logger } from '@/utils/logger';
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { CheckCircle2, XCircle, Search, Play, RefreshCw, AlertCircle, Cloud } from 'lucide-react';
 import { verificationApi } from '../services/api';
 import { cloudVerificationApi, type TimeWindow } from '../services/api/cloudVerification';
@@ -382,7 +382,7 @@ export function VerificationPage() {
                           id="count-value"
                           type="number"
                           min="0"
-                          value={expectedCount.type !== 'never' && expectedCount.type !== 'at_least_once' ? (expectedCount as any).value || 0 : ''}
+                          value={expectedCount.value || 0}
                           onChange={(e) => {
                             const value = parseInt(e.target.value, 10);
                             if (!isNaN(value)) {

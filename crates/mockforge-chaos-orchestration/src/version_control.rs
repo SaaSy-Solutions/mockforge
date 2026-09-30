@@ -87,7 +87,7 @@ impl VersionControlRepository {
 
         let mut repo = Self {
             orchestration_id,
-            storage_path: storage_path.clone(),
+            storage_path,
             branches: HashMap::new(),
             commits: HashMap::new(),
             current_branch: "main".to_string(),
@@ -313,7 +313,7 @@ impl VersionControlRepository {
 
     /// Hash content
     fn hash_content(content: &serde_json::Value) -> String {
-        let content_str = serde_json::to_string(content).unwrap();
+        let content_str = serde_json::to_string(content).expect("Value is serializable");
         let mut hasher = Sha256::new();
         hasher.update(content_str.as_bytes());
         format!("{:x}", hasher.finalize())[..16].to_string()
@@ -436,7 +436,7 @@ impl<'de> Deserialize<'de> for VersionControlRepository {
 
         let data = RepoData::deserialize(deserializer)?;
 
-        Ok(VersionControlRepository {
+        Ok(Self {
             orchestration_id: data.orchestration_id,
             storage_path: data.storage_path,
             branches: data.branches,

@@ -3,6 +3,10 @@
 //! Provides anomaly detection, reinforcement learning, predictive remediation,
 //! multi-armed bandit, and intelligent recommendations for chaos experiments.
 
+// Public API surface is still stabilizing (merged in #1005); per-item doc
+// coverage is a tracked follow-up rather than a merge gate.
+#![allow(missing_docs)]
+
 pub mod advanced_analytics;
 pub mod auto_remediation;
 pub mod ml_anomaly_detector;

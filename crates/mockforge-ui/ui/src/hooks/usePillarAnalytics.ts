@@ -5,6 +5,7 @@
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 import { IS_CLOUD } from '../utils/mode';
+import { authenticatedFetch } from '../utils/apiClient';
 
 export interface PillarMetricsQuery {
   time_range?: string;
@@ -95,6 +96,36 @@ function normalizeTimeRangeForCloud(timeRange: string | undefined): string {
   return '90d';
 }
 
+interface CloudPillarMetricsResponse {
+  workspace_id: string | null;
+  org_id: string | null;
+  time_range: string;
+  metrics: PillarUsageMetrics;
+}
+
+/**
+ * GET a registry-server pillar metrics endpoint. Goes through
+ * authenticatedFetch so the bearer token and refresh-on-401 apply like every
+ * other cloud call, and surfaces non-2xx responses as errors so the page
+ * renders an error state instead of waiting forever.
+ */
+async function fetchCloudPillarMetrics(url: string): Promise<CloudPillarMetricsResponse> {
+  const response = await authenticatedFetch(url, { credentials: 'include' });
+  if (!response.ok) {
+    let detail = '';
+    try {
+      const body = (await response.json()) as { error?: string; message?: string };
+      detail = body.error ?? body.message ?? '';
+    } catch {
+      // non-JSON error body
+    }
+    throw new Error(
+      `Failed to load pillar metrics (HTTP ${response.status})${detail ? `: ${detail}` : ''}`,
+    );
+  }
+  return (await response.json()) as CloudPillarMetricsResponse;
+}
+
 /**
  * Fetch pillar metrics for a workspace
  */
@@ -119,14 +150,8 @@ export const usePillarMetrics = (
         const params = new URLSearchParams();
         params.append('time_range', normalizeTimeRangeForCloud(query.time_range));
 
-        const response = await axios.get<{
-          workspace_id: string | null;
-          org_id: string | null;
-          time_range: string;
-          metrics: PillarUsageMetrics;
-        }>(`${url}?${params.toString()}`);
-
-        return response.data.metrics;
+        const body = await fetchCloudPillarMetrics(`${url}?${params.toString()}`);
+        return body.metrics;
       }
 
       let url: string;
@@ -197,11 +222,8 @@ export const usePillarUsageSummary = (
         const params = new URLSearchParams();
         params.append('time_range', normalizeTimeRangeForCloud(query.time_range));
 
-        const response = await axios.get<{ time_range: string; metrics: PillarUsageMetrics }>(
-          `${url}?${params.toString()}`
-        );
-
-        return synthesizePillarSummary(response.data.metrics, response.data.time_range);
+        const body = await fetchCloudPillarMetrics(`${url}?${params.toString()}`);
+        return synthesizePillarSummary(body.metrics, body.time_range);
       }
 
       let url: string;
@@ -296,5 +318,16 @@ function synthesizePillarSummary(
       is_most_used: total > 0 && p.usage === max,
       is_least_used: total > 0 && p.usage === min && p.usage !== max,
     })),
+  };
+}
+
+/** Per-pillar usage scores (0-100) shown in the distribution chart. */
+export function computePillarScores(data: PillarUsageMetrics) {
+  return {
+    reality: data.reality?.blended_reality_percent ?? 0,
+    contracts: data.contracts?.validation_enforce_percent ?? 0,
+    devx: data.devx ? (data.devx.sdk_installations > 0 ? 50 : 0) : 0,
+    cloud: data.cloud ? (data.cloud.shared_scenarios_count > 0 ? 50 : 0) : 0,
+    ai: data.ai ? (data.ai.ai_generated_mocks > 0 ? 50 : 0) : 0,
   };
 }

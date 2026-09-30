@@ -21,7 +21,7 @@ import { Loader2, Play, Square, RefreshCw } from 'lucide-react';
 
 export function ServerControl() {
   const queryClient = useQueryClient();
-  const [autoRefresh, setAutoRefresh] = useState(true);
+  const [autoRefresh] = useState(true);
 
   // Query server status
   const { data: status, isLoading, refetch } = useQuery<ServerStatus>({
@@ -71,7 +71,7 @@ export function ServerControl() {
   }, [queryClient]);
 
   const handleStart = () => {
-    startMutation.mutate();
+    startMutation.mutate(undefined);
   };
 
   const handleStop = () => {

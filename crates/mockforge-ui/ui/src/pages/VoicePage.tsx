@@ -3,7 +3,7 @@
 //! This page provides a conversational interface for creating mocks using
 //! natural language voice commands powered by LLM.
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { VoiceInput, type VoiceCommandResult } from '../components/voice/VoiceInput';
 import { NLHookEditor, type HookResult } from '../components/hooks/NLHookEditor';
 import {
@@ -35,13 +35,13 @@ export function VoicePage() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <AIStudioNav currentPage="Voice Interface" showQuickActions={false} />
       {/* Header */}
       <div className="space-y-2">
         <div className="flex items-center gap-3">
           <Mic className="h-8 w-8 text-primary" />
-          <h1 className="text-3xl font-bold">Voice + LLM Interface</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Voice + LLM Interface</h1>
         </div>
         <p className="text-muted-foreground">
           Build mocks conversationally using natural language commands powered by AI.

@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import { create } from 'zustand';
 import type { RequestLog, LogFilter } from '../types';
 
@@ -72,7 +71,6 @@ const generateMockLog = (id: number): RequestLog => {
       'X-Request-ID': `req-${id}`,
       'User-Agent': userAgents[Math.floor(Math.random() * userAgents.length)],
     },
-    request_size_bytes: Math.floor(Math.random() * 1000) + 50,
     response_size_bytes: responseSize,
     error_message: hasError ? `${statusCode === 404 ? 'Resource not found' : statusCode === 500 ? 'Internal server error' : 'Bad request'}` : undefined,
   };

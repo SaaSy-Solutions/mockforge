@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import React, { useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { cn } from '../../utils/cn';
@@ -191,11 +190,8 @@ export function DialogTrigger({ children, onClick, asChild }: { children: React.
     onClick?.();
   };
 
-  if (asChild && React.isValidElement(children)) {
-    return React.cloneElement(children, {
-      ...children.props,
-      onClick: handleClick,
-    } as any);
+  if (asChild && React.isValidElement<{ onClick?: () => void }>(children)) {
+    return React.cloneElement(children, { onClick: handleClick });
   }
 
   return (

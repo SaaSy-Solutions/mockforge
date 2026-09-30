@@ -113,7 +113,7 @@ export const PluginModerationPage: React.FC = () => {
 
   if (!isAdmin) {
     return (
-      <Box sx={{ p: 3 }}>
+      <Box>
         <Alert severity="error">
           Plugin moderation is restricted to administrators.
         </Alert>
@@ -122,7 +122,7 @@ export const PluginModerationPage: React.FC = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box>
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
         <Tooltip title="Back to plugin registry">
           <IconButton onClick={() => navigate('/plugin-registry')} size="small">
@@ -170,74 +170,76 @@ export const PluginModerationPage: React.FC = () => {
           </Typography>
         </Paper>
       ) : (
-        <TableContainer component={Paper} variant="outlined">
-          <Table size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell>Plugin</TableCell>
-                <TableCell>Author</TableCell>
-                <TableCell>Reason</TableCell>
-                <TableCell>Taken down</TableCell>
-                <TableCell align="right">Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {plugins.map((plugin) => (
-                <TableRow key={plugin.name} hover>
-                  <TableCell>
-                    <Stack spacing={0.5}>
-                      <Stack direction="row" spacing={1} alignItems="center">
-                        <Typography variant="subtitle2">{plugin.name}</Typography>
-                        <Chip label={plugin.category} size="small" variant="outlined" />
-                        <Chip label={`v${plugin.currentVersion}`} size="small" variant="outlined" />
-                      </Stack>
-                      <Typography variant="caption" color="text.secondary">
-                        {plugin.description}
-                      </Typography>
-                    </Stack>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">{plugin.author.username}</Typography>
-                    {plugin.author.email && (
-                      <Typography variant="caption" color="text.secondary">
-                        {plugin.author.email}
-                      </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell sx={{ maxWidth: 280 }}>
-                    {plugin.reason ? (
-                      <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
-                        {plugin.reason}
-                      </Typography>
-                    ) : (
-                      <Typography variant="caption" color="text.secondary">
-                        (no reason recorded)
-                      </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Tooltip title={new Date(plugin.takenDownAt).toLocaleString()}>
-                      <Typography variant="caption">
-                        {new Date(plugin.takenDownAt).toLocaleDateString()}
-                      </Typography>
-                    </Tooltip>
-                  </TableCell>
-                  <TableCell align="right">
-                    <Button
-                      size="small"
-                      variant="outlined"
-                      startIcon={<RestoreIcon />}
-                      disabled={restoring === plugin.name}
-                      onClick={() => handleRestore(plugin.name)}
-                    >
-                      {restoring === plugin.name ? 'Restoring…' : 'Restore'}
-                    </Button>
-                  </TableCell>
+        <Paper variant="outlined">
+          <TableContainer>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Plugin</TableCell>
+                  <TableCell>Author</TableCell>
+                  <TableCell>Reason</TableCell>
+                  <TableCell>Taken down</TableCell>
+                  <TableCell align="right">Actions</TableCell>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+              </TableHead>
+              <TableBody>
+                {plugins.map((plugin) => (
+                  <TableRow key={plugin.name} hover>
+                    <TableCell>
+                      <Stack spacing={0.5}>
+                        <Stack direction="row" spacing={1} alignItems="center">
+                          <Typography variant="subtitle2">{plugin.name}</Typography>
+                          <Chip label={plugin.category} size="small" variant="outlined" />
+                          <Chip label={`v${plugin.currentVersion}`} size="small" variant="outlined" />
+                        </Stack>
+                        <Typography variant="caption" color="text.secondary">
+                          {plugin.description}
+                        </Typography>
+                      </Stack>
+                    </TableCell>
+                    <TableCell>
+                      <Typography variant="body2">{plugin.author.username}</Typography>
+                      {plugin.author.email && (
+                        <Typography variant="caption" color="text.secondary">
+                          {plugin.author.email}
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell sx={{ maxWidth: 280 }}>
+                      {plugin.reason ? (
+                        <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap' }}>
+                          {plugin.reason}
+                        </Typography>
+                      ) : (
+                        <Typography variant="caption" color="text.secondary">
+                          (no reason recorded)
+                        </Typography>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      <Tooltip title={new Date(plugin.takenDownAt).toLocaleString()}>
+                        <Typography variant="caption">
+                          {new Date(plugin.takenDownAt).toLocaleDateString()}
+                        </Typography>
+                      </Tooltip>
+                    </TableCell>
+                    <TableCell align="right">
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<RestoreIcon />}
+                        disabled={restoring === plugin.name}
+                        onClick={() => handleRestore(plugin.name)}
+                      >
+                        {restoring === plugin.name ? 'Restoring…' : 'Restore'}
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Paper>
       )}
     </Box>
   );

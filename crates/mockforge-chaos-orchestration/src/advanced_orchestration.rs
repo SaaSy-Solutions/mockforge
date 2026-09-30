@@ -68,11 +68,11 @@ pub enum Condition {
     /// Variable exists
     Exists { variable: String },
     /// AND condition
-    And { conditions: Vec<Condition> },
+    And { conditions: Vec<Self> },
     /// OR condition
-    Or { conditions: Vec<Condition> },
+    Or { conditions: Vec<Self> },
     /// NOT condition
-    Not { condition: Box<Condition> },
+    Not { condition: Box<Self> },
     /// Previous step succeeded
     PreviousStepSucceeded,
     /// Previous step failed
@@ -101,15 +101,15 @@ impl Condition {
     /// Evaluate the condition
     pub fn evaluate(&self, context: &ExecutionContext) -> Result<bool, OrchestrationError> {
         match self {
-            Condition::Equals { variable, value } => {
+            Self::Equals { variable, value } => {
                 let var_value = context.get_variable(variable)?;
                 Ok(var_value == value)
             }
-            Condition::NotEquals { variable, value } => {
+            Self::NotEquals { variable, value } => {
                 let var_value = context.get_variable(variable)?;
                 Ok(var_value != value)
             }
-            Condition::GreaterThan { variable, value } => {
+            Self::GreaterThan { variable, value } => {
                 let var_value = context.get_variable(variable)?;
                 if let Some(num) = var_value.as_f64() {
                     Ok(num > *value)
@@ -120,7 +120,7 @@ impl Condition {
                     )))
                 }
             }
-            Condition::LessThan { variable, value } => {
+            Self::LessThan { variable, value } => {
                 let var_value = context.get_variable(variable)?;
                 if let Some(num) = var_value.as_f64() {
                     Ok(num < *value)
@@ -131,7 +131,7 @@ impl Condition {
                     )))
                 }
             }
-            Condition::GreaterThanOrEqual { variable, value } => {
+            Self::GreaterThanOrEqual { variable, value } => {
                 let var_value = context.get_variable(variable)?;
                 if let Some(num) = var_value.as_f64() {
                     Ok(num >= *value)
@@ -142,7 +142,7 @@ impl Condition {
                     )))
                 }
             }
-            Condition::LessThanOrEqual { variable, value } => {
+            Self::LessThanOrEqual { variable, value } => {
                 let var_value = context.get_variable(variable)?;
                 if let Some(num) = var_value.as_f64() {
                     Ok(num <= *value)
@@ -153,8 +153,8 @@ impl Condition {
                     )))
                 }
             }
-            Condition::Exists { variable } => Ok(context.variables.contains_key(variable)),
-            Condition::And { conditions } => {
+            Self::Exists { variable } => Ok(context.variables.contains_key(variable)),
+            Self::And { conditions } => {
                 for cond in conditions {
                     if !cond.evaluate(context)? {
                         return Ok(false);
@@ -162,7 +162,7 @@ impl Condition {
                 }
                 Ok(true)
             }
-            Condition::Or { conditions } => {
+            Self::Or { conditions } => {
                 for cond in conditions {
                     if cond.evaluate(context)? {
                         return Ok(true);
@@ -170,10 +170,10 @@ impl Condition {
                 }
                 Ok(false)
             }
-            Condition::Not { condition } => Ok(!condition.evaluate(context)?),
-            Condition::PreviousStepSucceeded => Ok(context.last_step_success),
-            Condition::PreviousStepFailed => Ok(!context.last_step_success),
-            Condition::MetricThreshold {
+            Self::Not { condition } => Ok(!condition.evaluate(context)?),
+            Self::PreviousStepSucceeded => Ok(context.last_step_success),
+            Self::PreviousStepFailed => Ok(!context.last_step_success),
+            Self::MetricThreshold {
                 metric_name,
                 operator,
                 threshold,
@@ -410,32 +410,32 @@ impl Assertion {
     /// Validate the assertion
     pub fn validate(&self, context: &ExecutionContext) -> Result<bool, OrchestrationError> {
         match self {
-            Assertion::VariableEquals { variable, expected } => {
+            Self::VariableEquals { variable, expected } => {
                 let value = context.get_variable(variable)?;
                 Ok(value == expected)
             }
-            Assertion::MetricInRange { metric, min, max } => {
+            Self::MetricInRange { metric, min, max } => {
                 if let Some(value) = context.metrics.get(metric) {
                     Ok(*value >= *min && *value <= *max)
                 } else {
                     Ok(false)
                 }
             }
-            Assertion::StepSucceeded { step_name } => {
+            Self::StepSucceeded { step_name } => {
                 if let Some(result) = context.step_results.get(step_name) {
                     Ok(result.success)
                 } else {
                     Ok(false)
                 }
             }
-            Assertion::StepFailed { step_name } => {
+            Self::StepFailed { step_name } => {
                 if let Some(result) = context.step_results.get(step_name) {
                     Ok(!result.success)
                 } else {
                     Ok(false)
                 }
             }
-            Assertion::Condition { condition } => condition.evaluate(context),
+            Self::Condition { condition } => condition.evaluate(context),
         }
     }
 }

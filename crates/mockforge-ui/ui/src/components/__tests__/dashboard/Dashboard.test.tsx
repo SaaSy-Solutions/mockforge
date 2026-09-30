@@ -2,14 +2,13 @@
  * @jest-environment jsdom
  */
 
-import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MetricCard } from '../../dashboard/MetricCard';
 import { StatCard } from '../../dashboard/StatCard';
 import { ServerTable } from '../../dashboard/ServerTable';
 import { RequestLog } from '../../dashboard/RequestLog';
-import { Activity, Users, Zap } from 'lucide-react';
+import { Activity, Users } from 'lucide-react';
 import * as apiHooks from '../../../hooks/useApi';
 import * as errorHooks from '../../../hooks/useErrorHandling';
 import * as preferencesStore from '../../../stores/usePreferencesStore';

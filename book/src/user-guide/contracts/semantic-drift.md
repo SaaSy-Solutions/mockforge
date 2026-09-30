@@ -1,5 +1,7 @@
 # Semantic Drift Notifications
 
+> **Experimental.** This feature ships in MockForge but is early: the `/api/v1/semantic-drift/*` endpoints exist and the CLI is `mockforge governance semantic analyze`; the `semantic-drift` subcommands and `contract_drift` config shown below are not implemented yet. Behavior, commands, and configuration may change between releases. Report issues at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 **Pillars:** [Contracts]
 
 Semantic Drift Notifications detect when the *meaning* of an API changes, not just its structure. This is where AI Contract Diff goes from "nice" to "indispensable."

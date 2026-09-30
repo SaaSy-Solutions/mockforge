@@ -72,9 +72,9 @@ export function SmtpMailboxPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['smtp-emails'] });
       setSelectedId(null);
-      showToast('Mailbox cleared', 'success');
+      showToast('success', 'Mailbox cleared');
     },
-    onError: (err: Error) => showToast(err.message, 'error'),
+    onError: (err: Error) => showToast('error', err.message),
   });
 
   const applySearch = (e: React.FormEvent) => {
@@ -89,10 +89,10 @@ export function SmtpMailboxPage() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-6 max-w-7xl">
+    <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
             <Mail className="h-6 w-6" />
             SMTP Mailbox
           </h1>

@@ -112,12 +112,18 @@ mockforge bench-chunked \
 | Flag | Meaning |
 |---|---|
 | `--target` | URL to POST chunked bodies at |
+| `--targets-file` | Bench every target in the file in parallel instead of one `--target` |
+| `--max-concurrency` | Max targets running at once with `--targets-file` (default 10) |
 | `--method` | `POST` (default), `PUT`, or `PATCH` |
-| `--concurrency` | Number of concurrent workers (each holds one connection) |
-| `--duration` | Run length in seconds |
+| `--concurrency` | Concurrent uploads **per target**: each worker sends one chunked request at a time and starts the next as soon as it finishes |
+| `--duration` | Run length (`30s`, `15m`, ...); **per operation** with `--spec` |
 | `--chunk-size-bytes` | Bytes per chunk emitted into the body stream |
 | `--total-size-bytes` | Total body size per request |
-| `--chunk-interval-ms` | Sleep between chunks (0 = back-to-back) |
+| `--chunk-interval-ms` | Pause between chunks (0 = back-to-back); the first chunk goes out with the headers |
+| `--rps` | Cap on request starts per second, per target (shared by its workers) |
+| `--cps` | New TCP/TLS connection per request, so connections/s = requests/s |
+| `--rounds` / `--repeat-until` | Re-run the whole pass N times / until a wall-clock duration elapses |
+| `--keep-rounds` | Keep only the newest N `round_*` dirs during a campaign |
 | `--header` | Extra `Name: Value` header; may be repeated |
 | `--insecure` | Skip TLS certificate verification |
 
@@ -142,6 +148,49 @@ mockforge bench-chunked --target http://server/upload \
   --concurrency 5 --duration 180 \
   --chunk-size-bytes 1048576 --total-size-bytes 1073741824
 ```
+
+**Multiple targets** — send chunked traffic to every server in a targets
+file at once. The file format is the same as `mockforge bench --targets-file`
+(one URL per line, or JSON with per-target `auth`, `headers` and `spec`).
+Without `--spec` each entry is a full endpoint URL; with `--spec` each entry
+is a base URL and every POST/PUT/PATCH operation runs against it:
+
+```bash
+mockforge bench-chunked --targets-file targets.txt --spec api.yaml \
+  --max-concurrency 5 --concurrency 10 --duration 10m \
+  --chunk-size-bytes 4096 --total-size-bytes 1048576 --export-requests
+```
+
+Output lines are prefixed with `[target_N]`. Per-target files go to
+`<output>/target_N/`, and `<output>/chunked-multi-target-summary.json` rolls up
+request, byte and status-code totals for every target.
+
+**How the numbers combine.** `--max-concurrency` × `--concurrency` is the
+peak number of uploads in flight (e.g. 5 × 10 = 50). With `--spec`, every
+target gets every POST/PUT/PATCH operation; operations run one after another
+per target, each for `--duration`. If the targets file has more entries than
+`--max-concurrency`, the extra targets wait for a running one to finish all of
+its operations. Each request lasts at least
+`(total_size_bytes / chunk_size_bytes - 1) × chunk_interval_ms`, so without
+`--rps` the per-target request rate is roughly `concurrency / request_seconds`
+and the per-target bandwidth is roughly
+`concurrency × chunk_size_bytes / chunk_interval_ms`. A request in flight when
+`--duration` expires is allowed to finish.
+
+**Fixed rate and longevity** — `--rps` paces request starts per target,
+`--cps` makes each one a new connection, and `--repeat-until` loops the whole
+pass (each round in `<output>/round_N/`, per-round stats in
+`<output>/campaign.jsonl` and `<output>/round-summaries/`):
+
+```bash
+mockforge bench-chunked --targets-file targets.txt --spec api.yaml \
+  --concurrency 20 --rps 2 --cps --duration 15m \
+  --repeat-until 24h --keep-rounds 3 --export-requests
+```
+
+`--rps` is a ceiling: with 128 s uploads and `--concurrency 10`, a target can
+only start about 10 / 128 ≈ 0.08 requests per second, so raise
+`--concurrency` to reach higher rates.
 
 **Chunked + chaos matching** — pair with `chunked_only: true` in
 `fault_injection.request_matcher` (see

@@ -1,5 +1,7 @@
 # Snapshot Diff Between Environments
 
+> **Experimental.** This feature ships in MockForge but is early: the comparison API is served at `/__mockforge/api/snapshot-diff/snapshots/compare` with in-memory storage; there is no `mockforge snapshot diff` command yet, and environment/persona/reality comparisons do not yet capture distinct states. Behavior, commands, and configuration may change between releases. Report issues at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 **Pillars:** [DevX]
 
 Snapshot Diff provides side-by-side visualization for comparing mock behavior between different environments, personas, scenarios, or "realities" (Reality 0.1 vs Reality 0.9). This is amazing for demos and debugging.

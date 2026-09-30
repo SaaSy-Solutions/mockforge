@@ -115,7 +115,7 @@ const CloudView: React.FC = () => {
         <div className="p-6 max-w-7xl mx-auto">
             <div className="flex justify-between items-start mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2">
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
                         <GitCompare className="w-6 h-6 text-pink-500" />
                         Cloud Contract & Verification
                     </h1>
@@ -209,7 +209,7 @@ const CloudView: React.FC = () => {
             )}
 
             <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                Fitness Functions <span className="text-xs text-gray-500 ml-2">(read-only, authoring soon)</span>
+                Fitness Functions <span className="text-xs text-gray-500 ml-2">(read-only)</span>
             </h2>
             {fitness.length === 0 ? (
                 <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6 text-sm text-gray-500 dark:text-gray-400 italic">

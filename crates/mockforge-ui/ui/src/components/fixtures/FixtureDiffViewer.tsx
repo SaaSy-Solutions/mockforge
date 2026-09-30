@@ -1,5 +1,3 @@
-import { logger } from '@/utils/logger';
-import React from 'react';
 import { Button } from '../ui/button';
 import type { FixtureDiff, DiffChange } from '../../types';
 

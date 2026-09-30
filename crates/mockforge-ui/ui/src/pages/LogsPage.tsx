@@ -240,7 +240,7 @@ export function LogsPage() {
               <select
                 value={methodFilter}
                 onChange={(e) => setMethodFilter(e.target.value as MethodFilter)}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-xs focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
               >
                 <option value="ALL">All Methods</option>
                 <option value="GET">GET</option>
@@ -261,7 +261,7 @@ export function LogsPage() {
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-xs focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
               >
                 <option value="all">All Status</option>
                 <option value="2xx">2xx Success</option>
@@ -278,7 +278,7 @@ export function LogsPage() {
               <select
                 value={limit}
                 onChange={(e) => setLimit(Number(e.target.value))}
-                className="w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="h-9 w-full rounded-lg border border-input bg-background px-3 text-sm text-foreground shadow-xs focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30"
               >
                 <option value={50}>50</option>
                 <option value={100}>100</option>

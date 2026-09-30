@@ -2,21 +2,22 @@
 //!
 //! Custom React Flow node component for representing loop steps in a flow.
 
-import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import type { NodeProps } from '@xyflow/react';
+import type { Node, NodeProps } from '@xyflow/react';
 import { Badge } from '../ui/Badge';
 import { Repeat } from 'lucide-react';
 import { cn } from '@/utils/cn';
 
-export interface LoopNodeData {
+export type LoopNodeData = {
   id: string;
   name: string;
   iterations?: number;
   condition?: string;
-}
+};
 
-export function LoopNode({ data, selected }: NodeProps<LoopNodeData>) {
+export type LoopNodeType = Node<LoopNodeData, 'loop'>;
+
+export function LoopNode({ data, selected }: NodeProps<LoopNodeType>) {
   const iterations = data.iterations;
   const condition = data.condition;
 

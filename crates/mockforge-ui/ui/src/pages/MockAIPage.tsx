@@ -7,15 +7,12 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
   Brain,
-  Code2,
   BarChart3,
   FileText,
   Sparkles,
   ArrowRight,
-  TrendingUp,
   Zap,
   BookOpen,
-  PlayCircle,
 } from 'lucide-react';
 import { PageHeader, Card, Button, Badge, Section } from '../components/ui/DesignSystem';
 import { apiService } from '../services/api';
@@ -24,7 +21,7 @@ import { isCloudMode } from '../utils/cloudMode';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';
 import { toast } from 'sonner';
 import { logger } from '@/utils/logger';
-import { AIStudioNav, BackToAIStudio } from '../components/ai/AIStudioNav';
+import { AIStudioNav } from '../components/ai/AIStudioNav';
 import { useI18n } from '../i18n/I18nProvider';
 
 interface FeatureCardProps {
@@ -168,8 +165,7 @@ export function MockAIPage() {
       <AIStudioNav currentPage="MockAI" showQuickActions={false} />
       <PageHeader
         title={t('page.mockai.title')}
-        description={t('page.mockai.description')}
-        icon={<Brain className="h-6 w-6" />}
+        subtitle={t('page.mockai.description')}
       />
 
       {/* Stats Overview */}

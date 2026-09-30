@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import { create } from 'zustand';
 import type { FixtureInfo, FixtureDiff, DiffChange } from '../types';
 import * as Diff from 'diff';

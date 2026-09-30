@@ -1,0 +1,102 @@
+name: Ashburn registry and tunnel images
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/ashburn-images.yml'
+      - 'Dockerfile.registry'
+      - 'Dockerfile.tunnel'
+      - 'crates/**'
+      - 'Cargo.lock'
+  workflow_dispatch:
+    inputs:
+      image:
+        description: 'One image for a canary (mockforge-tunnel-relay or mockforge-registry); blank builds both'
+        required: false
+        default: ''
+
+# Also used by docker-build.yml for the root MockForge image. Expensive Rust
+# Docker builds share a constrained Fly publisher app and run one at a time.
+concurrency:
+  group: mockforge-image-builds
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    if: >-
+      github.ref == 'refs/heads/main' && github.ref_protected &&
+      (github.event_name == 'workflow_dispatch' || vars.MOCKFORGE_AUTO_IMAGE_PUBLISH == 'true')
+    # This job only computes a JSON matrix; it needs no trusted publisher VM.
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+    steps:
+      - id: plan
+        env:
+          WANTED_IMAGE: ${{ inputs.image }}
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+          sources = {
+              'mockforge-registry': 'Dockerfile.registry',
+              'mockforge-tunnel-relay': 'Dockerfile.tunnel',
+          }
+          wanted = os.environ.get('WANTED_IMAGE', '')
+          if wanted and wanted not in sources:
+              raise SystemExit(f'unknown image: {wanted}')
+          chosen = {wanted: sources[wanted]} if wanted else sources
+          include = [{'app': app, 'dockerfile': dockerfile} for app, dockerfile in sorted(chosen.items())]
+          print('matrix=' + json.dumps({'include': include}))
+          PY
+
+  build:
+    needs: plan
+    name: ${{ matrix.app }}
+    if: >-
+      github.ref == 'refs/heads/main' && github.ref_protected &&
+      (github.event_name == 'workflow_dispatch' || vars.MOCKFORGE_AUTO_IMAGE_PUBLISH == 'true')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix: ${{ fromJson(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-flyctl
+      - name: Publish through disposable rootless BuildKit Machine
+        env:
+          FLY_IMAGE_PUBLISHER_TOKEN: ${{ secrets.FLY_IMAGE_PUBLISHER_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_APP: ${{ matrix.app }}
+          IMAGE_DOCKERFILE: ${{ matrix.dockerfile }}
+        run: python3 scripts/ci/fly_buildkit_publish.py
+      - name: Verify no publisher Machine remains
+        if: always()
+        env:
+          FLY_IMAGE_PUBLISHER_TOKEN: ${{ secrets.FLY_IMAGE_PUBLISHER_TOKEN }}
+          IMAGE_APP: ${{ matrix.app }}
+        run: python3 scripts/ci/fly_buildkit_publish.py --cleanup-only
+
+  images-built:
+    name: MockForge Ashburn images built
+    needs: [plan, build]
+    if: >-
+      always() && github.ref == 'refs/heads/main' &&
+      (github.event_name == 'workflow_dispatch' || vars.MOCKFORGE_AUTO_IMAGE_PUBLISH == 'true')
+    # Report the publisher result without waiting for old CI listeners.
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          test "${{ needs.plan.result }}" = success
+          test "${{ needs.build.result }}" = success

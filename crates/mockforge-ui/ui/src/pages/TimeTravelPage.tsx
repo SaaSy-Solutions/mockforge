@@ -10,9 +10,9 @@
  * Follows Apple's Human Interface Guidelines with smooth animations and intuitive UX.
  */
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Clock, Play, Pause, RotateCcw, FastForward, Settings, Calendar, Zap, RefreshCw } from 'lucide-react';
-import { PageHeader, Section, Alert } from '../components/ui/DesignSystem';
+import { PageHeader, Alert } from '../components/ui/DesignSystem';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/Card';
 import { Badge } from '../components/ui/Badge';

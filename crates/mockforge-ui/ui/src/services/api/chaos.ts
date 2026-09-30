@@ -2,11 +2,12 @@
  * Chaos API service — chaos engineering configuration, network profiles, error patterns.
  */
 import { fetchJson, authenticatedFetch } from './client';
+import type { ChaosLatencyConfig, ChaosFaultInjectionConfig, ChaosTrafficShapingConfig } from '../../types';
 
 export interface ChaosConfig {
-  latency?: Record<string, unknown>;
-  fault_injection?: Record<string, unknown>;
-  traffic_shaping?: Record<string, unknown>;
+  latency?: ChaosLatencyConfig | null;
+  fault_injection?: ChaosFaultInjectionConfig | null;
+  traffic_shaping?: ChaosTrafficShapingConfig | null;
   [key: string]: unknown;
 }
 

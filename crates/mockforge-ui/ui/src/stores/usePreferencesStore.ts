@@ -73,9 +73,12 @@ const SAVE_DEBOUNCE_MS = 800;
 
 interface PreferencesStore extends PreferencesState, PreferencesActions {}
 
+/** A patch where each preference section may itself be partial. */
+type PreferencesPatch = { [K in keyof UserPreferences]?: Partial<UserPreferences[K]> };
+
 function mergePartial(
   current: UserPreferences,
-  partial: Partial<UserPreferences>,
+  partial: PreferencesPatch,
 ): UserPreferences {
   return {
     ...current,

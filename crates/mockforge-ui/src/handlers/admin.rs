@@ -100,7 +100,7 @@ pub async fn get_logs(
         .collect();
 
     // Sort by timestamp descending (most recent first)
-    log_entries.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    log_entries.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
 
     Json(ApiResponse::success(log_entries))
 }

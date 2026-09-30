@@ -1,5 +1,3 @@
-import { logger } from '@/utils/logger';
-import React from 'react';
 import { cn } from '../../utils/cn';
 import {
   // Status Icons
@@ -68,7 +66,7 @@ export const iconSizes = {
 
 // Semantic color mappings
 export const iconColors = {
-  default: 'text-secondary',
+  default: 'text-muted-foreground',
   primary: 'text-primary',
   brand: 'text-brand',
   success: 'text-success',

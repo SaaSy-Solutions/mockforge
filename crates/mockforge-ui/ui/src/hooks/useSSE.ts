@@ -147,7 +147,7 @@ export function useSSE<T = unknown>(
 
       eventSource.onerror = (event) => {
         if (import.meta.env.DEV) {
-          logger.error('SSE: Connection error', event, 'ReadyState:', eventSource.readyState);
+          logger.error('SSE: Connection error', event, { readyState: eventSource.readyState });
         }
         setError(event);
         setReadyState(eventSource.readyState);

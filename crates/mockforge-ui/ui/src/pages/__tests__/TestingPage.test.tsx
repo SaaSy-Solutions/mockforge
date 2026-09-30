@@ -22,7 +22,15 @@ vi.mock('../../utils/cloudMode', () => cloudModeMock);
 
 import { TestingPage } from '../TestingPage';
 import { dashboardApi, smokeTestsApi } from '../../services/api';
-import type { SmokeTestResult } from '../../types';
+import type { HealthCheck, SmokeTestResult } from '../../types';
+
+const makeHealth = (overrides: Partial<HealthCheck> = {}): HealthCheck => ({
+  status: 'healthy',
+  services: {},
+  last_check: '2024-01-01T00:00:00Z',
+  issues: [],
+  ...overrides,
+});
 
 const mockData = vi.hoisted(() => ({
   smokeTestResults: [
@@ -30,19 +38,15 @@ const mockData = vi.hoisted(() => ({
       test_name: 'GET /api/users',
       passed: true,
       response_time_ms: 45,
-      status_code: 200,
     },
     {
       test_name: 'POST /api/posts',
       passed: false,
       response_time_ms: 120,
-      status_code: 500,
       error_message: 'Internal server error',
     },
   ] satisfies SmokeTestResult[],
 }));
-
-const mockSmokeTestResults: SmokeTestResult[] = mockData.smokeTestResults;
 
 vi.mock('../../services/api', () => ({
   dashboardApi: {
@@ -157,7 +161,7 @@ describe('TestingPage', () => {
   });
 
   it('handles health check failure', async () => {
-    dashboardApi.getHealth.mockResolvedValue({ status: 'unhealthy', issues: ['Database down'] });
+    vi.mocked(dashboardApi.getHealth).mockResolvedValue(makeHealth({ status: 'unhealthy', issues: ['Database down'] }));
 
     render(<TestingPage />, { wrapper: createWrapper() });
 
@@ -169,7 +173,7 @@ describe('TestingPage', () => {
   });
 
   it('handles health check error', async () => {
-    dashboardApi.getHealth.mockRejectedValue(new Error('Connection failed'));
+    vi.mocked(dashboardApi.getHealth).mockRejectedValue(new Error('Connection failed'));
 
     render(<TestingPage />, { wrapper: createWrapper() });
 
@@ -205,9 +209,9 @@ describe('TestingPage', () => {
 
   it('disables run buttons while tests are running', async () => {
     let resolveHealth: () => void;
-    dashboardApi.getHealth.mockReturnValue(
+    vi.mocked(dashboardApi.getHealth).mockReturnValue(
       new Promise((resolve) => {
-        resolveHealth = () => resolve({ status: 'healthy' });
+        resolveHealth = () => resolve(makeHealth());
       })
     );
 
@@ -293,11 +297,12 @@ describe('TestingPage', () => {
       test_name: `Test ${i}`,
       passed: true,
       response_time_ms: 50,
-      status_code: 200,
     }));
 
-    smokeTestsApi.getSmokeTests.mockResolvedValue(manyTests);
-    smokeTestsApi.runSmokeTests.mockResolvedValue({
+    vi.mocked(smokeTestsApi.getSmokeTests).mockResolvedValue(manyTests);
+    vi.mocked(smokeTestsApi.runSmokeTests).mockResolvedValue({
+      suite_name: 'smoke',
+      start_time: '2024-01-01T00:00:00Z',
       total_tests: 10,
       passed_tests: 10,
       failed_tests: 0,

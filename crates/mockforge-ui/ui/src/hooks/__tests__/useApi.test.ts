@@ -10,7 +10,6 @@ import {
   useDashboard,
   useHealth,
   useServerInfo,
-  useLogs,
   useRestartServers,
   queryKeys,
 } from '../useApi';

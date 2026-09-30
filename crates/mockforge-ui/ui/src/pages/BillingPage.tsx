@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -19,50 +19,13 @@ import {
 } from 'lucide-react';
 import { useToast } from '@/components/ui/ToastProvider';
 import { authenticatedFetch } from '@/utils/apiClient';
+import {
+  normalizeSubscription,
+  type RawSubscription,
+  type Subscription,
+} from '@/utils/billingSubscription';
 
 // Types
-interface Subscription {
-  org_id: string;
-  plan: 'free' | 'pro' | 'team';
-  status:
-    | 'active'
-    | 'trialing'
-    | 'past_due'
-    | 'canceled'
-    | 'unpaid'
-    | 'incomplete'
-    | 'incomplete_expired';
-  billing_interval?: 'month' | 'year';
-  cancel_at_period_end?: boolean;
-  current_period_start?: string;
-  current_period_end?: string;
-  usage: UsageStats;
-  limits: {
-    max_projects: number;
-    max_collaborators: number;
-    max_environments: number;
-    requests_per_30d: number;
-    storage_gb: number;
-    ai_tokens_per_month: number;
-    hosted_mocks: boolean;
-    max_hosted_mocks: number;
-    max_plugins_published: number;
-    max_templates_published: number;
-    max_scenarios_published: number;
-  };
-}
-
-interface UsageStats {
-  requests: number;
-  requests_limit: number;
-  storage_bytes: number;
-  storage_limit_bytes: number;
-  egress_bytes: number;
-  egress_limit_bytes: number;
-  ai_tokens_used: number;
-  ai_tokens_limit: number;
-}
-
 type BillingInterval = 'month' | 'year';
 
 interface CreateCheckoutRequest {
@@ -144,7 +107,7 @@ async function fetchSubscription(): Promise<Subscription> {
   if (!response.ok) {
     throw new Error(await extractErrorMessage(response, 'Failed to fetch subscription'));
   }
-  return response.json();
+  return normalizeSubscription((await response.json()) as RawSubscription);
 }
 
 async function createCheckout(request: CreateCheckoutRequest): Promise<CreateCheckoutResponse> {
@@ -309,22 +272,23 @@ export function BillingPage() {
     return Math.min((used / limit) * 100, 100);
   };
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: Subscription['status']) => {
     switch (status) {
+      case 'none':
       case 'active':
-        return <Badge className="bg-success-500"><CheckCircle2 className="w-3 h-3 mr-1" />Active</Badge>;
+        return <Badge variant="success"><CheckCircle2 className="w-3 h-3 mr-1" />Active</Badge>;
       case 'trialing':
-        return <Badge className="bg-info-500"><Calendar className="w-3 h-3 mr-1" />Trialing</Badge>;
+        return <Badge variant="info"><Calendar className="w-3 h-3 mr-1" />Trialing</Badge>;
       case 'past_due':
-        return <Badge className="bg-warning-500"><AlertCircle className="w-3 h-3 mr-1" />Past Due</Badge>;
+        return <Badge variant="warning"><AlertCircle className="w-3 h-3 mr-1" />Past Due</Badge>;
       case 'unpaid':
-        return <Badge className="bg-danger-500"><AlertCircle className="w-3 h-3 mr-1" />Unpaid</Badge>;
+        return <Badge variant="danger"><AlertCircle className="w-3 h-3 mr-1" />Unpaid</Badge>;
       case 'incomplete':
-        return <Badge className="bg-warning-500"><AlertCircle className="w-3 h-3 mr-1" />Incomplete</Badge>;
+        return <Badge variant="warning"><AlertCircle className="w-3 h-3 mr-1" />Incomplete</Badge>;
       case 'incomplete_expired':
-        return <Badge className="bg-gray-500"><XCircle className="w-3 h-3 mr-1" />Incomplete (expired)</Badge>;
+        return <Badge variant="default"><XCircle className="w-3 h-3 mr-1" />Incomplete (expired)</Badge>;
       case 'canceled':
-        return <Badge className="bg-gray-500"><XCircle className="w-3 h-3 mr-1" />Canceled</Badge>;
+        return <Badge variant="default"><XCircle className="w-3 h-3 mr-1" />Canceled</Badge>;
       default:
         return <Badge>{status}</Badge>;
     }
@@ -360,10 +324,10 @@ export function BillingPage() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Billing & Subscription</h1>
-        <p className="text-muted-foreground mt-2">Manage your subscription and view usage</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Billing & Subscription</h1>
+        <p className="text-sm text-muted-foreground mt-2">Manage your subscription and view usage</p>
       </div>
 
       {subscription.cancel_at_period_end && subscription.current_period_end && (
@@ -413,6 +377,11 @@ export function BillingPage() {
               <CardContent className="space-y-4">
                 <div>
                   <div className="text-2xl font-bold capitalize">{subscription.plan}</div>
+                  {subscription.status === 'none' && subscription.plan !== 'free' && (
+                    <div className="text-sm text-muted-foreground mt-1">
+                      Not billed through a subscription
+                    </div>
+                  )}
                   {subscription.current_period_start && subscription.current_period_end && (
                     <div className="text-sm text-muted-foreground mt-1">
                       Current period:{' '}
@@ -475,7 +444,7 @@ export function BillingPage() {
                     <ArrowUpCircle className="w-4 h-4 mr-2" />
                     Upgrade to Pro
                   </Button>
-                ) : (
+                ) : subscription.status === 'none' ? null : (
                   <Button
                     variant="outline"
                     onClick={handleManageSubscription}
@@ -1071,15 +1040,15 @@ function InvoiceStatusBadge({ status }: { status: string | null }) {
   if (!status) return <Badge>—</Badge>;
   switch (status) {
     case 'paid':
-      return <Badge className="bg-success-500"><CheckCircle2 className="w-3 h-3 mr-1" />Paid</Badge>;
+      return <Badge variant="success"><CheckCircle2 className="w-3 h-3 mr-1" />Paid</Badge>;
     case 'open':
-      return <Badge className="bg-warning-500"><AlertCircle className="w-3 h-3 mr-1" />Open</Badge>;
+      return <Badge variant="warning"><AlertCircle className="w-3 h-3 mr-1" />Open</Badge>;
     case 'uncollectible':
-      return <Badge className="bg-danger-500"><XCircle className="w-3 h-3 mr-1" />Uncollectible</Badge>;
+      return <Badge variant="danger"><XCircle className="w-3 h-3 mr-1" />Uncollectible</Badge>;
     case 'void':
-      return <Badge className="bg-gray-500"><XCircle className="w-3 h-3 mr-1" />Void</Badge>;
+      return <Badge variant="default"><XCircle className="w-3 h-3 mr-1" />Void</Badge>;
     case 'draft':
-      return <Badge className="bg-gray-400">Draft</Badge>;
+      return <Badge variant="default">Draft</Badge>;
     default:
       return <Badge>{status}</Badge>;
   }

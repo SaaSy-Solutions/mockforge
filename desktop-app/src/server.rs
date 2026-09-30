@@ -125,6 +125,7 @@ async fn start_embedded_servers(
         None,                         // mockai
         None,                         // deceptive_deploy_config - skip to avoid type mismatch
         None,                         // proxy_config
+        mockforge_core::SharedOverrides::load(config.overrides.clone()).await,
     )
     .await;
 

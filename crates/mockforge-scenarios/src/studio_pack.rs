@@ -466,10 +466,10 @@ impl StudioPackInstaller {
         // 2. Update the workspace via WorkspaceRegistry or WorkspaceService
         // 3. Persist the changes
 
-        if workspace_id.is_some() {
+        if let Some(workspace_id) = workspace_id {
             info!(
                 "Workspace configuration validated for workspace: {} (workspace management APIs not available, skipping application)",
-                workspace_id.unwrap()
+                workspace_id
             );
         } else {
             info!(

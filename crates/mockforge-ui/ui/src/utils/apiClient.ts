@@ -87,8 +87,9 @@ export async function fetchCapabilities(baseUrl?: string): Promise<string[]> {
     const res = await originalFetch(url);
     if (res.ok) {
       const data = await res.json();
-      cachedCapabilities = data.features ?? [];
-      return cachedCapabilities;
+      const features: string[] = data.features ?? [];
+      cachedCapabilities = features;
+      return features;
     }
   } catch {
     // Server may not support capabilities yet — fall back to static list

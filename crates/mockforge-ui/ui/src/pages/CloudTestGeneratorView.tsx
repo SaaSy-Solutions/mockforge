@@ -191,7 +191,7 @@ export const CloudTestGeneratorView: React.FC = () => {
         <Alert
           variant="info"
           title="Select a workspace"
-          description="Pick an active workspace from the top nav to start generating tests."
+          message="Pick an active workspace from the top nav to start generating tests."
         />
       </div>
     );
@@ -208,10 +208,10 @@ export const CloudTestGeneratorView: React.FC = () => {
       <Alert
         variant="info"
         title="How this works"
-        description="Jobs run against your org's BYOK provider (Settings → BYOK) — or platform credits on paid plans if no BYOK key is configured. Expanded rows live-stream via SSE; the rest of the list polls every 5 seconds."
+        message="Jobs run against your org's BYOK provider (Settings → BYOK) — or platform credits on paid plans if no BYOK key is configured. Expanded rows live-stream via SSE; the rest of the list polls every 5 seconds."
       />
 
-      {error && <Alert variant="error" title="Error" description={error} />}
+      {error && <Alert variant="error" title="Error" message={error} />}
 
       {/* Create form */}
       <Section>
@@ -351,7 +351,7 @@ export const CloudTestGeneratorView: React.FC = () => {
                         </pre>
                       </div>
                       {job.error && (
-                        <Alert variant="error" title="Job error" description={job.error} />
+                        <Alert variant="error" title="Job error" message={job.error} />
                       )}
                       {job.result !== null && job.result !== undefined && (
                         <div>

@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import React from 'react';
 import { cn } from '../../utils/cn';
 
@@ -49,7 +48,7 @@ export function TabsList({ children, className }: TabsListProps) {
   return (
     <div
       className={cn(
-        "inline-flex h-10 items-center justify-center rounded-md bg-bg-tertiary p-1 text-secondary",
+        "inline-flex h-9 items-center justify-center rounded-lg bg-muted p-1 text-muted-foreground",
         className
       )}
     >
@@ -65,10 +64,10 @@ export function TabsTrigger({ value, children, className }: TabsTriggerProps) {
   return (
     <button
       className={cn(
-        "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-bg-primary transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+        "inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1 text-sm font-medium ring-offset-bg-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
         isActive
-          ? "bg-bg-primary text-primary shadow-sm"
-          : "text-secondary hover:text-primary",
+          ? "bg-bg-primary text-foreground shadow-xs"
+          : "text-muted-foreground hover:text-foreground",
         className
       )}
       onClick={() => context?.onTabChange(value)}

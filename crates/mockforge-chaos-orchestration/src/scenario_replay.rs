@@ -24,9 +24,9 @@ impl ReplaySpeed {
     /// Calculate delay based on speed
     pub fn calculate_delay(&self, original_delay_ms: u64) -> u64 {
         match self {
-            ReplaySpeed::RealTime => original_delay_ms,
-            ReplaySpeed::Custom(multiplier) => ((original_delay_ms as f64) / multiplier) as u64,
-            ReplaySpeed::Fast => 0,
+            Self::RealTime => original_delay_ms,
+            Self::Custom(multiplier) => ((original_delay_ms as f64) / multiplier) as u64,
+            Self::Fast => 0,
         }
     }
 }

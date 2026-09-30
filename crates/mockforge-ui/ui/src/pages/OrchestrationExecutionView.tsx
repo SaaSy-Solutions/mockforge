@@ -14,9 +14,6 @@ import {
   LinearProgress,
   Chip,
   Grid,
-  List,
-  ListItem,
-  ListItemText,
   IconButton,
   Button,
   Alert,
@@ -92,7 +89,7 @@ export const OrchestrationExecutionView: React.FC<{ orchestrationId: string }> =
   // Local-mode WebSocket. The relative URL is stubbed in cloud mode so
   // the connection is a no-op there; the cloud-mode SSE stream below
   // takes over.
-  const { lastMessage, sendMessage, connected: isLocalConnected } = useWebSocket(
+  const { lastMessage, connected: isLocalConnected } = useWebSocket(
     `/api/chaos/orchestration/${orchestrationId}/ws`,
   );
 
@@ -321,7 +318,7 @@ export const OrchestrationExecutionView: React.FC<{ orchestrationId: string }> =
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box>
       {isCloudMode() && (
         <Card sx={{ mb: 2 }}>
           <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -468,12 +465,9 @@ export const OrchestrationExecutionView: React.FC<{ orchestrationId: string }> =
           </Typography>
 
           <Stepper activeStep={executionState.currentStep} orientation="vertical">
-            {(executionState.steps ?? []).map((step, index) => (
+            {(executionState.steps ?? []).map((step) => (
               <Step key={step.id} completed={step.status === 'completed'}>
-                <StepLabel
-                  icon={getStepIcon(step.status)}
-                  error={step.status === 'failed'}
-                >
+                <StepLabel icon={getStepIcon(step.status)}>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <Typography variant="subtitle1">{step.name}</Typography>
                     {step.duration && (

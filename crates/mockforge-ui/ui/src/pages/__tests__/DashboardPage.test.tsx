@@ -8,6 +8,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { DashboardPage } from '../DashboardPage';
 import { useDashboard, useLogs } from '../../hooks/useApi';
+import type { DashboardData, RequestLog, SystemInfo } from '../../types';
 
 // Mock the hooks
 vi.mock('../../hooks/useApi');
@@ -52,20 +53,34 @@ vi.mock('../../utils/cloudMode', () => ({
   getCloudApiBase: () => '',
 }));
 
+type LogFields = Pick<RequestLog, 'timestamp' | 'method' | 'path' | 'status_code' | 'response_time_ms'>;
+
+const toRequestLogs = (entries: LogFields[]): RequestLog[] =>
+  entries.map((entry, i) => ({ id: String(i + 1), headers: {}, response_size_bytes: 0, ...entry }));
+
+const makeDashboard = (system: Omit<SystemInfo, 'total_routes' | 'total_fixtures'>): DashboardData => ({
+  server_info: { version: system.version, build_time: '', git_sha: '', api_enabled: true, admin_port: 9080 },
+  system_info: { os: 'linux', arch: 'x86_64', uptime: system.uptime_seconds, memory_usage: system.memory_usage_mb },
+  metrics: { total_requests: 0, active_requests: 0, average_response_time: 0, error_rate: 0 },
+  servers: [],
+  recent_logs: [],
+  system: { ...system, total_routes: 0, total_fixtures: 0 },
+});
+
 describe('DashboardPage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it('renders loading state', () => {
-    vi.mocked(useDashboard).mockReturnValue({
+    vi.mocked(useDashboard, { partial: true }).mockReturnValue({
       data: undefined,
       isLoading: true,
       error: null,
-    } as any);
-    vi.mocked(useLogs).mockReturnValue({
+    });
+    vi.mocked(useLogs, { partial: true }).mockReturnValue({
       data: undefined,
-    } as any);
+    });
 
     const Wrapper = createWrapper();
     render(
@@ -78,17 +93,15 @@ describe('DashboardPage', () => {
   });
 
   it('renders dashboard with data', async () => {
-    const mockDashboard = {
-      system: {
-        uptime_seconds: 3600,
-        cpu_usage_percent: 10.5,
-        memory_usage_mb: 512,
-        active_threads: 4,
-        version: '1.0.0',
-      },
-    };
+    const mockDashboard = makeDashboard({
+      uptime_seconds: 3600,
+      cpu_usage_percent: 10.5,
+      memory_usage_mb: 512,
+      active_threads: 4,
+      version: '1.0.0',
+    });
 
-    const mockLogs = [
+    const mockLogs = toRequestLogs([
       {
         timestamp: '2024-01-01T12:00:00Z',
         method: 'GET',
@@ -96,14 +109,14 @@ describe('DashboardPage', () => {
         status_code: 200,
         response_time_ms: 45,
       },
-    ];
+    ]);
 
-    useDashboard.mockReturnValue({
+    vi.mocked(useDashboard, { partial: true }).mockReturnValue({
       data: mockDashboard,
       isLoading: false,
       error: null,
     });
-    useLogs.mockReturnValue({
+    vi.mocked(useLogs, { partial: true }).mockReturnValue({
       data: mockLogs,
     });
 
@@ -115,17 +128,19 @@ describe('DashboardPage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('System Metrics')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'System' })).toBeInTheDocument();
+      expect(screen.getByText('1.0.0')).toBeInTheDocument();
+      expect(screen.getByText('Error rate')).toBeInTheDocument();
     });
   });
 
   it('handles errors', async () => {
-    useDashboard.mockReturnValue({
+    vi.mocked(useDashboard, { partial: true }).mockReturnValue({
       data: undefined,
       isLoading: false,
       error: new Error('Failed to fetch'),
     });
-    useLogs.mockReturnValue({
+    vi.mocked(useLogs, { partial: true }).mockReturnValue({
       data: undefined,
     });
 
@@ -143,7 +158,7 @@ describe('DashboardPage', () => {
   });
 
   it('calculates metrics from logs', async () => {
-    const mockLogs = [
+    const mockLogs = toRequestLogs([
       {
         timestamp: '2024-01-01T12:00:00Z',
         method: 'GET',
@@ -165,22 +180,20 @@ describe('DashboardPage', () => {
         status_code: 500,
         response_time_ms: 200,
       },
-    ];
+    ]);
 
-    useDashboard.mockReturnValue({
-      data: {
-        system: {
-          uptime_seconds: 3600,
-          cpu_usage_percent: 10.5,
-          memory_usage_mb: 512,
-          active_threads: 4,
-          version: '1.0.0',
-        },
-      },
+    vi.mocked(useDashboard, { partial: true }).mockReturnValue({
+      data: makeDashboard({
+        uptime_seconds: 3600,
+        cpu_usage_percent: 10.5,
+        memory_usage_mb: 512,
+        active_threads: 4,
+        version: '1.0.0',
+      }),
       isLoading: false,
       error: null,
     });
-    useLogs.mockReturnValue({
+    vi.mocked(useLogs, { partial: true }).mockReturnValue({
       data: mockLogs,
     });
 
@@ -192,9 +205,15 @@ describe('DashboardPage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Success Responses')).toBeInTheDocument();
-      expect(screen.getByText('Client Errors')).toBeInTheDocument();
-      expect(screen.getByText('Server Errors')).toBeInTheDocument();
+      expect(screen.getByText('2xx Success')).toBeInTheDocument();
+      expect(screen.getByText('4xx Client errors')).toBeInTheDocument();
+      expect(screen.getByText('5xx Server errors')).toBeInTheDocument();
+      // One of each → an even three-way split in the stacked bar.
+      expect(
+        screen.getByRole('img', {
+          name: '2xx Success 33.3%, 4xx Client errors 33.3%, 5xx Server errors 33.3%',
+        }),
+      ).toBeInTheDocument();
     });
   });
 });

@@ -72,7 +72,7 @@ describe('ServicesPage', () => {
     render(<ServicesPage />);
 
     // ServicesPanel should be rendered
-    expect(screen.getByRole('heading', { name: 'Services', level: 2 })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'All services', level: 2 })).toBeInTheDocument();
   });
 
   it('displays no services message when empty (self-hosted mode)', () => {

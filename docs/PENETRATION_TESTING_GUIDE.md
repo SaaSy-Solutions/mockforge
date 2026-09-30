@@ -791,7 +791,7 @@ For v1.x release, engage professional penetration testers:
 
 **Security Team:** security@mockforge.dev
 **Emergency:** [Provided to registered users]
-**Bug Bounty:** https://mockforge.dev/security/bounty
+**Disclosure policy:** https://mockforge.dev/trust.html
 
 ---
 

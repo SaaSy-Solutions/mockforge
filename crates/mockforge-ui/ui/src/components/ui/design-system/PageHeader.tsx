@@ -8,23 +8,28 @@ interface PageHeaderProps {
   className?: string;
 }
 
+/**
+ * Page title row: title + one-line description on the left, actions on the
+ * right. Compact on purpose — the shell's breadcrumb already says where you
+ * are, so this only has to say what the page is for.
+ */
 export function PageHeader({ title, subtitle, action, className }: PageHeaderProps) {
   return (
     <div className={cn(
-      'flex items-center justify-between py-6 border-b border-border',
+      'mb-6 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between',
       className
     )}>
       <div className="min-w-0">
-        <h1 className="text-3xl font-bold text-foreground truncate">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground truncate">
           {title}
         </h1>
         {subtitle && (
-          <p className="text-lg text-muted-foreground mt-2">
+          <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
             {subtitle}
           </p>
         )}
       </div>
-      {action && <div className="flex-shrink-0 ml-4">{action}</div>}
+      {action && <div className="flex flex-shrink-0 items-center gap-2">{action}</div>}
     </div>
   );
 }
@@ -39,17 +44,17 @@ interface SectionProps {
 
 export function Section({ title, subtitle, action, className, children }: SectionProps) {
   return (
-    <section className={cn('py-8', className)}>
+    <section className={cn('py-4', className)}>
       {(title || subtitle || action) && (
-        <div className="flex items-center justify-between mb-6">
+        <div className="mb-3 flex items-end justify-between gap-4">
           <div className="min-w-0">
             {title && (
-              <h2 className="text-2xl font-bold text-foreground">
+              <h2 className="text-base font-semibold text-foreground">
                 {title}
               </h2>
             )}
             {subtitle && (
-              <p className="text-base text-muted-foreground mt-1">
+              <p className="text-sm text-muted-foreground mt-0.5">
                 {subtitle}
               </p>
             )}
@@ -83,15 +88,15 @@ export function EmptyState({
       className
     )}>
       {icon && (
-        <div className="p-4 rounded-full bg-muted text-muted-foreground mb-4">
+        <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-bg-primary text-muted-foreground shadow-xs [&_svg]:h-5 [&_svg]:w-5">
           {icon}
         </div>
       )}
-      <h3 className="text-lg font-semibold text-foreground mb-2">
+      <h3 className="text-sm font-semibold text-foreground mb-1">
         {title}
       </h3>
       {description && (
-        <p className="text-sm text-muted-foreground mb-6 max-w-md">
+        <p className="text-sm text-muted-foreground mb-4 max-w-sm">
           {description}
         </p>
       )}

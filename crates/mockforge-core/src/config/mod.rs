@@ -96,6 +96,11 @@ pub struct ServerConfig {
     /// Deceptive deploy configuration for production-like mock APIs
     #[serde(default)]
     pub deceptive_deploy: DeceptiveDeployConfig,
+    /// Response override rules. Applied before rules from
+    /// `MOCKFORGE_HTTP_OVERRIDES_GLOB` and `MOCKFORGE_HTTP_OVERRIDES`, and
+    /// replaceable at runtime through the admin API.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub overrides: Vec<crate::overrides::OverrideRule>,
     /// Behavioral cloning configuration
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub behavioral_cloning: Option<BehavioralCloningConfig>,
@@ -1230,7 +1235,7 @@ const config: Config = {
         let config = load_config(&config_path).await.expect("config loads");
         let resolved = config.http.openapi_spec.expect("spec path present");
         assert_eq!(
-            std::path::Path::new(&resolved).canonicalize().unwrap(),
+            Path::new(&resolved).canonicalize().unwrap(),
             spec_path.canonicalize().unwrap(),
             "relative spec must resolve next to the config file, got {resolved}"
         );

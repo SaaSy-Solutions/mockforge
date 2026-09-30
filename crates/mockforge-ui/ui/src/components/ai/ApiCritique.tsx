@@ -11,9 +11,6 @@ import {
   Upload,
   FileText,
   AlertTriangle,
-  CheckCircle2,
-  XCircle,
-  Info,
   Download,
   Loader2,
   Code,
@@ -214,21 +211,6 @@ export function ApiCritique({ onUsageUpdate }: ApiCritiqueProps) {
     link.download = `api-critique-${Date.now()}.json`;
     link.click();
     URL.revokeObjectURL(url);
-  };
-
-  const getSeverityColor = (severity: string) => {
-    switch (severity.toLowerCase()) {
-      case 'critical':
-        return 'text-danger-600 dark:text-danger-400';
-      case 'high':
-        return 'text-orange-600 dark:text-orange-400';
-      case 'medium':
-        return 'text-warning-600 dark:text-warning-400';
-      case 'low':
-        return 'text-info-600 dark:text-info-400';
-      default:
-        return 'text-muted-foreground';
-    }
   };
 
   const getSeverityBadgeClasses = (severity: string) => {

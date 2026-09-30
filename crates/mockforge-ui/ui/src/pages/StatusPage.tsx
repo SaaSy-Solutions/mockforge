@@ -1,4 +1,3 @@
-import React from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Alert } from '@/components/ui/alert';
@@ -72,7 +71,7 @@ export function StatusPage() {
 
   if (isLoading) {
     return (
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <div className="mx-auto w-full px-0 sm:px-4 py-8 max-w-4xl">
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
         </div>
@@ -82,7 +81,7 @@ export function StatusPage() {
 
   if (error) {
     return (
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <div className="mx-auto w-full px-0 sm:px-4 py-8 max-w-4xl">
         <Alert className="bg-danger-50 dark:bg-danger-900/20 border-danger-200 dark:border-danger-800">
           <span className="text-danger-700 dark:text-danger-200">
             Failed to load status information. Please try again later.
@@ -96,10 +95,10 @@ export function StatusPage() {
     // Render the page shell even when the status payload is missing so
     // tests and users never see a blank main container.
     return (
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <div className="mx-auto w-full px-0 sm:px-4 py-8 max-w-4xl">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Service Status</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Service Status</h1>
+          <p className="text-sm text-muted-foreground">
             Real-time status of MockForge Cloud services
           </p>
         </div>
@@ -112,14 +111,19 @@ export function StatusPage() {
 
   // Defensive: `services` and `incidents` can be missing when the API
   // returns a degraded payload under rate-limit pressure.
-  const services = Array.isArray(status.services) ? status.services : [];
+  // Optional backing services the deployment doesn't use (older registry
+  // builds reported an unused Redis cache as "Not configured") are not part
+  // of the customer-facing service surface, so they are left off the list.
+  const services = (Array.isArray(status.services) ? status.services : []).filter(
+    (service) => !/^not configured$/i.test(service.message ?? ''),
+  );
   const incidents = Array.isArray(status.incidents) ? status.incidents : [];
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className="mx-auto w-full max-w-4xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Service Status</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Service Status</h1>
+        <p className="text-sm text-muted-foreground">
           Real-time status of MockForge Cloud services
         </p>
       </div>

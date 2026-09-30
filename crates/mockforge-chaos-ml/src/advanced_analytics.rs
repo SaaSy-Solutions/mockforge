@@ -185,7 +185,7 @@ impl AdvancedAnalyticsEngine {
         // Add to history
         {
             let mut history = self.event_history.write();
-            history.push_back(event.clone());
+            history.push_back(event);
 
             // Trim history if needed
             while history.len() > self.max_history_size {

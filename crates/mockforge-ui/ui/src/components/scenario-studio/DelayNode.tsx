@@ -2,20 +2,21 @@
 //!
 //! Custom React Flow node component for representing delay steps in a flow.
 
-import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import type { NodeProps } from '@xyflow/react';
+import type { Node, NodeProps } from '@xyflow/react';
 import { Badge } from '../ui/Badge';
 import { Clock } from 'lucide-react';
 import { cn } from '@/utils/cn';
 
-export interface DelayNodeData {
+export type DelayNodeData = {
   id: string;
   name: string;
   delayMs?: number;
-}
+};
 
-export function DelayNode({ data, selected }: NodeProps<DelayNodeData>) {
+export type DelayNodeType = Node<DelayNodeData, 'delay'>;
+
+export function DelayNode({ data, selected }: NodeProps<DelayNodeType>) {
   const delayMs = data.delayMs || 0;
   const delaySeconds = (delayMs / 1000).toFixed(1);
 

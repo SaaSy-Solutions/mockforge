@@ -14,7 +14,6 @@ import {
     Brain,
     PlayCircle,
     CassetteTape,
-    Database,
 } from 'lucide-react';
 import { isCloudMode } from '../utils/cloudMode';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';
@@ -139,7 +138,7 @@ const CloudView: React.FC = () => {
         <div className="p-6 max-w-7xl mx-auto">
             <div className="flex justify-between items-start mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2">
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
                         <CassetteTape className="w-6 h-6 text-cyan-500" />
                         Recorder & Behavioral Cloning
                     </h1>
@@ -518,7 +517,7 @@ const ReplayModal: React.FC<{
                         value={url}
                         onChange={(e) => setUrl(e.target.value)}
                         placeholder="https://api.example.com (defaults to synthetic mode)"
-                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs"
+                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-ring/30 font-mono text-xs"
                     />
                 </div>
             </div>

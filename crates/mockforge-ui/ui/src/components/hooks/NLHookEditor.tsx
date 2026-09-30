@@ -3,7 +3,7 @@
 //! This component allows users to describe hook logic in natural language
 //! and see the transpiled hook configuration.
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Loader2, CheckCircle2, XCircle, Copy, Download, Code2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '../../utils/cn';
@@ -89,11 +89,6 @@ export function NLHookEditor({ onHookGenerated, className }: NLHookEditorProps) 
     }
   };
 
-  const handleTextSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    processDescription();
-  };
-
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(
       () => {
@@ -129,7 +124,7 @@ export function NLHookEditor({ onHookGenerated, className }: NLHookEditorProps) 
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder="e.g., For users flagged as VIP, webhooks should fire instantly but payments fail 5% of the time"
-          className="w-full min-h-[120px] px-3 py-2 border border-border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-info"
+          className="w-full min-h-[120px] px-3 py-2 border border-border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-info"
           disabled={isProcessing}
         />
         <p className="text-xs text-muted-foreground">

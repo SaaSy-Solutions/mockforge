@@ -344,7 +344,7 @@ export const TemplateMarketplacePage: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box>
       <MarketplaceTabs />
 
       {/* Header */}
@@ -368,7 +368,7 @@ export const TemplateMarketplacePage: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 InputProps={{
-                  startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+                  startAdornment: <SearchIcon className="mr-2 text-muted-foreground" />,
                 }}
               />
             </Grid>
@@ -378,7 +378,7 @@ export const TemplateMarketplacePage: React.FC = () => {
                 <Select
                   value={selectedCategory}
                   label="Category"
-                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  onChange={(e) => setSelectedCategory(String(e.target.value))}
                 >
                   {categories.map((cat) => (
                     <MenuItem key={cat.value} value={cat.value}>
@@ -394,7 +394,7 @@ export const TemplateMarketplacePage: React.FC = () => {
                 <Select
                   value={sortBy}
                   label="Sort By"
-                  onChange={(e) => setSortBy(e.target.value)}
+                  onChange={(e) => setSortBy(String(e.target.value))}
                 >
                   {sortOptions.map((opt) => (
                     <MenuItem key={opt.value} value={opt.value}>

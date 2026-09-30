@@ -14,7 +14,7 @@ import { ErrorDashboard } from './ErrorDashboard';
 import { TrafficHeatmap } from './TrafficHeatmap';
 import { FilterPanel } from './FilterPanel';
 import { ExportButton } from './ExportButton';
-import type { AnalyticsFilter } from '@/hooks/useAnalyticsV2';
+import type { AnalyticsFilter, OverviewMetrics } from '@/hooks/useAnalyticsV2';
 
 export const AnalyticsDashboardV2: React.FC = () => {
   const [filter, setFilter] = useState<AnalyticsFilter>({
@@ -26,7 +26,7 @@ export const AnalyticsDashboardV2: React.FC = () => {
 
   // Fetch overview metrics (with auto-refresh if live updates disabled)
   const { data: overview, isLoading, error } = useOverviewMetrics(filter, {
-    refetchInterval: liveUpdatesEnabled ? false : 30000, // 30s when WS disabled
+    refetchInterval: liveUpdatesEnabled ? undefined : 30000, // 30s when WS disabled
   });
 
   // WebSocket for real-time updates
@@ -64,7 +64,7 @@ export const AnalyticsDashboardV2: React.FC = () => {
       {/* Header with title and controls */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">
             Analytics Dashboard
           </h1>
           <p className="text-sm text-muted-foreground mt-1">

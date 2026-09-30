@@ -181,7 +181,7 @@ jobs:
   publish:
     name: Publish to crates.io
     runs-on: ubuntu-latest
-    # Same gating rationale as deploy-registry: publishing to crates.io
+    # Publishing to crates.io
     # with broken tests yanks our reputation, not just our deploy.
     needs: release
     if: '!contains(github.ref_name, ''rc'') && !contains(github.ref_name, ''alpha'') && !contains(github.ref_name, ''beta'')'
@@ -220,32 +220,10 @@ jobs:
   # main and on semver tags). GHCR is the canonical registry for MockForge
   # images; we do not publish to Docker Hub.
 
-  deploy-registry:
-    name: Deploy Registry Server to Fly.io
-    runs-on: ubuntu-latest
-    # Block Fly auto-deploy on the `release` job (which runs `cargo test
-    # --workspace --release` + builds the binary). Without this, a tag push
-    # would deploy whatever the build pipeline produced even if tests had
-    # failed — exactly the scenario #447 calls out. If you want to ship a
-    # deploy without tests, re-trigger this job manually after the test fix.
-    needs: release
-    if: '!contains(github.ref_name, ''rc'') && !contains(github.ref_name, ''alpha'') && !contains(github.ref_name, ''beta'')'
-    steps:
-    - name: Checkout repository
-      uses: actions/checkout@v7
-
-    - name: Install flyctl
-      uses: superfly/flyctl-actions/setup-flyctl@master
-
-    - name: Deploy registry server
-      run: flyctl deploy --config fly.registry.toml --remote-only
-      env:
-        FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
-
   helm:
     name: Package and Publish Helm Chart
     runs-on: ubuntu-latest
-    # Same gating rationale as deploy-registry + publish.
+    # Same release gating rationale as publish.
     needs: release
     if: '!contains(github.ref_name, ''rc'') && !contains(github.ref_name, ''alpha'') && !contains(github.ref_name, ''beta'')'
     permissions:

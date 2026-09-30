@@ -95,25 +95,29 @@ pub async fn resend_verification(
     // Create new verification token
     let verification_token = state.store.create_verification_token(user_id).await?;
 
-    // Send verification email (non-blocking)
+    // Send synchronously so the response reflects whether the email really
+    // went out. A disabled provider or a provider error is reported as
+    // `success: false` instead of a "check your inbox" message for a mail
+    // that was never sent.
     let verification_email = EmailService::generate_verification_email(
         &user.username,
         &user.email,
         &verification_token.token,
     );
-
-    tokio::spawn(async move {
-        match EmailService::from_env() {
-            Ok(email_service) => {
-                if let Err(e) = email_service.send(verification_email).await {
-                    tracing::warn!("Failed to send verification email: {}", e);
-                }
-            }
-            Err(e) => {
-                tracing::warn!("Failed to create email service: {}", e);
-            }
+    let send_result = match EmailService::from_env() {
+        Ok(email_service) if email_service.is_configured() => {
+            email_service.send(verification_email).await.map_err(|e| e.to_string())
         }
-    });
+        Ok(_) => Err("email provider is not configured".to_string()),
+        Err(e) => Err(e.to_string()),
+    };
+    if let Err(e) = send_result {
+        tracing::warn!("Failed to send verification email: {}", e);
+        return Ok(Json(ResendVerificationResponse {
+            success: false,
+            message: "We couldn't send the verification email right now. Please try again in a few minutes or contact support.".to_string(),
+        }));
+    }
 
     Ok(Json(ResendVerificationResponse {
         success: true,

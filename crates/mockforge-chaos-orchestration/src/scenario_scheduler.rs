@@ -113,8 +113,8 @@ impl ScheduledScenario {
                 } else {
                     // Build cron expression from decomposed fields
                     let min = minute.unwrap_or(0).to_string();
-                    let hr = hour.map(|h| h.to_string()).unwrap_or_else(|| "*".to_string());
-                    let dow = day_of_week.map(|d| d.to_string()).unwrap_or_else(|| "*".to_string());
+                    let hr = hour.map_or_else(|| "*".to_string(), |h| h.to_string());
+                    let dow = day_of_week.map_or_else(|| "*".to_string(), |d| d.to_string());
                     let cron_expr = format!("0 {} {} * * {} *", min, hr, dow);
 
                     if let Ok(schedule) = cron_expr.parse::<cron::Schedule>() {

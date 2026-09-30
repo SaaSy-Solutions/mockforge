@@ -223,12 +223,12 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
             {variables && variables.variables.length > 0 && (
               <div className="mt-3 pt-3 border-t border-border">
                 <div className="flex flex-wrap gap-1">
-                  {variables.variables.slice(0, 3).map((variable: unknown) => (
+                  {variables.variables.slice(0, 3).map((variable) => (
                     <span
-                      key={variable.name}
+                      key={variable.key}
                       className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-muted text-foreground"
                     >
-                      {variable.name}
+                      {variable.key}
                     </span>
                   ))}
                   {variables.variables.length > 3 && (
@@ -356,14 +356,14 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {(environments?.environments || [])
-          .sort((a: unknown, b: unknown) => {
+          .sort((a, b) => {
             // Global environment always first
             if (a.is_global && !b.is_global) return -1;
             if (!a.is_global && b.is_global) return 1;
             // Then sort by order field
             return (a.order || 0) - (b.order || 0);
           })
-          .map((environment: unknown) => (
+          .map((environment) => (
             <EnvironmentCard key={environment.id} environment={environment} />
           ))}
       </div>

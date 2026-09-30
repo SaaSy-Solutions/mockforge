@@ -16,7 +16,6 @@ import {
   Button,
   Chip,
   Rating,
-  IconButton,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -25,9 +24,6 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  Tabs,
-  Tab,
-  Divider,
   Alert,
   Paper,
   Accordion,
@@ -51,7 +47,6 @@ export const LearningHubPage: React.FC = () => {
   const [selectedResource, setSelectedResource] = useState<LearningResource | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState(0);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -162,7 +157,7 @@ export const LearningHubPage: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box>
       <Typography variant="h4" gutterBottom>
         Learning Hub
       </Typography>
@@ -177,7 +172,7 @@ export const LearningHubPage: React.FC = () => {
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           InputProps={{
-            startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+            startAdornment: <SearchIcon className="mr-2 text-muted-foreground" />,
           }}
           sx={{ flexGrow: 1, minWidth: 300 }}
         />
@@ -185,7 +180,7 @@ export const LearningHubPage: React.FC = () => {
           <InputLabel>Type</InputLabel>
           <Select
             value={selectedType}
-            onChange={(e) => setSelectedType(e.target.value)}
+            onChange={(e) => setSelectedType(String(e.target.value))}
             label="Type"
           >
             {resourceTypes.map((type) => (
@@ -199,7 +194,7 @@ export const LearningHubPage: React.FC = () => {
           <InputLabel>Category</InputLabel>
           <Select
             value={selectedCategory}
-            onChange={(e) => setSelectedCategory(e.target.value)}
+            onChange={(e) => setSelectedCategory(String(e.target.value))}
             label="Category"
           >
             <MenuItem value="all">All Categories</MenuItem>
@@ -214,7 +209,7 @@ export const LearningHubPage: React.FC = () => {
           <InputLabel>Difficulty</InputLabel>
           <Select
             value={selectedDifficulty}
-            onChange={(e) => setSelectedDifficulty(e.target.value)}
+            onChange={(e) => setSelectedDifficulty(String(e.target.value))}
             label="Difficulty"
           >
             {difficulties.map((diff) => (

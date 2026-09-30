@@ -1,5 +1,4 @@
-import { logger } from '@/utils/logger';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { Button } from '../ui/button';
 import { useServiceStore } from '../../stores/useServiceStore';
 import { useFixtureStore } from '../../stores/useFixtureStore';

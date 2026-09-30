@@ -23,8 +23,8 @@ async fn test_port_in_use_error() {
 
     // Should fail because port is already in use
     // Note: This might succeed if port binding isn't exclusive, so we just check the result
-    if result.is_err() {
-        let err_msg = format!("{:?}", result.unwrap_err());
+    if let Err(err) = result {
+        let err_msg = format!("{err:?}");
         // The error message should be helpful
         assert!(!err_msg.is_empty());
     }
@@ -41,8 +41,7 @@ async fn test_port_discovery_failed_error() {
         .start())
     .await;
 
-    if result.is_err() {
-        let err = result.unwrap_err();
+    if let Err(err) = result {
         let err_msg = format!("{err:?}");
         // Should include helpful tip
         assert!(

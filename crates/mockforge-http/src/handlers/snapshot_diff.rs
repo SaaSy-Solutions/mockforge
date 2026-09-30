@@ -260,7 +260,7 @@ async fn list_snapshots(
         .collect();
 
     // Sort by timestamp descending (most recent first)
-    snapshots.sort_by(|a, b| b.timestamp.cmp(&a.timestamp));
+    snapshots.sort_by_key(|b| std::cmp::Reverse(b.timestamp));
 
     Ok(Json(snapshots))
 }

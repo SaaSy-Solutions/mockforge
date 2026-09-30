@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import React, { createContext } from 'react';
 import type { ReactNode } from 'react';
 

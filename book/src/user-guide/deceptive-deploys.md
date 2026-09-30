@@ -1,5 +1,7 @@
 # Deceptive Deploys
 
+> **Experimental.** This feature ships in MockForge but is early: `mockforge deploy` and the `deceptive_deploy` config apply production-like headers, CORS, rate limiting, and OAuth settings, and can start a tunnel, but the mock only resembles production as closely as your spec, fixtures, and config make it. Behavior, commands, and configuration may change between releases. Report issues at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 Deceptive Deploy allows you to deploy mock APIs that look identical to production endpoints. Perfect for front-end demos, PoCs, investor prototypes, and client presentations without exposing production systems.
 
 ## Overview
@@ -12,7 +14,7 @@ Deceptive Deploy configures MockForge to automatically:
 - ✅ Support OAuth flows identical to production
 - ✅ Deploy to public URLs via tunneling
 
-The result: mock APIs that are indistinguishable from production endpoints to your application and users.
+The result: mock APIs that behave like your production endpoints at the HTTP level (headers, CORS, rate limits, auth), so front-end code runs against them unchanged.
 
 ## Quick Start
 

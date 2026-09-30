@@ -82,6 +82,12 @@ const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
 
     const displayValue = value !== undefined ? value : internalValue;
     const percentage = ((displayValue - min) / (max - min)) * 100;
+    // CSS custom property for the track fill; React's CSSProperties has no
+    // index signature for `--*` names, so widen the type explicitly.
+    const trackStyle: React.CSSProperties & { "--track-fill": string } = {
+      "--track-fill": `${percentage}%`,
+      background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) var(--track-fill), hsl(var(--muted)) var(--track-fill), hsl(var(--muted)) 100%)`,
+    };
 
     return (
       <div className="w-full space-y-2">
@@ -121,11 +127,7 @@ const Slider = React.forwardRef<HTMLInputElement, SliderProps>(
               "before:absolute before:left-0 before:top-0 before:h-2 before:rounded-lg before:bg-primary before:pointer-events-none",
               className
             )}
-            style={{
-              // @ts-ignore - CSS custom property for track fill
-              "--track-fill": `${percentage}%`,
-              background: `linear-gradient(to right, hsl(var(--primary)) 0%, hsl(var(--primary)) var(--track-fill), hsl(var(--muted)) var(--track-fill), hsl(var(--muted)) 100%)`,
-            }}
+            style={trackStyle}
             {...props}
           />
         </div>

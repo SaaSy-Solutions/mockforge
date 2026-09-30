@@ -564,10 +564,11 @@ impl AuditLog {
 /// for a full-length IPv6 literal.
 ///
 /// Module-level and deliberately NOT inside the `#[cfg(feature = "postgres")]`
-/// `impl AuditLog`: `normalize_client_ip` below is ungated (its tests run
-/// without the postgres feature), so a gated associated const would leave this
-/// crate uncompilable for default-feature consumers — which is precisely the
-/// build `cargo install mockforge-cli` performs.
+/// `impl AuditLog`: `normalize_client_ip` below is needed by its tests, which
+/// run without the postgres feature, so a gated associated const would leave
+/// the test build uncompilable. `cfg(test)` keeps that working while avoiding
+/// dead-code warnings for dependents that disable default features.
+#[cfg(any(feature = "postgres", test))]
 const IP_ADDRESS_MAX_CHARS: usize = 45;
 
 /// Reduce a client-IP header value to something the `ip_address` column can
@@ -593,6 +594,7 @@ const IP_ADDRESS_MAX_CHARS: usize = 45;
 /// the result, so no header — however long, malformed, or hostile — can cost us
 /// an audit record. Truncation counts characters, not bytes, because that is
 /// what Postgres `varchar(n)` counts.
+#[cfg(any(feature = "postgres", test))]
 fn normalize_client_ip(ip: Option<&str>) -> Option<String> {
     let first = ip?.split(',').next()?.trim();
     if first.is_empty() {

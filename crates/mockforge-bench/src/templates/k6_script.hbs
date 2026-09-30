@@ -16,11 +16,17 @@ import { Rate, Trend, Counter } from 'k6/metrics';
 {{{this}}}
 {{/each}}
 
-// Custom metrics per operation
+{{#if per_op_metrics}}
+// Custom metrics per operation. Omitted for huge specs / long runs
+// (--no-per-op-metrics or auto) so k6 RSS stays bounded (#79 longevity OOM).
 {{#each operations}}
 const {{this.name}}_latency = new Trend('{{this.metric_name}}_latency');
 const {{this.name}}_errors = new Rate('{{this.metric_name}}_errors');
 {{/each}}
+{{else}}
+// Per-operation Trend/Rate metrics omitted (per_op_metrics=false).
+// Use k6 built-ins http_req_duration / http_req_failed. Force on with --per-op-metrics.
+{{/if}}
 
 // Server-injected chaos signals (parsed from MockForge response headers).
 // `mockforge_server_injected_latency_ms` and `mockforge_server_injected_jitter_ms`
@@ -330,8 +336,10 @@ export default function () {
       '{{this.display_name}}: has response': (r) => r.body !== null && r.body.length > 0,
     });
 
+    {{#if @root.per_op_metrics}}
     {{this.name}}_latency.add(res.timings.duration);
     {{this.name}}_errors.add(!success);
+    {{/if}}
 
     {{#unless @root.target_rps}}
     // `constant-arrival-rate` (set via --rps) drives the rate itself, so any

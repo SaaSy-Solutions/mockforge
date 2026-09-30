@@ -1,5 +1,4 @@
-import { logger } from '@/utils/logger';
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { FixtureTree } from './FixtureTree';
 import { FixtureEditor } from './FixtureEditor';
 import { FixtureDiffViewer } from './FixtureDiffViewer';

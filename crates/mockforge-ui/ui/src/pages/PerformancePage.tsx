@@ -8,21 +8,19 @@
  * - Start/stop controls
  */
 
-import React from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../components/ui/Card';
+import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/button';
 import { PerformanceMetrics } from '../components/performance/PerformanceMetrics';
 import { LoadProfileEditor } from '../components/performance/LoadProfileEditor';
 import { BottleneckControls } from '../components/performance/BottleneckControls';
-import { usePerformanceStatus, useStartPerformance, useStopPerformance, useUpdateRps } from '../hooks/usePerformance';
-import { Play, Square, Settings } from 'lucide-react';
+import { usePerformanceStatus, useStartPerformance, useStopPerformance } from '../hooks/usePerformance';
+import { Play, Square } from 'lucide-react';
 import type { RpsProfile } from '@/hooks/usePerformance';
 
 export default function PerformancePage() {
   const { data: status, isLoading: statusLoading } = usePerformanceStatus();
   const startPerformance = useStartPerformance();
   const stopPerformance = useStopPerformance();
-  const updateRps = useUpdateRps();
 
   const handleStart = (profile: RpsProfile) => {
     startPerformance.mutate({
@@ -57,12 +55,12 @@ export default function PerformancePage() {
   const isRunning = status?.running || false;
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">Performance Mode</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Performance Mode</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             Lightweight load simulation with RPS control and bottleneck simulation
           </p>
         </div>

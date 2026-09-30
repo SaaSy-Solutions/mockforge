@@ -113,7 +113,7 @@ export const PersonaCIHits: React.FC<PersonaCIHitsProps> = ({
       </div>
 
       <div className="space-y-3">
-        {aggregatedData.map((persona, index) => (
+        {aggregatedData.map((persona) => (
           <div
             key={persona.persona_id}
             className="p-4 border border-border rounded-lg hover:bg-accent hover:text-accent-foreground/50 transition-colors"

@@ -17,8 +17,38 @@
 
 import { logger } from '@/utils/logger';
 
+type SentryLevel = 'debug' | 'info' | 'warning' | 'error';
+
+/**
+ * The subset of the `@sentry/react` module surface used here. Declared
+ * locally because `@sentry/react` is an optional, dynamically-imported
+ * dependency and is not installed by default.
+ */
+interface SentryModule {
+  init(options: {
+    dsn: string;
+    environment: string;
+    release?: string;
+    integrations: unknown[];
+    tracesSampleRate: number;
+    replaysSessionSampleRate: number;
+    replaysOnErrorSampleRate: number;
+  }): void;
+  browserTracingIntegration(): unknown;
+  replayIntegration(options: { maskAllText: boolean; blockAllMedia: boolean }): unknown;
+  captureException(error: unknown, hint?: { contexts?: Record<string, Record<string, unknown> | undefined> }): string;
+  captureMessage(message: string, level?: SentryLevel): string;
+  setUser(user: { id: string; email?: string; username?: string } | null): void;
+  addBreadcrumb(breadcrumb: {
+    category?: string;
+    message: string;
+    level?: SentryLevel;
+    data?: Record<string, unknown>;
+  }): void;
+}
+
 // Sentry is optional - dynamically import if DSN is configured
-let Sentry: typeof import('@sentry/react') | null = null;
+let Sentry: SentryModule | null = null;
 
 const SENTRY_DSN = import.meta.env.VITE_SENTRY_DSN;
 const SENTRY_ENVIRONMENT = import.meta.env.VITE_SENTRY_ENVIRONMENT || 'development';
@@ -32,14 +62,15 @@ export async function initErrorReporting(): Promise<void> {
   if (SENTRY_DSN) {
     try {
       const sentryModule = '@sentry/react';
-      Sentry = await import(/* @vite-ignore */ sentryModule);
-      Sentry.init({
+      const sentry: SentryModule = await import(/* @vite-ignore */ sentryModule);
+      Sentry = sentry;
+      sentry.init({
         dsn: SENTRY_DSN,
         environment: SENTRY_ENVIRONMENT,
         release: SENTRY_RELEASE,
         integrations: [
-          Sentry.browserTracingIntegration(),
-          Sentry.replayIntegration({
+          sentry.browserTracingIntegration(),
+          sentry.replayIntegration({
             maskAllText: true,
             blockAllMedia: true,
           }),

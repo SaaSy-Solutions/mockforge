@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import React, { useState, useEffect } from 'react';
 import { apiService } from '../../services/api';
 import type { ResponseHistoryEntry } from '../../types';
@@ -45,7 +44,7 @@ const ResponseHistory: React.FC<ResponseHistoryProps> = ({
     try {
       setExecuting(true);
       const response = await apiService.executeRequest(workspaceId, requestId);
-      setHistory(prev => [response.execution, ...prev]);
+      setHistory(prev => [response, ...prev]);
       toast.success('Request executed successfully');
       onExecuteRequest?.();
     } catch (err) {

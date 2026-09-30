@@ -5,7 +5,7 @@
  * Updates in real-time via polling (every 500ms).
  */
 
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { Line } from 'react-chartjs-2';
 import { getChartPalette } from '../../utils/chartTheme';
 import {

@@ -8,7 +8,7 @@
 import React from 'react';
 import { usePipeline, useTriggerPipeline, type Pipeline } from '../../hooks/usePipelines';
 import { Card } from '../ui/Card';
-import { ArrowLeft, Edit, Play, CheckCircle, XCircle, Clock, Settings } from 'lucide-react';
+import { ArrowLeft, Edit, Play, CheckCircle, XCircle, Settings } from 'lucide-react';
 
 export interface PipelineDetailProps {
   pipeline: Pipeline;
@@ -61,7 +61,7 @@ export const PipelineDetail: React.FC<PipelineDetailProps> = ({
             </button>
           )}
           <div>
-            <h1 className="text-3xl font-bold text-foreground">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground">
               {currentPipeline.name}
             </h1>
             <p className="text-sm text-muted-foreground mt-1">

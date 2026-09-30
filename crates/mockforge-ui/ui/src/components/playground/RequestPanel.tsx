@@ -1,6 +1,6 @@
 import { logger } from '@/utils/logger';
-import React, { useState, useEffect, useCallback } from 'react';
-import { Play, Loader2, Plus, Trash2, Code2 } from 'lucide-react';
+import { useState, useEffect, useCallback } from 'react';
+import { Play, Loader2, Plus, Trash2 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
@@ -138,7 +138,9 @@ export function RequestPanel() {
         <div className="flex items-center justify-between">
           <CardTitle className="text-lg font-semibold">Request</CardTitle>
           <div className="flex items-center gap-2">
-            <Select value={protocol} onValueChange={(value: 'rest' | 'graphql') => setProtocol(value)}>
+            <Select value={protocol} onValueChange={(value) => {
+              if (value === 'rest' || value === 'graphql') setProtocol(value);
+            }}>
               <SelectTrigger className="w-32">
                 <SelectValue />
               </SelectTrigger>

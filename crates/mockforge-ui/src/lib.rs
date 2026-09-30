@@ -14,6 +14,7 @@ pub mod registry_admin;
 pub mod routes;
 // Templates module removed; static assets in `static/` are the single source of truth
 pub mod models;
+pub mod overrides_api;
 pub mod prometheus_client;
 pub mod time_travel_handlers;
 
@@ -81,6 +82,7 @@ pub async fn start_admin_server(
         vbr_engine,
         resilience_api_state,
         None,
+        None,
     )
     .await
 }
@@ -110,6 +112,7 @@ pub async fn start_admin_server_notify(
     federation: Option<std::sync::Arc<mockforge_federation::Federation>>,
     vbr_engine: Option<std::sync::Arc<mockforge_vbr::VbrEngine>>,
     resilience_api_state: Option<mockforge_chaos::resilience_api::ResilienceApiState>,
+    overrides: Option<mockforge_core::SharedOverrides>,
     bound_port_tx: Option<tokio::sync::oneshot::Sender<u16>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let mut app = create_admin_router(
@@ -130,6 +133,9 @@ pub async fn start_admin_server_notify(
         vbr_engine,
         resilience_api_state,
     );
+    if let Some(overrides) = overrides {
+        app = app.merge(overrides_api::overrides_router(overrides));
+    }
 
     // Optionally bring up the registry-admin (SQLite) sub-router if the
     // operator points us at a database via MOCKFORGE_REGISTRY_DB_URL.

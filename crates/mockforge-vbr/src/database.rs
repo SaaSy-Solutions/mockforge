@@ -783,10 +783,8 @@ fn matches_json_where(
                                 return Ok(false);
                             }
                         }
-                        "!=" | "<>" => {
-                            if matches_value(actual_value, expected_value) {
-                                return Ok(false);
-                            }
+                        "!=" | "<>" if matches_value(actual_value, expected_value) => {
+                            return Ok(false);
                         }
                         _ => {
                             // Unsupported operator, skip
