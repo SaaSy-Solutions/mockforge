@@ -6,7 +6,7 @@ use std::time::Duration;
 
 use axum::{
     extract::{Path, State},
-    http::HeaderMap,
+    http::{HeaderMap, HeaderValue},
     Json,
 };
 use mockforge_registry_core::auth::deployment_management_token;
@@ -40,10 +40,8 @@ pub fn env_entry(deployment_id: Uuid) -> Option<(String, String)> {
 
 /// A client for calling one deployment's runtime, carrying its token
 pub fn proxy_client(deployment_id: Uuid, timeout: Duration) -> reqwest::Result<reqwest::Client> {
-    let mut headers = reqwest::header::HeaderMap::new();
-    if let Some(value) =
-        token_for(deployment_id).and_then(|t| reqwest::header::HeaderValue::from_str(&t).ok())
-    {
+    let mut headers = HeaderMap::new();
+    if let Some(value) = token_for(deployment_id).and_then(|t| HeaderValue::from_str(&t).ok()) {
         headers.insert(MANAGEMENT_TOKEN_HEADER, value);
     }
     reqwest::Client::builder().timeout(timeout).default_headers(headers).build()
