@@ -11,23 +11,37 @@ FILENAMES = ['ashburn-images.yml', 'docker-build.yml']
 
 
 class AshburnImagesTest(unittest.TestCase):
-    def test_publisher_uses_trusted_hosted_orchestrator(self) -> None:
+    def test_publishers_build_on_self_hosted_runners_with_private_state(self) -> None:
         smoke = (ROOT / ".github/workflows/ashburn-image-smoke.yml").read_text()
-        guard = (ROOT / "scripts/verify-image-publisher.sh").read_text()
-        self.assertIn("name=rootless", guard)
-        self.assertIn("isolated-host", guard)
-        self.assertIn("attestation directory must be root owned", guard)
-        self.assertIn("saasy-ci-fsn-02", guard)
         self.assertNotIn("packages: write", smoke)
         for filename in FILENAMES:
             workflow = (ROOT / ".github/workflows" / filename).read_text()
-            self.assertIn("runs-on: ubuntu-latest", workflow)
-            self.assertNotIn("group: mockforge-image-publish", workflow)
-            self.assertIn("fly_buildkit_publish.py", workflow)
-            self.assertIn("FLY_IMAGE_PUBLISHER_TOKEN", workflow)
+            self.assertIn("runs-on: [self-hosted, linux, x64, rust]", workflow)
+            self.assertNotIn("fly", workflow.lower())
             self.assertIn("persist-credentials: false", workflow)
-            self.assertIn("--cleanup-only", workflow)
             self.assertIn("packages: write", workflow)
+            # GHCR credential and buildx state live in a private per-job dir.
+            self.assertIn('mktemp -d "$RUNNER_TEMP/ghcr-auth-XXXXXXXX")', workflow)
+            self.assertIn('>> "$GITHUB_ENV"', workflow)
+            # A fresh builder per run, removed explicitly before the private
+            # config dir it is registered in is deleted.
+            self.assertIn("docker/setup-buildx-action", workflow)
+            self.assertIn("cleanup: false", workflow)
+            self.assertIn("${{ github.run_id }}-${{ github.run_attempt }}", workflow)
+            self.assertIn('docker buildx rm --force "$BUILDER"', workflow)
+            self.assertLess(workflow.index("docker buildx rm"), workflow.index('rm -rf -- "$DOCKER_CONFIG"'))
+            self.assertIn("docker/build-push-action", workflow)
+            self.assertIn("provenance: false", workflow)
+            self.assertIn(":buildcache", workflow)
+
+    def test_fly_publisher_is_gone(self) -> None:
+        for path in (
+            "scripts/ci/fly_buildkit_publish.py",
+            "scripts/verify-image-publisher.sh",
+            ".github/workflows/fly-publisher-cleanup.yml",
+            ".github/actions/setup-flyctl",
+        ):
+            self.assertFalse((ROOT / path).exists(), path)
 
     def test_registry_and_tunnel_dockerfiles_are_published_serially(self) -> None:
         workflow = (ROOT / ".github/workflows/ashburn-images.yml").read_text()
@@ -46,20 +60,19 @@ class AshburnImagesTest(unittest.TestCase):
         self.assertIn("startsWith(github.ref, 'refs/tags/v')", core_workflow)
         self.assertIn("github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'", core_workflow)
         isolation = (ROOT / "docs/IMAGE_PUBLISHER_ISOLATION.md").read_text()
-        self.assertIn('mockforge-image-publisher', isolation)
-        self.assertIn('FLY_IMAGE_PUBLISHER_TOKEN', isolation)
+        self.assertIn("[self-hosted, linux, x64, rust]", isolation)
+        self.assertIn("Threat model", isolation)
         self.assertIn('protected `v*`', isolation)
         for publish in (workflow, core_workflow):
             self.assertNotIn("  pull_request:", publish)
             self.assertIn("packages: write", publish)
-            self.assertIn("fly_buildkit_publish.py", publish)
         self.assertIn("pull_request:", smoke)
         self.assertIn("contents: read", smoke)
         self.assertNotIn("packages: write", smoke)
         self.assertNotIn("docker/login-action", smoke)
         self.assertIn("push: false", smoke)
         self.assertIn("Dockerfile.registry", smoke)
-        self.assertIn("BUILD_DATE: ${{ steps.build-date.outputs.value }}", core_workflow)
+        self.assertIn("BUILD_DATE=${{ steps.build-date.outputs.value }}", core_workflow)
         self.assertIn("docker buildx imagetools create", core_workflow)
         self.assertIn("image_digest: ${{ steps.build-and-push.outputs.digest }}", core_workflow)
         self.assertIn("@${{ needs.build-and-push.outputs.image_digest }}", core_workflow)
@@ -73,7 +86,7 @@ class AshburnImagesTest(unittest.TestCase):
             self.assertIn("runs-on: ubuntu-latest", no_write_job)
             self.assertNotIn("packages: write", no_write_job)
             self.assertNotIn("docker/login-action", no_write_job)
-        self.assertIn("runs-on: ubuntu-latest", build)
+        self.assertIn("runs-on: [self-hosted, linux, x64, rust]", build)
         self.assertIn("packages: write", build)
 
     def test_auto_publish_is_opt_in_without_blocking_manual_canary(self) -> None:
