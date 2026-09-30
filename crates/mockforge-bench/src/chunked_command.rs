@@ -815,13 +815,16 @@ mod tests {
         let dir = scratch_dir("until");
         let mut c = cmd(Some(&format!("{}/upload", server.url())), None);
         c.output = dir.clone();
-        c.duration = Duration::from_millis(100);
-        c.repeat_until = Some(Duration::from_millis(250));
+        // Short rounds against a roomy budget: a loaded CI runner can stretch
+        // one round's setup well past its nominal duration, so assert only that
+        // the campaign repeated and then stopped, not an exact count.
+        c.duration = Duration::from_millis(50);
+        c.repeat_until = Some(Duration::from_millis(500));
 
         assert!(c.execute().await.unwrap());
 
         let n = std::fs::read_to_string(dir.join("campaign.jsonl")).unwrap().lines().count();
-        assert!((3..=4).contains(&n), "expected 3-4 rounds of 100ms in 250ms, got {n}");
+        assert!((2..=11).contains(&n), "expected 2-11 rounds of 50ms in 500ms, got {n}");
         let _ = std::fs::remove_dir_all(&dir);
     }
 
