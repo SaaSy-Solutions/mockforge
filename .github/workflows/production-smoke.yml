@@ -1,6 +1,6 @@
 name: Production Smoke Test
 
-# Runs end-to-end against the hosted registry API (mockforge-registry.fly.dev)
+# Runs end-to-end against the hosted registry API (api.mockforge.dev, Ashburn)
 # every 15 minutes. Catches regressions that ship past release.yml's gates and
 # surface only when real customers hit them.
 #
@@ -26,7 +26,7 @@ permissions:
 
 jobs:
   smoke:
-    name: Smoke registry API (mockforge-registry.fly.dev)
+    name: Smoke registry API (api.mockforge.dev)
     # #1000: runs on a GitHub-hosted runner, NOT the self-hosted pool. This job
     # is curl plus an issue-creation script: it needs no Rust toolchain, and
     # mockforge has only two self-hosted runners. Sitting in that queue meant a
@@ -47,11 +47,10 @@ jobs:
         # if `failure_step` got written.
         continue-on-error: true
         env:
-          # The registry API hosts /api/v1/auth/*, hosted-mocks and billing.
-          # api.mockforge.dev is the public DEMO serve instance (fly.demo.toml)
-          # — it has no registry endpoints, so this workflow never passed
-          # against it (0 successes in its history before this change).
-          BASE_URL: https://mockforge-registry.fly.dev
+          # The registry API (/api/v1/auth/*, hosted-mocks, billing) moved from
+          # mockforge-registry.fly.dev to api.mockforge.dev in the 2026-09-27
+          # Ashburn cutover; the Fly host is retired (#1087).
+          BASE_URL: https://api.mockforge.dev
         run: |
           set +e
           fail() {
@@ -87,9 +86,9 @@ jobs:
           }
 
           # 1) Health endpoint — fastest signal, runs first.
-          HEALTH=$(http_retry /tmp/health.json 10 "$BASE_URL/metrics/health")
+          HEALTH=$(http_retry /tmp/health.json 10 "$BASE_URL/health")
           if [ "$HEALTH" != "200" ]; then
-            fail "health" "GET /metrics/health returned $HEALTH; body: $(cat /tmp/health.json 2>/dev/null | head -c 200)"
+            fail "health" "GET /health returned $HEALTH; body: $(cat /tmp/health.json 2>/dev/null | head -c 200)"
           fi
           echo "OK health -> $HEALTH"
 
@@ -160,6 +159,18 @@ jobs:
             fail "billing-subscription" "GET /api/v1/billing/subscription returned $SUB; body: $(cat /tmp/sub.json 2>/dev/null | head -c 300)"
           fi
           echo "OK subscription -> $SUB"
+
+          # 6) Erase the throwaway account so smoke runs stop accumulating users
+          # and orgs in production; also exercises the GDPR cascade delete.
+          ERASE=$(http_retry /tmp/erase.json 20 \
+            -X DELETE "$BASE_URL/api/v1/gdpr/erase" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H 'Content-Type: application/json' \
+            -d '{"confirm":true,"reason":"production smoke cleanup"}')
+          if [ "$ERASE" != "200" ]; then
+            fail "gdpr-erase" "DELETE /api/v1/gdpr/erase returned $ERASE; body: $(cat /tmp/erase.json 2>/dev/null | head -c 300)"
+          fi
+          echo "OK erase -> $ERASE"
 
           echo "All smoke checks passed."
 
