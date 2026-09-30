@@ -40,7 +40,7 @@ pub fn env_entry(deployment_id: Uuid) -> Option<(String, String)> {
 
 /// A client for calling one deployment's runtime, carrying its token
 pub fn proxy_client(deployment_id: Uuid, timeout: Duration) -> reqwest::Result<reqwest::Client> {
-    let mut headers = reqwest::header::HeaderMap::new();
+    let mut headers = HeaderMap::new();
     if let Some(value) =
         token_for(deployment_id).and_then(|t| reqwest::header::HeaderValue::from_str(&t).ok())
     {
