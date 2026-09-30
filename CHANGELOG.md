@@ -1,5 +1,13 @@
 ## [Unreleased]
 
+### Added
+
+- **[Reality]** `mockforge bench-chunked` gains `--rps N` (per-target cap on request starts per second), `--cps` (new TCP/TLS connection per request), and campaign mode: `--rounds N` / `--repeat-until <duration>` re-run the whole pass into `<output>/round_N/`, with per-round stats in `campaign.jsonl` and `round-summaries/`, and `--keep-rounds N` rotating old round dirs, matching `mockforge bench`. (#79)
+
+### Fixed
+
+- **[Reality]** `bench-chunked --chunk-interval-ms` now sends the first chunk immediately and waits only *between* chunks. Previously it waited before the first chunk and sent the last two back to back. (#79)
+
 ## [0.3.226] - 2026-09-29
 
 ### Added

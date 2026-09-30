@@ -13,8 +13,14 @@
 //!   `mockforge bench --targets-file`, including per-target `auth`, `headers`
 //!   and `spec`. Per-target artifacts go to `<output>/target_<N>/`, and a
 //!   roll-up goes to `<output>/chunked-multi-target-summary.json`.
+//!
+//! Any mode can loop as a campaign (`--rounds` / `--repeat-until`, issue
+//! #79): each pass writes to `<output>/round_<N>/`, per-round stats go to
+//! `<output>/campaign.jsonl` + `<output>/round-summaries/`, and
+//! `--keep-rounds` prunes old `round_*` dirs, matching `mockforge bench`.
 
 use crate::chunked_bench::{run, ChunkedBenchConfig, ChunkedBenchResult};
+use crate::parallel_executor::ParallelExecutor;
 use crate::request_gen::RequestGenerator;
 use crate::spec_parser::SpecParser;
 use crate::target_parser::{parse_targets_file, TargetConfig};
@@ -47,6 +53,16 @@ pub struct ChunkedCommand {
     pub validate_requests: bool,
     pub export_requests: bool,
     pub output: PathBuf,
+    /// Per-target cap on request starts per second (shared by its workers).
+    pub rps: Option<u32>,
+    /// New TCP/TLS connection per request, so connections/s = requests/s.
+    pub cps: bool,
+    /// Campaign: run the whole plan this many times.
+    pub rounds: Option<u32>,
+    /// Campaign: keep starting new rounds until this much wall clock elapsed.
+    pub repeat_until: Option<Duration>,
+    /// Campaign: keep only the newest N `round_*` dirs.
+    pub keep_rounds: Option<u32>,
 }
 
 /// One target's resolved run plan.
@@ -91,28 +107,108 @@ impl ChunkedCommand {
         match (&self.target, &self.targets_file) {
             (Some(_), Some(_)) => bail!("--target and --targets-file are mutually exclusive"),
             (None, None) => bail!("either --target or --targets-file is required"),
-            (Some(target), None) => {
+            _ => {}
+        }
+        if self.rounds == Some(0) {
+            bail!("--rounds must be >= 1 (or omit it for a single pass / --repeat-until)");
+        }
+        let max_rounds = self.rounds.unwrap_or(if self.repeat_until.is_some() {
+            u32::MAX
+        } else {
+            1
+        });
+        let looping = max_rounds > 1 || self.repeat_until.is_some();
+        if !looping {
+            if self.keep_rounds.is_some() {
+                eprintln!(
+                    "Note: --keep-rounds only applies to campaign runs (--repeat-until / --rounds > 1); ignoring"
+                );
+            }
+            return Ok(self.execute_pass(&self.output).await?.0);
+        }
+
+        match self.repeat_until {
+            Some(until) => println!(
+                "Campaign: re-running every pass until {}s of wall clock (or --rounds {})",
+                until.as_secs(),
+                self.rounds.map(|n| n.to_string()).unwrap_or_else(|| "unlimited".into())
+            ),
+            None => println!("Campaign: {max_rounds} round(s)"),
+        }
+        if let Some(keep) = self.keep_rounds {
+            println!(
+                "Round pruning: keeping newest {keep} round_* dir(s); per-round stats persist in campaign.jsonl + round-summaries/"
+            );
+        }
+
+        let campaign_start = std::time::Instant::now();
+        let mut all_ok = true;
+        let mut round: u32 = 0;
+        while round < max_rounds {
+            if let Some(until) = self.repeat_until {
+                if round > 0 && campaign_start.elapsed() >= until {
+                    println!("Reached --repeat-until; stopping after {round} round(s)");
+                    break;
+                }
+            }
+            round += 1;
+            let round_output = self.output.join(format!("round_{round}"));
+            println!(
+                "\n=== Round {round} (campaign elapsed {}s) → {} ===",
+                campaign_start.elapsed().as_secs(),
+                round_output.display()
+            );
+            let (ok, summary) = self.execute_pass(&round_output).await?;
+            all_ok &= ok;
+            write_round_record(&self.output, round, campaign_start.elapsed(), ok, summary)?;
+            if let Some(keep) = self.keep_rounds {
+                ParallelExecutor::prune_old_rounds(&self.output, keep);
+            }
+        }
+        Ok(all_ok)
+    }
+
+    /// One pass over the whole plan, writing artifacts under `output`.
+    /// Returns whether every run completed plus a JSON roll-up of the pass.
+    async fn execute_pass(&self, output: &Path) -> anyhow::Result<(bool, serde_json::Value)> {
+        match (&self.target, &self.targets_file) {
+            (Some(target), _) => {
                 let run = TargetRun {
                     prefix: String::new(),
                     url: target.clone(),
                     headers: self.headers.clone(),
                     spec: self.spec.clone(),
-                    output: self.output.clone(),
+                    output: output.to_path_buf(),
                 };
-                Ok(!self.run_target(&run).await?.run_failed)
+                let o = self.run_target(&run).await?;
+                let summary = serde_json::json!({
+                    "url": target,
+                    "total_requests": o.total_requests,
+                    "successful": o.successful,
+                    "failed": o.failed,
+                    "bytes_sent": o.bytes_sent,
+                    "status_counts": o.status_counts,
+                    "run_failed": o.run_failed,
+                });
+                Ok((!o.run_failed, summary))
             }
-            (None, Some(file)) => self.execute_multi_target(file).await,
+            (None, Some(file)) => self.execute_multi_target(file, output).await,
+            (None, None) => bail!("either --target or --targets-file is required"),
         }
     }
 
-    async fn execute_multi_target(&self, file: &Path) -> anyhow::Result<bool> {
+    async fn execute_multi_target(
+        &self,
+        file: &Path,
+        output: &Path,
+    ) -> anyhow::Result<(bool, serde_json::Value)> {
         let targets = parse_targets_file(file)
             .map_err(|e| anyhow::anyhow!("{e}"))
             .with_context(|| format!("failed to read targets file {}", file.display()))?;
         if targets.is_empty() {
             bail!("no targets found in {}", file.display());
         }
-        let runs = plan_target_runs(targets, &self.headers, self.spec.as_ref(), &self.output);
+        let runs = plan_target_runs(targets, &self.headers, self.spec.as_ref(), output);
         let max_concurrency = self.max_concurrency.max(1) as usize;
         println!(
             "→ Chunked bench across {} targets from {:?} (max {} in parallel)",
@@ -183,9 +279,9 @@ impl ChunkedCommand {
             }
         }
 
-        std::fs::create_dir_all(&self.output)
-            .with_context(|| format!("failed to create output directory {:?}", self.output))?;
-        let path = self.output.join("chunked-multi-target-summary.json");
+        std::fs::create_dir_all(output)
+            .with_context(|| format!("failed to create output directory {:?}", output))?;
+        let path = output.join("chunked-multi-target-summary.json");
         let payload = serde_json::json!({
             "targets_file": file.display().to_string(),
             "concurrency_per_target": self.concurrency,
@@ -194,12 +290,14 @@ impl ChunkedCommand {
             "chunk_size_bytes": self.chunk_size_bytes,
             "total_size_bytes": self.total_size_bytes,
             "chunk_interval_ms": self.chunk_interval_ms,
+            "rps_per_target": self.rps,
+            "new_connection_per_request": self.cps,
             "targets": rows,
         });
         std::fs::write(&path, serde_json::to_string_pretty(&payload)?)
             .with_context(|| format!("failed to write {:?}", path))?;
         println!("📝 Wrote {:?}", path);
-        Ok(all_ok)
+        Ok((all_ok, payload))
     }
 
     fn bench_config(
@@ -218,6 +316,8 @@ impl ChunkedCommand {
             chunk_interval_ms: self.chunk_interval_ms,
             headers: headers.clone(),
             skip_tls_verify: self.insecure,
+            rps: self.rps,
+            no_keep_alive: self.cps,
         }
     }
 
@@ -461,6 +561,41 @@ fn plan_target_runs(
         .collect()
 }
 
+/// Campaign bookkeeping for one finished round: a pruning-proof copy under
+/// `<output>/round-summaries/` and one line appended to
+/// `<output>/campaign.jsonl`.
+fn write_round_record(
+    output: &Path,
+    round: u32,
+    campaign_elapsed: Duration,
+    ok: bool,
+    pass: serde_json::Value,
+) -> anyhow::Result<()> {
+    use std::io::Write;
+    let record = serde_json::json!({
+        "round": round,
+        "campaign_elapsed_seconds": campaign_elapsed.as_secs(),
+        "all_runs_completed": ok,
+        "pass": pass,
+    });
+    let summaries = output.join("round-summaries");
+    std::fs::create_dir_all(&summaries)
+        .with_context(|| format!("failed to create {:?}", summaries))?;
+    std::fs::write(
+        summaries.join(format!("round_{round}.json")),
+        serde_json::to_string_pretty(&record)?,
+    )?;
+    let mut line = serde_json::to_string(&record)?;
+    line.push('\n');
+    std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(output.join("campaign.jsonl"))?
+        .write_all(line.as_bytes())
+        .context("failed to append campaign.jsonl")?;
+    Ok(())
+}
+
 fn export_record(
     cmd: &ChunkedCommand,
     label: &str,
@@ -480,6 +615,8 @@ fn export_record(
         "total_size_bytes": cmd.total_size_bytes,
         "chunk_interval_ms": cmd.chunk_interval_ms,
         "concurrency": cmd.concurrency,
+        "rps": cmd.rps,
+        "new_connection_per_request": cmd.cps,
         "duration_secs": cmd.duration.as_secs(),
         "result": {
             "total_requests": r.total_requests,
@@ -610,6 +747,11 @@ mod tests {
             validate_requests: false,
             export_requests: false,
             output: PathBuf::from("bench-results"),
+            rps: None,
+            cps: false,
+            rounds: None,
+            repeat_until: None,
+            keep_rounds: None,
         }
     }
 
@@ -622,5 +764,71 @@ mod tests {
     #[tokio::test]
     async fn rejects_neither_target_nor_targets_file() {
         assert!(cmd(None, None).execute().await.is_err());
+    }
+
+    fn scratch_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "mf-chunked-{name}-{}-{}",
+            std::process::id(),
+            line!()
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[tokio::test]
+    async fn campaign_rounds_write_records_and_prune_round_dirs() {
+        let mut server = mockito::Server::new_async().await;
+        let _m = server.mock("POST", "/upload").with_status(200).create_async().await;
+        let dir = scratch_dir("campaign");
+        let targets = dir.join("targets.txt");
+        std::fs::write(&targets, format!("{}/upload\n{}/upload\n", server.url(), server.url()))
+            .unwrap();
+        let mut c = cmd(None, Some(targets));
+        c.output = dir.join("out");
+        c.duration = Duration::from_millis(50);
+        c.rounds = Some(3);
+        c.keep_rounds = Some(1);
+
+        assert!(c.execute().await.unwrap());
+
+        let jsonl = std::fs::read_to_string(c.output.join("campaign.jsonl")).unwrap();
+        let rounds: Vec<serde_json::Value> =
+            jsonl.lines().map(|l| serde_json::from_str(l).unwrap()).collect();
+        assert_eq!(rounds.len(), 3);
+        assert_eq!(rounds[2]["round"], 3);
+        assert_eq!(rounds[2]["pass"]["targets"].as_array().unwrap().len(), 2);
+        for n in 1..=3 {
+            assert!(c.output.join(format!("round-summaries/round_{n}.json")).exists());
+        }
+        assert!(!c.output.join("round_1").exists());
+        assert!(!c.output.join("round_2").exists());
+        assert!(c.output.join("round_3/chunked-multi-target-summary.json").exists());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn campaign_repeat_until_stops_on_wall_clock() {
+        let mut server = mockito::Server::new_async().await;
+        let _m = server.mock("POST", "/upload").with_status(200).create_async().await;
+        let dir = scratch_dir("until");
+        let mut c = cmd(Some(&format!("{}/upload", server.url())), None);
+        c.output = dir.clone();
+        c.duration = Duration::from_millis(100);
+        c.repeat_until = Some(Duration::from_millis(250));
+
+        assert!(c.execute().await.unwrap());
+
+        let n = std::fs::read_to_string(dir.join("campaign.jsonl")).unwrap().lines().count();
+        assert!((3..=4).contains(&n), "expected 3-4 rounds of 100ms in 250ms, got {n}");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn rejects_zero_rounds() {
+        let mut c = cmd(Some("http://127.0.0.1:1"), None);
+        c.rounds = Some(0);
+        assert!(c.execute().await.is_err());
     }
 }

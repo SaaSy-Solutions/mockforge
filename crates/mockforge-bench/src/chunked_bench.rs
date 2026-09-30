@@ -26,6 +26,8 @@
 //!     chunk_interval_ms: 0,
 //!     headers: HashMap::new(),
 //!     skip_tls_verify: false,
+//!     rps: None,
+//!     no_keep_alive: false,
 //! }).await?;
 //! println!("{} req/s", result.req_per_sec);
 //! # Ok(()) }
@@ -65,6 +67,37 @@ pub struct ChunkedBenchConfig {
     pub headers: HashMap<String, String>,
     /// Skip TLS certificate verification (useful for test self-signed certs).
     pub skip_tls_verify: bool,
+    /// Cap on request *starts* per second, shared by all workers. `None` =
+    /// each worker starts its next request as soon as the previous one ends.
+    /// The achieved rate can't exceed `concurrency / request_duration`.
+    pub rps: Option<u32>,
+    /// Open a fresh TCP/TLS connection for every request (no pooling), so the
+    /// connections-per-second rate equals the request rate.
+    pub no_keep_alive: bool,
+}
+
+/// Hands out evenly spaced request start times across all workers.
+struct Pacer {
+    interval: Duration,
+    next: Mutex<Instant>,
+}
+
+impl Pacer {
+    fn new(rps: u32) -> Self {
+        Self {
+            interval: Duration::from_secs_f64(1.0 / f64::from(rps)),
+            next: Mutex::new(Instant::now()),
+        }
+    }
+
+    /// Reserve the next start slot. Slots are never handed out in the past,
+    /// so a stall doesn't cause a burst to "catch up".
+    async fn reserve(&self) -> Instant {
+        let mut next = self.next.lock().await;
+        let slot = (*next).max(Instant::now());
+        *next = slot + self.interval;
+        slot
+    }
 }
 
 /// One captured non-2xx response — used to surface *who* sent the error
@@ -118,10 +151,16 @@ pub async fn run(cfg: ChunkedBenchConfig) -> anyhow::Result<ChunkedBenchResult> 
     if cfg.concurrency == 0 {
         anyhow::bail!("concurrency must be >= 1");
     }
+    if cfg.rps == Some(0) {
+        anyhow::bail!("rps must be >= 1");
+    }
 
-    let client = reqwest::Client::builder()
-        .danger_accept_invalid_certs(cfg.skip_tls_verify)
-        .build()?;
+    let mut builder = reqwest::Client::builder().danger_accept_invalid_certs(cfg.skip_tls_verify);
+    if cfg.no_keep_alive {
+        builder = builder.pool_max_idle_per_host(0);
+    }
+    let client = builder.build()?;
+    let pacer = cfg.rps.map(|n| Arc::new(Pacer::new(n)));
 
     let total_requests = Arc::new(AtomicU64::new(0));
     let successful = Arc::new(AtomicU64::new(0));
@@ -145,9 +184,17 @@ pub async fn run(cfg: ChunkedBenchConfig) -> anyhow::Result<ChunkedBenchResult> 
         let latencies = latencies.clone();
         let status_counts = status_counts.clone();
         let error_samples = error_samples.clone();
+        let pacer = pacer.clone();
 
         workers.push(tokio::spawn(async move {
             while Instant::now() < deadline {
+                if let Some(pacer) = &pacer {
+                    let slot = pacer.reserve().await;
+                    if slot >= deadline {
+                        break;
+                    }
+                    tokio::time::sleep_until(slot.into()).await;
+                }
                 let req_started = Instant::now();
                 match send_one_chunked_request(&client, &cfg).await {
                     Ok(SendResult { status, sample }) => {
@@ -248,12 +295,13 @@ async fn send_one_chunked_request(
         let mut sent: usize = 0;
         let payload = vec![b'X'; chunk_size];
         while sent < total {
+            // Wait *between* chunks: the first chunk goes out immediately.
+            if interval_ms > 0 && sent > 0 {
+                tokio::time::sleep(Duration::from_millis(interval_ms)).await;
+            }
             let next = std::cmp::min(chunk_size, total - sent);
             let chunk = payload[..next].to_vec();
             sent += next;
-            if interval_ms > 0 && sent < total {
-                tokio::time::sleep(Duration::from_millis(interval_ms)).await;
-            }
             yield Ok::<_, std::io::Error>(chunk);
         }
     };
@@ -322,6 +370,8 @@ mod tests {
             chunk_interval_ms: 0,
             headers: HashMap::new(),
             skip_tls_verify: false,
+            rps: None,
+            no_keep_alive: false,
         };
         assert!(run(cfg).await.is_err());
     }
@@ -338,6 +388,65 @@ mod tests {
             chunk_interval_ms: 0,
             headers: HashMap::new(),
             skip_tls_verify: false,
+            rps: None,
+            no_keep_alive: false,
+        };
+        assert!(run(cfg).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn pacer_spaces_slots_evenly() {
+        let pacer = Pacer::new(10);
+        let a = pacer.reserve().await;
+        let b = pacer.reserve().await;
+        let c = pacer.reserve().await;
+        assert_eq!(b - a, Duration::from_millis(100));
+        assert_eq!(c - b, Duration::from_millis(100));
+    }
+
+    #[tokio::test]
+    async fn rps_caps_request_starts_across_workers() {
+        let mut server = mockito::Server::new_async().await;
+        let _m = server
+            .mock("POST", "/upload")
+            .with_status(200)
+            .expect_at_least(1)
+            .create_async()
+            .await;
+        let cfg = ChunkedBenchConfig {
+            target_url: format!("{}/upload", server.url()),
+            method: reqwest::Method::POST,
+            concurrency: 8,
+            duration: Duration::from_millis(1000),
+            chunk_size_bytes: 64,
+            total_size_bytes: 256,
+            chunk_interval_ms: 0,
+            headers: HashMap::new(),
+            skip_tls_verify: false,
+            rps: Some(5),
+            no_keep_alive: true,
+        };
+        let r = run(cfg).await.unwrap();
+        // 1s at 5 rps = slots at 0, 200, 400, 600, 800ms. Unpaced, 8 workers
+        // against a local server would do hundreds.
+        assert!((4..=6).contains(&r.total_requests), "got {} requests", r.total_requests);
+        assert_eq!(r.failed, 0);
+    }
+
+    #[tokio::test]
+    async fn rejects_zero_rps() {
+        let cfg = ChunkedBenchConfig {
+            target_url: "http://127.0.0.1:1".into(),
+            method: reqwest::Method::POST,
+            concurrency: 1,
+            duration: Duration::from_millis(10),
+            chunk_size_bytes: 1024,
+            total_size_bytes: 4096,
+            chunk_interval_ms: 0,
+            headers: HashMap::new(),
+            skip_tls_verify: false,
+            rps: Some(0),
+            no_keep_alive: false,
         };
         assert!(run(cfg).await.is_err());
     }
