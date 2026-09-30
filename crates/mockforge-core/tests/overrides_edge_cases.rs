@@ -9,10 +9,7 @@ use serde_json::json;
 /// Test empty overrides
 #[test]
 fn test_overrides_empty() {
-    let overrides = Overrides {
-        rules: vec![],
-        regex_cache: Default::default(),
-    };
+    let overrides = Overrides::new(vec![]).unwrap();
 
     let mut body = json!({"value": "original"});
     overrides.apply("test_op", &[], "/test", &mut body);
@@ -24,31 +21,33 @@ fn test_overrides_empty() {
 /// Test overrides with multiple rules
 #[test]
 fn test_overrides_multiple_rules() {
-    let overrides = Overrides {
-        rules: vec![
-            OverrideRule {
-                targets: vec!["operation:test_op".to_string()],
-                mode: OverrideMode::Replace,
-                patch: vec![PatchOp::Replace {
-                    path: "/value1".to_string(),
-                    value: json!("first"),
-                }],
-                when: None,
-                post_templating: false,
-            },
-            OverrideRule {
-                targets: vec!["operation:test_op".to_string()],
-                mode: OverrideMode::Replace,
-                patch: vec![PatchOp::Replace {
-                    path: "/value2".to_string(),
-                    value: json!("second"),
-                }],
-                when: None,
-                post_templating: false,
-            },
-        ],
-        regex_cache: Default::default(),
-    };
+    let overrides = Overrides::new(vec![
+        OverrideRule {
+            name: None,
+            enabled: true,
+            targets: vec!["operation:test_op".to_string()],
+            mode: OverrideMode::Replace,
+            patch: vec![PatchOp::Replace {
+                path: "/value1".to_string(),
+                value: json!("first"),
+            }],
+            when: None,
+            post_templating: false,
+        },
+        OverrideRule {
+            name: None,
+            enabled: true,
+            targets: vec!["operation:test_op".to_string()],
+            mode: OverrideMode::Replace,
+            patch: vec![PatchOp::Replace {
+                path: "/value2".to_string(),
+                value: json!("second"),
+            }],
+            when: None,
+            post_templating: false,
+        },
+    ])
+    .unwrap();
 
     let mut body = json!({"value1": "original1", "value2": "original2"});
     overrides.apply("test_op", &[], "/test", &mut body);
@@ -60,19 +59,19 @@ fn test_overrides_multiple_rules() {
 /// Test overrides with Merge mode
 #[test]
 fn test_overrides_merge_mode() {
-    let overrides = Overrides {
-        rules: vec![OverrideRule {
-            targets: vec!["operation:test_op".to_string()],
-            mode: OverrideMode::Merge,
-            patch: vec![PatchOp::Replace {
-                path: "/nested/key".to_string(),
-                value: json!("merged"),
-            }],
-            when: None,
-            post_templating: false,
+    let overrides = Overrides::new(vec![OverrideRule {
+        name: None,
+        enabled: true,
+        targets: vec!["operation:test_op".to_string()],
+        mode: OverrideMode::Merge,
+        patch: vec![PatchOp::Replace {
+            path: "/nested/key".to_string(),
+            value: json!("merged"),
         }],
-        regex_cache: Default::default(),
-    };
+        when: None,
+        post_templating: false,
+    }])
+    .unwrap();
 
     let mut body = json!({
         "nested": {
@@ -89,26 +88,19 @@ fn test_overrides_merge_mode() {
 /// Test overrides with path matching
 #[test]
 fn test_overrides_path_matching() {
-    use regex::Regex;
-    use std::collections::HashMap;
-
-    // Pre-compile regex pattern for path matching
-    let mut regex_cache = HashMap::new();
-    regex_cache.insert("/api/users/.*".to_string(), Regex::new(r"/api/users/.*").unwrap());
-
-    let overrides = Overrides {
-        rules: vec![OverrideRule {
-            targets: vec!["path:/api/users/.*".to_string()],
-            mode: OverrideMode::Replace,
-            patch: vec![PatchOp::Replace {
-                path: "/count".to_string(),
-                value: json!(100),
-            }],
-            when: None,
-            post_templating: false,
+    let overrides = Overrides::new(vec![OverrideRule {
+        name: None,
+        enabled: true,
+        targets: vec!["path:/api/users/.*".to_string()],
+        mode: OverrideMode::Replace,
+        patch: vec![PatchOp::Replace {
+            path: "/count".to_string(),
+            value: json!(100),
         }],
-        regex_cache,
-    };
+        when: None,
+        post_templating: false,
+    }])
+    .unwrap();
 
     let mut body = json!({"count": 0});
     overrides.apply("any_op", &[], "/api/users/123", &mut body);
@@ -119,19 +111,19 @@ fn test_overrides_path_matching() {
 /// Test overrides with tag matching
 #[test]
 fn test_overrides_tag_matching() {
-    let overrides = Overrides {
-        rules: vec![OverrideRule {
-            targets: vec!["tag:admin".to_string()],
-            mode: OverrideMode::Replace,
-            patch: vec![PatchOp::Replace {
-                path: "/role".to_string(),
-                value: json!("admin"),
-            }],
-            when: None,
-            post_templating: false,
+    let overrides = Overrides::new(vec![OverrideRule {
+        name: None,
+        enabled: true,
+        targets: vec!["tag:admin".to_string()],
+        mode: OverrideMode::Replace,
+        patch: vec![PatchOp::Replace {
+            path: "/role".to_string(),
+            value: json!("admin"),
         }],
-        regex_cache: Default::default(),
-    };
+        when: None,
+        post_templating: false,
+    }])
+    .unwrap();
 
     let mut body = json!({"role": "user"});
     overrides.apply("any_op", &["admin".to_string()], "/test", &mut body);
@@ -142,19 +134,19 @@ fn test_overrides_tag_matching() {
 /// Test overrides with multiple tags
 #[test]
 fn test_overrides_multiple_tags() {
-    let overrides = Overrides {
-        rules: vec![OverrideRule {
-            targets: vec!["tag:premium".to_string()],
-            mode: OverrideMode::Replace,
-            patch: vec![PatchOp::Replace {
-                path: "/tier".to_string(),
-                value: json!("premium"),
-            }],
-            when: None,
-            post_templating: false,
+    let overrides = Overrides::new(vec![OverrideRule {
+        name: None,
+        enabled: true,
+        targets: vec!["tag:premium".to_string()],
+        mode: OverrideMode::Replace,
+        patch: vec![PatchOp::Replace {
+            path: "/tier".to_string(),
+            value: json!("premium"),
         }],
-        regex_cache: Default::default(),
-    };
+        when: None,
+        post_templating: false,
+    }])
+    .unwrap();
 
     let mut body = json!({"tier": "free"});
     overrides.apply("any_op", &["premium".to_string(), "vip".to_string()], "/test", &mut body);
@@ -165,19 +157,19 @@ fn test_overrides_multiple_tags() {
 /// Test overrides with no matching tags
 #[test]
 fn test_overrides_no_matching_tags() {
-    let overrides = Overrides {
-        rules: vec![OverrideRule {
-            targets: vec!["tag:premium".to_string()],
-            mode: OverrideMode::Replace,
-            patch: vec![PatchOp::Replace {
-                path: "/tier".to_string(),
-                value: json!("premium"),
-            }],
-            when: None,
-            post_templating: false,
+    let overrides = Overrides::new(vec![OverrideRule {
+        name: None,
+        enabled: true,
+        targets: vec!["tag:premium".to_string()],
+        mode: OverrideMode::Replace,
+        patch: vec![PatchOp::Replace {
+            path: "/tier".to_string(),
+            value: json!("premium"),
         }],
-        regex_cache: Default::default(),
-    };
+        when: None,
+        post_templating: false,
+    }])
+    .unwrap();
 
     let mut body = json!({"tier": "free"});
     overrides.apply("any_op", &["basic".to_string()], "/test", &mut body);
@@ -189,19 +181,19 @@ fn test_overrides_no_matching_tags() {
 /// Test overrides with nested path
 #[test]
 fn test_overrides_nested_path() {
-    let overrides = Overrides {
-        rules: vec![OverrideRule {
-            targets: vec!["operation:test_op".to_string()],
-            mode: OverrideMode::Replace,
-            patch: vec![PatchOp::Replace {
-                path: "/level1/level2/level3/value".to_string(),
-                value: json!("deep"),
-            }],
-            when: None,
-            post_templating: false,
+    let overrides = Overrides::new(vec![OverrideRule {
+        name: None,
+        enabled: true,
+        targets: vec!["operation:test_op".to_string()],
+        mode: OverrideMode::Replace,
+        patch: vec![PatchOp::Replace {
+            path: "/level1/level2/level3/value".to_string(),
+            value: json!("deep"),
         }],
-        regex_cache: Default::default(),
-    };
+        when: None,
+        post_templating: false,
+    }])
+    .unwrap();
 
     let mut body = json!({
         "level1": {
@@ -220,19 +212,19 @@ fn test_overrides_nested_path() {
 /// Test overrides with array index
 #[test]
 fn test_overrides_array_index() {
-    let overrides = Overrides {
-        rules: vec![OverrideRule {
-            targets: vec!["operation:test_op".to_string()],
-            mode: OverrideMode::Replace,
-            patch: vec![PatchOp::Replace {
-                path: "/items/0/name".to_string(),
-                value: json!("first"),
-            }],
-            when: None,
-            post_templating: false,
+    let overrides = Overrides::new(vec![OverrideRule {
+        name: None,
+        enabled: true,
+        targets: vec!["operation:test_op".to_string()],
+        mode: OverrideMode::Replace,
+        patch: vec![PatchOp::Replace {
+            path: "/items/0/name".to_string(),
+            value: json!("first"),
         }],
-        regex_cache: Default::default(),
-    };
+        when: None,
+        post_templating: false,
+    }])
+    .unwrap();
 
     let mut body = json!({
         "items": [
@@ -249,19 +241,19 @@ fn test_overrides_array_index() {
 /// Test overrides with non-existent path using Add operation
 #[test]
 fn test_overrides_non_existent_path() {
-    let overrides = Overrides {
-        rules: vec![OverrideRule {
-            targets: vec!["operation:test_op".to_string()],
-            mode: OverrideMode::Merge, // Merge mode handles Add operations better
-            patch: vec![PatchOp::Add {
-                path: "/new/field/value".to_string(),
-                value: json!("created"),
-            }],
-            when: None,
-            post_templating: false,
+    let overrides = Overrides::new(vec![OverrideRule {
+        name: None,
+        enabled: true,
+        targets: vec!["operation:test_op".to_string()],
+        mode: OverrideMode::Merge, // Merge mode handles Add operations better
+        patch: vec![PatchOp::Add {
+            path: "/new/field/value".to_string(),
+            value: json!("created"),
         }],
-        regex_cache: Default::default(),
-    };
+        when: None,
+        post_templating: false,
+    }])
+    .unwrap();
 
     let mut body = json!({});
     overrides.apply("test_op", &[], "/test", &mut body);
@@ -273,19 +265,19 @@ fn test_overrides_non_existent_path() {
 /// Test overrides with empty string value
 #[test]
 fn test_overrides_empty_string() {
-    let overrides = Overrides {
-        rules: vec![OverrideRule {
-            targets: vec!["operation:test_op".to_string()],
-            mode: OverrideMode::Replace,
-            patch: vec![PatchOp::Replace {
-                path: "/value".to_string(),
-                value: json!(""),
-            }],
-            when: None,
-            post_templating: false,
+    let overrides = Overrides::new(vec![OverrideRule {
+        name: None,
+        enabled: true,
+        targets: vec!["operation:test_op".to_string()],
+        mode: OverrideMode::Replace,
+        patch: vec![PatchOp::Replace {
+            path: "/value".to_string(),
+            value: json!(""),
         }],
-        regex_cache: Default::default(),
-    };
+        when: None,
+        post_templating: false,
+    }])
+    .unwrap();
 
     let mut body = json!({"value": "original"});
     overrides.apply("test_op", &[], "/test", &mut body);
@@ -296,19 +288,19 @@ fn test_overrides_empty_string() {
 /// Test overrides with null value
 #[test]
 fn test_overrides_null_value() {
-    let overrides = Overrides {
-        rules: vec![OverrideRule {
-            targets: vec!["operation:test_op".to_string()],
-            mode: OverrideMode::Replace,
-            patch: vec![PatchOp::Replace {
-                path: "/value".to_string(),
-                value: json!(null),
-            }],
-            when: None,
-            post_templating: false,
+    let overrides = Overrides::new(vec![OverrideRule {
+        name: None,
+        enabled: true,
+        targets: vec!["operation:test_op".to_string()],
+        mode: OverrideMode::Replace,
+        patch: vec![PatchOp::Replace {
+            path: "/value".to_string(),
+            value: json!(null),
         }],
-        regex_cache: Default::default(),
-    };
+        when: None,
+        post_templating: false,
+    }])
+    .unwrap();
 
     let mut body = json!({"value": "original"});
     overrides.apply("test_op", &[], "/test", &mut body);
@@ -319,19 +311,19 @@ fn test_overrides_null_value() {
 /// Test overrides with boolean value
 #[test]
 fn test_overrides_boolean_value() {
-    let overrides = Overrides {
-        rules: vec![OverrideRule {
-            targets: vec!["operation:test_op".to_string()],
-            mode: OverrideMode::Replace,
-            patch: vec![PatchOp::Replace {
-                path: "/enabled".to_string(),
-                value: json!(true),
-            }],
-            when: None,
-            post_templating: false,
+    let overrides = Overrides::new(vec![OverrideRule {
+        name: None,
+        enabled: true,
+        targets: vec!["operation:test_op".to_string()],
+        mode: OverrideMode::Replace,
+        patch: vec![PatchOp::Replace {
+            path: "/enabled".to_string(),
+            value: json!(true),
         }],
-        regex_cache: Default::default(),
-    };
+        when: None,
+        post_templating: false,
+    }])
+    .unwrap();
 
     let mut body = json!({"enabled": false});
     overrides.apply("test_op", &[], "/test", &mut body);
@@ -342,19 +334,19 @@ fn test_overrides_boolean_value() {
 /// Test overrides with number value
 #[test]
 fn test_overrides_number_value() {
-    let overrides = Overrides {
-        rules: vec![OverrideRule {
-            targets: vec!["operation:test_op".to_string()],
-            mode: OverrideMode::Replace,
-            patch: vec![PatchOp::Replace {
-                path: "/count".to_string(),
-                value: json!(42),
-            }],
-            when: None,
-            post_templating: false,
+    let overrides = Overrides::new(vec![OverrideRule {
+        name: None,
+        enabled: true,
+        targets: vec!["operation:test_op".to_string()],
+        mode: OverrideMode::Replace,
+        patch: vec![PatchOp::Replace {
+            path: "/count".to_string(),
+            value: json!(42),
         }],
-        regex_cache: Default::default(),
-    };
+        when: None,
+        post_templating: false,
+    }])
+    .unwrap();
 
     let mut body = json!({"count": 0});
     overrides.apply("test_op", &[], "/test", &mut body);
@@ -365,19 +357,19 @@ fn test_overrides_number_value() {
 /// Test overrides with float value
 #[test]
 fn test_overrides_float_value() {
-    let overrides = Overrides {
-        rules: vec![OverrideRule {
-            targets: vec!["operation:test_op".to_string()],
-            mode: OverrideMode::Replace,
-            patch: vec![PatchOp::Replace {
-                path: "/price".to_string(),
-                value: json!(99.99),
-            }],
-            when: None,
-            post_templating: false,
+    let overrides = Overrides::new(vec![OverrideRule {
+        name: None,
+        enabled: true,
+        targets: vec!["operation:test_op".to_string()],
+        mode: OverrideMode::Replace,
+        patch: vec![PatchOp::Replace {
+            path: "/price".to_string(),
+            value: json!(99.99),
         }],
-        regex_cache: Default::default(),
-    };
+        when: None,
+        post_templating: false,
+    }])
+    .unwrap();
 
     let mut body = json!({"price": 0.0});
     overrides.apply("test_op", &[], "/test", &mut body);
@@ -388,19 +380,19 @@ fn test_overrides_float_value() {
 /// Test overrides with array value
 #[test]
 fn test_overrides_array_value() {
-    let overrides = Overrides {
-        rules: vec![OverrideRule {
-            targets: vec!["operation:test_op".to_string()],
-            mode: OverrideMode::Replace,
-            patch: vec![PatchOp::Replace {
-                path: "/items".to_string(),
-                value: json!([1, 2, 3]),
-            }],
-            when: None,
-            post_templating: false,
+    let overrides = Overrides::new(vec![OverrideRule {
+        name: None,
+        enabled: true,
+        targets: vec!["operation:test_op".to_string()],
+        mode: OverrideMode::Replace,
+        patch: vec![PatchOp::Replace {
+            path: "/items".to_string(),
+            value: json!([1, 2, 3]),
         }],
-        regex_cache: Default::default(),
-    };
+        when: None,
+        post_templating: false,
+    }])
+    .unwrap();
 
     let mut body = json!({"items": []});
     overrides.apply("test_op", &[], "/test", &mut body);
@@ -411,19 +403,19 @@ fn test_overrides_array_value() {
 /// Test overrides with object value
 #[test]
 fn test_overrides_object_value() {
-    let overrides = Overrides {
-        rules: vec![OverrideRule {
-            targets: vec!["operation:test_op".to_string()],
-            mode: OverrideMode::Replace,
-            patch: vec![PatchOp::Replace {
-                path: "/metadata".to_string(),
-                value: json!({"key": "value", "number": 42}),
-            }],
-            when: None,
-            post_templating: false,
+    let overrides = Overrides::new(vec![OverrideRule {
+        name: None,
+        enabled: true,
+        targets: vec!["operation:test_op".to_string()],
+        mode: OverrideMode::Replace,
+        patch: vec![PatchOp::Replace {
+            path: "/metadata".to_string(),
+            value: json!({"key": "value", "number": 42}),
         }],
-        regex_cache: Default::default(),
-    };
+        when: None,
+        post_templating: false,
+    }])
+    .unwrap();
 
     let mut body = json!({"metadata": {}});
     overrides.apply("test_op", &[], "/test", &mut body);
@@ -436,6 +428,8 @@ fn test_overrides_object_value() {
 #[test]
 fn test_overrides_rules_method() {
     let rule = OverrideRule {
+        name: None,
+        enabled: true,
         targets: vec!["operation:test_op".to_string()],
         mode: OverrideMode::Replace,
         patch: vec![],
@@ -443,10 +437,7 @@ fn test_overrides_rules_method() {
         post_templating: false,
     };
 
-    let overrides = Overrides {
-        rules: vec![rule.clone()],
-        regex_cache: Default::default(),
-    };
+    let overrides = Overrides::new(vec![rule.clone()]).unwrap();
 
     let rules = overrides.rules();
     assert_eq!(rules.len(), 1);
@@ -455,19 +446,19 @@ fn test_overrides_rules_method() {
 /// Test overrides with multiple target patterns
 #[test]
 fn test_overrides_multiple_targets() {
-    let overrides = Overrides {
-        rules: vec![OverrideRule {
-            targets: vec!["operation:test_op".to_string(), "tag:test_tag".to_string()],
-            mode: OverrideMode::Replace,
-            patch: vec![PatchOp::Replace {
-                path: "/value".to_string(),
-                value: json!("matched"),
-            }],
-            when: None,
-            post_templating: false,
+    let overrides = Overrides::new(vec![OverrideRule {
+        name: None,
+        enabled: true,
+        targets: vec!["operation:test_op".to_string(), "tag:test_tag".to_string()],
+        mode: OverrideMode::Replace,
+        patch: vec![PatchOp::Replace {
+            path: "/value".to_string(),
+            value: json!("matched"),
         }],
-        regex_cache: Default::default(),
-    };
+        when: None,
+        post_templating: false,
+    }])
+    .unwrap();
 
     let mut body = json!({"value": "original"});
     // Should match by operation
@@ -483,25 +474,25 @@ fn test_overrides_multiple_targets() {
 /// Test overrides with complex nested structure
 #[test]
 fn test_overrides_complex_nested() {
-    let overrides = Overrides {
-        rules: vec![OverrideRule {
-            targets: vec!["operation:test_op".to_string()],
-            mode: OverrideMode::Replace,
-            patch: vec![
-                PatchOp::Replace {
-                    path: "/user/profile/name".to_string(),
-                    value: json!("John Doe"),
-                },
-                PatchOp::Replace {
-                    path: "/user/profile/email".to_string(),
-                    value: json!("john@example.com"),
-                },
-            ],
-            when: None,
-            post_templating: false,
-        }],
-        regex_cache: Default::default(),
-    };
+    let overrides = Overrides::new(vec![OverrideRule {
+        name: None,
+        enabled: true,
+        targets: vec!["operation:test_op".to_string()],
+        mode: OverrideMode::Replace,
+        patch: vec![
+            PatchOp::Replace {
+                path: "/user/profile/name".to_string(),
+                value: json!("John Doe"),
+            },
+            PatchOp::Replace {
+                path: "/user/profile/email".to_string(),
+                value: json!("john@example.com"),
+            },
+        ],
+        when: None,
+        post_templating: false,
+    }])
+    .unwrap();
 
     let mut body = json!({
         "user": {

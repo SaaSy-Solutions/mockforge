@@ -1,0 +1,17 @@
+-- GDPR erasure fails for any user with audit rows (#1087).
+--
+-- Migration ...012 declared `audit_logs.user_id REFERENCES users(id) ON DELETE
+-- SET NULL`. Since ...080 (#872) made audit_logs append-only, that referential
+-- action turns `DELETE FROM users` into an UPDATE of the user's audit rows,
+-- which the `audit_logs_append_only` trigger rejects:
+--
+--   ERROR: audit_logs is append-only (#872): UPDATE is not permitted
+--
+-- so `delete_user_data_cascade` (DELETE /api/v1/gdpr/erase) rolled back for
+-- every user who had ever produced an audit event. Nulling user_id would also
+-- break the per-org hash chain, because user_id is part of `canonical_entry`.
+--
+-- Same treatment ...080 gave `org_id`: drop the FK and keep the column. The
+-- rows keep their original user_id, the chain keeps verifying, and once the
+-- users row is gone the UUID no longer resolves to any account data.
+ALTER TABLE audit_logs DROP CONSTRAINT IF EXISTS audit_logs_user_id_fkey;

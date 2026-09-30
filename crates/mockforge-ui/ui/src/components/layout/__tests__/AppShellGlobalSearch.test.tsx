@@ -57,10 +57,11 @@ describe('AppShell command palette', () => {
     const input = openPalette();
     fireEvent.change(input, { target: { value: 'override' } });
 
-    const options = screen.getAllByRole('option').map((o) => o.id);
-    expect(options).toEqual(
-      expect.arrayContaining(['cmd-page:fixtures', 'cmd-page:config']),
-    );
+    const pages = screen
+      .getAllByRole('option')
+      .map((o) => o.id)
+      .filter((id) => id.startsWith('cmd-page:'));
+    expect(pages[0]).toBe('cmd-page:overrides');
   });
 
   it('offers log and service search for free text', () => {

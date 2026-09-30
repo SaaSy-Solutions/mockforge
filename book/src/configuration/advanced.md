@@ -872,7 +872,6 @@ The cross-cutting feature toggles that DO have env vars:
 # Core feature flags
 MOCKFORGE_LATENCY_ENABLED=true
 MOCKFORGE_FAILURES_ENABLED=true
-MOCKFORGE_OVERRIDES_ENABLED=true
 MOCKFORGE_RATE_LIMIT_ENABLED=true
 
 # Persistent metrics record (CSV)

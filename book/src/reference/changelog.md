@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+## [0.3.226] - 2026-09-29
+
+### Added
+
+- **[DevX]** Response overrides now work in `mockforge serve`. Rules come from a new `overrides:` list in `mockforge.yaml`, `MOCKFORGE_HTTP_OVERRIDES_GLOB` files, and a new `MOCKFORGE_HTTP_OVERRIDES` JSON array. With `--admin`, `GET`/`PUT /__mockforge/overrides` reads and replaces the live rules without a restart; an invalid set returns 400 and keeps the previous rules. Rules gain `name` and `enabled`. (#1088)
+- **[DevX]** Admin UI **Overrides** page to toggle, reorder, edit, and save override rules for the running mock (self-hosted) or a hosted mock (cloud). (#1095)
+- **[Cloud]** Per-hosted-mock override rules: `GET`/`PUT /api/v1/hosted-mocks/{id}/overrides` stores rules on the deployment, passes them to new machines, and pushes them live to running ones over the private network. (#1094)
+
+### Fixed
+
+- **[DevX]** `tag:` override targets match the operation's real OpenAPI tags, and `when:` conditions see request headers, query, and body. Invalid JSON pointers are rejected instead of silently patching the whole body, and regex targets work in rule sets loaded from config (including gRPC). (#1088)
+- **[Cloud]** Redeployed hosted mocks now start their admin server, so the resilience dashboard and override push can reach them. (#1094)
+- **[Cloud]** Plugin registry search no longer returns 500 for the default "popular" sort and the "security" sort. (#1082)
+- **[DevX]** The admin UI top-bar search suggests pages and navigates on Enter. (#1082)
+- **[Cloud]** Bump wasmtime and wasmtime-wasi to 36.0.16 for RUSTSEC-2026-0316 and RUSTSEC-2026-0314. (#1092)
+
 ## [0.3.225] - 2026-09-27
 
 ### Added
