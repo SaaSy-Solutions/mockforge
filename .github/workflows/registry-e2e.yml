@@ -359,7 +359,9 @@ jobs:
           sudo apt-get install -y protobuf-compiler
 
       - name: Ensure psql client
-        run: 'command -v psql > /dev/null 2>&1 || { echo "::error::postgresql-client missing on self-hosted runner. Run: sudo apt-get install -y postgresql-client"; exit 1; }'
+        # ubuntu-latest images no longer ship psql; the RLS gate script
+        # provisions the NOBYPASSRLS role through it.
+        run: command -v psql > /dev/null 2>&1 || sudo apt-get install -y postgresql-client
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
