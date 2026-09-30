@@ -168,23 +168,27 @@ mod tests {
     use http::HeaderValue;
     use tower::ServiceExt;
 
-    fn isolate_env<F: FnOnce()>(value: Option<&str>, body: F) {
-        // Tests can't run in true parallel for env-var coverage; use a process-
-        // wide mutex held in the suite to serialize. Here we just save + set.
-        let prev = std::env::var("MOCKFORGE_HTTP_LOG_CONN").ok();
+    /// Serializes every test that touches `MOCKFORGE_HTTP_LOG_CONN`: the env
+    /// is process-wide and the test harness runs tests in parallel.
+    static ENV_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+    fn set_env(value: Option<&str>) {
         match value {
             Some(v) => std::env::set_var("MOCKFORGE_HTTP_LOG_CONN", v),
             None => std::env::remove_var("MOCKFORGE_HTTP_LOG_CONN"),
         }
+    }
+
+    fn isolate_env<F: FnOnce()>(value: Option<&str>, body: F) {
+        let prev = std::env::var("MOCKFORGE_HTTP_LOG_CONN").ok();
+        set_env(value);
         body();
-        match prev {
-            Some(p) => std::env::set_var("MOCKFORGE_HTTP_LOG_CONN", p),
-            None => std::env::remove_var("MOCKFORGE_HTTP_LOG_CONN"),
-        }
+        set_env(prev.as_deref());
     }
 
     #[test]
     fn enabled_flag_truthy_values() {
+        let _guard = ENV_LOCK.blocking_lock();
         isolate_env(Some("1"), || assert!(is_conn_log_enabled()));
         isolate_env(Some("true"), || assert!(is_conn_log_enabled()));
         isolate_env(Some("on"), || assert!(is_conn_log_enabled()));
@@ -195,13 +199,16 @@ mod tests {
 
     #[tokio::test]
     async fn middleware_is_transparent_when_disabled() {
-        isolate_env(None, || {});
+        let _guard = ENV_LOCK.lock().await;
+        let prev = std::env::var("MOCKFORGE_HTTP_LOG_CONN").ok();
+        set_env(None);
         let app: Router = Router::new()
             .route("/", get(|| async { "ok" }))
             .layer(axum::middleware::from_fn(conn_diag_middleware));
 
         let req = Request::builder().uri("/").body(Body::empty()).unwrap();
         let res = app.oneshot(req).await.unwrap();
+        set_env(prev.as_deref());
         assert_eq!(res.status(), 200);
     }
 
@@ -209,8 +216,9 @@ mod tests {
     async fn middleware_passes_through_when_enabled() {
         // Just confirm we don't drop the response. The actual log assertion
         // is covered by inspecting tracing in higher-level integration tests.
+        let _guard = ENV_LOCK.lock().await;
         let prev = std::env::var("MOCKFORGE_HTTP_LOG_CONN").ok();
-        std::env::set_var("MOCKFORGE_HTTP_LOG_CONN", "1");
+        set_env(Some("1"));
 
         let app: Router = Router::new()
             .route("/x", get(|| async { "ok" }))
@@ -222,12 +230,8 @@ mod tests {
             .body(Body::empty())
             .unwrap();
         let res = app.oneshot(req).await.unwrap();
+        set_env(prev.as_deref());
         assert_eq!(res.status(), 200);
-
-        match prev {
-            Some(p) => std::env::set_var("MOCKFORGE_HTTP_LOG_CONN", p),
-            None => std::env::remove_var("MOCKFORGE_HTTP_LOG_CONN"),
-        }
     }
 
     #[test]
