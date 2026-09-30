@@ -2489,6 +2489,11 @@ enum Commands {
     /// results land in <output>/target_<N>/ plus
     /// <output>/chunked-multi-target-summary.json.
     ///
+    /// --rps caps request starts per second per target; --cps opens a new
+    /// connection per request. --rounds / --repeat-until loop the whole run
+    /// as a campaign (<output>/round_<N>/, campaign.jsonl), and
+    /// --keep-rounds rotates old round dirs.
+    ///
     /// Examples:
     ///   mockforge bench-chunked --target http://localhost:3000/upload
     ///   mockforge bench-chunked --target http://localhost:3000/upload \
@@ -2500,6 +2505,8 @@ enum Commands {
     ///     --validate-requests --export-requests
     ///   mockforge bench-chunked --spec api.json --targets-file targets.txt \
     ///     --max-concurrency 5 --duration 10m --insecure
+    ///   mockforge bench-chunked --spec api.json --targets-file targets.txt \
+    ///     --rps 20 --cps --duration 15m --repeat-until 24h --keep-rounds 3
     #[cfg(feature = "bench")]
     #[command(verbatim_doc_comment)]
     BenchChunked {
@@ -2616,6 +2623,39 @@ enum Commands {
         /// --validate-requests is set). Created if missing.
         #[arg(short, long, default_value = "bench-results")]
         output: PathBuf,
+
+        /// Cap on requests started per second, **per target** (shared by
+        /// that target's --concurrency workers). Without it each worker
+        /// starts its next request as soon as the previous one finishes.
+        /// The achieved rate can't exceed concurrency / request duration,
+        /// so raise --concurrency if long chunked uploads keep it below
+        /// --rps (#79).
+        #[arg(long, value_name = "N")]
+        rps: Option<u32>,
+
+        /// Open a new TCP/TLS connection for every request instead of
+        /// reusing pooled ones, so connections/s equals requests/s. Combine
+        /// with --rps to drive a fixed connections-per-second rate (#79).
+        #[arg(long)]
+        cps: bool,
+
+        /// Campaign: re-run the whole pass (every target, every operation)
+        /// this many times. Combines with --repeat-until (stops at whichever
+        /// hits first). Each round writes to `<output>/round_<N>/` (#79).
+        #[arg(long)]
+        rounds: Option<u32>,
+
+        /// Campaign: keep starting new rounds until this much wall clock has
+        /// elapsed (e.g. `24h`). A round in flight finishes before stopping.
+        /// Per-round stats go to `<output>/campaign.jsonl` and
+        /// `<output>/round-summaries/` (#79).
+        #[arg(long = "repeat-until")]
+        repeat_until: Option<String>,
+
+        /// Campaign only: keep only the newest N `round_*` directories.
+        /// `campaign.jsonl` and `round-summaries/` are never pruned (#79).
+        #[arg(long, value_name = "N")]
+        keep_rounds: Option<u32>,
     },
 
     /// Generate HTTP load marked with QoS / DSCP traffic classes (#933)
@@ -3699,6 +3739,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             validate_requests,
             export_requests,
             output,
+            rps,
+            cps,
+            rounds,
+            repeat_until,
+            keep_rounds,
         } => {
             use mockforge_bench::chunked_command::ChunkedCommand;
             use mockforge_bench::command::BenchCommand;
@@ -3725,6 +3770,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 }
             }
 
+            let repeat_until = match repeat_until.as_deref().map(BenchCommand::parse_duration) {
+                None => None,
+                Some(Ok(secs)) => Some(std::time::Duration::from_secs(secs)),
+                Some(Err(e)) => {
+                    eprintln!(
+                        "Invalid --repeat-until {:?}: {}. Examples: 30m, 24h",
+                        repeat_until, e
+                    );
+                    std::process::exit(1);
+                }
+            };
+
             let cmd = ChunkedCommand {
                 target,
                 targets_file,
@@ -3743,6 +3800,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 validate_requests,
                 export_requests,
                 output,
+                rps,
+                cps,
+                rounds,
+                repeat_until,
+                keep_rounds,
             };
             match cmd.execute().await {
                 Ok(true) => {}
