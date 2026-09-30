@@ -683,11 +683,11 @@ pub async fn proxy_chaos_toggle(
         base.trim_end_matches('/').trim_end_matches("/__mockforge")
     );
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .user_agent("mockforge-registry-chaos-proxy/1.0")
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
+    let client = crate::handlers::management_token::proxy_client(
+        deployment_id,
+        std::time::Duration::from_secs(10),
+    )
+    .unwrap_or_else(|_| reqwest::Client::new());
 
     let resp = client
         .post(&target)

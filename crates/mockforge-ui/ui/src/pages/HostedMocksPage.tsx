@@ -23,6 +23,7 @@ import {
   type TraceSpan,
 } from '@/hooks/useDeploymentTraces';
 import { useDeploymentStateMachines } from '@/hooks/useDeploymentStateMachines';
+import { ManagementTokenField } from '@/components/hosted/ManagementTokenField';
 import { getAuthToken } from '@/services/tokenStorage';
 import {
   Box,
@@ -1494,6 +1495,9 @@ export const HostedMocksPage: React.FC = () => {
                           'Not provided'
                         )}
                       </Typography>
+                    </Grid>
+                    <Grid item xs={12}>
+                      <ManagementTokenField deploymentId={selectedDeployment.id} />
                     </Grid>
                     <Grid item xs={6}>
                       <Typography variant="caption" color="text.secondary">

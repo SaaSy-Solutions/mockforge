@@ -540,6 +540,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // Response override rules for a hosted mock: stored on the
         // deployment and pushed to its admin server over Fly 6PN.
         .route(
+            "/api/v1/hosted-mocks/{deployment_id}/management-token",
+            get(handlers::management_token::get_management_token),
+        )
+        .route(
             "/api/v1/hosted-mocks/{deployment_id}/overrides",
             get(handlers::hosted_mock_overrides::get_overrides)
                 .put(handlers::hosted_mock_overrides::put_overrides),

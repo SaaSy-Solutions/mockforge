@@ -27,6 +27,7 @@ pub mod incidents;
 pub mod internal_contract_diff;
 pub mod internal_test_runs;
 pub mod legal;
+pub mod management_token;
 pub mod mockai;
 pub mod notification_channels;
 pub mod oauth;

@@ -190,6 +190,19 @@ See the [Configuration Validation Guide](config-validation.md).
 
 ---
 
+### Why does my hosted mock return 401 when I change it with curl?
+
+Hosted mocks protect MockForge's management API. Writes to `/__mockforge/*` and the other MockForge control routes (creating mocks, chaos, time travel, the recorder) need the deployment's management token. Open the deployment on the **Hosted Mocks** page, press **Reveal** next to *Management token*, and send it as a header:
+
+```bash
+curl -X POST https://<your-mock>/__mockforge/api/mocks \
+  -H 'X-MockForge-Management-Token: mfm_...' \
+  -H 'content-type: application/json' \
+  -d '{"id":"hello","method":"GET","path":"/hello","response":{"body":{"hi":true}}}'
+```
+
+Reads (the spec, route list, docs, live stream) and your mocked API itself don't need the token. Self-hosted `mockforge serve` doesn't use one.
+
 ## OpenAPI & HTTP Mocking
 
 ### Can I use Swagger/OpenAPI specs?

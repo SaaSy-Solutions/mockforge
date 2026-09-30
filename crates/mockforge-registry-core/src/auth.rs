@@ -206,6 +206,22 @@ pub fn create_deployment_ingest_token(
     Ok(token)
 }
 
+/// The management token for one hosted mock (#1085).
+///
+/// The runtime requires it on control-plane writes when
+/// `MOCKFORGE_MANAGEMENT_TOKEN` is set. It is derived, not stored:
+/// HMAC-SHA256 of the deployment id under `secret`, so the registry can
+/// recompute it for its own proxy calls and for the owner, and rotating
+/// `secret` rotates every token on the next deploy.
+pub fn deployment_management_token(deployment_id: uuid::Uuid, secret: &str) -> String {
+    use hmac::{Hmac, Mac};
+    let mut mac = Hmac::<sha2::Sha256>::new_from_slice(secret.as_bytes())
+        .expect("HMAC accepts keys of any length");
+    mac.update(b"mockforge-management-token:");
+    mac.update(deployment_id.as_bytes());
+    format!("mfm_{}", hex::encode(mac.finalize().into_bytes()))
+}
+
 /// Verify an ingest token and return the embedded deployment id.
 /// Errors if the token is invalid, expired, or doesn't carry the
 /// `deployment:<uuid>` subject prefix.
@@ -293,6 +309,18 @@ pub fn verify_password(password: &str, hash: &str) -> Result<bool> {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn management_tokens_are_per_deployment_and_per_secret() {
+        let a = uuid::Uuid::new_v4();
+        let b = uuid::Uuid::new_v4();
+        let token = deployment_management_token(a, "secret-one");
+        assert!(token.starts_with("mfm_") && token.len() == 4 + 64);
+        assert_eq!(token, deployment_management_token(a, "secret-one"));
+        assert_ne!(token, deployment_management_token(b, "secret-one"));
+        assert_ne!(token, deployment_management_token(a, "secret-two"));
+    }
+
     use super::*;
 
     const TEST_SECRET: &str = "test-secret-key-for-jwt-signing-minimum-32-chars";
