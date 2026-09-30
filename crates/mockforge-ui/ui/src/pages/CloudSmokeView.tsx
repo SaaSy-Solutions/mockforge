@@ -118,7 +118,7 @@ export function CloudSmokeView() {
   };
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <PageHeader
         title="Smoke tests (cloud)"
         subtitle="Probe every declared route on a hosted-mock deployment. Each route gets a 2xx-class assertion plus a per-route latency budget."

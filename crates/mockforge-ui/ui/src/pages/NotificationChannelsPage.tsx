@@ -185,7 +185,7 @@ const CloudView: React.FC = () => {
         <div className="p-6 max-w-7xl mx-auto">
             <div className="flex justify-between items-start mb-8">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">
                         Notification Channels
                     </h1>
                     <p className="text-gray-600 dark:text-gray-400">
@@ -386,7 +386,7 @@ const CreateModal: React.FC<{
                         value={state.name}
                         onChange={(e) => setState({ ...state, name: e.target.value })}
                         placeholder="e.g., #incidents Slack"
-                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-ring/30"
                     />
                 </div>
                 <div className="space-y-2">
@@ -394,7 +394,7 @@ const CreateModal: React.FC<{
                     <select
                         value={state.kind}
                         onChange={(e) => setState({ ...state, kind: e.target.value as NotificationChannelKind })}
-                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-ring/30"
                     >
                         <option value="webhook">Webhook</option>
                         <option value="slack">Slack (incoming-webhook)</option>
@@ -411,7 +411,7 @@ const CreateModal: React.FC<{
                         value={state.target}
                         onChange={(e) => setState({ ...state, target: e.target.value })}
                         placeholder={TARGET_FIELD[state.kind].placeholder}
-                        className={`w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 ${
+                        className={`w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-ring/30 ${
                             TARGET_FIELD[state.kind].mono ? 'font-mono text-xs' : 'text-sm'
                         }`}
                     />

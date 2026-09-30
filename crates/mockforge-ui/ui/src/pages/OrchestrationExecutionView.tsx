@@ -318,7 +318,7 @@ export const OrchestrationExecutionView: React.FC<{ orchestrationId: string }> =
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box>
       {isCloudMode() && (
         <Card sx={{ mb: 2 }}>
           <CardContent sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>

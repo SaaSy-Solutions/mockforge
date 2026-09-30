@@ -4,141 +4,111 @@ MockForge provides multiple powerful ways to create custom HTTP responses beyond
 
 ## Response Override Rules
 
-Override rules allow you to modify OpenAPI-generated responses using JSON patches without changing the original specification.
+Override rules patch the responses MockForge generates from your OpenAPI spec, without editing the spec. Each rule picks operations with `targets`, then applies JSON patch operations to the **response body**.
 
-### Basic Override Configuration
+### Where rules come from
+
+Rules are combined in this order, and all of them can be replaced at runtime:
+
+1. The `overrides:` list in `mockforge.yaml`.
+2. YAML files named by `MOCKFORGE_HTTP_OVERRIDES_GLOB` (comma-separated globs or absolute paths). Each file is a list of rules.
+3. A JSON array of rules in `MOCKFORGE_HTTP_OVERRIDES`. Hosted mocks receive their rules this way.
 
 ```yaml
 # mockforge.yaml
-http:
-  openapi_spec: api-spec.json
-  response_template_expand: true
-
-# Override specific endpoints
 overrides:
-  - targets: ["path:/users"]
+  - name: Stamp a request id
+    targets: ["operation:getUser"]
+    patch:
+      - op: add
+        path: /requestId
+        value: "{{uuid}}"
+    post_templating: true
+
+  - name: Fail payments
+    targets: ["tag:Payments"]
     patch:
       - op: replace
-        path: "/responses/200/content/application~1json/example"
-        value:
-          users:
-            - id: "{{uuid}}"
-              name: "John Doe"
-              email: "john@example.com"
-            - id: "{{uuid}}"
-              name: "Jane Smith"
-              email: "jane@example.com"
-
-  - targets: ["operation:getUser"]
-    patch:
-      - op: add
-        path: "/responses/200/content/application~1json/example/profile"
-        value:
-          avatar: "https://example.com/avatar.jpg"
-          bio: "User biography"
+        path: /status
+        value: FAILED
 ```
 
-### Override Targeting
+### Targets
 
-Target specific operations using different selectors:
+A rule applies when any of its targets matches the operation.
+
+| Target | Matches |
+|--------|---------|
+| `operation:getUser` | The operation whose `operationId` is `getUser` |
+| `tag:Users` | Operations tagged `Users` in the spec |
+| `path:^/users/` | Path templates matching the regex, such as `/users/{id}` |
+| `regex:^list` | Operation IDs matching the regex |
+| `*` | Every operation |
+
+### Patch operations
+
+`path` is a JSON pointer into the response body. Use `""` for the whole body.
+
+```yaml
+patch:
+  - op: add          # add or set a field
+    path: /metadata/source
+    value: mock
+  - op: replace      # replace an existing value
+    path: /user/tier
+    value: gold
+  - op: remove       # delete a field
+    path: /debug
+```
+
+With `mode: merge`, `add` and `replace` deep-merge objects into the existing value instead of overwriting it. The default is `mode: replace`.
+
+### Conditions
+
+`when` limits a rule to matching requests. Supported forms:
+
+| Condition | True when |
+|-----------|-----------|
+| `header[x-scenario]=empty` | The request header equals the value (names are case-insensitive) |
+| `header[x-scenario]!=empty` | The header differs from the value |
+| `query[format]=detailed` | The query parameter equals the value |
+| `$.request.body.plan == 'pro'` | A JSONPath into the request body compares equal |
+| `AND(a, b)`, `OR(a, b)`, `NOT(a)` | Combinations of the above |
 
 ```yaml
 overrides:
-  # By operation ID
-  - targets: ["operation:listUsers", "operation:createUser"]
-    patch: [...]
-
-  # By path pattern
-  - targets: ["path:/users/*"]
-    patch: [...]
-
-  # By tag
-  - targets: ["tag:Users"]
-    patch: [...]
-
-  # By regex
-  - targets: ["regex:^/api/v[0-9]+/users$"]
-    patch: [...]
-```
-
-### Patch Operations
-
-Supported JSON patch operations:
-
-```yaml
-overrides:
-  - targets: ["path:/users"]
+  - name: Empty list for demos
+    targets: ["path:^/users$"]
+    when: "header[x-scenario]=empty"
     patch:
-      # Add new fields
-      - op: add
-        path: "/responses/200/content/application~1json/example/metadata"
-        value:
-          total: 100
-          page: 1
-
-      # Replace existing values
       - op: replace
-        path: "/responses/200/content/application~1json/example/users/0/name"
-        value: "Updated Name"
-
-      # Remove fields
-      - op: remove
-        path: "/responses/200/content/application~1json/example/users/1/email"
-
-      # Copy values
-      - op: copy
-        from: "/responses/200/content/application~1json/example/users/0/id"
-        path: "/responses/200/content/application~1json/example/primaryUserId"
-
-      # Move values
-      - op: move
-        from: "/responses/200/content/application~1json/example/temp"
-        path: "/responses/200/content/application~1json/example/permanent"
+        path: ""
+        value: []
 ```
 
-### Conditional Overrides
+### Templating
 
-Apply overrides based on request conditions:
+Token values such as `{{uuid}}` in rule files are expanded once, when the file loads. Set `post_templating: true` to expand tokens in the patched body on every response instead.
 
-```yaml
-overrides:
-  - targets: ["path:/users"]
-    when: "request.query.format == 'detailed'"
-    patch:
-      - op: add
-        path: "/responses/200/content/application~1json/example/users/0/profile"
-        value:
-          bio: "Detailed user profile"
-          preferences: {}
+### Turning rules off
 
-  - targets: ["path:/users"]
-    when: "request.header.X-API-Version == 'v2'"
-    patch:
-      - op: add
-        path: "/responses/200/content/application~1json/example/apiVersion"
-        value: "v2"
+Set `enabled: false` to keep a rule without applying it. The admin UI's Overrides page toggles this for you.
+
+### Changing rules at runtime
+
+With `--admin`, the admin server exposes the live rule set:
+
+```bash
+# Read the rules
+curl http://localhost:9080/__mockforge/overrides
+
+# Replace them all; the next response uses the new rules
+curl -X PUT http://localhost:9080/__mockforge/overrides \
+  -H 'content-type: application/json' \
+  -d '{"rules": [{"targets": ["operation:ping"], "patch": [{"op": "add", "path": "/overridden", "value": true}]}]}'
 ```
 
-### Override Modes
-
-Control how patches are applied:
-
-```yaml
-overrides:
-  # Replace mode (default) - complete replacement
-  - targets: ["path:/users"]
-    mode: replace
-    patch: [...]
-
-  # Merge mode - deep merge objects and arrays
-  - targets: ["path:/users"]
-    mode: merge
-    patch:
-      - op: add
-        path: "/responses/200/content/application~1json/example"
-        value:
-          additionalField: "value"
-```
+A PUT is validated as a whole. An invalid target regex or JSON pointer returns `400` with the reason, and the previous rules stay in place. Runtime changes are not written back to `mockforge.yaml`.
 
 ## Response Plugins
 

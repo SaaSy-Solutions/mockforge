@@ -26,6 +26,7 @@ const ContractDiffPage = lazy(() => import('../pages/ContractDiffPage').then(m =
 const IncidentDashboardPage = lazy(() => import('../pages/IncidentDashboardPage').then(m => ({ default: m.IncidentDashboardPage })));
 const FitnessFunctionsPage = lazy(() => import('../pages/FitnessFunctionsPage').then(m => ({ default: m.FitnessFunctionsPage })));
 const FixturesPage = lazy(() => import('../pages/FixturesPage').then(m => ({ default: m.FixturesPage })));
+const OverridesPage = lazy(() => import('../pages/OverridesPage').then(m => ({ default: m.OverridesPage })));
 const TestingPage = lazy(() => import('../pages/TestingPage').then(m => ({ default: m.TestingPage })));
 const ImportPage = lazy(() => import('../pages/ImportPage').then(m => ({ default: m.ImportPage })));
 const WorkspacesPage = lazy(() => import('../pages/WorkspacesPage'));
@@ -180,6 +181,7 @@ export const routes: RouteConfig[] = [
   { path: '/services', element: <ServicesPage /> },
   { path: '/virtual-backends', element: <VirtualBackendsPage /> },
   { path: '/fixtures', element: <FixturesPage /> },
+  { path: '/overrides', element: <OverridesPage /> },
   { path: '/hosted-mocks', element: <HostedMocksPage /> },
   { path: '/api-explorer', element: <ApiExplorerWrapper /> },
   { path: '/tunnels', element: <TunnelsPage /> },

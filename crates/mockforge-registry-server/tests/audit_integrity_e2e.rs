@@ -32,8 +32,8 @@ async fn pool() -> PgPool {
 /// Insert a row via the real `AuditLog::create` chain logic. `org_id` is now an
 /// FK-less plain column (the CASCADE FK was dropped in migration 080), so a fresh
 /// random org per test gives isolation without seeding `organizations`. `user_id`
-/// is `None`: `audit_logs.user_id` still references `users(id)`, and seeding a user
-/// is unnecessary to exercise the hash chain / trigger / tamper detection.
+/// is `None` because a user is unnecessary to exercise the hash chain / trigger /
+/// tamper detection (its FK was likewise dropped in migration 085, #1087).
 async fn insert_event(pool: &PgPool, org_id: Uuid, n: usize) -> AuditLog {
     AuditLog::create(
         pool,
@@ -148,4 +148,108 @@ async fn new_event_types_insert_and_extend_chain() {
         AuditLog::verify_chain(&pool, org_id).await.expect("verify_chain"),
         "chain with ai_usage + payment_failed rows must verify"
     );
+}
+
+/// #1087: GDPR erasure (`delete_user_data_cascade`) must succeed for a user who
+/// has audit rows. The old `audit_logs_user_id_fkey ... ON DELETE SET NULL`
+/// turned the `DELETE FROM users` into an UPDATE of every audit row, which the
+/// append-only trigger rejects ("audit_logs is append-only (#872): UPDATE is not
+/// permitted"), so erasure failed for any user who had ever done anything.
+///
+/// Mirrors the #872 treatment of `org_id`: the rows outlive the user, keep
+/// their original `user_id` (a bare UUID once the `users` row is gone), and the
+/// per-org hash chain still verifies because nothing in the row changed.
+#[tokio::test]
+#[ignore = "requires DATABASE_URL Postgres"]
+async fn gdpr_erase_succeeds_for_user_with_audit_rows_and_chain_survives() {
+    use mockforge_registry_core::store::{PgRegistryStore, RegistryStore};
+
+    let pool = pool().await;
+    let org_id = Uuid::new_v4();
+    let user_id = Uuid::new_v4();
+    let tag = user_id.simple().to_string();
+    let username = format!("gdpr-{tag}");
+    let email = format!("gdpr-{tag}@example.test");
+
+    sqlx::query("INSERT INTO users (id, username, email, password_hash) VALUES ($1, $2, $3, 'x')")
+        .bind(user_id)
+        .bind(&username)
+        .bind(&email)
+        .execute(&pool)
+        .await
+        .expect("seed user");
+
+    for n in 0..3 {
+        AuditLog::create(
+            &pool,
+            org_id,
+            Some(user_id),
+            AuditEventType::LoginSucceeded,
+            format!("user event {n}"),
+            Some(serde_json::json!({ "seq": n })),
+            Some("203.0.113.9"),
+            Some("gdpr-test/1.0"),
+        )
+        .await
+        .expect("create audit event for user");
+    }
+    assert!(AuditLog::verify_chain(&pool, org_id).await.expect("verify_chain"));
+
+    let store = PgRegistryStore::new(pool.clone());
+    store
+        .delete_user_data_cascade(user_id)
+        .await
+        .expect("GDPR erase must succeed for a user with audit rows");
+
+    let user_left: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM users WHERE id = $1")
+        .bind(user_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+    assert_eq!(user_left, 0, "users row must be deleted");
+
+    let audit_rows: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM audit_logs WHERE org_id = $1 AND user_id = $2")
+            .bind(org_id)
+            .bind(user_id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(audit_rows, 3, "audit rows must survive erasure with their original user_id");
+
+    assert!(
+        AuditLog::verify_chain(&pool, org_id).await.expect("verify_chain"),
+        "hash chain must still verify after the user is erased"
+    );
+
+    // The handler's own post-erasure audit row must not reintroduce the
+    // erased user's email (or username): it identifies them by user_id only.
+    mockforge_registry_server::handlers::gdpr::record_erasure_audit(
+        &store,
+        user_id,
+        Some("smoke".to_string()),
+        0,
+    )
+    .await;
+
+    let (description, metadata): (String, Option<serde_json::Value>) = sqlx::query_as(
+        "SELECT description, metadata FROM audit_logs \
+         WHERE user_id = $1 AND metadata->>'action' = 'gdpr_data_erasure'",
+    )
+    .bind(user_id)
+    .fetch_one(&pool)
+    .await
+    .expect("erasure audit row must be recorded");
+
+    let metadata = metadata.expect("erasure row has metadata").to_string();
+    for (field, text) in [("description", &description), ("metadata", &metadata)] {
+        assert!(!text.contains(&email), "erasure {field} must not contain the email: {text}");
+        assert!(!text.contains('@'), "erasure {field} must not contain an email: {text}");
+        assert!(
+            !text.contains(&username),
+            "erasure {field} must not contain the username: {text}"
+        );
+    }
+    assert!(description.contains(&user_id.to_string()));
+    assert!(metadata.contains(&user_id.to_string()));
 }

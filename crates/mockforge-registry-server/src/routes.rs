@@ -537,6 +537,13 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             "/api/v1/snapshots/{id}/restore",
             post(handlers::snapshots::restore_snapshot),
         )
+        // Response override rules for a hosted mock: stored on the
+        // deployment and pushed to its admin server over Fly 6PN.
+        .route(
+            "/api/v1/hosted-mocks/{deployment_id}/overrides",
+            get(handlers::hosted_mock_overrides::get_overrides)
+                .put(handlers::hosted_mock_overrides::put_overrides),
+        )
         // Resilience runtime proxy (#468 Phase 2 follow-up). Scoped to a
         // hosted-mock deployment because circuit-breaker / bulkhead state
         // lives in the running `mockforge serve` process. Handlers proxy

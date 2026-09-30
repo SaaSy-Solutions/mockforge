@@ -261,6 +261,8 @@ jobs:
             --test cloud_ai_contract_diff_e2e \
             --test cloud_conformance_e2e \
             --test paid_flow_e2e \
+            --test hosted_mock_overrides_e2e \
+            --test audit_integrity_e2e \
             -- --ignored --nocapture --test-threads=1
 
       - name: Dump registry-server log on failure
@@ -357,7 +359,9 @@ jobs:
           sudo apt-get install -y protobuf-compiler
 
       - name: Ensure psql client
-        run: 'command -v psql > /dev/null 2>&1 || { echo "::error::postgresql-client missing on self-hosted runner. Run: sudo apt-get install -y postgresql-client"; exit 1; }'
+        # ubuntu-latest images no longer ship psql; the RLS gate script
+        # provisions the NOBYPASSRLS role through it.
+        run: command -v psql > /dev/null 2>&1 || sudo apt-get install -y postgresql-client
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2

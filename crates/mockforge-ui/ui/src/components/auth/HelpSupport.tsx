@@ -37,7 +37,7 @@ export function HelpSupport({ open, onOpenChange }: HelpSupportProps) {
   const modKey = isMac ? '⌘' : 'Ctrl';
 
   const shortcuts = [
-    { keys: `${modKey} + K`, description: 'Focus global search' },
+    { keys: `${modKey} + K`, description: 'Open command palette (pages, workspaces, search)' },
     { keys: 'Esc', description: 'Clear search / Close dialogs' },
     { keys: 'Shift + ?', description: 'Open Help & Support' },
   ];

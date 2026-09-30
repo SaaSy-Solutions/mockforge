@@ -7,6 +7,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use crate::store::RegistryStore;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
@@ -320,46 +321,53 @@ pub async fn delete_data(
         ));
     }
 
-    // Get user (for audit logging after the cascade)
-    let user = state
+    // Confirm the account exists before erasing it.
+    state
         .store
         .find_user_by_id(user_id)
         .await?
         .ok_or_else(|| ApiError::InvalidRequest("User not found".to_string()))?;
 
-    let user_email = user.email.clone();
-
     // Perform the transactional cascade delete through the store.
     let orgs_affected = state.store.delete_user_data_cascade(user_id).await?;
 
-    tracing::info!(
-        "User data deleted: user_id={}, email={}, reason={:?}",
-        user_id,
-        user_email,
-        request.reason
-    );
+    tracing::info!("User data deleted: user_id={}, reason={:?}", user_id, request.reason);
 
-    // Record audit event after commit (user is deleted, but this is compliance-required)
-    state
-        .store
-        .record_audit_event(
-            Uuid::nil(),
-            Some(user_id),
-            AuditEventType::OrgDeleted, // Reusing closest event type for data erasure
-            format!("GDPR data erasure completed for user {}", user_email),
-            Some(serde_json::json!({
-                "action": "gdpr_data_erasure",
-                "reason": request.reason,
-                "orgs_affected": orgs_affected,
-            })),
-            None,
-            None,
-        )
-        .await;
+    record_erasure_audit(state.store.as_ref(), user_id, request.reason, orgs_affected).await;
 
     Ok(Json(DeleteResponse {
         success: true,
         message: "All user data has been permanently deleted.".to_string(),
         deleted_at: Utc::now().to_rfc3339(),
     }))
+}
+
+/// Record the compliance audit row for a completed GDPR erasure.
+///
+/// Written after the cascade commits, so the user's personal data is already
+/// gone. The row must not reintroduce it: it identifies the subject only by
+/// `user_id` (a bare UUID once the `users` row is deleted), never by email or
+/// username (#1087).
+pub async fn record_erasure_audit(
+    store: &dyn RegistryStore,
+    user_id: Uuid,
+    reason: Option<String>,
+    orgs_affected: usize,
+) {
+    store
+        .record_audit_event(
+            Uuid::nil(),
+            Some(user_id),
+            AuditEventType::OrgDeleted, // Reusing closest event type for data erasure
+            format!("GDPR data erasure completed for user {}", user_id),
+            Some(serde_json::json!({
+                "action": "gdpr_data_erasure",
+                "user_id": user_id,
+                "reason": reason,
+                "orgs_affected": orgs_affected,
+            })),
+            None,
+            None,
+        )
+        .await;
 }

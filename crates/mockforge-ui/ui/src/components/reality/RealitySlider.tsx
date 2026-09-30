@@ -210,27 +210,24 @@ export function RealitySlider({ className, compact = false }: RealitySliderProps
   return (
     <Card
       className={cn(
-        'p-6 transition-all duration-300 ease-out',
-        'hover:shadow-lg hover:-translate-y-0.5',
-        levelConfig.bgColor,
-        `border-2 ${levelConfig.borderColor}`,
+        'h-full',
         className
       )}
     >
       {/* Header */}
-      <div className="flex items-start justify-between mb-6">
+      <div className="flex items-start justify-between mb-5">
         <div className="flex items-center gap-3">
           <div
             className={cn(
-              'p-3 rounded-xl transition-all duration-200',
+              'flex h-8 w-8 items-center justify-center rounded-md',
               levelConfig.bgColor,
               levelConfig.color
             )}
           >
-            <Icon className="h-6 w-6" />
+            <Icon className="h-4 w-4" />
           </div>
           <div>
-            <h3 className="text-lg font-semibold text-foreground">
+            <h3 className="text-sm font-semibold text-foreground">
               Reality Slider
             </h3>
             <p className="text-sm text-muted-foreground">

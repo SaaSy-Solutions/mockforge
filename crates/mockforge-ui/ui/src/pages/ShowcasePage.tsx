@@ -133,7 +133,7 @@ export const ShowcasePage: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box>
       <Typography variant="h4" gutterBottom>
         Community Showcase
       </Typography>

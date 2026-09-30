@@ -369,7 +369,7 @@ function TokensTab({ currentUser }: { currentUser: RegistryUser | null }) {
       {created && (
         <Alert style={{ marginTop: '1rem' }}>
           <p><strong>Token created — copy it now, it won't be shown again!</strong></p>
-          <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', marginTop: '0.5rem', padding: '0.75rem', background: 'var(--muted, #f5f5f5)', borderRadius: '4px', fontSize: '0.85em' }}>
+          <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-all', marginTop: '0.5rem', padding: '0.75rem', background: 'hsl(var(--muted))', borderRadius: '4px', fontSize: '0.85em' }}>
             {created.token}
           </pre>
           <p style={{ marginTop: '0.5rem', fontSize: '0.85em' }}>

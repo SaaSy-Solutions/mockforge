@@ -344,7 +344,7 @@ export const TemplateMarketplacePage: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box>
       <MarketplaceTabs />
 
       {/* Header */}

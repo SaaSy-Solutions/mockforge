@@ -37,7 +37,8 @@ const COLOR_KEYWORDS: Record<string, string> = {
   'primary.main': 'hsl(var(--primary))',
   'primary.light': 'hsl(var(--primary) / 0.8)',
   'primary.dark': 'hsl(var(--primary) / 1.1)',
-  'secondary.main': 'hsl(var(--secondary))',
+  // --secondary is a neutral surface now; as a text colour it means muted text.
+  'secondary.main': 'hsl(var(--muted-foreground))',
   'error.main': 'hsl(var(--destructive))',
   'error.light': 'hsl(var(--destructive) / 0.5)',
   'warning.main': 'hsl(var(--warning))',
@@ -262,13 +263,16 @@ interface ContainerProps extends BoxProps {
   disableGutters?: boolean;
 }
 
-export function Container({ maxWidth = 'lg', disableGutters, className, children, sx, style, ...rest }: ContainerProps) {
-  const widths = {
-    xs: '444px', sm: '600px', md: '900px', lg: '1200px', xl: '1536px',
+export function Container({ maxWidth = 'lg', disableGutters: _disableGutters, className, children, sx, style, ...rest }: ContainerProps) {
+  // Inside the app shell, the page frame already provides gutters and the
+  // max content width. Wide containers therefore fill the frame (so shim
+  // pages line up with native ones); narrow ones still centre for forms.
+  const widths: Record<string, string | undefined> = {
+    xs: '444px', sm: '600px', md: '900px', lg: undefined, xl: undefined,
   };
   return (
     <div
-      className={cn('mx-auto w-full', !disableGutters && 'px-4 md:px-6', className)}
+      className={cn('mx-auto w-full', className)}
       style={{ maxWidth: maxWidth ? widths[maxWidth] : undefined, ...sxToStyle(sx), ...style }}
       {...rest}
     >
@@ -289,7 +293,7 @@ export const Paper = React.forwardRef<HTMLDivElement, PaperProps>(function Paper
   const shadow =
     variant === 'outlined' ? '' :
     elevation === 0 ? '' :
-    elevation <= 2 ? 'shadow-sm' :
+    elevation <= 2 ? 'shadow-xs border border-border' :
     elevation <= 6 ? 'shadow-md' :
     elevation <= 12 ? 'shadow-lg' : 'shadow-xl';
   return (
@@ -299,7 +303,7 @@ export const Paper = React.forwardRef<HTMLDivElement, PaperProps>(function Paper
         'bg-card text-card-foreground',
         variant === 'outlined' ? 'border border-border' : '',
         shadow,
-        !square && 'rounded-lg',
+        !square && 'rounded-xl',
         className
       )}
       style={{ ...sxToStyle(sx), ...style }}
@@ -370,19 +374,21 @@ const TYPO_TAG: Record<TypoVariant, keyof React.JSX.IntrinsicElements> = {
 };
 
 const TYPO_CLASS: Record<TypoVariant, string> = {
-  h1: 'text-5xl font-bold tracking-tight',
-  h2: 'text-4xl font-bold tracking-tight',
-  h3: 'text-3xl font-bold tracking-tight',
-  h4: 'text-2xl font-semibold',
-  h5: 'text-xl font-semibold',
-  h6: 'text-lg font-semibold',
-  subtitle1: 'text-base font-medium',
+  // Product-UI scale: h4 is the usual page title and matches PageHeader;
+  // h5/h6 are section and card titles.
+  h1: 'text-3xl font-semibold tracking-tight',
+  h2: 'text-2xl font-semibold tracking-tight',
+  h3: 'text-2xl font-semibold tracking-tight',
+  h4: 'text-2xl font-semibold tracking-tight',
+  h5: 'text-lg font-semibold',
+  h6: 'text-base font-semibold',
+  subtitle1: 'text-sm font-medium',
   subtitle2: 'text-sm font-medium',
-  body1: 'text-base',
+  body1: 'text-sm',
   body2: 'text-sm',
-  button: 'text-sm font-medium uppercase tracking-wider',
+  button: 'text-sm font-medium',
   caption: 'text-xs text-muted-foreground',
-  overline: 'text-xs uppercase tracking-widest text-muted-foreground',
+  overline: 'text-[11px] font-medium uppercase tracking-wider text-muted-foreground',
   inherit: '',
 };
 
@@ -405,7 +411,7 @@ export function Typography({
   const Tag = (component ?? (paragraph ? 'p' : TYPO_TAG[variant])) as React.ElementType;
   const colorClass =
     color === 'primary' ? 'text-primary' :
-    color === 'secondary' ? 'text-secondary' :
+    color === 'secondary' ? 'text-muted-foreground' :
     color === 'error' || color === 'error.main' ? 'text-destructive' :
     color === 'warning' || color === 'warning.main' ? 'text-warning' :
     color === 'info' || color === 'info.main' ? 'text-info' :
@@ -457,7 +463,7 @@ function buttonColorClasses(variant: string, color: string): string {
   const map: Record<string, Record<string, string>> = {
     contained: {
       primary: 'bg-primary text-primary-foreground hover:bg-primary/90',
-      secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/80',
+      secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/70',
       error: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
       warning: 'bg-warning text-text-inverse hover:bg-warning-600',
       info: 'bg-info text-text-inverse hover:bg-info-600',
@@ -465,22 +471,22 @@ function buttonColorClasses(variant: string, color: string): string {
       inherit: 'bg-muted text-foreground hover:bg-muted/80',
     },
     outlined: {
-      primary: 'border border-primary text-primary hover:bg-primary/10',
-      secondary: 'border border-secondary text-secondary hover:bg-secondary/10',
+      primary: 'border border-input bg-background text-foreground shadow-xs hover:bg-muted',
+      secondary: 'border border-input bg-background text-foreground shadow-xs hover:bg-muted',
       error: 'border border-destructive text-destructive hover:bg-destructive/10',
       warning: 'border border-warning text-warning hover:bg-warning/10',
       info: 'border border-info text-info hover:bg-info/10',
       success: 'border border-success text-success hover:bg-success/10',
-      inherit: 'border border-border text-foreground hover:bg-accent hover:text-accent-foreground',
+      inherit: 'border border-input bg-background text-foreground shadow-xs hover:bg-muted',
     },
     text: {
       primary: 'text-primary hover:bg-primary/10',
-      secondary: 'text-secondary hover:bg-secondary/10',
+      secondary: 'text-muted-foreground hover:bg-muted hover:text-foreground',
       error: 'text-destructive hover:bg-destructive/10',
       warning: 'text-warning hover:bg-warning/10',
       info: 'text-info hover:bg-info/10',
       success: 'text-success hover:bg-success/10',
-      inherit: 'text-foreground hover:bg-accent hover:text-accent-foreground',
+      inherit: 'text-foreground hover:bg-muted',
     },
   };
   return map[variant]?.[color] ?? map.text.primary;
@@ -504,9 +510,9 @@ export const Button = React.forwardRef<HTMLButtonElement, MuiButtonProps>(functi
   }, ref
 ) {
   const sizes = {
-    small: 'px-3 py-1 text-xs',
-    medium: 'px-4 py-2 text-sm',
-    large: 'px-6 py-3 text-base',
+    small: 'h-8 px-3 text-[13px]',
+    medium: 'h-9 px-4 text-sm',
+    large: 'h-10 px-6 text-sm',
   };
   const Comp = (component ?? (rest.href ? 'a' : 'button')) as React.ElementType;
   return (
@@ -514,7 +520,7 @@ export const Button = React.forwardRef<HTMLButtonElement, MuiButtonProps>(functi
       ref={ref}
       disabled={disabled}
       className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none',
+        'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:opacity-50 disabled:pointer-events-none [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
         buttonColorClasses(variant, color),
         sizes[size],
         fullWidth && 'w-full',
@@ -540,22 +546,26 @@ interface IconButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElem
 export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(function IconButton(
   { color = 'default', size = 'medium', className, children, sx, style, ...rest }, ref
 ) {
-  const sizes = { small: 'h-8 w-8', medium: 'h-10 w-10', large: 'h-12 w-12' };
+  const sizes = {
+    small: 'h-7 w-7 [&_svg]:h-4 [&_svg]:w-4',
+    medium: 'h-8 w-8 [&_svg]:h-4 [&_svg]:w-4',
+    large: 'h-10 w-10 [&_svg]:h-5 [&_svg]:w-5',
+  };
   const colors: Record<string, string> = {
     primary: 'text-primary hover:bg-primary/10',
-    secondary: 'text-secondary hover:bg-secondary/10',
+    secondary: 'text-muted-foreground hover:bg-muted hover:text-foreground',
     error: 'text-destructive hover:bg-destructive/10',
     warning: 'text-warning hover:bg-warning/10',
     info: 'text-info hover:bg-info/10',
     success: 'text-success hover:bg-success/10',
-    inherit: 'text-current hover:bg-accent',
-    default: 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+    inherit: 'text-current hover:bg-muted',
+    default: 'text-muted-foreground hover:bg-muted hover:text-foreground',
   };
   return (
     <button
       ref={ref}
       className={cn(
-        'inline-flex items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:pointer-events-none',
+        'inline-flex shrink-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:pointer-events-none',
         sizes[size],
         colors[color],
         className
@@ -674,7 +684,8 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(function Card(
       ref={ref}
       className={cn(
         'bg-card text-card-foreground rounded-xl',
-        variant === 'outlined' ? 'border border-border' : 'shadow-sm border border-border/50',
+        'border border-border',
+        variant !== 'outlined' && 'shadow-xs',
         raised && 'shadow-lg',
         className
       )}
@@ -688,7 +699,7 @@ export const Card = React.forwardRef<HTMLDivElement, CardProps>(function Card(
 
 export function CardContent({ className, children, sx, style, ...rest }: BoxProps) {
   return (
-    <div className={cn('p-6', className)} style={{ ...sxToStyle(sx), ...style }} {...rest}>
+    <div className={cn('p-5', className)} style={{ ...sxToStyle(sx), ...style }} {...rest}>
       {children}
     </div>
   );
@@ -696,7 +707,7 @@ export function CardContent({ className, children, sx, style, ...rest }: BoxProp
 
 export function CardActions({ className, children, sx, style, ...rest }: BoxProps) {
   return (
-    <div className={cn('flex items-center gap-2 px-4 py-2 border-t border-border/50', className)} style={{ ...sxToStyle(sx), ...style }} {...rest}>
+    <div className={cn('flex items-center gap-2 px-5 py-3 border-t border-border', className)} style={{ ...sxToStyle(sx), ...style }} {...rest}>
       {children}
     </div>
   );
@@ -861,7 +872,7 @@ export function Drawer({ open, onClose, anchor = 'left', variant = 'temporary', 
 // -----------------------------------------------------------------------------
 
 const inputBase =
-  'w-full rounded-md border border-input bg-background text-foreground placeholder:text-muted-foreground ' +
+  'w-full rounded-lg border border-input bg-background text-foreground shadow-xs placeholder:text-muted-foreground ' +
   'focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30 ' +
   'transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
 
@@ -892,7 +903,7 @@ export function TextField({
   className, value, onChange, type, name, id, placeholder, disabled, required,
   sx, style, ...rest
 }: TextFieldProps) {
-  const sizeClass = size === 'small' ? 'px-2.5 py-1 text-sm' : 'px-3 py-2 text-sm';
+  const sizeClass = size === 'small' ? 'px-2.5 py-1 text-[13px]' : 'px-3 py-[7px] text-sm';
   const wrapMargin = margin === 'dense' ? 'my-1' : margin === 'normal' ? 'my-3' : '';
   const errorClass = error ? 'border-destructive focus:border-destructive focus:ring-destructive/30' : '';
   const inputCls = cn(inputBase, sizeClass, errorClass, className);
@@ -906,7 +917,7 @@ export function TextField({
         </label>
       )}
       <div className="relative flex items-center">
-        {InputProps?.startAdornment && <span className="absolute left-2 flex items-center text-muted-foreground">{InputProps.startAdornment}</span>}
+        {InputProps?.startAdornment && <span className="absolute left-2.5 flex items-center text-muted-foreground [&_svg]:h-4 [&_svg]:w-4">{InputProps.startAdornment}</span>}
         {select ? (
           <select
             id={fieldId}
@@ -948,7 +959,7 @@ export function TextField({
             {...rest}
           />
         )}
-        {InputProps?.endAdornment && <span className="absolute right-2 flex items-center text-muted-foreground">{InputProps.endAdornment}</span>}
+        {InputProps?.endAdornment && <span className="absolute right-2.5 flex items-center text-muted-foreground [&_svg]:h-4 [&_svg]:w-4">{InputProps.endAdornment}</span>}
       </div>
       {helperText && (
         <p className={cn('mt-1 text-xs', error ? 'text-destructive' : 'text-muted-foreground')}>{helperText}</p>
@@ -1007,7 +1018,7 @@ interface SelectProps extends Omit<React.SelectHTMLAttributes<HTMLSelectElement>
 }
 
 export function Select({ size = 'medium', fullWidth, className, children, value, onChange, name, disabled, required, multiple, sx, style, ...rest }: SelectProps) {
-  const sizeClass = size === 'small' ? 'px-2.5 py-1 text-sm' : 'px-3 py-2 text-sm';
+  const sizeClass = size === 'small' ? 'px-2.5 py-1 text-[13px]' : 'px-3 py-[7px] text-sm';
   return (
     <select
       className={cn(inputBase, sizeClass, fullWidth && 'w-full', 'cursor-pointer', className)}
@@ -1239,7 +1250,7 @@ export function Chip({ label, variant = 'filled', color = 'default', size = 'med
   const outlined: Record<string, string> = {
     default: 'border border-border text-foreground',
     primary: 'border border-primary text-primary',
-    secondary: 'border border-secondary text-secondary',
+    secondary: 'border border-border text-muted-foreground',
     error: 'border border-destructive text-destructive',
     warning: 'border border-warning text-warning',
     info: 'border border-info text-info',
@@ -1511,7 +1522,7 @@ export function Table({ size, stickyHeader, className, children, sx, style, ...r
 
 export function TableHead({ className, children, sx, style, ...rest }: React.HTMLAttributes<HTMLTableSectionElement> & { sx?: SxObject }) {
   return (
-    <thead className={cn('bg-muted text-muted-foreground', className)} style={{ ...sxToStyle(sx), ...style }} {...rest}>
+    <thead className={cn('bg-bg-secondary text-xs font-medium text-muted-foreground [&_tr]:border-b [&_tr]:border-border', className)} style={{ ...sxToStyle(sx), ...style }} {...rest}>
       {children}
     </thead>
   );
@@ -1535,8 +1546,8 @@ export function TableRow({ hover, selected, className, children, sx, style, ...r
   return (
     <tr
       className={cn(
-        hover && 'hover:bg-accent hover:text-accent-foreground',
-        selected && 'bg-accent text-accent-foreground',
+        hover && 'transition-colors hover:bg-muted/50',
+        selected && 'bg-muted',
         className,
       )}
       style={{ ...sxToStyle(sx), ...style }}
@@ -1561,7 +1572,8 @@ export function TableCell({ component, align, padding, className, children, sx, 
   return (
     <Comp
       className={cn(
-        padding === 'checkbox' ? 'px-2 py-1' : padding === 'none' ? '' : 'px-4 py-2',
+        'align-middle',
+        padding === 'checkbox' ? 'px-2 py-1.5' : padding === 'none' ? '' : 'px-4 py-2.5',
         align && `text-${align}`,
         className,
       )}
@@ -1916,7 +1928,7 @@ interface CircularProgressProps extends Omit<React.HTMLAttributes<HTMLDivElement
 export function CircularProgress({ variant = 'indeterminate', value = 0, size = 40, thickness = 3.6, color = 'primary', className, sx, style, ...rest }: CircularProgressProps) {
   const colors: Record<string, string> = {
     primary: 'text-primary',
-    secondary: 'text-secondary',
+    secondary: 'text-muted-foreground',
     error: 'text-destructive',
     warning: 'text-warning',
     info: 'text-info',
@@ -2187,7 +2199,7 @@ export function Link({ color = 'primary', underline = 'hover', variant, componen
   const Comp = (component ?? 'a') as React.ElementType;
   const colorCls =
     color === 'primary' ? 'text-primary' :
-    color === 'secondary' ? 'text-secondary' :
+    color === 'secondary' ? 'text-muted-foreground' :
     color === 'inherit' ? 'text-inherit' : '';
   const underlineCls =
     underline === 'always' ? 'underline' :
