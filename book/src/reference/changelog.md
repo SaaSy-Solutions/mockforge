@@ -14,6 +14,17 @@
 - **[Cloud]** Security: the GDPR data export included pending invitation payloads, which let a plain member redeem an invite meant for someone else. (#1087)
 - **[Cloud]** `GET /api/v1/organizations/{org_id}/incidents/stats` no longer returns 500 once the org has a resolved incident. (#1087)
 
+## [0.3.228] - 2026-09-30
+
+### Added
+
+- **[Reality]** The mock Kafka broker can filter messages so it counts or verifies them without keeping every payload in memory. (#992)
+
+### Fixed
+
+- **[Cloud]** Hosted mocks now require a per-deployment management token for writes to MockForge's control routes (`/__mockforge/*`, `/api/chaos`, `/api/recorder`, and the other management APIs). Previously anyone who knew a hosted mock's URL could change it. Reads and your mocked API are unaffected, and self-hosted servers don't use a token. Owners can reveal the token on the Hosted Mocks page. (#1105)
+- **[DevX]** Windows release binaries build again (a Unix-only socket option in `bench-qos` broke every Windows build since 0.3.223). (#1101)
+
 ## [0.3.227] - 2026-09-30
 
 ### Added
