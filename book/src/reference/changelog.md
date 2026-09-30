@@ -9,6 +9,7 @@
 
 ### Fixed
 
+- **[Cloud]** The registry API no longer occasionally drops a request mid-flight (clients saw a closed connection or 502). The request-logging middleware held a tracing span open across an `await`, which could panic once a request moved between worker threads.
 - **[Cloud]** Security: any authenticated user could read or overwrite any org's quota overrides. (#1087)
 - **[Cloud][AI]** Security: `POST /api/v1/organizations/{org_id}/mockai/generate-openapi-from-traffic` did not check that the caller belongs to the org. (#1087)
 - **[Cloud]** Security: the GDPR data export included pending invitation payloads, which let a plain member redeem an invite meant for someone else. (#1087)
