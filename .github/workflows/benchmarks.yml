@@ -114,7 +114,7 @@ jobs:
           git push
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: benchmark-results-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.number) || 'main' }}
           path: |
@@ -127,7 +127,7 @@ jobs:
           node .github/scripts/generate-dashboard.js
 
       - name: Upload dashboard
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: performance-dashboard
           path: performance-dashboard.html
