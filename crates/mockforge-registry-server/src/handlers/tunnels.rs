@@ -27,6 +27,7 @@ use crate::{
     handlers::usage::effective_limits,
     middleware::{resolve_org_context, AuthUser},
     models::TunnelReservation,
+    store::with_org_context,
     AppState,
 };
 
@@ -38,9 +39,10 @@ pub async fn list_tunnels(
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<TunnelReservation>>> {
     authorize_org(&state, user_id, &headers, org_id).await?;
-    let tunnels = TunnelReservation::list_by_org(state.db.pool(), org_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let tunnels = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(TunnelReservation::list_by_org(&mut **tx, org_id).await?) })
+    })
+    .await?;
     Ok(Json(tunnels))
 }
 
@@ -88,9 +90,10 @@ pub async fn create_tunnel(
         ));
     }
     if max_reservations > 0 {
-        let used = TunnelReservation::count_by_org(state.db.pool(), org_id)
-            .await
-            .map_err(ApiError::Database)?;
+        let used = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+            Box::pin(async move { Ok(TunnelReservation::count_by_org(&mut **tx, org_id).await?) })
+        })
+        .await?;
         if used >= max_reservations {
             return Err(ApiError::ResourceLimitExceeded(format!(
                 "Tunnel reservation limit reached ({used}/{max_reservations}). \
@@ -110,12 +113,7 @@ pub async fn create_tunnel(
 
     // 3. Subdomain pre-check (the unique index is the authoritative guard;
     //    this is for a friendlier error before hitting it).
-    if let Some(existing) =
-        TunnelReservation::find_by_subdomain(state.db.pool(), &request.subdomain)
-            .await
-            .map_err(ApiError::Database)?
-    {
-        let _ = existing;
+    if subdomain_taken_by_any_org(&state, &request.subdomain).await? {
         return Err(ApiError::InvalidRequest(format!(
             "Subdomain '{}' is already taken",
             request.subdomain
@@ -123,19 +121,23 @@ pub async fn create_tunnel(
     }
 
     // 4. Create.
-    let tunnel = TunnelReservation::create(
-        state.db.pool(),
-        CreateTunnelReservation {
-            org_id,
-            workspace_id: request.workspace_id,
-            name: &request.name,
-            subdomain: &request.subdomain,
-            custom_domain: request.custom_domain.as_deref(),
-            created_by: Some(user_id),
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let tunnel = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(TunnelReservation::create(
+                &mut **tx,
+                CreateTunnelReservation {
+                    org_id,
+                    workspace_id: request.workspace_id,
+                    name: &request.name,
+                    subdomain: &request.subdomain,
+                    custom_domain: request.custom_domain.as_deref(),
+                    created_by: Some(user_id),
+                },
+            )
+            .await?)
+        })
+    })
+    .await?;
 
     Ok(Json(tunnel))
 }
@@ -171,16 +173,20 @@ pub async fn update_tunnel(
     headers: HeaderMap,
     Json(request): Json<UpdateTunnelRequest>,
 ) -> ApiResult<Json<TunnelReservation>> {
-    load_authorized_tunnel(&state, user_id, &headers, id).await?;
+    let tunnel = load_authorized_tunnel(&state, user_id, &headers, id).await?;
 
-    let updated = TunnelReservation::update(
-        state.db.pool(),
-        id,
-        request.name.as_deref(),
-        request.custom_domain.as_ref().map(|d| d.as_deref()),
-    )
-    .await
-    .map_err(ApiError::Database)?
+    let updated = with_org_context(state.db.runtime_pool(), tunnel.org_id, |tx| {
+        Box::pin(async move {
+            Ok(TunnelReservation::update(
+                &mut **tx,
+                id,
+                request.name.as_deref(),
+                request.custom_domain.as_ref().map(|d| d.as_deref()),
+            )
+            .await?)
+        })
+    })
+    .await?
     .ok_or_else(|| ApiError::InvalidRequest("Tunnel not found".into()))?;
     Ok(Json(updated))
 }
@@ -192,11 +198,12 @@ pub async fn delete_tunnel(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    load_authorized_tunnel(&state, user_id, &headers, id).await?;
+    let tunnel = load_authorized_tunnel(&state, user_id, &headers, id).await?;
 
-    let deleted = TunnelReservation::delete(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?;
+    let deleted = with_org_context(state.db.runtime_pool(), tunnel.org_id, |tx| {
+        Box::pin(async move { Ok(TunnelReservation::delete(&mut **tx, id).await?) })
+    })
+    .await?;
     if !deleted {
         return Err(ApiError::InvalidRequest("Tunnel not found".into()));
     }
@@ -246,10 +253,14 @@ pub async fn verify_custom_domain(
         )));
     }
 
-    let updated = TunnelReservation::mark_custom_domain_verified(state.db.pool(), tunnel.id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Tunnel not found".into()))?;
+    let tunnel_id = tunnel.id;
+    let updated = with_org_context(state.db.runtime_pool(), tunnel.org_id, |tx| {
+        Box::pin(async move {
+            Ok(TunnelReservation::mark_custom_domain_verified(&mut **tx, tunnel_id).await?)
+        })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Tunnel not found".into()))?;
     Ok(Json(updated))
 }
 
@@ -389,17 +400,29 @@ async fn load_authorized_tunnel(
     headers: &HeaderMap,
     id: Uuid,
 ) -> ApiResult<TunnelReservation> {
-    let tunnel = TunnelReservation::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Tunnel not found".into()))?;
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    // Loaded under the caller's org: another org's tunnel is invisible under
+    // RLS and surfaces as the same "not found".
+    let tunnel = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+        Box::pin(async move { Ok(TunnelReservation::find_by_id(&mut **tx, id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Tunnel not found".into()))?;
     if ctx.org_id != tunnel.org_id {
         return Err(ApiError::InvalidRequest("Tunnel not found".into()));
     }
     Ok(tunnel)
+}
+
+/// Whether any org already holds `subdomain`. Deliberately cross-org (owner
+/// pool): subdomains are globally unique, so RLS scoping would hide conflicts.
+async fn subdomain_taken_by_any_org(state: &AppState, subdomain: &str) -> ApiResult<bool> {
+    let existing = TunnelReservation::find_by_subdomain(state.db.pool(), subdomain)
+        .await
+        .map_err(ApiError::Database)?;
+    Ok(existing.is_some())
 }
 
 /// PATCH-semantics double-option deserializer (same pattern as test_suites).

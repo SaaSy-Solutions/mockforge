@@ -359,7 +359,7 @@ impl AuditLog {
     /// The first row of each org's chain has `prev_hash = NULL`.
     #[allow(clippy::too_many_arguments)]
     pub async fn create(
-        pool: &sqlx::PgPool,
+        conn: &mut sqlx::PgConnection,
         org_id: Uuid,
         user_id: Option<Uuid>,
         event_type: AuditEventType,
@@ -374,7 +374,7 @@ impl AuditLog {
         let ip_address = normalize_client_ip(ip_address);
         let ip_address = ip_address.as_deref();
 
-        let mut tx = pool.begin().await?;
+        let mut tx = sqlx::Connection::begin(&mut *conn).await?;
 
         // Lock + read the previous entry's hash for this org. FOR UPDATE
         // serializes concurrent inserts on the same org chain.
@@ -444,7 +444,10 @@ impl AuditLog {
     /// (mutated field, deleted row, reordered row, or forged hash). Rows whose
     /// `entry_hash` is NULL (pre-#872 history) are treated as a fresh chain
     /// start: the chain is validated from the first hashed row onward.
-    pub async fn verify_chain(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<bool> {
+    pub async fn verify_chain(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<bool> {
         let rows = sqlx::query_as::<_, AuditChainRow>(
             r#"
             SELECT org_id, user_id, event_type, description, metadata,
@@ -455,7 +458,7 @@ impl AuditLog {
             "#,
         )
         .bind(org_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await?;
 
         let mut prev_hash: Option<String> = None;
@@ -527,7 +530,7 @@ impl AuditLog {
 
     /// Get audit logs for a specific user within an organization
     pub async fn get_by_user_in_org(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         user_id: Uuid,
         limit: Option<i64>,
@@ -543,7 +546,7 @@ impl AuditLog {
             query.push_bind(limit);
         }
 
-        query.build_query_as::<Self>().fetch_all(pool).await
+        query.build_query_as::<Self>().fetch_all(executor).await
     }
 
     /// Audit-log retention is disabled for tamper-evidence (#872).
@@ -617,8 +620,15 @@ pub async fn record_audit_event(
     user_agent: Option<&str>,
 ) {
     // Don't fail the request if audit logging fails
+    let mut conn = match pool.acquire().await {
+        Ok(conn) => conn,
+        Err(e) => {
+            tracing::warn!("Failed to record audit event: {}", e);
+            return;
+        }
+    };
     if let Err(e) = AuditLog::create(
-        pool,
+        &mut conn,
         org_id,
         user_id,
         event_type,

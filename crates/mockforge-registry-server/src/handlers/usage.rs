@@ -16,6 +16,7 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
     models::{Organization, UsageAlert, UsageCounter},
+    store::with_org_context,
     AppState,
 };
 
@@ -230,9 +231,14 @@ pub async fn report_ai_tokens(
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    UsageCounter::increment_ai_tokens(state.db.pool(), org_ctx.org_id, request.tokens)
-        .await
-        .map_err(ApiError::Database)?;
+    let (org_id, tokens) = (org_ctx.org_id, request.tokens);
+    with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+        Box::pin(async move {
+            UsageCounter::increment_ai_tokens(tx, org_id, tokens).await?;
+            Ok(())
+        })
+    })
+    .await?;
 
     tracing::info!(
         org_id = %org_ctx.org_id,
@@ -302,9 +308,13 @@ pub async fn list_usage_alerts(
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
     let period_start = current_period_start();
-    let rows = UsageAlert::list_active_for_period(state.db.pool(), org_ctx.org_id, period_start)
-        .await
-        .map_err(ApiError::Database)?;
+    let org_id = org_ctx.org_id;
+    let rows = with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+        Box::pin(async move {
+            Ok(UsageAlert::list_active_for_period(&mut **tx, org_id, period_start).await?)
+        })
+    })
+    .await?;
 
     let alerts = rows
         .into_iter()
@@ -340,9 +350,11 @@ pub async fn dismiss_usage_alert(
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    let result = UsageAlert::dismiss(state.db.pool(), alert_id, org_ctx.org_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let org_id = org_ctx.org_id;
+    let result = with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+        Box::pin(async move { Ok(UsageAlert::dismiss(&mut **tx, alert_id, org_id).await?) })
+    })
+    .await?;
 
     Ok(Json(DismissUsageAlertResponse {
         dismissed: result.is_some(),

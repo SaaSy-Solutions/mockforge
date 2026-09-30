@@ -18,6 +18,7 @@ use crate::{
         OrgMember, OrgRole, PromotionStatus, Scenario, ScenarioEnvironmentVersion,
         ScenarioPromotion,
     },
+    store::with_org_context,
     AppState,
 };
 use mockforge_collab::models::UserRole;
@@ -42,9 +43,8 @@ pub async fn promote_scenario(
         .map_err(|_| ApiError::AuthRequired)?;
 
     // Check fine-grained RBAC for ScenarioPromote permission
-    let member = OrgMember::find(pool, org_ctx.org_id, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let member = find_member(&state, org_ctx.org_id, user_id)
+        .await?
         .ok_or_else(|| ApiError::PermissionDenied)?;
 
     // Map OrgRole to UserRole for permission checking
@@ -69,10 +69,14 @@ pub async fn promote_scenario(
         .map_err(ApiError::InvalidRequest)?;
 
     // Get scenario
-    let scenario = Scenario::find_by_id(pool, request.scenario_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::ScenarioNotFound("Scenario not found".to_string()))?;
+    // Runtime pool bound to the caller's org: the scenarios policy admits this
+    // org's scenarios plus public (org_id IS NULL) ones.
+    let (scenario_org_id, scenario_id) = (org_ctx.org_id, request.scenario_id);
+    let scenario = with_org_context(state.db.runtime_pool(), scenario_org_id, move |tx| {
+        Box::pin(async move { Ok(Scenario::find_by_id(&mut **tx, scenario_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::ScenarioNotFound("Scenario not found".to_string()))?;
 
     // Determine if approval is required
     let approval_rules = mockforge_core::workspace::ApprovalRules::default();
@@ -151,9 +155,8 @@ pub async fn list_promotions(
         .map_err(|_| ApiError::AuthRequired)?;
 
     // Check fine-grained RBAC for ScenarioPromote permission (needed to view promotions)
-    let member = OrgMember::find(pool, org_ctx.org_id, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let member = find_member(&state, org_ctx.org_id, user_id)
+        .await?
         .ok_or_else(|| ApiError::PermissionDenied)?;
 
     // Map OrgRole to UserRole for permission checking
@@ -196,9 +199,8 @@ pub async fn approve_promotion(
         .map_err(|_| ApiError::AuthRequired)?;
 
     // Check fine-grained RBAC for ScenarioApprove permission
-    let member = OrgMember::find(pool, org_ctx.org_id, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let member = find_member(&state, org_ctx.org_id, user_id)
+        .await?
         .ok_or_else(|| ApiError::PermissionDenied)?;
 
     // Map OrgRole to UserRole for permission checking
@@ -282,9 +284,8 @@ pub async fn reject_promotion(
         .map_err(|_| ApiError::AuthRequired)?;
 
     // Check fine-grained RBAC for ScenarioApprove permission
-    let member = OrgMember::find(pool, org_ctx.org_id, user_id)
-        .await
-        .map_err(ApiError::Database)?
+    let member = find_member(&state, org_ctx.org_id, user_id)
+        .await?
         .ok_or_else(|| ApiError::PermissionDenied)?;
 
     // Map OrgRole to UserRole for permission checking
@@ -376,4 +377,17 @@ pub struct RejectPromotionResponse {
     pub promotion_id: Uuid,
     pub status: PromotionStatus,
     pub message: String,
+}
+
+/// Membership lookup for the RBAC check, on the request-path (RLS) pool bound
+/// to the org being authorized against (#1087).
+async fn find_member(
+    state: &AppState,
+    org_id: Uuid,
+    user_id: Uuid,
+) -> ApiResult<Option<OrgMember>> {
+    Ok(with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+        Box::pin(async move { Ok(OrgMember::find(&mut **tx, org_id, user_id).await?) })
+    })
+    .await?)
 }

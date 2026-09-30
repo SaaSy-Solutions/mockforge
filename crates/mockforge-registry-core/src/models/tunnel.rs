@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[cfg(feature = "postgres")]
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 
 #[cfg_attr(feature = "postgres", derive(FromRow))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -50,43 +50,58 @@ pub struct CreateTunnelReservation<'a> {
 
 #[cfg(feature = "postgres")]
 impl TunnelReservation {
-    pub async fn list_by_org(pool: &PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_by_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM tunnel_reservations WHERE org_id = $1 ORDER BY created_at DESC",
         )
         .bind(org_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM tunnel_reservations WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// Look up by subdomain. Used by the relay's auth handshake to map
     /// an incoming connection to a reservation row.
-    pub async fn find_by_subdomain(pool: &PgPool, subdomain: &str) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_subdomain(
+        executor: impl sqlx::PgExecutor<'_>,
+        subdomain: &str,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM tunnel_reservations WHERE subdomain = $1")
             .bind(subdomain)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// How many reservations does an org have? Used for the
     /// `max_tunnel_reservations` plan-limit check before insert.
-    pub async fn count_by_org(pool: &PgPool, org_id: Uuid) -> sqlx::Result<i64> {
+    pub async fn count_by_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<i64> {
         let row: (i64,) =
             sqlx::query_as("SELECT COUNT(*) FROM tunnel_reservations WHERE org_id = $1")
                 .bind(org_id)
-                .fetch_one(pool)
+                .fetch_one(executor)
                 .await?;
         Ok(row.0)
     }
 
-    pub async fn create(pool: &PgPool, input: CreateTunnelReservation<'_>) -> sqlx::Result<Self> {
+    pub async fn create(
+        executor: impl sqlx::PgExecutor<'_>,
+        input: CreateTunnelReservation<'_>,
+    ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"
             INSERT INTO tunnel_reservations
@@ -101,13 +116,13 @@ impl TunnelReservation {
         .bind(input.subdomain)
         .bind(input.custom_domain)
         .bind(input.created_by)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// PATCH-style update.
     pub async fn update(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         name: Option<&str>,
         custom_domain: Option<Option<&str>>,
@@ -128,14 +143,14 @@ impl TunnelReservation {
         .bind(name)
         .bind(custom_domain.is_some())
         .bind(custom_domain.flatten())
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
     /// Mark a reservation's custom domain as verified. Called after the
     /// DNS proof check passes. Idempotent.
     pub async fn mark_custom_domain_verified(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
     ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>(
@@ -149,14 +164,14 @@ impl TunnelReservation {
             "#,
         )
         .bind(id)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
-    pub async fn delete(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<bool> {
         let rows = sqlx::query("DELETE FROM tunnel_reservations WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?
             .rows_affected();
         Ok(rows > 0)

@@ -455,14 +455,19 @@ pub async fn get_plugin_usage(
 
     let (period_start, period_end) = current_billing_period();
 
-    let rows = FeatureUsage::aggregate_plugin_invoke_ms_by_deployment(
-        state.db.pool(),
-        org_ctx.org_id,
-        deployment_id,
-        period_start,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let org_id = org_ctx.org_id;
+    let rows = crate::store::with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+        Box::pin(async move {
+            Ok(FeatureUsage::aggregate_plugin_invoke_ms_by_deployment(
+                &mut **tx,
+                org_id,
+                deployment_id,
+                period_start,
+            )
+            .await?)
+        })
+    })
+    .await?;
 
     let by_plugin: Vec<PluginUsageEntry> = rows.into_iter().map(into_usage_entry).collect();
     let deployment_total_invoke_ms: i64 = by_plugin.iter().map(|p| p.invoke_ms).sum();

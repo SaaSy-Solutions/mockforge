@@ -163,19 +163,25 @@ impl CaptureSession {
 
 #[cfg(feature = "postgres")]
 impl CloneModel {
-    pub async fn list_by_workspace(pool: &PgPool, workspace_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_by_workspace(
+        executor: impl sqlx::PgExecutor<'_>,
+        workspace_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM clone_models WHERE workspace_id = $1 ORDER BY created_at DESC",
         )
         .bind(workspace_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM clone_models WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
@@ -183,7 +189,7 @@ impl CloneModel {
     /// transitions it to `ready` (with artifact_url + metrics + runner_seconds)
     /// once the model is uploaded.
     pub async fn create_training(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         workspace_id: Uuid,
         source_session_id: Option<Uuid>,
@@ -200,14 +206,14 @@ impl CloneModel {
         .bind(workspace_id)
         .bind(source_session_id)
         .bind(name)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Worker callback. Idempotent: only transitions rows still in
     /// 'training'.
     pub async fn mark_ready(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         artifact_url: &str,
         metrics: &serde_json::Value,
@@ -228,24 +234,27 @@ impl CloneModel {
         .bind(artifact_url)
         .bind(metrics)
         .bind(runner_seconds)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
-    pub async fn mark_failed(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn mark_failed(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>(
             "UPDATE clone_models SET status = 'failed' WHERE id = $1 AND status = 'training' \
              RETURNING *",
         )
         .bind(id)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
-    pub async fn delete(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<bool> {
         let rows = sqlx::query("DELETE FROM clone_models WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?
             .rows_affected();
         Ok(rows > 0)

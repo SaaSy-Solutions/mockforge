@@ -69,6 +69,10 @@ async fn main() -> Result<()> {
         tracing::info!("Database migrations complete");
     }
 
+    // Truthful report of which roles back the owner and request-path pools,
+    // and ERROR logs if they cannot support the RLS backstop (#1087).
+    db.check_rls_roles().await;
+
     // Initialize storage
     let storage = PluginStorage::new(&config).await?;
     tracing::info!("Storage initialized");

@@ -138,9 +138,14 @@ async fn breaking_finding_raises_dedupes_and_dispatches() {
     // --- runner emits a synthetic BREAKING diff_finding -------------------
     ingest(&pool, run.id, 1, breaking_payload("/pets/200")).await;
 
-    let incidents = Incident::list_by_org(&pool, run.org_id, Some("open"), 10)
-        .await
-        .expect("list incidents");
+    let incidents = Incident::list_by_org(
+        &mut pool.acquire().await.expect("acquire"),
+        run.org_id,
+        Some("open"),
+        10,
+    )
+    .await
+    .expect("list incidents");
     assert_eq!(incidents.len(), 1, "exactly one open incident after one breaking finding");
     let incident = &incidents[0];
     assert_eq!(incident.source, "contract_drift");

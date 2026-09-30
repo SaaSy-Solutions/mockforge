@@ -42,7 +42,7 @@ impl Project {
 
     /// Create a new project
     pub async fn create(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         slug: &str,
         name: &str,
@@ -63,44 +63,50 @@ impl Project {
         .bind(description)
         .bind(visibility.to_string())
         .bind(default_env)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Find project by ID
-    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM projects WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// Find project by org and slug
     pub async fn find_by_slug(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         slug: &str,
     ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM projects WHERE org_id = $1 AND slug = $2")
             .bind(org_id)
             .bind(slug)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// Get all projects for an organization
-    pub async fn find_by_org(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn find_by_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM projects WHERE org_id = $1 ORDER BY created_at DESC",
         )
         .bind(org_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     /// Update project
     pub async fn update(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         name: Option<&str>,
         description: Option<&str>,
@@ -151,13 +157,16 @@ impl Project {
         }
         query = query.bind(id);
 
-        query.execute(pool).await?;
+        query.execute(executor).await?;
         Ok(())
     }
 
     /// Delete project
-    pub async fn delete(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<()> {
-        sqlx::query("DELETE FROM projects WHERE id = $1").bind(id).execute(pool).await?;
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<()> {
+        sqlx::query("DELETE FROM projects WHERE id = $1")
+            .bind(id)
+            .execute(executor)
+            .await?;
 
         Ok(())
     }

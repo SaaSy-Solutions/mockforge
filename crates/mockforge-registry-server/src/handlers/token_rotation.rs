@@ -182,11 +182,13 @@ pub async fn get_tokens_needing_rotation(
 /// Background task: Send rotation reminders for tokens older than threshold
 /// This should be called periodically (e.g., daily via cron or scheduled task)
 pub async fn send_rotation_reminders(
-    pool: &sqlx::PgPool,
+    // Owner pool: a cross-org sweep driven by the reminders worker (#1087).
+    owner_pool: &sqlx::PgPool,
     threshold_days: i64,
 ) -> Result<usize, anyhow::Error> {
+    let pool = owner_pool;
     // Find all tokens needing rotation
-    let tokens = ApiToken::find_tokens_needing_rotation(pool, None, threshold_days).await?;
+    let tokens = ApiToken::find_tokens_needing_rotation(owner_pool, None, threshold_days).await?;
 
     let email_service = EmailService::from_env()?;
     let mut reminders_sent = 0;

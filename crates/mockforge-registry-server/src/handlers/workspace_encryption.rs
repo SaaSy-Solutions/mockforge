@@ -18,6 +18,7 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
     models::{workspace_environment::WorkspaceEnvVariable, CloudWorkspace},
+    store::with_org_context,
     AppState,
 };
 
@@ -30,9 +31,11 @@ async fn require_workspace(
     let org_ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), workspace_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".to_string()))?;
+    let workspace = with_org_context(state.db.runtime_pool(), org_ctx.org_id, |tx| {
+        Box::pin(async move { Ok(CloudWorkspace::find_by_id(&mut **tx, workspace_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".to_string()))?;
     if workspace.org_id != org_ctx.org_id {
         return Err(ApiError::InvalidRequest(
             "Workspace does not belong to this organization".to_string(),
@@ -100,7 +103,7 @@ pub async fn put_config(
     Path(workspace_id): Path<Uuid>,
     Json(mut config): Json<Value>,
 ) -> ApiResult<Json<Value>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let workspace = require_workspace(&state, user_id, &headers, workspace_id).await?;
 
     // Callers sometimes send `enabled`/`algorithm` inside the config blob; keep the flag
     // column authoritative and strip those from the JSONB so we don't store them twice.
@@ -110,9 +113,13 @@ pub async fn put_config(
     obj.remove("enabled");
     obj.remove("algorithm");
 
-    let updated = CloudWorkspace::set_encryption_config(state.db.pool(), workspace_id, &config)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".to_string()))?;
+    let updated = with_org_context(state.db.runtime_pool(), workspace.org_id, |tx| {
+        Box::pin(async move {
+            Ok(CloudWorkspace::set_encryption_config(&mut **tx, workspace_id, &config).await?)
+        })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".to_string()))?;
 
     Ok(Json(json!({
         "message": "Encryption config updated",
@@ -127,10 +134,14 @@ pub async fn enable(
     headers: HeaderMap,
     Path(workspace_id): Path<Uuid>,
 ) -> ApiResult<Json<Value>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
-    CloudWorkspace::set_encryption_enabled(state.db.pool(), workspace_id, true)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".to_string()))?;
+    let workspace = require_workspace(&state, user_id, &headers, workspace_id).await?;
+    with_org_context(state.db.runtime_pool(), workspace.org_id, |tx| {
+        Box::pin(async move {
+            Ok(CloudWorkspace::set_encryption_enabled(&mut **tx, workspace_id, true).await?)
+        })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".to_string()))?;
     Ok(Json(json!({ "message": "Encryption enabled" })))
 }
 
@@ -141,10 +152,14 @@ pub async fn disable(
     headers: HeaderMap,
     Path(workspace_id): Path<Uuid>,
 ) -> ApiResult<Json<Value>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
-    CloudWorkspace::set_encryption_enabled(state.db.pool(), workspace_id, false)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".to_string()))?;
+    let workspace = require_workspace(&state, user_id, &headers, workspace_id).await?;
+    with_org_context(state.db.runtime_pool(), workspace.org_id, |tx| {
+        Box::pin(async move {
+            Ok(CloudWorkspace::set_encryption_enabled(&mut **tx, workspace_id, false).await?)
+        })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".to_string()))?;
     Ok(Json(json!({ "message": "Encryption disabled" })))
 }
 

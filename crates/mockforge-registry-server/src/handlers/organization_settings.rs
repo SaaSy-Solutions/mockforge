@@ -191,56 +191,60 @@ pub async fn get_organization_usage(
         }
     }
 
-    // Get usage statistics
-    let total_requests: (Option<i64>,) = sqlx::query_as(
-        "SELECT COALESCE(SUM(requests), 0)::BIGINT FROM usage_counters WHERE org_id = $1",
-    )
-    .bind(org_id)
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    let total_storage_gb: (Option<f64>,) = sqlx::query_as(
-        "SELECT COALESCE(SUM(storage_bytes), 0)::FLOAT8 / 1073741824.0 FROM usage_counters WHERE org_id = $1",
-    )
-    .bind(org_id)
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    let total_ai_tokens: (Option<i64>,) = sqlx::query_as(
-        "SELECT COALESCE(SUM(ai_tokens_used), 0)::BIGINT FROM usage_counters WHERE org_id = $1",
-    )
-    .bind(org_id)
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
-
-    // Get feature usage counts. #832: hosted_mocks is RLS-covered, so run this
-    // one under the org GUC on the runtime pool (the WHERE org_id stays as
-    // defense-in-depth); the other counts hit non-covered tables and stay on
-    // the shared pool.
-    let hosted_mocks_count: (i64,) =
+    // Usage statistics. Every table here except `plugins` is RLS-forced, so
+    // they run in one transaction on the runtime pool bound to the PATH org
+    // (authorized above; not necessarily the request's default org). The
+    // `WHERE org_id` filters stay as defense-in-depth.
+    let (total_requests, total_storage_gb, total_ai_tokens, hosted_mocks_count, api_tokens_count) =
         crate::store::with_org_context(state.db.runtime_pool(), org_id, move |tx| {
             Box::pin(async move {
-                sqlx::query_as("SELECT COUNT(*) FROM hosted_mocks WHERE org_id = $1")
-                    .bind(org_id)
-                    .fetch_one(&mut **tx)
-                    .await
-                    .map_err(Into::into)
+                let total_requests: (Option<i64>,) = sqlx::query_as(
+                    "SELECT COALESCE(SUM(requests), 0)::BIGINT FROM usage_counters WHERE org_id = $1",
+                )
+                .bind(org_id)
+                .fetch_one(&mut **tx)
+                .await?;
+
+                let total_storage_gb: (Option<f64>,) = sqlx::query_as(
+                    "SELECT COALESCE(SUM(storage_bytes), 0)::FLOAT8 / 1073741824.0 FROM usage_counters WHERE org_id = $1",
+                )
+                .bind(org_id)
+                .fetch_one(&mut **tx)
+                .await?;
+
+                let total_ai_tokens: (Option<i64>,) = sqlx::query_as(
+                    "SELECT COALESCE(SUM(ai_tokens_used), 0)::BIGINT FROM usage_counters WHERE org_id = $1",
+                )
+                .bind(org_id)
+                .fetch_one(&mut **tx)
+                .await?;
+
+                let hosted_mocks_count: (i64,) =
+                    sqlx::query_as("SELECT COUNT(*) FROM hosted_mocks WHERE org_id = $1")
+                        .bind(org_id)
+                        .fetch_one(&mut **tx)
+                        .await?;
+
+                let api_tokens_count: (i64,) =
+                    sqlx::query_as("SELECT COUNT(*) FROM api_tokens WHERE org_id = $1")
+                        .bind(org_id)
+                        .fetch_one(&mut **tx)
+                        .await?;
+
+                Ok((
+                    total_requests,
+                    total_storage_gb,
+                    total_ai_tokens,
+                    hosted_mocks_count,
+                    api_tokens_count,
+                ))
             })
         })
         .await?;
 
+    // `plugins` is the global public registry and deliberately not RLS-forced.
     let plugins_published: (i64,) =
         sqlx::query_as("SELECT COUNT(*) FROM plugins WHERE org_id = $1")
-            .bind(org_id)
-            .fetch_one(pool)
-            .await
-            .map_err(ApiError::Database)?;
-
-    let api_tokens_count: (i64,) =
-        sqlx::query_as("SELECT COUNT(*) FROM api_tokens WHERE org_id = $1")
             .bind(org_id)
             .fetch_one(pool)
             .await
@@ -263,7 +267,6 @@ pub async fn get_organization_billing(
     AuthUser(user_id): AuthUser,
     Path(org_id): Path<Uuid>,
 ) -> ApiResult<Json<OrganizationBillingResponse>> {
-    let pool = state.db.pool();
     // Get organization
     let org = state
         .store
@@ -276,8 +279,11 @@ pub async fn get_organization_billing(
         return Err(ApiError::PermissionDenied);
     }
 
-    // Get subscription info
-    let subscription = Subscription::find_by_org(pool, org_id).await.map_err(ApiError::Database)?;
+    // Get subscription info (runtime pool, bound to the path org authorized above)
+    let subscription = crate::store::with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+        Box::pin(async move { Ok(Subscription::find_by_org(&mut **tx, org_id).await?) })
+    })
+    .await?;
 
     Ok(Json(OrganizationBillingResponse {
         org_id: org.id,

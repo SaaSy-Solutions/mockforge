@@ -16,6 +16,7 @@ use crate::{
     models::{
         AuditEventType, Organization, Plan, Subscription, SubscriptionStatus, UsageCounter, User,
     },
+    store::with_org_context,
     AppState,
 };
 
@@ -56,22 +57,22 @@ pub async fn get_subscription(
     AuthUser(user_id): AuthUser,
     headers: HeaderMap,
 ) -> ApiResult<Json<SubscriptionResponse>> {
-    let pool = state.db.pool();
-
     // Resolve org context (extensions not available in handler, use None)
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
 
-    // Get subscription
-    let subscription = Subscription::find_by_org(pool, org_ctx.org_id)
-        .await
-        .map_err(ApiError::Database)?;
-
-    // Get current usage
-    let usage = UsageCounter::get_or_create_current(pool, org_ctx.org_id)
-        .await
-        .map_err(ApiError::Database)?;
+    // Subscription + current usage, on the request-path (RLS) pool bound to
+    // the resolved org.
+    let org_id = org_ctx.org_id;
+    let (subscription, usage) = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            let subscription = Subscription::find_by_org(&mut **tx, org_id).await?;
+            let usage = UsageCounter::get_or_create_current(&mut **tx, org_id).await?;
+            Ok((subscription, usage))
+        })
+    })
+    .await?;
 
     // Effective limits = plan defaults + custom org quota overrides
     let limits = super::usage::effective_limits(&state, &org_ctx.org).await?;

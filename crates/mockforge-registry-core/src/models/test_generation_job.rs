@@ -12,7 +12,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[cfg(feature = "postgres")]
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 
 /// Terminal states a job can finish in. Stored in DB as the raw string
 /// values via `status: String`; this enum mirrors them for client code
@@ -77,7 +77,10 @@ pub struct CreateTestGenerationJob<'a> {
 impl TestGenerationJob {
     /// Create a new job in 'queued' state. The Phase 2 worker is
     /// responsible for transitioning it through 'running' → terminal.
-    pub async fn create(pool: &PgPool, input: CreateTestGenerationJob<'_>) -> sqlx::Result<Self> {
+    pub async fn create(
+        executor: impl sqlx::PgExecutor<'_>,
+        input: CreateTestGenerationJob<'_>,
+    ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"
             INSERT INTO cloud_test_generation_jobs
@@ -92,14 +95,14 @@ impl TestGenerationJob {
         .bind(input.prompt)
         .bind(input.captures_filter)
         .bind(input.created_by)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Look up a single job by id, scoped to the caller's workspace so
     /// cross-workspace IDs return None even when the row exists.
     pub async fn find_in_workspace(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
         job_id: Uuid,
     ) -> sqlx::Result<Option<Self>> {
@@ -113,7 +116,7 @@ impl TestGenerationJob {
         )
         .bind(job_id)
         .bind(workspace_id)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
@@ -121,7 +124,7 @@ impl TestGenerationJob {
     /// size — callers should pass a sane upper bound (the handler caps
     /// at 100).
     pub async fn list_by_workspace(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
         limit: i64,
     ) -> sqlx::Result<Vec<Self>> {
@@ -137,7 +140,7 @@ impl TestGenerationJob {
         )
         .bind(workspace_id)
         .bind(limit)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
@@ -148,7 +151,9 @@ impl TestGenerationJob {
     /// scale-out won't claim the same row) skip rather than block on a
     /// locked candidate. Phase 3 only runs a single worker process per
     /// registry pod, but the locking pattern future-proofs us.
-    pub async fn claim_next_queued(pool: &PgPool) -> sqlx::Result<Option<Self>> {
+    pub async fn claim_next_queued(
+        executor: impl sqlx::PgExecutor<'_>,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>(
             r#"
             UPDATE cloud_test_generation_jobs
@@ -164,7 +169,7 @@ impl TestGenerationJob {
                       result, error, queued_at, started_at, finished_at, created_by
             "#,
         )
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
@@ -173,7 +178,7 @@ impl TestGenerationJob {
     /// (e.g., the user cancelled while the worker was mid-flight) — the
     /// rows_affected check makes this safe under that race.
     pub async fn complete_success(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         job_id: Uuid,
         result: &serde_json::Value,
     ) -> sqlx::Result<bool> {
@@ -188,7 +193,7 @@ impl TestGenerationJob {
         )
         .bind(job_id)
         .bind(result)
-        .execute(pool)
+        .execute(executor)
         .await?
         .rows_affected();
         Ok(rows > 0)
@@ -196,7 +201,11 @@ impl TestGenerationJob {
 
     /// Persist a failure reason and flip status to 'failed'. Same
     /// no-op-on-race semantics as `complete_success`.
-    pub async fn complete_failure(pool: &PgPool, job_id: Uuid, error: &str) -> sqlx::Result<bool> {
+    pub async fn complete_failure(
+        executor: impl sqlx::PgExecutor<'_>,
+        job_id: Uuid,
+        error: &str,
+    ) -> sqlx::Result<bool> {
         let rows = sqlx::query(
             r#"
             UPDATE cloud_test_generation_jobs
@@ -208,7 +217,7 @@ impl TestGenerationJob {
         )
         .bind(job_id)
         .bind(error)
-        .execute(pool)
+        .execute(executor)
         .await?
         .rows_affected();
         Ok(rows > 0)
@@ -217,7 +226,11 @@ impl TestGenerationJob {
     /// Cancel a queued/running job. No-op if the job is already terminal.
     /// Returns Ok(true) on a state change, Ok(false) if the job was
     /// already terminal or not found.
-    pub async fn cancel(pool: &PgPool, workspace_id: Uuid, job_id: Uuid) -> sqlx::Result<bool> {
+    pub async fn cancel(
+        executor: impl sqlx::PgExecutor<'_>,
+        workspace_id: Uuid,
+        job_id: Uuid,
+    ) -> sqlx::Result<bool> {
         let rows = sqlx::query(
             r#"
             UPDATE cloud_test_generation_jobs
@@ -231,7 +244,7 @@ impl TestGenerationJob {
         )
         .bind(job_id)
         .bind(workspace_id)
-        .execute(pool)
+        .execute(executor)
         .await?
         .rows_affected();
         Ok(rows > 0)
@@ -241,7 +254,10 @@ impl TestGenerationJob {
     /// create-job handler (#865) to cap pending AI jobs per org and prevent
     /// queue flooding — each dequeued job burns platform tokens, so an
     /// unbounded queue is a cost-exposure even with a per-job quota check.
-    pub async fn count_pending_for_org(pool: &PgPool, org_id: Uuid) -> sqlx::Result<i64> {
+    pub async fn count_pending_for_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<i64> {
         let count: i64 = sqlx::query_scalar(
             r#"
             SELECT COUNT(*)
@@ -251,7 +267,7 @@ impl TestGenerationJob {
             "#,
         )
         .bind(org_id)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await?;
         Ok(count)
     }

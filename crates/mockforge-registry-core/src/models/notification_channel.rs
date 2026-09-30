@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[cfg(feature = "postgres")]
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 
 #[cfg_attr(feature = "postgres", derive(FromRow))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,23 +44,32 @@ pub struct CreateNotificationChannel<'a> {
 
 #[cfg(feature = "postgres")]
 impl NotificationChannel {
-    pub async fn list_by_org(pool: &PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_by_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM notification_channels WHERE org_id = $1 ORDER BY created_at ASC",
         )
         .bind(org_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM notification_channels WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
-    pub async fn create(pool: &PgPool, input: CreateNotificationChannel<'_>) -> sqlx::Result<Self> {
+    pub async fn create(
+        executor: impl sqlx::PgExecutor<'_>,
+        input: CreateNotificationChannel<'_>,
+    ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"
             INSERT INTO notification_channels (org_id, name, kind, config, enabled)
@@ -73,13 +82,13 @@ impl NotificationChannel {
         .bind(input.kind)
         .bind(input.config)
         .bind(input.enabled)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// PATCH-style update. Any `Some(_)` field overwrites; `None` leaves it.
     pub async fn update(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         name: Option<&str>,
         config: Option<&serde_json::Value>,
@@ -100,14 +109,14 @@ impl NotificationChannel {
         .bind(name)
         .bind(config)
         .bind(enabled)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
-    pub async fn delete(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<bool> {
         let rows = sqlx::query("DELETE FROM notification_channels WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?
             .rows_affected();
         Ok(rows > 0)

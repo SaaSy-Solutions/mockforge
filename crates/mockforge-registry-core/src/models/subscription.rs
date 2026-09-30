@@ -94,7 +94,7 @@ impl Subscription {
     /// Create or update subscription from Stripe webhook
     #[allow(clippy::too_many_arguments)]
     pub async fn upsert_from_stripe(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         stripe_subscription_id: &str,
         stripe_customer_id: &str,
@@ -138,41 +138,44 @@ impl Subscription {
         .bind(current_period_end)
         .bind(cancel_at_period_end)
         .bind(canceled_at)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Find subscription by org_id
-    pub async fn find_by_org(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM subscriptions WHERE org_id = $1 ORDER BY created_at DESC LIMIT 1",
         )
         .bind(org_id)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
     /// Find subscription by Stripe subscription ID
     pub async fn find_by_stripe_subscription_id(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         stripe_subscription_id: &str,
     ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM subscriptions WHERE stripe_subscription_id = $1")
             .bind(stripe_subscription_id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// Update subscription status
     pub async fn update_status(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         subscription_id: Uuid,
         status: SubscriptionStatus,
     ) -> sqlx::Result<()> {
         sqlx::query("UPDATE subscriptions SET status = $1, updated_at = NOW() WHERE id = $2")
             .bind(status.to_string())
             .bind(subscription_id)
-            .execute(pool)
+            .execute(executor)
             .await?;
 
         Ok(())
@@ -180,7 +183,7 @@ impl Subscription {
 
     /// Cancel subscription (mark for cancellation at period end)
     pub async fn cancel_at_period_end(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         subscription_id: Uuid,
     ) -> sqlx::Result<()> {
         sqlx::query(
@@ -191,7 +194,7 @@ impl Subscription {
             "#,
         )
         .bind(subscription_id)
-        .execute(pool)
+        .execute(executor)
         .await?;
 
         Ok(())
@@ -239,7 +242,10 @@ pub struct UsageCounter {
 #[cfg(feature = "postgres")]
 impl UsageCounter {
     /// Get or create usage counter for current month
-    pub async fn get_or_create_current(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Self> {
+    pub async fn get_or_create_current(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Self> {
         let period_start = Utc::now().date_naive();
         let period_start = NaiveDate::from_ymd_opt(period_start.year(), period_start.month(), 1)
             .unwrap_or(period_start);
@@ -255,24 +261,24 @@ impl UsageCounter {
         )
         .bind(org_id)
         .bind(period_start)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Increment request count
     pub async fn increment_requests(
-        pool: &sqlx::PgPool,
+        conn: &mut sqlx::PgConnection,
         org_id: Uuid,
         count: i64,
     ) -> sqlx::Result<()> {
-        let counter = Self::get_or_create_current(pool, org_id).await?;
+        let counter = Self::get_or_create_current(&mut *conn, org_id).await?;
 
         sqlx::query(
             "UPDATE usage_counters SET requests = requests + $1, updated_at = NOW() WHERE id = $2",
         )
         .bind(count)
         .bind(counter.id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
 
         Ok(())
@@ -280,33 +286,37 @@ impl UsageCounter {
 
     /// Increment egress bytes
     pub async fn increment_egress(
-        pool: &sqlx::PgPool,
+        conn: &mut sqlx::PgConnection,
         org_id: Uuid,
         bytes: i64,
     ) -> sqlx::Result<()> {
-        let counter = Self::get_or_create_current(pool, org_id).await?;
+        let counter = Self::get_or_create_current(&mut *conn, org_id).await?;
 
         sqlx::query(
             "UPDATE usage_counters SET egress_bytes = egress_bytes + $1, updated_at = NOW() WHERE id = $2",
         )
         .bind(bytes)
         .bind(counter.id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
 
         Ok(())
     }
 
     /// Update storage bytes (absolute value, not increment)
-    pub async fn update_storage(pool: &sqlx::PgPool, org_id: Uuid, bytes: i64) -> sqlx::Result<()> {
-        let counter = Self::get_or_create_current(pool, org_id).await?;
+    pub async fn update_storage(
+        conn: &mut sqlx::PgConnection,
+        org_id: Uuid,
+        bytes: i64,
+    ) -> sqlx::Result<()> {
+        let counter = Self::get_or_create_current(&mut *conn, org_id).await?;
 
         sqlx::query(
             "UPDATE usage_counters SET storage_bytes = $1, updated_at = NOW() WHERE id = $2",
         )
         .bind(bytes)
         .bind(counter.id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
 
         Ok(())
@@ -321,14 +331,14 @@ impl UsageCounter {
     /// created first if it doesn't exist yet; the increment itself never reads
     /// the counter into the application before writing.
     pub async fn increment_ai_tokens(
-        pool: &sqlx::PgPool,
+        conn: &mut sqlx::PgConnection,
         org_id: Uuid,
         tokens: i64,
     ) -> sqlx::Result<i64> {
         // Ensure the current-period row exists. This is idempotent and does
         // not participate in the increment's atomicity — the running total is
         // only ever mutated by the single atomic UPDATE below.
-        let counter = Self::get_or_create_current(pool, org_id).await?;
+        let counter = Self::get_or_create_current(&mut *conn, org_id).await?;
 
         let (new_total,): (i64,) = sqlx::query_as(
             "UPDATE usage_counters \
@@ -338,7 +348,7 @@ impl UsageCounter {
         )
         .bind(tokens)
         .bind(counter.id)
-        .fetch_one(pool)
+        .fetch_one(&mut *conn)
         .await?;
 
         Ok(new_total)
@@ -348,18 +358,18 @@ impl UsageCounter {
     /// a cloud worker spends on a test/chaos/scenario/etc. run. Plan limits
     /// live in `organizations.limits_json` under `runner_seconds_per_month`.
     pub async fn increment_runner_seconds(
-        pool: &sqlx::PgPool,
+        conn: &mut sqlx::PgConnection,
         org_id: Uuid,
         seconds: i64,
     ) -> sqlx::Result<()> {
-        let counter = Self::get_or_create_current(pool, org_id).await?;
+        let counter = Self::get_or_create_current(&mut *conn, org_id).await?;
 
         sqlx::query(
             "UPDATE usage_counters SET runner_seconds_used = runner_seconds_used + $1, updated_at = NOW() WHERE id = $2",
         )
         .bind(seconds)
         .bind(counter.id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
 
         Ok(())
@@ -369,18 +379,18 @@ impl UsageCounter {
     /// relay binary via internal mTLS routes. Plan limits live in
     /// `organizations.limits_json` under `tunnel_bytes_per_month`.
     pub async fn increment_tunnel_bytes(
-        pool: &sqlx::PgPool,
+        conn: &mut sqlx::PgConnection,
         org_id: Uuid,
         bytes: i64,
     ) -> sqlx::Result<()> {
-        let counter = Self::get_or_create_current(pool, org_id).await?;
+        let counter = Self::get_or_create_current(&mut *conn, org_id).await?;
 
         sqlx::query(
             "UPDATE usage_counters SET tunnel_bytes_used = tunnel_bytes_used + $1, updated_at = NOW() WHERE id = $2",
         )
         .bind(bytes)
         .bind(counter.id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
 
         Ok(())
@@ -392,18 +402,18 @@ impl UsageCounter {
     /// total and write it. Plan limits live in `organizations.limits_json`
     /// under `snapshot_bytes_quota`.
     pub async fn set_snapshot_bytes(
-        pool: &sqlx::PgPool,
+        conn: &mut sqlx::PgConnection,
         org_id: Uuid,
         bytes: i64,
     ) -> sqlx::Result<()> {
-        let counter = Self::get_or_create_current(pool, org_id).await?;
+        let counter = Self::get_or_create_current(&mut *conn, org_id).await?;
 
         sqlx::query(
             "UPDATE usage_counters SET snapshot_bytes_stored = $1, updated_at = NOW() WHERE id = $2",
         )
         .bind(bytes)
         .bind(counter.id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
 
         Ok(())
@@ -413,18 +423,18 @@ impl UsageCounter {
     /// log shipper / OTLP collector via internal routes. Plan limits
     /// live in `organizations.limits_json` under `log_bytes_per_month`.
     pub async fn increment_log_bytes(
-        pool: &sqlx::PgPool,
+        conn: &mut sqlx::PgConnection,
         org_id: Uuid,
         bytes: i64,
     ) -> sqlx::Result<()> {
-        let counter = Self::get_or_create_current(pool, org_id).await?;
+        let counter = Self::get_or_create_current(&mut *conn, org_id).await?;
 
         sqlx::query(
             "UPDATE usage_counters SET log_bytes_ingested = log_bytes_ingested + $1, updated_at = NOW() WHERE id = $2",
         )
         .bind(bytes)
         .bind(counter.id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
 
         Ok(())
@@ -432,7 +442,7 @@ impl UsageCounter {
 
     /// Get usage for a specific period
     pub async fn get_for_period(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         period_start: NaiveDate,
     ) -> sqlx::Result<Option<Self>> {
@@ -441,17 +451,20 @@ impl UsageCounter {
         )
         .bind(org_id)
         .bind(period_start)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
     /// Get all usage counters for an org
-    pub async fn get_all_for_org(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn get_all_for_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM usage_counters WHERE org_id = $1 ORDER BY period_start DESC",
         )
         .bind(org_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 }
@@ -475,7 +488,7 @@ impl UsageAlert {
     /// Idempotent insert. Returns `Some(row)` if newly inserted (worker should
     /// then send an email), `None` if a matching alert already exists.
     pub async fn try_insert(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         metric: &str,
         period_start: NaiveDate,
@@ -493,13 +506,13 @@ impl UsageAlert {
         .bind(metric)
         .bind(period_start)
         .bind(threshold_pct)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
     /// Active (non-dismissed) alerts for the given period, newest first.
     pub async fn list_active_for_period(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         period_start: NaiveDate,
     ) -> sqlx::Result<Vec<Self>> {
@@ -512,14 +525,14 @@ impl UsageAlert {
         )
         .bind(org_id)
         .bind(period_start)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     /// Dismiss an alert. Returns the updated row if it was active and owned by
     /// the given org; `None` if it was already dismissed or didn't exist.
     pub async fn dismiss(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         org_id: Uuid,
     ) -> sqlx::Result<Option<Self>> {
@@ -532,7 +545,7 @@ impl UsageAlert {
         )
         .bind(id)
         .bind(org_id)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 }

@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[cfg(feature = "postgres")]
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 
 #[cfg_attr(feature = "postgres", derive(FromRow))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -82,7 +82,7 @@ impl ObservabilitySavedQuery {
     }
 
     pub async fn list_by_org(
-        pool: &PgPool,
+        conn: &mut sqlx::PgConnection,
         org_id: Uuid,
         kind: Option<&str>,
     ) -> sqlx::Result<Vec<Self>> {
@@ -94,7 +94,7 @@ impl ObservabilitySavedQuery {
                 )
                 .bind(org_id)
                 .bind(k)
-                .fetch_all(pool)
+                .fetch_all(&mut *conn)
                 .await
             }
             None => {
@@ -103,20 +103,26 @@ impl ObservabilitySavedQuery {
                  WHERE org_id = $1 ORDER BY updated_at DESC",
                 )
                 .bind(org_id)
-                .fetch_all(pool)
+                .fetch_all(&mut *conn)
                 .await
             }
         }
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM observability_saved_queries WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
-    pub async fn create(pool: &PgPool, input: CreateSavedQuery<'_>) -> sqlx::Result<Self> {
+    pub async fn create(
+        executor: impl sqlx::PgExecutor<'_>,
+        input: CreateSavedQuery<'_>,
+    ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"
             INSERT INTO observability_saved_queries
@@ -132,12 +138,12 @@ impl ObservabilitySavedQuery {
         .bind(input.kind)
         .bind(input.filters)
         .bind(input.created_by)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     pub async fn update(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         name: Option<&str>,
         filters: Option<&serde_json::Value>,
@@ -155,14 +161,14 @@ impl ObservabilitySavedQuery {
         .bind(id)
         .bind(name)
         .bind(filters)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
-    pub async fn delete(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<bool> {
         let rows = sqlx::query("DELETE FROM observability_saved_queries WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?
             .rows_affected();
         Ok(rows > 0)
@@ -171,23 +177,32 @@ impl ObservabilitySavedQuery {
 
 #[cfg(feature = "postgres")]
 impl ObservabilityDashboard {
-    pub async fn list_by_org(pool: &PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_by_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM observability_dashboards WHERE org_id = $1 ORDER BY updated_at DESC",
         )
         .bind(org_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM observability_dashboards WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
-    pub async fn create(pool: &PgPool, input: CreateDashboard<'_>) -> sqlx::Result<Self> {
+    pub async fn create(
+        executor: impl sqlx::PgExecutor<'_>,
+        input: CreateDashboard<'_>,
+    ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"
             INSERT INTO observability_dashboards
@@ -203,12 +218,12 @@ impl ObservabilityDashboard {
         .bind(input.layout)
         .bind(input.queries)
         .bind(input.created_by)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     pub async fn update(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         name: Option<&str>,
         layout: Option<&serde_json::Value>,
@@ -229,14 +244,14 @@ impl ObservabilityDashboard {
         .bind(name)
         .bind(layout)
         .bind(queries)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
-    pub async fn delete(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<bool> {
         let rows = sqlx::query("DELETE FROM observability_dashboards WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?
             .rows_affected();
         Ok(rows > 0)

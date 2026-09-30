@@ -20,6 +20,7 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
     models::{cloud_service::CloudService, CloudWorkspace, Flow},
+    store::with_org_context,
     AppState,
 };
 
@@ -71,9 +72,13 @@ pub async fn get_workspace_graph(
 ) -> ApiResult<Json<GraphData>> {
     let workspace = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
 
-    let services = CloudService::find_by_workspace(state.db.pool(), workspace.org_id, workspace_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let org_id = workspace.org_id;
+    let services = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(CloudService::find_by_workspace(&mut **tx, org_id, workspace_id).await?)
+        })
+    })
+    .await?;
     let flows = Flow::list_by_workspace(state.db.pool(), workspace_id, None)
         .await
         .map_err(ApiError::Database)?;
@@ -144,12 +149,16 @@ async fn authorize_workspace(
     headers: &HeaderMap,
     workspace_id: Uuid,
 ) -> ApiResult<CloudWorkspace> {
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), workspace_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    // Bound to the caller's org: a workspace in another org reads as absent
+    // and yields the same "Workspace not found" as an explicit mismatch.
+    let workspace = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+        Box::pin(async move { Ok(CloudWorkspace::find_by_id(&mut **tx, workspace_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
     if ctx.org_id != workspace.org_id {
         return Err(ApiError::InvalidRequest("Workspace not found".into()));
     }

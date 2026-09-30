@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[cfg(feature = "postgres")]
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 
 #[cfg_attr(feature = "postgres", derive(FromRow))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -78,7 +78,10 @@ impl InflightRuns {
 #[cfg(feature = "postgres")]
 impl TestRun {
     /// Insert a new run in `queued` status.
-    pub async fn enqueue(pool: &PgPool, input: EnqueueTestRun<'_>) -> sqlx::Result<Self> {
+    pub async fn enqueue(
+        executor: impl sqlx::PgExecutor<'_>,
+        input: EnqueueTestRun<'_>,
+    ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"
             INSERT INTO test_runs
@@ -95,20 +98,23 @@ impl TestRun {
         .bind(input.triggered_by_user)
         .bind(input.git_ref)
         .bind(input.git_sha)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM test_runs WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// Recent runs of a suite, newest first.
     pub async fn list_by_suite(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         suite_id: Uuid,
         limit: i64,
     ) -> sqlx::Result<Vec<Self>> {
@@ -122,13 +128,13 @@ impl TestRun {
         )
         .bind(suite_id)
         .bind(limit)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     /// Cross-suite list for an org. Used by the global "all runs" dashboard.
     pub async fn list_by_org(
-        pool: &PgPool,
+        conn: &mut sqlx::PgConnection,
         org_id: Uuid,
         status_filter: Option<&str>,
         limit: i64,
@@ -142,7 +148,7 @@ impl TestRun {
                 .bind(org_id)
                 .bind(status)
                 .bind(limit)
-                .fetch_all(pool)
+                .fetch_all(&mut *conn)
                 .await
             }
             None => {
@@ -152,7 +158,7 @@ impl TestRun {
                 )
                 .bind(org_id)
                 .bind(limit)
-                .fetch_all(pool)
+                .fetch_all(&mut *conn)
                 .await
             }
         }
@@ -161,18 +167,21 @@ impl TestRun {
     /// How many runs are queued + running for this org? Used by the
     /// concurrency-cap check (max_concurrent_runs plan limit) before
     /// admitting a new run.
-    pub async fn count_inflight(pool: &PgPool, org_id: Uuid) -> sqlx::Result<InflightRuns> {
+    pub async fn count_inflight(
+        conn: &mut sqlx::PgConnection,
+        org_id: Uuid,
+    ) -> sqlx::Result<InflightRuns> {
         let queued: (i64,) = sqlx::query_as(
             "SELECT COUNT(*) FROM test_runs WHERE org_id = $1 AND status = 'queued'",
         )
         .bind(org_id)
-        .fetch_one(pool)
+        .fetch_one(&mut *conn)
         .await?;
         let running: (i64,) = sqlx::query_as(
             "SELECT COUNT(*) FROM test_runs WHERE org_id = $1 AND status = 'running'",
         )
         .bind(org_id)
-        .fetch_one(pool)
+        .fetch_one(&mut *conn)
         .await?;
         Ok(InflightRuns {
             queued: queued.0,
@@ -182,7 +191,10 @@ impl TestRun {
 
     /// Worker-callback transition to `running`. Idempotent: only
     /// transitions when current status is `queued`, otherwise no-op.
-    pub async fn mark_running(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn mark_running(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>(
             r#"
             UPDATE test_runs SET
@@ -193,7 +205,7 @@ impl TestRun {
             "#,
         )
         .bind(id)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
@@ -201,7 +213,7 @@ impl TestRun {
     /// terminal: a row already in `passed/failed/cancelled/errored` is not
     /// changed.
     pub async fn mark_finished(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         status: &str,
         runner_seconds: i32,
@@ -222,12 +234,15 @@ impl TestRun {
         .bind(status)
         .bind(runner_seconds)
         .bind(summary)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
     /// User-initiated abort. Allowed from `queued` or `running`.
-    pub async fn cancel(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn cancel(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>(
             r#"
             UPDATE test_runs SET
@@ -238,7 +253,7 @@ impl TestRun {
             "#,
         )
         .bind(id)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 }

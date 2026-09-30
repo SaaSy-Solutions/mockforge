@@ -82,9 +82,12 @@ impl<'a> PermissionChecker<'a> {
     /// Resolve a user's role within an organization.
     /// Returns `None` if the user is not a member.
     async fn resolve_role(&self, user_id: Uuid, org_id: Uuid) -> Result<Option<OrgRole>, ApiError> {
-        let member = OrgMember::find(self.state.db.pool(), org_id, user_id)
-            .await
-            .map_err(ApiError::Database)?;
+        // Request-path (RLS) pool bound to the org being authorized against.
+        let member =
+            crate::store::with_org_context(self.state.db.runtime_pool(), org_id, move |tx| {
+                Box::pin(async move { Ok(OrgMember::find(&mut **tx, org_id, user_id).await?) })
+            })
+            .await?;
 
         Ok(member.map(|m| m.role()))
     }

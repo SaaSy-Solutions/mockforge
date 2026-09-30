@@ -32,6 +32,7 @@ use crate::{
     handlers::usage::effective_limits,
     middleware::{resolve_org_context, AuthUser},
     models::{CaptureSession, CloneModel, CloudWorkspace, TestRun},
+    store::with_org_context,
     AppState,
 };
 
@@ -141,10 +142,11 @@ pub async fn list_clone_models(
     Path(workspace_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<CloneModel>>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
-    let rows = CloneModel::list_by_workspace(state.db.pool(), workspace_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let rows = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(CloneModel::list_by_workspace(&mut **tx, workspace_id).await?) })
+    })
+    .await?;
     Ok(Json(rows))
 }
 
@@ -166,16 +168,13 @@ pub async fn train_clone_from_session(
     headers: HeaderMap,
     Json(request): Json<TrainCloneRequest>,
 ) -> ApiResult<Json<CloneModel>> {
-    let session = load_authorized_session(&state, user_id, &headers, session_id).await?;
+    let (session, org_id) =
+        load_authorized_session_with_org(&state, user_id, &headers, session_id).await?;
     if request.name.trim().is_empty() {
         return Err(ApiError::InvalidRequest("name must not be empty".into()));
     }
 
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), session.workspace_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
-
-    let limits = effective_limits(&state, &load_org(&state, workspace.org_id).await?).await?;
+    let limits = effective_limits(&state, &load_org(&state, org_id).await?).await?;
     let max_clones = limits.get("max_clone_models").and_then(|v| v.as_i64()).unwrap_or(0);
     if max_clones == 0 {
         return Err(ApiError::ResourceLimitExceeded(
@@ -183,30 +182,30 @@ pub async fn train_clone_from_session(
         ));
     }
 
-    let row = CloneModel::create_training(
-        state.db.pool(),
-        workspace.org_id,
-        session.workspace_id,
-        Some(session.id),
-        &request.name,
-    )
-    .await
-    .map_err(ApiError::Database)?;
-
-    let run = TestRun::enqueue(
-        state.db.pool(),
-        EnqueueTestRun {
-            suite_id: row.id,
-            org_id: workspace.org_id,
-            kind: "behavioral_clone",
-            triggered_by: "manual",
-            triggered_by_user: Some(user_id),
-            git_ref: None,
-            git_sha: None,
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let (workspace_id, sid) = (session.workspace_id, session.id);
+    let name = request.name.clone();
+    let (row, run) = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            let row =
+                CloneModel::create_training(&mut **tx, org_id, workspace_id, Some(sid), &name)
+                    .await?;
+            let run = TestRun::enqueue(
+                &mut **tx,
+                EnqueueTestRun {
+                    suite_id: row.id,
+                    org_id,
+                    kind: "behavioral_clone",
+                    triggered_by: "manual",
+                    triggered_by_user: Some(user_id),
+                    git_ref: None,
+                    git_sha: None,
+                },
+            )
+            .await?;
+            Ok((row, run))
+        })
+    })
+    .await?;
 
     if let Err(e) = crate::run_queue::enqueue(
         state.redis.as_ref(),
@@ -254,25 +253,28 @@ pub async fn replay_capture_session(
     headers: HeaderMap,
     Json(request): Json<ReplaySessionRequest>,
 ) -> ApiResult<Json<TestRun>> {
-    let session = load_authorized_session(&state, user_id, &headers, session_id).await?;
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), session.workspace_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
+    let (session, org_id) =
+        load_authorized_session_with_org(&state, user_id, &headers, session_id).await?;
 
-    let run = TestRun::enqueue(
-        state.db.pool(),
-        EnqueueTestRun {
-            suite_id: session.id,
-            org_id: workspace.org_id,
-            kind: "replay",
-            triggered_by: "manual",
-            triggered_by_user: Some(user_id),
-            git_ref: None,
-            git_sha: None,
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let sid = session.id;
+    let run = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(TestRun::enqueue(
+                &mut **tx,
+                EnqueueTestRun {
+                    suite_id: sid,
+                    org_id,
+                    kind: "replay",
+                    triggered_by: "manual",
+                    triggered_by_user: Some(user_id),
+                    git_ref: None,
+                    git_sha: None,
+                },
+            )
+            .await?)
+        })
+    })
+    .await?;
 
     let mut payload = serde_json::Map::new();
     payload.insert("session_id".into(), serde_json::json!(session.id));
@@ -308,7 +310,7 @@ pub async fn get_clone_model(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<CloneModel>> {
-    let model = load_authorized_clone(&state, user_id, &headers, id).await?;
+    let (model, _) = load_authorized_clone(&state, user_id, &headers, id).await?;
     Ok(Json(model))
 }
 
@@ -319,27 +321,51 @@ pub async fn delete_clone_model(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    load_authorized_clone(&state, user_id, &headers, id).await?;
-    let deleted = CloneModel::delete(state.db.pool(), id).await.map_err(ApiError::Database)?;
+    let (_, org_id) = load_authorized_clone(&state, user_id, &headers, id).await?;
+    let deleted = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(CloneModel::delete(&mut **tx, id).await?) })
+    })
+    .await?;
     if !deleted {
         return Err(ApiError::InvalidRequest("Clone model not found".into()));
     }
     Ok(Json(serde_json::json!({ "deleted": true })))
 }
 
+/// Resolve the caller's org and verify `workspace_id` belongs to it.
+/// Returns the org id so callers can bind it for follow-up queries.
 async fn authorize_workspace(
     state: &AppState,
     user_id: Uuid,
     headers: &HeaderMap,
     workspace_id: Uuid,
-) -> ApiResult<()> {
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), workspace_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
+) -> ApiResult<Uuid> {
+    let org_id = resolve_org_id(state, user_id, headers).await?;
+    authorize_workspace_in_org(state, org_id, workspace_id).await?;
+    Ok(org_id)
+}
+
+async fn resolve_org_id(state: &AppState, user_id: Uuid, headers: &HeaderMap) -> ApiResult<Uuid> {
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
-    if ctx.org_id != workspace.org_id {
+    Ok(ctx.org_id)
+}
+
+/// Verify `workspace_id` belongs to `org_id`. The lookup is bound to that
+/// org, so a workspace in another org reads as absent ("Workspace not
+/// found", same as an explicit mismatch).
+async fn authorize_workspace_in_org(
+    state: &AppState,
+    org_id: Uuid,
+    workspace_id: Uuid,
+) -> ApiResult<()> {
+    let workspace = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(CloudWorkspace::find_by_id(&mut **tx, workspace_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
+    if org_id != workspace.org_id {
         return Err(ApiError::InvalidRequest("Workspace not found".into()));
     }
     Ok(())
@@ -351,26 +377,40 @@ async fn load_authorized_session(
     headers: &HeaderMap,
     id: Uuid,
 ) -> ApiResult<CaptureSession> {
+    Ok(load_authorized_session_with_org(state, user_id, headers, id).await?.0)
+}
+
+/// Like [`load_authorized_session`], also returning the authorized org id.
+async fn load_authorized_session_with_org(
+    state: &AppState,
+    user_id: Uuid,
+    headers: &HeaderMap,
+    id: Uuid,
+) -> ApiResult<(CaptureSession, Uuid)> {
     let session = CaptureSession::find_by_id(state.db.pool(), id)
         .await
         .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Capture session not found".into()))?;
-    authorize_workspace(state, user_id, headers, session.workspace_id).await?;
-    Ok(session)
+    let org_id = authorize_workspace(state, user_id, headers, session.workspace_id).await?;
+    Ok((session, org_id))
 }
 
+/// Load a clone model bound to the caller's org (a model in another org
+/// reads as absent), then verify its workspace. Returns the org id.
 async fn load_authorized_clone(
     state: &AppState,
     user_id: Uuid,
     headers: &HeaderMap,
     id: Uuid,
-) -> ApiResult<CloneModel> {
-    let model = CloneModel::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Clone model not found".into()))?;
-    authorize_workspace(state, user_id, headers, model.workspace_id).await?;
-    Ok(model)
+) -> ApiResult<(CloneModel, Uuid)> {
+    let org_id = resolve_org_id(state, user_id, headers).await?;
+    let model = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(CloneModel::find_by_id(&mut **tx, id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Clone model not found".into()))?;
+    authorize_workspace_in_org(state, org_id, model.workspace_id).await?;
+    Ok((model, org_id))
 }
 
 async fn load_org(

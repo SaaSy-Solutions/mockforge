@@ -75,7 +75,7 @@ pub struct IncidentEvent {
 #[cfg(feature = "postgres")]
 impl Incident {
     pub async fn list_by_org(
-        pool: &PgPool,
+        conn: &mut sqlx::PgConnection,
         org_id: Uuid,
         status_filter: Option<&str>,
         limit: i64,
@@ -89,7 +89,7 @@ impl Incident {
                 .bind(org_id)
                 .bind(status)
                 .bind(limit)
-                .fetch_all(pool)
+                .fetch_all(&mut *conn)
                 .await
             }
             None => {
@@ -98,16 +98,19 @@ impl Incident {
                 )
                 .bind(org_id)
                 .bind(limit)
-                .fetch_all(pool)
+                .fetch_all(&mut *conn)
                 .await
             }
         }
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM incidents WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
@@ -118,8 +121,11 @@ impl Incident {
     /// Relies on the partial-unique index `idx_incidents_open_dedupe` —
     /// `ON CONFLICT DO NOTHING` against that index keeps repeated fires
     /// idempotent without needing application-side coordination.
-    pub async fn raise(pool: &PgPool, input: RaiseIncidentInput<'_>) -> sqlx::Result<Self> {
-        let mut tx = pool.begin().await?;
+    pub async fn raise(
+        conn: &mut sqlx::PgConnection,
+        input: RaiseIncidentInput<'_>,
+    ) -> sqlx::Result<Self> {
+        let mut tx = sqlx::Connection::begin(&mut *conn).await?;
 
         // Try to insert. The partial unique index makes this fail silently
         // when there's already an open incident matching the dedupe key.
@@ -180,12 +186,12 @@ impl Incident {
     /// resolved. Used by sources that auto-resolve when the underlying
     /// signal recovers (e.g., next clean drift check).
     pub async fn auto_resolve(
-        pool: &PgPool,
+        conn: &mut sqlx::PgConnection,
         org_id: Uuid,
         source: &str,
         dedupe_key: &str,
     ) -> sqlx::Result<u64> {
-        let mut tx = pool.begin().await?;
+        let mut tx = sqlx::Connection::begin(&mut *conn).await?;
 
         let rows = sqlx::query(
             r#"
@@ -222,11 +228,11 @@ impl Incident {
     }
 
     pub async fn acknowledge(
-        pool: &PgPool,
+        conn: &mut sqlx::PgConnection,
         id: Uuid,
         actor_id: Uuid,
     ) -> sqlx::Result<Option<Self>> {
-        let mut tx = pool.begin().await?;
+        let mut tx = sqlx::Connection::begin(&mut *conn).await?;
 
         let updated: Option<Self> = sqlx::query_as::<_, Self>(
             r#"
@@ -259,8 +265,12 @@ impl Incident {
         Ok(updated)
     }
 
-    pub async fn resolve(pool: &PgPool, id: Uuid, actor_id: Uuid) -> sqlx::Result<Option<Self>> {
-        let mut tx = pool.begin().await?;
+    pub async fn resolve(
+        conn: &mut sqlx::PgConnection,
+        id: Uuid,
+        actor_id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
+        let mut tx = sqlx::Connection::begin(&mut *conn).await?;
 
         let updated: Option<Self> = sqlx::query_as::<_, Self>(
             r#"
@@ -308,7 +318,10 @@ impl Incident {
     /// incident drops out of the list.
     ///
     /// Capped at `limit` rows so a backlog can't OOM the worker.
-    pub async fn list_pending_dispatch(pool: &PgPool, limit: i64) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_pending_dispatch(
+        executor: impl sqlx::PgExecutor<'_>,
+        limit: i64,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             r#"
             SELECT i.*
@@ -324,7 +337,7 @@ impl Incident {
             "#,
         )
         .bind(limit)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
@@ -389,7 +402,7 @@ impl Incident {
     /// users don't expect "your alert is resolved" emails for alerts
     /// they never received.
     pub async fn list_pending_resolution_dispatch(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         limit: i64,
     ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
@@ -412,7 +425,7 @@ impl Incident {
             "#,
         )
         .bind(limit)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 

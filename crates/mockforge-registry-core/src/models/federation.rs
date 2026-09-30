@@ -21,7 +21,7 @@ pub struct Federation {
 impl Federation {
     /// Create a new federation
     pub async fn create(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         created_by: Uuid,
         name: &str,
@@ -40,31 +40,37 @@ impl Federation {
         .bind(description)
         .bind(services)
         .bind(created_by)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Find a federation by ID
-    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM federations WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// Find all federations for an organization
-    pub async fn find_by_org(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn find_by_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM federations WHERE org_id = $1 ORDER BY created_at DESC",
         )
         .bind(org_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     /// Update a federation
     pub async fn update(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         name: Option<&str>,
         description: Option<&str>,
@@ -86,15 +92,15 @@ impl Federation {
         .bind(name)
         .bind(description)
         .bind(services)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
     /// Delete a federation
-    pub async fn delete(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<()> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<()> {
         sqlx::query("DELETE FROM federations WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?;
         Ok(())
     }

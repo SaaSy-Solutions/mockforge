@@ -27,6 +27,7 @@ use crate::{
     error::ApiError,
     middleware::resolve_org_context,
     models::{Subscription, SubscriptionStatus},
+    store::with_org_context,
     AppState,
 };
 
@@ -103,8 +104,15 @@ pub async fn past_due_writes_blocked_middleware(
         return Ok(next.run(request).await);
     };
 
-    let pool = state.db.pool();
-    let subscription = match Subscription::find_by_org(pool, org_ctx.org_id).await {
+    // Request-path (RLS) pool, bound to the resolved org. A wrong or missing
+    // binding here would read as "no subscription" and fail OPEN, so the org
+    // is bound explicitly rather than relying on the task-local.
+    let org_id = org_ctx.org_id;
+    let subscription = match with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(Subscription::find_by_org(&mut **tx, org_id).await?) })
+    })
+    .await
+    {
         Ok(Some(sub)) => sub,
         Ok(None) => return Ok(next.run(request).await), // free orgs: no subscription, never past_due
         Err(e) => {

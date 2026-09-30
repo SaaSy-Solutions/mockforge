@@ -160,17 +160,32 @@ impl RegistryStore for PgRegistryStore {
         scopes: &[TokenScope],
         expires_at: Option<DateTime<Utc>>,
     ) -> StoreResult<(String, ApiToken)> {
-        ApiToken::create(&self.pool, org_id, user_id, name, scopes, expires_at)
-            .await
-            .map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                ApiToken::create(&mut **tx, org_id, user_id, name, scopes, expires_at)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn find_api_token_by_id(&self, token_id: Uuid) -> StoreResult<Option<ApiToken>> {
-        ApiToken::find_by_id(&self.pool, token_id).await.map_err(Into::into)
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(
+                async move { ApiToken::find_by_id(&mut **tx, token_id).await.map_err(Into::into) },
+            )
+        })
+        .await
     }
 
     async fn list_api_tokens_by_org(&self, org_id: Uuid) -> StoreResult<Vec<ApiToken>> {
-        ApiToken::find_by_org(&self.pool, org_id).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(
+                async move { ApiToken::find_by_org(&mut **tx, org_id).await.map_err(Into::into) },
+            )
+        })
+        .await
     }
 
     async fn find_api_token_by_prefix(
@@ -178,15 +193,25 @@ impl RegistryStore for PgRegistryStore {
         org_id: Uuid,
         prefix: &str,
     ) -> StoreResult<Option<ApiToken>> {
-        ApiToken::find_by_prefix(&self.pool, org_id, prefix).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                ApiToken::find_by_prefix(&mut **tx, org_id, prefix).await.map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn verify_api_token(&self, token: &str) -> StoreResult<Option<ApiToken>> {
-        ApiToken::verify_token(&self.pool, token).await.map_err(Into::into)
+        ApiToken::verify_token(&mut *self.owner_pool.acquire().await?, token)
+            .await
+            .map_err(Into::into)
     }
 
     async fn delete_api_token(&self, token_id: Uuid) -> StoreResult<()> {
-        ApiToken::delete(&self.pool, token_id).await.map_err(Into::into)
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(async move { ApiToken::delete(&mut **tx, token_id).await.map_err(Into::into) })
+        })
+        .await
     }
 
     async fn rotate_api_token(
@@ -195,9 +220,12 @@ impl RegistryStore for PgRegistryStore {
         new_name: Option<&str>,
         delete_old: bool,
     ) -> StoreResult<(String, ApiToken, Option<ApiToken>)> {
-        ApiToken::rotate(&self.pool, token_id, new_name, delete_old)
-            .await
-            .map_err(Into::into)
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(async move {
+                ApiToken::rotate(tx, token_id, new_name, delete_old).await.map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn find_api_tokens_needing_rotation(
@@ -205,13 +233,23 @@ impl RegistryStore for PgRegistryStore {
         org_id: Option<Uuid>,
         days_old: i64,
     ) -> StoreResult<Vec<ApiToken>> {
-        ApiToken::find_tokens_needing_rotation(&self.pool, org_id, days_old)
-            .await
-            .map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, org_id, move |tx| {
+            Box::pin(async move {
+                ApiToken::find_tokens_needing_rotation(&mut **tx, org_id, days_old)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn get_org_setting(&self, org_id: Uuid, key: &str) -> StoreResult<Option<OrgSetting>> {
-        OrgSetting::get(&self.pool, org_id, key).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(
+                async move { OrgSetting::get(&mut **tx, org_id, key).await.map_err(Into::into) },
+            )
+        })
+        .await
     }
 
     async fn set_org_setting(
@@ -220,11 +258,21 @@ impl RegistryStore for PgRegistryStore {
         key: &str,
         value: serde_json::Value,
     ) -> StoreResult<OrgSetting> {
-        OrgSetting::set(&self.pool, org_id, key, value).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                OrgSetting::set(&mut **tx, org_id, key, value).await.map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn delete_org_setting(&self, org_id: Uuid, key: &str) -> StoreResult<()> {
-        OrgSetting::delete(&self.pool, org_id, key).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(
+                async move { OrgSetting::delete(&mut **tx, org_id, key).await.map_err(Into::into) },
+            )
+        })
+        .await
     }
 
     async fn create_organization(
@@ -234,7 +282,7 @@ impl RegistryStore for PgRegistryStore {
         owner_id: Uuid,
         plan: Plan,
     ) -> StoreResult<Organization> {
-        Organization::create(&self.pool, name, slug, owner_id, plan)
+        Organization::create(&mut *self.owner_pool.acquire().await?, name, slug, owner_id, plan)
             .await
             .map_err(Into::into)
     }
@@ -248,7 +296,7 @@ impl RegistryStore for PgRegistryStore {
     }
 
     async fn list_organizations_by_user(&self, user_id: Uuid) -> StoreResult<Vec<Organization>> {
-        Organization::find_by_user(&self.pool, user_id).await.map_err(Into::into)
+        Organization::find_by_user(&self.owner_pool, user_id).await.map_err(Into::into)
     }
 
     async fn update_organization_name(&self, org_id: Uuid, name: &str) -> StoreResult<()> {
@@ -276,13 +324,18 @@ impl RegistryStore for PgRegistryStore {
     }
 
     async fn organization_has_active_subscription(&self, org_id: Uuid) -> StoreResult<bool> {
-        let row: (bool,) = sqlx::query_as(
-            "SELECT EXISTS(SELECT 1 FROM subscriptions WHERE org_id = $1 AND status IN ('active', 'trialing'))",
-        )
-        .bind(org_id)
-        .fetch_one(&self.pool)
-        .await?;
-        Ok(row.0)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                    let row: (bool,) = sqlx::query_as(
+                        "SELECT EXISTS(SELECT 1 FROM subscriptions WHERE org_id = $1 AND status IN ('active', 'trialing'))",
+                    )
+                    .bind(org_id)
+                    .fetch_one(&mut **tx)
+                    .await?;
+                    Ok(row.0)
+            })
+        })
+        .await
     }
 
     async fn delete_organization(&self, org_id: Uuid) -> StoreResult<()> {
@@ -300,15 +353,30 @@ impl RegistryStore for PgRegistryStore {
         user_id: Uuid,
         role: OrgRole,
     ) -> StoreResult<OrgMember> {
-        OrgMember::create(&self.pool, org_id, user_id, role).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                OrgMember::create(&mut **tx, org_id, user_id, role).await.map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn find_org_member(&self, org_id: Uuid, user_id: Uuid) -> StoreResult<Option<OrgMember>> {
-        OrgMember::find(&self.pool, org_id, user_id).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                OrgMember::find(&mut **tx, org_id, user_id).await.map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn list_org_members(&self, org_id: Uuid) -> StoreResult<Vec<OrgMember>> {
-        OrgMember::find_by_org(&self.pool, org_id).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(
+                async move { OrgMember::find_by_org(&mut **tx, org_id).await.map_err(Into::into) },
+            )
+        })
+        .await
     }
 
     async fn update_org_member_role(
@@ -317,13 +385,23 @@ impl RegistryStore for PgRegistryStore {
         user_id: Uuid,
         role: OrgRole,
     ) -> StoreResult<()> {
-        OrgMember::update_role(&self.pool, org_id, user_id, role)
-            .await
-            .map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                OrgMember::update_role(&mut **tx, org_id, user_id, role)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn delete_org_member(&self, org_id: Uuid, user_id: Uuid) -> StoreResult<()> {
-        OrgMember::delete(&self.pool, org_id, user_id).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                OrgMember::delete(&mut **tx, org_id, user_id).await.map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn record_audit_event(
@@ -423,7 +501,9 @@ impl RegistryStore for PgRegistryStore {
         feature: FeatureType,
         metadata: Option<serde_json::Value>,
     ) {
-        if let Err(e) = FeatureUsage::record(&self.pool, org_id, user_id, feature, metadata).await {
+        if let Err(e) =
+            FeatureUsage::record(&self.owner_pool, org_id, user_id, feature, metadata).await
+        {
             tracing::warn!("Failed to record feature usage: {}", e);
         }
     }
@@ -434,9 +514,14 @@ impl RegistryStore for PgRegistryStore {
         feature: FeatureType,
         days: i64,
     ) -> StoreResult<i64> {
-        FeatureUsage::count_by_org(&self.pool, org_id, feature, days)
-            .await
-            .map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                FeatureUsage::count_by_org(&mut **tx, org_id, feature, days)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn record_suspicious_activity(
@@ -451,7 +536,7 @@ impl RegistryStore for PgRegistryStore {
         user_agent: Option<&str>,
     ) {
         record_suspicious_activity(
-            &self.pool,
+            &self.owner_pool,
             org_id,
             user_id,
             activity_type,
@@ -606,9 +691,13 @@ impl RegistryStore for PgRegistryStore {
         user_id: Uuid,
         username: &str,
     ) -> StoreResult<Organization> {
-        Organization::get_or_create_personal_org(&self.pool, user_id, username)
-            .await
-            .map_err(Into::into)
+        Organization::get_or_create_personal_org(
+            &mut *self.owner_pool.acquire().await?,
+            user_id,
+            username,
+        )
+        .await
+        .map_err(Into::into)
     }
 
     async fn update_user_password_hash(
@@ -736,17 +825,30 @@ impl RegistryStore for PgRegistryStore {
         description: &str,
         services: &serde_json::Value,
     ) -> StoreResult<Federation> {
-        Federation::create(&self.pool, org_id, created_by, name, description, services)
-            .await
-            .map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                Federation::create(&mut **tx, org_id, created_by, name, description, services)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn find_federation_by_id(&self, id: Uuid) -> StoreResult<Option<Federation>> {
-        Federation::find_by_id(&self.pool, id).await.map_err(Into::into)
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(async move { Federation::find_by_id(&mut **tx, id).await.map_err(Into::into) })
+        })
+        .await
     }
 
     async fn list_federations_by_org(&self, org_id: Uuid) -> StoreResult<Vec<Federation>> {
-        Federation::find_by_org(&self.pool, org_id).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(
+                async move { Federation::find_by_org(&mut **tx, org_id).await.map_err(Into::into) },
+            )
+        })
+        .await
     }
 
     async fn update_federation(
@@ -756,13 +858,21 @@ impl RegistryStore for PgRegistryStore {
         description: Option<&str>,
         services: Option<&serde_json::Value>,
     ) -> StoreResult<Option<Federation>> {
-        Federation::update(&self.pool, id, name, description, services)
-            .await
-            .map_err(Into::into)
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(async move {
+                Federation::update(&mut **tx, id, name, description, services)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn delete_federation(&self, id: Uuid) -> StoreResult<()> {
-        Federation::delete(&self.pool, id).await.map_err(Into::into)
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(async move { Federation::delete(&mut **tx, id).await.map_err(Into::into) })
+        })
+        .await
     }
 
     async fn create_federation_scenario_activation(
@@ -856,25 +966,30 @@ impl RegistryStore for PgRegistryStore {
         &self,
         workspace_id: Uuid,
     ) -> StoreResult<Vec<FederationScenarioActivation>> {
-        // JSONB `@>` is a containment check — matches when the services array
-        // contains an object whose `workspace_id` equals the target. Indexable
-        // via a GIN index on `federations.services` (not currently present,
-        // can be added if poll latency becomes an issue).
-        sqlx::query_as::<_, FederationScenarioActivation>(
-            r#"
-            SELECT a.*
-            FROM federation_scenario_activations a
-            JOIN federations f ON f.id = a.federation_id
-            WHERE a.status = 'active'
-              AND f.services @> jsonb_build_array(
-                      jsonb_build_object('workspace_id', $1::text)
-                  )
-            "#,
-        )
-        .bind(workspace_id.to_string())
-        .fetch_all(&self.pool)
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(async move {
+                // JSONB `@>` is a containment check — matches when the services array
+                // contains an object whose `workspace_id` equals the target. Indexable
+                // via a GIN index on `federations.services` (not currently present,
+                // can be added if poll latency becomes an issue).
+                sqlx::query_as::<_, FederationScenarioActivation>(
+                    r#"
+                        SELECT a.*
+                        FROM federation_scenario_activations a
+                        JOIN federations f ON f.id = a.federation_id
+                        WHERE a.status = 'active'
+                          AND f.services @> jsonb_build_array(
+                                  jsonb_build_object('workspace_id', $1::text)
+                              )
+                        "#,
+                )
+                .bind(workspace_id.to_string())
+                .fetch_all(&mut **tx)
+                .await
+                .map_err(Into::into)
+            })
+        })
         .await
-        .map_err(Into::into)
     }
 
     async fn list_unresolved_suspicious_activities(
@@ -884,19 +999,29 @@ impl RegistryStore for PgRegistryStore {
         severity: Option<&str>,
         limit: Option<i64>,
     ) -> StoreResult<Vec<SuspiciousActivity>> {
-        SuspiciousActivity::get_unresolved(&self.pool, org_id, user_id, severity, limit)
-            .await
-            .map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, org_id, move |tx| {
+            Box::pin(async move {
+                SuspiciousActivity::get_unresolved(&mut **tx, org_id, user_id, severity, limit)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn count_unresolved_suspicious_activities(&self, org_id: Uuid) -> StoreResult<i64> {
-        let row: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM suspicious_activities WHERE org_id = $1 AND resolved = FALSE",
-        )
-        .bind(org_id)
-        .fetch_one(&self.pool)
-        .await?;
-        Ok(row.0)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                    let row: (i64,) = sqlx::query_as(
+                        "SELECT COUNT(*) FROM suspicious_activities WHERE org_id = $1 AND resolved = FALSE",
+                    )
+                    .bind(org_id)
+                    .fetch_one(&mut **tx)
+                    .await?;
+                    Ok(row.0)
+            })
+        })
+        .await
     }
 
     async fn resolve_suspicious_activity(
@@ -905,13 +1030,19 @@ impl RegistryStore for PgRegistryStore {
         activity_id: Uuid,
         resolved_by: Uuid,
     ) -> StoreResult<()> {
-        let affected = SuspiciousActivity::resolve(&self.pool, org_id, activity_id, resolved_by)
-            .await
-            .map_err(StoreError::from)?;
-        if affected == 0 {
-            return Err(StoreError::NotFound);
-        }
-        Ok(())
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                let affected =
+                    SuspiciousActivity::resolve(&mut **tx, org_id, activity_id, resolved_by)
+                        .await
+                        .map_err(StoreError::from)?;
+                if affected == 0 {
+                    return Err(StoreError::NotFound);
+                }
+                Ok(())
+            })
+        })
+        .await
     }
 
     async fn create_cloud_workspace(
@@ -921,17 +1052,32 @@ impl RegistryStore for PgRegistryStore {
         name: &str,
         description: &str,
     ) -> StoreResult<CloudWorkspace> {
-        CloudWorkspace::create(&self.pool, org_id, created_by, name, description)
-            .await
-            .map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                CloudWorkspace::create(&mut **tx, org_id, created_by, name, description)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn find_cloud_workspace_by_id(&self, id: Uuid) -> StoreResult<Option<CloudWorkspace>> {
-        CloudWorkspace::find_by_id(&self.pool, id).await.map_err(Into::into)
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(
+                async move { CloudWorkspace::find_by_id(&mut **tx, id).await.map_err(Into::into) },
+            )
+        })
+        .await
     }
 
     async fn list_cloud_workspaces_by_org(&self, org_id: Uuid) -> StoreResult<Vec<CloudWorkspace>> {
-        CloudWorkspace::find_by_org(&self.pool, org_id).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                CloudWorkspace::find_by_org(&mut **tx, org_id).await.map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn update_cloud_workspace(
@@ -942,13 +1088,21 @@ impl RegistryStore for PgRegistryStore {
         is_active: Option<bool>,
         settings: Option<&serde_json::Value>,
     ) -> StoreResult<Option<CloudWorkspace>> {
-        CloudWorkspace::update(&self.pool, id, name, description, is_active, settings)
-            .await
-            .map_err(Into::into)
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(async move {
+                CloudWorkspace::update(&mut **tx, id, name, description, is_active, settings)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn delete_cloud_workspace(&self, id: Uuid) -> StoreResult<()> {
-        CloudWorkspace::delete(&self.pool, id).await.map_err(Into::into)
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(async move { CloudWorkspace::delete(&mut **tx, id).await.map_err(Into::into) })
+        })
+        .await
     }
 
     async fn create_cloud_service(
@@ -960,25 +1114,40 @@ impl RegistryStore for PgRegistryStore {
         description: &str,
         base_url: &str,
     ) -> StoreResult<CloudService> {
-        CloudService::create(
-            &self.pool,
-            org_id,
-            workspace_id,
-            created_by,
-            name,
-            description,
-            base_url,
-        )
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                CloudService::create(
+                    &mut **tx,
+                    org_id,
+                    workspace_id,
+                    created_by,
+                    name,
+                    description,
+                    base_url,
+                )
+                .await
+                .map_err(Into::into)
+            })
+        })
         .await
-        .map_err(Into::into)
     }
 
     async fn find_cloud_service_by_id(&self, id: Uuid) -> StoreResult<Option<CloudService>> {
-        CloudService::find_by_id(&self.pool, id).await.map_err(Into::into)
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(
+                async move { CloudService::find_by_id(&mut **tx, id).await.map_err(Into::into) },
+            )
+        })
+        .await
     }
 
     async fn list_cloud_services_by_org(&self, org_id: Uuid) -> StoreResult<Vec<CloudService>> {
-        CloudService::find_by_org(&self.pool, org_id).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                CloudService::find_by_org(&mut **tx, org_id).await.map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn list_cloud_services_by_workspace(
@@ -986,9 +1155,14 @@ impl RegistryStore for PgRegistryStore {
         org_id: Uuid,
         workspace_id: Uuid,
     ) -> StoreResult<Vec<CloudService>> {
-        CloudService::find_by_workspace(&self.pool, org_id, workspace_id)
-            .await
-            .map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                CloudService::find_by_workspace(&mut **tx, org_id, workspace_id)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn update_cloud_service(
@@ -1002,23 +1176,31 @@ impl RegistryStore for PgRegistryStore {
         routes: Option<&serde_json::Value>,
         workspace_id: Option<Option<Uuid>>,
     ) -> StoreResult<Option<CloudService>> {
-        CloudService::update(
-            &self.pool,
-            id,
-            name,
-            description,
-            base_url,
-            enabled,
-            tags,
-            routes,
-            workspace_id,
-        )
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(async move {
+                CloudService::update(
+                    &mut **tx,
+                    id,
+                    name,
+                    description,
+                    base_url,
+                    enabled,
+                    tags,
+                    routes,
+                    workspace_id,
+                )
+                .await
+                .map_err(Into::into)
+            })
+        })
         .await
-        .map_err(Into::into)
     }
 
     async fn delete_cloud_service(&self, id: Uuid) -> StoreResult<()> {
-        CloudService::delete(&self.pool, id).await.map_err(Into::into)
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(async move { CloudService::delete(&mut **tx, id).await.map_err(Into::into) })
+        })
+        .await
     }
 
     async fn create_cloud_fixture(
@@ -1035,26 +1217,36 @@ impl RegistryStore for PgRegistryStore {
         workspace_id: Option<Uuid>,
         route_path: Option<&str>,
     ) -> StoreResult<CloudFixture> {
-        CloudFixture::create(
-            &self.pool,
-            org_id,
-            created_by,
-            name,
-            description,
-            path,
-            method,
-            content,
-            protocol,
-            tags,
-            workspace_id,
-            route_path,
-        )
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                CloudFixture::create(
+                    &mut **tx,
+                    org_id,
+                    created_by,
+                    name,
+                    description,
+                    path,
+                    method,
+                    content,
+                    protocol,
+                    tags,
+                    workspace_id,
+                    route_path,
+                )
+                .await
+                .map_err(Into::into)
+            })
+        })
         .await
-        .map_err(Into::into)
     }
 
     async fn find_cloud_fixture_by_id(&self, id: Uuid) -> StoreResult<Option<CloudFixture>> {
-        CloudFixture::find_by_id(&self.pool, id).await.map_err(Into::into)
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(
+                async move { CloudFixture::find_by_id(&mut **tx, id).await.map_err(Into::into) },
+            )
+        })
+        .await
     }
 
     async fn list_cloud_fixtures_by_org(
@@ -1062,9 +1254,14 @@ impl RegistryStore for PgRegistryStore {
         org_id: Uuid,
         workspace_id: Option<Uuid>,
     ) -> StoreResult<Vec<CloudFixture>> {
-        CloudFixture::find_by_org(&self.pool, org_id, workspace_id)
-            .await
-            .map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                CloudFixture::find_by_org(&mut **tx, org_id, workspace_id)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn update_cloud_fixture(
@@ -1080,25 +1277,33 @@ impl RegistryStore for PgRegistryStore {
         route_path: Option<&str>,
         workspace_id: Option<Option<Uuid>>,
     ) -> StoreResult<Option<CloudFixture>> {
-        CloudFixture::update(
-            &self.pool,
-            id,
-            name,
-            description,
-            path,
-            method,
-            content,
-            protocol,
-            tags,
-            route_path,
-            workspace_id,
-        )
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(async move {
+                CloudFixture::update(
+                    &mut **tx,
+                    id,
+                    name,
+                    description,
+                    path,
+                    method,
+                    content,
+                    protocol,
+                    tags,
+                    route_path,
+                    workspace_id,
+                )
+                .await
+                .map_err(Into::into)
+            })
+        })
         .await
-        .map_err(Into::into)
     }
 
     async fn delete_cloud_fixture(&self, id: Uuid) -> StoreResult<()> {
-        CloudFixture::delete(&self.pool, id).await.map_err(Into::into)
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(async move { CloudFixture::delete(&mut **tx, id).await.map_err(Into::into) })
+        })
+        .await
     }
 
     async fn delete_cloud_fixtures_bulk(
@@ -1106,7 +1311,12 @@ impl RegistryStore for PgRegistryStore {
         org_id: Uuid,
         ids: &[Uuid],
     ) -> StoreResult<Vec<Uuid>> {
-        CloudFixture::delete_many(&self.pool, org_id, ids).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                CloudFixture::delete_many(&mut **tx, org_id, ids).await.map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn create_hosted_mock(
@@ -1241,24 +1451,37 @@ impl RegistryStore for PgRegistryStore {
     }
 
     async fn get_or_create_current_usage_counter(&self, org_id: Uuid) -> StoreResult<UsageCounter> {
-        UsageCounter::get_or_create_current(&self.pool, org_id)
-            .await
-            .map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                UsageCounter::get_or_create_current(&mut **tx, org_id).await.map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn list_usage_counters_by_org(&self, org_id: Uuid) -> StoreResult<Vec<UsageCounter>> {
-        UsageCounter::get_all_for_org(&self.pool, org_id).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                UsageCounter::get_all_for_org(&mut **tx, org_id).await.map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn find_sso_config_by_org(&self, org_id: Uuid) -> StoreResult<Option<SSOConfiguration>> {
-        SSOConfiguration::find_by_org(&self.pool, org_id).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                SSOConfiguration::find_by_org(&mut **tx, org_id).await.map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn find_sso_config_by_email_domain(
         &self,
         domain: &str,
     ) -> StoreResult<Option<(SSOConfiguration, String)>> {
-        SSOConfiguration::find_by_email_domain(&self.pool, domain)
+        SSOConfiguration::find_by_email_domain(&self.owner_pool, domain)
             .await
             .map_err(Into::into)
     }
@@ -1281,44 +1504,69 @@ impl RegistryStore for PgRegistryStore {
         oidc_client_secret: Option<&str>,
         email_domain: Option<&str>,
     ) -> StoreResult<SSOConfiguration> {
-        SSOConfiguration::upsert(
-            &self.pool,
-            org_id,
-            provider,
-            saml_entity_id,
-            saml_sso_url,
-            saml_slo_url,
-            saml_x509_cert,
-            saml_name_id_format,
-            attribute_mapping,
-            require_signed_assertions,
-            require_signed_responses,
-            allow_unsolicited_responses,
-            oidc_issuer_url,
-            oidc_client_id,
-            oidc_client_secret,
-            email_domain,
-        )
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                SSOConfiguration::upsert(
+                    &mut **tx,
+                    org_id,
+                    provider,
+                    saml_entity_id,
+                    saml_sso_url,
+                    saml_slo_url,
+                    saml_x509_cert,
+                    saml_name_id_format,
+                    attribute_mapping,
+                    require_signed_assertions,
+                    require_signed_responses,
+                    allow_unsolicited_responses,
+                    oidc_issuer_url,
+                    oidc_client_id,
+                    oidc_client_secret,
+                    email_domain,
+                )
+                .await
+                .map_err(Into::into)
+            })
+        })
         .await
-        .map_err(Into::into)
     }
 
     async fn enable_sso_config(&self, org_id: Uuid) -> StoreResult<()> {
-        SSOConfiguration::enable(&self.pool, org_id).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                SSOConfiguration::enable(&mut **tx, org_id).await.map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn disable_sso_config(&self, org_id: Uuid) -> StoreResult<()> {
-        SSOConfiguration::disable(&self.pool, org_id).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                SSOConfiguration::disable(&mut **tx, org_id).await.map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn delete_sso_config(&self, org_id: Uuid) -> StoreResult<()> {
-        SSOConfiguration::delete(&self.pool, org_id).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                SSOConfiguration::delete(&mut **tx, org_id).await.map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn is_saml_assertion_used(&self, assertion_id: &str, org_id: Uuid) -> StoreResult<bool> {
-        SAMLAssertionId::is_used(&self.pool, assertion_id, org_id)
-            .await
-            .map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                SAMLAssertionId::is_used(&mut **tx, assertion_id, org_id)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn record_saml_assertion_used(
@@ -1330,17 +1578,22 @@ impl RegistryStore for PgRegistryStore {
         issued_at: DateTime<Utc>,
         expires_at: DateTime<Utc>,
     ) -> StoreResult<SAMLAssertionId> {
-        SAMLAssertionId::record_used(
-            &self.pool,
-            assertion_id,
-            org_id,
-            user_id,
-            name_id,
-            issued_at,
-            expires_at,
-        )
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                SAMLAssertionId::record_used(
+                    &mut **tx,
+                    assertion_id,
+                    org_id,
+                    user_id,
+                    name_id,
+                    issued_at,
+                    expires_at,
+                )
+                .await
+                .map_err(Into::into)
+            })
+        })
         .await
-        .map_err(Into::into)
     }
 
     async fn create_org_template(
@@ -1353,26 +1606,41 @@ impl RegistryStore for PgRegistryStore {
         created_by: Uuid,
         is_default: bool,
     ) -> StoreResult<OrgTemplate> {
-        OrgTemplate::create(
-            &self.pool,
-            org_id,
-            name,
-            description,
-            blueprint_config,
-            security_baseline,
-            created_by,
-            is_default,
-        )
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                OrgTemplate::create(
+                    tx,
+                    org_id,
+                    name,
+                    description,
+                    blueprint_config,
+                    security_baseline,
+                    created_by,
+                    is_default,
+                )
+                .await
+                .map_err(Into::into)
+            })
+        })
         .await
-        .map_err(Into::into)
     }
 
     async fn find_org_template_by_id(&self, id: Uuid) -> StoreResult<Option<OrgTemplate>> {
-        OrgTemplate::find_by_id(&self.pool, id).await.map_err(Into::into)
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(
+                async move { OrgTemplate::find_by_id(&mut **tx, id).await.map_err(Into::into) },
+            )
+        })
+        .await
     }
 
     async fn list_org_templates_by_org(&self, org_id: Uuid) -> StoreResult<Vec<OrgTemplate>> {
-        OrgTemplate::list_by_org(&self.pool, org_id).await.map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                OrgTemplate::list_by_org(&mut **tx, org_id).await.map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn update_org_template(
@@ -1384,14 +1652,22 @@ impl RegistryStore for PgRegistryStore {
         security_baseline: Option<serde_json::Value>,
         is_default: Option<bool>,
     ) -> StoreResult<OrgTemplate> {
-        template
-            .update(&self.pool, name, description, blueprint_config, security_baseline, is_default)
-            .await
-            .map_err(Into::into)
+        crate::store::with_optional_org(&self.pool, Some(template.org_id), move |tx| {
+            Box::pin(async move {
+                template
+                    .update(tx, name, description, blueprint_config, security_baseline, is_default)
+                    .await
+                    .map_err(Into::into)
+            })
+        })
+        .await
     }
 
     async fn delete_org_template(&self, id: Uuid) -> StoreResult<()> {
-        OrgTemplate::delete(&self.pool, id).await.map_err(Into::into)
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(async move { OrgTemplate::delete(&mut **tx, id).await.map_err(Into::into) })
+        })
+        .await
     }
 
     async fn create_template(
@@ -2118,7 +2394,7 @@ impl RegistryStore for PgRegistryStore {
             "#,
         )
         .bind(author_id)
-        .fetch_all(&self.pool)
+        .fetch_all(&self.owner_pool)
         .await
         .map_err(Into::into)
     }
@@ -2440,7 +2716,7 @@ impl RegistryStore for PgRegistryStore {
     }
 
     async fn update_template_review_stats(&self, template_id: Uuid) -> StoreResult<()> {
-        TemplateReview::update_template_stats(&self.pool, template_id)
+        TemplateReview::update_template_stats(&mut *self.owner_pool.acquire().await?, template_id)
             .await
             .map_err(Into::into)
     }
@@ -2524,7 +2800,7 @@ impl RegistryStore for PgRegistryStore {
     }
 
     async fn update_scenario_review_stats(&self, scenario_id: Uuid) -> StoreResult<()> {
-        ScenarioReview::update_scenario_stats(&self.pool, scenario_id)
+        ScenarioReview::update_scenario_stats(&mut *self.owner_pool.acquire().await?, scenario_id)
             .await
             .map_err(Into::into)
     }
@@ -2833,7 +3109,7 @@ impl RegistryStore for PgRegistryStore {
         &self,
         interval: &str,
     ) -> StoreResult<ConversionFunnelSnapshot> {
-        let pool = &self.pool;
+        let pool = &self.owner_pool;
 
         let (signups,): (i64,) = sqlx::query_as(&format!(
             "SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '{}'",
@@ -2968,7 +3244,7 @@ impl RegistryStore for PgRegistryStore {
     async fn list_user_api_tokens(&self, user_id: Uuid) -> StoreResult<Vec<ApiToken>> {
         sqlx::query_as::<_, ApiToken>("SELECT * FROM api_tokens WHERE user_id = $1")
             .bind(user_id)
-            .fetch_all(&self.pool)
+            .fetch_all(&self.owner_pool)
             .await
             .map_err(Into::into)
     }
@@ -2978,51 +3254,66 @@ impl RegistryStore for PgRegistryStore {
         org_id: Uuid,
         user_id: Uuid,
     ) -> StoreResult<Option<String>> {
-        let row = sqlx::query_as::<_, (String,)>(
-            "SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2",
-        )
-        .bind(org_id)
-        .bind(user_id)
-        .fetch_optional(&self.pool)
-        .await?;
-        Ok(row.map(|(r,)| r))
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                let row = sqlx::query_as::<_, (String,)>(
+                    "SELECT role FROM org_members WHERE org_id = $1 AND user_id = $2",
+                )
+                .bind(org_id)
+                .bind(user_id)
+                .fetch_optional(&mut **tx)
+                .await?;
+                Ok(row.map(|(r,)| r))
+            })
+        })
+        .await
     }
 
     async fn list_org_settings_raw(&self, org_id: Uuid) -> StoreResult<Vec<OrgSettingRow>> {
-        let rows = sqlx::query_as::<_, (String, serde_json::Value, DateTime<Utc>, DateTime<Utc>)>(
-            "SELECT setting_key, setting_value, created_at, updated_at FROM org_settings WHERE org_id = $1",
-        )
-        .bind(org_id)
-        .fetch_all(&self.pool)
-        .await?;
-        Ok(rows
-            .into_iter()
-            .map(|(key, value, created_at, updated_at)| OrgSettingRow {
-                key,
-                value,
-                created_at,
-                updated_at,
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                    let rows = sqlx::query_as::<_, (String, serde_json::Value, DateTime<Utc>, DateTime<Utc>)>(
+                        "SELECT setting_key, setting_value, created_at, updated_at FROM org_settings WHERE org_id = $1",
+                    )
+                    .bind(org_id)
+                    .fetch_all(&mut **tx)
+                    .await?;
+                    Ok(rows
+                        .into_iter()
+                        .map(|(key, value, created_at, updated_at)| OrgSettingRow {
+                            key,
+                            value,
+                            created_at,
+                            updated_at,
+                        })
+                        .collect())
             })
-            .collect())
+        })
+        .await
     }
 
     async fn list_org_projects_raw(&self, org_id: Uuid) -> StoreResult<Vec<ProjectRow>> {
-        let rows = sqlx::query_as::<_, (Uuid, String, String, DateTime<Utc>, DateTime<Utc>)>(
-            "SELECT id, name, visibility, created_at, updated_at FROM projects WHERE org_id = $1",
-        )
-        .bind(org_id)
-        .fetch_all(&self.pool)
-        .await?;
-        Ok(rows
-            .into_iter()
-            .map(|(id, name, visibility, created_at, updated_at)| ProjectRow {
-                id,
-                name,
-                visibility,
-                created_at,
-                updated_at,
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                    let rows = sqlx::query_as::<_, (Uuid, String, String, DateTime<Utc>, DateTime<Utc>)>(
+                        "SELECT id, name, visibility, created_at, updated_at FROM projects WHERE org_id = $1",
+                    )
+                    .bind(org_id)
+                    .fetch_all(&mut **tx)
+                    .await?;
+                    Ok(rows
+                        .into_iter()
+                        .map(|(id, name, visibility, created_at, updated_at)| ProjectRow {
+                            id,
+                            name,
+                            visibility,
+                            created_at,
+                            updated_at,
+                        })
+                        .collect())
             })
-            .collect())
+        })
+        .await
     }
 
     /// RLS-backed variant of [`Self::list_org_projects_raw`] (#832).
@@ -3058,25 +3349,30 @@ impl RegistryStore for PgRegistryStore {
     }
 
     async fn list_org_subscriptions_raw(&self, org_id: Uuid) -> StoreResult<Vec<SubscriptionRow>> {
-        let rows = sqlx::query_as::<
-            _,
-            (Uuid, String, String, DateTime<Utc>, DateTime<Utc>),
-        >(
-            "SELECT id, plan, status, current_period_end, created_at FROM subscriptions WHERE org_id = $1",
-        )
-        .bind(org_id)
-        .fetch_all(&self.pool)
-        .await?;
-        Ok(rows
-            .into_iter()
-            .map(|(id, plan, status, current_period_end, created_at)| SubscriptionRow {
-                id,
-                plan,
-                status,
-                current_period_end,
-                created_at,
+        crate::store::with_optional_org(&self.pool, Some(org_id), move |tx| {
+            Box::pin(async move {
+                    let rows = sqlx::query_as::<
+                        _,
+                        (Uuid, String, String, DateTime<Utc>, DateTime<Utc>),
+                    >(
+                        "SELECT id, plan, status, current_period_end, created_at FROM subscriptions WHERE org_id = $1",
+                    )
+                    .bind(org_id)
+                    .fetch_all(&mut **tx)
+                    .await?;
+                    Ok(rows
+                        .into_iter()
+                        .map(|(id, plan, status, current_period_end, created_at)| SubscriptionRow {
+                            id,
+                            plan,
+                            status,
+                            current_period_end,
+                            created_at,
+                        })
+                        .collect())
             })
-            .collect())
+        })
+        .await
     }
 
     async fn list_org_hosted_mocks_raw(&self, org_id: Uuid) -> StoreResult<Vec<HostedMock>> {
@@ -3095,7 +3391,7 @@ impl RegistryStore for PgRegistryStore {
     }
 
     async fn delete_user_data_cascade(&self, user_id: Uuid) -> StoreResult<usize> {
-        let mut tx = self.pool.begin().await?;
+        let mut tx = self.owner_pool.begin().await?;
 
         let owned_orgs =
             sqlx::query_as::<_, (Uuid,)>("SELECT id FROM organizations WHERE owner_id = $1")

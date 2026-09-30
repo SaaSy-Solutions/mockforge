@@ -30,6 +30,7 @@ use crate::{
     handlers::usage::effective_limits,
     middleware::{resolve_org_context, AuthUser},
     models::{TestRun, TestSuite},
+    store::with_org_context,
     AppState,
 };
 
@@ -72,17 +73,10 @@ pub async fn trigger_run(
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
 
     // Suite is workspace-scoped; verify the workspace belongs to caller's org.
-    let workspace = mockforge_registry_core::models::CloudWorkspace::find_by_id(
-        state.db.pool(),
-        suite.workspace_id,
-    )
-    .await?
-    .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
-    if workspace.org_id != ctx.org_id {
-        return Err(ApiError::InvalidRequest("Test suite not found".into()));
-    }
+    authorize_suite_workspace(&state, ctx.org_id, suite.workspace_id).await?;
 
-    // 2. Concurrency cap.
+    // 2. Plan gate. The concurrency cap itself is checked in the same
+    // transaction as the insert (step 5).
     let limits = effective_limits(&state, &ctx.org).await?;
     let max_concurrent = limits.get("max_concurrent_runs").and_then(|v| v.as_i64()).unwrap_or(0);
     if max_concurrent == 0 {
@@ -90,18 +84,6 @@ pub async fn trigger_run(
             "Test execution is not enabled on this plan — upgrade to Pro or Team to run tests"
                 .into(),
         ));
-    }
-    if max_concurrent > 0 {
-        let inflight = TestRun::count_inflight(state.db.pool(), ctx.org_id)
-            .await
-            .map_err(ApiError::Database)?;
-        if inflight.total() >= max_concurrent {
-            return Err(ApiError::ResourceLimitExceeded(format!(
-                "Concurrent run limit reached ({}/{}). Wait for a run to finish or upgrade your plan.",
-                inflight.total(),
-                max_concurrent,
-            )));
-        }
     }
 
     // 3. Validate triggered_by source label.
@@ -124,21 +106,44 @@ pub async fn trigger_run(
             .map_err(|e| ApiError::InvalidRequest(format!("target_url rejected: {}", e)))?;
     }
 
-    // 5. Insert the test_runs row.
-    let run = TestRun::enqueue(
-        state.db.pool(),
-        EnqueueTestRun {
-            suite_id: suite.id,
-            org_id: ctx.org_id,
-            kind: &suite.kind,
-            triggered_by,
-            triggered_by_user: Some(user_id),
-            git_ref: request.git_ref.as_deref(),
-            git_sha: request.git_sha.as_deref(),
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    // 5. Concurrency cap + insert the test_runs row, in one org-bound
+    // transaction.
+    let org_id = ctx.org_id;
+    let suite_id = suite.id;
+    let kind = suite.kind.clone();
+    let triggered_by = triggered_by.to_string();
+    let git_ref = request.git_ref;
+    let git_sha = request.git_sha;
+    let run = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            if max_concurrent > 0 {
+                let inflight = TestRun::count_inflight(tx, org_id).await?;
+                if inflight.total() >= max_concurrent {
+                    return Ok(Err(inflight.total()));
+                }
+            }
+            Ok(Ok(TestRun::enqueue(
+                &mut **tx,
+                EnqueueTestRun {
+                    suite_id,
+                    org_id,
+                    kind: &kind,
+                    triggered_by: &triggered_by,
+                    triggered_by_user: Some(user_id),
+                    git_ref: git_ref.as_deref(),
+                    git_sha: git_sha.as_deref(),
+                },
+            )
+            .await?))
+        })
+    })
+    .await?
+    .map_err(|inflight_total| {
+        ApiError::ResourceLimitExceeded(format!(
+            "Concurrent run limit reached ({}/{}). Wait for a run to finish or upgrade your plan.",
+            inflight_total, max_concurrent,
+        ))
+    })?;
 
     // 6. Push onto the Redis queue so mockforge-test-runner picks it up.
     // We pass the suite's config straight through as the payload — the
@@ -185,20 +190,14 @@ pub async fn list_suite_runs(
     let ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
-    let workspace = mockforge_registry_core::models::CloudWorkspace::find_by_id(
-        state.db.pool(),
-        suite.workspace_id,
-    )
-    .await?
-    .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
-    if workspace.org_id != ctx.org_id {
-        return Err(ApiError::InvalidRequest("Test suite not found".into()));
-    }
+    authorize_suite_workspace(&state, ctx.org_id, suite.workspace_id).await?;
 
     let limit = query.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
-    let runs = TestRun::list_by_suite(state.db.pool(), suite.id, limit)
-        .await
-        .map_err(ApiError::Database)?;
+    let suite_id = suite.id;
+    let runs = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+        Box::pin(async move { Ok(TestRun::list_by_suite(&mut **tx, suite_id, limit).await?) })
+    })
+    .await?;
     Ok(Json(runs))
 }
 
@@ -226,9 +225,13 @@ pub async fn list_org_runs(
     }
 
     let limit = query.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
-    let runs = TestRun::list_by_org(state.db.pool(), org_id, query.status.as_deref(), limit)
-        .await
-        .map_err(ApiError::Database)?;
+    let status = query.status;
+    let runs = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(
+            async move { Ok(TestRun::list_by_org(tx, org_id, status.as_deref(), limit).await?) },
+        )
+    })
+    .await?;
     Ok(Json(runs))
 }
 
@@ -262,11 +265,15 @@ pub async fn stream_run_events(
     headers: HeaderMap,
 ) -> ApiResult<Sse<impl Stream<Item = Result<Event, Infallible>>>> {
     // Authorize once up front so we don't leak existence to non-members.
-    load_authorized_run(&state, user_id, &headers, id).await?;
+    let run = load_authorized_run(&state, user_id, &headers, id).await?;
 
-    let pool = state.db.pool().clone();
+    // Each poll opens its own short org-bound transaction (never one held
+    // across polls). The stream body outlives the handler, so the org is
+    // captured explicitly rather than read from the request task-local.
+    let pool = state.db.runtime_pool().clone();
     let cursor = EventCursor {
         run_id: id,
+        org_id: run.org_id,
         pool,
         // #668 — resume from where the client left off instead of
         // replaying everything since the run started.
@@ -307,15 +314,21 @@ async fn advance_event_cursor(
     // that idle streams don't hammer the DB.
     tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
 
-    let events: Vec<TestRunEventRow> = match sqlx::query_as::<_, TestRunEventRow>(
-        "SELECT seq, event_type, payload, occurred_at \
-         FROM test_run_events \
-         WHERE run_id = $1 AND seq > $2 \
-         ORDER BY seq ASC LIMIT 200",
-    )
-    .bind(cursor.run_id)
-    .bind(cursor.seq)
-    .fetch_all(&cursor.pool)
+    let (run_id, seq) = (cursor.run_id, cursor.seq);
+    let events: Vec<TestRunEventRow> = match with_org_context(&cursor.pool, cursor.org_id, |tx| {
+        Box::pin(async move {
+            Ok(sqlx::query_as::<_, TestRunEventRow>(
+                "SELECT seq, event_type, payload, occurred_at \
+                 FROM test_run_events \
+                 WHERE run_id = $1 AND seq > $2 \
+                 ORDER BY seq ASC LIMIT 200",
+            )
+            .bind(run_id)
+            .bind(seq)
+            .fetch_all(&mut **tx)
+            .await?)
+        })
+    })
     .await
     {
         Ok(rows) => rows,
@@ -348,36 +361,34 @@ async fn advance_event_cursor(
         return Some((Ok(evt), cursor));
     }
 
-    let terminal = matches!(
-        sqlx::query_as::<_, (String,)>("SELECT status FROM test_runs WHERE id = $1")
-            .bind(cursor.run_id)
-            .fetch_optional(&cursor.pool)
-            .await,
-        Ok(Some((ref s,))) if matches!(
-            s.as_str(),
-            "passed" | "failed" | "cancelled" | "errored"
-        )
-    );
+    // One read serves both the terminal check and the final `done` payload.
+    let final_row = with_org_context(&cursor.pool, cursor.org_id, |tx| {
+        Box::pin(async move {
+            Ok(sqlx::query_as::<_, (String, Option<i32>, Option<serde_json::Value>)>(
+                "SELECT status, runner_seconds, summary FROM test_runs WHERE id = $1",
+            )
+            .bind(run_id)
+            .fetch_optional(&mut **tx)
+            .await?)
+        })
+    })
+    .await;
 
-    if !terminal {
-        // No new events, run still inflight — keep-alive sentinel.
-        let evt = Event::default().event("ping").data("{}");
-        return Some((Ok(evt), cursor));
-    }
-
-    let final_payload = match sqlx::query_as::<_, (String, Option<i32>, Option<serde_json::Value>)>(
-        "SELECT status, runner_seconds, summary FROM test_runs WHERE id = $1",
-    )
-    .bind(cursor.run_id)
-    .fetch_optional(&cursor.pool)
-    .await
-    {
-        Ok(Some((status, runner_seconds, summary))) => serde_json::json!({
-            "status": status,
-            "runner_seconds": runner_seconds,
-            "summary": summary,
-        }),
-        _ => serde_json::json!({ "status": "unknown" }),
+    let final_payload = match final_row {
+        Ok(Some((status, runner_seconds, summary)))
+            if matches!(status.as_str(), "passed" | "failed" | "cancelled" | "errored") =>
+        {
+            serde_json::json!({
+                "status": status,
+                "runner_seconds": runner_seconds,
+                "summary": summary,
+            })
+        }
+        _ => {
+            // No new events, run still inflight — keep-alive sentinel.
+            let evt = Event::default().event("ping").data("{}");
+            return Some((Ok(evt), cursor));
+        }
     };
     cursor.terminal_emitted = true;
     let evt = Event::default().event("done").data(final_payload.to_string());
@@ -398,6 +409,9 @@ fn parse_last_event_id(headers: &HeaderMap) -> i32 {
 
 struct EventCursor {
     run_id: Uuid,
+    /// Org the run belongs to (authorized up front); bound per poll.
+    org_id: Uuid,
+    /// Runtime (RLS-enforced) pool.
     pool: sqlx::PgPool,
     /// Highest seq we've emitted; the next DB poll asks for `> seq`.
     seq: i32,
@@ -422,15 +436,14 @@ pub async fn cancel_run(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<TestRun>> {
-    load_authorized_run(&state, user_id, &headers, id).await?;
-    let updated = TestRun::cancel(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| {
-            ApiError::InvalidRequest(
-                "Run is not cancellable (already terminal or not found)".into(),
-            )
-        })?;
+    let run = load_authorized_run(&state, user_id, &headers, id).await?;
+    let updated = with_org_context(state.db.runtime_pool(), run.org_id, |tx| {
+        Box::pin(async move { Ok(TestRun::cancel(&mut **tx, id).await?) })
+    })
+    .await?
+    .ok_or_else(|| {
+        ApiError::InvalidRequest("Run is not cancellable (already terminal or not found)".into())
+    })?;
     Ok(Json(updated))
 }
 
@@ -443,17 +456,45 @@ async fn load_authorized_run(
     headers: &HeaderMap,
     id: Uuid,
 ) -> ApiResult<TestRun> {
-    let run = TestRun::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Test run not found".into()))?;
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    // Bound to the caller's org: a run in another org reads as absent.
+    let run = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+        Box::pin(async move { Ok(TestRun::find_by_id(&mut **tx, id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Test run not found".into()))?;
     if ctx.org_id != run.org_id {
         return Err(ApiError::InvalidRequest("Test run not found".into()));
     }
     Ok(run)
+}
+
+/// Verify a suite's workspace belongs to `org_id`. The lookup is bound to
+/// that org, so a workspace in another org reads as absent and yields the
+/// same "not found" as an explicit mismatch.
+async fn authorize_suite_workspace(
+    state: &AppState,
+    org_id: Uuid,
+    workspace_id: Uuid,
+) -> ApiResult<()> {
+    let workspace =
+        with_org_context(state.db.runtime_pool(), org_id, |tx| {
+            Box::pin(async move {
+                Ok(mockforge_registry_core::models::CloudWorkspace::find_by_id(
+                    &mut **tx,
+                    workspace_id,
+                )
+                .await?)
+            })
+        })
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Test suite not found".into()))?;
+    if workspace.org_id != org_id {
+        return Err(ApiError::InvalidRequest("Test suite not found".into()));
+    }
+    Ok(())
 }
 
 fn is_valid_trigger_source(s: &str) -> bool {

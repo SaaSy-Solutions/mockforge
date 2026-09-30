@@ -27,6 +27,7 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
     models::{Incident, IncidentEvent},
+    store::with_org_context,
     AppState,
 };
 
@@ -60,9 +61,12 @@ pub async fn list_incidents(
     }
 
     let limit = query.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
-    let incidents = Incident::list_by_org(state.db.pool(), org_id, query.status.as_deref(), limit)
-        .await
-        .map_err(ApiError::Database)?;
+    let incidents = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(Incident::list_by_org(tx, org_id, query.status.as_deref(), limit).await?)
+        })
+    })
+    .await?;
     Ok(Json(incidents))
 }
 
@@ -114,21 +118,25 @@ pub async fn raise_incident_external(
         ));
     }
 
-    let incident = Incident::raise(
-        state.db.pool(),
-        RaiseIncidentInput {
-            org_id,
-            workspace_id: request.workspace_id,
-            source: &request.source,
-            source_ref: request.source_ref.as_deref(),
-            dedupe_key: &request.dedupe_key,
-            severity: &request.severity,
-            title: &request.title,
-            description: request.description.as_deref(),
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let incident = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(Incident::raise(
+                tx,
+                RaiseIncidentInput {
+                    org_id,
+                    workspace_id: request.workspace_id,
+                    source: &request.source,
+                    source_ref: request.source_ref.as_deref(),
+                    dedupe_key: &request.dedupe_key,
+                    severity: &request.severity,
+                    title: &request.title,
+                    description: request.description.as_deref(),
+                },
+            )
+            .await?)
+        })
+    })
+    .await?;
 
     Ok(Json(incident))
 }
@@ -166,11 +174,12 @@ pub async fn acknowledge_incident(
     headers: HeaderMap,
 ) -> ApiResult<Json<Incident>> {
     // Authorize first so we don't leak existence to non-members.
-    load_authorized_incident(&state, user_id, &headers, id).await?;
-    let updated = Incident::acknowledge(state.db.pool(), id, user_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Incident not found".into()))?;
+    let incident = load_authorized_incident(&state, user_id, &headers, id).await?;
+    let updated = with_org_context(state.db.runtime_pool(), incident.org_id, |tx| {
+        Box::pin(async move { Ok(Incident::acknowledge(tx, id, user_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Incident not found".into()))?;
     Ok(Json(updated))
 }
 
@@ -181,11 +190,12 @@ pub async fn resolve_incident(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Incident>> {
-    load_authorized_incident(&state, user_id, &headers, id).await?;
-    let updated = Incident::resolve(state.db.pool(), id, user_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Incident not found".into()))?;
+    let incident = load_authorized_incident(&state, user_id, &headers, id).await?;
+    let updated = with_org_context(state.db.runtime_pool(), incident.org_id, |tx| {
+        Box::pin(async move { Ok(Incident::resolve(tx, id, user_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Incident not found".into()))?;
     Ok(Json(updated))
 }
 
@@ -199,14 +209,18 @@ async fn load_authorized_incident(
     headers: &HeaderMap,
     id: Uuid,
 ) -> ApiResult<Incident> {
-    let incident = Incident::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Incident not found".into()))?;
-
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+
+    // Load under the caller's org: an incident in another org is invisible
+    // under RLS and surfaces as the same "not found" as a missing row.
+    let incident = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+        Box::pin(async move { Ok(Incident::find_by_id(&mut **tx, id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Incident not found".into()))?;
+
     if ctx.org_id != incident.org_id {
         return Err(ApiError::InvalidRequest("Incident not found".into()));
     }
@@ -256,53 +270,55 @@ pub async fn get_stats(
     if ctx.org_id != org_id {
         return Err(ApiError::InvalidRequest("Cannot read stats for a different org".into()));
     }
-    let pool = state.db.pool();
+    let (open_rows, resolved_rows, mttr, attempts) =
+        with_org_context(state.db.runtime_pool(), org_id, |tx| {
+            Box::pin(async move {
+                let open_rows: Vec<(String, i64)> = sqlx::query_as(
+                    "SELECT severity, COUNT(*) FROM incidents \
+                     WHERE org_id = $1 AND status = 'open' GROUP BY severity",
+                )
+                .bind(org_id)
+                .fetch_all(&mut **tx)
+                .await?;
 
-    let open_rows: Vec<(String, i64)> = sqlx::query_as(
-        "SELECT severity, COUNT(*) FROM incidents \
-         WHERE org_id = $1 AND status = 'open' GROUP BY severity",
-    )
-    .bind(org_id)
-    .fetch_all(pool)
-    .await
-    .map_err(ApiError::Database)?;
+                let resolved_rows: Vec<(String, i64)> = sqlx::query_as(
+                    "SELECT severity, COUNT(*) FROM incidents \
+                     WHERE org_id = $1 AND status = 'resolved' \
+                       AND resolved_at >= NOW() - INTERVAL '30 days' GROUP BY severity",
+                )
+                .bind(org_id)
+                .fetch_all(&mut **tx)
+                .await?;
+
+                let mttr: Option<f64> = sqlx::query_scalar(
+                    "SELECT AVG(EXTRACT(EPOCH FROM (resolved_at - created_at)))::float8 \
+                     FROM incidents \
+                     WHERE org_id = $1 AND status = 'resolved' \
+                       AND resolved_at IS NOT NULL \
+                       AND resolved_at >= NOW() - INTERVAL '30 days'",
+                )
+                .bind(org_id)
+                .fetch_one(&mut **tx)
+                .await?;
+
+                let attempts: i64 = sqlx::query_scalar(
+                    "SELECT COUNT(*) FROM incident_events e \
+                        JOIN incidents i ON i.id = e.incident_id \
+                      WHERE i.org_id = $1 \
+                        AND e.event_type = 'notification_sent' \
+                        AND e.created_at >= NOW() - INTERVAL '24 hours'",
+                )
+                .bind(org_id)
+                .fetch_one(&mut **tx)
+                .await?;
+
+                Ok((open_rows, resolved_rows, mttr, attempts))
+            })
+        })
+        .await?;
     let open = breakdown_from_rows(&open_rows);
-
-    let resolved_rows: Vec<(String, i64)> = sqlx::query_as(
-        "SELECT severity, COUNT(*) FROM incidents \
-         WHERE org_id = $1 AND status = 'resolved' \
-           AND resolved_at >= NOW() - INTERVAL '30 days' GROUP BY severity",
-    )
-    .bind(org_id)
-    .fetch_all(pool)
-    .await
-    .map_err(ApiError::Database)?;
     let resolved_30d = breakdown_from_rows(&resolved_rows);
-
-    let mttr: Option<f64> = sqlx::query_scalar(
-        "SELECT AVG(EXTRACT(EPOCH FROM (resolved_at - created_at))) \
-         FROM incidents \
-         WHERE org_id = $1 AND status = 'resolved' \
-           AND resolved_at IS NOT NULL \
-           AND resolved_at >= NOW() - INTERVAL '30 days'",
-    )
-    .bind(org_id)
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
     let mttr_seconds_30d = mttr.map(|s| s as i64);
-
-    let attempts: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM incident_events e \
-            JOIN incidents i ON i.id = e.incident_id \
-          WHERE i.org_id = $1 \
-            AND e.event_type = 'notification_sent' \
-            AND e.created_at >= NOW() - INTERVAL '24 hours'",
-    )
-    .bind(org_id)
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
 
     Ok(Json(IncidentStats {
         open,

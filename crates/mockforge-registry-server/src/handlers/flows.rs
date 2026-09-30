@@ -30,6 +30,7 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
     models::{CloudWorkspace, Flow, FlowVersion, TestRun},
+    store::with_org_context,
     AppState,
 };
 
@@ -213,18 +214,13 @@ pub async fn trigger_run(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<TestRun>> {
-    let flow = load_authorized_flow(&state, user_id, &headers, id).await?;
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), flow.workspace_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
+    // `org_id` is the flow's workspace org, verified against the caller.
+    let (flow, org_id) = load_authorized_flow_with_org(&state, user_id, &headers, id).await?;
 
-    let org = mockforge_registry_core::models::Organization::find_by_id(
-        state.db.pool(),
-        workspace.org_id,
-    )
-    .await
-    .map_err(|_| ApiError::Internal(anyhow::anyhow!("DB error loading org")))?
-    .ok_or_else(|| ApiError::InvalidRequest("Organization not found".into()))?;
+    let org = mockforge_registry_core::models::Organization::find_by_id(state.db.pool(), org_id)
+        .await
+        .map_err(|_| ApiError::Internal(anyhow::anyhow!("DB error loading org")))?
+        .ok_or_else(|| ApiError::InvalidRequest("Organization not found".into()))?;
     let limits = crate::handlers::usage::effective_limits(&state, &org).await?;
     let max_concurrent = limits.get("max_concurrent_runs").and_then(|v| v.as_i64()).unwrap_or(0);
     if max_concurrent == 0 {
@@ -232,33 +228,39 @@ pub async fn trigger_run(
             "Test execution / flow runs are not enabled on this plan".into(),
         ));
     }
-    if max_concurrent > 0 {
-        let inflight = TestRun::count_inflight(state.db.pool(), workspace.org_id)
-            .await
-            .map_err(ApiError::Database)?;
-        if inflight.total() >= max_concurrent {
-            return Err(ApiError::ResourceLimitExceeded(format!(
-                "Concurrent run limit reached ({}/{}).",
-                inflight.total(),
-                max_concurrent,
-            )));
-        }
-    }
-
-    let run = TestRun::enqueue(
-        state.db.pool(),
-        EnqueueTestRun {
-            suite_id: flow.id,
-            org_id: workspace.org_id,
-            kind: &flow.kind,
-            triggered_by: "manual",
-            triggered_by_user: Some(user_id),
-            git_ref: None,
-            git_sha: None,
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    // Concurrency cap + insert in one org-bound transaction.
+    let flow_id = flow.id;
+    let kind = flow.kind.clone();
+    let run = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            if max_concurrent > 0 {
+                let inflight = TestRun::count_inflight(tx, org_id).await?;
+                if inflight.total() >= max_concurrent {
+                    return Ok(Err(inflight.total()));
+                }
+            }
+            Ok(Ok(TestRun::enqueue(
+                &mut **tx,
+                EnqueueTestRun {
+                    suite_id: flow_id,
+                    org_id,
+                    kind: &kind,
+                    triggered_by: "manual",
+                    triggered_by_user: Some(user_id),
+                    git_ref: None,
+                    git_sha: None,
+                },
+            )
+            .await?))
+        })
+    })
+    .await?
+    .map_err(|inflight_total| {
+        ApiError::ResourceLimitExceeded(format!(
+            "Concurrent run limit reached ({}/{}).",
+            inflight_total, max_concurrent,
+        ))
+    })?;
 
     // Push payload includes the flow's current_version_id AND its
     // config — saves the runner a round trip to fetch what it needs to
@@ -349,12 +351,12 @@ async fn authorize_workspace(
     headers: &HeaderMap,
     workspace_id: Uuid,
 ) -> ApiResult<()> {
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), workspace_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    let workspace = find_workspace_in_org(state, ctx.org_id, workspace_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
     if ctx.org_id != workspace.org_id {
         return Err(ApiError::InvalidRequest("Workspace not found".into()));
     }
@@ -367,20 +369,42 @@ async fn load_authorized_flow(
     headers: &HeaderMap,
     id: Uuid,
 ) -> ApiResult<Flow> {
+    Ok(load_authorized_flow_with_org(state, user_id, headers, id).await?.0)
+}
+
+/// Like [`load_authorized_flow`], also returning the authorized org id.
+async fn load_authorized_flow_with_org(
+    state: &AppState,
+    user_id: Uuid,
+    headers: &HeaderMap,
+    id: Uuid,
+) -> ApiResult<(Flow, Uuid)> {
     let flow = Flow::find_by_id(state.db.pool(), id)
         .await
         .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Flow not found".into()))?;
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), flow.workspace_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Flow not found".into()))?;
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    let workspace = find_workspace_in_org(state, ctx.org_id, flow.workspace_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Flow not found".into()))?;
     if ctx.org_id != workspace.org_id {
         return Err(ApiError::InvalidRequest("Flow not found".into()));
     }
-    Ok(flow)
+    Ok((flow, ctx.org_id))
+}
+
+/// Load a workspace bound to `org_id`; a workspace in another org is `None`.
+async fn find_workspace_in_org(
+    state: &AppState,
+    org_id: Uuid,
+    workspace_id: Uuid,
+) -> ApiResult<Option<CloudWorkspace>> {
+    Ok(with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(CloudWorkspace::find_by_id(&mut **tx, workspace_id).await?) })
+    })
+    .await?)
 }
 
 fn deserialize_double_option<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>

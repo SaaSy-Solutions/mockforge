@@ -79,7 +79,10 @@ impl TemplateReview {
     }
 
     /// Update rating stats for template
-    pub async fn update_template_stats(pool: &sqlx::PgPool, template_id: Uuid) -> sqlx::Result<()> {
+    pub async fn update_template_stats(
+        conn: &mut sqlx::PgConnection,
+        template_id: Uuid,
+    ) -> sqlx::Result<()> {
         let stats = sqlx::query_as::<_, (f64, i64)>(
             r#"
             SELECT COALESCE(AVG(rating), 0.0)::float8, COUNT(*)
@@ -88,7 +91,7 @@ impl TemplateReview {
             "#,
         )
         .bind(template_id)
-        .fetch_one(pool)
+        .fetch_one(&mut *conn)
         .await?;
 
         // Update template stats_json
@@ -105,7 +108,7 @@ impl TemplateReview {
         )
         .bind(stats.0)
         .bind(template_id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
 
         sqlx::query(
@@ -121,7 +124,7 @@ impl TemplateReview {
         )
         .bind(stats.1)
         .bind(template_id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
 
         Ok(())

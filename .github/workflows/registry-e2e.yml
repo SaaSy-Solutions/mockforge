@@ -263,6 +263,8 @@ jobs:
             --test paid_flow_e2e \
             --test hosted_mock_overrides_e2e \
             --test audit_integrity_e2e \
+            --test rls_coverage_e2e \
+            --test hosted_mock_rls_routes_e2e \
             -- --ignored --nocapture --test-threads=1
 
       - name: Dump registry-server log on failure
@@ -300,8 +302,8 @@ jobs:
   #
   # Re-runs the same E2E suite with the request-path pool bound to a
   # NOSUPERUSER / NOBYPASSRLS role, so the tenant-isolation policies from
-  # migration 20250101000082 are ACTIVE. Any covered-table query
-  # (projects, audit_logs, hosted_mocks, templates, scenarios) that reaches
+  # migrations 20250101000082 + 20250101000086 are ACTIVE. Any covered-table
+  # query (36 org-scoped tables) that reaches
   # the database without `app.current_org_id` bound fail-closes to zero rows
   # and the E2E assertion depending on it fails.
   #
@@ -329,8 +331,9 @@ jobs:
   #
   # All of the setup lives in scripts/rls-e2e-gate.sh so the local dev loop and
   # CI exercise exactly the same provisioning, and the script self-checks that
-  # the gate is actually armed (role is NOBYPASSRLS, 5/5 tables ENABLE+FORCE
-  # RLS, unbound reads return 0 rows) before trusting a green run.
+  # the gate is actually armed (role is NOBYPASSRLS, every org_id table is
+  # ENABLE+FORCE RLS or a documented exclusion, seeded rows are invisible
+  # unbound and visible bound) before trusting a green run.
   # ---------------------------------------------------------------------------
   registry-e2e-rls:
     name: Registry E2E under RLS (NOBYPASSRLS)
@@ -367,6 +370,12 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           env-vars: "CARGO_HOME"
+
+      # Static half of the gate: every statement on a FORCE-RLS table must run
+      # GUC-bound on the runtime pool or be a reviewed ELEVATED owner-pool path.
+      # The e2e run below only proves fail-closure on the paths it exercises.
+      - name: RLS coverage audit (static)
+        run: python3 scripts/check_rls_coverage.py
 
       - name: Run E2E suite with RLS active
         env:

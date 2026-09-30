@@ -39,7 +39,7 @@ impl OrgTemplate {
     /// Create a new organization template
     #[allow(clippy::too_many_arguments)]
     pub async fn create(
-        pool: &sqlx::PgPool,
+        conn: &mut sqlx::PgConnection,
         org_id: Uuid,
         name: &str,
         description: Option<&str>,
@@ -52,7 +52,7 @@ impl OrgTemplate {
         if is_default {
             sqlx::query("UPDATE org_templates SET is_default = FALSE WHERE org_id = $1")
                 .bind(org_id)
-                .execute(pool)
+                .execute(&mut *conn)
                 .await?;
         }
 
@@ -73,42 +73,51 @@ impl OrgTemplate {
         .bind(security_baseline.unwrap_or_else(|| serde_json::json!({})))
         .bind(created_by)
         .bind(is_default)
-        .fetch_one(pool)
+        .fetch_one(&mut *conn)
         .await
     }
 
     /// Find by ID
-    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM org_templates WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// List all templates for an organization
-    pub async fn list_by_org(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_by_org(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM org_templates WHERE org_id = $1 ORDER BY is_default DESC, name",
         )
         .bind(org_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     /// Get the default template for an organization
-    pub async fn get_default(pool: &sqlx::PgPool, org_id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn get_default(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM org_templates WHERE org_id = $1 AND is_default = TRUE LIMIT 1",
         )
         .bind(org_id)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
     /// Update template
     pub async fn update(
         &self,
-        pool: &sqlx::PgPool,
+        conn: &mut sqlx::PgConnection,
         name: Option<&str>,
         description: Option<&str>,
         blueprint_config: Option<serde_json::Value>,
@@ -122,7 +131,7 @@ impl OrgTemplate {
             )
             .bind(self.org_id)
             .bind(self.id)
-            .execute(pool)
+            .execute(&mut *conn)
             .await?;
         }
 
@@ -146,25 +155,29 @@ impl OrgTemplate {
         .bind(security_baseline)
         .bind(is_default)
         .bind(self.id)
-        .fetch_one(pool)
+        .fetch_one(&mut *conn)
         .await
     }
 
     /// Delete template
-    pub async fn delete(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<()> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<()> {
         sqlx::query("DELETE FROM org_templates WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?;
         Ok(())
     }
 
     /// Set as default template for the organization
-    pub async fn set_as_default(pool: &sqlx::PgPool, id: Uuid, org_id: Uuid) -> sqlx::Result<Self> {
+    pub async fn set_as_default(
+        conn: &mut sqlx::PgConnection,
+        id: Uuid,
+        org_id: Uuid,
+    ) -> sqlx::Result<Self> {
         // Unset other defaults
         sqlx::query("UPDATE org_templates SET is_default = FALSE WHERE org_id = $1")
             .bind(org_id)
-            .execute(pool)
+            .execute(&mut *conn)
             .await?;
 
         // Set this one as default
@@ -172,7 +185,7 @@ impl OrgTemplate {
             "UPDATE org_templates SET is_default = TRUE, updated_at = NOW() WHERE id = $1 RETURNING *",
         )
         .bind(id)
-        .fetch_one(pool)
+        .fetch_one(&mut *conn)
         .await
     }
 }

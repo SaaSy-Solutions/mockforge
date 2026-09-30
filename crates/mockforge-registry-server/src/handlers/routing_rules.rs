@@ -23,6 +23,7 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
     models::RoutingRule,
+    store::with_org_context,
     AppState,
 };
 
@@ -36,9 +37,10 @@ pub async fn list_rules(
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<RoutingRule>>> {
     authorize_org(&state, user_id, &headers, org_id).await?;
-    let rules = RoutingRule::list_by_org(state.db.pool(), org_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let rules = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(RoutingRule::list_by_org(&mut **tx, org_id).await?) })
+    })
+    .await?;
     Ok(Json(rules))
 }
 
@@ -70,19 +72,23 @@ pub async fn create_rule(
         ));
     }
 
-    let rule = RoutingRule::create(
-        state.db.pool(),
-        CreateRoutingRule {
-            org_id,
-            priority: request.priority,
-            match_severity: &request.match_severity,
-            match_source: &request.match_source,
-            match_workspace_id: request.match_workspace_id,
-            channel_ids: &request.channel_ids,
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let rule = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(RoutingRule::create(
+                &mut **tx,
+                CreateRoutingRule {
+                    org_id,
+                    priority: request.priority,
+                    match_severity: &request.match_severity,
+                    match_source: &request.match_source,
+                    match_workspace_id: request.match_workspace_id,
+                    channel_ids: &request.channel_ids,
+                },
+            )
+            .await?)
+        })
+    })
+    .await?;
     Ok(Json(rule))
 }
 
@@ -120,16 +126,20 @@ pub async fn update_rule(
         }
     }
 
-    let updated = RoutingRule::update(
-        state.db.pool(),
-        id,
-        request.priority,
-        request.match_severity.as_deref(),
-        request.match_source.as_deref(),
-        request.channel_ids.as_deref(),
-    )
-    .await
-    .map_err(ApiError::Database)?
+    let updated = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(RoutingRule::update(
+                &mut **tx,
+                id,
+                request.priority,
+                request.match_severity.as_deref(),
+                request.match_source.as_deref(),
+                request.channel_ids.as_deref(),
+            )
+            .await?)
+        })
+    })
+    .await?
     .ok_or_else(|| ApiError::InvalidRequest("Routing rule not found".into()))?;
     Ok(Json(updated))
 }
@@ -144,7 +154,10 @@ pub async fn delete_rule(
     authorize_org(&state, user_id, &headers, org_id).await?;
     load_authorized_rule(&state, org_id, id).await?;
 
-    let deleted = RoutingRule::delete(state.db.pool(), id).await.map_err(ApiError::Database)?;
+    let deleted = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(RoutingRule::delete(&mut **tx, id).await?) })
+    })
+    .await?;
     if !deleted {
         return Err(ApiError::InvalidRequest("Routing rule not found".into()));
     }
@@ -169,10 +182,11 @@ async fn authorize_org(
 }
 
 async fn load_authorized_rule(state: &AppState, org_id: Uuid, id: Uuid) -> ApiResult<RoutingRule> {
-    let rule = RoutingRule::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Routing rule not found".into()))?;
+    let rule = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(RoutingRule::find_by_id(&mut **tx, id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Routing rule not found".into()))?;
     if rule.org_id != org_id {
         return Err(ApiError::InvalidRequest("Routing rule not found".into()));
     }

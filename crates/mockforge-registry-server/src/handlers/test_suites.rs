@@ -25,6 +25,7 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
     models::TestSuite,
+    store::with_org_context,
     AppState,
 };
 use mockforge_registry_core::models::test_execution::CreateTestSuite;
@@ -178,12 +179,16 @@ async fn load_authorized_suite(
         .await
         .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Test suite not found".into()))?;
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), suite.workspace_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Test suite not found".into()))?;
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    // Bound to the caller's org: a cross-org workspace reads as absent.
+    let workspace_id = suite.workspace_id;
+    let workspace = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+        Box::pin(async move { Ok(CloudWorkspace::find_by_id(&mut **tx, workspace_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Test suite not found".into()))?;
     if ctx.org_id != workspace.org_id {
         return Err(ApiError::InvalidRequest("Test suite not found".into()));
     }
@@ -198,12 +203,16 @@ async fn authorize_workspace(
     headers: &HeaderMap,
     workspace_id: Uuid,
 ) -> ApiResult<CloudWorkspace> {
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), workspace_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    // Bound to the caller's org: a workspace in another org reads as absent
+    // and yields the same "Workspace not found" as an explicit mismatch.
+    let workspace = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+        Box::pin(async move { Ok(CloudWorkspace::find_by_id(&mut **tx, workspace_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
     if ctx.org_id != workspace.org_id {
         return Err(ApiError::InvalidRequest("Workspace not found".into()));
     }

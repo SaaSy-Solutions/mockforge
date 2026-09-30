@@ -257,8 +257,10 @@ pub async fn run_finished(
         // the test_runs row (set at queue-time), not from the request
         // — the runner can't lie about which org to charge.
         if body.runner_seconds > 0 {
+            // Owner pool: internal shared-token runner callback, no user org
+            // context (#1087 elevated path).
             UsageCounter::increment_runner_seconds(
-                state.db.pool(),
+                &mut *state.db.pool().acquire().await?,
                 run.org_id,
                 body.runner_seconds as i64,
             )

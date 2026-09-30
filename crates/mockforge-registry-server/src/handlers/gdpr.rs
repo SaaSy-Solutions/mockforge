@@ -11,7 +11,7 @@ use crate::store::RegistryStore;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
-    models::{AuditEventType, UsageCounter},
+    models::AuditEventType,
     AppState,
 };
 
@@ -167,7 +167,9 @@ pub async fn export_data(
         let subscriptions = state.store.list_org_subscriptions_raw(org.id).await?;
 
         // Get usage
-        let usage = UsageCounter::get_or_create_current(state.db.pool(), org.id).await.ok();
+        // Store method binds `org.id` explicitly (the export spans every org
+        // the user belongs to, not just the request's org).
+        let usage = state.store.get_or_create_current_usage_counter(org.id).await.ok();
 
         // Get hosted mocks
         let hosted_mocks = state.store.list_org_hosted_mocks_raw(org.id).await?;
@@ -181,8 +183,12 @@ pub async fn export_data(
             created_at: org.created_at.to_rfc3339(),
             updated_at: org.updated_at.to_rfc3339(),
             role,
+            // `invite:{nonce}` rows hold the full payload `accept_invitation`
+            // needs; exporting them to a plain member let them redeem pending
+            // (e.g. admin) invites. Invitations are not the user's data.
             settings: org_settings
                 .into_iter()
+                .filter(|s| !s.key.starts_with("invite:"))
                 .map(|s| SettingData {
                     key: s.key,
                     value: s.value,

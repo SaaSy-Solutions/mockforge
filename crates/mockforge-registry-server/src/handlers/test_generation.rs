@@ -36,6 +36,7 @@ use crate::{
     error::{ApiError, ApiResult},
     handlers::{ai_studio::load_byok_config, entitlements::effective_plan},
     middleware::{resolve_org_context, AuthUser},
+    store::with_org_context,
     AppState,
 };
 use mockforge_registry_core::models::{
@@ -130,23 +131,31 @@ pub async fn create_job(
     // queue. The worker keeps its own check as defense in depth.
     enforce_pre_enqueue_gates(&state, workspace.org_id).await?;
 
-    let row = TestGenerationJob::create(
-        state.db.pool(),
-        CreateTestGenerationJob {
-            workspace_id: workspace.id,
-            org_id: workspace.org_id,
-            prompt: &body.prompt,
-            captures_filter: &captures_filter,
-            created_by: Some(user_id),
-        },
-    )
+    let (workspace_id, org_id) = (workspace.id, workspace.org_id);
+    let prompt = body.prompt;
+    let prompt_len = prompt.len();
+    let row = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(TestGenerationJob::create(
+                &mut **tx,
+                CreateTestGenerationJob {
+                    workspace_id,
+                    org_id,
+                    prompt: &prompt,
+                    captures_filter: &captures_filter,
+                    created_by: Some(user_id),
+                },
+            )
+            .await?)
+        })
+    })
     .await?;
 
     tracing::info!(
         job_id = %row.id,
         workspace_id = %workspace.id,
         org_id = %workspace.org_id,
-        prompt_len = body.prompt.len(),
+        prompt_len,
         "test-generation job queued"
     );
 
@@ -162,8 +171,13 @@ pub async fn list_jobs(
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<TestGenerationJob>>> {
     let workspace = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
-    let jobs =
-        TestGenerationJob::list_by_workspace(state.db.pool(), workspace.id, LIST_LIMIT).await?;
+    let workspace_id = workspace.id;
+    let jobs = with_org_context(state.db.runtime_pool(), workspace.org_id, |tx| {
+        Box::pin(async move {
+            Ok(TestGenerationJob::list_by_workspace(&mut **tx, workspace_id, LIST_LIMIT).await?)
+        })
+    })
+    .await?;
     Ok(Json(jobs))
 }
 
@@ -176,9 +190,14 @@ pub async fn get_job(
     headers: HeaderMap,
 ) -> ApiResult<Json<TestGenerationJob>> {
     let workspace = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
-    let job = TestGenerationJob::find_in_workspace(state.db.pool(), workspace.id, job_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Job not found".into()))?;
+    let workspace_id = workspace.id;
+    let job = with_org_context(state.db.runtime_pool(), workspace.org_id, |tx| {
+        Box::pin(async move {
+            Ok(TestGenerationJob::find_in_workspace(&mut **tx, workspace_id, job_id).await?)
+        })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Job not found".into()))?;
     Ok(Json(job))
 }
 
@@ -191,7 +210,13 @@ pub async fn cancel_job(
     headers: HeaderMap,
 ) -> ApiResult<Json<Value>> {
     let workspace = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
-    let changed = TestGenerationJob::cancel(state.db.pool(), workspace.id, job_id).await?;
+    let workspace_id = workspace.id;
+    let changed = with_org_context(state.db.runtime_pool(), workspace.org_id, |tx| {
+        Box::pin(
+            async move { Ok(TestGenerationJob::cancel(&mut **tx, workspace_id, job_id).await?) },
+        )
+    })
+    .await?;
     Ok(Json(json!({
         "cancelled": changed,
     })))
@@ -227,8 +252,11 @@ pub async fn stream_job(
     // Authorize once up front so we don't leak existence to non-members.
     let workspace = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
 
+    // Each poll opens its own short org-bound transaction; the stream body
+    // outlives the handler, so the org is captured explicitly.
     let cursor = JobStreamCursor {
-        pool: state.db.pool().clone(),
+        pool: state.db.runtime_pool().clone(),
+        org_id: workspace.org_id,
         workspace_id: workspace.id,
         job_id,
         last_snapshot: None,
@@ -267,7 +295,10 @@ impl JobSnapshot {
 }
 
 struct JobStreamCursor {
+    /// Runtime (RLS-enforced) pool.
     pool: PgPool,
+    /// Authorized org of the workspace; bound per poll.
+    org_id: Uuid,
     workspace_id: Uuid,
     job_id: Uuid,
     last_snapshot: Option<JobSnapshot>,
@@ -297,11 +328,12 @@ async fn advance_job_stream(
         tokio::time::sleep(Duration::from_secs(1)).await;
     }
 
-    let job = match TestGenerationJob::find_in_workspace(
-        &cursor.pool,
-        cursor.workspace_id,
-        cursor.job_id,
-    )
+    let (workspace_id, job_id) = (cursor.workspace_id, cursor.job_id);
+    let job = match with_org_context(&cursor.pool, cursor.org_id, |tx| {
+        Box::pin(async move {
+            Ok(TestGenerationJob::find_in_workspace(&mut **tx, workspace_id, job_id).await?)
+        })
+    })
     .await
     {
         Ok(Some(j)) => j,
@@ -365,7 +397,12 @@ async fn advance_job_stream(
 /// provider bill); the pending cap still applies to bound queue depth.
 async fn enforce_pre_enqueue_gates(state: &AppState, org_id: Uuid) -> ApiResult<()> {
     // 1. Pending-job cap.
-    let pending = TestGenerationJob::count_pending_for_org(state.db.pool(), org_id).await?;
+    let pending = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(
+            async move { Ok(TestGenerationJob::count_pending_for_org(&mut **tx, org_id).await?) },
+        )
+    })
+    .await?;
     if pending >= MAX_PENDING_JOBS_PER_ORG {
         return Err(ApiError::RateLimitExceeded(format!(
             "Too many pending test-generation jobs ({pending}/{MAX_PENDING_JOBS_PER_ORG}). \
@@ -393,18 +430,23 @@ async fn enforce_pre_enqueue_gates(state: &AppState, org_id: Uuid) -> ApiResult<
 /// the workspace so callers can read `workspace.org_id` without a second
 /// fetch. Mirrors the helper in `handlers::captures` but returns the
 /// workspace rather than just `()`.
+///
+/// The lookup is bound to the caller's org, so a cross-org workspace reads
+/// as absent and yields the same "Workspace not found".
 async fn authorize_workspace(
     state: &AppState,
     user_id: Uuid,
     headers: &HeaderMap,
     workspace_id: Uuid,
 ) -> ApiResult<CloudWorkspace> {
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), workspace_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    let workspace = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+        Box::pin(async move { Ok(CloudWorkspace::find_by_id(&mut **tx, workspace_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
     if ctx.org_id != workspace.org_id {
         // Same opaque response as the unknown-workspace case — don't leak
         // existence of cross-org workspace IDs.

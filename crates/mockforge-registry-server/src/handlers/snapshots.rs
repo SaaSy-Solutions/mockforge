@@ -26,6 +26,7 @@ use crate::{
     handlers::usage::effective_limits,
     middleware::{resolve_org_context, AuthUser},
     models::{CloudWorkspace, Snapshot, UsageCounter},
+    store::with_org_context,
     AppState,
 };
 
@@ -147,16 +148,16 @@ pub async fn capture_snapshot(
     // summary stub so the UI's quick-look still has something without
     // a follow-up fetch.
     const INLINE_THRESHOLD: i64 = 256 * 1024; // 256 KB
-    let (manifest, size_bytes) = match build_workspace_manifest(state.db.pool(), workspace_id).await
-    {
-        Ok((m, s)) => (m, s),
-        Err(e) => {
-            tracing::error!(snapshot_id = %snapshot.id, error = %e, "manifest build failed");
-            // Flip status to 'failed' so list_by_workspace reflects reality.
-            let _ = Snapshot::mark_failed(state.db.pool(), snapshot.id).await;
-            return Err(ApiError::Database(e));
-        }
-    };
+    let (manifest, size_bytes) =
+        match build_workspace_manifest(&state, ctx.org_id, workspace_id).await {
+            Ok((m, s)) => (m, s),
+            Err(e) => {
+                tracing::error!(snapshot_id = %snapshot.id, error = %e, "manifest build failed");
+                // Flip status to 'failed' so list_by_workspace reflects reality.
+                let _ = Snapshot::mark_failed(state.db.pool(), snapshot.id).await;
+                return Err(ApiError::Database(e));
+            }
+        };
 
     let (storage_url, stored_manifest) = if size_bytes > INLINE_THRESHOLD {
         // Upload the full blob; keep a small summary on the row so
@@ -214,13 +215,18 @@ pub async fn capture_snapshot(
 /// Includes the resources a "restore" would want to recreate: services,
 /// fixtures, scenarios, environments, federation links, folders.
 /// Returns (manifest, byte_count) so the caller can bill storage usage.
+///
+/// `org_id` must be the already-authorized org owning `workspace_id`; the
+/// RLS-forced `services` / `fixtures` dumps are bound to it.
 async fn build_workspace_manifest(
-    pool: &sqlx::PgPool,
+    state: &AppState,
+    org_id: Uuid,
     workspace_id: Uuid,
 ) -> sqlx::Result<(serde_json::Value, i64)> {
     use mockforge_registry_core::models::{
         flow::Flow, mock_environment::MockEnvironment, ChaosCampaign,
     };
+    let pool = state.db.pool();
 
     // Each list is best-effort — if a resource family fails to load we
     // log + include an empty array. A partial snapshot is more useful
@@ -255,22 +261,32 @@ async fn build_workspace_manifest(
     // Raw services / fixtures table dumps via sqlx so we don't need a
     // model API for every column — the manifest is forward-compatible
     // because new columns just appear in the JSON.
-    let services = sqlx::query_as::<_, (Uuid, serde_json::Value)>(
-        "SELECT id, to_jsonb(s) AS doc FROM services s WHERE workspace_id = $1",
-    )
-    .bind(workspace_id)
-    .fetch_all(pool)
+    let services = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(sqlx::query_as::<_, (Uuid, serde_json::Value)>(
+                "SELECT id, to_jsonb(s) AS doc FROM services s WHERE workspace_id = $1",
+            )
+            .bind(workspace_id)
+            .fetch_all(&mut **tx)
+            .await?)
+        })
+    })
     .await
     .unwrap_or_else(|e| {
         tracing::warn!(workspace_id = %workspace_id, error = %e, "snapshot: services fetch failed");
         partial = true;
         Vec::new()
     });
-    let fixtures = sqlx::query_as::<_, (Uuid, serde_json::Value)>(
-        "SELECT id, to_jsonb(f) AS doc FROM fixtures f WHERE workspace_id = $1",
-    )
-    .bind(workspace_id)
-    .fetch_all(pool)
+    let fixtures = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(sqlx::query_as::<_, (Uuid, serde_json::Value)>(
+                "SELECT id, to_jsonb(f) AS doc FROM fixtures f WHERE workspace_id = $1",
+            )
+            .bind(workspace_id)
+            .fetch_all(&mut **tx)
+            .await?)
+        })
+    })
     .await
     .unwrap_or_else(|e| {
         tracing::warn!(workspace_id = %workspace_id, error = %e, "snapshot: fixtures fetch failed");
@@ -308,7 +324,7 @@ pub async fn get_snapshot(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Snapshot>> {
-    let snapshot = load_authorized_snapshot(&state, user_id, &headers, id).await?;
+    let (snapshot, _) = load_authorized_snapshot(&state, user_id, &headers, id).await?;
     Ok(Json(snapshot))
 }
 
@@ -357,12 +373,12 @@ pub async fn diff_snapshot(
     Query(query): Query<DiffQuery>,
     headers: HeaderMap,
 ) -> ApiResult<Json<SnapshotDiff>> {
-    let snapshot = load_authorized_snapshot(&state, user_id, &headers, id).await?;
+    let (snapshot, org_id) = load_authorized_snapshot(&state, user_id, &headers, id).await?;
     let snapshot_manifest = resolve_manifest(&state, &snapshot).await;
 
     let against_str = query.against.as_deref().unwrap_or("current");
     let (against_kind, against_id, against_manifest) = if against_str == "current" {
-        let (m, _) = build_workspace_manifest(state.db.pool(), snapshot.workspace_id)
+        let (m, _) = build_workspace_manifest(&state, org_id, snapshot.workspace_id)
             .await
             .map_err(ApiError::Database)?;
         ("current".to_string(), None, m)
@@ -370,7 +386,7 @@ pub async fn diff_snapshot(
         let other_id = Uuid::parse_str(against_str).map_err(|_| {
             ApiError::InvalidRequest("'against' must be 'current' or a snapshot UUID".into())
         })?;
-        let other = load_authorized_snapshot(&state, user_id, &headers, other_id).await?;
+        let (other, _) = load_authorized_snapshot(&state, user_id, &headers, other_id).await?;
         if other.workspace_id != snapshot.workspace_id {
             return Err(ApiError::InvalidRequest(
                 "Cannot diff snapshots across different workspaces".into(),
@@ -499,7 +515,7 @@ pub async fn restore_snapshot(
     use mockforge_registry_core::models::mock_environment::{MockEnvironment, MockEnvironmentName};
     use mockforge_registry_core::models::ChaosCampaign;
 
-    let snapshot = load_authorized_snapshot(&state, user_id, &headers, id).await?;
+    let (snapshot, _) = load_authorized_snapshot(&state, user_id, &headers, id).await?;
     let manifest = resolve_manifest(&state, &snapshot).await;
     if manifest.as_object().map(|o| o.is_empty()).unwrap_or(true) {
         return Err(ApiError::InvalidRequest("Snapshot has no manifest to restore".into()));
@@ -628,7 +644,7 @@ pub async fn delete_snapshot(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let snapshot = load_authorized_snapshot(&state, user_id, &headers, id).await?;
+    let (snapshot, org_id) = load_authorized_snapshot(&state, user_id, &headers, id).await?;
     let workspace_id = snapshot.workspace_id;
 
     let deleted = Snapshot::delete(state.db.pool(), id).await.map_err(ApiError::Database)?;
@@ -636,33 +652,33 @@ pub async fn delete_snapshot(
         return Err(ApiError::InvalidRequest("Snapshot not found".into()));
     }
 
-    // Re-sync the storage gauge for the org.
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), workspace_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
+    // Re-sync the storage gauge for the org (the workspace's org, already
+    // authorized by `load_authorized_snapshot`).
     let bytes = Snapshot::sum_ready_bytes_by_workspace(state.db.pool(), workspace_id)
         .await
         .map_err(ApiError::Database)?;
-    UsageCounter::set_snapshot_bytes(state.db.pool(), workspace.org_id, bytes)
-        .await
-        .map_err(ApiError::Database)?;
+    with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(UsageCounter::set_snapshot_bytes(tx, org_id, bytes).await?) })
+    })
+    .await?;
 
     Ok(Json(serde_json::json!({ "deleted": true })))
 }
 
-/// Verify caller belongs to the workspace's org.
+/// Verify caller belongs to the workspace's org. The workspace lookup is
+/// bound to the caller's org, so a cross-org workspace reads as absent.
 async fn authorize_workspace(
     state: &AppState,
     user_id: Uuid,
     headers: &HeaderMap,
     workspace_id: Uuid,
 ) -> ApiResult<crate::middleware::org_context::OrgContext> {
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), workspace_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    let workspace = find_workspace_in_org(state, ctx.org_id, workspace_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
     if ctx.org_id != workspace.org_id {
         return Err(ApiError::InvalidRequest("Workspace not found".into()));
     }
@@ -670,24 +686,37 @@ async fn authorize_workspace(
 }
 
 /// Fetch a snapshot and verify caller belongs to its workspace's org.
+/// Returns the snapshot and the authorized org id.
 async fn load_authorized_snapshot(
     state: &AppState,
     user_id: Uuid,
     headers: &HeaderMap,
     id: Uuid,
-) -> ApiResult<Snapshot> {
+) -> ApiResult<(Snapshot, Uuid)> {
     let snapshot = Snapshot::find_by_id(state.db.pool(), id)
         .await
         .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidRequest("Snapshot not found".into()))?;
-    let workspace = CloudWorkspace::find_by_id(state.db.pool(), snapshot.workspace_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Snapshot not found".into()))?;
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    let workspace = find_workspace_in_org(state, ctx.org_id, snapshot.workspace_id)
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Snapshot not found".into()))?;
     if ctx.org_id != workspace.org_id {
         return Err(ApiError::InvalidRequest("Snapshot not found".into()));
     }
-    Ok(snapshot)
+    Ok((snapshot, ctx.org_id))
+}
+
+/// Load a workspace bound to `org_id`; a workspace in another org is `None`.
+async fn find_workspace_in_org(
+    state: &AppState,
+    org_id: Uuid,
+    workspace_id: Uuid,
+) -> ApiResult<Option<CloudWorkspace>> {
+    Ok(with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(CloudWorkspace::find_by_id(&mut **tx, workspace_id).await?) })
+    })
+    .await?)
 }

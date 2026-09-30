@@ -1,5 +1,17 @@
 ## [Unreleased]
 
+### Changed
+
+- **[Cloud]** Tenant isolation is now also enforced in the database for every org-scoped table (36 tables under Postgres row-level security, up from 5). Request-path queries run bound to the caller's org; background workers, webhooks and platform-admin paths run on the owner role. Requires the owner role (`DATABASE_URL`) to have `BYPASSRLS`; the migration refuses to apply otherwise. Startup now logs which roles back each pool and flags a misconfigured one at ERROR. (#1087)
+- **[Cloud]** `PUT /api/v1/organizations/{org_id}/quota` is now platform-admin only. Org owners can no longer set their own quota overrides, because overrides are merged over plan limits. `GET` now requires membership in the org. (#1087)
+
+### Fixed
+
+- **[Cloud]** Security: any authenticated user could read or overwrite any org's quota overrides. (#1087)
+- **[Cloud][AI]** Security: `POST /api/v1/organizations/{org_id}/mockai/generate-openapi-from-traffic` did not check that the caller belongs to the org. (#1087)
+- **[Cloud]** Security: the GDPR data export included pending invitation payloads, which let a plain member redeem an invite meant for someone else. (#1087)
+- **[Cloud]** `GET /api/v1/organizations/{org_id}/incidents/stats` no longer returns 500 once the org has a resolved incident. (#1087)
+
 ## [0.3.228] - 2026-09-30
 
 ### Added

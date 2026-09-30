@@ -523,16 +523,24 @@ pub async fn oidc_callback(
 
     // Mirror saml_acs: create an SSO session and mint a short-lived app token.
     let session_expires = Utc::now() + chrono::Duration::hours(8);
-    let _session = crate::models::SSOSession::create(
-        state.db.pool(),
-        org.id,
-        user.id,
-        None,
-        Some(&email),
-        session_expires,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    // Runtime (RLS) pool bound to the org the path slug resolved to (#1087).
+    let (session_org_id, session_user_id) = (org.id, user.id);
+    let session_email = email.clone();
+    let _session =
+        crate::store::with_org_context(state.db.runtime_pool(), session_org_id, move |tx| {
+            Box::pin(async move {
+                Ok(crate::models::SSOSession::create(
+                    &mut **tx,
+                    session_org_id,
+                    session_user_id,
+                    None,
+                    Some(&session_email),
+                    session_expires,
+                )
+                .await?)
+            })
+        })
+        .await?;
 
     let token = crate::auth::create_token(&user.id.to_string(), &state.config.jwt_secret)
         .map_err(ApiError::Internal)?;

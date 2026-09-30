@@ -10,6 +10,7 @@ use crate::ai::provider::ProviderSelection;
 use crate::error::{ApiError, ApiResult};
 use crate::handlers::usage::effective_limits;
 use crate::models::{Organization, UsageCounter};
+use crate::store::with_org_context;
 use crate::AppState;
 use uuid::Uuid;
 
@@ -125,8 +126,14 @@ pub async fn record_ai_usage(
     if tokens <= 0 || !matches!(selection, ProviderSelection::Platform) {
         return Ok(());
     }
-    let _new_total = UsageCounter::increment_ai_tokens(state.db.pool(), org_id, tokens)
-        .await
-        .map_err(ApiError::Database)?;
+    // Request-path (RLS) pool bound to the org being charged. Also called from
+    // the test-generation worker, which passes the job's org explicitly.
+    with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            UsageCounter::increment_ai_tokens(tx, org_id, tokens).await?;
+            Ok(())
+        })
+    })
+    .await?;
     Ok(())
 }

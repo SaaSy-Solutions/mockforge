@@ -51,20 +51,23 @@ pub trait IncidentBus: Send + Sync {
 /// incident dedupe index makes repeated fires idempotent.
 #[cfg(feature = "postgres")]
 pub struct PgIncidentBus {
-    pool: sqlx::PgPool,
+    /// The OWNER pool (#1087). Findings are raised from the internal runner
+    /// callbacks, which authenticate with a shared token and have no user org
+    /// context; the incident's org comes from the run row.
+    owner_pool: sqlx::PgPool,
 }
 
 #[cfg(feature = "postgres")]
 impl PgIncidentBus {
-    pub fn new(pool: sqlx::PgPool) -> Self {
-        Self { pool }
+    pub fn new(owner_pool: sqlx::PgPool) -> Self {
+        Self { owner_pool }
     }
 }
 
 #[cfg(feature = "postgres")]
 impl IncidentBus for PgIncidentBus {
     async fn raise(&self, input: RaiseIncidentInput<'_>) -> sqlx::Result<Incident> {
-        Incident::raise(&self.pool, input).await
+        Incident::raise(&mut *self.owner_pool.acquire().await?, input).await
     }
 }
 

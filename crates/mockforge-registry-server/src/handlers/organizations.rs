@@ -824,21 +824,34 @@ pub async fn get_organization_by_slug(
 /// GET /api/v1/organizations/:org_id/quota
 pub async fn get_organization_quota(
     State(state): State<AppState>,
-    AuthUser(_user_id): AuthUser,
+    AuthUser(user_id): AuthUser,
     Path(org_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
+    // Readable by the org's own members and by platform admins. Previously any
+    // authenticated user could read any org's quota (found by the #1087 RLS
+    // e2e suite: RLS cannot catch it because the handler names the org).
+    if !is_platform_admin(&state, user_id).await? {
+        require_org_member(&state, org_id, user_id).await?;
+    }
     let setting = state.store.get_org_setting(org_id, "quota").await?;
     let value = setting.map(|s| s.setting_value).unwrap_or_else(|| serde_json::json!({}));
     Ok(Json(serde_json::json!({ "org_id": org_id, "quota": value })))
 }
 
 /// PUT /api/v1/organizations/:org_id/quota
+///
+/// Platform-admin only. Quota overrides are merged over the plan limits by
+/// `usage::effective_limits`, so letting an org set its own would let it lift
+/// its plan's limits; letting anyone set any org's was a cross-tenant write.
 pub async fn set_organization_quota(
     State(state): State<AppState>,
-    AuthUser(_user_id): AuthUser,
+    AuthUser(user_id): AuthUser,
     Path(org_id): Path<Uuid>,
     Json(quota): Json<serde_json::Value>,
 ) -> ApiResult<Json<serde_json::Value>> {
+    if !is_platform_admin(&state, user_id).await? {
+        return Err(ApiError::PermissionDenied);
+    }
     if !quota.is_object() {
         return Err(ApiError::InvalidRequest("quota body must be a JSON object".to_string()));
     }
@@ -848,6 +861,22 @@ pub async fn set_organization_quota(
         "quota": updated.setting_value,
         "updated_at": updated.updated_at,
     })))
+}
+
+async fn is_platform_admin(state: &AppState, user_id: Uuid) -> ApiResult<bool> {
+    Ok(state.store.find_user_by_id(user_id).await?.map(|u| u.is_admin).unwrap_or(false))
+}
+
+/// Owner or any member of `org_id`. A missing org and a non-member get the
+/// same error, so the check does not reveal which org ids exist.
+async fn require_org_member(state: &AppState, org_id: Uuid, user_id: Uuid) -> ApiResult<()> {
+    if state.store.find_org_member(org_id, user_id).await?.is_some() {
+        return Ok(());
+    }
+    match state.store.find_organization_by_id(org_id).await? {
+        Some(org) if org.owner_id == user_id => Ok(()),
+        _ => Err(ApiError::PermissionDenied),
+    }
 }
 
 // ---------------------------------------------------------------------------

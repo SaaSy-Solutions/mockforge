@@ -46,7 +46,7 @@ impl SuspiciousActivity {
     /// Create a new suspicious activity record
     #[allow(clippy::too_many_arguments)]
     pub async fn create(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Option<Uuid>,
         user_id: Option<Uuid>,
         activity_type: SuspiciousActivityType,
@@ -71,13 +71,13 @@ impl SuspiciousActivity {
         .bind(metadata)
         .bind(ip_address)
         .bind(user_agent)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Get unresolved suspicious activities
     pub async fn get_unresolved(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Option<Uuid>,
         user_id: Option<Uuid>,
         severity: Option<&str>,
@@ -108,14 +108,14 @@ impl SuspiciousActivity {
             query.push_bind(limit);
         }
 
-        query.build_query_as::<Self>().fetch_all(pool).await
+        query.build_query_as::<Self>().fetch_all(executor).await
     }
 
     /// Mark activity as resolved, scoped to `org_id`. The UPDATE silently
     /// affects zero rows when `activity_id` doesn't belong to `org_id`;
     /// callers should treat that as not-found.
     pub async fn resolve(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
         activity_id: Uuid,
         resolved_by: Uuid,
@@ -126,19 +126,19 @@ impl SuspiciousActivity {
         .bind(resolved_by)
         .bind(activity_id)
         .bind(org_id)
-        .execute(pool)
+        .execute(executor)
         .await?;
         Ok(result.rows_affected())
     }
 
     /// Clean up old resolved activities (older than N days)
-    pub async fn cleanup_old(pool: &sqlx::PgPool, days: i64) -> sqlx::Result<u64> {
+    pub async fn cleanup_old(executor: impl sqlx::PgExecutor<'_>, days: i64) -> sqlx::Result<u64> {
         let cutoff = Utc::now() - chrono::Duration::days(days);
         let result = sqlx::query(
             "DELETE FROM suspicious_activities WHERE resolved = TRUE AND resolved_at < $1",
         )
         .bind(cutoff)
-        .execute(pool)
+        .execute(executor)
         .await?;
         Ok(result.rows_affected())
     }
