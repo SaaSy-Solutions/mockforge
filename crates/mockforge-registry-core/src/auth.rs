@@ -215,8 +215,8 @@ pub fn create_deployment_ingest_token(
 /// `secret` rotates every token on the next deploy.
 pub fn deployment_management_token(deployment_id: uuid::Uuid, secret: &str) -> String {
     use hmac::{Hmac, Mac};
-    let mut mac = Hmac::<sha2::Sha256>::new_from_slice(secret.as_bytes())
-        .expect("HMAC accepts keys of any length");
+    let mut mac =
+        Hmac::<Sha256>::new_from_slice(secret.as_bytes()).expect("HMAC accepts keys of any length");
     mac.update(b"mockforge-management-token:");
     mac.update(deployment_id.as_bytes());
     format!("mfm_{}", hex::encode(mac.finalize().into_bytes()))
