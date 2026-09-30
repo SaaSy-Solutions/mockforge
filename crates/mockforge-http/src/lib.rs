@@ -236,6 +236,8 @@ pub mod llm_mock;
 
 /// Management API for server control and monitoring
 pub mod management;
+/// Runtime route-scoped chaos rules API
+pub mod management_auth;
 /// WebSocket-based management API for real-time updates
 pub mod management_ws;
 /// Mock MCP (Model Context Protocol) server for agent-as-MCP-client testing (#913).
@@ -260,7 +262,6 @@ pub mod reality_proxy;
 /// Replay listing and fixture management
 pub mod replay_listing;
 pub mod request_logging;
-/// Runtime route-scoped chaos rules API
 pub mod route_chaos_runtime;
 /// Runtime named-scenario activation API
 #[cfg(feature = "scenario-engine")]

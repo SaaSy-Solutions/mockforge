@@ -61,6 +61,7 @@ rust_decimal = "1.42"
 # Crypto / hashing
 sha2 = "0.10"
 hex = "0.4"
+hmac = { workspace = true }
 # Ed25519 verification for publisher SBOM attestations.
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 
