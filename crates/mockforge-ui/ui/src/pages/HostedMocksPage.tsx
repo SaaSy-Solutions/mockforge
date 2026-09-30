@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { PageHeader, EmptyState as DSEmptyState } from '@/components/ui/DesignSystem';
 import { useHostedMockStream } from '@/hooks/useHostedMockStream';
 import { useFlyRuntimeLogs } from '@/hooks/useFlyRuntimeLogs';
 import { useRuntimeRequests } from '@/hooks/useRuntimeRequests';
@@ -993,35 +994,30 @@ export const HostedMocksPage: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
-      {/* Header */}
-      <Box sx={{ mb: 4, display: 'flex', justifyContent: 'space-between', alignItems: 'start' }}>
-        <Box>
-          <Typography variant="h4" gutterBottom>
-            Hosted Mocks
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Deploy and manage cloud-hosted mock services
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 2 }}>
-          <Button
-            variant="outlined"
-            startIcon={<RefreshIcon />}
-            onClick={loadDeployments}
-            disabled={loading}
-          >
-            Refresh
-          </Button>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={() => setCreateModalOpen(true)}
-          >
-            Deploy Mock
-          </Button>
-        </Box>
-      </Box>
+    <Box>
+      <PageHeader
+        title="Hosted Mocks"
+        subtitle="Deploy mock APIs to the cloud and monitor their health, traffic and logs."
+        action={
+          <>
+            <Button
+              variant="outlined"
+              startIcon={<RefreshIcon />}
+              onClick={loadDeployments}
+              disabled={loading}
+            >
+              Refresh
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={() => setCreateModalOpen(true)}
+            >
+              Deploy Mock
+            </Button>
+          </>
+        }
+      />
 
       {error && (
         <Alert severity="error" sx={{ mb: 3 }} onClose={() => setError(null)}>
@@ -1048,10 +1044,21 @@ export const HostedMocksPage: React.FC = () => {
             <TableBody>
               {deployments.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} align="center" sx={{ py: 4 }}>
-                    <Typography variant="body2" color="text.secondary">
-                      No deployments yet. Create your first deployment to get started.
-                    </Typography>
+                  <TableCell colSpan={6} padding="none">
+                    {loading ? (
+                      <p className="py-10 text-center text-sm text-muted-foreground">Loading deployments…</p>
+                    ) : (
+                      <DSEmptyState
+                        icon={<AddIcon />}
+                        title="No deployments yet"
+                        description="Deploy an OpenAPI spec or workspace to get a public URL with health checks, logs and traffic metrics."
+                        action={
+                          <Button variant="contained" startIcon={<AddIcon />} onClick={() => setCreateModalOpen(true)}>
+                            Deploy your first mock
+                          </Button>
+                        }
+                      />
+                    )}
                   </TableCell>
                 </TableRow>
               ) : (

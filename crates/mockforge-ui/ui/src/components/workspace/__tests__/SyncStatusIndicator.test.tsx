@@ -156,15 +156,15 @@ describe('SyncStatusIndicator', () => {
   it('displays correct badge variant for status', () => {
     const { rerender } = render(<SyncStatusIndicator status={{ ...baseStatus, status: 'syncing' }} />);
     let badge = screen.getByText('Syncing...').closest('.inline-flex');
-    expect(badge).toHaveClass('bg-info-100');
+    expect(badge).toHaveClass('bg-info-50');
 
     rerender(<SyncStatusIndicator status={{ ...baseStatus, status: 'success' }} />);
     badge = screen.getByText('Synced').closest('.inline-flex');
-    expect(badge).toHaveClass('bg-success/15');
+    expect(badge).toHaveClass('bg-success-50');
 
     rerender(<SyncStatusIndicator status={{ ...baseStatus, status: 'error' }} />);
     badge = screen.getByText('Sync Error').closest('.inline-flex');
-    expect(badge).toHaveClass('bg-danger/15');
+    expect(badge).toHaveClass('bg-danger-50');
   });
 
   it('shows tooltip for target directory', () => {

@@ -139,7 +139,7 @@ describe('WorkspacesPage', () => {
     render(<WorkspacesPage />, { wrapper: createWrapper() });
 
     expect(screen.getByText('Workspaces')).toBeInTheDocument();
-    expect(screen.getByText('Manage your mock API workspaces')).toBeInTheDocument();
+    expect(screen.getByText(/Group routes, fixtures and environments per API/)).toBeInTheDocument();
   });
 
   it('displays workspace cards', () => {
@@ -158,8 +158,8 @@ describe('WorkspacesPage', () => {
   it('displays workspace statistics', () => {
     render(<WorkspacesPage />, { wrapper: createWrapper() });
 
-    expect(screen.getByText('10 requests')).toBeInTheDocument();
-    expect(screen.getByText('3 folders')).toBeInTheDocument();
+    expect(screen.getByLabelText('10 requests')).toBeInTheDocument();
+    expect(screen.getByLabelText('3 folders')).toBeInTheDocument();
   });
 
   it('opens create workspace dialog', () => {
@@ -400,8 +400,8 @@ describe('WorkspacesPage', () => {
 
     render(<WorkspacesPage />, { wrapper: createWrapper() });
 
-    expect(screen.getByText('No Workspaces Yet')).toBeInTheDocument();
-    expect(screen.getByText(/Get started by creating a new workspace/)).toBeInTheDocument();
+    expect(screen.getByText('No workspaces yet')).toBeInTheDocument();
+    expect(screen.getByText(/Create one to get started/)).toBeInTheDocument();
   });
 
   it('shows loading state', () => {

@@ -26,8 +26,8 @@ function ServicesHeader({
   return (
     <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
       <div>
-        <h1 className="text-3xl font-semibold text-foreground">Services</h1>
-        <p className="text-base text-muted-foreground mt-1">{subtitle}</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Services</h1>
+        <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>
       </div>
       {isCloud && (
         <div className="flex items-center gap-2">
@@ -140,7 +140,7 @@ export function ServicesPage() {
     // a static empty-state card.
     return (
       <div className="space-y-8">
-        {header('Manage services and routes. Use global search to quickly filter routes.')}
+        {header('Manage services and routes. Press Ctrl/⌘ K and choose “Search services” to filter routes.')}
         <Card title="No Services" icon={<Search className="h-4 w-4" />}>
           <div className="text-sm text-muted-foreground">
             No services configured. Add a service to get started.
@@ -152,7 +152,7 @@ export function ServicesPage() {
 
   return (
     <div className="space-y-8">
-      {header('Manage services and routes. Use global search to quickly filter routes.')}
+      {header('Manage services and routes. Press Ctrl/⌘ K and choose “Search services” to filter routes.')}
 
       <Card title="Matching Routes" icon={<Search className="h-4 w-4" />} className={searchActive ? '' : 'opacity-70'}>
         {searchActive ? (
@@ -171,7 +171,7 @@ export function ServicesPage() {
             )}
           </div>
         ) : (
-          <div className="text-sm text-muted-foreground">No search active. Type in the header's global search to filter routes.</div>
+          <div className="text-sm text-muted-foreground">No search active. Press Ctrl/⌘ K, type a path, and choose “Search services”.</div>
         )}
       </Card>
 

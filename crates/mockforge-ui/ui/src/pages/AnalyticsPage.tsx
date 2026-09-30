@@ -23,7 +23,7 @@ export const AnalyticsPage: React.FC = () => {
 const CloudModeNotice: React.FC = () => {
   const navigate = useNavigate();
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="max-w-3xl mx-auto">
       <div className="rounded-lg border border-blue-200 bg-blue-50 p-5 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-900/20 dark:text-blue-300">
         <h2 className="text-base font-semibold mb-2">
           Request-traffic analytics is a self-hosted feature

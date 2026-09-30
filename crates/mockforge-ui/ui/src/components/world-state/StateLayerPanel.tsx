@@ -35,7 +35,7 @@ export const StateLayerPanel: React.FC<StateLayerPanelProps> = ({
               type="checkbox"
               checked={layer.enabled}
               onChange={(e) => onLayerToggle(layer.id, e.target.checked)}
-              className="w-4 h-4 text-info-600 rounded focus:ring-blue-500"
+              className="w-4 h-4 text-info-600 rounded focus:ring-ring/30"
             />
             <span className="text-sm font-medium">{layer.name}</span>
           </label>

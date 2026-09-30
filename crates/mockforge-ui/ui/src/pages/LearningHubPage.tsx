@@ -157,7 +157,7 @@ export const LearningHubPage: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box>
       <Typography variant="h4" gutterBottom>
         Learning Hub
       </Typography>

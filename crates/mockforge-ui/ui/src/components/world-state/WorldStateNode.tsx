@@ -50,8 +50,9 @@ export const WorldStateNodeComponent: React.FC<NodeProps<WorldStateFlowNode>> = 
       style={{
         padding: '10px',
         borderRadius: '8px',
-        background: isSelected ? '#eff6ff' : '#ffffff',
-        border: `2px solid ${isSelected ? layerColor : '#e5e7eb'}`,
+        background: 'hsl(var(--card))',
+        color: 'hsl(var(--card-foreground))',
+        border: `2px solid ${isSelected ? layerColor : 'hsl(var(--border))'}`,
         minWidth: '150px',
         boxShadow: isSelected
           ? `0 4px 6px -1px ${layerColor}40`

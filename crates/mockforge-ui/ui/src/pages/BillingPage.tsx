@@ -276,19 +276,19 @@ export function BillingPage() {
     switch (status) {
       case 'none':
       case 'active':
-        return <Badge className="bg-success-500"><CheckCircle2 className="w-3 h-3 mr-1" />Active</Badge>;
+        return <Badge variant="success"><CheckCircle2 className="w-3 h-3 mr-1" />Active</Badge>;
       case 'trialing':
-        return <Badge className="bg-info-500"><Calendar className="w-3 h-3 mr-1" />Trialing</Badge>;
+        return <Badge variant="info"><Calendar className="w-3 h-3 mr-1" />Trialing</Badge>;
       case 'past_due':
-        return <Badge className="bg-warning-500"><AlertCircle className="w-3 h-3 mr-1" />Past Due</Badge>;
+        return <Badge variant="warning"><AlertCircle className="w-3 h-3 mr-1" />Past Due</Badge>;
       case 'unpaid':
-        return <Badge className="bg-danger-500"><AlertCircle className="w-3 h-3 mr-1" />Unpaid</Badge>;
+        return <Badge variant="danger"><AlertCircle className="w-3 h-3 mr-1" />Unpaid</Badge>;
       case 'incomplete':
-        return <Badge className="bg-warning-500"><AlertCircle className="w-3 h-3 mr-1" />Incomplete</Badge>;
+        return <Badge variant="warning"><AlertCircle className="w-3 h-3 mr-1" />Incomplete</Badge>;
       case 'incomplete_expired':
-        return <Badge className="bg-gray-500"><XCircle className="w-3 h-3 mr-1" />Incomplete (expired)</Badge>;
+        return <Badge variant="default"><XCircle className="w-3 h-3 mr-1" />Incomplete (expired)</Badge>;
       case 'canceled':
-        return <Badge className="bg-gray-500"><XCircle className="w-3 h-3 mr-1" />Canceled</Badge>;
+        return <Badge variant="default"><XCircle className="w-3 h-3 mr-1" />Canceled</Badge>;
       default:
         return <Badge>{status}</Badge>;
     }
@@ -324,10 +324,10 @@ export function BillingPage() {
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Billing & Subscription</h1>
-        <p className="text-muted-foreground mt-2">Manage your subscription and view usage</p>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Billing & Subscription</h1>
+        <p className="text-sm text-muted-foreground mt-2">Manage your subscription and view usage</p>
       </div>
 
       {subscription.cancel_at_period_end && subscription.current_period_end && (
@@ -1040,15 +1040,15 @@ function InvoiceStatusBadge({ status }: { status: string | null }) {
   if (!status) return <Badge>—</Badge>;
   switch (status) {
     case 'paid':
-      return <Badge className="bg-success-500"><CheckCircle2 className="w-3 h-3 mr-1" />Paid</Badge>;
+      return <Badge variant="success"><CheckCircle2 className="w-3 h-3 mr-1" />Paid</Badge>;
     case 'open':
-      return <Badge className="bg-warning-500"><AlertCircle className="w-3 h-3 mr-1" />Open</Badge>;
+      return <Badge variant="warning"><AlertCircle className="w-3 h-3 mr-1" />Open</Badge>;
     case 'uncollectible':
-      return <Badge className="bg-danger-500"><XCircle className="w-3 h-3 mr-1" />Uncollectible</Badge>;
+      return <Badge variant="danger"><XCircle className="w-3 h-3 mr-1" />Uncollectible</Badge>;
     case 'void':
-      return <Badge className="bg-gray-500"><XCircle className="w-3 h-3 mr-1" />Void</Badge>;
+      return <Badge variant="default"><XCircle className="w-3 h-3 mr-1" />Void</Badge>;
     case 'draft':
-      return <Badge className="bg-gray-400">Draft</Badge>;
+      return <Badge variant="default">Draft</Badge>;
     default:
       return <Badge>{status}</Badge>;
   }

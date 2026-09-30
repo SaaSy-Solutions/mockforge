@@ -495,10 +495,12 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Workspaces</h1>
-          <p className="text-muted-foreground">Manage your mock API workspaces</p>
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Workspaces</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Group routes, fixtures and environments per API. The active workspace scopes the rest of the app.
+          </p>
         </div>
         <div className="flex gap-2">
           <Dialog open={createWorkspaceOpen} onOpenChange={setCreateWorkspaceOpen}>
@@ -578,10 +580,12 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
       {workspaces && workspaces.length === 0 ? (
         <Card className="col-span-full">
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <FolderOpen className="w-16 h-16 text-muted-foreground mb-4" />
-            <h3 className="text-xl font-semibold mb-2">No Workspaces Yet</h3>
-            <p className="text-muted-foreground mb-6 text-center max-w-md">
-              Get started by creating a new workspace.
+            <div className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg border border-border bg-bg-primary text-muted-foreground shadow-xs">
+              <FolderOpen className="h-5 w-5" />
+            </div>
+            <h3 className="mb-1 text-sm font-semibold text-foreground">No workspaces yet</h3>
+            <p className="mb-4 max-w-sm text-center text-sm text-muted-foreground">
+              A workspace holds the routes, fixtures and environments for one API. Create one to get started.
             </p>
             <div className="flex gap-2">
               <Button onClick={() => setCreateWorkspaceOpen(true)}>
@@ -596,7 +600,7 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
           {workspaces?.map((workspace) => (
           <Card
             key={workspace.id}
-            className={`cursor-pointer transition-all hover:shadow-md ${
+            className={`cursor-pointer transition-colors hover:border-foreground/20 ${
               selectedWorkspace?.summary.id === workspace.id ? 'ring-2 ring-primary' : ''
             } ${
               draggedWorkspace === workspace.id && updateWorkspacesOrder.isPending
@@ -608,15 +612,15 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
             onDragOver={handleWorkspaceDragOver}
             onDrop={(e) => handleWorkspaceDrop(e, workspace.id)}
           >
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <div className="flex items-center space-x-2">
-                <GripVertical className="w-4 h-4 text-muted-foreground" />
-                <CardTitle className="text-lg">{workspace.name}</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <GripVertical className="h-4 w-4 shrink-0 cursor-grab text-muted-foreground/60" aria-hidden />
+                <CardTitle className="truncate text-base" title={workspace.name}>{workspace.name}</CardTitle>
                 {workspace.is_active && (
-                  <Badge variant="secondary">Active</Badge>
+                  <Badge variant="success" className="shrink-0">Active</Badge>
                 )}
               </div>
-              <div className="flex items-center space-x-1">
+              <div className="flex shrink-0 items-center">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -626,6 +630,8 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                   }}
                   disabled={workspace.is_active}
                   title="Set as active workspace"
+                  aria-label="Set as active workspace"
+                  className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
                 >
                   <Play className="w-4 h-4" />
                 </Button>
@@ -637,6 +643,8 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                     openEditWorkspace(workspace);
                   }}
                   title="Edit workspace"
+                  aria-label="Edit workspace"
+                  className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
                 >
                   <Pencil className="w-4 h-4" />
                 </Button>
@@ -648,18 +656,24 @@ const WorkspacesPage: React.FC<WorkspacesPageProps> = () => {
                     confirmDeleteWorkspace(workspace.id);
                   }}
                   title="Delete workspace"
+                  aria-label="Delete workspace"
+                  className="h-7 w-7 p-0 text-muted-foreground hover:text-foreground"
                 >
                   <Trash2 className="w-4 h-4" />
                 </Button>
               </div>
             </CardHeader>
             <CardContent onClick={() => handleWorkspaceClick(workspace)}>
-              <CardDescription className="mb-4">
+              <CardDescription className="mb-4 line-clamp-2 min-h-[2.5rem]">
                 {workspace.description || 'No description'}
               </CardDescription>
-              <div className="flex items-center justify-between text-sm text-muted-foreground">
-                <span>{workspace.request_count} requests</span>
-                <span>{workspace.folder_count} folders</span>
+              <div className="flex items-center gap-4 border-t border-border pt-3 text-xs text-muted-foreground">
+                <span aria-label={`${workspace.request_count ?? 0} requests`}>
+                  <span className="font-mono text-sm tabular-nums text-foreground">{workspace.request_count ?? 0}</span> requests
+                </span>
+                <span aria-label={`${workspace.folder_count ?? 0} folders`}>
+                  <span className="font-mono text-sm tabular-nums text-foreground">{workspace.folder_count ?? 0}</span> folders
+                </span>
               </div>
             </CardContent>
           </Card>

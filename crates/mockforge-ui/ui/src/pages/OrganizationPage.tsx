@@ -2017,10 +2017,10 @@ export function OrganizationPage() {
   const selectedOrgId = selectedOrg?.id ?? null;
 
   return (
-    <div className="mx-auto max-w-screen-2xl p-6 space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Organizations</h1>
-        <p className="text-muted-foreground mt-2">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Organizations</h1>
+        <p className="text-sm text-muted-foreground mt-2">
           Manage your organizations and team members
         </p>
       </div>

@@ -118,7 +118,7 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
             </button>
           )}
           <div>
-            <h1 className="text-3xl font-bold text-foreground flex items-center gap-2">
+            <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
               <Network className="h-8 w-8 text-info-600 dark:text-info-400" />
               {currentFederation.name}
             </h1>

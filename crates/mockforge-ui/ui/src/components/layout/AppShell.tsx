@@ -1,984 +1,522 @@
-import React, { useMemo, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import * as DialogPrimitive from '@radix-ui/react-dialog';
+import {
+  ChevronRight,
+  CircleHelp,
+  Lock,
+  Menu,
+  PanelLeftClose,
+  PanelLeftOpen,
+  RefreshCw,
+  Search,
+  X,
+} from 'lucide-react';
 import { cn } from '../../utils/cn';
-import { Button } from '../ui/button';
 import { SimpleThemeToggle } from '../ui/ThemeToggle';
 import { UserProfile } from '../auth/UserProfile';
 import { HelpSupport } from '../auth/HelpSupport';
 import { Logo } from '../ui/Logo';
-import { Input } from '../ui/input';
-import { useLogStore } from '../../stores/useLogStore';
-import { useServiceStore } from '../../stores/useServiceStore';
 import { useHelpStore } from '../../stores/useHelpStore';
 import { usePreferencesStore } from '../../stores/usePreferencesStore';
-import { useWorkspaceStore } from '../../stores/useWorkspaceStore';
 import { useAppShortcuts } from '../../hooks/useKeyboardNavigation';
 import { useSkipLinks } from '../../hooks/useFocusManagement';
 import { useI18n } from '../../i18n/I18nProvider';
-import type { Locale } from '../../i18n/translations';
-import {
-  BarChart3,
-  Server,
-  Database,
-  FileJson,
-  FileText,
-  Activity,
-  TestTube,
-  Settings,
-  Menu,
-  RefreshCw,
-  X,
-  Puzzle,
-  FolderOpen,
-  Import,
-  Link2,
-  GitBranch,
-  Radio,
-  Zap,
-  Shield,
-  Eye,
-  Code2,
-  PlayCircle,
-  Network,
-  Layers,
-  Replace,
-  Store,
-  Package,
-  GitBranch as GraphIcon,
-  CheckCircle2,
-  Brain,
-  GitCompare,
-  Mic,
-  History,
-  AlertTriangle,
-  Search,
-  Film,
-  Copy,
-  Users,
-  BookOpen,
-  Star,
-  Layout,
-  HeartPulse,
-  Cloud,
-  Globe,
-  Key,
-  CreditCard,
-  LineChart,
-  Wifi,
-  Share2,
-  Lock as LockIcon,
-  Mail,
-  Radio as RadioIcon,
-  Network as NetworkIcon,
-  MessageCircle as MessageCircleIcon,
-  LifeBuoy,
-  Bell,
-  Camera,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react';
 import { GlobalConnectionStatus } from './ConnectionStatus';
-import { isCloudMode as detectCloudMode } from '../../utils/cloudMode';
+import { CommandPalette } from './CommandPalette';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher';
+import {
+  findNavItem,
+  getHelpNavItems,
+  getNavSections,
+  recordRecentPage,
+  type ResolvedNavItem,
+  type ResolvedNavSection,
+} from './navigation';
 
 interface AppShellProps {
   children: React.ReactNode;
   onRefresh: () => void;
 }
 
-const navSections = [
-  {
-    titleKey: 'nav.core',
-    items: [
-      { id: 'dashboard', labelKey: 'tab.dashboard', icon: BarChart3 },
-      { id: 'workspaces', labelKey: 'tab.workspaces', icon: FolderOpen },
-      { id: 'federation', labelKey: 'tab.federation', icon: Share2 },
-    ]
-  },
-  {
-    titleKey: 'nav.servicesData',
-    items: [
-      { id: 'services', labelKey: 'tab.services', icon: Server },
-      { id: 'virtual-backends', labelKey: 'tab.virtualBackends', icon: Database },
-      { id: 'fixtures', labelKey: 'tab.fixtures', icon: FileJson },
-      { id: 'overrides', labelKey: 'tab.overrides', icon: Replace },
-      { id: 'hosted-mocks', labelKey: 'tab.hostedMocks', icon: Cloud },
-      { id: 'cloud-snapshots', labelKey: 'tab.cloudSnapshots', icon: Camera },
-      { id: 'tunnels', labelKey: 'tab.tunnels', icon: Wifi },
-      { id: 'proxy-inspector', labelKey: 'tab.proxyInspector', icon: Search },
-    ]
-  },
-  {
-    titleKey: 'nav.protocolBrokers',
-    items: [
-      { id: 'smtp-mailbox', labelKey: 'tab.smtpMailbox', icon: Mail },
-      { id: 'mqtt-broker', labelKey: 'tab.mqttBroker', icon: RadioIcon },
-      { id: 'kafka-broker', labelKey: 'tab.kafkaBroker', icon: Database },
-      { id: 'amqp-broker', labelKey: 'tab.amqpBroker', icon: NetworkIcon },
-    ]
-  },
-  {
-    titleKey: 'nav.orchestration',
-    items: [
-      { id: 'chains', labelKey: 'tab.chains', icon: Link2 },
-      { id: 'graph', labelKey: 'tab.graph', icon: GraphIcon },
-      { id: 'state-machine-editor', labelKey: 'tab.stateMachines', icon: GitBranch },
-      { id: 'scenario-studio', labelKey: 'tab.scenarioStudio', icon: Film },
-      { id: 'orchestration-builder', labelKey: 'tab.orchestrationBuilder', icon: GitBranch },
-      { id: 'orchestration-execution', labelKey: 'tab.orchestrationExecution', icon: PlayCircle },
-      { id: 'cloud-flows', labelKey: 'tab.cloudFlows', icon: GitBranch },
-    ]
-  },
-  {
-    titleKey: 'nav.observability',
-    items: [
-      { id: 'observability', labelKey: 'tab.observability', icon: Eye },
-      { id: 'world-state', labelKey: 'tab.worldState', icon: Layers },
-      { id: 'performance', labelKey: 'tab.performance', icon: Activity },
-      { id: 'status', labelKey: 'tab.systemStatus', icon: Globe },
-      { id: 'incidents', labelKey: 'tab.incidents', icon: AlertTriangle },
-      { id: 'cloud-incidents', labelKey: 'tab.cloudIncidents', icon: Bell },
-      { id: 'logs', labelKey: 'tab.logs', icon: FileText },
-      { id: 'traces', labelKey: 'tab.traces', icon: Network },
-      { id: 'cloud-traces', labelKey: 'tab.cloudTraces', icon: Network },
-      { id: 'metrics', labelKey: 'tab.metrics', icon: Activity },
-      { id: 'analytics', labelKey: 'tab.analytics', icon: BarChart3 },
-      { id: 'pillar-analytics', labelKey: 'tab.pillarAnalytics', icon: Layout },
-      { id: 'fitness-functions', labelKey: 'tab.fitnessFunctions', icon: HeartPulse },
-      { id: 'verification', labelKey: 'tab.verification', icon: CheckCircle2 },
-      { id: 'contract-diff', labelKey: 'tab.contractDiff', icon: GitCompare },
-      { id: 'cloud-contract', labelKey: 'tab.cloudContract', icon: GitCompare },
-    ]
-  },
-  {
-    titleKey: 'nav.testing',
-    items: [
-      { id: 'testing', labelKey: 'tab.testing', icon: TestTube },
-      { id: 'test-generator', labelKey: 'tab.testGenerator', icon: Code2 },
-      { id: 'test-execution', labelKey: 'tab.testExecution', icon: PlayCircle },
-      { id: 'cloud-test-runs', labelKey: 'tab.cloudTestRuns', icon: PlayCircle },
-      { id: 'integration-test-builder', labelKey: 'tab.integrationTests', icon: Layers },
-      { id: 'conformance', labelKey: 'tab.conformance', icon: Shield },
-      { id: 'time-travel', labelKey: 'tab.timeTravel', icon: History },
-    ]
-  },
-  {
-    titleKey: 'nav.chaosResilience',
-    items: [
-      { id: 'chaos', labelKey: 'tab.chaosEngineering', icon: Zap },
-      { id: 'cloud-chaos', labelKey: 'tab.cloudChaos', icon: Zap },
-      { id: 'resilience', labelKey: 'tab.resilience', icon: Shield },
-      { id: 'recorder', labelKey: 'tab.recorder', icon: Radio },
-      { id: 'cloud-recorder', labelKey: 'tab.cloudRecorder', icon: Radio },
-      { id: 'behavioral-cloning', labelKey: 'tab.behavioralCloning', icon: Copy },
-      { id: 'cloud-behavioral-cloning', labelKey: 'tab.cloudBehavioralCloning', icon: Copy },
-    ]
-  },
-  {
-    titleKey: 'nav.importTemplates',
-    items: [
-      { id: 'import', labelKey: 'tab.import', icon: Import },
-      { id: 'template-marketplace', labelKey: 'tab.templateMarketplace', icon: Store },
-      { id: 'scenario-marketplace', labelKey: 'tab.scenarioMarketplace', icon: Store },
-    ]
-  },
-  {
-    titleKey: 'nav.aiIntelligence',
-    items: [
-      { id: 'ai-studio', labelKey: 'tab.aiStudio', icon: Brain },
-      { id: 'mockai', labelKey: 'tab.mockai', icon: Brain },
-      { id: 'mockai-openapi-generator', labelKey: 'tab.mockaiOpenApiGenerator', icon: Code2 },
-      { id: 'mockai-rules', labelKey: 'tab.mockaiRules', icon: BarChart3 },
-      { id: 'voice', labelKey: 'tab.voiceLlm', icon: Mic },
-    ]
-  },
-  {
-    titleKey: 'nav.community',
-    items: [
-      { id: 'showcase', labelKey: 'tab.showcase', icon: Star },
-      { id: 'cloud-showcase-admin', labelKey: 'tab.cloudShowcaseAdmin', icon: Star },
-      { id: 'learning-hub', labelKey: 'tab.learningHub', icon: BookOpen },
-    ]
-  },
-  {
-    titleKey: 'nav.plugins',
-    items: [
-      { id: 'plugins', labelKey: 'tab.plugins', icon: Puzzle },
-      { id: 'cloud-plugins', labelKey: 'tab.cloudPlugins', icon: Puzzle },
-      { id: 'plugin-registry', labelKey: 'tab.pluginRegistry', icon: Package },
-    ]
-  },
-  {
-    titleKey: 'nav.configuration',
-    items: [
-      { id: 'config', labelKey: 'tab.config', icon: Settings },
-      { id: 'organization', labelKey: 'tab.organization', icon: Users },
-      { id: 'billing', labelKey: 'tab.billing', icon: CreditCard },
-      { id: 'api-tokens', labelKey: 'tab.apiTokens', icon: Key },
-      { id: 'publisher-keys', labelKey: 'tab.publisherKeys', icon: Key },
-      { id: 'byok', labelKey: 'tab.byok', icon: LockIcon },
-      { id: 'usage', labelKey: 'tab.usage', icon: LineChart },
-      { id: 'notification-channels', labelKey: 'tab.notificationChannels', icon: Bell },
-      // user-management retired (#15) — surface lives inside the
-      // Organization page's Members / Roles / Activity tabs now.
-    ]
-  },
-  {
-    titleKey: 'nav.help',
-    items: [
-      { id: 'faq', labelKey: 'tab.faq', icon: MessageCircleIcon },
-      { id: 'support', labelKey: 'tab.support', icon: LifeBuoy },
-    ]
+const OPEN_SECTIONS_KEY = 'mockforge-nav-open-sections';
+// A calm first impression: the everyday groups start open, the rest stay
+// folded until the user opens them (or navigates into them).
+const DEFAULT_OPEN_SECTIONS = ['overview', 'mocks', 'observe'];
+
+function readOpenSections(): Set<string> {
+  try {
+    const raw = localStorage.getItem(OPEN_SECTIONS_KEY);
+    const parsed: unknown = raw ? JSON.parse(raw) : null;
+    if (Array.isArray(parsed)) return new Set(parsed.filter((v): v is string => typeof v === 'string'));
+  } catch {
+    // fall through to defaults
   }
-];
-
-// Cloud mode: only show functional nav items when running on the cloud app
-const isCloudMode = detectCloudMode();
-
-const cloudNavItemIds = new Set([
-  'dashboard',
-  'workspaces',
-  'federation',
-  'services',
-  'fixtures',
-  'overrides',
-  'hosted-mocks',
-  'template-marketplace',
-  'scenario-marketplace',
-  'plugin-registry',
-  'pillar-analytics',
-  'status',
-  // AI Studio chat + the rest of the MockAI suite are wired end-to-end
-  // through aiStudioApi: chat / generate-openapi / explain-rule plus the
-  // post-#353 cloud routes for rule explanations, learn, generate-from-
-  // traffic, and the three voice handlers (process / transpile-hook /
-  // create-workspace-scenario).
-  'ai-studio',
-  'mockai',
-  'mockai-rules',
-  'mockai-openapi-generator',
-  'voice',
-  // Import dispatches to /api/v1/import/preview + /api/v1/workspaces/{id}/import
-  // when isCloudMode(); requires an active workspace selection.
-  'import',
-  // Tunnels page detects cloud mode and dispatches CRUD + DNS verify
-  // through cloudTunnelsApi against /api/v1/organizations/{org_id}/tunnels.
-  'tunnels',
-  // Cloud snapshots — synchronous capture / diff / restore for the
-  // active workspace via cloudSnapshotsApi.
-  'cloud-snapshots',
-  // Resilience dashboard (#468 cloud scaffold) — circuit-breaker /
-  // bulkhead state via cloudResilienceApi. Phase 1 returns
-  // `runtime_state: 'pending'` because the hosted-mock runtime hasn't
-  // wired the middleware yet; the page shows an explicit pending
-  // banner so users don't confuse "no breakers configured" with the
-  // empty scaffold response.
-  'resilience',
-  // Virtual Backends (#461) — entities tab dispatches to
-  // cloudConsistencyApi against /api/v1/workspaces/{id}/consistency/*.
-  // Lifecycle preset library is shared with local mode (static array
-  // server-side); cloud-mode snapshots tab links to the cloud-snapshots
-  // page instead of trying to host two snapshot UIs.
-  'virtual-backends',
-  // Cloud incidents — org-wide dashboard wired through cloudIncidentsApi
-  // (different feature from drift IncidentDashboard).
-  'cloud-incidents',
-  // Cloud test runs — org-wide history with SSE event tailing via
-  // cloudTestRunsApi.streamRunEvents.
-  'cloud-test-runs',
-  // Testing page — cloud mode dispatches through cloudSmokeApi against
-  // /api/v1/hosted-mocks/{id}/smoke-runs and tails route_pass/_fail/_skipped
-  // events via cloudTestRunsApi.streamRunEvents (#392).
-  'testing',
-  // Integration Test Builder persists as test_suite kind='integration'
-  // and runs through the IntegrationExecutor in mockforge-test-runner
-  // (#356).
-  'integration-test-builder',
-  // Cloud traces — cross-deployment OTLP search via cloudObservabilityApi.
-  'cloud-traces',
-  // Cloud chaos campaigns — workspace-scoped via cloudChaosApi.
-  'cloud-chaos',
-  // Cloud flows — versioned scenario / state-machine / orchestration /
-  // chain definitions via cloudFlowsApi (covers #9 + #14 collab).
-  'cloud-flows',
-  // Chains share the flows resource (kind='chain') and are executed by
-  // the ChainExecutor in mockforge-test-runner (#354).
-  'chains',
-  // Workspace dependency graph (#460) — services + flows as nodes,
-  // clustered by the active workspace. Phase 1 returns no edges; SSE
-  // updates are local-only for now (cloud falls back to 30s polling).
-  'graph',
-  // Observability dashboard (#465): each org saved query renders as a
-  // live tile that re-executes via cloudObservabilityApi.executeSavedQuery.
-  'observability',
-  // Scenario Studio uses cloudFlowsApi with kind='scenario'. Each flow
-  // version stores the full {flow_type, steps, connections, tags}
-  // payload as the FlowVersion config; runs queue through test_runs.
-  'scenario-studio',
-  // State Machine Editor uses cloudFlowsApi with kind='state_machine'.
-  // The page exposes a workspace-scoped picker; the selected flow's
-  // current FlowVersion.config carries {state_machine, visual_layout}.
-  'state-machine-editor',
-  // Orchestration Builder uses cloudFlowsApi with kind='orchestration'.
-  // The page persists the full Orchestration object (name, description,
-  // variables, hooks, steps, conditionalSteps, assertions,
-  // enableReporting) as the FlowVersion config.
-  'orchestration-builder',
-  // Orchestration Execution viewer streams test_run_events via
-  // cloudTestRunsApi.streamRunEvents for the cloudFlowsApi.triggerRun
-  // result. step_start / step_pass / step_fail / step_skip / done get
-  // mapped onto the existing ExecutionStep visualization.
-  'orchestration-execution',
-  // Fitness Functions: read-only via cloudContractApi.listFitnessFunctions.
-  // Cloud rows have a generic {kind, config} blob — we adapt them into
-  // the local typed shape and hide create/edit/delete (no write paths
-  // on the registry yet).
-  'fitness-functions',
-  // Cloud contract diff + verification via cloudContractApi.
-  'cloud-contract',
-  // Cloud-mode request verification (#390): WireMock-style assertions
-  // against the workspace's runtime_captures table, dispatched through
-  // cloudVerificationApi against /api/v1/workspaces/{id}/request-log/*.
-  'verification',
-  // Cloud-mode conformance (#391): ad-hoc OpenAPI conformance runs
-  // dispatched as transient kind='conformance' test_suites through
-  // cloudTestRunsApi. The runner side uses NativeConformanceExecutor
-  // and streams `started` / `check_completed` / `finished` events
-  // through test_run_events.
-  'conformance',
-  // Cloud recorder + behavioral cloning via cloudRecorderApi.
-  'cloud-recorder',
-  // Cloud behavioral cloning (#393) — clone-model-centric view with live
-  // SSE training/replay streams via cloudTestRunsApi.streamRunEvents.
-  'cloud-behavioral-cloning',
-  // Showcase admin authoring via cloudShowcaseApi.adminList / adminCreate /
-  // adminUpdate / adminDelete.
-  'cloud-showcase-admin',
-  // Cloud plugins (Phase 3) — read-only attachment listing today;
-  // attach/permission/detach controls land in subsequent sub-PRs once
-  // PR #395's control-plane API merges. Listed here so the sidebar
-  // shows it as active in cloud mode.
-  'cloud-plugins',
-  // Public showcase + learning hub adapt /api/v1/showcase/* and
-  // /api/v1/learning/* into the legacy ShowcaseProject / LearningResource
-  // shapes via cloudCommunityApi (services/api/cloudCommunity.ts).
-  'showcase',
-  'learning-hub',
-  // Workspace request logs (#462) — read from `runtime_captures` rows
-  // tagged with this workspace via cloudLogsApi. Hosted-mock captures
-  // without workspace_id are invisible until the shipper backfill lands;
-  // cloud-shipped captures (--cloud-ship) work today.
-  'logs',
-  // World State (#464 Phase 2) — per-deployment graph + snapshot + layers
-  // + slice query via cloudWorldStateApi against /api/v1/hosted-mocks/
-  // {deployment_id}/world-state/*. The local `/stream` WebSocket isn't
-  // proxied yet (Phase 2 follow-up); cloud mode polls every 5s, which
-  // matches the local TanStack Query refetchInterval.
-  'world-state',
-  // Test Generator (#469 Phase 2) — async LLM jobs over runtime_captures
-  // via cloudTestGeneratorApi against /api/v1/workspaces/{id}/test-generation
-  // /jobs. Phase 1 shipped the data plane (table + 4 CRUD endpoints + TS
-  // client); Phase 2 ships the page branch. The background BYOK LLM
-  // worker is Phase 3 — jobs created here sit in 'queued' until that
-  // lands. The page surfaces this honestly via an inline banner.
-  'test-generator',
-  // Time Travel (#466 Phase 2) — per-deployment virtual-clock control via
-  // cloudTimeTravelApi against /api/v1/hosted-mocks/{deployment_id}
-  // /time-travel/* (registry proxies over Fly 6PN to port 3000). Only
-  // the 7 clock-control endpoints are wired in cloud mode (status /
-  // enable / disable / advance / set / scale / reset); cron jobs and
-  // mutation rules stay local-only because they manage scenario state,
-  // not a hosted mock's single-process clock.
-  'time-travel',
-  // Notification channels (cloud-only) — incident dispatch destinations
-  // wired through cloudNotificationsApi.
-  'notification-channels',
-  'config',
-  'organization',
-  'billing',
-  'api-tokens',
-  'publisher-keys',
-  'byok',
-  'usage',
-  'faq',
-  'support',
-]);
-
-// Items in this set are HIDDEN entirely in cloud mode because a cloud-*
-// sibling page already supersedes them. Showing both creates sidebar
-// noise without adding value (e.g. ChaosPage vs CloudChaosPage).
-const cloudHiddenNavItemIds = new Set([
-  // Each entry has a cloud sibling that serves the same purpose:
-  'chaos',                  // → cloud-chaos
-  'recorder',               // → cloud-recorder
-  'behavioral-cloning',     // → cloud-behavioral-cloning
-  'incidents',              // → cloud-incidents
-  'traces',                 // → cloud-traces
-  'contract-diff',          // → cloud-contract
-  'plugins',                // → plugin-registry (cloud-side plugin discovery)
-  'test-execution',         // → cloud-test-runs (TestExecutionDashboard is mock-data only)
-  'analytics',              // → pillar-analytics (request-traffic analytics is local-only)
-  // The next two (#463, #467) are redundant with pages that are already
-  // cloud-enabled — keeping both visible just adds sidebar noise.
-  'metrics',                // → pillar-analytics (request rate / latency / errors live there)
-  'performance',            // → cloud-test-runs (k6 / load runs already covered)
-  // ApiExplorerPage is already cloud-aware (takes a `deployment` prop and
-  // fetches the OpenAPI spec from the runtime). It is reached by clicking
-  // "Open" on a deployment in HostedMocksPage, not standalone from the
-  // sidebar — keeping it visible suggested a global explorer that does not
-  // exist in cloud mode.
-  'api-explorer',           // → reached via HostedMocksPage "Open" action
-]);
-
-// In cloud mode, items outside the allowlist are shown as disabled "Local only"
-// entries so users can discover the full product surface and understand what
-// requires a local MockForge instance. In self-hosted mode every item is active.
-//
-// Cloud-mode label overrides: when the local Analytics tab is hidden in cloud,
-// pillar-analytics becomes the de-facto analytics destination, so it surfaces
-// under the plain "Analytics" label instead of "Pillar Analytics" (#394).
-const cloudLabelOverrides: Record<string, string> = {
-  'pillar-analytics': 'tab.analytics',
-};
-const effectiveNavSections = navSections
-  .map(section => ({
-    ...section,
-    items: section.items
-      .filter(item => !(isCloudMode && cloudHiddenNavItemIds.has(item.id)))
-      .map(item => ({
-        ...item,
-        labelKey: (isCloudMode && cloudLabelOverrides[item.id]) || item.labelKey,
-        localOnly: isCloudMode && !cloudNavItemIds.has(item.id),
-      })),
-  }))
-  .filter(section => section.items.length > 0);
-
-// Extra search terms for the sidebar page filter, so users can find a page
-// by the concept they have in mind rather than its exact nav label (e.g.
-// "overrides" lands on Fixtures / Config, "team" on Organization).
-const navSearchKeywords: Record<string, string[]> = {
-  dashboard: ['home', 'overview'],
-  'hosted-mocks': ['deploy', 'deployments', 'cloud mocks'],
-  fixtures: ['responses', 'stubs', 'canned'],
-  overrides: ['override', 'patch', 'rules', 'response rules', 'json patch'],
-  config: ['settings', 'latency', 'validation', 'reality', 'environment', 'env vars'],
-  organization: ['team', 'teams', 'members', 'invite', 'roles', 'sso', 'audit log'],
-  billing: ['plan', 'subscription', 'invoices', 'payment', 'upgrade'],
-  'api-tokens': ['keys', 'personal access tokens', 'pat', 'credentials'],
-  'publisher-keys': ['signing', 'signatures'],
-  byok: ['llm', 'openai', 'anthropic', 'api key', 'bring your own key'],
-  usage: ['quota', 'limits', 'consumption'],
-  'notification-channels': ['alerts', 'slack', 'pagerduty', 'email', 'webhooks'],
-  observability: ['monitoring', 'dashboards', 'tiles', 'metrics'],
-  status: ['health', 'uptime', 'services'],
-  'cloud-incidents': ['alerts', 'outages'],
-  'cloud-traces': ['tracing', 'otel', 'opentelemetry', 'spans'],
-  'pillar-analytics': ['analytics', 'metrics', 'traffic'],
-  'plugin-registry': ['plugins', 'extensions', 'marketplace'],
-  'cloud-chaos': ['fault injection', 'failures', 'latency'],
-  tunnels: ['expose', 'public url', 'ngrok'],
-  support: ['help', 'contact'],
-  faq: ['help', 'questions'],
-};
-
-function matchesNavQuery(item: { id: string }, label: string, query: string): boolean {
-  if (!query) return true;
-  const haystack = [label, item.id.replace(/-/g, ' '), ...(navSearchKeywords[item.id] ?? [])]
-    .join(' ')
-    .toLowerCase();
-  return query
-    .toLowerCase()
-    .split(/\s+/)
-    .filter(Boolean)
-    .every((term) => haystack.includes(term));
+  return new Set(DEFAULT_OPEN_SECTIONS);
 }
 
-// Flattened items for title lookup (includes non-sidebar pages for breadcrumb
-// resolution). Apply the same cloud-mode label overrides so the breadcrumb
-// matches the nav label users clicked on.
-const allNavItems = [
-  ...navSections.flatMap(section => section.items),
-  { id: 'api-explorer', labelKey: 'tab.apiExplorer', icon: Code2 },
-].map(item => ({
-  ...item,
-  labelKey: (isCloudMode && cloudLabelOverrides[item.id]) || item.labelKey,
-}));
+function writeOpenSections(open: Set<string>) {
+  try {
+    localStorage.setItem(OPEN_SECTIONS_KEY, JSON.stringify([...open]));
+  } catch {
+    // Persisting is a convenience only.
+  }
+}
 
-export function AppShell({ children, onRefresh }: AppShellProps) {
-  const { t, locale, supportedLocales, setLocale } = useI18n();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const activeTab = location.pathname.replace(/^\//, '') || 'dashboard';
-  const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [navQuery, setNavQuery] = useState('');
-  const visibleNavSections = useMemo(() => {
-    const query = navQuery.trim();
-    if (!query) return effectiveNavSections;
-    return effectiveNavSections
-      .map((section) => ({
-        ...section,
-        items: section.items.filter((item) => matchesNavQuery(item, t(item.labelKey), query)),
-      }))
-      .filter((section) => section.items.length > 0);
-  }, [navQuery, t]);
-  const firstNavMatch = visibleNavSections
-    .flatMap((section) => section.items)
-    .find((item) => !item.localOnly);
-  const renderNavFilter = (onNavigate?: () => void) => (
-    <div className="relative">
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-      <input
-        type="search"
-        value={navQuery}
-        onChange={(e) => setNavQuery(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && firstNavMatch) {
-            navigate('/' + firstNavMatch.id);
-            setNavQuery('');
-            onNavigate?.();
-          } else if (e.key === 'Escape') {
-            setNavQuery('');
-          }
-        }}
-        placeholder="Find a page"
-        aria-label="Find a page"
-        className="h-8 w-full rounded-md border border-border bg-bg-secondary pl-8 pr-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+function useIsMac() {
+  const [isMac, setIsMac] = useState(false);
+  useEffect(() => {
+    setIsMac(/mac/i.test(navigator.userAgent));
+  }, []);
+  return isMac;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Sidebar                                                                    */
+/* -------------------------------------------------------------------------- */
+
+interface SidebarProps {
+  sections: ResolvedNavSection[];
+  activeId: string;
+  collapsed: boolean;
+  openSections: Set<string>;
+  onToggleSection: (id: string) => void;
+  onNavigate?: () => void;
+  onOpenSearch: () => void;
+  onToggleCollapsed?: () => void;
+  onClose?: () => void;
+}
+
+function NavLinkItem({
+  item,
+  active,
+  collapsed,
+  onNavigate,
+}: {
+  item: ResolvedNavItem;
+  active: boolean;
+  collapsed: boolean;
+  onNavigate?: () => void;
+}) {
+  const { t } = useI18n();
+  const Icon = item.icon;
+  const label = t(item.labelKey);
+
+  const classes = cn(
+    'group relative flex h-8 w-full items-center gap-2.5 rounded-md text-[13px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring',
+    collapsed ? 'justify-center px-0' : 'px-2.5',
+    item.localOnly
+      ? 'cursor-not-allowed text-muted-foreground/60'
+      : active
+        ? 'bg-muted text-foreground'
+        : 'text-muted-foreground hover:bg-muted/70 hover:text-foreground',
+  );
+
+  const content = (
+    <>
+      {active && !collapsed && (
+        <span aria-hidden className="absolute -left-3 top-1.5 h-5 w-[3px] rounded-r-full bg-primary" />
+      )}
+      <Icon
+        className={cn(
+          'h-4 w-4 shrink-0',
+          active ? 'text-primary' : 'text-muted-foreground group-hover:text-foreground',
+          item.localOnly && 'opacity-60',
+        )}
+        aria-hidden
       />
+      {!collapsed && <span className="flex-1 truncate text-left">{label}</span>}
+      {!collapsed && item.localOnly && <Lock className="h-3 w-3 shrink-0" aria-hidden />}
+    </>
+  );
+
+  if (item.localOnly) {
+    return (
+      <span
+        role="link"
+        aria-disabled="true"
+        title={t('nav.localOnly.tooltip')}
+        aria-label={`${label} — ${t('nav.localOnly.tooltip')}`}
+        className={classes}
+      >
+        {content}
+      </span>
+    );
+  }
+
+  return (
+    <Link
+      to={'/' + item.id}
+      onClick={onNavigate}
+      aria-current={active ? 'page' : undefined}
+      aria-label={collapsed ? label : undefined}
+      title={collapsed ? label : undefined}
+      className={classes}
+    >
+      {content}
+    </Link>
+  );
+}
+
+function SidebarContent({
+  sections,
+  activeId,
+  collapsed,
+  openSections,
+  onToggleSection,
+  onNavigate,
+  onOpenSearch,
+  onToggleCollapsed,
+  onClose,
+}: SidebarProps) {
+  const { t } = useI18n();
+  const isMac = useIsMac();
+  const helpItems = getHelpNavItems();
+
+  return (
+    <div className="flex h-full flex-col">
+      {/* Brand row */}
+      <div className={cn('flex h-14 shrink-0 items-center gap-2', collapsed ? 'justify-center px-2' : 'px-4')}>
+        <Link to="/dashboard" onClick={onNavigate} className="flex items-center gap-2 rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring">
+          <Logo variant="icon" size="sm" />
+          {!collapsed && (
+            <span className="text-[15px] font-semibold tracking-tight text-foreground">{t('app.brand')}</span>
+          )}
+        </Link>
+        {onToggleCollapsed && !collapsed && (
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-label={t('a11y.collapseSidebar')}
+            title={t('a11y.collapseSidebar')}
+            className="ml-auto flex h-7 w-7 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <PanelLeftClose className="h-4 w-4" />
+          </button>
+        )}
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t('shell.closeMenu')}
+            className="ml-auto flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {/* Workspace + search */}
+      <div className={cn('space-y-1.5 pb-3', collapsed ? 'px-2' : 'px-3')}>
+        <WorkspaceSwitcher collapsed={collapsed} />
+        <button
+          type="button"
+          id="global-search-trigger"
+          onClick={onOpenSearch}
+          aria-label={t('shell.search')}
+          title={collapsed ? t('shell.search') : undefined}
+          className={cn(
+            'flex h-8 w-full items-center gap-2 rounded-md border border-border bg-background text-sm text-muted-foreground outline-none transition-colors hover:border-foreground/20 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
+            collapsed ? 'justify-center' : 'px-2.5',
+          )}
+        >
+          <Search className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          {!collapsed && (
+            <>
+              <span className="flex-1 text-left">{t('shell.search')}…</span>
+              <kbd className="hidden rounded border border-border bg-muted px-1 font-mono text-[10px] leading-4 md:inline">
+                {isMac ? '⌘K' : 'Ctrl K'}
+              </kbd>
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* Sections */}
+      <nav
+        id="main-navigation"
+        aria-label={t('a11y.mainNavigation')}
+        className={cn('flex-1 overflow-y-auto pb-4 custom-scrollbar', collapsed ? 'px-2' : 'px-3')}
+      >
+        {sections.map((section, index) => {
+          const titled = Boolean(section.titleKey);
+          const isOpen = collapsed || !titled || openSections.has(section.id);
+          const containsActive = section.items.some((i) => i.id === activeId);
+          const listId = `nav-section-${section.id}`;
+          return (
+            <div key={section.id} className={cn(index > 0 && (collapsed ? 'mt-2 border-t border-border pt-2' : 'mt-3'))}>
+              {titled && !collapsed && (
+                <button
+                  type="button"
+                  onClick={() => onToggleSection(section.id)}
+                  aria-expanded={isOpen}
+                  aria-controls={listId}
+                  className="group flex h-7 w-full items-center gap-1 rounded-md px-2.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/80 outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <span className="flex-1 text-left">{t(section.titleKey!)}</span>
+                  {!isOpen && containsActive && (
+                    <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-primary" />
+                  )}
+                  <ChevronRight
+                    className={cn('h-3.5 w-3.5 transition-transform duration-150', isOpen && 'rotate-90')}
+                    aria-hidden
+                  />
+                </button>
+              )}
+              {isOpen && (
+                <div id={listId} className="space-y-px">
+                  {section.id === 'local-only' && !collapsed && (
+                    <p className="px-2.5 pb-1 text-[11px] leading-snug text-muted-foreground">
+                      {t('nav.localOnly.hint')}
+                    </p>
+                  )}
+                  {section.items.map((item) => (
+                    <NavLinkItem
+                      key={item.id}
+                      item={item}
+                      active={item.id === activeId}
+                      collapsed={collapsed}
+                      onNavigate={onNavigate}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </nav>
+
+      {/* Footer */}
+      <div className={cn('shrink-0 space-y-px border-t border-border py-2', collapsed ? 'px-2' : 'px-3')}>
+        {helpItems.map((item) => (
+          <NavLinkItem
+            key={item.id}
+            item={item}
+            active={item.id === activeId}
+            collapsed={collapsed}
+            onNavigate={onNavigate}
+          />
+        ))}
+        {onToggleCollapsed && collapsed && (
+          <button
+            type="button"
+            onClick={onToggleCollapsed}
+            aria-label={t('a11y.expandSidebar')}
+            title={t('a11y.expandSidebar')}
+            className="flex h-8 w-full items-center justify-center rounded-md text-muted-foreground outline-none hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+          </button>
+        )}
+        <div className="pt-1">
+          <UserProfile collapsed={collapsed} />
+        </div>
+      </div>
     </div>
   );
-  const navEmptyState = (
-    <p className="px-3 text-sm text-muted-foreground">
-      No pages match &ldquo;{navQuery.trim()}&rdquo;.
-    </p>
-  );
-  const { setFilter: setLogFilter } = useLogStore();
-  const { setGlobalSearch } = useServiceStore();
-  const [globalQuery, setGlobalQuery] = useState('');
-  const [globalSearchFocused, setGlobalSearchFocused] = useState(false);
-  const [activePageMatch, setActivePageMatch] = useState(0);
-  // The top bar also jumps to pages (same matcher as the sidebar filter), so
-  // typing "billing" + Enter works even where there are no logs or services
-  // to filter, which is always the case in cloud mode.
-  const globalPageMatches = useMemo(() => {
-    const query = globalQuery.trim();
-    if (!query) return [];
-    return effectiveNavSections
-      .flatMap((section) => section.items)
-      .filter((item) => !item.localOnly && matchesNavQuery(item, t(item.labelKey), query))
-      .slice(0, 6);
-  }, [globalQuery, t]);
-  const [isMac, setIsMac] = useState(false);
+}
 
-  const helpOpen = useHelpStore(state => state.isOpen);
-  const openHelp = useHelpStore(state => state.open);
-  const setHelpOpen = useHelpStore(state => state.setOpen);
-  const workspaces = useWorkspaceStore(state => state.workspaces);
-  const activeWorkspace = useWorkspaceStore(state => state.activeWorkspace);
-  const setActiveWorkspaceById = useWorkspaceStore(state => state.setActiveWorkspaceById);
-  const keyboardShortcutsEnabled = usePreferencesStore(
-    state => state.preferences.ui.keyboardShortcuts,
-  );
-  const sidebarCollapsed = usePreferencesStore(state => state.preferences.ui.sidebarCollapsed);
-  const updateUI = usePreferencesStore(state => state.updateUI);
-  const defaultSearchScope = usePreferencesStore(
-    state => state.preferences.search.defaultScope,
-  );
-  type SearchScope = 'all' | 'current' | 'logs' | 'services';
-  const [searchScope, setSearchScope] = useState<SearchScope>(
-    (defaultSearchScope as SearchScope) ?? 'all',
-  );
-  // Keep local scope state aligned with the default when the preference changes.
-  React.useEffect(() => {
-    setSearchScope((defaultSearchScope as SearchScope) ?? 'all');
-  }, [defaultSearchScope]);
+/* -------------------------------------------------------------------------- */
+/* Shell                                                                      */
+/* -------------------------------------------------------------------------- */
 
-  const dispatchSearch = (q: string | undefined) => {
-    const wantLogs = searchScope === 'all' || searchScope === 'logs' || searchScope === 'current';
-    const wantServices =
-      searchScope === 'all' || searchScope === 'services' || searchScope === 'current';
-    setLogFilter({ path_pattern: wantLogs ? q : undefined });
-    setGlobalSearch(wantServices ? q : undefined);
-  };
+export function AppShell({ children, onRefresh }: AppShellProps) {
+  const { t } = useI18n();
+  const location = useLocation();
+  // First path segment, so nested routes (/hosted-mocks/:id) keep their parent highlighted.
+  const activeId = location.pathname.split('/').filter(Boolean)[0] ?? 'dashboard';
 
-  const goToSearchPage = (id: string) => {
-    navigate('/' + id);
-    setGlobalQuery('');
-    dispatchSearch(undefined);
-    (document.getElementById('global-search-input') as HTMLInputElement | null)?.blur();
-  };
+  const sections = useMemo(() => getNavSections(), []);
+  const current = findNavItem(activeId);
+  const currentSectionTitle = current?.section?.titleKey ? t(current.section.titleKey) : undefined;
+  const currentLabel = current
+    ? t(current.item.labelKey)
+    : activeId.replace(/-/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
 
-  // Setup keyboard shortcuts (user-disablable via preferences.ui.keyboardShortcuts)
-  useAppShortcuts({
-    onSearch: () => {
-      const searchInput = document.getElementById('global-search-input') as HTMLInputElement;
-      if (searchInput) {
-        searchInput.focus();
-        searchInput.select();
+  const [mobileOpen, setMobileOpen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const [openSections, setOpenSections] = useState<Set<string>>(readOpenSections);
+
+  const helpOpen = useHelpStore((state) => state.isOpen);
+  const openHelp = useHelpStore((state) => state.open);
+  const setHelpOpen = useHelpStore((state) => state.setOpen);
+  const keyboardShortcutsEnabled = usePreferencesStore((state) => state.preferences.ui.keyboardShortcuts);
+  const sidebarCollapsed = usePreferencesStore((state) => state.preferences.ui.sidebarCollapsed);
+  const updateUI = usePreferencesStore((state) => state.updateUI);
+
+  const toggleCollapsed = useCallback(
+    () => updateUI({ sidebarCollapsed: !sidebarCollapsed }),
+    [updateUI, sidebarCollapsed],
+  );
+
+  const toggleSection = useCallback((id: string) => {
+    setOpenSections((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      writeOpenSections(next);
+      return next;
+    });
+  }, []);
+
+  // Navigating into a folded group (e.g. from ⌘K) unfolds it so the active
+  // item is always visible in the sidebar.
+  const activeSectionId = sections.find((s) => s.items.some((i) => i.id === activeId))?.id;
+  useEffect(() => {
+    if (!activeSectionId) return;
+    setOpenSections((prev) => {
+      if (prev.has(activeSectionId)) return prev;
+      const next = new Set(prev);
+      next.add(activeSectionId);
+      writeOpenSections(next);
+      return next;
+    });
+  }, [activeSectionId]);
+
+  useEffect(() => {
+    recordRecentPage(activeId);
+  }, [activeId]);
+
+  // ⌘K / Ctrl+K opens the palette — handled here (not in useAppShortcuts,
+  // which only matches Ctrl) so the macOS binding works and it fires even
+  // while focus is inside a text field.
+  useEffect(() => {
+    if (!keyboardShortcutsEnabled) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setPaletteOpen((o) => !o);
       }
-    },
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [keyboardShortcutsEnabled]);
+
+  useAppShortcuts({
     onHelp: () => openHelp(),
     enabled: keyboardShortcutsEnabled,
   });
 
-  // Skip links functionality
   const { createSkipLink } = useSkipLinks();
 
-  React.useEffect(() => {
-    setIsMac(navigator.userAgent.toUpperCase().indexOf('MAC') >= 0);
-  }, []);
+  const sidebarProps = {
+    sections,
+    activeId,
+    openSections,
+    onToggleSection: toggleSection,
+    onOpenSearch: () => {
+      setMobileOpen(false);
+      setPaletteOpen(true);
+    },
+  };
+
+  const iconButton =
+    'flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring';
 
   return (
     <div className="min-h-screen bg-bg-secondary">
-      {/* Skip Links */}
-      <nav className="sr-only focus-within:not-sr-only">
+      <nav className="sr-only focus-within:not-sr-only" aria-label="Skip links">
         <a {...createSkipLink('main-navigation', t('a11y.skipNavigation'))} />
         <a {...createSkipLink('main-content', t('a11y.skipMain'))} />
-        <a {...createSkipLink('global-search-input', t('a11y.skipSearch'))} />
+        <a {...createSkipLink('global-search-trigger', t('a11y.skipSearch'))} />
       </nav>
 
-      {sidebarOpen && (
-        <div className="fixed inset-0 z-50 md:hidden">
-          <div
-            className="fixed inset-0 bg-black/50 backdrop-blur-sm animate-fade-in"
-            onClick={() => setSidebarOpen(false)}
-          />
-          <aside className="fixed left-0 top-0 h-full w-80 max-w-[90vw] bg-background border-r border-gray-200 dark:border-gray-800 shadow-2xl animate-slide-in-left">
-            <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-800 bg-card">
-              <div className="flex items-center gap-3">
-                <Logo variant="icon" size="md" />
-                <span className="text-xl font-bold text-gray-900 dark:text-gray-100">{t('app.brand')}</span>
-              </div>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setSidebarOpen(false)}
-                className="h-10 w-10 p-0 rounded-full spring-hover"
-              >
-                <X className="h-5 w-5" />
-              </Button>
-            </div>
-            <nav className="p-6 space-y-6 overflow-y-auto h-[calc(100%-88px)]">
-              {renderNavFilter(() => setSidebarOpen(false))}
-              {visibleNavSections.length === 0 && navEmptyState}
-              {visibleNavSections.map((section, sectionIndex) => (
-                <div key={section.titleKey} className="space-y-2">
-                  <h3 className="px-2 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                    {t(section.titleKey)}
-                  </h3>
-                  <div className="space-y-1">
-                    {section.items.map((item, itemIndex) => {
-                      const Icon = item.icon;
-                      const isLocalOnly = item.localOnly;
-                      return (
-                        <Button
-                          key={item.id}
-                          variant={activeTab === item.id ? 'default' : 'ghost'}
-                          disabled={isLocalOnly}
-                          title={isLocalOnly ? t('nav.localOnly.tooltip') : undefined}
-                          className={cn(
-                            'w-full justify-start gap-4 h-10 text-sm nav-item-hover focus-ring spring-hover',
-                            'animate-slide-in-up',
-                            isLocalOnly
-                              ? 'text-muted-foreground/60 cursor-not-allowed opacity-70'
-                              : activeTab === item.id
-                              ? 'bg-brand-500 text-white shadow-md hover:bg-brand-600'
-                              : 'text-foreground/80 dark:text-gray-400 hover:text-foreground dark:hover:text-gray-100 hover:bg-muted/50'
-                          )}
-                          style={{ animationDelay: `${(sectionIndex * 5 + itemIndex) * 20}ms` }}
-                          onClick={() => {
-                            if (isLocalOnly) return;
-                            navigate('/' + item.id);
-                            setSidebarOpen(false);
-                          }}
-                        >
-                          <Icon className="h-4 w-4" />
-                          <span className="flex-1 text-left">{t(item.labelKey)}</span>
-                          {isLocalOnly && (
-                            <span className="flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                              <LockIcon className="h-3 w-3" />
-                              {t('nav.localOnly.badge')}
-                            </span>
-                          )}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </nav>
-          </aside>
-        </div>
-      )}
+      {/* Desktop sidebar */}
+      <aside
+        className={cn(
+          'fixed inset-y-0 left-0 z-40 hidden border-r border-border bg-bg-primary transition-[width] duration-200 md:block',
+          sidebarCollapsed ? 'w-14' : 'w-60',
+        )}
+      >
+        <SidebarContent {...sidebarProps} collapsed={sidebarCollapsed} onToggleCollapsed={toggleCollapsed} />
+      </aside>
 
-      <div className="flex">
-        {/* Desktop Sidebar - Always visible on md and larger screens; width
-            driven by preferences.ui.sidebarCollapsed. */}
-        <aside
-          className={cn(
-            'hidden md:flex md:flex-col md:fixed md:inset-y-0 md:z-50 overflow-hidden transition-[width] duration-200',
-            sidebarCollapsed ? 'md:w-16' : 'md:w-64',
-          )}
-        >
-          <div className="flex flex-col flex-grow overflow-hidden bg-bg-primary border-r border-border">
-            <div className="flex items-center gap-3 px-4 py-4 border-b border-border flex-shrink-0">
-              <Logo variant="icon" size="md" />
-              {!sidebarCollapsed && (
-                <span className="font-semibold text-gray-900 dark:text-gray-100">{t('app.brand')}</span>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="ml-auto h-7 w-7 p-0"
-                onClick={() => updateUI({ sidebarCollapsed: !sidebarCollapsed })}
-                aria-label={sidebarCollapsed ? t('a11y.expandSidebar') : t('a11y.collapseSidebar')}
-                title={sidebarCollapsed ? t('a11y.expandSidebar') : t('a11y.collapseSidebar')}
-              >
-                {sidebarCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-              </Button>
-            </div>
-            <nav id="main-navigation" className="flex-1 px-2 py-6 space-y-6 overflow-y-auto" role="navigation" aria-label={t('a11y.mainNavigation')}>
-              {!sidebarCollapsed && <div className="px-1">{renderNavFilter()}</div>}
-              {visibleNavSections.length === 0 && navEmptyState}
-              {visibleNavSections.map((section) => (
-                <div key={section.titleKey} className="space-y-2">
-                  {!sidebarCollapsed && (
-                    <h3 className="px-3 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                      {t(section.titleKey)}
-                    </h3>
-                  )}
-                  <div className="space-y-1">
-                    {section.items.map((item) => {
-                      const Icon = item.icon;
-                      const isLocalOnly = item.localOnly;
-                      const label = t(item.labelKey);
-                      return (
-                        <Button
-                          key={item.id}
-                          variant={activeTab === item.id ? 'default' : 'ghost'}
-                          disabled={isLocalOnly}
-                          title={
-                            isLocalOnly
-                              ? t('nav.localOnly.tooltip')
-                              : sidebarCollapsed
-                              ? label
-                              : undefined
-                          }
-                          aria-label={sidebarCollapsed ? label : undefined}
-                          className={cn(
-                            'w-full h-9 transition-all duration-200 nav-item-hover focus-ring spring-hover',
-                            sidebarCollapsed ? 'justify-center px-0' : 'justify-start gap-3',
-                            isLocalOnly
-                              ? 'text-muted-foreground/60 cursor-not-allowed opacity-70'
-                              : activeTab === item.id
-                              ? 'bg-brand-600 text-white shadow-lg ring-1 ring-brand-200/60 dark:ring-brand-600/70 hover:bg-brand-700'
-                              : 'text-foreground/80 dark:text-gray-200 hover:text-foreground dark:hover:text-white hover:bg-muted/50 dark:hover:bg-white/5'
-                          )}
-                          onClick={() => {
-                            if (isLocalOnly) return;
-                            navigate('/' + item.id);
-                          }}
-                        >
-                          <Icon className="h-4 w-4" />
-                          {!sidebarCollapsed && (
-                            <>
-                              <span className="flex-1 text-left">{label}</span>
-                              {isLocalOnly && (
-                                <span className="flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-                                  <LockIcon className="h-3 w-3" />
-                                  {t('nav.localOnly.badge')}
-                                </span>
-                              )}
-                            </>
-                          )}
-                        </Button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
-            </nav>
+      {/* Mobile drawer */}
+      <DialogPrimitive.Root open={mobileOpen} onOpenChange={setMobileOpen}>
+        <DialogPrimitive.Portal>
+          <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/40 data-[state=open]:animate-fade-in md:hidden" />
+          <DialogPrimitive.Content
+            aria-describedby={undefined}
+            className="fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] border-r border-border bg-bg-primary shadow-xl data-[state=open]:animate-fade-in md:hidden"
+          >
+            <DialogPrimitive.Title className="sr-only">{t('a11y.mainNavigation')}</DialogPrimitive.Title>
+            <SidebarContent
+              {...sidebarProps}
+              collapsed={false}
+              onNavigate={() => setMobileOpen(false)}
+              onClose={() => setMobileOpen(false)}
+            />
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Portal>
+      </DialogPrimitive.Root>
+
+      <div className={cn('flex min-h-screen min-w-0 flex-col', sidebarCollapsed ? 'md:pl-14' : 'md:pl-60')}>
+        <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-border bg-bg-secondary/85 px-4 backdrop-blur supports-[backdrop-filter]:bg-bg-secondary/70 sm:px-6 lg:px-8">
+          <button
+            type="button"
+            className={cn(iconButton, '-ml-1.5 md:hidden')}
+            onClick={() => setMobileOpen(true)}
+            aria-label={t('shell.openMenu')}
+          >
+            <Menu className="h-5 w-5" />
+          </button>
+
+          <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5 text-sm">
+            {currentSectionTitle && (
+              <>
+                <span className="hidden truncate text-muted-foreground sm:inline">{currentSectionTitle}</span>
+                <ChevronRight className="hidden h-3.5 w-3.5 shrink-0 text-muted-foreground/60 sm:inline" aria-hidden />
+              </>
+            )}
+            <span className="truncate font-medium text-foreground" aria-current="page">
+              {currentLabel}
+            </span>
+          </nav>
+
+          <div className="ml-auto flex items-center gap-1">
+            <GlobalConnectionStatus className="mr-2 hidden sm:flex" />
+            <button
+              type="button"
+              className={cn(iconButton, 'md:hidden')}
+              onClick={() => setPaletteOpen(true)}
+              aria-label={t('shell.search')}
+            >
+              <Search className="h-4 w-4" />
+            </button>
+            <button
+              type="button"
+              className={iconButton}
+              onClick={onRefresh}
+              aria-label={t('app.refresh')}
+              title={t('app.refresh')}
+            >
+              <RefreshCw className="h-4 w-4" />
+            </button>
+            <SimpleThemeToggle className={iconButton} />
+            <button
+              type="button"
+              className={iconButton}
+              onClick={() => openHelp()}
+              aria-label={t('shell.help')}
+              title={t('shell.help')}
+            >
+              <CircleHelp className="h-4 w-4" />
+            </button>
           </div>
-        </aside>
+        </header>
 
-        <div className={cn('flex flex-col flex-1 min-w-0 min-h-screen', sidebarCollapsed ? 'md:pl-16' : 'md:pl-64')}>
-          <header className="sticky top-0 z-40 flex h-16 shrink-0 items-center border-b border-border bg-bg-primary shadow-sm">
-            <div className="w-full max-w-[1400px] mx-auto flex items-center gap-x-2 px-4 sm:gap-x-6 sm:px-6 lg:px-8">
-              <Button variant="ghost" size="sm" className="md:hidden" onClick={() => setSidebarOpen(true)}>
-                <Menu className="h-5 w-5" />
-              </Button>
-              <div className="flex items-center gap-3 min-w-0">
-                <span className="hidden sm:inline text-sm text-gray-600 dark:text-gray-400">{t('app.home')}</span>
-                <span className="hidden sm:inline text-gray-600 dark:text-gray-400">/</span>
-                <span className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate capitalize">
-                  {t(allNavItems.find(n => n.id === activeTab)?.labelKey ?? '', activeTab)}
-                </span>
-              </div>
-              <div className="flex flex-1" />
-              <div className="hidden sm:flex w-80 relative items-center gap-1">
-                <select
-                  value={searchScope}
-                  onChange={(e) => {
-                    const next = e.target.value as SearchScope;
-                    setSearchScope(next);
-                    if (globalQuery) {
-                      // Re-dispatch with the new scope so stale filters clear.
-                      const wantLogs = next === 'all' || next === 'logs' || next === 'current';
-                      const wantServices = next === 'all' || next === 'services' || next === 'current';
-                      setLogFilter({ path_pattern: wantLogs ? globalQuery : undefined });
-                      setGlobalSearch(wantServices ? globalQuery : undefined);
-                    }
-                  }}
-                  aria-label={t('a11y.searchScope')}
-                  className="h-9 rounded-md border border-border bg-bg-primary px-1.5 text-xs text-foreground"
-                >
-                  <option value="all">{t('search.scope.all')}</option>
-                  <option value="current">{t('search.scope.current')}</option>
-                  <option value="logs">{t('search.scope.logs')}</option>
-                  <option value="services">{t('search.scope.services')}</option>
-                </select>
-                <div className="relative flex-1">
-                  <Input
-                    placeholder={t('app.searchPlaceholder')}
-                    id="global-search-input"
-                    value={globalQuery}
-                    role="combobox"
-                    aria-expanded={globalSearchFocused && globalQuery.trim().length > 0}
-                    aria-controls="global-search-pages"
-                    aria-activedescendant={
-                      globalPageMatches[activePageMatch]
-                        ? `global-search-page-${globalPageMatches[activePageMatch].id}`
-                        : undefined
-                    }
-                    autoComplete="off"
-                    onFocus={() => setGlobalSearchFocused(true)}
-                    onBlur={() => setGlobalSearchFocused(false)}
-                    onChange={(e) => {
-                      const q = e.target.value;
-                      setGlobalQuery(q);
-                      setActivePageMatch(0);
-                      dispatchSearch(q || undefined);
-                    }}
-                    onKeyDown={(e) => {
-                      if (e.key === 'ArrowDown' && globalPageMatches.length > 0) {
-                        e.preventDefault();
-                        setActivePageMatch((i) => (i + 1) % globalPageMatches.length);
-                      } else if (e.key === 'ArrowUp' && globalPageMatches.length > 0) {
-                        e.preventDefault();
-                        setActivePageMatch(
-                          (i) => (i - 1 + globalPageMatches.length) % globalPageMatches.length,
-                        );
-                      } else if (e.key === 'Enter' && globalPageMatches[activePageMatch]) {
-                        e.preventDefault();
-                        goToSearchPage(globalPageMatches[activePageMatch].id);
-                      } else if (e.key === 'Escape') {
-                        setGlobalQuery('');
-                        dispatchSearch(undefined);
-                        (document.getElementById('global-search-input') as HTMLInputElement | null)?.blur();
-                      }
-                    }}
-                  />
-                  {globalSearchFocused && globalQuery.trim().length > 0 && (
-                    <div
-                      id="global-search-pages"
-                      role="listbox"
-                      aria-label="Pages"
-                      className="absolute left-0 right-0 top-full z-50 mt-1 overflow-hidden rounded-md border border-border bg-bg-primary py-1 shadow-lg"
-                    >
-                      {globalPageMatches.length > 0 ? (
-                        globalPageMatches.map((item, index) => {
-                          const Icon = item.icon;
-                          return (
-                            <div
-                              key={item.id}
-                              id={`global-search-page-${item.id}`}
-                              role="option"
-                              aria-selected={index === activePageMatch}
-                              // mousedown fires before the input's blur closes the list.
-                              onMouseDown={(e) => {
-                                e.preventDefault();
-                                goToSearchPage(item.id);
-                              }}
-                              onMouseEnter={() => setActivePageMatch(index)}
-                              className={cn(
-                                'flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm text-foreground',
-                                index === activePageMatch && 'bg-bg-secondary',
-                              )}
-                            >
-                              <Icon className="h-4 w-4 text-muted-foreground" />
-                              <span className="flex-1 truncate">{t(item.labelKey)}</span>
-                              {index === activePageMatch && (
-                                <span className="text-[10px] text-muted-foreground">Enter</span>
-                              )}
-                            </div>
-                          );
-                        })
-                      ) : (
-                        <p className="px-3 py-1.5 text-sm text-muted-foreground">
-                          No pages match &ldquo;{globalQuery.trim()}&rdquo;.
-                        </p>
-                      )}
-                    </div>
-                  )}
-                  <span className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 text-[10px] text-gray-600 dark:text-gray-400 border border-border rounded px-1 py-0.5 bg-bg-primary">
-                    {isMac ? '⌘K' : 'Ctrl K'}
-                  </span>
-                </div>
-              </div>
-              <div className="flex shrink-0 items-center gap-x-2 sm:gap-x-4 lg:gap-x-6">
-                <GlobalConnectionStatus className="hidden sm:flex" />
-                {workspaces.length > 0 && (
-                  <select
-                    value={activeWorkspace?.id ?? ''}
-                    onChange={(e) => {
-                      const id = e.target.value;
-                      if (id) void setActiveWorkspaceById(id);
-                    }}
-                    className="hidden sm:block h-9 max-w-[200px] rounded-md border border-border bg-bg-primary px-2 text-xs text-foreground"
-                    aria-label={t('workspace.selector.label')}
-                    title={activeWorkspace?.name ?? t('workspace.selector.placeholder')}
-                  >
-                    {!activeWorkspace && (
-                      <option value="" disabled>
-                        {t('workspace.selector.placeholder')}
-                      </option>
-                    )}
-                    {workspaces.map((w) => (
-                      <option key={w.id} value={w.id}>
-                        {w.name}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                {supportedLocales.length > 1 && (
-                  <select
-                    value={locale}
-                    onChange={(e) => setLocale(e.target.value as Locale)}
-                    className="hidden sm:block h-9 rounded-md border border-border bg-bg-primary px-2 text-xs"
-                    aria-label="Language"
-                  >
-                    {supportedLocales.map((supportedLocale) => (
-                      <option key={supportedLocale} value={supportedLocale}>
-                        {supportedLocale.toUpperCase()}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <SimpleThemeToggle />
-                <Button variant="outline" size="sm" onClick={onRefresh} className="flex items-center gap-2">
-                  <RefreshCw className="h-4 w-4" />
-                  <span className="hidden sm:inline">{t('app.refresh')}</span>
-                </Button>
-                <UserProfile />
-              </div>
-            </div>
-          </header>
-
-          <main id="main-content" className="flex-1" role="main" aria-label={t('a11y.mainContent')}>
-            <div className="w-full max-w-[1400px] mx-auto px-6 py-6">{children}</div>
-          </main>
-        </div>
+        <main id="main-content" className="flex-1" role="main" aria-label={t('a11y.mainContent')}>
+          <div className="mx-auto w-full max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">{children}</div>
+        </main>
       </div>
 
-      {/* Shared Help & Support modal — opened by Shift+? or the avatar menu. */}
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        onRefresh={onRefresh}
+        onToggleSidebar={toggleCollapsed}
+        onOpenHelp={openHelp}
+      />
       <HelpSupport open={helpOpen} onOpenChange={setHelpOpen} />
     </div>
   );

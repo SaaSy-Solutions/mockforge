@@ -29,7 +29,7 @@ export const TimeRangeSelector: React.FC<TimeRangeSelectorProps> = ({
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="px-3 py-2 border border-border rounded-md bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+        className="px-3 py-2 border border-border rounded-md bg-card text-foreground text-sm focus:outline-none focus:ring-2 focus:ring-ring/30"
       >
         {timeRanges.map((range) => (
           <option key={range.value} value={range.value}>

@@ -27,7 +27,7 @@ export function PlaygroundPage() {
   const { protocol } = usePlaygroundStore();
 
   return (
-    <div className="h-full flex flex-col p-6 space-y-4">
+    <div className="h-full flex flex-col space-y-4">
       <div className="flex-1 grid grid-cols-2 gap-4 min-h-0">
         {/* Left Panel - Request */}
         <div className="flex flex-col min-h-0">

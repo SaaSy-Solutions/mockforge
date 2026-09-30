@@ -22,39 +22,38 @@ export function ModernCard({
   ...props
 }: CardProps) {
   const variants = {
-    default: 'bg-card text-card-foreground border border-border shadow-sm',
-    elevated: 'bg-card text-card-foreground border border-border shadow-lg',
-    outlined: 'bg-card text-card-foreground border-2 border-border',
+    default: 'bg-card text-card-foreground border border-border shadow-xs',
+    elevated: 'bg-card text-card-foreground border border-border shadow-md',
+    outlined: 'bg-card text-card-foreground border border-border',
   };
 
   const paddings = {
     none: '',
-    sm: 'p-4',
-    md: 'p-6',
-    lg: 'p-8',
+    sm: 'p-3',
+    md: 'p-5',
+    lg: 'p-6',
   };
 
   return (
     <div
       className={cn(
-        'rounded-xl transition-all duration-200 hover:shadow-md animate-fade-in-scale',
-        'card-hover',
+        'rounded-xl',
         variants[variant],
         className
       )}
       {...props}
     >
       {(title || subtitle || icon || action) && (
-        <div className="flex items-center justify-between p-6 pb-0 mb-6">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-5 py-3.5">
+          <div className="flex items-center gap-2.5 min-w-0">
             {icon && (
-              <div className="p-2 rounded-lg bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 flex-shrink-0">
+              <div className="flex h-7 w-7 items-center justify-center rounded-md bg-muted text-muted-foreground flex-shrink-0 [&_svg]:h-4 [&_svg]:w-4">
                 {icon}
               </div>
             )}
             <div className="min-w-0">
-              {title && <h3 className="font-semibold text-foreground truncate">{title}</h3>}
-              {subtitle && <p className="text-sm text-muted-foreground mt-1">{subtitle}</p>}
+              {title && <h3 className="text-sm font-semibold text-foreground truncate">{title}</h3>}
+              {subtitle && <p className="text-xs text-muted-foreground mt-0.5">{subtitle}</p>}
             </div>
           </div>
           {action && <div className="flex-shrink-0">{action}</div>}
@@ -96,19 +95,19 @@ export function MetricCard({
   };
 
   return (
-    <ModernCard className={className}>
-      <div className="flex items-center justify-between">
+    <ModernCard className={className} padding="sm">
+      <div className="flex items-start justify-between gap-3 px-1 py-0.5">
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-medium text-muted-foreground truncate">
+          <p className="text-[13px] font-medium text-muted-foreground truncate">
             {title}
           </p>
-          <div className="flex items-baseline gap-2 mt-1">
-            <p className="text-3xl font-bold text-foreground">
+          <div className="flex items-baseline gap-2 mt-1.5">
+            <p className="font-mono text-2xl font-semibold tracking-tight tabular-nums text-foreground">
               {typeof value === 'number' ? value.toLocaleString() : value}
             </p>
             {trend && (
               <span className={cn(
-                'text-sm font-medium',
+                'text-xs font-medium',
                 trendColors[trend.direction]
               )}>
                 {trend.value}
@@ -116,13 +115,13 @@ export function MetricCard({
             )}
           </div>
           {subtitle && (
-            <p className="text-sm text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1 truncate">
               {subtitle}
             </p>
           )}
         </div>
         {icon && (
-          <div className="p-3 rounded-lg bg-brand-50 dark:bg-brand-900/20 text-brand-600 dark:text-brand-400 spring-hover">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground [&_svg]:h-4 [&_svg]:w-4">
             {icon}
           </div>
         )}

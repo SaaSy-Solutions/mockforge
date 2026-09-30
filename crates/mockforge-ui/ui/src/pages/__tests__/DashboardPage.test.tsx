@@ -128,7 +128,9 @@ describe('DashboardPage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('System Metrics')).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'System' })).toBeInTheDocument();
+      expect(screen.getByText('1.0.0')).toBeInTheDocument();
+      expect(screen.getByText('Error rate')).toBeInTheDocument();
     });
   });
 
@@ -203,9 +205,15 @@ describe('DashboardPage', () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText('Success Responses')).toBeInTheDocument();
-      expect(screen.getByText('Client Errors')).toBeInTheDocument();
-      expect(screen.getByText('Server Errors')).toBeInTheDocument();
+      expect(screen.getByText('2xx Success')).toBeInTheDocument();
+      expect(screen.getByText('4xx Client errors')).toBeInTheDocument();
+      expect(screen.getByText('5xx Server errors')).toBeInTheDocument();
+      // One of each → an even three-way split in the stacked bar.
+      expect(
+        screen.getByRole('img', {
+          name: '2xx Success 33.3%, 4xx Client errors 33.3%, 5xx Server errors 33.3%',
+        }),
+      ).toBeInTheDocument();
     });
   });
 });

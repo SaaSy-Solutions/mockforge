@@ -55,12 +55,12 @@ export default function PerformancePage() {
   const isRunning = status?.running || false;
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold">Performance Mode</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Performance Mode</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             Lightweight load simulation with RPS control and bottleneck simulation
           </p>
         </div>
