@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
@@ -895,7 +895,7 @@ function AuditLogTab({ orgId }: { orgId: string }) {
                 <p className="text-sm font-medium">{log.description}</p>
                 {log.metadata && (
                   <div className="flex gap-2 mt-1 flex-wrap">
-                    {log.metadata.provider && (
+                    {Boolean(log.metadata.provider) && (
                       <Badge variant="secondary">
                         {String(log.metadata.provider)}
                       </Badge>
@@ -960,10 +960,10 @@ export function BYOKConfigPage() {
   const orgId = organizations?.[0]?.id;
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Bring Your Own Key (BYOK)</h1>
-        <p className="text-muted-foreground mt-2">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Bring Your Own Key (BYOK)</h1>
+        <p className="text-sm text-muted-foreground mt-2">
           Configure your own AI provider API keys, manage AI features, and monitor usage
         </p>
       </div>

@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import React, { useRef, useCallback, useEffect, useState } from 'react';
 
 export interface FocusableElement {

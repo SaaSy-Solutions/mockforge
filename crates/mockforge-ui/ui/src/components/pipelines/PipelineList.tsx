@@ -8,7 +8,7 @@ import React from 'react';
 import { usePipelines, useDeletePipeline, type Pipeline } from '../../hooks/usePipelines';
 import { useConfirmDelete } from '../../hooks/useConfirmDelete';
 import { Card } from '../ui/Card';
-import { Play, Edit, Trash2, Plus, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Edit, Trash2, Plus, CheckCircle, XCircle, Clock } from 'lucide-react';
 
 export interface PipelineListProps {
   workspaceId?: string;

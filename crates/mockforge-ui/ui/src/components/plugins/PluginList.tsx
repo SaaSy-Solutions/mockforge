@@ -1,6 +1,5 @@
-import { logger } from '@/utils/logger';
 import { authenticatedFetch } from '@/utils/apiClient';
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   MoreHorizontal,
   Eye,

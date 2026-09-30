@@ -161,7 +161,6 @@ These variables configure the core MockForge mock server functionality.
 |----------|---------|-------------|
 | `MOCKFORGE_LATENCY_ENABLED` | `false` | Enable latency injection |
 | `MOCKFORGE_FAILURES_ENABLED` | `false` | Enable failure injection |
-| `MOCKFORGE_OVERRIDES_ENABLED` | `false` | Enable response overrides |
 | `MOCKFORGE_TRAFFIC_SHAPING_ENABLED` | `false` | Enable traffic shaping |
 
 ### Bandwidth Control
@@ -207,7 +206,8 @@ These variables configure the core MockForge mock server functionality.
 | `MOCKFORGE_MOCK_FILES_DIR` | `mock-files` | Directory for mock files |
 | `MOCKFORGE_FIXTURES_DIR` | `fixtures` | Directory for test fixtures |
 | `MOCKFORGE_SNAPSHOT_DIR` | None | Snapshot storage directory |
-| `MOCKFORGE_HTTP_OVERRIDES_GLOB` | None | Glob pattern for override files |
+| `MOCKFORGE_HTTP_OVERRIDES_GLOB` | None | Comma-separated globs or absolute paths of YAML response-override rule files |
+| `MOCKFORGE_HTTP_OVERRIDES` | None | JSON array of response-override rules, applied after file rules |
 | `MOCKFORGE_COVERAGE_UI_PATH` | None | Coverage UI path |
 
 ### Logging

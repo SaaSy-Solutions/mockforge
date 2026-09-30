@@ -1,5 +1,3 @@
-import { logger } from '@/utils/logger';
-import React from 'react';
 import { cn } from '../../utils/cn';
 
 export type StatusType = 'running' | 'warning' | 'error' | 'stopped' | 'info' | 'loading' | 'neutral';

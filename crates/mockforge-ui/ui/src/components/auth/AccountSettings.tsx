@@ -324,11 +324,24 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
                 ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
             body: JSON.stringify(body), });
+            const data = await response.json().catch(() => ({}));
             if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
                 throw new Error(
-                    apiErrorMessage(response, errorData, 'Failed to resend verification email'),
+                    apiErrorMessage(response, data, 'Failed to resend verification email'),
                 );
+            }
+            // The registry answers 200 with `success: false` when the mail
+            // could not actually be sent (e.g. provider outage).
+            if (data && data.success === false) {
+                throw new Error(
+                    typeof data.message === 'string' && data.message
+                        ? data.message
+                        : 'Failed to resend verification email',
+                );
+            }
+            if (data && typeof data.message === 'string' && /already verified/i.test(data.message)) {
+                setIsVerified(true);
+                return;
             }
             setVerifyBanner({
                 kind: 'success',
@@ -384,11 +397,13 @@ export function AccountSettings({ open, onOpenChange }: AccountSettingsProps) {
                         <div className="space-y-3 rounded-md border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-900/20 p-4">
                             <div className="flex items-start gap-2 text-sm font-semibold text-amber-900 dark:text-amber-200">
                                 <AlertCircle className="h-4 w-4 mt-0.5" />
-                                <span>Verify your email</span>
+                                <span>Confirm your email address</span>
                             </div>
                             <p className="text-xs text-amber-800 dark:text-amber-300">
-                                Some features require a confirmed email address.
-                                {user.email ? ` We'll resend the link to ${user.email}.` : ''}
+                                Every feature works without it. We recommend confirming anyway so you
+                                know security alerts, billing notices, and password-reset links reach the
+                                right inbox.
+                                {user.email ? ` We'll send the link to ${user.email}.` : ''}
                             </p>
                             {verifyBanner && <Banner banner={verifyBanner} />}
                             <form onSubmit={handleResendVerification} className="space-y-2">

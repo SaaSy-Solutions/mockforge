@@ -2463,7 +2463,7 @@ fn scan_fixtures_directory() -> Result<Vec<FixtureInfo>> {
     all_fixtures.extend(grpc_fixtures);
 
     // Sort by saved_at timestamp (newest first)
-    all_fixtures.sort_by(|a, b| b.saved_at.cmp(&a.saved_at));
+    all_fixtures.sort_by_key(|b| std::cmp::Reverse(b.saved_at));
 
     tracing::info!("Found {} fixtures in directory: {}", all_fixtures.len(), fixtures_dir);
     Ok(all_fixtures)

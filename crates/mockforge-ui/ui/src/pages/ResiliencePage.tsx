@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react';
-import { useWebSocket } from '../hooks/useWebSocket';
 import { isCloudMode } from '../utils/cloudMode';
 import { cloudResilienceApi, type RuntimeState } from '../services/api/cloudResilience';
 import { getAuthToken } from '../services/tokenStorage';
@@ -239,7 +238,7 @@ export const ResiliencePage: React.FC = () => {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6">
       {/* Deployment unreachable banner. The registry proxies live state from
           the hosted-mock's admin port; when that proxy fails (deployment
           stopped, not yet started, transient network), the page renders zeros
@@ -286,7 +285,7 @@ export const ResiliencePage: React.FC = () => {
 
       {/* Header */}
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-foreground">Resilience Dashboard</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Resilience Dashboard</h1>
         <div className="flex items-center space-x-4">
           <label className="flex items-center space-x-2">
             <input

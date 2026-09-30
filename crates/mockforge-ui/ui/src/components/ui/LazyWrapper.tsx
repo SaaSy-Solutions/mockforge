@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import React, { Suspense } from 'react';
 import type { ComponentType } from 'react';
 import { Skeleton } from './Skeleton';

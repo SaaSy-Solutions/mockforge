@@ -7,7 +7,7 @@
 
 import React, { useMemo } from 'react';
 import { Card } from '../ui/Card';
-import { TrendingUp, Calendar } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
 import { useScenarioUsage } from '@/hooks/useCoverageMetrics';
 import type { CoverageMetricsQuery } from '@/hooks/useCoverageMetrics';
 

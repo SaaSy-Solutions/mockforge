@@ -13,6 +13,8 @@
 import * as L from 'lucide-react';
 
 // MUI names that map to the same lucide-react name.
+export const History = L.History;
+export const HistoryIcon = L.History;
 export const Search = L.Search;
 export const SearchIcon = L.Search;
 export const Save = L.Save;

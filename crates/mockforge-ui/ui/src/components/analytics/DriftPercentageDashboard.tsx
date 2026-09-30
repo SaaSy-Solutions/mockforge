@@ -7,7 +7,7 @@
 
 import React, { useMemo } from 'react';
 import { Card } from '../ui/Card';
-import { TrendingDown, TrendingUp, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { TrendingDown, AlertCircle, CheckCircle2 } from 'lucide-react';
 import { useDriftPercentage } from '@/hooks/useCoverageMetrics';
 import type { CoverageMetricsQuery } from '@/hooks/useCoverageMetrics';
 

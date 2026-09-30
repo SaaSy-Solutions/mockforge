@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 // Re-export Alert from DesignSystem
 export { Alert } from './DesignSystem';
 

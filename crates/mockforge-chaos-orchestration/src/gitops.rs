@@ -1,6 +1,6 @@
-//! GitOps workflow support for chaos orchestrations
+//! `GitOps` workflow support for chaos orchestrations
 //!
-//! Provides integration with GitOps tools like Flux and ArgoCD for
+//! Provides integration with `GitOps` tools like Flux and `ArgoCD` for
 //! managing chaos orchestrations declaratively.
 
 use chrono::{DateTime, Utc};
@@ -16,7 +16,7 @@ enum ManifestChange {
     Update(String),
 }
 
-/// GitOps repository configuration
+/// `GitOps` repository configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GitOpsConfig {
     /// Repository URL
@@ -47,7 +47,7 @@ pub enum GitOpsAuth {
     Basic { username: String, password: String },
 }
 
-/// GitOps sync status
+/// `GitOps` sync status
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncStatus {
     pub last_sync: DateTime<Utc>,
@@ -67,7 +67,7 @@ pub enum SyncState {
     Failed,
 }
 
-/// Orchestration manifest in GitOps repository
+/// Orchestration manifest in `GitOps` repository
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrchestrationManifest {
     pub file_path: PathBuf,
@@ -76,7 +76,7 @@ pub struct OrchestrationManifest {
     pub last_modified: DateTime<Utc>,
 }
 
-/// GitOps manager
+/// `GitOps` manager
 pub struct GitOpsManager {
     config: GitOpsConfig,
     manifests: HashMap<String, OrchestrationManifest>,
@@ -84,7 +84,7 @@ pub struct GitOpsManager {
 }
 
 impl GitOpsManager {
-    /// Create a new GitOps manager
+    /// Create a new `GitOps` manager
     pub fn new(config: GitOpsConfig) -> Self {
         Self {
             config,
@@ -142,8 +142,7 @@ impl GitOpsManager {
             let hash = hash_content(&content_raw);
             let last_modified = fs::metadata(&file_path)
                 .and_then(|m| m.modified())
-                .map(DateTime::<Utc>::from)
-                .unwrap_or_else(|_| Utc::now());
+                .map_or_else(|_| Utc::now(), DateTime::<Utc>::from);
 
             manifests.push(OrchestrationManifest {
                 file_path,
@@ -168,7 +167,7 @@ impl GitOpsManager {
             match self.manifests.get(&key) {
                 None => changes.push(ManifestChange::Create(key)),
                 Some(existing) if existing.hash != manifest.hash => {
-                    changes.push(ManifestChange::Update(key))
+                    changes.push(ManifestChange::Update(key));
                 }
                 _ => {}
             }
@@ -285,7 +284,7 @@ fn collect_manifest_files(base: &Path, out: &mut Vec<PathBuf>) -> Result<(), Str
 
 fn parse_manifest_content(path: &Path, content: &str) -> Result<serde_json::Value, String> {
     match path.extension().and_then(|s| s.to_str()) {
-        Some("yaml") | Some("yml") => {
+        Some("yaml" | "yml") => {
             serde_yaml::from_str(content).map_err(|e| format!("Invalid YAML manifest: {}", e))
         }
         Some("json") => {
@@ -337,7 +336,7 @@ pub mod flux {
     }
 
     impl FluxKustomization {
-        /// Create a new Flux Kustomization for MockForge orchestrations
+        /// Create a new Flux Kustomization for `MockForge` orchestrations
         pub fn new_for_orchestrations(
             name: String,
             namespace: String,
@@ -347,10 +346,7 @@ pub mod flux {
             Self {
                 api_version: "kustomize.toolkit.fluxcd.io/v1".to_string(),
                 kind: "Kustomization".to_string(),
-                metadata: FluxMetadata {
-                    name: name.clone(),
-                    namespace,
-                },
+                metadata: FluxMetadata { name, namespace },
                 spec: FluxSpec {
                     interval: "5m".to_string(),
                     path,
@@ -370,11 +366,11 @@ pub mod flux {
     }
 }
 
-/// ArgoCD integration
+/// `ArgoCD` integration
 pub mod argocd {
     use super::*;
 
-    /// ArgoCD Application configuration
+    /// `ArgoCD` Application configuration
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct ArgoApplication {
         pub api_version: String,
@@ -426,7 +422,7 @@ pub mod argocd {
     }
 
     impl ArgoApplication {
-        /// Create a new ArgoCD Application for MockForge orchestrations
+        /// Create a new `ArgoCD` Application for `MockForge` orchestrations
         pub fn new_for_orchestrations(
             name: String,
             namespace: String,
@@ -438,7 +434,7 @@ pub mod argocd {
                 api_version: "argoproj.io/v1alpha1".to_string(),
                 kind: "Application".to_string(),
                 metadata: ArgoMetadata {
-                    name: name.clone(),
+                    name,
                     namespace: namespace.clone(),
                 },
                 spec: ArgoSpec {

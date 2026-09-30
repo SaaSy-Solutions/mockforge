@@ -30,7 +30,7 @@ pub struct OrchestrationTemplate {
 }
 
 /// Template category
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum TemplateCategory {
     NetworkChaos,
@@ -139,7 +139,7 @@ impl TemplateMarketplace {
     }
 
     /// Search templates
-    pub fn search_templates(&self, filters: TemplateSearchFilters) -> Vec<OrchestrationTemplate> {
+    pub fn search_templates(&self, filters: &TemplateSearchFilters) -> Vec<OrchestrationTemplate> {
         let mut results: Vec<_> = self
             .templates
             .values()
@@ -197,7 +197,7 @@ impl TemplateMarketplace {
                 });
             }
             TemplateSortBy::Newest => {
-                results.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+                results.sort_by_key(|b| std::cmp::Reverse(b.created_at));
             }
             TemplateSortBy::TopRated => {
                 results.sort_by(|a, b| {
@@ -205,10 +205,10 @@ impl TemplateMarketplace {
                 });
             }
             TemplateSortBy::MostDownloaded => {
-                results.sort_by(|a, b| b.stats.downloads.cmp(&a.stats.downloads));
+                results.sort_by_key(|b| std::cmp::Reverse(b.stats.downloads));
             }
             TemplateSortBy::RecentlyUpdated => {
-                results.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+                results.sort_by_key(|b| std::cmp::Reverse(b.updated_at));
             }
         }
 
@@ -264,10 +264,11 @@ impl TemplateMarketplace {
         }
 
         // Add review
-        self.reviews.entry(review.template_id.clone()).or_default().push(review.clone());
+        let template_id = review.template_id.clone();
+        self.reviews.entry(template_id.clone()).or_default().push(review);
 
         // Update template rating
-        self.update_template_rating(&review.template_id)?;
+        self.update_template_rating(&template_id)?;
 
         Ok(())
     }
@@ -481,7 +482,7 @@ mod tests {
             offset: 0,
         };
 
-        let results = marketplace.search_templates(filters);
+        let results = marketplace.search_templates(&filters);
         assert_eq!(results.len(), 1);
     }
 }

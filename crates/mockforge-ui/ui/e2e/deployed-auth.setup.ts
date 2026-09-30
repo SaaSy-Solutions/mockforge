@@ -18,6 +18,11 @@ const MAX_AUTH_AGE_MS = 24 * 60 * 60 * 1000;
  *
  * If a recent auth state file exists (< 24h old), reuse it without credentials.
  *
+ * E2E_EMAIL MUST be a dedicated test account, never a real customer or
+ * personal account: several deployed specs create real resources in prod
+ * (e.g. api-tokens-deployed.spec.ts creates and then deletes
+ * `E2E Token <epoch-ms>` API tokens).
+ *
  * Run with:
  *   E2E_EMAIL=you@example.com E2E_PASSWORD=secret \
  *   npx playwright test --config=playwright-deployed.config.ts

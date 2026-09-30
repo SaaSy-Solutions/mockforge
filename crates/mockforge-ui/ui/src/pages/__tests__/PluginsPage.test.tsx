@@ -116,9 +116,9 @@ describe('PluginsPage', () => {
 
   it('disables reload button during reload', async () => {
     let resolveReload: () => void;
-    pluginsApi.reloadAllPlugins.mockReturnValue(
+    vi.mocked(pluginsApi.reloadAllPlugins).mockReturnValue(
       new Promise((resolve) => {
-        resolveReload = resolve;
+        resolveReload = () => resolve({ message: 'Plugins reloaded' });
       })
     );
 
@@ -136,7 +136,7 @@ describe('PluginsPage', () => {
   });
 
   it('displays error when reload fails', async () => {
-    pluginsApi.reloadAllPlugins.mockRejectedValue(new Error('Reload failed'));
+    vi.mocked(pluginsApi.reloadAllPlugins).mockRejectedValue(new Error('Reload failed'));
 
     renderWithProviders();
 

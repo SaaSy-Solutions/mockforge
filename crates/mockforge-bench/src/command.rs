@@ -320,6 +320,22 @@ pub struct BenchCommand {
     /// wire (Srikanth's WAF routes by Host/SNI, so the target must be a name).
     pub dns_policy: Option<String>,
 
+    /// Round 67 (#79) — suppress per-run k6 artifacts: `k6-output.log` plus
+    /// the automatic debug sidecars (`conformance-failure-details.json`,
+    /// `conformance-network-events.json`), and stop buffering k6's whole
+    /// output in memory. Srikanth's 24–48h `--repeat-until` campaigns wrote
+    /// a full k6 dump per round × target and filled the disk. `summary.json`
+    /// (results parsing) and an explicit `--export-requests` dump are
+    /// unaffected.
+    pub no_k6_logs: bool,
+
+    /// Round 67 (#79) — campaign mode only (`--repeat-until` / `--rounds`):
+    /// keep only the newest N `round_*` directories and prune older ones
+    /// after each round (log rotation). Per-round stats survive in
+    /// `campaign.jsonl` and `round-summaries/` at the base output dir.
+    /// `Some(0)` keeps only the campaign-level stats.
+    pub keep_rounds: Option<u32>,
+
     // === OWASP API Security Top 10 Testing ===
     /// Enable OWASP API Security Top 10 testing mode
     pub owasp_api_top10: bool,
@@ -1079,7 +1095,8 @@ impl BenchCommand {
             .with_local_ips(self.source_ips.join(","))
             .with_dns_policy(self.dns_policy.clone().unwrap_or_default())
             .with_discard_response_bodies(self.discard_response_bodies)
-            .with_force_http1(force_http1);
+            .with_force_http1(force_http1)
+            .with_capture_logs(!self.no_k6_logs);
 
         std::fs::create_dir_all(&self.output)?;
 
@@ -1241,6 +1258,10 @@ impl BenchCommand {
                 // Round 61 (#79) — carry the DNS policy so per-target k6 runs
                 // resolve hostnames with the same IPv6/IPv4 preference.
                 dns_policy: self.dns_policy.clone(),
+                // Round 67 (#79) — campaign log control: suppress per-run k6
+                // artifacts and prune old round_* dirs after each round.
+                no_k6_logs: self.no_k6_logs,
+                keep_rounds: self.keep_rounds,
             },
             targets,
             max_concurrency,
@@ -1282,43 +1303,8 @@ impl BenchCommand {
         // Save aggregated summary if requested
         if self.results_format == "aggregated" || self.results_format == "both" {
             let summary_path = self.output.join("aggregated_summary.json");
-            let summary_json = serde_json::json!({
-                "total_elapsed_seconds": elapsed.as_secs(),
-                "total_targets": results.total_targets,
-                "successful_targets": results.successful_targets,
-                "failed_targets": results.failed_targets,
-                "aggregated_metrics": {
-                    "total_requests": results.aggregated_metrics.total_requests,
-                    "total_failed_requests": results.aggregated_metrics.total_failed_requests,
-                    "avg_duration_ms": results.aggregated_metrics.avg_duration_ms,
-                    "p95_duration_ms": results.aggregated_metrics.p95_duration_ms,
-                    "p99_duration_ms": results.aggregated_metrics.p99_duration_ms,
-                    "error_rate": results.aggregated_metrics.error_rate,
-                    "total_rps": results.aggregated_metrics.total_rps,
-                    "avg_rps": results.aggregated_metrics.avg_rps,
-                    "total_vus_max": results.aggregated_metrics.total_vus_max,
-                },
-                "target_results": results.target_results.iter().map(|r| {
-                    serde_json::json!({
-                        "target_url": r.target_url,
-                        "target_index": r.target_index,
-                        "success": r.success,
-                        "error": r.error,
-                        "total_requests": r.results.total_requests,
-                        "failed_requests": r.results.failed_requests,
-                        "avg_duration_ms": r.results.avg_duration_ms,
-                        "min_duration_ms": r.results.min_duration_ms,
-                        "med_duration_ms": r.results.med_duration_ms,
-                        "p90_duration_ms": r.results.p90_duration_ms,
-                        "p95_duration_ms": r.results.p95_duration_ms,
-                        "p99_duration_ms": r.results.p99_duration_ms,
-                        "max_duration_ms": r.results.max_duration_ms,
-                        "rps": r.results.rps,
-                        "vus_max": r.results.vus_max,
-                        "output_dir": r.output_dir.to_string_lossy(),
-                    })
-                }).collect::<Vec<_>>(),
-            });
+            let summary_json =
+                crate::parallel_executor::targets_summary_json(results, elapsed.as_secs());
 
             std::fs::write(&summary_path, serde_json::to_string_pretty(&summary_json)?)?;
             TerminalReporter::print_success(&format!(
@@ -1329,29 +1315,7 @@ impl BenchCommand {
 
         // Write CSV with all per-target results for easy parsing
         let csv_path = self.output.join("all_targets.csv");
-        let mut csv = String::from(
-            "target_url,success,requests,failed,rps,vus,min_ms,avg_ms,med_ms,p90_ms,p95_ms,p99_ms,max_ms,error\n",
-        );
-        for r in &results.target_results {
-            csv.push_str(&format!(
-                "{},{},{},{},{:.1},{},{:.1},{:.1},{:.1},{:.1},{:.1},{:.1},{:.1},{}\n",
-                r.target_url,
-                r.success,
-                r.results.total_requests,
-                r.results.failed_requests,
-                r.results.rps,
-                r.results.vus_max,
-                r.results.min_duration_ms,
-                r.results.avg_duration_ms,
-                r.results.med_duration_ms,
-                r.results.p90_duration_ms,
-                r.results.p95_duration_ms,
-                r.results.p99_duration_ms,
-                r.results.max_duration_ms,
-                r.error.as_deref().unwrap_or(""),
-            ));
-        }
-        let _ = std::fs::write(&csv_path, &csv);
+        let _ = std::fs::write(&csv_path, crate::parallel_executor::targets_csv(results));
 
         self.reprint_traffic_file_breakdown();
         println!("\nResults saved to: {}", self.output.display());
@@ -1361,6 +1325,15 @@ impl BenchCommand {
             println!(
                 "  - Aggregated summary: {}",
                 self.output.join("aggregated_summary.json").display()
+            );
+        }
+        // Round 67 (#79) — campaign runs write per-round stats as they go so
+        // a killed / pruned campaign still leaves an auditable trail.
+        if self.repeat_until.is_some() || self.rounds.map(|r| r > 1).unwrap_or(false) {
+            println!(
+                "  - Per-round stats:    {} (+ {})",
+                self.output.join("campaign.jsonl").display(),
+                self.output.join("round-summaries").display()
             );
         }
 
@@ -2400,7 +2373,8 @@ impl BenchCommand {
         if !self.generate_only {
             let executor = K6Executor::new()?
                 .with_local_ips(self.source_ips.join(","))
-                .with_dns_policy(self.dns_policy.clone().unwrap_or_default());
+                .with_dns_policy(self.dns_policy.clone().unwrap_or_default())
+                .with_capture_logs(!self.no_k6_logs);
             std::fs::create_dir_all(&output_dir)?;
 
             executor.execute(&script_path, Some(&output_dir), self.verbose).await?;
@@ -2534,7 +2508,8 @@ impl BenchCommand {
                 .with_local_ips(self.source_ips.join(","))
                 .with_dns_policy(self.dns_policy.clone().unwrap_or_default())
                 .with_discard_response_bodies(self.discard_response_bodies)
-                .with_force_http1(force_http1);
+                .with_force_http1(force_http1)
+                .with_capture_logs(!self.no_k6_logs);
             let output_dir = self.output.join(format!("{}_results", spec_name.replace('.', "_")));
             std::fs::create_dir_all(&output_dir)?;
 
@@ -2864,7 +2839,8 @@ impl BenchCommand {
         TerminalReporter::print_progress("Executing CRUD flow test...");
         let executor = K6Executor::new()?
             .with_local_ips(self.source_ips.join(","))
-            .with_dns_policy(self.dns_policy.clone().unwrap_or_default());
+            .with_dns_policy(self.dns_policy.clone().unwrap_or_default())
+            .with_capture_logs(!self.no_k6_logs);
         std::fs::create_dir_all(&self.output)?;
 
         let results = executor.execute(&script_path, Some(&self.output), self.verbose).await?;
@@ -3440,7 +3416,8 @@ impl BenchCommand {
             TerminalReporter::print_progress("Running conformance tests via k6...");
             let executor = K6Executor::new()?
                 .with_local_ips(self.source_ips.join(","))
-                .with_dns_policy(self.dns_policy.clone().unwrap_or_default());
+                .with_dns_policy(self.dns_policy.clone().unwrap_or_default())
+                .with_capture_logs(!self.no_k6_logs);
             executor.execute(&script_path, Some(&self.output), self.verbose).await?;
 
             let report_path = self.output.join("conformance-report.json");
@@ -4023,7 +4000,8 @@ impl BenchCommand {
                 ));
                 let k6 = K6Executor::new()?
                     .with_local_ips(self.source_ips.join(","))
-                    .with_dns_policy(self.dns_policy.clone().unwrap_or_default());
+                    .with_dns_policy(self.dns_policy.clone().unwrap_or_default())
+                    .with_capture_logs(!self.no_k6_logs);
                 // Unique k6 API port per target to avoid collisions.
                 let api_port = 6565u16.saturating_add(idx as u16);
                 k6.execute_with_port(&script_path, Some(&target_dir), self.verbose, Some(api_port))
@@ -4394,7 +4372,8 @@ impl BenchCommand {
         TerminalReporter::print_progress("Executing OWASP security tests...");
         let executor = K6Executor::new()?
             .with_local_ips(self.source_ips.join(","))
-            .with_dns_policy(self.dns_policy.clone().unwrap_or_default());
+            .with_dns_policy(self.dns_policy.clone().unwrap_or_default())
+            .with_capture_logs(!self.no_k6_logs);
         std::fs::create_dir_all(&self.output)?;
 
         let results = executor.execute(&script_path, Some(&self.output), self.verbose).await?;
@@ -4622,6 +4601,8 @@ mod tests {
             report_missed_cap: None,
             discard_response_bodies: false,
             dns_policy: None,
+            no_k6_logs: false,
+            keep_rounds: None,
         };
 
         let headers = cmd.parse_headers().unwrap();
@@ -4810,6 +4791,8 @@ mod tests {
             report_missed_cap: None,
             discard_response_bodies: false,
             dns_policy: None,
+            no_k6_logs: false,
+            keep_rounds: None,
         };
 
         assert_eq!(cmd.get_spec_display_name(), "test.yaml");
@@ -4901,6 +4884,8 @@ mod tests {
             report_missed_cap: None,
             discard_response_bodies: false,
             dns_policy: None,
+            no_k6_logs: false,
+            keep_rounds: None,
         };
 
         assert_eq!(cmd_multi.get_spec_display_name(), "2 spec files");
@@ -5027,6 +5012,8 @@ mod tests {
             report_missed_cap: None,
             discard_response_bodies: false,
             dns_policy: None,
+            no_k6_logs: false,
+            keep_rounds: None,
         }
     }
 

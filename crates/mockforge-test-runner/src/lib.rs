@@ -38,7 +38,11 @@
 //! each other.
 
 #![warn(missing_docs)]
-#![allow(clippy::missing_errors_doc)] // crate-level: errors are typed via thiserror
+#![allow(clippy::missing_errors_doc)]
+// crate-level: errors are typed via thiserror
+// `next_seq` is a run-event sequence number, not a loop counter — it is
+// shared across several loops and helper calls in the executors.
+#![allow(clippy::explicit_counter_loop)]
 
 pub mod callbacks;
 pub mod config;

@@ -81,10 +81,15 @@ jobs:
     name: Test
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
       CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      # Full debuginfo for the whole workspace plus its test binaries filled
+      # the hosted runner's disk and the linker died with "Bus error".
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     strategy:
       fail-fast: false
       matrix:
@@ -92,15 +97,11 @@ jobs:
           - "1.96.0"
 
     steps:
-    - name: Set per-runner CARGO_HOME
-      # `runner.name` is unavailable in workflow- or job-level `env:` blocks
-      # (GH Actions context: `runner.*` is step-scoped). Writing to
-      # `$GITHUB_ENV` here exports it to every subsequent step in this job,
-      # including the rust-toolchain composite action and rust-cache.
-      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
-
     - name: Checkout repository
       uses: actions/checkout@v7
+
+    - name: Free runner disk space
+      run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
 
     - name: Install Rust toolchain
       uses: ./.github/actions/rust-toolchain
@@ -108,8 +109,10 @@ jobs:
         toolchain: ${{ matrix.rust }}
         components: rustfmt, clippy
 
-    - name: Install system dependencies
-      run: 'dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev > /dev/null 2>&1 || { echo "::error::Required system deps missing on self-hosted runner. Run on the runner host: sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev"; exit 1; }'
+    - name: Install native build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
 
     # sccache was here, removed 2026-05-06: 0% Rust hit rate over 1378+
     # compile attempts. Self-hosted runners' rustc invocations include
@@ -180,17 +183,10 @@ jobs:
     name: UI Tests
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 40
 
     steps:
-      - name: Set per-runner CARGO_HOME
-        # `runner.name` is unavailable in workflow- or job-level `env:` blocks
-        # (GH Actions context: `runner.*` is step-scoped). Writing to
-        # `$GITHUB_ENV` here exports it to every subsequent step in this job,
-        # including the rust-toolchain composite action and rust-cache.
-        run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
-
       - name: Checkout code
         uses: actions/checkout@v7
 
@@ -241,26 +237,22 @@ jobs:
     name: Incremental Warning Gate
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 40
     env:
       CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
     steps:
-    - name: Set per-runner CARGO_HOME
-      # `runner.name` is unavailable in workflow- or job-level `env:` blocks
-      # (GH Actions context: `runner.*` is step-scoped). Writing to
-      # `$GITHUB_ENV` here exports it to every subsequent step in this job,
-      # including the rust-toolchain composite action and rust-cache.
-      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
-
     - name: Checkout repository
       uses: actions/checkout@v7
 
     - name: Install Rust toolchain
       uses: ./.github/actions/rust-toolchain
 
-    - name: Install protoc (protobuf compiler)
-      run: 'dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev > /dev/null 2>&1 || { echo "::error::Required system deps missing on self-hosted runner. Run on the runner host: sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev"; exit 1; }'
+    - name: Install native build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
@@ -274,27 +266,23 @@ jobs:
     name: Warning Ratchet Preview
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 40
     continue-on-error: true
     env:
       CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
     steps:
-    - name: Set per-runner CARGO_HOME
-      # `runner.name` is unavailable in workflow- or job-level `env:` blocks
-      # (GH Actions context: `runner.*` is step-scoped). Writing to
-      # `$GITHUB_ENV` here exports it to every subsequent step in this job,
-      # including the rust-toolchain composite action and rust-cache.
-      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
-
     - name: Checkout repository
       uses: actions/checkout@v7
 
     - name: Install Rust toolchain
       uses: ./.github/actions/rust-toolchain
 
-    - name: Install protoc (protobuf compiler)
-      run: 'dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev > /dev/null 2>&1 || { echo "::error::Required system deps missing on self-hosted runner. Run on the runner host: sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev"; exit 1; }'
+    - name: Install native build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2
@@ -308,55 +296,23 @@ jobs:
     name: Security Audit
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-    - name: Set per-runner CARGO_HOME
-      # `runner.name` is unavailable in workflow- or job-level `env:` blocks
-      # (GH Actions context: `runner.*` is step-scoped). Writing to
-      # `$GITHUB_ENV` here exports it to every subsequent step in this job,
-      # including the rust-toolchain composite action and rust-cache.
-      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
-
     - name: Checkout repository
       uses: actions/checkout@v7
 
     - name: Install Rust toolchain
       uses: ./.github/actions/rust-toolchain
 
-    - name: Install protoc (protobuf compiler)
-      run: 'dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev > /dev/null 2>&1 || { echo "::error::Required system deps missing on self-hosted runner. Run on the runner host: sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev"; exit 1; }'
-    - name: Verify security tools present on self-hosted runner
-      # `cargo install` rebuilds these from source on every run (~5 min total),
-      # which dominated Security Audit wall-clock. Both tools change rarely;
-      # we preinstall them on the runner and verify here with the same
-      # pattern used for protoc above.
-      #
-      # IMPORTANT (#539): the durable install location is `/usr/local/bin/`,
-      # NOT `~/.cargo/bin/`. The `actions/rust-toolchain` setup re-runs
-      # `rustup-init` on each workflow, which wipes `/home/actions/.cargo/bin/`
-      # — so anything installed there with `cargo install` survives only until
-      # the next toolchain bump. `/usr/local/bin/` is root-owned, comes earlier
-      # in $PATH for the runner user, and is untouched by rustup-init.
-      #
-      # To repair a missing tool, SSH the runner and copy the binary into the
-      # durable location (binaries are statically linked, no rebuild needed):
-      #   ssh root@<runner-ip>
-      #   cp /home/actions/.cargo/bin/cargo-audit /usr/local/bin/
-      #   cp /home/actions/.cargo/bin/cargo-deny  /usr/local/bin/
-      # If `~/.cargo/bin/` is empty too, first build the tool once with
-      # `sudo -u actions cargo install <tool> --locked --force`, then copy.
-      # Long-term: runner provisioning in the saas-platform repo
-      # (`infrastructure/github-runners/`) should populate /usr/local/bin/
-      # directly.
+    - name: Install pinned security audit tools
+      uses: taiki-e/install-action@v2.87.21
+      with:
+        tool: cargo-audit@0.22.2,cargo-deny@0.20.2
+        fallback: none
+
+    - name: Verify security tool versions
       run: |
-        durable_repair_msg='Repair: ssh the runner and run `cp /home/actions/.cargo/bin/<tool> /usr/local/bin/` (cargo install into ~/.cargo/bin/ alone will be wiped by the next rustup-init run — see ci.yml comment).'
-        command -v cargo-audit > /dev/null || { echo "::error::cargo-audit missing on self-hosted runner. $durable_repair_msg"; exit 1; }
-        command -v cargo-deny  > /dev/null || { echo "::error::cargo-deny missing on self-hosted runner. $durable_repair_msg"; exit 1; }
-        # Surface which copy is on PATH so a future failure makes the
-        # ~/.cargo/bin vs /usr/local/bin distinction obvious in logs.
-        echo "cargo-audit: $(command -v cargo-audit)"
-        echo "cargo-deny:  $(command -v cargo-deny)"
         cargo-audit --version
         cargo-deny --version
 
@@ -430,18 +386,12 @@ jobs:
     name: Minimum Supported Rust Version
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
     steps:
-    - name: Set per-runner CARGO_HOME
-      # `runner.name` is unavailable in workflow- or job-level `env:` blocks
-      # (GH Actions context: `runner.*` is step-scoped). Writing to
-      # `$GITHUB_ENV` here exports it to every subsequent step in this job,
-      # including the rust-toolchain composite action and rust-cache.
-      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
-
     - name: Checkout repository
       uses: actions/checkout@v7
 
@@ -450,8 +400,10 @@ jobs:
       with:
         toolchain: "1.91"  # MSRV - matches highest requirement from dependencies (aws-sdk, async-graphql, time)
 
-    - name: Install protoc (protobuf compiler)
-      run: 'dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev > /dev/null 2>&1 || { echo "::error::Required system deps missing on self-hosted runner. Run on the runner host: sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev"; exit 1; }'
+    - name: Install native build dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
 
     - name: Cache dependencies
       uses: Swatinem/rust-cache@v2

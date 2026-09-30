@@ -1,8 +1,6 @@
-import React from 'react';
-import { ArrowLeft, Tag, FileCode, Clock, GitBranch } from 'lucide-react';
+import { ArrowLeft, Tag, FileCode, Clock } from 'lucide-react';
 import type { Flow, FlowStep } from '../../types';
 import { ModernCard, ModernBadge, PageHeader } from '../ui/DesignSystem';
-import { cn } from '../../utils/cn';
 
 interface FlowDetailsProps {
   flow: Flow;
@@ -25,7 +23,7 @@ export function FlowDetails({ flow, onBack, onTag, onCompile }: FlowDetailsProps
         </button>
         <PageHeader
           title={flow.name || `Flow ${flow.id.slice(0, 8)}`}
-          description={flow.description || 'Multi-step API flow'}
+          subtitle={flow.description || 'Multi-step API flow'}
         />
       </div>
 
@@ -49,7 +47,7 @@ export function FlowDetails({ flow, onBack, onTag, onCompile }: FlowDetailsProps
             <div className="flex gap-1 flex-wrap">
               {flow.tags && flow.tags.length > 0 ? (
                 flow.tags.map((tag) => (
-                  <ModernBadge key={tag} variant="secondary" size="sm">
+                  <ModernBadge key={tag} variant="default" size="sm">
                     {tag}
                   </ModernBadge>
                 ))
@@ -87,10 +85,10 @@ export function FlowDetails({ flow, onBack, onTag, onCompile }: FlowDetailsProps
         ) : (
           <div className="space-y-4">
             {steps.map((step, index) => (
-              <FlowStepItem 
-                key={step.request_id} 
-                step={step} 
-                index={index} 
+              <FlowStepItem
+                key={step.request_id}
+                step={step}
+                index={index}
                 isLast={index === steps.length - 1}
               />
             ))}
@@ -134,4 +132,3 @@ function FlowStepItem({ step, index, isLast }: { step: FlowStep; index: number; 
     </div>
   );
 }
-

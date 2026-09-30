@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,7 +26,6 @@ export function SupportPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const { showToast } = useToast();
-  const queryClient = useQueryClient();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,21 +54,21 @@ export function SupportPage() {
         message: '',
         priority: 'normal',
       });
-      showToast('Support request submitted successfully! We\'ll get back to you soon.', 'success');
+      showToast('success', 'Support request submitted successfully! We\'ll get back to you soon.');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to submit support request';
       setError(errorMessage);
-      showToast(errorMessage, 'error');
+      showToast('error', errorMessage);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className="mx-auto max-w-4xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Contact Support</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Contact Support</h1>
+        <p className="text-sm text-muted-foreground">
           Need help? We're here for you. Submit a support request and we'll get back to you as soon as possible.
         </p>
       </div>

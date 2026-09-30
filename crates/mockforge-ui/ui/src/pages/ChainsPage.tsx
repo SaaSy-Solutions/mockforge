@@ -208,8 +208,8 @@ export const ChainsPage: React.FC<ChainsPageProps> = ({ className }) => {
     <div className={`p-6 ${className}`}>
       <div className="flex justify-between items-center mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Request Chains</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Request Chains</h1>
+          <p className="text-sm text-muted-foreground">
             Manage and execute request chains for complex API workflows
           </p>
         </div>

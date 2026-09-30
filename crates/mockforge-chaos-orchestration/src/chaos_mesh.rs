@@ -2,8 +2,8 @@
 //!
 //! Chaos Mesh Integration
 //!
-//! Integrates MockForge with Chaos Mesh for Kubernetes-native chaos engineering.
-//! Supports various chaos experiment types including PodChaos, NetworkChaos, StressChaos, etc.
+//! Integrates `MockForge` with Chaos Mesh for Kubernetes-native chaos engineering.
+//! Supports various chaos experiment types including `PodChaos`, `NetworkChaos`, `StressChaos`, etc.
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

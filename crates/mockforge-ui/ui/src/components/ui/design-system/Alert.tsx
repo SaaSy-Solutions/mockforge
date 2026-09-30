@@ -8,10 +8,11 @@ interface AlertProps {
   title?: string;
   message?: string;
   className?: string;
+  style?: React.CSSProperties;
   children?: React.ReactNode;
 }
 
-export function Alert({ type, variant, title, message, className, children }: AlertProps) {
+export function Alert({ type, variant, title, message, className, style, children }: AlertProps) {
   const alertType = type || variant || 'info';
 
   const icons = {
@@ -39,7 +40,7 @@ export function Alert({ type, variant, title, message, className, children }: Al
       'flex items-start gap-3 p-4 border rounded-xl transition-all duration-200 spring-in',
       colors[alertType],
       className
-    )}>
+    )} style={style}>
       <Icon className="h-5 w-5 mt-0.5 flex-shrink-0 spring-hover" />
       <div className="flex-1 min-w-0">
         {title && <h4 className="font-semibold text-sm">{title}</h4>}

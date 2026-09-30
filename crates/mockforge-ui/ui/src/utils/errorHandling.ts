@@ -150,10 +150,7 @@ export function logError(error: unknown, context?: string): void {
     logger.error(
       `[Error${context ? ` - ${context}` : ''}]`,
       details.message,
-      '\nType:',
-      details.type,
-      '\nDetails:',
-      details.details || error
+      { type: details.type, details: details.details || error }
     );
   }
 }

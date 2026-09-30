@@ -1,5 +1,3 @@
-import { logger } from '@/utils/logger';
-import React from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useEnvironments, useSetActiveEnvironment } from '../../hooks/useApi';
 import { Button } from '../ui/button';

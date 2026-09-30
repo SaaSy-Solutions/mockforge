@@ -89,12 +89,10 @@ impl RecordedScenario {
 
     /// Finish recording
     pub fn finish(&mut self) {
-        self.recording_ended = Some(Utc::now());
-        self.total_duration_ms = self
-            .recording_ended
-            .unwrap()
-            .signed_duration_since(self.recording_started)
-            .num_milliseconds() as u64;
+        let ended = Utc::now();
+        self.recording_ended = Some(ended);
+        self.total_duration_ms =
+            ended.signed_duration_since(self.recording_started).num_milliseconds() as u64;
     }
 
     /// Get events within a time range
@@ -131,7 +129,7 @@ impl RecordedScenario {
         let extension = path.extension().and_then(|s| s.to_str());
 
         let content = match extension {
-            Some("yaml") | Some("yml") => {
+            Some("yaml" | "yml") => {
                 self.to_yaml().map_err(|e| std::io::Error::other(e.to_string()))?
             }
             _ => self.to_json().map_err(|e| std::io::Error::other(e.to_string()))?,
@@ -149,7 +147,7 @@ impl RecordedScenario {
         let extension = path.extension().and_then(|s| s.to_str());
 
         let scenario = match extension {
-            Some("yaml") | Some("yml") => {
+            Some("yaml" | "yml") => {
                 Self::from_yaml(&content).map_err(|e| std::io::Error::other(e.to_string()))?
             }
             _ => Self::from_json(&content).map_err(|e| std::io::Error::other(e.to_string()))?,

@@ -590,7 +590,7 @@ test.describe('Dashboard — Deployed Site', () => {
     });
 
     test('should display the global search input', async ({ page }) => {
-      await expect(page.getByPlaceholder('Global search…')).toBeVisible();
+      await expect(page.getByPlaceholder('Search pages and logs…')).toBeVisible();
     });
 
     test('should display the keyboard shortcut hint for search', async ({ page }) => {
@@ -729,7 +729,7 @@ test.describe('Dashboard — Deployed Site', () => {
       await expect(mainContent(page).getByRole('slider')).toBeVisible();
 
       // Search input has placeholder text
-      await expect(page.getByPlaceholder('Global search…')).toBeVisible();
+      await expect(page.getByPlaceholder('Search pages and logs…')).toBeVisible();
     });
   });
 

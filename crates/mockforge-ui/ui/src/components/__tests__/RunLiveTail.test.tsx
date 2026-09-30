@@ -9,14 +9,14 @@ class MockEventSource {
     url: string;
     readyState = 1;
     onerror: (() => void) | null = null;
-    private listeners = new Map<string, ((ev: { data: string }) => void)[]>();
+    private listeners = new Map<string, ((ev: { type: string; data: string }) => void)[]>();
 
     constructor(url: string) {
         this.url = url;
         MockEventSource.instances.push(this);
     }
 
-    addEventListener(type: string, cb: (ev: { data: string }) => void) {
+    addEventListener(type: string, cb: (ev: { type: string; data: string }) => void) {
         const list = this.listeners.get(type) ?? [];
         list.push(cb);
         this.listeners.set(type, list);

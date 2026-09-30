@@ -99,6 +99,13 @@ class CloudObservabilityApi {
     ) as Promise<ObservabilitySavedQuery>;
   }
 
+  async deleteSavedQuery(queryId: string): Promise<void> {
+    this.guard('deleteSavedQuery');
+    await fetchJsonWithErrorBody(`/api/v1/observability/saved-queries/${queryId}`, {
+      method: 'DELETE',
+    });
+  }
+
   async listDashboards(orgId: string): Promise<ObservabilityDashboard[]> {
     this.guard('listDashboards');
     return fetchJsonWithErrorBody(

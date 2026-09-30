@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import { useState, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 

@@ -3,7 +3,7 @@
 //! Real-time state visualization panel that shows active state instances
 //! and their current states. Updates via WebSocket for live preview.
 
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/Badge';

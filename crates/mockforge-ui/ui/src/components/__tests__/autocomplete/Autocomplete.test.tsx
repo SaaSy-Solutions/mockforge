@@ -2,10 +2,9 @@
  * @jest-environment jsdom
  */
 
-import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { AutocompleteProvider, AutocompleteContext } from '../../autocomplete/AutocompleteContext';
+import { AutocompleteProvider } from '../../autocomplete/AutocompleteContext';
 import { AutocompleteInput } from '../../autocomplete/AutocompleteInput';
 import { useAutocomplete } from '../../autocomplete/useAutocomplete';
 import type { ChainContext } from '../../autocomplete/AutocompleteContext';

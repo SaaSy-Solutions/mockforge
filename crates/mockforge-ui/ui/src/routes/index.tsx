@@ -26,6 +26,7 @@ const ContractDiffPage = lazy(() => import('../pages/ContractDiffPage').then(m =
 const IncidentDashboardPage = lazy(() => import('../pages/IncidentDashboardPage').then(m => ({ default: m.IncidentDashboardPage })));
 const FitnessFunctionsPage = lazy(() => import('../pages/FitnessFunctionsPage').then(m => ({ default: m.FitnessFunctionsPage })));
 const FixturesPage = lazy(() => import('../pages/FixturesPage').then(m => ({ default: m.FixturesPage })));
+const OverridesPage = lazy(() => import('../pages/OverridesPage').then(m => ({ default: m.OverridesPage })));
 const TestingPage = lazy(() => import('../pages/TestingPage').then(m => ({ default: m.TestingPage })));
 const ImportPage = lazy(() => import('../pages/ImportPage').then(m => ({ default: m.ImportPage })));
 const WorkspacesPage = lazy(() => import('../pages/WorkspacesPage'));
@@ -134,10 +135,7 @@ const MqttBrokerPage = lazy(() => import('../pages/MqttBrokerPage').then(m => ({
 const KafkaBrokerPage = lazy(() => import('../pages/KafkaBrokerPage').then(m => ({ default: m.KafkaBrokerPage })));
 const AmqpBrokerPage = lazy(() => import('../pages/AmqpBrokerPage').then(m => ({ default: m.AmqpBrokerPage })));
 
-// Public / legal / marketing pages
-const TermsPage = lazy(() => import('../pages/TermsPage').then(m => ({ default: m.TermsPage })));
-const PrivacyPage = lazy(() => import('../pages/PrivacyPage').then(m => ({ default: m.PrivacyPage })));
-const DPAPage = lazy(() => import('../pages/DPAPage').then(m => ({ default: m.DPAPage })));
+// Public / marketing pages (legal docs are routed in App.tsx, outside AuthGuard)
 const FAQPage = lazy(() => import('../pages/FAQPage').then(m => ({ default: m.FAQPage })));
 const SupportPage = lazy(() => import('../pages/SupportPage').then(m => ({ default: m.SupportPage })));
 const PricingPage = lazy(() => import('../pages/PricingPage').then(m => ({ default: m.PricingPage })));
@@ -183,6 +181,7 @@ export const routes: RouteConfig[] = [
   { path: '/services', element: <ServicesPage /> },
   { path: '/virtual-backends', element: <VirtualBackendsPage /> },
   { path: '/fixtures', element: <FixturesPage /> },
+  { path: '/overrides', element: <OverridesPage /> },
   { path: '/hosted-mocks', element: <HostedMocksPage /> },
   { path: '/api-explorer', element: <ApiExplorerWrapper /> },
   { path: '/tunnels', element: <TunnelsPage /> },
@@ -290,10 +289,7 @@ export const routes: RouteConfig[] = [
   { path: '/kafka-broker', element: <KafkaBrokerPage /> },
   { path: '/amqp-broker', element: <AmqpBrokerPage /> },
 
-  // Public / legal / marketing (render pre-auth via AuthGuard bypass)
-  { path: '/terms', element: <TermsPage /> },
-  { path: '/privacy', element: <PrivacyPage /> },
-  { path: '/dpa', element: <DPAPage /> },
+  // Public / marketing (render pre-auth via AuthGuard bypass)
   { path: '/faq', element: <FAQPage /> },
   { path: '/support', element: <SupportPage /> },
   { path: '/pricing', element: <PricingPage /> },

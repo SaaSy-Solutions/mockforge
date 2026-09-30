@@ -1,5 +1,7 @@
 # Generative Schema Mode
 
+> **Planned / not yet available.** The generative-schema library exists in `mockforge-core`, but it is not exposed yet: `mockforge generate` does not accept `--from-json`, `--serve`, or the other flags shown below. This page describes the intended design and is kept for reference; do not rely on it in a released build. Track progress at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 Generative Schema Mode enables you to generate complete API ecosystems from JSON payloads. Simply provide example JSON data, and MockForge automatically creates routes, schemas, and entity relationships for a fully functional mock API.
 
 ## Overview

@@ -310,13 +310,11 @@ impl Tenant {
                     });
                 }
             }
-            "user" => {
-                if self.usage.users >= self.quota.max_users {
-                    return Err(MultiTenancyError::QuotaExceeded {
-                        tenant: self.id.clone(),
-                        quota_type: "users".to_string(),
-                    });
-                }
+            "user" if self.usage.users >= self.quota.max_users => {
+                return Err(MultiTenancyError::QuotaExceeded {
+                    tenant: self.id.clone(),
+                    quota_type: "users".to_string(),
+                });
             }
             _ => {}
         }
@@ -478,10 +476,8 @@ impl TenantManager {
                     tenant.usage.templates -= 1;
                 }
             }
-            "user" => {
-                if tenant.usage.users > 0 {
-                    tenant.usage.users -= 1;
-                }
+            "user" if tenant.usage.users > 0 => {
+                tenant.usage.users -= 1;
             }
             _ => {}
         }

@@ -1,5 +1,7 @@
 # Virtual Backend Reality (VBR) Engine
 
+> **Experimental.** This feature ships in MockForge but is early: the engine and the `mockforge vbr` commands work, but it is not yet enabled from `mockforge serve` (there is no `--vbr-enabled` flag or `vbr:` config key), and some CLI examples below use older argument forms. Behavior, commands, and configuration may change between releases. Report issues at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 The Virtual Backend Reality (VBR) Engine provides a virtual "database" layer that automatically generates CRUD operations from OpenAPI specifications. It enables stateful mocking with relationship management, data persistence, and realistic data generation.
 
 ## Overview

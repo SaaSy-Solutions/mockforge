@@ -7,6 +7,7 @@ on:
       - 'crates/mockforge-registry-server/**'
       - 'crates/mockforge-registry-core/**'
       - 'docker-compose.e2e.yml'
+      - 'docker-compose.rls-gate.yml'
       - '.github/workflows/registry-e2e.yml'
   # No `paths:` filter on pull_request — the workflow runs on EVERY PR so the
   # required "Registry E2E (Postgres + MinIO)" check always reports a status.
@@ -20,11 +21,9 @@ on:
 env:
   CARGO_TERM_COLOR: always
   RUST_BACKTRACE: 1
-  # Cap cargo parallelism. The self-hosted runner is 8 vCPU shared with
-  # 7 other runners; unrestricted `-j` produces flakes under contention.
-  # `CARGO_HOME` is set per-job (not here) — it must reference `runner.name`,
-  # which the workflow parser only resolves once a runner is assigned.
-  CARGO_BUILD_JOBS: "4"
+  # Hosted runners (the self-hosted Rust runners are offline, #1061); cap
+  # parallelism to keep the debug build inside hosted-runner memory.
+  CARGO_BUILD_JOBS: "2"
   RUSTUP_TOOLCHAIN: "1.96.0"
 
 concurrency:
@@ -65,7 +64,7 @@ jobs:
           while IFS= read -r f; do
             [ -z "$f" ] && continue
             case "$f" in
-              crates/mockforge-registry-server/*|crates/mockforge-registry-core/*|docker-compose.e2e.yml|.github/workflows/registry-e2e.yml) registry=true ;;
+              crates/mockforge-registry-server/*|crates/mockforge-registry-core/*|docker-compose.e2e.yml|docker-compose.rls-gate.yml|.github/workflows/registry-e2e.yml) registry=true ;;
             esac
           done <<< "$files"
           echo "Registry E2E required: registry=$registry"
@@ -75,7 +74,7 @@ jobs:
     name: Registry E2E (Postgres + MinIO)
     needs: changes
     if: ${{ needs.changes.outputs.registry == 'true' }}
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 45
 
     env:
@@ -115,13 +114,6 @@ jobs:
       RATE_LIMIT_PER_USER: "100000"
 
     steps:
-      - name: Set per-runner CARGO_HOME
-        # `runner.name` is unavailable in workflow- or job-level `env:` blocks
-        # (GH Actions context: `runner.*` is step-scoped). Writing to
-        # `$GITHUB_ENV` here exports it to every subsequent step in this job,
-        # including the rust-toolchain composite action and rust-cache.
-        run: echo "CARGO_HOME=/tmp/cargo-mockforge-e2e-${{ runner.name }}" >> "$GITHUB_ENV"
-
       - name: Checkout
         uses: actions/checkout@v7
 
@@ -131,8 +123,13 @@ jobs:
       - name: Ensure rustup default = 1.96.0
         run: rustup default 1.96.0
 
+      - name: Free hosted-runner disk
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+
       - name: Install protoc
-        run: 'dpkg -s protobuf-compiler > /dev/null 2>&1 || { echo "::error::protobuf-compiler missing on self-hosted runner. Run: sudo apt-get install -y protobuf-compiler"; exit 1; }'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
 
       # Same target/ guard as integration-tests.yml — keeps the shared NVMe from
       # filling up across sibling runners.
@@ -264,6 +261,8 @@ jobs:
             --test cloud_ai_contract_diff_e2e \
             --test cloud_conformance_e2e \
             --test paid_flow_e2e \
+            --test hosted_mock_overrides_e2e \
+            --test audit_integrity_e2e \
             -- --ignored --nocapture --test-threads=1
 
       - name: Dump registry-server log on failure
@@ -337,15 +336,11 @@ jobs:
     name: Registry E2E under RLS (NOBYPASSRLS)
     needs: [changes, registry-e2e]
     if: ${{ needs.changes.outputs.registry == 'true' }}
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     env:
-      CARGO_BUILD_JOBS: "4"
       RUSTUP_TOOLCHAIN: "1.96.0"
     steps:
-      - name: Set per-runner CARGO_HOME
-        run: echo "CARGO_HOME=/tmp/cargo-mockforge-e2e-${{ runner.name }}" >> "$GITHUB_ENV"
-
       - name: Checkout
         uses: actions/checkout@v7
 
@@ -355,11 +350,18 @@ jobs:
       - name: Ensure rustup default = 1.96.0
         run: rustup default 1.96.0
 
+      - name: Free hosted-runner disk
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+
       - name: Install protoc
-        run: 'dpkg -s protobuf-compiler > /dev/null 2>&1 || { echo "::error::protobuf-compiler missing on self-hosted runner. Run: sudo apt-get install -y protobuf-compiler"; exit 1; }'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
 
       - name: Ensure psql client
-        run: 'command -v psql > /dev/null 2>&1 || { echo "::error::postgresql-client missing on self-hosted runner. Run: sudo apt-get install -y postgresql-client"; exit 1; }'
+        # ubuntu-latest images no longer ship psql; the RLS gate script
+        # provisions the NOBYPASSRLS role through it.
+        run: command -v psql > /dev/null 2>&1 || sudo apt-get install -y postgresql-client
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2

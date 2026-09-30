@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { usePipelineExecutions, type PipelineExecution } from '../../hooks/usePipelines';
+import { usePipelineExecutions } from '../../hooks/usePipelines';
 import { Card } from '../ui/Card';
 import { ArrowLeft, CheckCircle, XCircle, Clock, Loader } from 'lucide-react';
 
@@ -65,7 +65,7 @@ export const PipelineExecutions: React.FC<PipelineExecutionsProps> = ({
             <ArrowLeft className="h-5 w-5" />
           </button>
         )}
-        <h1 className="text-3xl font-bold text-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           Pipeline Executions
         </h1>
       </div>

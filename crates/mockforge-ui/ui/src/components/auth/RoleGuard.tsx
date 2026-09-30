@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import React from 'react';
 import { useAuthStore } from '../../stores/useAuthStore';
 

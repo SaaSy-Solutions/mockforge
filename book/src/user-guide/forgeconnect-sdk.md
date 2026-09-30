@@ -1,5 +1,7 @@
 # ForgeConnect SDK
 
+> **Experimental.** This feature ships in MockForge but is early: the browser SDK (`sdk/browser`, v0.1) and DevTools extension exist in the repository, but framework sub-path imports (`/react`, `/vue`, `/next`) are not published yet and the extension is not listed in browser stores. Behavior, commands, and configuration may change between releases. Report issues at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 ForgeConnect SDK provides browser extension and framework SDKs for capturing network traffic, auto-generating mocks, and integrating with popular frontend frameworks. Develop and test frontend applications with seamless mock integration.
 
 ## Overview

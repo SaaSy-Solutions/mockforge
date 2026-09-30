@@ -41,7 +41,7 @@ pub enum ErrorPattern {
 
 impl Default for ErrorPattern {
     fn default() -> Self {
-        ErrorPattern::Random { probability: 0.1 }
+        Self::Random { probability: 0.1 }
     }
 }
 
@@ -123,7 +123,7 @@ pub struct FaultInjectionConfig {
     /// Error injection pattern (burst, random, sequential)
     #[serde(default)]
     pub error_pattern: Option<ErrorPattern>,
-    /// Enable MockAI for dynamic error message generation
+    /// Enable `MockAI` for dynamic error message generation
     #[serde(default)]
     pub mockai_enabled: bool,
 }

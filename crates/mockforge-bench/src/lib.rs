@@ -4,6 +4,7 @@
 //! using OpenAPI specifications to generate realistic traffic patterns.
 
 pub mod chunked_bench;
+pub mod chunked_command;
 pub mod cloud_api;
 pub mod command;
 pub mod conformance;

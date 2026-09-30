@@ -43,8 +43,8 @@ const mockEnvironments = {
 
 const mockVariables = {
   variables: [
-    { name: 'API_URL', value: 'https://api.dev.com' },
-    { name: 'API_KEY', value: 'dev-key-123' },
+    { key: 'API_URL', value: 'https://api.dev.com' },
+    { key: 'API_KEY', value: 'dev-key-123' },
   ],
 };
 
@@ -375,10 +375,10 @@ describe('EnvironmentManager', () => {
     vi.mocked(useEnvironmentVariables).mockReturnValue({
       data: {
         variables: [
-          { name: 'VAR1', value: 'val1' },
-          { name: 'VAR2', value: 'val2' },
-          { name: 'VAR3', value: 'val3' },
-          { name: 'VAR4', value: 'val4' },
+          { key: 'VAR1', value: 'val1' },
+          { key: 'VAR2', value: 'val2' },
+          { key: 'VAR3', value: 'val3' },
+          { key: 'VAR4', value: 'val4' },
         ],
       },
     } as any);

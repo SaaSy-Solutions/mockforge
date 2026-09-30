@@ -252,7 +252,7 @@ export const CloudWorldStateView: React.FC = () => {
         <Alert
           variant="info"
           title="No deployments yet"
-          description="Create a hosted mock first to visualize its world state from the cloud dashboard."
+          message="Create a hosted mock first to visualize its world state from the cloud dashboard."
         />
       </div>
     );
@@ -300,20 +300,19 @@ export const CloudWorldStateView: React.FC = () => {
         <Alert
           variant="warning"
           title="Deployment not reachable"
-          description="The registry couldn't reach this deployment's runtime over Fly 6PN. Showing the last successful snapshot if any; polling will keep retrying. If this persists, check the deployment's status."
+          message="The registry couldn't reach this deployment's runtime over Fly 6PN. Showing the last successful snapshot if any; polling will keep retrying. If this persists, check the deployment's status."
         />
       )}
 
-      {error && !unreachable && <Alert variant="error" title="Error" description={error} />}
+      {error && !unreachable && <Alert variant="error" title="Error" message={error} />}
 
       <Section>
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center space-x-4">
             {/* The local mode toggle is "Real-time updates"; cloud mode
-                doesn't have a WS proxy yet (Phase 2 work), so we show a
-                static label noting the polling cadence instead. */}
+                has no WS proxy, so we show the polling cadence instead. */}
             <span className="text-xs text-muted-foreground">
-              Polling every {POLL_MS / 1000}s — WebSocket stream not yet proxied in cloud mode.
+              Refreshes every {POLL_MS / 1000}s
             </span>
             <Button variant="outline" size="sm" onClick={refresh} disabled={!selectedDeploymentId}>
               <RefreshCw className="h-4 w-4 mr-1" />

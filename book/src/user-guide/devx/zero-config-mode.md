@@ -1,5 +1,7 @@
 # Zero-Config Mode (Runtime Daemon)
 
+> **Planned / not yet available.** The runtime daemon exists as the `mockforge-runtime-daemon` crate behind an optional build feature that the released `mockforge` binary does not enable; the `--runtime-daemon` flag and `runtime_daemon:` config key shown below do not exist. This page describes the intended design and is kept for reference; do not rely on it in a released build. Track progress at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 **Pillars:** [DevX]
 
 Zero-Config Mode provides the "invisible mock server" experience. When you hit an endpoint that doesn't exist, MockForge automatically creates a mock, generates types, creates client stubs, and sets up scenarios—all without manual configuration.

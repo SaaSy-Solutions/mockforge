@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import type { Flow, TagFlowRequest } from '../../types';
-import { apiService } from '../../services/api';
+import { proxyApi } from '../../services/api';
 import { logger } from '../../utils/logger';
 
 interface TagFlowModalProps {
@@ -32,7 +32,7 @@ export function TagFlowModal({ flow, onClose, onTagged }: TagFlowModalProps) {
           .filter((t) => t.length > 0),
       };
 
-      await apiService.tagFlow(flow.id, request);
+      await proxyApi.tagFlow(flow.id, request);
       onTagged();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Failed to tag flow';
@@ -117,4 +117,3 @@ export function TagFlowModal({ flow, onClose, onTagged }: TagFlowModalProps) {
     </div>
   );
 }
-

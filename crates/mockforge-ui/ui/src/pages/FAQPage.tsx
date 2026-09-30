@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Input } from '@/components/ui/input';
@@ -83,10 +83,10 @@ export function FAQPage() {
   }, {} as Record<string, FAQItem[]>);
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className="mx-auto max-w-4xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Frequently Asked Questions</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Frequently Asked Questions</h1>
+        <p className="text-sm text-muted-foreground">
           Find answers to common questions about MockForge Cloud
         </p>
       </div>

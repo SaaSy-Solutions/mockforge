@@ -1,5 +1,7 @@
 # World State Engine
 
+> **Planned / not yet available.** A read-only `/api/world-state/*` API and UI page exist, but no data sources are registered yet (snapshots are empty), and the `mockforge world-state` CLI and `/api/v1/world-state/*` endpoints shown below do not exist. This page describes the intended design and is kept for reference; do not rely on it in a released build. Track progress at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 **Pillars:** [Reality][DevX]
 
 The World State Engine unifies all MockForge state systems into a single "world state" visualization. Think of it as a miniature game engine for your backend—a unified view of personas, lifecycle, reality, time, multi-protocol state, behavior trees, generative schemas, recorded data, and AI modifiers.

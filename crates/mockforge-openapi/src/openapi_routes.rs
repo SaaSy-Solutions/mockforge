@@ -16,7 +16,7 @@ pub mod registry;
 pub mod validation;
 
 use crate::response::AiGenerator;
-use crate::response_rewriter::ResponseRewriter;
+use crate::response_rewriter::{OverrideHook, OverrideRequest, ResponseRewriter};
 use crate::{OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSpec};
 use axum::extract::{DefaultBodyLimit, Path as AxumPath, RawQuery};
 use axum::http::HeaderMap;
@@ -50,6 +50,8 @@ pub struct OpenApiRouteRegistry {
     options: ValidationOptions,
     /// Custom fixture loader (optional)
     custom_fixture_loader: Option<Arc<crate::custom_fixture::CustomFixtureLoader>>,
+    /// Override rules applied to every generated response (optional)
+    overrides: Option<Arc<dyn OverrideHook>>,
 }
 
 /// Validation mode for request/response validation
@@ -109,13 +111,11 @@ pub struct RouterContext {
     pub latency_injector: Option<LatencyInjector>,
     /// Failure injector (per-tag fault injection)
     pub failure_injector: Option<mockforge_foundation::failure_injection::FailureInjector>,
-    /// Response-body mutation hook — used for template token expansion
-    /// and override rule application. Core's concrete impl is
-    /// [`crate::openapi_rewriter::CoreResponseRewriter`].
+    /// Template token expansion hook. Core's concrete impl is
+    /// `mockforge_core::openapi_rewriter::CoreResponseRewriter`.
     pub response_rewriter: Option<Arc<dyn ResponseRewriter>>,
-    /// Whether override application is active (gates the
-    /// [`ResponseRewriter::apply_overrides`] call).
-    pub overrides_enabled: bool,
+    /// Override rules applied after token expansion
+    pub overrides: Option<Arc<dyn OverrideHook>>,
     /// AI response generator
     pub ai_generator: Option<Arc<dyn AiGenerator + Send + Sync>>,
     /// MockAI intelligent behavior handle (type-erased via
@@ -143,7 +143,7 @@ impl Default for RouterContext {
             latency_injector: None,
             failure_injector: None,
             response_rewriter: None,
-            overrides_enabled: false,
+            overrides: None,
             ai_generator: None,
             mockai: None,
             enable_full_validation: false,
@@ -232,6 +232,7 @@ impl OpenApiRouteRegistry {
             routes,
             options,
             custom_fixture_loader: None,
+            overrides: None,
         }
     }
 
@@ -254,6 +255,7 @@ impl OpenApiRouteRegistry {
             routes,
             options,
             custom_fixture_loader: None,
+            overrides: None,
         }
     }
 
@@ -263,6 +265,12 @@ impl OpenApiRouteRegistry {
         loader: Arc<crate::custom_fixture::CustomFixtureLoader>,
     ) -> Self {
         self.custom_fixture_loader = Some(loader);
+        self
+    }
+
+    /// Apply override rules to every generated response
+    pub fn with_overrides(mut self, overrides: Arc<dyn OverrideHook>) -> Self {
+        self.overrides = Some(overrides);
         self
     }
 
@@ -276,6 +284,7 @@ impl OpenApiRouteRegistry {
             routes: self.routes.clone(),
             options: self.options.clone(),
             custom_fixture_loader: self.custom_fixture_loader.clone(),
+            overrides: self.overrides.clone(),
         }
     }
 
@@ -399,6 +408,7 @@ impl OpenApiRouteRegistry {
     pub fn build_router(self) -> Router {
         let ctx = RouterContext {
             custom_fixture_loader: self.custom_fixture_loader.clone(),
+            overrides: self.overrides.clone(),
             enable_full_validation: true,
             enable_template_expand: true,
             add_spec_endpoint: true,
@@ -898,18 +908,18 @@ impl OpenApiRouteRegistry {
                     }
                 }
 
-                // (h) Apply overrides if a rewriter is wired up and overrides are enabled.
-                if ctx.overrides_enabled {
-                    if let Some(ref rewriter) = ctx.response_rewriter {
-                        let op_tags =
-                            operation.operation_id.clone().map(|id| vec![id]).unwrap_or_default();
-                        rewriter.apply_overrides(
-                            &operation.operation_id.clone().unwrap_or_default(),
-                            &op_tags,
-                            &path_template,
-                            &mut final_response,
-                        );
-                    }
+                // (h) Apply override rules
+                if let Some(ref overrides) = ctx.overrides {
+                    let request = OverrideRequest {
+                        method: &method,
+                        path_template: &path_template,
+                        operation_id: operation.operation_id.as_deref().unwrap_or_default(),
+                        tags: &operation_tags,
+                        headers: &headers,
+                        query: raw_query.as_deref(),
+                        body: &body,
+                    };
+                    overrides.apply(&request, &mut final_response);
                 }
 
                 // (i) Response validation and trace (if full validation is enabled)
@@ -1045,30 +1055,24 @@ impl OpenApiRouteRegistry {
         latency_injector: LatencyInjector,
         failure_injector: Option<mockforge_foundation::failure_injection::FailureInjector>,
     ) -> Router {
-        self.build_router_with_injectors_and_overrides(
-            latency_injector,
-            failure_injector,
-            None,
-            false,
-        )
+        self.build_router_with_injectors_and_rewriter(latency_injector, failure_injector, None)
     }
 
     /// Build an Axum router from the OpenAPI spec with latency, failure
-    /// injection, and a response-rewriter hook (typically wrapping
-    /// core's `Overrides` + `templating::expand_tokens`).
-    pub fn build_router_with_injectors_and_overrides(
+    /// injection, and a template-expansion hook (typically core's
+    /// `CoreResponseRewriter`).
+    pub fn build_router_with_injectors_and_rewriter(
         self,
         latency_injector: LatencyInjector,
         failure_injector: Option<mockforge_foundation::failure_injection::FailureInjector>,
         response_rewriter: Option<Arc<dyn ResponseRewriter>>,
-        overrides_enabled: bool,
     ) -> Router {
         let ctx = RouterContext {
             custom_fixture_loader: self.custom_fixture_loader.clone(),
+            overrides: self.overrides.clone(),
             latency_injector: Some(latency_injector),
             failure_injector,
             response_rewriter,
-            overrides_enabled,
             enable_full_validation: true,
             enable_template_expand: true,
             add_spec_endpoint: true,
@@ -1980,6 +1984,7 @@ impl OpenApiRouteRegistry {
 
             let route_clone = (*route).clone();
             let mockai_clone = mockai.clone();
+            let overrides_clone = self.overrides.clone();
             let custom_loader_clone = custom_loader.clone();
             // Issue #79 round 13 — the MockAI handler was bypassing
             // request validation entirely, so spec violations never
@@ -2009,6 +2014,7 @@ impl OpenApiRouteRegistry {
                                 body_bytes: axum::body::Bytes| {
                 let route = route_clone.clone();
                 let mockai = mockai_clone.clone();
+                let overrides = overrides_clone.clone();
                 let validator = validator_clone.clone();
 
                 async move {
@@ -2328,7 +2334,7 @@ impl OpenApiRouteRegistry {
                                 method: route.method.clone(),
                                 path: route.path.clone(),
                                 body: body.as_ref().map(|Json(b)| b.clone()),
-                                query_params: mockai_query,
+                                query_params: mockai_query.clone(),
                                 headers: mockai_headers,
                             };
 
@@ -2364,8 +2370,16 @@ impl OpenApiRouteRegistry {
                                         );
                                         let status = axum::http::StatusCode::from_u16(spec_status)
                                             .unwrap_or(axum::http::StatusCode::OK);
-                                        let mut resp =
-                                            (status, Json(mockai_response.body)).into_response();
+                                        let mut mockai_body = mockai_response.body;
+                                        apply_route_overrides(
+                                            overrides.as_deref(),
+                                            &route,
+                                            &headers,
+                                            &mockai_query,
+                                            &body_bytes,
+                                            &mut mockai_body,
+                                        );
+                                        let mut resp = (status, Json(mockai_body)).into_response();
                                         inject_spec_response_headers(
                                             &mut resp,
                                             &route,
@@ -2407,11 +2421,19 @@ impl OpenApiRouteRegistry {
                         .or_else(|| std::env::var("MOCKFORGE_HTTP_SCENARIO").ok());
 
                     // Fallback to standard response generation
-                    let (status, response) = route
+                    let (status, mut response) = route
                         .mock_response_with_status_and_scenario_and_override(
                             scenario.as_deref(),
                             status_override,
                         );
+                    apply_route_overrides(
+                        overrides.as_deref(),
+                        &route,
+                        &headers,
+                        &mockai_query,
+                        &body_bytes,
+                        &mut response,
+                    );
                     let status_code = axum::http::StatusCode::from_u16(status)
                         .unwrap_or(axum::http::StatusCode::OK);
                     let mut resp = (status_code, Json(response)).into_response();
@@ -2441,6 +2463,38 @@ impl OpenApiRouteRegistry {
 /// — we only insert if absent. Invalid HeaderName / HeaderValue bytes
 /// are silently skipped so a typo in the spec doesn't take the response
 /// down.
+/// Apply override rules to a response built by the MockAI router, which
+/// receives the query already parsed rather than as a raw string.
+fn apply_route_overrides(
+    overrides: Option<&dyn OverrideHook>,
+    route: &OpenApiRoute,
+    headers: &HeaderMap,
+    query: &HashMap<String, String>,
+    request_body: &[u8],
+    body: &mut Value,
+) {
+    let Some(overrides) = overrides else {
+        return;
+    };
+    let raw_query = (!query.is_empty()).then(|| {
+        url::form_urlencoded::Serializer::new(String::new())
+            .extend_pairs(query.iter())
+            .finish()
+    });
+    let mut tags = route.operation.tags.clone();
+    tags.extend(route.operation.operation_id.clone());
+    let request = OverrideRequest {
+        method: &route.method,
+        path_template: &route.path,
+        operation_id: route.operation.operation_id.as_deref().unwrap_or_default(),
+        tags: &tags,
+        headers,
+        query: raw_query.as_deref(),
+        body: request_body,
+    };
+    overrides.apply(&request, body);
+}
+
 fn inject_spec_response_headers(
     response: &mut axum::response::Response,
     route: &OpenApiRoute,
@@ -3343,7 +3397,7 @@ mod tests {
                 }
             }
         });
-        let spec = crate::spec::OpenApiSpec::from_json(spec_json).expect("spec parses");
+        let spec = OpenApiSpec::from_json(spec_json).expect("spec parses");
         let router = OpenApiRouteRegistry::new(spec);
 
         // kind violates the enum AND the body misses `email`.

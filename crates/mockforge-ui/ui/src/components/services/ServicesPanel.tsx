@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Plus } from 'lucide-react';
 import { ServiceToggleCard } from './ServiceToggleCard';
 import { NewServiceDialog } from './NewServiceDialog';
@@ -98,8 +98,8 @@ export function ServicesPanel({ services, onUpdateService, onToggleRoute }: Serv
       {/* Header Controls */}
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h2 className="text-2xl font-bold">Services</h2>
-          <p className="text-muted-foreground">
+          <h2 className="text-base font-semibold text-foreground">All services</h2>
+          <p className="text-sm text-muted-foreground">
             {enabledServices}/{filteredServices.length} services enabled
           </p>
         </div>

@@ -534,7 +534,7 @@ impl RemediationEngine {
             action_id: action_id.to_string(),
             success: true,
             message: "Remediation applied successfully".to_string(),
-            applied_changes: applied_changes.to_vec(),
+            applied_changes: applied_changes.clone(),
             duration_ms: (Utc::now() - start_time).num_milliseconds() as u64,
         })
     }

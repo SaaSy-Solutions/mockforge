@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import React, { useState } from 'react';
 import { cn } from '../../utils/cn';
 import { ChevronIcon, Icons } from './IconSystem';
@@ -36,6 +35,18 @@ export interface ResponsiveTableProps<T = unknown> {
   // Loading and empty states
   isLoading?: boolean;
   emptyMessage?: string;
+}
+
+// Render a raw cell value when the column has no custom renderer
+function defaultCellContent(value: unknown): React.ReactNode {
+  if (typeof value === 'string' || typeof value === 'number') return value;
+  if (value === null || value === undefined || typeof value === 'boolean') return null;
+  return String(value);
+}
+
+// Normalize a cell value for ordering comparisons
+function toSortable(value: unknown): string | number {
+  return typeof value === 'number' ? value : String(value ?? '');
 }
 
 // Mobile card view for a single row
@@ -77,7 +88,7 @@ function MobileCard<T>({
       <div className="space-y-2">
         {highPriorityColumns.map((column) => {
           const value = (row as Record<string, unknown>)[column.key];
-          const displayValue = column.render ? column.render(value, row) : value;
+          const displayValue = column.render ? column.render(value, row) : defaultCellContent(value);
 
           return (
             <div key={column.key} className="flex items-center justify-between">
@@ -114,7 +125,7 @@ function MobileCard<T>({
             <div className="space-y-2 animate-fade-in-up">
               {otherColumns.map((column) => {
                 const value = (row as Record<string, unknown>)[column.key];
-                const displayValue = column.render ? column.render(value, row) : value;
+                const displayValue = column.render ? column.render(value, row) : defaultCellContent(value);
 
                 return (
                   <div key={column.key} className="flex items-center justify-between">
@@ -165,8 +176,8 @@ function DesktopTable<T>({
     if (!sortColumn) return data;
 
     return [...data].sort((a, b) => {
-      const aValue = (a as Record<string, unknown>)[sortColumn];
-      const bValue = (b as Record<string, unknown>)[sortColumn];
+      const aValue = toSortable((a as Record<string, unknown>)[sortColumn]);
+      const bValue = toSortable((b as Record<string, unknown>)[sortColumn]);
 
       if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1;
       if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1;
@@ -236,7 +247,7 @@ function DesktopTable<T>({
             >
               {columns.map((column) => {
                 const value = (row as Record<string, unknown>)[column.key];
-                const displayValue = column.render ? column.render(value, row) : value;
+                const displayValue = column.render ? column.render(value, row) : defaultCellContent(value);
 
                 return (
                   <td

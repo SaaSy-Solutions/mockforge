@@ -2,20 +2,20 @@
 //!
 //! Custom React Flow node component for representing conditional branching steps in a flow.
 
-import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import type { NodeProps } from '@xyflow/react';
-import { Badge } from '../ui/Badge';
+import type { Node, NodeProps } from '@xyflow/react';
 import { GitBranch } from 'lucide-react';
 import { cn } from '@/utils/cn';
 
-export interface ConditionNodeData {
+export type ConditionNodeData = {
   id: string;
   name: string;
   expression?: string;
-}
+};
 
-export function ConditionNode({ data, selected }: NodeProps<ConditionNodeData>) {
+export type ConditionNodeType = Node<ConditionNodeData, 'condition'>;
+
+export function ConditionNode({ data, selected }: NodeProps<ConditionNodeType>) {
   const expression = data.expression || 'condition';
 
   return (

@@ -210,6 +210,8 @@ async fn test_bench_command_parse_headers() {
         report_missed_cap: None,
         discard_response_bodies: false,
         dns_policy: None,
+        no_k6_logs: false,
+        keep_rounds: None,
     };
 
     let headers = cmd.parse_headers().unwrap();
@@ -307,6 +309,8 @@ async fn test_bench_command_parse_headers_invalid_format() {
         report_missed_cap: None,
         discard_response_bodies: false,
         dns_policy: None,
+        no_k6_logs: false,
+        keep_rounds: None,
     };
 
     let result = cmd.parse_headers();

@@ -19,6 +19,10 @@ const mockWorkspaces: WorkspaceSummary[] = [
     is_active: true,
     request_count: 10,
     folder_count: 3,
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+    config_count: 0,
+    service_count: 0,
   },
   {
     id: 'workspace-2',
@@ -27,6 +31,10 @@ const mockWorkspaces: WorkspaceSummary[] = [
     is_active: false,
     request_count: 5,
     folder_count: 2,
+    created_at: '2024-01-01T00:00:00Z',
+    updated_at: '2024-01-01T00:00:00Z',
+    config_count: 0,
+    service_count: 0,
   },
 ];
 
@@ -131,7 +139,7 @@ describe('WorkspacesPage', () => {
     render(<WorkspacesPage />, { wrapper: createWrapper() });
 
     expect(screen.getByText('Workspaces')).toBeInTheDocument();
-    expect(screen.getByText('Manage your mock API workspaces')).toBeInTheDocument();
+    expect(screen.getByText(/Group routes, fixtures and environments per API/)).toBeInTheDocument();
   });
 
   it('displays workspace cards', () => {
@@ -150,8 +158,8 @@ describe('WorkspacesPage', () => {
   it('displays workspace statistics', () => {
     render(<WorkspacesPage />, { wrapper: createWrapper() });
 
-    expect(screen.getByText('10 requests')).toBeInTheDocument();
-    expect(screen.getByText('3 folders')).toBeInTheDocument();
+    expect(screen.getByLabelText('10 requests')).toBeInTheDocument();
+    expect(screen.getByLabelText('3 folders')).toBeInTheDocument();
   });
 
   it('opens create workspace dialog', () => {
@@ -266,7 +274,7 @@ describe('WorkspacesPage', () => {
     const playButtons = screen.getAllByRole('button');
     const activateButton = playButtons.find((btn) => {
       const svg = btn.querySelector('svg');
-      return svg && svg.classList.contains('lucide-play') && !btn.disabled;
+      return svg && svg.classList.contains('lucide-play') && !(btn as HTMLButtonElement).disabled;
     });
     fireEvent.click(activateButton!);
 
@@ -392,8 +400,8 @@ describe('WorkspacesPage', () => {
 
     render(<WorkspacesPage />, { wrapper: createWrapper() });
 
-    expect(screen.getByText('No Workspaces Yet')).toBeInTheDocument();
-    expect(screen.getByText(/Get started by creating a new workspace/)).toBeInTheDocument();
+    expect(screen.getByText('No workspaces yet')).toBeInTheDocument();
+    expect(screen.getByText(/Create one to get started/)).toBeInTheDocument();
   });
 
   it('shows loading state', () => {

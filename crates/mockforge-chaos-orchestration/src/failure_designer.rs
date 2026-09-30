@@ -370,7 +370,7 @@ impl FailureDesigner {
     /// Generate route chaos configuration
     ///
     /// Converts failure design rules into route-specific chaos configurations
-    /// that can be used with RouteChaosInjector.
+    /// that can be used with `RouteChaosInjector`.
     pub fn generate_route_chaos_config(&self, rule: &FailureDesignRule) -> Result<Value, String> {
         // Validate rule
         self.validate_rule(rule)?;

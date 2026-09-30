@@ -48,7 +48,7 @@ export function StateIndicator({ state, size = 'md', animated = true }: StateInd
   return (
     <div className={`inline-flex items-center gap-1.5 px-2 py-1 rounded-full ${config.bgColor} ${config.color}`}>
       <div className={animated && normalizedState === 'processing' ? 'animate-spin' : ''}>
-        {React.cloneElement(config.icon as React.ReactElement, {
+        {React.cloneElement(config.icon as React.ReactElement<{ className?: string }>, {
           className: sizeClasses[size],
         })}
       </div>

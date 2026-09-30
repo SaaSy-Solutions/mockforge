@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { Clock, TrendingUp, Activity, AlertCircle, BarChart3 } from 'lucide-react';
 import { useMetrics } from '../../hooks/useApi';
 import { ModernCard, MetricCard, Section, EmptyState } from '../ui/DesignSystem';
@@ -17,13 +17,13 @@ export function PerformanceDashboard() {
 
   // Process metrics data
   const processedData = useMemo(() => {
-    if (!metrics?.data) return null;
+    if (!metrics) return null;
 
-    const percentiles = metrics.data.response_time_percentiles || {};
-    const endpointPercentiles = metrics.data.endpoint_percentiles || {};
-    const latencyOverTime = metrics.data.latency_over_time || [];
-    const requestsByEndpoint = metrics.data.requests_by_endpoint || {};
-    const errorRates = metrics.data.error_rate_by_endpoint || {};
+    const percentiles = metrics.response_time_percentiles || {};
+    const endpointPercentiles = metrics.endpoint_percentiles || {};
+    const latencyOverTime = metrics.latency_over_time || [];
+    const requestsByEndpoint = metrics.requests_by_endpoint || {};
+    const errorRates = metrics.error_rate_by_endpoint || {};
 
     // Calculate average latency
     const avgLatency = latencyOverTime.length > 0
@@ -63,7 +63,7 @@ export function PerformanceDashboard() {
       <EmptyState
         icon={<AlertCircle className="h-12 w-12" />}
         title="Unable to Load Metrics"
-        message={error?.message || "Failed to load performance metrics. Please try again."}
+        description={error?.message || "Failed to load performance metrics. Please try again."}
       />
     );
   }

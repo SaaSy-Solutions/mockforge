@@ -1,5 +1,7 @@
 # Performance Mode (Load Simulation)
 
+> **Planned / not yet available.** `/api/performance/*` and a UI page exist, but the simulator is not yet on the request path (it neither generates load nor shapes responses), and there is no `mockforge performance` CLI. This page describes the intended design and is kept for reference; do not rely on it in a released build. Track progress at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 **Pillars:** [DevX]
 
 Performance Mode provides lightweight load simulation for running scenarios at N RPS, simulating bottlenecks, recording latencies, and observing how responses change under load. This is NOT true load testing—it's realistic behavior simulation under stress testing conditions.

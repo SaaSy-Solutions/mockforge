@@ -4,7 +4,7 @@
  * Form for creating and editing pipelines
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useCreatePipeline, useUpdatePipeline, type Pipeline, type PipelineDefinition } from '../../hooks/usePipelines';
 import { Card } from '../ui/Card';
 import { ArrowLeft, Save } from 'lucide-react';
@@ -94,7 +94,7 @@ export const PipelineForm: React.FC<PipelineFormProps> = ({
             <ArrowLeft className="h-5 w-5" />
           </button>
         )}
-        <h1 className="text-3xl font-bold text-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">
           {pipeline ? 'Edit Pipeline' : 'Create Pipeline'}
         </h1>
       </div>

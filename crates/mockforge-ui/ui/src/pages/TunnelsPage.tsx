@@ -94,7 +94,7 @@ const CloudTunnelsView: React.FC = () => {
         <div className="p-6 max-w-7xl mx-auto">
             <div className="flex justify-between items-start mb-8">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Tunnels</h1>
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">Tunnels</h1>
                     <p className="text-gray-600 dark:text-gray-400">
                         Reserve a subdomain on the MockForge relay so external services can reach your local mocks.
                     </p>
@@ -296,7 +296,7 @@ const CreateModal: React.FC<{
                         value={state.name}
                         onChange={(e) => setState({ ...state, name: e.target.value })}
                         placeholder="e.g., Payment Service Dev"
-                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-ring/30"
                     />
                 </div>
                 <div className="space-y-2">
@@ -306,7 +306,7 @@ const CreateModal: React.FC<{
                         value={state.subdomain}
                         onChange={(e) => setState({ ...state, subdomain: e.target.value.toLowerCase() })}
                         placeholder="e.g., payments-dev"
-                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-ring/30 font-mono"
                     />
                     <p className="text-xs text-gray-500">3–40 lowercase chars, alphanumeric or hyphens.</p>
                 </div>
@@ -319,7 +319,7 @@ const CreateModal: React.FC<{
                         value={state.custom_domain}
                         onChange={(e) => setState({ ...state, custom_domain: e.target.value })}
                         placeholder="e.g., api.example.com"
-                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-ring/30 font-mono"
                     />
                     <p className="text-xs text-gray-500">
                         DNS verification runs against <code>_mockforge-verify.&lt;domain&gt;</code> after creation.
@@ -385,7 +385,7 @@ const LocalTunnelsView: React.FC = () => {
             </div>
             <div className="flex justify-between items-start mb-8">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Tunnels</h1>
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">Tunnels</h1>
                 </div>
                 <button
                     onClick={() => setIsCreateModalOpen(true)}

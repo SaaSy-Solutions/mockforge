@@ -9,14 +9,12 @@
 import React, { useState } from 'react';
 import {
   BookOpen,
-  ChevronRight,
   Clock,
   ArrowRight,
   CheckCircle2,
   Loader2,
   Info,
   Zap,
-  Users,
   ShoppingCart,
   CreditCard,
   UserCheck
@@ -24,7 +22,7 @@ import {
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/Card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/Badge';
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../ui/Dialog';
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/Dialog';
 import { Alert } from '../ui/DesignSystem';
 import { toast } from 'sonner';
 import {

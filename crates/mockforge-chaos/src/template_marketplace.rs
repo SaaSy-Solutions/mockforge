@@ -197,7 +197,7 @@ impl TemplateMarketplace {
                 });
             }
             TemplateSortBy::Newest => {
-                results.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+                results.sort_by_key(|b| std::cmp::Reverse(b.created_at));
             }
             TemplateSortBy::TopRated => {
                 results.sort_by(|a, b| {
@@ -205,10 +205,10 @@ impl TemplateMarketplace {
                 });
             }
             TemplateSortBy::MostDownloaded => {
-                results.sort_by(|a, b| b.stats.downloads.cmp(&a.stats.downloads));
+                results.sort_by_key(|b| std::cmp::Reverse(b.stats.downloads));
             }
             TemplateSortBy::RecentlyUpdated => {
-                results.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
+                results.sort_by_key(|b| std::cmp::Reverse(b.updated_at));
             }
         }
 

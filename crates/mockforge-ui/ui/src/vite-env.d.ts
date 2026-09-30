@@ -13,3 +13,6 @@ declare global {
     __mockforge_explorer_deployment?: ExplorerDeploymentContext;
   }
 }
+
+// Make this file a module so the `declare global` augmentation above applies.
+export {};

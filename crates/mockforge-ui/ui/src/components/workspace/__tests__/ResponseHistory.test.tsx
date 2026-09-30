@@ -22,13 +22,11 @@ const mockHistory: ResponseHistoryEntry[] = [
     request_method: 'GET',
     request_path: '/api/users',
     request_headers: { 'Content-Type': 'application/json' },
-    request_body: null,
     response_status_code: 200,
     response_headers: { 'Content-Type': 'application/json' },
     response_body: '{"users": []}',
     response_time_ms: 45,
     response_size_bytes: 1024,
-    error_message: null,
   },
   {
     executed_at: '2024-01-01T09:00:00Z',
@@ -38,7 +36,6 @@ const mockHistory: ResponseHistoryEntry[] = [
     request_body: '{"title": "Test"}',
     response_status_code: 500,
     response_headers: {},
-    response_body: null,
     response_time_ms: 120,
     response_size_bytes: 0,
     error_message: 'Internal server error',
@@ -101,10 +98,8 @@ describe('ResponseHistory', () => {
   it('executes request when execute button clicked', async () => {
     const onExecuteRequest = vi.fn();
     const executionResult = {
-      execution: {
-        ...mockHistory[0],
-        executed_at: '2024-01-01T11:00:00Z',
-      },
+      ...mockHistory[0],
+      executed_at: '2024-01-01T11:00:00Z',
     };
     (apiService.executeRequest as any) = vi.fn().mockResolvedValue(executionResult);
 
@@ -149,7 +144,7 @@ describe('ResponseHistory', () => {
       expect(executeButton).toBeDisabled();
     });
 
-    resolveExecution!({ execution: mockHistory[0] });
+    resolveExecution!(mockHistory[0]);
   });
 
   it('shows empty state when no history', async () => {
@@ -279,17 +274,15 @@ describe('ResponseHistory', () => {
   });
 
   it('updates history when new execution completes', async () => {
-    const { rerender } = render(
+    render(
       <ResponseHistory workspaceId="ws-1" requestId="req-1" requestName="Test Request" />
     );
 
     await waitFor(() => screen.getByText('2 executions for Test Request'));
 
     const newExecution = {
-      execution: {
-        ...mockHistory[0],
-        executed_at: '2024-01-01T11:00:00Z',
-      },
+      ...mockHistory[0],
+      executed_at: '2024-01-01T11:00:00Z',
     };
     (apiService.executeRequest as any) = vi.fn().mockResolvedValue(newExecution);
 

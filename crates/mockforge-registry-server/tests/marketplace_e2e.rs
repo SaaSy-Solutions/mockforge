@@ -220,6 +220,32 @@ async fn test_plugin_marketplace_workflow() {
         search_response.json().await.expect("Failed to parse response");
     assert!(!search_body["plugins"].as_array().unwrap().is_empty());
 
+    // Every sort mode the UI offers must succeed. "popular" (the UI default)
+    // and "security" order by expressions, which Postgres rejects when the
+    // query uses SELECT DISTINCT; that shipped as a 500 on the registry page.
+    for (sort, tags) in [
+        ("downloads", json!([])),
+        ("rating", json!([])),
+        ("recent", json!([])),
+        ("name", json!([])),
+        ("popular", json!([])),
+        ("security", json!([])),
+        ("popular", json!(["e2e"])),
+    ] {
+        let response = helper
+            .client
+            .post(format!("{}/api/v1/plugins/search", helper.base_url))
+            .json(&json!({ "tags": tags, "sort": sort, "page": 0, "perPage": 24 }))
+            .send()
+            .await
+            .expect("Failed to search plugins");
+        assert!(
+            response.status().is_success(),
+            "Plugin search with sort={sort} tags={tags} failed: {:?}",
+            response.text().await
+        );
+    }
+
     // Step 5: Get plugin details
     let get_response = helper
         .client

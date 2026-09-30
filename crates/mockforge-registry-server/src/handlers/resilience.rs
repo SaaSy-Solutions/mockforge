@@ -251,7 +251,7 @@ pub async fn reset_bulkhead(
 /// Build the 6PN admin URL for a hosted mock. The deployment is a Fly app
 /// named via [`HostedMock::fly_app_name`]; Fly resolves `{name}.internal`
 /// to a private IPv6 reachable from the registry pod.
-fn admin_base_url(deployment: &HostedMock) -> String {
+pub(crate) fn admin_base_url(deployment: &HostedMock) -> String {
     format!("http://{}.internal:{ADMIN_PORT}", deployment.fly_app_name())
 }
 
@@ -298,7 +298,7 @@ async fn proxy_post_empty(url: &str) -> reqwest::Result<()> {
 /// Resolve `deployment_id` to a `HostedMock`, after confirming the caller's
 /// org matches. Returns the deployment so callers can build the admin URL
 /// without a second DB hit.
-async fn authorize_deployment(
+pub(crate) async fn authorize_deployment(
     state: &AppState,
     user_id: Uuid,
     headers: &HeaderMap,

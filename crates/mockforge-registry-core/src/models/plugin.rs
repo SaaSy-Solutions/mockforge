@@ -95,26 +95,22 @@ impl Plugin {
         limit: i64,
         offset: i64,
     ) -> sqlx::Result<Vec<Self>> {
-        let mut sql = String::from(
-            r#"
-            SELECT DISTINCT p.*
-            FROM plugins p
-            "#,
-        );
+        // No DISTINCT here: Postgres rejects `SELECT DISTINCT` combined with
+        // an ORDER BY expression outside the select list, which is exactly
+        // what the "popular" and "security" sorts use. The tag filter is an
+        // EXISTS subquery instead of a join so rows can't duplicate.
+        let mut sql = String::from("SELECT p.* FROM plugins p");
 
         let mut conditions = Vec::new();
         let mut params_count = 0;
 
-        // Add tag filtering if needed
         if !tags.is_empty() {
-            sql.push_str(
-                r#"
-                INNER JOIN plugin_tags pt ON p.id = pt.plugin_id
-                INNER JOIN tags t ON pt.tag_id = t.id
-                "#,
-            );
             params_count += 1;
-            conditions.push(format!("t.name = ANY(${})", params_count));
+            conditions.push(format!(
+                "EXISTS (SELECT 1 FROM plugin_tags pt INNER JOIN tags t ON pt.tag_id = t.id \
+                 WHERE pt.plugin_id = p.id AND t.name = ANY(${}))",
+                params_count
+            ));
         }
 
         // Hide taken-down plugins from public search. The admin UI loads

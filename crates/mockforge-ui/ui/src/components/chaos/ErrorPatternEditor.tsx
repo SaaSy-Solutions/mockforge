@@ -7,8 +7,8 @@
  * - Sequential: Inject errors in a specific sequence
  */
 
-import React, { useState, useEffect } from 'react';
-import { ModernCard, Section } from '../ui/DesignSystem';
+import { useState, useEffect } from 'react';
+import { ModernCard } from '../ui/DesignSystem';
 import { Button } from '../ui/button';
 import { Slider } from '../ui/slider';
 import { useUpdateErrorPattern } from '../../hooks/useApi';

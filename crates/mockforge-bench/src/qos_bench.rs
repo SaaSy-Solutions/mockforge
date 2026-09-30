@@ -193,8 +193,12 @@ fn marked_socket(
         }
     }
     if let Some(m) = mss {
-        // Best-effort; TCP_MAXSEG isn't settable on every platform.
+        // Best-effort; TCP_MAXSEG isn't settable on every platform, and
+        // socket2 only exposes it on Unix.
+        #[cfg(unix)]
         let _ = socket.set_mss(m);
+        #[cfg(not(unix))]
+        tracing::debug!("TCP_MAXSEG clamping is not supported on this platform; ignoring mss={m}");
     }
     Ok(socket)
 }

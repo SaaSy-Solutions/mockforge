@@ -6,8 +6,8 @@
  * for managing reality level configurations.
  */
 
-import React, { useState } from 'react';
-import { Download, Upload, FileText, X, Check } from 'lucide-react';
+import { useState } from 'react';
+import { Download, Upload, FileText, Check } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import {
   useRealityPresets,
@@ -20,7 +20,6 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Textarea } from '../ui/textarea';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../ui/Dialog';
-import { Badge } from '../ui/Badge';
 import { Alert } from '../ui/DesignSystem';
 import { toast } from 'sonner';
 

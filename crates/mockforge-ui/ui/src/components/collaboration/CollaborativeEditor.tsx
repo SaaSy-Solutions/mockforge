@@ -12,7 +12,6 @@ import {
   AvatarGroup,
   Chip,
   Tooltip,
-  Badge,
   Typography,
   Alert,
   Snackbar,
@@ -52,14 +51,14 @@ export const CollaborativeEditor: React.FC<CollaborativeEditorProps> = ({
   children,
 }) => {
   const [activeUsers, setActiveUsers] = useState<User[]>([]);
-  const [changes, setChanges] = useState<Change[]>([]);
+  const [, setChanges] = useState<Change[]>([]);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [conflicts, setConflicts] = useState<string[]>([]);
   const [notification, setNotification] = useState<string | null>(null);
   const localChangesRef = useRef<Change[]>([]);
   const lastSyncedValueRef = useRef(value);
 
-  const { messages, sendMessage, isConnected } = useWebSocket(
+  const { lastMessage, sendMessage, connected: isConnected } = useWebSocket(
     `/api/collaboration/${orchestrationId}/ws`
   );
 
@@ -101,11 +100,14 @@ export const CollaborativeEditor: React.FC<CollaborativeEditorProps> = ({
 
   // Handle incoming messages
   useEffect(() => {
-    if (messages.length > 0) {
-      const message = messages[messages.length - 1];
-      handleMessage(message);
+    if (lastMessage) {
+      try {
+        handleMessage(JSON.parse(lastMessage.data));
+      } catch {
+        // Ignore non-JSON frames
+      }
     }
-  }, [messages]);
+  }, [lastMessage]);
 
   const handleMessage = useCallback((message: any) => {
     switch (message.type) {
@@ -344,7 +346,7 @@ export const CollaborativeEditor: React.FC<CollaborativeEditorProps> = ({
           handlePresenceUpdate({ x: e.clientX, y: e.clientY });
         }}
       >
-        {React.cloneElement(children as React.ReactElement, {
+        {React.cloneElement(children as React.ReactElement<{ onChange?: (value: unknown) => void }>, {
           onChange: (newValue: any) => {
             const path = 'root'; // Simplified - in production, track specific paths
             handleLocalChange(path, newValue, value);

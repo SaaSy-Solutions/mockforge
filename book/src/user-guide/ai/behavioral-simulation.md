@@ -1,5 +1,7 @@
 # AI Behavioral Simulation Engine
 
+> **Planned / not yet available.** The behavioral simulator and AI Studio panel exist, but the backend API is not mounted yet and there is no `mockforge ai behavioral-sim` command. This page describes the intended design and is kept for reference; do not rely on it in a released build. Track progress at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 **Pillars:** [AI]
 
 The AI Behavioral Simulation Engine models users as narrative agents that react to app state, form intentions, respond to errors, and trigger multi-step interactions automatically. MockForge becomes **an AI user simulator**—not just an API simulator.

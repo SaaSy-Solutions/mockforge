@@ -6,16 +6,18 @@
 
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import type { NodeProps } from '@xyflow/react';
+import type { Node, NodeProps } from '@xyflow/react';
 
-interface WorldStateNodeData {
+type WorldStateNodeData = {
   label: string;
   nodeType: string;
   layer: string;
   state?: string;
   properties: Record<string, unknown>;
   selected?: boolean;
-}
+};
+
+type WorldStateFlowNode = Node<WorldStateNodeData>;
 
 /**
  * Get color for layer
@@ -36,7 +38,7 @@ function getLayerColor(layer: string): string {
   return colors[layer.toLowerCase()] || '#6b7280';
 }
 
-export const WorldStateNodeComponent: React.FC<NodeProps<WorldStateNodeData>> = ({
+export const WorldStateNodeComponent: React.FC<NodeProps<WorldStateFlowNode>> = ({
   data,
   selected,
 }) => {
@@ -48,8 +50,9 @@ export const WorldStateNodeComponent: React.FC<NodeProps<WorldStateNodeData>> = 
       style={{
         padding: '10px',
         borderRadius: '8px',
-        background: isSelected ? '#eff6ff' : '#ffffff',
-        border: `2px solid ${isSelected ? layerColor : '#e5e7eb'}`,
+        background: 'hsl(var(--card))',
+        color: 'hsl(var(--card-foreground))',
+        border: `2px solid ${isSelected ? layerColor : 'hsl(var(--border))'}`,
         minWidth: '150px',
         boxShadow: isSelected
           ? `0 4px 6px -1px ${layerColor}40`

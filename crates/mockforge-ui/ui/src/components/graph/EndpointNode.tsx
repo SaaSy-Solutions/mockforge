@@ -1,17 +1,18 @@
 import React from 'react';
 import { Handle, Position } from '@xyflow/react';
-import type { NodeProps } from '@xyflow/react';
+import type { Node, NodeProps } from '@xyflow/react';
 import { Badge } from '../ui/Badge';
 import { Server, Zap, Globe, MessageSquare, Database, Mail, Radio } from 'lucide-react';
-import type { GraphNode } from '../../types/graph';
 
-interface EndpointNodeData {
+type EndpointNodeData = {
   label: string;
   nodeType: string;
   protocol?: string;
   currentState?: string;
   metadata: Record<string, unknown>;
-}
+};
+
+type EndpointFlowNode = Node<EndpointNodeData, 'endpoint'>;
 
 const protocolIcons: Record<string, React.ReactNode> = {
   http: <Globe className="h-4 w-4" />,
@@ -45,7 +46,7 @@ const stateColors: Record<string, string> = {
   processing: 'bg-info-500',
 };
 
-export function EndpointNode({ data }: NodeProps<EndpointNodeData>) {
+export function EndpointNode({ data }: NodeProps<EndpointFlowNode>) {
   const protocol = data.protocol?.toLowerCase() || 'http';
   const state = data.currentState?.toLowerCase();
   const method = data.metadata?.method as string | undefined;

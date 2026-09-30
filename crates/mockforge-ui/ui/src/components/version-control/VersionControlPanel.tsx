@@ -5,7 +5,7 @@
  * commit history, branching, diffing, and merging capabilities.
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -36,8 +36,6 @@ import {
   CompareArrows as DiffIcon,
   Add as AddIcon,
   History as HistoryIcon,
-  FileDownload as DownloadIcon,
-  FileUpload as UploadIcon,
   PlayArrow as CheckoutIcon,
   Lock as ProtectedIcon,
 } from '@mui/icons-material';

@@ -11,23 +11,16 @@
 //! - Interaction timeline visualization
 //! - Intention/state visualization
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { reportAiTokenUsage } from '@/services/api/usage';
 import {
   Users,
   Play,
-  Pause,
-  Square,
   UserPlus,
-  Settings,
   Activity,
-  TrendingUp,
-  AlertCircle,
-  CheckCircle2,
   XCircle,
   Loader2,
   Eye,
-  EyeOff,
   RefreshCw,
   Zap,
 } from 'lucide-react';

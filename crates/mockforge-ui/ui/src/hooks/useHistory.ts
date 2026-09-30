@@ -5,10 +5,6 @@
 
 import { useState, useCallback, useRef } from 'react';
 
-interface UseHistoryOptions {
-  capacity?: number;
-}
-
 interface UseHistoryReturn<T> {
   history: T;
   push: (state: T) => void;

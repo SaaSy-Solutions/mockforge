@@ -3,7 +3,7 @@
 //! Visual flow editor for co-editing business flows (happy path, SLA violation, regression)
 //! with drag-and-drop React Flow integration.
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   ReactFlow,
   Background,
@@ -21,7 +21,6 @@ import type {
   NodeTypes,
   ReactFlowInstance,
 } from '@xyflow/react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -37,13 +36,18 @@ import {
   Clock,
   Repeat,
   Layers,
-  Settings,
 } from 'lucide-react';
-import { ApiCallNode, type ApiCallNodeData } from '@/components/scenario-studio/ApiCallNode';
-import { ConditionNode, type ConditionNodeData } from '@/components/scenario-studio/ConditionNode';
-import { DelayNode, type DelayNodeData } from '@/components/scenario-studio/DelayNode';
-import { LoopNode, type LoopNodeData } from '@/components/scenario-studio/LoopNode';
-import { ParallelNode, type ParallelNodeData } from '@/components/scenario-studio/ParallelNode';
+import type { ApiCallNodeData } from '@/components/scenario-studio/ApiCallNode';
+import type { ConditionNodeData } from '@/components/scenario-studio/ConditionNode';
+import type { DelayNodeData } from '@/components/scenario-studio/DelayNode';
+import type { LoopNodeData } from '@/components/scenario-studio/LoopNode';
+import type { ParallelNodeData } from '@/components/scenario-studio/ParallelNode';
+import {
+  scenarioNodeTypes,
+  normalizeStepType,
+  STEP_TYPE_COLORS,
+  type StepType,
+} from '@/components/scenario-studio/stepTypes';
 import { FlowPropertiesPanel } from '@/components/scenario-studio/FlowPropertiesPanel';
 import { FlowExecutor } from '@/components/scenario-studio/FlowExecutor';
 import { useHistory } from '@/hooks/useHistory';
@@ -67,7 +71,7 @@ interface FlowDefinition {
 interface FlowStep {
   id: string;
   name: string;
-  step_type: 'api_call' | 'condition' | 'delay' | 'loop' | 'parallel';
+  step_type: StepType;
   method?: string;
   endpoint?: string;
   delay_ms?: number;
@@ -85,14 +89,16 @@ interface FlowConnection {
   label?: string;
 }
 
-// Node type mapping
-const nodeTypes: NodeTypes = {
-  apiCall: ApiCallNode,
-  condition: ConditionNode,
-  delay: DelayNode,
-  loop: LoopNode,
-  parallel: ParallelNode,
-};
+type StudioNodeData =
+  | ApiCallNodeData
+  | ConditionNodeData
+  | DelayNodeData
+  | LoopNodeData
+  | ParallelNodeData;
+type StudioNode = Node<StudioNodeData>;
+
+// Node type mapping, keyed by the backend's snake_case step_type
+const nodeTypes: NodeTypes = scenarioNodeTypes;
 
 // Cloud-mode flows store the full scenario payload (flow_type / steps /
 // connections / tags) inside the current FlowVersion.config object. We
@@ -154,19 +160,19 @@ export function ScenarioStudioPage() {
   const [newFlowName, setNewFlowName] = useState('');
   const [newFlowType, setNewFlowType] = useState<'happy_path' | 'sla_violation' | 'regression' | 'custom'>('happy_path');
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [selectedNode, setSelectedNode] = useState<Node | null>(null);
+  const [, setError] = useState<string | null>(null);
+  const [selectedNode, setSelectedNode] = useState<StudioNode | null>(null);
   const [showProperties, setShowProperties] = useState(false);
   const [showExecutor, setShowExecutor] = useState(false);
-  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
+  const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance<StudioNode, Edge> | null>(null);
 
   // React Flow state
-  const [nodes, setNodes, onNodesChange] = useNodesState([]);
-  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<StudioNode>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
 
   // History for undo/redo
-  const { history, push, undo, redo, canUndo, canRedo } = useHistory<{
-    nodes: Node[];
+  const { push, undo, redo, canUndo, canRedo } = useHistory<{
+    nodes: StudioNode[];
     edges: Edge[];
   }>({ nodes: [], edges: [] }, 50);
 
@@ -247,16 +253,18 @@ export function ScenarioStudioPage() {
 
   const loadFlowIntoEditor = (flow: FlowDefinition) => {
     // Convert flow steps to React Flow nodes
-    const flowNodes: Node[] = flow.steps.map((step, index) => {
+    const flowNodes: StudioNode[] = flow.steps.map((step, index) => {
       const position = step.position || { x: (index % 5) * 250 + 100, y: Math.floor(index / 5) * 150 + 100 };
 
-      let nodeData: any = {
+      let nodeData: StudioNodeData = {
         id: step.id,
         name: step.name,
       };
 
+      const stepType = normalizeStepType(step.step_type);
+
       // Add type-specific data
-      switch (step.step_type) {
+      switch (stepType) {
         case 'api_call':
           nodeData = {
             ...nodeData,
@@ -294,7 +302,7 @@ export function ScenarioStudioPage() {
 
       return {
         id: step.id,
-        type: step.step_type,
+        type: stepType,
         position,
         data: nodeData,
       };
@@ -377,12 +385,12 @@ export function ScenarioStudioPage() {
         const baseStep: FlowStep = {
           id: node.id,
           name: node.data.name,
-          step_type: (node.type as any) || 'api_call',
+          step_type: normalizeStepType(node.type),
           position: { x: node.position.x, y: node.position.y },
         };
 
         // Add type-specific fields
-        switch (node.type) {
+        switch (baseStep.step_type) {
           case 'api_call':
             const apiData = node.data as ApiCallNodeData;
             return {
@@ -502,7 +510,7 @@ export function ScenarioStudioPage() {
     if (!selectedFlow) return;
 
     const nodeId = `step-${Date.now()}`;
-    let nodeData: any = {
+    let nodeData: StudioNodeData = {
       id: nodeId,
       name: `New ${stepType.replace('_', ' ')}`,
     };
@@ -526,11 +534,11 @@ export function ScenarioStudioPage() {
         break;
     }
 
-    const newNode: Node = {
+    const newNode: StudioNode = {
       id: nodeId,
       type: stepType,
       position: reactFlowInstance
-        ? reactFlowInstance.project({ x: 400, y: 300 })
+        ? reactFlowInstance.screenToFlowPosition({ x: 400, y: 300 })
         : { x: 400, y: 300 },
       data: nodeData,
     };
@@ -548,18 +556,22 @@ export function ScenarioStudioPage() {
 
   const onConnect = useCallback(
     (params: Connection) => {
-      const newEdge: Edge = {
-        ...addEdge(params, []),
-        markerEnd: {
-          type: MarkerType.ArrowClosed,
-        },
-      };
-      setEdges((eds) => [...eds, newEdge]);
+      setEdges((eds) =>
+        addEdge(
+          {
+            ...params,
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+            },
+          },
+          eds
+        )
+      );
     },
     [setEdges]
   );
 
-  const onNodeClick = useCallback((_event: React.MouseEvent, node: Node) => {
+  const onNodeClick = useCallback((_event: React.MouseEvent, node: StudioNode) => {
     setSelectedNode(node);
     setShowProperties(true);
   }, []);
@@ -795,14 +807,7 @@ export function ScenarioStudioPage() {
                 <Controls />
                 <MiniMap
                   nodeColor={(node) => {
-                    const colors: Record<string, string> = {
-                      apiCall: '#3b82f6',
-                      condition: '#a855f7',
-                      delay: '#eab308',
-                      loop: '#6366f1',
-                      parallel: '#14b8a6',
-                    };
-                    return colors[node.type || 'apiCall'] || '#6b7280';
+                    return STEP_TYPE_COLORS[normalizeStepType(node.type)];
                   }}
                 />
               </ReactFlow>
@@ -810,7 +815,9 @@ export function ScenarioStudioPage() {
               {/* Properties Panel */}
               {showProperties && selectedNode && (
                 <div className="absolute top-4 right-4 z-10">
+                  {/* key remounts per node: the panel's hooks differ by step type */}
                   <FlowPropertiesPanel
+                    key={selectedNode.id}
                     selectedNode={selectedNode}
                     onUpdate={handleNodeUpdate}
                     onClose={() => setShowProperties(false)}

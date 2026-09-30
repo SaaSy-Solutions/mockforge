@@ -1,5 +1,47 @@
 ## [Unreleased]
 
+## [0.3.227] - 2026-09-30
+
+### Added
+
+- **[Reality]** `mockforge bench-chunked` gains `--rps N` (per-target cap on request starts per second), `--cps` (new TCP/TLS connection per request), and campaign mode: `--rounds N` / `--repeat-until <duration>` re-run the whole pass into `<output>/round_N/`, with per-round stats in `campaign.jsonl` and `round-summaries/`, and `--keep-rounds N` rotating old round dirs, matching `mockforge bench`. (#79)
+- **[Cloud]** Redesigned app shell for the logged-in portal: new sidebar, top bar, search and menus, refreshed shared UI primitives, and a new dashboard; every page moved onto the new frame. (#1086)
+
+### Fixed
+
+- **[Cloud]** GDPR account erasure no longer fails for users who have audit-log rows. (#1093)
+- **[Reality]** `bench-chunked --chunk-interval-ms` now sends the first chunk immediately and waits only *between* chunks. Previously it waited before the first chunk and sent the last two back to back. (#79)
+
+## [0.3.226] - 2026-09-29
+
+### Added
+
+- **[DevX]** Response overrides now work in `mockforge serve`. Rules come from a new `overrides:` list in `mockforge.yaml`, `MOCKFORGE_HTTP_OVERRIDES_GLOB` files, and a new `MOCKFORGE_HTTP_OVERRIDES` JSON array. With `--admin`, `GET`/`PUT /__mockforge/overrides` reads and replaces the live rules without a restart; an invalid set returns 400 and keeps the previous rules. Rules gain `name` and `enabled`. (#1088)
+- **[DevX]** Admin UI **Overrides** page to toggle, reorder, edit, and save override rules for the running mock (self-hosted) or a hosted mock (cloud). (#1095)
+- **[Cloud]** Per-hosted-mock override rules: `GET`/`PUT /api/v1/hosted-mocks/{id}/overrides` stores rules on the deployment, passes them to new machines, and pushes them live to running ones over the private network. (#1094)
+
+### Fixed
+
+- **[DevX]** `tag:` override targets match the operation's real OpenAPI tags, and `when:` conditions see request headers, query, and body. Invalid JSON pointers are rejected instead of silently patching the whole body, and regex targets work in rule sets loaded from config (including gRPC). (#1088)
+- **[Cloud]** Redeployed hosted mocks now start their admin server, so the resilience dashboard and override push can reach them. (#1094)
+- **[Cloud]** Plugin registry search no longer returns 500 for the default "popular" sort and the "security" sort. (#1082)
+- **[DevX]** The admin UI top-bar search suggests pages and navigates on Enter. (#1082)
+- **[Cloud]** Bump wasmtime and wasmtime-wasi to 36.0.16 for RUSTSEC-2026-0316 and RUSTSEC-2026-0314. (#1092)
+
+## [0.3.225] - 2026-09-27
+
+### Added
+
+- **[Reality]** `mockforge bench-chunked --targets-file <file>` sends real `Transfer-Encoding: chunked` traffic to every target in a multi-target file in parallel (`--max-concurrency`, default 10). It uses the same file format as `bench --targets-file`, including per-target `auth`/`headers`/`spec`. Per-target artifacts go to `<output>/target_N/`, with a roll-up in `chunked-multi-target-summary.json`. (#79)
+
+
+## [0.3.224] - 2026-09-24
+
+### Added
+
+- **[Reality]** Campaign mode now supports `--no-k6-logs` (skips `k6-output.log` and conformance debug sidecars; k6 output is drained instead of buffered) plus per-round aggregate artifacts: `round_N/round_summary.json`, `round_N/all_targets.csv`, durable `campaign.jsonl`, and `round-summaries/` copies. New `--keep-rounds N` prunes old round directories during a campaign while preserving campaign-level stats, and k6 scripts are generated once per target and reused across rounds. (#79)
+
+
 ## [0.3.223] - 2026-09-18
 
 ### Added

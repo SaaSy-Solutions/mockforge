@@ -1,0 +1,24 @@
+name: Setup flyctl
+description: Install the Fly CLI version used by the disposable BuildKit publisher
+
+runs:
+  using: composite
+  steps:
+    - name: Install flyctl 0.4.93
+      shell: bash
+      run: |
+        set -euo pipefail
+        version=0.4.93
+        destination="${RUNNER_TEMP}/flyctl-${version}"
+        url="https://github.com/superfly/flyctl/releases/download/v${version}/flyctl_${version}_Linux_x86_64.tar.gz"
+        curl --fail --location --silent --show-error \
+          --retry 6 --retry-delay 5 --retry-all-errors --connect-timeout 20 \
+          --output "${destination}.tar.gz" "$url"
+        mkdir -p "$destination"
+        tar -xzf "${destination}.tar.gz" -C "$destination"
+        installed="$("${destination}/flyctl" version)"
+        case "$installed" in
+          *"v${version}"*) ;;
+          *) echo "::error::unexpected flyctl version: $installed"; exit 1 ;;
+        esac
+        echo "$destination" >> "$GITHUB_PATH"

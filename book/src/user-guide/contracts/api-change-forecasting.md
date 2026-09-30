@@ -1,5 +1,7 @@
 # API Change Forecasting
 
+> **Experimental.** This feature ships in MockForge but is early: the engine and `/api/v1/forecasts` endpoints exist (they require a Postgres database), and the CLI is `mockforge governance forecast generate`; the `contract_drift` config block shown below is not read yet. Behavior, commands, and configuration may change between releases. Report issues at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 **Pillars:** [Contracts]
 
 API Change Forecasting uses historical sync/diff data to predict likely future contract breaks. This lets teams proactively harden clients before changes occur.

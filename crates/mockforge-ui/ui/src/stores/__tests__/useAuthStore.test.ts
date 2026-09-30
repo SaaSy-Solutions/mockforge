@@ -186,7 +186,7 @@ describe('useAuthStore', () => {
       try {
         await result.current.login('nonexistent', 'password');
       } catch (error) {
-        expect(error.message).toContain('Invalid username or password');
+        expect(error instanceof Error ? error.message : String(error)).toContain('Invalid username or password');
       }
     });
 
@@ -280,7 +280,6 @@ describe('useAuthStore', () => {
     });
 
     expect(result.current.isAuthenticated).toBe(true);
-    const tokenBeforeRefresh = result.current.token;
 
     // Refresh token
     await act(async () => {
@@ -301,7 +300,7 @@ describe('useAuthStore', () => {
       try {
         await result.current.refreshTokenAction();
       } catch (error) {
-        expect(error.message).toContain('No refresh token available');
+        expect(error instanceof Error ? error.message : String(error)).toContain('No refresh token available');
       }
     });
   });

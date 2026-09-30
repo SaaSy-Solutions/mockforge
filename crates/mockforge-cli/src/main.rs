@@ -1931,6 +1931,23 @@ enum Commands {
         #[arg(long)]
         rounds: Option<u32>,
 
+        /// Campaign mode only (--repeat-until / --rounds): keep only the
+        /// newest N `round_*` directories; older rounds are pruned after each
+        /// round (log rotation for 24-48h runs). Per-round stats survive in
+        /// `campaign.jsonl` and `round-summaries/` at the output dir. `0`
+        /// keeps only the campaign-level stats (#79).
+        #[arg(long, value_name = "N")]
+        keep_rounds: Option<u32>,
+
+        /// Suppress per-run k6 artifacts: `k6-output.log` plus the automatic
+        /// debug sidecars (conformance-failure-details.json,
+        /// conformance-network-events.json). Also stops buffering k6's whole
+        /// output in memory. For longevity campaigns where per-run logs
+        /// bloat the disk; summary.json and --export-requests output still
+        /// write (#79).
+        #[arg(long)]
+        no_k6_logs: bool,
+
         /// Results format: "per-target", "aggregated", or "both" (default: "both")
         /// Only used when --targets-file is specified
         #[arg(long, default_value = "both")]
@@ -2466,6 +2483,17 @@ enum Commands {
     /// for --duration each. --base-path is prepended to every spec path
     /// (priority: CLI > spec.servers, matching `mockforge bench`).
     ///
+    /// With --targets-file (same format as `mockforge bench`), every target
+    /// runs in parallel (up to --max-concurrency at once). Per-target
+    /// `auth`, `headers` and `spec` from a JSON targets file are honored;
+    /// results land in <output>/target_<N>/ plus
+    /// <output>/chunked-multi-target-summary.json.
+    ///
+    /// --rps caps request starts per second per target; --cps opens a new
+    /// connection per request. --rounds / --repeat-until loop the whole run
+    /// as a campaign (<output>/round_<N>/, campaign.jsonl), and
+    /// --keep-rounds rotates old round dirs.
+    ///
     /// Examples:
     ///   mockforge bench-chunked --target http://localhost:3000/upload
     ///   mockforge bench-chunked --target http://localhost:3000/upload \
@@ -2475,15 +2503,37 @@ enum Commands {
     ///   mockforge bench-chunked --spec api.json --target https://192.168.2.86 \
     ///     --base-path /v1.0 --duration 10m --insecure \
     ///     --validate-requests --export-requests
+    ///   mockforge bench-chunked --spec api.json --targets-file targets.txt \
+    ///     --max-concurrency 5 --duration 10m --insecure
+    ///   mockforge bench-chunked --spec api.json --targets-file targets.txt \
+    ///     --rps 20 --cps --duration 15m --repeat-until 24h --keep-rounds 3
     #[cfg(feature = "bench")]
     #[command(verbatim_doc_comment)]
     BenchChunked {
         /// Target URL. Without --spec: full URL of the chunked endpoint
         /// (e.g. `http://host:3000/upload`). With --spec: base URL only
         /// (e.g. `https://192.168.2.86`); the path is taken from each
-        /// matching operation in the spec.
-        #[arg(short, long)]
-        target: String,
+        /// matching operation in the spec. Mutually exclusive with
+        /// --targets-file.
+        #[arg(
+            short,
+            long,
+            required_unless_present = "targets_file",
+            conflicts_with = "targets_file"
+        )]
+        target: Option<String>,
+
+        /// File containing multiple targets (one per line, or the JSON
+        /// format used by `mockforge bench --targets-file`). Each line is
+        /// read like --target: a full endpoint URL without --spec, a base
+        /// URL with --spec. Targets run in parallel.
+        #[arg(long)]
+        targets_file: Option<PathBuf>,
+
+        /// Maximum number of targets benched at the same time. Only used
+        /// with --targets-file. Each target still uses --concurrency workers.
+        #[arg(long, default_value = "10")]
+        max_concurrency: u32,
 
         /// OpenAPI spec to drive the bench. When set, runs one chunked
         /// bench per POST/PUT/PATCH operation, each for --duration.
@@ -2573,6 +2623,39 @@ enum Commands {
         /// --validate-requests is set). Created if missing.
         #[arg(short, long, default_value = "bench-results")]
         output: PathBuf,
+
+        /// Cap on requests started per second, **per target** (shared by
+        /// that target's --concurrency workers). Without it each worker
+        /// starts its next request as soon as the previous one finishes.
+        /// The achieved rate can't exceed concurrency / request duration,
+        /// so raise --concurrency if long chunked uploads keep it below
+        /// --rps (#79).
+        #[arg(long, value_name = "N")]
+        rps: Option<u32>,
+
+        /// Open a new TCP/TLS connection for every request instead of
+        /// reusing pooled ones, so connections/s equals requests/s. Combine
+        /// with --rps to drive a fixed connections-per-second rate (#79).
+        #[arg(long)]
+        cps: bool,
+
+        /// Campaign: re-run the whole pass (every target, every operation)
+        /// this many times. Combines with --repeat-until (stops at whichever
+        /// hits first). Each round writes to `<output>/round_<N>/` (#79).
+        #[arg(long)]
+        rounds: Option<u32>,
+
+        /// Campaign: keep starting new rounds until this much wall clock has
+        /// elapsed (e.g. `24h`). A round in flight finishes before stopping.
+        /// Per-round stats go to `<output>/campaign.jsonl` and
+        /// `<output>/round-summaries/` (#79).
+        #[arg(long = "repeat-until")]
+        repeat_until: Option<String>,
+
+        /// Campaign only: keep only the newest N `round_*` directories.
+        /// `campaign.jsonl` and `round-summaries/` are never pruned (#79).
+        #[arg(long, value_name = "N")]
+        keep_rounds: Option<u32>,
     },
 
     /// Generate HTTP load marked with QoS / DSCP traffic classes (#933)
@@ -3436,6 +3519,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             max_concurrency,
             repeat_until,
             rounds,
+            keep_rounds,
+            no_k6_logs,
             results_format,
             params_file,
             crud_flow,
@@ -3551,6 +3636,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 max_concurrency,
                 repeat_until,
                 rounds,
+                keep_rounds,
+                no_k6_logs,
                 results_format,
                 params_file,
                 crud_flow,
@@ -3636,6 +3723,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         #[cfg(feature = "bench")]
         Commands::BenchChunked {
             target,
+            targets_file,
+            max_concurrency,
             spec,
             base_path,
             operation_id,
@@ -3650,8 +3739,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             validate_requests,
             export_requests,
             output,
+            rps,
+            cps,
+            rounds,
+            repeat_until,
+            keep_rounds,
         } => {
-            use mockforge_bench::chunked_bench::{run, ChunkedBenchConfig, ChunkedBenchResult};
+            use mockforge_bench::chunked_command::ChunkedCommand;
             use mockforge_bench::command::BenchCommand;
             use std::collections::HashMap;
 
@@ -3676,327 +3770,48 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 }
             }
 
-            // Helper to print one result block; used by both single-target
-            // and spec-driven flows.
-            fn print_result(label: &str, r: &ChunkedBenchResult) {
-                println!("Chunked bench [{}] complete in {:?}", label, r.elapsed);
-                println!("  Total requests: {}", r.total_requests);
-                println!("  Successful:     {}", r.successful);
-                println!("  Failed:         {}", r.failed);
-                println!("  Bytes sent:     {}", r.bytes_sent);
-                println!("  Throughput:     {:.2} req/s", r.req_per_sec);
-                println!(
-                    "  Latency:        avg={:.1}ms p50={}ms p95={}ms p99={}ms",
-                    r.avg_latency_ms, r.p50_ms, r.p95_ms, r.p99_ms
-                );
-                if !r.status_counts.is_empty() {
-                    println!("  Status codes:");
-                    let mut codes: Vec<_> = r.status_counts.iter().collect();
-                    codes.sort_by_key(|(k, _)| **k);
-                    for (code, n) in codes {
-                        println!("    {} = {}", code, n);
-                    }
-                }
-                // Surface the captured error responses so the user can tell
-                // whether errors came from MockForge, an upstream proxy, a
-                // CDN, etc. Hint at the most common cause when 5xx is
-                // involved (proxy upstream timeout on long chunked uploads).
-                if !r.error_samples.is_empty() {
-                    println!("  Error response samples:");
-                    for s in &r.error_samples {
-                        let server = s.server_header.as_deref().unwrap_or("(no Server header)");
-                        println!("    [{}] Server: {}", s.status, server);
-                        if !s.body_excerpt.is_empty() {
-                            let one_line = s.body_excerpt.replace('\n', " ");
-                            println!("       body: {}", one_line);
-                        }
-                    }
-                    if r.status_counts.keys().any(|c| (500..600).contains(c)) {
-                        println!(
-                            "  Hint: 5xx responses with `Server:` revealing a proxy/LB usually \
-                             mean the proxy timed out reading from upstream. Each chunked request \
-                             takes >= (total_size_bytes / chunk_size_bytes) * chunk_interval_ms; \
-                             if that exceeds the proxy's upstream timeout, errors are inevitable."
-                        );
-                    }
-                }
-            }
-
-            if let Some(spec_path) = spec {
-                // Spec-driven mode: iterate POST/PUT/PATCH operations.
-                use mockforge_bench::request_gen::RequestGenerator;
-                use mockforge_bench::spec_parser::SpecParser;
-
-                let parser = match SpecParser::from_file(&spec_path).await {
-                    Ok(p) => p,
-                    Err(e) => {
-                        eprintln!("Failed to parse spec {:?}: {}", spec_path, e);
-                        std::process::exit(1);
-                    }
-                };
-                let base_url = target.trim_end_matches('/').to_string();
-                // CLI --base-path > spec.servers > none. Empty string from CLI
-                // explicitly disables (matches `mockforge bench` semantics).
-                let effective_base_path: Option<String> = match &base_path {
-                    Some(p) if p.is_empty() => None,
-                    Some(p) => Some(p.clone()),
-                    None => parser.get_base_path(),
-                };
-                let want_methods = ["POST", "PUT", "PATCH"];
-                let ops: Vec<_> = parser
-                    .get_operations()
-                    .into_iter()
-                    .filter(|op| want_methods.contains(&op.method.to_uppercase().as_str()))
-                    .filter(|op| match &operation_id {
-                        Some(id) => op.operation_id.as_deref() == Some(id.as_str()),
-                        None => true,
-                    })
-                    .collect();
-                if ops.is_empty() {
+            let repeat_until = match repeat_until.as_deref().map(BenchCommand::parse_duration) {
+                None => None,
+                Some(Ok(secs)) => Some(std::time::Duration::from_secs(secs)),
+                Some(Err(e)) => {
                     eprintln!(
-                        "No POST/PUT/PATCH operations matched in {:?}{}",
-                        spec_path,
-                        operation_id
-                            .as_deref()
-                            .map(|id| format!(" (operation-id={id})"))
-                            .unwrap_or_default()
+                        "Invalid --repeat-until {:?}: {}. Examples: 30m, 24h",
+                        repeat_until, e
                     );
                     std::process::exit(1);
                 }
+            };
 
-                // Pre-flight validation. Any failure here aborts before
-                // touching the network so the bench doesn't half-run.
-                let mut violations: Vec<serde_json::Value> = Vec::new();
-                let mut planned: Vec<(
-                    String, // label
-                    String, // method
-                    String, // url
-                    String, // op.path
-                )> = Vec::with_capacity(ops.len());
-                for op in &ops {
-                    let label = op.display_name();
-                    match RequestGenerator::generate_template(op) {
-                        Ok(template) => {
-                            let path_with_base = match &effective_base_path {
-                                Some(bp) if !bp.is_empty() => {
-                                    format!("{}{}", bp, template.generate_path())
-                                }
-                                _ => template.generate_path().to_string(),
-                            };
-                            let url = format!("{}{}", base_url, path_with_base);
-                            if reqwest::Method::from_bytes(op.method.to_uppercase().as_bytes())
-                                .is_err()
-                            {
-                                violations.push(serde_json::json!({
-                                    "operation": label,
-                                    "method": op.method,
-                                    "path": op.path,
-                                    "kind": "invalid_method",
-                                    "detail": format!("`{}` is not a valid HTTP method", op.method),
-                                }));
-                            } else {
-                                planned.push((
-                                    label,
-                                    op.method.to_uppercase(),
-                                    url,
-                                    op.path.clone(),
-                                ));
-                            }
-                        }
-                        Err(e) => {
-                            violations.push(serde_json::json!({
-                                "operation": label,
-                                "method": op.method,
-                                "path": op.path,
-                                "kind": "template_build_failure",
-                                "detail": e.to_string(),
-                            }));
-                        }
-                    }
-                }
-
-                if validate_requests {
-                    if !violations.is_empty() {
-                        if let Err(e) = std::fs::create_dir_all(&output) {
-                            eprintln!("Failed to create output directory {:?}: {}", output, e);
-                            std::process::exit(1);
-                        }
-                        let path = output.join("chunked-request-violations.json");
-                        let payload = serde_json::json!({
-                            "spec": spec_path.display().to_string(),
-                            "base_url": base_url,
-                            "base_path": effective_base_path,
-                            "violations": violations,
-                        });
-                        match serde_json::to_string_pretty(&payload) {
-                            Ok(s) => {
-                                if let Err(e) = std::fs::write(&path, s) {
-                                    eprintln!("Failed to write {:?}: {}", path, e);
-                                }
-                            }
-                            Err(e) => eprintln!("Failed to serialize violations: {}", e),
-                        }
-                        eprintln!(
-                            "✗ --validate-requests: {} violation(s); see {:?}",
-                            violations.len(),
-                            path
-                        );
-                        std::process::exit(1);
-                    } else {
-                        println!("✅ --validate-requests: all {} operations OK", planned.len());
-                    }
-                }
-
-                println!(
-                    "→ {} chunked bench {} from {:?} (base {}{})",
-                    planned.len(),
-                    if planned.len() == 1 {
-                        "operation"
-                    } else {
-                        "operations"
-                    },
-                    spec_path,
-                    base_url,
-                    effective_base_path
-                        .as_deref()
-                        .map(|bp| format!(", base-path {}", bp))
-                        .unwrap_or_default()
-                );
-
-                let mut any_failed = false;
-                let mut export_records: Vec<serde_json::Value> = Vec::new();
-                for (label, method_str, url, op_path) in &planned {
-                    let method = match reqwest::Method::from_bytes(method_str.as_bytes()) {
-                        Ok(m) => m,
-                        Err(_) => {
-                            eprintln!("✗ {}: invalid method `{}`", label, method_str);
-                            any_failed = true;
-                            continue;
-                        }
-                    };
-                    println!();
-                    println!("→ {} {}  ({})", method_str, op_path, url);
-                    let cfg = ChunkedBenchConfig {
-                        target_url: url.clone(),
-                        method,
-                        concurrency,
-                        duration: std::time::Duration::from_secs(duration_secs),
-                        chunk_size_bytes,
-                        total_size_bytes,
-                        chunk_interval_ms,
-                        headers: headers.clone(),
-                        skip_tls_verify: insecure,
-                    };
-                    match run(cfg).await {
-                        Ok(r) => {
-                            print_result(label, &r);
-                            if export_requests {
-                                export_records.push(serde_json::json!({
-                                    "operation": label,
-                                    "method": method_str,
-                                    "url": url,
-                                    "spec_path": op_path,
-                                    "headers": headers,
-                                    "chunk_size_bytes": chunk_size_bytes,
-                                    "total_size_bytes": total_size_bytes,
-                                    "chunk_interval_ms": chunk_interval_ms,
-                                    "concurrency": concurrency,
-                                    "duration_secs": duration_secs,
-                                    "result": {
-                                        "total_requests": r.total_requests,
-                                        "successful": r.successful,
-                                        "failed": r.failed,
-                                        "bytes_sent": r.bytes_sent,
-                                        "elapsed_ms": r.elapsed.as_millis(),
-                                        "req_per_sec": r.req_per_sec,
-                                        "avg_latency_ms": r.avg_latency_ms,
-                                        "p50_ms": r.p50_ms,
-                                        "p95_ms": r.p95_ms,
-                                        "p99_ms": r.p99_ms,
-                                        "status_counts": r.status_counts,
-                                        "error_samples": r.error_samples.iter().map(|s| serde_json::json!({
-                                            "status": s.status,
-                                            "server_header": s.server_header,
-                                            "body_excerpt": s.body_excerpt,
-                                        })).collect::<Vec<_>>(),
-                                    },
-                                }));
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("✗ {}: chunked bench failed: {}", label, e);
-                            any_failed = true;
-                        }
-                    }
-                }
-
-                if export_requests {
-                    if let Err(e) = std::fs::create_dir_all(&output) {
-                        eprintln!("Failed to create output directory {:?}: {}", output, e);
-                    } else {
-                        let path = output.join("chunked-requests.json");
-                        let payload = serde_json::json!({
-                            "spec": spec_path.display().to_string(),
-                            "base_url": base_url,
-                            "base_path": effective_base_path,
-                            "operations": export_records,
-                        });
-                        match serde_json::to_string_pretty(&payload) {
-                            Ok(s) => match std::fs::write(&path, s) {
-                                Ok(_) => println!(
-                                    "📝 --export-requests: wrote {} operations to {:?}",
-                                    export_records.len(),
-                                    path
-                                ),
-                                Err(e) => eprintln!("Failed to write {:?}: {}", path, e),
-                            },
-                            Err(e) => eprintln!("Failed to serialize export: {}", e),
-                        }
-                    }
-                }
-
-                if any_failed {
+            let cmd = ChunkedCommand {
+                target,
+                targets_file,
+                max_concurrency,
+                spec,
+                base_path,
+                operation_id,
+                method,
+                concurrency,
+                duration: std::time::Duration::from_secs(duration_secs),
+                chunk_size_bytes,
+                total_size_bytes,
+                chunk_interval_ms,
+                headers,
+                insecure,
+                validate_requests,
+                export_requests,
+                output,
+                rps,
+                cps,
+                rounds,
+                repeat_until,
+                keep_rounds,
+            };
+            match cmd.execute().await {
+                Ok(true) => {}
+                Ok(false) => std::process::exit(1),
+                Err(e) => {
+                    eprintln!("✗ Chunked bench failed: {:#}", e);
                     std::process::exit(1);
-                }
-            } else {
-                // Single-target mode (original behavior). --base-path,
-                // --validate-requests, --export-requests are spec-only.
-                if base_path.is_some() {
-                    eprintln!(
-                        "Note: --base-path has no effect without --spec; \
-                         single-target mode uses --target verbatim"
-                    );
-                }
-                if validate_requests {
-                    eprintln!("Note: --validate-requests requires --spec (skipped)");
-                }
-                if export_requests {
-                    eprintln!("Note: --export-requests requires --spec (skipped)");
-                }
-                let method = match reqwest::Method::from_bytes(method.to_uppercase().as_bytes()) {
-                    Ok(m) => m,
-                    Err(_) => {
-                        eprintln!("Invalid HTTP method: {}", method);
-                        std::process::exit(1);
-                    }
-                };
-                let cfg = ChunkedBenchConfig {
-                    target_url: target,
-                    method,
-                    concurrency,
-                    duration: std::time::Duration::from_secs(duration_secs),
-                    chunk_size_bytes,
-                    total_size_bytes,
-                    chunk_interval_ms,
-                    headers,
-                    skip_tls_verify: insecure,
-                };
-                match run(cfg).await {
-                    Ok(r) => print_result("single-target", &r),
-                    Err(e) => {
-                        eprintln!("Chunked bench failed: {}", e);
-                        std::process::exit(1);
-                    }
                 }
             }
         }

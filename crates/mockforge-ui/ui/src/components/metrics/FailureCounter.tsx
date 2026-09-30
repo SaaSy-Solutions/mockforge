@@ -1,5 +1,4 @@
-import { logger } from '@/utils/logger';
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import { Pie, Bar } from 'react-chartjs-2';
 import { getChartPalette } from '../../utils/chartTheme';
 import {

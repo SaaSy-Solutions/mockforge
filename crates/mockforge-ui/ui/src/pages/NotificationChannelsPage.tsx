@@ -38,6 +38,74 @@ const KIND_META: Record<NotificationChannelKind, { label: string; Icon: React.FC
     webhook: { label: 'Webhook', Icon: WebhookIcon },
 };
 
+// Each channel kind stores its destination under a different config key
+// (see incident_dispatcher.rs): webhook/slack `url`, email `to`,
+// pagerduty `routing_key`. The form collects one "target" and maps it.
+const TARGET_FIELD: Record<
+    NotificationChannelKind,
+    { label: string; placeholder: string; help: string; inputType: string; mono: boolean }
+> = {
+    webhook: {
+        label: 'Webhook URL',
+        placeholder: 'https://example.com/webhook',
+        help: 'We POST a JSON payload to this URL when an incident opens or resolves.',
+        inputType: 'url',
+        mono: true,
+    },
+    slack: {
+        label: 'Slack incoming-webhook URL',
+        placeholder: 'https://hooks.slack.com/services/...',
+        help: "Paste the incoming-webhook URL from the Slack app's setup page.",
+        inputType: 'url',
+        mono: true,
+    },
+    email: {
+        label: 'Recipients',
+        placeholder: 'oncall@example.com, team@example.com',
+        help: 'One or more email addresses, separated by commas.',
+        inputType: 'text',
+        mono: false,
+    },
+    pagerduty: {
+        label: 'PagerDuty integration key',
+        placeholder: '32-character Events API v2 routing key',
+        help: 'Find it under Service > Integrations > Events API v2 in PagerDuty.',
+        inputType: 'text',
+        mono: true,
+    },
+};
+
+function buildChannelConfig(kind: NotificationChannelKind, target: string): Record<string, unknown> {
+    const value = target.trim();
+    switch (kind) {
+        case 'email':
+            return {
+                to: value
+                    .split(',')
+                    .map((addr) => addr.trim())
+                    .filter(Boolean),
+            };
+        case 'pagerduty':
+            return { routing_key: value };
+        default:
+            return { url: value };
+    }
+}
+
+function describeChannelTarget(channel: NotificationChannel): string {
+    const config = channel.config as Record<string, unknown>;
+    if (channel.kind === 'email') {
+        const to = config.to;
+        if (Array.isArray(to)) return to.join(', ') || '(not set)';
+        return typeof to === 'string' && to ? to : '(not set)';
+    }
+    if (channel.kind === 'pagerduty') {
+        const key = config.routing_key ?? config.integration_key;
+        return typeof key === 'string' && key ? `routing key ending ${key.slice(-4)}` : '(not set)';
+    }
+    return typeof config.url === 'string' && config.url ? config.url : '(not set)';
+}
+
 export const NotificationChannelsPage: React.FC = () => {
     if (!isCloudMode()) {
         return (
@@ -58,8 +126,8 @@ const CloudView: React.FC = () => {
     const [draft, setDraft] = useState<{
         name: string;
         kind: NotificationChannelKind;
-        url: string;
-    }>({ name: '', kind: 'webhook', url: '' });
+        target: string;
+    }>({ name: '', kind: 'webhook', target: '' });
     const [fireResult, setFireResult] = useState<{ id: string; result: TestFireResult } | null>(null);
 
     const channelsQuery = useQuery({
@@ -73,12 +141,12 @@ const CloudView: React.FC = () => {
             cloudNotificationsApi.createChannel(orgId!, {
                 name: draft.name,
                 kind: draft.kind,
-                config: { url: draft.url },
+                config: buildChannelConfig(draft.kind, draft.target),
                 enabled: true,
             }),
         onSuccess: () => {
             setShowCreate(false);
-            setDraft({ name: '', kind: 'webhook', url: '' });
+            setDraft({ name: '', kind: 'webhook', target: '' });
             queryClient.invalidateQueries({ queryKey: ['cloud', 'notification-channels', orgId] });
         },
     });
@@ -117,7 +185,7 @@ const CloudView: React.FC = () => {
         <div className="p-6 max-w-7xl mx-auto">
             <div className="flex justify-between items-start mb-8">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">
                         Notification Channels
                     </h1>
                     <p className="text-gray-600 dark:text-gray-400">
@@ -242,7 +310,7 @@ const ChannelRow: React.FC<{
 }> = ({ channel, onToggle, onDelete, onTestFire, fireDisabled }) => {
     const meta = KIND_META[channel.kind] ?? { label: channel.kind, Icon: WebhookIcon };
     const Icon = meta.Icon;
-    const url = (channel.config as { url?: string }).url ?? '(not set)';
+    const target = describeChannelTarget(channel);
     return (
         <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
             <td className="px-6 py-4 font-medium text-gray-900 dark:text-gray-100">{channel.name}</td>
@@ -252,7 +320,7 @@ const ChannelRow: React.FC<{
                     {meta.label}
                 </span>
             </td>
-            <td className="px-6 py-4 font-mono text-gray-600 dark:text-gray-300 truncate max-w-[280px]">{url}</td>
+            <td className="px-6 py-4 font-mono text-gray-600 dark:text-gray-300 truncate max-w-[280px]" title={target}>{target}</td>
             <td className="px-6 py-4">
                 <span
                     className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium border ${
@@ -293,8 +361,8 @@ const ChannelRow: React.FC<{
 };
 
 const CreateModal: React.FC<{
-    state: { name: string; kind: NotificationChannelKind; url: string };
-    setState: (s: { name: string; kind: NotificationChannelKind; url: string }) => void;
+    state: { name: string; kind: NotificationChannelKind; target: string };
+    setState: (s: { name: string; kind: NotificationChannelKind; target: string }) => void;
     onClose: () => void;
     onSubmit: () => void;
     submitting: boolean;
@@ -318,7 +386,7 @@ const CreateModal: React.FC<{
                         value={state.name}
                         onChange={(e) => setState({ ...state, name: e.target.value })}
                         placeholder="e.g., #incidents Slack"
-                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-ring/30"
                     />
                 </div>
                 <div className="space-y-2">
@@ -326,26 +394,28 @@ const CreateModal: React.FC<{
                     <select
                         value={state.kind}
                         onChange={(e) => setState({ ...state, kind: e.target.value as NotificationChannelKind })}
-                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-blue-500"
+                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-ring/30"
                     >
                         <option value="webhook">Webhook</option>
                         <option value="slack">Slack (incoming-webhook)</option>
-                        <option value="email">Email (recorded but not yet sent)</option>
-                        <option value="pagerduty">PagerDuty (recorded but not yet sent)</option>
+                        <option value="email">Email</option>
+                        <option value="pagerduty">PagerDuty</option>
                     </select>
                 </div>
                 <div className="space-y-2">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">URL</label>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        {TARGET_FIELD[state.kind].label}
+                    </label>
                     <input
-                        type="url"
-                        value={state.url}
-                        onChange={(e) => setState({ ...state, url: e.target.value })}
-                        placeholder="https://example.com/webhook"
-                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs"
+                        type={TARGET_FIELD[state.kind].inputType}
+                        value={state.target}
+                        onChange={(e) => setState({ ...state, target: e.target.value })}
+                        placeholder={TARGET_FIELD[state.kind].placeholder}
+                        className={`w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-ring/30 ${
+                            TARGET_FIELD[state.kind].mono ? 'font-mono text-xs' : 'text-sm'
+                        }`}
                     />
-                    <p className="text-xs text-gray-500">
-                        For Slack, paste the incoming-webhook URL from the integration's setup page.
-                    </p>
+                    <p className="text-xs text-gray-500">{TARGET_FIELD[state.kind].help}</p>
                 </div>
             </div>
             <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
@@ -357,7 +427,7 @@ const CreateModal: React.FC<{
                 </button>
                 <button
                     onClick={onSubmit}
-                    disabled={!state.name || !state.url || submitting}
+                    disabled={!state.name || !state.target.trim() || submitting}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {submitting ? 'Creating…' : 'Create'}

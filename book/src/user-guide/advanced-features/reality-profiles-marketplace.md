@@ -1,5 +1,7 @@
 # Reality Profiles Marketplace
 
+> **Experimental.** This feature ships in MockForge but is early: `mockforge reality-profile` installs the four built-in packs or a local file, but there is no remote marketplace yet and applying a pack does not yet change runtime behavior. Behavior, commands, and configuration may change between releases. Report issues at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+
 **Pillars:** [Reality]
 
 The Reality Profiles Marketplace provides pre-tuned "realism packs" that bundle personas, scenarios, chaos rules, latency curves, error distributions, data mutation behaviors, and protocol behaviors into ready-to-use packages. Think of them as MockForge's "Kubernetes Operators" moment—reusable ops-level behaviors.

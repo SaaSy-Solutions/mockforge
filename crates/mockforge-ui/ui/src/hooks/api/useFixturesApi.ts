@@ -9,16 +9,14 @@ import { queryKeys } from './queryKeys';
 export function useFileContent() {
   return useMutation({
     mutationFn: ({ path, type }: { path: string; type: string }) =>
-      filesApi.getFileContent({ path, type }),
+      filesApi.getFileContent({ file_path: path, file_type: type }),
   });
 }
 
 export function useSaveFileContent() {
-  const _queryClient = useQueryClient();
-
   return useMutation({
     mutationFn: ({ path, content }: { path: string; content: string }) =>
-      filesApi.saveFileContent({ path, content }),
+      filesApi.saveFileContent({ file_path: path, content }),
     onSuccess: () => {
       // Could invalidate file-related queries here if we had them
     },

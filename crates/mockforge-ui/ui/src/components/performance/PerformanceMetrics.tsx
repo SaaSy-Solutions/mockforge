@@ -8,10 +8,9 @@
  * - Request counts
  */
 
-import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/Card';
 import { usePerformanceSnapshot } from '../../hooks/usePerformance';
-import { Activity, TrendingUp, AlertCircle, Clock, Zap } from 'lucide-react';
+import { Activity, AlertCircle, Clock, Zap } from 'lucide-react';
 
 export function PerformanceMetrics() {
   const { data: snapshot, isLoading, error } = usePerformanceSnapshot();

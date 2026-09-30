@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import React, { useState } from 'react';
 import { cn } from '../../utils/cn';
 import { Server, Globe, Zap, Database, RefreshCw, AlertTriangle } from 'lucide-react';
@@ -191,13 +190,13 @@ export function ServerTable() {
         return (
           <div
             key={server.server_type}
-            className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-accent hover:text-accent-foreground/50 transition-colors"
+            className="flex items-center justify-between p-4 rounded-lg border border-border hover:bg-muted/60 transition-colors"
           >
             <div className="flex items-center gap-4">
-              <div className="p-3 rounded-xl bg-info-50 dark:bg-info-900/20 text-info-600 dark:text-info-400">
-                {server.server_type === 'HTTP' && <Globe className="h-5 w-5" />}
-                {server.server_type === 'WebSocket' && <Zap className="h-5 w-5" />}
-                {server.server_type === 'gRPC' && <Database className="h-5 w-5" />}
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+                {server.server_type === 'HTTP' && <Globe className="h-4 w-4" />}
+                {server.server_type === 'WebSocket' && <Zap className="h-4 w-4" />}
+                {server.server_type === 'gRPC' && <Database className="h-4 w-4" />}
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2">
@@ -242,21 +241,21 @@ export function ServerTable() {
 
             <div className="flex items-center gap-6 text-sm">
               <div className="text-center">
-                <div className="font-medium text-foreground">
+                <div className="font-mono font-medium tabular-nums text-foreground">
                   {formatUptime(server.uptime_seconds)}
                 </div>
                 <div className="text-muted-foreground">Uptime</div>
               </div>
 
               <div className="text-center">
-                <div className="font-medium text-foreground">
+                <div className="font-mono font-medium tabular-nums text-foreground">
                   {server.total_requests.toLocaleString()}
                 </div>
                 <div className="text-muted-foreground">Requests</div>
               </div>
 
               <div className="text-center">
-                <div className="font-medium text-foreground">
+                <div className="font-mono font-medium tabular-nums text-foreground">
                   {server.active_connections}
                 </div>
                 <div className="text-muted-foreground">Active</div>
@@ -276,10 +275,10 @@ export function ServerTable() {
         return (
           <div
             key={server.server_type}
-            className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-accent hover:text-accent-foreground/50 transition-colors"
+            className="flex items-center justify-between p-3 rounded-lg border border-border hover:bg-muted/60 transition-colors"
           >
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-info-50 dark:bg-info-900/20 text-info-600 dark:text-info-400">
+              <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
                 {server.server_type === 'HTTP' && <Globe className="h-4 w-4" />}
                 {server.server_type === 'WebSocket' && <Zap className="h-4 w-4" />}
                 {server.server_type === 'gRPC' && <Database className="h-4 w-4" />}
@@ -315,21 +314,21 @@ export function ServerTable() {
 
             <div className="flex items-center gap-3 text-xs">
               <div className="text-center">
-                <div className="font-medium text-foreground">
+                <div className="font-mono font-medium tabular-nums text-foreground">
                   {formatUptime(server.uptime_seconds)}
                 </div>
                 <div className="text-muted-foreground">Uptime</div>
               </div>
 
               <div className="text-center">
-                <div className="font-medium text-foreground">
+                <div className="font-mono font-medium tabular-nums text-foreground">
                   {server.total_requests.toLocaleString()}
                 </div>
                 <div className="text-muted-foreground">Req</div>
               </div>
 
               <div className="text-center">
-                <div className="font-medium text-foreground">
+                <div className="font-mono font-medium tabular-nums text-foreground">
                   {server.active_connections}
                 </div>
                 <div className="text-muted-foreground">Active</div>

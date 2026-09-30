@@ -4,10 +4,15 @@
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { generateCurlCommand, copyToClipboard } from '../curlGenerator';
+import type { RouteInfo } from '../../types';
+
+function makeRoute(method: string, path: string): RouteInfo {
+  return { id: `${method} ${path}`, method, path, statusCode: 200 };
+}
 
 describe('generateCurlCommand', () => {
   it('generates basic GET request', () => {
-    const route = { method: 'GET', path: '/api/users' };
+    const route = makeRoute('GET', '/api/users');
     const curl = generateCurlCommand(route);
 
     expect(curl).toContain('curl');
@@ -17,49 +22,49 @@ describe('generateCurlCommand', () => {
   });
 
   it('omits -X for GET requests', () => {
-    const route = { method: 'GET', path: '/api/users' };
+    const route = makeRoute('GET', '/api/users');
     const curl = generateCurlCommand(route);
 
     expect(curl).not.toContain('-X GET');
   });
 
   it('includes method for POST requests', () => {
-    const route = { method: 'POST', path: '/api/users' };
+    const route = makeRoute('POST', '/api/users');
     const curl = generateCurlCommand(route);
 
     expect(curl).toContain('-X POST');
   });
 
   it('includes method for PUT requests', () => {
-    const route = { method: 'PUT', path: '/api/users/1' };
+    const route = makeRoute('PUT', '/api/users/1');
     const curl = generateCurlCommand(route);
 
     expect(curl).toContain('-X PUT');
   });
 
   it('includes method for DELETE requests', () => {
-    const route = { method: 'DELETE', path: '/api/users/1' };
+    const route = makeRoute('DELETE', '/api/users/1');
     const curl = generateCurlCommand(route);
 
     expect(curl).toContain('-X DELETE');
   });
 
   it('uses custom base URL when provided', () => {
-    const route = { method: 'GET', path: '/api/users' };
+    const route = makeRoute('GET', '/api/users');
     const curl = generateCurlCommand(route, { baseUrl: 'https://example.com' });
 
     expect(curl).toContain('"https://example.com/api/users"');
   });
 
   it('handles absolute URLs in path', () => {
-    const route = { method: 'GET', path: 'https://api.example.com/users' };
+    const route = makeRoute('GET', 'https://api.example.com/users');
     const curl = generateCurlCommand(route);
 
     expect(curl).toContain('"https://api.example.com/users"');
   });
 
   it('includes headers when provided', () => {
-    const route = { method: 'GET', path: '/api/users' };
+    const route = makeRoute('GET', '/api/users');
     const headers = {
       'Content-Type': 'application/json',
       'Authorization': 'Bearer token123',
@@ -71,7 +76,7 @@ describe('generateCurlCommand', () => {
   });
 
   it('includes body for POST requests', () => {
-    const route = { method: 'POST', path: '/api/users' };
+    const route = makeRoute('POST', '/api/users');
     const body = '{"name": "John"}';
     const curl = generateCurlCommand(route, { body });
 
@@ -79,7 +84,7 @@ describe('generateCurlCommand', () => {
   });
 
   it('includes body for PUT requests', () => {
-    const route = { method: 'PUT', path: '/api/users/1' };
+    const route = makeRoute('PUT', '/api/users/1');
     const body = '{"name": "Jane"}';
     const curl = generateCurlCommand(route, { body });
 
@@ -87,7 +92,7 @@ describe('generateCurlCommand', () => {
   });
 
   it('includes body for PATCH requests', () => {
-    const route = { method: 'PATCH', path: '/api/users/1' };
+    const route = makeRoute('PATCH', '/api/users/1');
     const body = '{"name": "Bob"}';
     const curl = generateCurlCommand(route, { body });
 
@@ -95,7 +100,7 @@ describe('generateCurlCommand', () => {
   });
 
   it('does not include body for GET requests', () => {
-    const route = { method: 'GET', path: '/api/users' };
+    const route = makeRoute('GET', '/api/users');
     const body = '{"name": "John"}';
     const curl = generateCurlCommand(route, { body });
 
@@ -103,7 +108,7 @@ describe('generateCurlCommand', () => {
   });
 
   it('does not include body for DELETE requests', () => {
-    const route = { method: 'DELETE', path: '/api/users/1' };
+    const route = makeRoute('DELETE', '/api/users/1');
     const body = '{"confirm": true}';
     const curl = generateCurlCommand(route, { body });
 
@@ -111,21 +116,21 @@ describe('generateCurlCommand', () => {
   });
 
   it('disables follow redirects when specified', () => {
-    const route = { method: 'GET', path: '/api/users' };
+    const route = makeRoute('GET', '/api/users');
     const curl = generateCurlCommand(route, { followRedirects: false });
 
     expect(curl).not.toContain('-L');
   });
 
   it('uses custom timeout when provided', () => {
-    const route = { method: 'GET', path: '/api/users' };
+    const route = makeRoute('GET', '/api/users');
     const curl = generateCurlCommand(route, { timeout: 60 });
 
     expect(curl).toContain('--max-time 60');
   });
 
   it('formats command with line breaks', () => {
-    const route = { method: 'POST', path: '/api/users' };
+    const route = makeRoute('POST', '/api/users');
     const headers = { 'Content-Type': 'application/json' };
     const body = '{"name": "John"}';
     const curl = generateCurlCommand(route, { headers, body });
@@ -134,7 +139,7 @@ describe('generateCurlCommand', () => {
   });
 
   it('generates complete command with all options', () => {
-    const route = { method: 'POST', path: '/api/users' };
+    const route = makeRoute('POST', '/api/users');
     const options = {
       baseUrl: 'https://api.example.com',
       headers: {

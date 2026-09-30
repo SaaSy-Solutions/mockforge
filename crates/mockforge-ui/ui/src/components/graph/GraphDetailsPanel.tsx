@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, ExternalLink, Copy, Check } from 'lucide-react';
+import { X, Copy, Check } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/Card';
 import { Badge } from '../ui/Badge';

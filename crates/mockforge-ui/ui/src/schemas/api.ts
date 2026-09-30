@@ -40,6 +40,8 @@ export const WorkspaceSummarySchema = z.object({
   updated_at: z.string().optional(),
   route_count: z.number().optional(),
   fixture_count: z.number().optional(),
+  request_count: z.number().optional(),
+  folder_count: z.number().optional(),
 });
 
 export const WorkspaceDetailsSchema = z.object({

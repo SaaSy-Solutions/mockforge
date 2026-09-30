@@ -42,10 +42,10 @@ import {
 } from '@mui/material';
 import {
   Search as SearchIcon,
+  Category as CategoryIcon,
   Star as StarIcon,
   Download as DownloadIcon,
   Visibility as ViewIcon,
-  Category as CategoryIcon,
   Security as SecurityIcon,
   Code as CodeIcon,
   GitHub as GitHubIcon,
@@ -166,6 +166,8 @@ export const PluginRegistryPage: React.FC = () => {
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
   const [pageLoading, setPageLoading] = useState(false);
+  const [hasLoaded, setHasLoaded] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
   const [totalPlugins, setTotalPlugins] = useState(0);
   const [publishOpen, setPublishOpen] = useState(false);
@@ -243,6 +245,21 @@ export const PluginRegistryPage: React.FC = () => {
     filterPlugins();
   }, [plugins, minRating, minSecurityScore]);
 
+  const hasActiveFilters =
+    searchQuery.trim().length > 0 ||
+    selectedCategory !== 'all' ||
+    selectedLanguage !== 'all' ||
+    minRating > 0 ||
+    minSecurityScore > 0;
+
+  const clearFilters = () => {
+    setSearchQuery('');
+    setSelectedCategory('all');
+    setSelectedLanguage('all');
+    setMinRating(0);
+    setMinSecurityScore(0);
+  };
+
   const loadPlugins = async (nextPage: number, append: boolean) => {
     setPageLoading(true);
     try {
@@ -266,12 +283,17 @@ export const PluginRegistryPage: React.FC = () => {
         const loaded: Plugin[] = data.plugins || [];
         setTotalPlugins(typeof data.total === 'number' ? data.total : loaded.length);
         setPlugins((prev) => (append ? [...prev, ...loaded] : loaded));
+        setLoadError(null);
         loadBadges(loaded);
+      } else {
+        setLoadError(`The plugin registry returned HTTP ${response.status}.`);
       }
     } catch (error) {
       console.error('Failed to load plugins:', error);
+      setLoadError('The plugin registry could not be reached.');
     } finally {
       setPageLoading(false);
+      setHasLoaded(true);
     }
   };
 
@@ -626,7 +648,7 @@ export const PluginRegistryPage: React.FC = () => {
   };
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box>
       <MarketplaceTabs />
 
       {/* Phase 0 demand-validation CTA — only renders in cloud mode. */}
@@ -680,7 +702,7 @@ export const PluginRegistryPage: React.FC = () => {
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 InputProps={{
-                  startAdornment: <SearchIcon sx={{ mr: 1, color: 'text.secondary' }} />,
+                  startAdornment: <SearchIcon className="mr-2 text-muted-foreground" />,
                 }}
               />
             </Grid>
@@ -690,7 +712,7 @@ export const PluginRegistryPage: React.FC = () => {
                 <Select
                   value={selectedCategory}
                   label="Category"
-                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  onChange={(e) => setSelectedCategory(String(e.target.value))}
                 >
                   {categories.map((cat) => (
                     <MenuItem key={cat.value} value={cat.value}>
@@ -706,7 +728,7 @@ export const PluginRegistryPage: React.FC = () => {
                 <Select
                   value={selectedLanguage}
                   label="Language"
-                  onChange={(e) => setSelectedLanguage(e.target.value)}
+                  onChange={(e) => setSelectedLanguage(String(e.target.value))}
                 >
                   {languages.map((lang) => (
                     <MenuItem key={lang.value} value={lang.value}>
@@ -722,7 +744,7 @@ export const PluginRegistryPage: React.FC = () => {
                 <Select
                   value={sortBy}
                   label="Sort By"
-                  onChange={(e) => setSortBy(e.target.value)}
+                  onChange={(e) => setSortBy(String(e.target.value))}
                 >
                   {sortOptions.map((opt) => (
                     <MenuItem key={opt.value} value={opt.value}>
@@ -734,7 +756,7 @@ export const PluginRegistryPage: React.FC = () => {
             </Grid>
             <Grid item xs={6} md={1.5}>
               <Box>
-                <Typography variant="caption" display="block" gutterBottom>
+                <Typography variant="caption" gutterBottom sx={{ display: 'block' }}>
                   Min Rating
                 </Typography>
                 <Rating
@@ -746,7 +768,7 @@ export const PluginRegistryPage: React.FC = () => {
             </Grid>
             <Grid item xs={6} md={1.5}>
               <Box>
-                <Typography variant="caption" display="block" gutterBottom>
+                <Typography variant="caption" gutterBottom sx={{ display: 'block' }}>
                   Min Security
                 </Typography>
                 <TextField
@@ -763,19 +785,56 @@ export const PluginRegistryPage: React.FC = () => {
         </CardContent>
       </Card>
 
+      {loadError && (
+        <Alert
+          severity="error"
+          sx={{ mb: 3 }}
+          action={
+            <Button color="inherit" size="small" onClick={() => loadPlugins(0, false)}>
+              Retry
+            </Button>
+          }
+        >
+          {loadError}
+        </Alert>
+      )}
+
       {/* Results Summary */}
-      <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Typography variant="body2" color="text.secondary">
-          {filteredPlugins.length} of {totalPlugins || plugins.length} plugin
-          {totalPlugins === 1 ? '' : 's'} {filteredPlugins.length !== plugins.length && '(filtered) '}
-          loaded
-        </Typography>
-        {pageLoading && (
-          <Typography variant="caption" color="text.secondary">
-            Loading…
+      {filteredPlugins.length > 0 && (
+        <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <Typography variant="body2" color="text.secondary">
+            Showing {filteredPlugins.length} of {totalPlugins || plugins.length} plugin
+            {(totalPlugins || plugins.length) === 1 ? '' : 's'}
+            {filteredPlugins.length !== plugins.length && ' (filtered)'}
           </Typography>
-        )}
-      </Box>
+          {pageLoading && (
+            <Typography variant="caption" color="text.secondary">
+              Loading…
+            </Typography>
+          )}
+        </Box>
+      )}
+
+      {hasLoaded && !loadError && filteredPlugins.length === 0 && (
+        hasActiveFilters ? (
+          <Paper variant="outlined" sx={{ p: 4, textAlign: 'center', mb: 3 }}>
+            <Typography variant="h6" gutterBottom>
+              No plugins match these filters
+            </Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Try a different search term or clear the filters to see the full catalog.
+            </Typography>
+            <Button variant="outlined" onClick={clearFilters}>
+              Clear filters
+            </Button>
+          </Paper>
+        ) : (
+          <PluginRegistryEmptyState
+            canPublish={!!currentUser}
+            onPublish={() => setPublishOpen(true)}
+          />
+        )
+      )}
 
       {/* Plugins Grid */}
       <Grid container spacing={3}>
@@ -890,10 +949,8 @@ export const PluginRegistryPage: React.FC = () => {
                   {plugin.repository && (
                     <IconButton
                       size="small"
-                      component="a"
-                      href={plugin.repository}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                      aria-label="Open repository"
+                      onClick={() => window.open(plugin.repository, '_blank', 'noopener,noreferrer')}
                     >
                       <GitHubIcon />
                     </IconButton>
@@ -1058,7 +1115,7 @@ export const PluginRegistryPage: React.FC = () => {
                             precision={0.1}
                             size="small"
                           />
-                          <Typography variant="caption" color="text.secondary" display="block">
+                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
                             {reviewStats.totalReviews} review
                             {reviewStats.totalReviews !== 1 ? 's' : ''}
                           </Typography>
@@ -1176,7 +1233,7 @@ export const PluginRegistryPage: React.FC = () => {
                                     borderRadius: 1,
                                   }}
                                 >
-                                  <Typography variant="caption" color="primary" fontWeight="bold">
+                                  <Typography variant="caption" color="primary" sx={{ fontWeight: 'bold' }}>
                                     Author response ·{' '}
                                     {new Date(review.authorResponse.createdAt).toLocaleDateString()}
                                   </Typography>
@@ -1187,7 +1244,7 @@ export const PluginRegistryPage: React.FC = () => {
                               )}
                             </Box>
                           </ListItem>
-                          <Divider component="li" />
+                          <Divider />
                         </React.Fragment>
                       ))}
                     </List>
@@ -1388,7 +1445,7 @@ export const PluginRegistryPage: React.FC = () => {
         <DialogContent>
           <Stack spacing={2} sx={{ mt: 1 }}>
             <Box>
-              <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+              <Typography variant="caption" color="text.secondary" gutterBottom sx={{ display: 'block' }}>
                 Rating
               </Typography>
               <Rating
@@ -1577,3 +1634,44 @@ export const PluginRegistryPage: React.FC = () => {
 };
 
 export default PluginRegistryPage;
+
+const PLUGIN_DOCS_URL = 'https://docs.mockforge.dev/user-guide/plugins.html';
+
+const PluginRegistryEmptyState: React.FC<{ canPublish: boolean; onPublish: () => void }> = ({
+  canPublish,
+  onPublish,
+}) => (
+  <Paper
+    variant="outlined"
+    sx={{ p: 4, mb: 3, textAlign: 'center' }}
+    data-testid="plugin-registry-empty"
+  >
+    <Avatar sx={{ width: 56, height: 56, mx: 'auto', mb: 2, bgcolor: 'action.hover', color: 'primary.main' }}>
+      <CategoryIcon />
+    </Avatar>
+    <Typography variant="h5" gutterBottom>
+      No plugins published yet
+    </Typography>
+    <Typography variant="body1" color="text.secondary" sx={{ maxWidth: 560, mx: 'auto', mb: 3 }}>
+      Plugins extend MockForge with custom authentication, response generators, data sources, and
+      middleware. Plugins published to the registry will appear here with ratings, security scores,
+      and one-click install commands.
+    </Typography>
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, justifyContent: 'center', mb: 3 }}>
+      <Button variant="contained" href={PLUGIN_DOCS_URL} target="_blank" rel="noopener noreferrer">
+        Read the plugin guide
+      </Button>
+      {canPublish && (
+        <Button variant="outlined" onClick={onPublish}>
+          Publish a plugin
+        </Button>
+      )}
+    </Box>
+    <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+      You can already install a plugin from Git, a URL, or a local path:
+    </Typography>
+    <code className="inline-block max-w-full break-all rounded-md bg-muted px-3 py-1.5 font-mono text-[13px] text-foreground">
+      mockforge plugin install https://github.com/user/repo#v1.0.0
+    </code>
+  </Paper>
+);

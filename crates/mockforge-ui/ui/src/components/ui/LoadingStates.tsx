@@ -1,4 +1,3 @@
-import { logger } from '@/utils/logger';
 import React from 'react';
 import { cn } from '../../utils/cn';
 import { SkeletonCard, SkeletonMetricCard, SkeletonChart, SkeletonTable, SkeletonList } from './Skeleton';
@@ -23,7 +22,7 @@ export function Spinner({ size = 'md', className, color = 'primary' }: SpinnerPr
   const colors = {
     primary: 'text-primary',
     brand: 'text-brand',
-    muted: 'text-secondary',
+    muted: 'text-muted-foreground',
   };
 
   return (

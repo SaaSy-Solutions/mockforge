@@ -25,6 +25,7 @@ import {
   Stack,
   TextField,
   Typography,
+  type Theme,
 } from '@mui/material';
 import {
   Cloud as CloudIcon,
@@ -40,6 +41,9 @@ import {
 
 const QUERY_KEY = ['cloud-plugins', 'beta-interest', 'me'];
 const USE_CASE_MAX = 2_000;
+const USE_CASE_INPUT_PROPS: React.InputHTMLAttributes<HTMLInputElement> & { 'data-testid': string } = {
+  'data-testid': 'beta-use-case-input',
+};
 
 export const CloudPluginsBetaCta: React.FC = () => {
   if (!isCloudMode()) return null;
@@ -124,7 +128,7 @@ const Inner: React.FC = () => {
               value={useCase}
               onChange={(e) => setUseCase(e.target.value.slice(0, USE_CASE_MAX))}
               helperText={`${useCase.length} / ${USE_CASE_MAX}`}
-              inputProps={{ 'data-testid': 'beta-use-case-input' }}
+              inputProps={USE_CASE_INPUT_PROPS}
             />
             {submit.isError && (
               <Alert severity="error">
@@ -164,6 +168,7 @@ const CtaBanner: React.FC<{ onClick: () => void }> = ({ onClick }) => (
       display: 'flex',
       alignItems: 'center',
       gap: 2,
+      flexWrap: 'wrap',
       p: 2,
       mb: 3,
       borderRadius: 2,
@@ -173,13 +178,13 @@ const CtaBanner: React.FC<{ onClick: () => void }> = ({ onClick }) => (
     }}
     data-testid="cloud-plugins-beta-cta"
   >
-    <CloudIcon sx={{ color: 'primary.main' }} />
-    <Box sx={{ flex: 1 }}>
+    <CloudIcon className="text-primary" />
+    <Box sx={{ flex: '1 1 220px', minWidth: 0 }}>
       <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
         Coming soon: run plugins in your cloud workspace
       </Typography>
       <Typography variant="body2" color="text.secondary">
-        Help us decide what ships first — request beta access in 30 seconds.
+        Help us decide what ships first. Requesting beta access takes 30 seconds.
       </Typography>
     </Box>
     <Button variant="contained" size="small" onClick={onClick}>
@@ -201,7 +206,7 @@ const SignedUpBanner: React.FC<{ onUpdate: () => void }> = ({ onUpdate }) => {
         p: 1.5,
         mb: 3,
         borderRadius: 2,
-        background: (theme) =>
+        background: (theme: Theme) =>
           theme.palette.mode === 'dark'
             ? 'rgba(34,197,94,0.08)'
             : 'rgba(34,197,94,0.06)',
@@ -210,7 +215,7 @@ const SignedUpBanner: React.FC<{ onUpdate: () => void }> = ({ onUpdate }) => {
       }}
       data-testid="cloud-plugins-beta-signed-up"
     >
-      <CheckCircleIcon sx={{ color: 'success.main' }} />
+      <CheckCircleIcon className="text-success" />
       <Box sx={{ flex: 1 }}>
         <Typography variant="body2">
           You're on the cloud-plugins beta list. We'll reach out as the runtime

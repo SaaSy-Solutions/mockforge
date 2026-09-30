@@ -47,7 +47,7 @@ export const CloudPluginsPage: React.FC = () => {
 const LocalModeNotice: React.FC = () => {
   const navigate = useNavigate();
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div>
       <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800 dark:border-blue-900 dark:bg-blue-900/20 dark:text-blue-300">
         Cloud plugin management only applies to cloud-hosted deployments. For
         plugins on a local MockForge runtime, open the{' '}
@@ -73,10 +73,10 @@ const CloudView: React.FC = () => {
   });
 
   return (
-    <div className="p-6 max-w-7xl mx-auto space-y-6">
+    <div className="space-y-6">
       <header className="flex items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold flex items-center gap-2">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
             <Puzzle className="w-6 h-6" />
             {t('page.cloudPlugins.title')}
           </h1>
@@ -126,12 +126,11 @@ const CloudView: React.FC = () => {
 
 const BetaBanner: React.FC = () => (
   <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
-    <p className="font-medium">Cloud plugin runtime — beta</p>
+    <p className="font-medium">Cloud plugin runtime (beta)</p>
     <p className="mt-1">
-      Cloud plugin management is rolling out alongside the cloud plugin
-      runtime. Attach, permission, and detach controls land in the next
-      sub-PRs of Phase 3. Today this page lists deployments and any plugins
-      already wired up.
+      This page lists each hosted-mock deployment and the plugins attached
+      to it. Attaching and detaching plugins from the dashboard opens with
+      the cloud plugin runtime beta; request access from the Plugin Registry.
     </p>
   </div>
 );
