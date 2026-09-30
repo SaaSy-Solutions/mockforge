@@ -13,6 +13,7 @@ use axum::{
     middleware::Next,
     response::Response,
 };
+use tracing::Instrument;
 use uuid::Uuid;
 
 /// The header name for request ID
@@ -37,13 +38,15 @@ pub async fn request_id_middleware(request: Request, next: Next) -> Response {
         uri = %request.uri(),
     );
 
-    // Execute the request within the span
-    let _guard = span.enter();
-
-    tracing::debug!(request_id = %request_id, "Processing request");
-
-    // Call the next middleware/handler
-    let mut response = next.run(request).await;
+    // Run the rest of the chain inside the span. `instrument` re-enters the
+    // span on every poll; a `span.enter()` guard held across the await would
+    // corrupt the per-thread span stacks once the task hops worker threads.
+    let mut response = async {
+        tracing::debug!(request_id = %request_id, "Processing request");
+        next.run(request).await
+    }
+    .instrument(span)
+    .await;
 
     // Add request ID to response headers
     if let Ok(header_value) = HeaderValue::from_str(&request_id) {
@@ -105,6 +108,52 @@ mod tests {
         Router::new()
             .route("/test", get(test_handler))
             .layer(axum::middleware::from_fn(request_id_middleware))
+    }
+
+    /// Regression: the middleware used to hold `span.enter()` across
+    /// `next.run(..).await`. When the request task yielded and resumed on
+    /// another worker thread, the thread-local span stacks went out of sync and
+    /// `tracing-subscriber` panicked ("tried to clone a span that already
+    /// closed") inside a handler, dropping the connection mid-request.
+    #[test]
+    fn request_span_survives_yielding_handlers_on_multi_thread_runtime() {
+        let dispatch = tracing::Dispatch::new(tracing_subscriber::registry());
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(4)
+            .enable_all()
+            .on_thread_start(move || std::mem::forget(tracing::dispatcher::set_default(&dispatch)))
+            .build()
+            .unwrap();
+
+        runtime.block_on(async {
+            // Mirrors what sqlx does on every query: wrap a future in
+            // `Span::current()`, which clones the current span.
+            async fn yielding_handler() -> &'static str {
+                use tracing::Instrument;
+                for _ in 0..16 {
+                    tokio::task::yield_now().in_current_span().await;
+                }
+                "OK"
+            }
+
+            let app = Router::new()
+                .route("/yield", get(yielding_handler))
+                .layer(axum::middleware::from_fn(request_id_middleware));
+
+            let requests: Vec<_> = (0..2000)
+                .map(|_| {
+                    let app = app.clone();
+                    tokio::spawn(async move {
+                        let request = Request::builder().uri("/yield").body(Body::empty()).unwrap();
+                        app.oneshot(request).await.unwrap().status()
+                    })
+                })
+                .collect();
+
+            for request in requests {
+                assert_eq!(request.await.expect("request task panicked"), StatusCode::OK);
+            }
+        });
     }
 
     #[test]
