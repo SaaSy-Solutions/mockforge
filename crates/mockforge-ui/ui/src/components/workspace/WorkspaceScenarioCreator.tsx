@@ -163,7 +163,7 @@ export function WorkspaceScenarioCreator({
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           placeholder='e.g., Create a workspace that simulates a bank with flaky foreign exchange rates and slow KYC, with 3 existing users and 5 open disputes'
-          className="w-full min-h-[120px] px-3 py-2 border border-border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-info"
+          className="w-full min-h-[120px] px-3 py-2 border border-border rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-ring/30 focus:border-info"
           disabled={isProcessing}
         />
         <p className="text-xs text-muted-foreground">

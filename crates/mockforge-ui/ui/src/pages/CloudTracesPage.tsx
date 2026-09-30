@@ -62,7 +62,7 @@ const CloudView: React.FC = () => {
         <div className="p-6 max-w-7xl mx-auto">
             <div className="flex justify-between items-start mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Cloud Traces</h1>
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground">Cloud Traces</h1>
                     <p className="text-gray-600 dark:text-gray-400">
                         Cross-deployment OTLP trace search scoped to your org.
                     </p>
@@ -89,7 +89,7 @@ const CloudView: React.FC = () => {
                             setFilters({ ...filters, service_name: e.target.value || undefined })
                         }
                         placeholder="service name (exact)"
-                        className="px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                        className="px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm outline-none focus:ring-2 focus:ring-ring/30"
                     />
                     <input
                         type="text"
@@ -98,7 +98,7 @@ const CloudView: React.FC = () => {
                             setFilters({ ...filters, name_contains: e.target.value || undefined })
                         }
                         placeholder="span name (substring)"
-                        className="px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                        className="px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm outline-none focus:ring-2 focus:ring-ring/30"
                     />
                     <select
                         value={filters.status ?? 'any'}
@@ -108,7 +108,7 @@ const CloudView: React.FC = () => {
                                 status: e.target.value as TraceQueryRequest['status'],
                             })
                         }
-                        className="px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                        className="px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg text-sm outline-none focus:ring-2 focus:ring-ring/30"
                     >
                         <option value="any">all statuses</option>
                         <option value="ok">ok</option>

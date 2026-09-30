@@ -598,7 +598,7 @@ export function IncidentDashboardPage() {
   const statistics = statsData?.statistics || statsData;
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       <PageHeader
         title="Incident Dashboard"
         subtitle="Monitor and manage contract drift incidents"

@@ -449,7 +449,7 @@ export const ScenarioMarketplacePage: React.FC = () => {
   }, [scenarios, isAuthenticated]);
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box>
       <MarketplaceTabs />
 
       {/* Header */}

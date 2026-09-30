@@ -128,11 +128,11 @@ export function FlowExecutor({ flowId, onClose }: FlowExecutorProps) {
       case 'pending':
         return <Badge variant="outline">Pending</Badge>;
       case 'running':
-        return <Badge className="bg-info-500">Running</Badge>;
+        return <Badge variant="info">Running</Badge>;
       case 'success':
-        return <Badge className="bg-success-500">Success</Badge>;
+        return <Badge variant="success">Success</Badge>;
       case 'error':
-        return <Badge className="bg-danger-500">Error</Badge>;
+        return <Badge variant="danger">Error</Badge>;
     }
   };
 

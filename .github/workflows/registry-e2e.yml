@@ -302,7 +302,7 @@ jobs:
   #
   # Re-runs the same E2E suite with the request-path pool bound to a
   # NOSUPERUSER / NOBYPASSRLS role, so the tenant-isolation policies from
-  # migrations 20250101000082 + 20250101000084 are ACTIVE. Any covered-table
+  # migrations 20250101000082 + 20250101000086 are ACTIVE. Any covered-table
   # query (36 org-scoped tables) that reaches
   # the database without `app.current_org_id` bound fail-closes to zero rows
   # and the E2E assertion depending on it fails.
@@ -362,7 +362,9 @@ jobs:
           sudo apt-get install -y protobuf-compiler
 
       - name: Ensure psql client
-        run: 'command -v psql > /dev/null 2>&1 || { echo "::error::postgresql-client missing on self-hosted runner. Run: sudo apt-get install -y postgresql-client"; exit 1; }'
+        # ubuntu-latest images no longer ship psql; the RLS gate script
+        # provisions the NOBYPASSRLS role through it.
+        run: command -v psql > /dev/null 2>&1 || sudo apt-get install -y postgresql-client
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2

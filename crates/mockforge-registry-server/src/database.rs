@@ -9,7 +9,7 @@ pub struct Database {
     /// `ENABLE ROW LEVEL SECURITY`) and cross-org background workers that
     /// legitimately sweep every tenant. This role MUST have `BYPASSRLS` (or be
     /// a superuser); `check_rls_roles` logs an ERROR at startup when it does
-    /// not, and migration 20250101000084 refuses to apply.
+    /// not, and migration 20250101000086 refuses to apply.
     pool: PgPool,
     /// Request-path pool. When `APP_DATABASE_URL` is set this is its own pool,
     /// which SHOULD connect as a `NOSUPERUSER NOBYPASSRLS` role so the RLS

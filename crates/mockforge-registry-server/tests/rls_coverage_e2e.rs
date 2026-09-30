@@ -1,5 +1,5 @@
 //! End-to-end coverage for the HTTP surfaces backed by the tables that became
-//! Postgres-RLS-forced in migration `20250101000084_rls_tenant_isolation_coverage.sql`
+//! Postgres-RLS-forced in migration `20250101000086_rls_tenant_isolation_coverage.sql`
 //! (issue #1087).
 //!
 //! Under `scripts/rls-e2e-gate.sh` the registry server runs its request-path

@@ -280,7 +280,7 @@ export function OverridesPage() {
 
   if (cloud && hostedMocks.isSuccess && hostedMocks.data.length === 0) {
     return (
-      <div className="space-y-6 p-6">
+      <div className="space-y-6">
         {header}
         <EmptyState
           icon={<Layers className="h-12 w-12" />}
@@ -299,7 +299,7 @@ export function OverridesPage() {
   const loadError = hostedMocks.error ?? saved.error;
 
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
       {header}
 
       {cloud && (hostedMocks.data?.length ?? 0) > 0 && (

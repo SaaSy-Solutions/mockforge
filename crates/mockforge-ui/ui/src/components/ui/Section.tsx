@@ -18,10 +18,10 @@ export function Section({
   return (
     <div className={cn("section-gap", className)} {...props}>
       {(title || subtitle || actions) && (
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-5">
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-3 mb-3">
           <div>
-            {title && <h2 className="text-2xl font-semibold">{title}</h2>}
-            {subtitle && <p className="text-muted-foreground mt-1">{subtitle}</p>}
+            {title && <h2 className="text-base font-semibold text-foreground">{title}</h2>}
+            {subtitle && <p className="text-sm text-muted-foreground mt-0.5">{subtitle}</p>}
           </div>
           {actions && <div>{actions}</div>}
         </div>

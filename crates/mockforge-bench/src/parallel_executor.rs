@@ -915,7 +915,7 @@ impl ParallelExecutor {
     /// Round 67 (#79) — log rotation for campaign mode: delete all but the
     /// newest `keep` `round_*` dirs under `base_output`. `round-summaries/`
     /// and `campaign.jsonl` live outside the round dirs and are untouched.
-    fn prune_old_rounds(base_output: &Path, keep: u32) {
+    pub(crate) fn prune_old_rounds(base_output: &Path, keep: u32) {
         let mut round_dirs: Vec<(u32, PathBuf)> = match std::fs::read_dir(base_output) {
             Ok(rd) => rd
                 .filter_map(|e| e.ok())

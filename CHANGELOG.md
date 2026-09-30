@@ -12,6 +12,18 @@
 - **[Cloud]** Security: the GDPR data export included pending invitation payloads, which let a plain member redeem an invite meant for someone else. (#1087)
 - **[Cloud]** `GET /api/v1/organizations/{org_id}/incidents/stats` no longer returns 500 once the org has a resolved incident. (#1087)
 
+## [0.3.227] - 2026-09-30
+
+### Added
+
+- **[Reality]** `mockforge bench-chunked` gains `--rps N` (per-target cap on request starts per second), `--cps` (new TCP/TLS connection per request), and campaign mode: `--rounds N` / `--repeat-until <duration>` re-run the whole pass into `<output>/round_N/`, with per-round stats in `campaign.jsonl` and `round-summaries/`, and `--keep-rounds N` rotating old round dirs, matching `mockforge bench`. (#79)
+- **[Cloud]** Redesigned app shell for the logged-in portal: new sidebar, top bar, search and menus, refreshed shared UI primitives, and a new dashboard; every page moved onto the new frame. (#1086)
+
+### Fixed
+
+- **[Cloud]** GDPR account erasure no longer fails for users who have audit-log rows. (#1093)
+- **[Reality]** `bench-chunked --chunk-interval-ms` now sends the first chunk immediately and waits only *between* chunks. Previously it waited before the first chunk and sent the last two back to back. (#79)
+
 ## [0.3.226] - 2026-09-29
 
 ### Added

@@ -221,7 +221,7 @@ export function RequestLog() {
         'px-3 h-7 text-xs font-medium transition-all duration-150',
         active
           ? 'bg-brand-500 text-white shadow-sm hover:bg-brand-600'
-          : 'text-secondary hover:text-primary hover:bg-bg-tertiary'
+          : 'text-muted-foreground hover:text-foreground hover:bg-bg-tertiary'
       )}
       onClick={onClick}
     >

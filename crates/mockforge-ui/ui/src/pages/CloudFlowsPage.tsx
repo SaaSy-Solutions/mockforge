@@ -121,7 +121,7 @@ const CloudView: React.FC = () => {
         <div className="p-6 max-w-7xl mx-auto">
             <div className="flex justify-between items-start mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2 flex items-center gap-2">
+                    <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
                         <GitBranch className="w-6 h-6 text-purple-500" />
                         Cloud Flows
                     </h1>

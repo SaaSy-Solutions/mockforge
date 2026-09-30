@@ -65,10 +65,10 @@ export function SupportPage() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8 max-w-4xl">
+    <div className="mx-auto max-w-4xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Contact Support</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Contact Support</h1>
+        <p className="text-sm text-muted-foreground">
           Need help? We're here for you. Submit a support request and we'll get back to you as soon as possible.
         </p>
       </div>

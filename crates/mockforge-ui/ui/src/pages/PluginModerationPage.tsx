@@ -113,7 +113,7 @@ export const PluginModerationPage: React.FC = () => {
 
   if (!isAdmin) {
     return (
-      <Box sx={{ p: 3 }}>
+      <Box>
         <Alert severity="error">
           Plugin moderation is restricted to administrators.
         </Alert>
@@ -122,7 +122,7 @@ export const PluginModerationPage: React.FC = () => {
   }
 
   return (
-    <Box sx={{ p: 3 }}>
+    <Box>
       <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 1 }}>
         <Tooltip title="Back to plugin registry">
           <IconButton onClick={() => navigate('/plugin-registry')} size="small">

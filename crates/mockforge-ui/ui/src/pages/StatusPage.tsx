@@ -97,8 +97,8 @@ export function StatusPage() {
     return (
       <div className="mx-auto w-full px-0 sm:px-4 py-8 max-w-4xl">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Service Status</h1>
-          <p className="text-muted-foreground">
+          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Service Status</h1>
+          <p className="text-sm text-muted-foreground">
             Real-time status of MockForge Cloud services
           </p>
         </div>
@@ -120,10 +120,10 @@ export function StatusPage() {
   const incidents = Array.isArray(status.incidents) ? status.incidents : [];
 
   return (
-    <div className="mx-auto w-full px-0 sm:px-4 py-8 max-w-4xl">
+    <div className="mx-auto w-full max-w-4xl">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2">Service Status</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Service Status</h1>
+        <p className="text-sm text-muted-foreground">
           Real-time status of MockForge Cloud services
         </p>
       </div>
