@@ -62,7 +62,7 @@ jobs:
           echo "binary_path=target/release/mockforge" >> $GITHUB_OUTPUT
 
       - name: Upload binary
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: mockforge-binary
           path: target/release/mockforge
@@ -385,7 +385,7 @@ jobs:
           kill $SERVER_PID 2>/dev/null || true
 
       - name: Upload storm results
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: connection-storm-results
           path: storm-results.txt

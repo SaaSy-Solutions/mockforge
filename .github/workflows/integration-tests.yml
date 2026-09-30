@@ -142,7 +142,7 @@ jobs:
 
       - name: Upload test artifacts
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: integration-test-results
           path: |
@@ -181,7 +181,7 @@ jobs:
 
       - name: Upload E2E test results
         if: failure() && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v7.0.1
         with:
           name: e2e-test-results
           path: target/test-results/
