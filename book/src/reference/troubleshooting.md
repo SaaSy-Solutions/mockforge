@@ -100,7 +100,7 @@ grep "WARN" mockforge.log
 3. **Template expansion disabled**:
    ```bash
    # Enable template expansion
-   mockforge serve --response-template-expand --spec api-spec.yaml
+   MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true mockforge serve --spec api-spec.yaml
    ```
 
 ### Template Variables Not Working
@@ -111,14 +111,11 @@ grep "WARN" mockforge.log
 
 1. **Enable template expansion**:
    ```bash
-   # Via command line
-   mockforge serve --response-template-expand --spec api-spec.yaml
-
    # Via environment variable
    MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true mockforge serve --spec api-spec.yaml
 
    # Via config file
-   echo "response:\n  template_expand: true" > config.yaml
+   printf "http:\n  response_template_expand: true\n" > config.yaml
    mockforge serve --config config.yaml --spec api-spec.yaml
    ```
 
@@ -136,10 +133,10 @@ grep "WARN" mockforge.log
 1. **Adjust validation mode**:
    ```bash
    # Disable validation
-   mockforge serve --validation off --spec api-spec.yaml
+   MOCKFORGE_REQUEST_VALIDATION=off mockforge serve --spec api-spec.yaml
 
    # Use warning mode
-   mockforge serve --validation warn --spec api-spec.yaml
+   MOCKFORGE_REQUEST_VALIDATION=warn mockforge serve --spec api-spec.yaml
    ```
 
 2. **Fix request format**:
@@ -290,13 +287,10 @@ grep "WARN" mockforge.log
    - Admin UI should work from any origin by default
    - Check browser console for CORS errors
 
-3. **Embedded vs standalone**:
+3. **Run the Admin UI on its own**:
    ```bash
-   # Force standalone mode
-   mockforge serve --admin --admin-standalone
-
-   # Or embedded mode
-   mockforge serve --admin --admin-embed
+   # Start only the Admin UI (standalone server)
+   mockforge admin
    ```
 
 ### API Endpoints Not Working
@@ -387,7 +381,7 @@ mockforge serve
 2. **Disable unnecessary features**:
    ```bash
    # Run with minimal features
-   mockforge serve --validation off --response-template-expand false
+   MOCKFORGE_REQUEST_VALIDATION=off MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=false mockforge serve
    ```
 
 3. **Monitor resource usage**:

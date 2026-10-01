@@ -152,7 +152,7 @@ Quick access to MockForge Playground from hover tooltips.
 
 ### Development Workflow
 
-1. **Start MockForge server**: `mockforge start`
+1. **Start MockForge server**: `mockforge serve --admin`
 2. **Open VS Code**: The extension auto-connects
 3. **Edit config files**: Get real-time validation
 4. **Hover over endpoints**: See mock responses inline

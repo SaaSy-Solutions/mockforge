@@ -275,7 +275,7 @@ Watch the spec / config / fixtures dirs and rebuild routes on change without res
 
 ## Proxy / Record-Replay
 
-- `MOCKFORGE_PROXY_UPSTREAM=<url>` — when set, requests with no matching mock are proxied here. Pair with `mockforge serve --record` (or the recorder admin API) to capture upstream traffic for replay.
+- `MOCKFORGE_PROXY_UPSTREAM=<url>` — when set, requests with no matching mock are proxied here. Pair with `mockforge serve --recorder` (or the recorder admin API) to capture upstream traffic for replay.
 - `MOCKFORGE_PROXY_SPEC=<path>` — OpenAPI/Swagger spec (JSON or YAML) backing the proxy's passive conformance tap (#864).
 - `MOCKFORGE_PROXY_VALIDATE_CONFORMANCE=true|false` — validate proxied requests against the spec and report violations; requires `MOCKFORGE_PROXY_SPEC`.
 - `MOCKFORGE_PROXY_VALIDATE_CONFORMANCE_STRICT=true|false` — additionally reject non-conforming requests with a diagnostic response instead of forwarding.

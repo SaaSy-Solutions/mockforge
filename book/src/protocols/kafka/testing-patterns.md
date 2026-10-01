@@ -92,11 +92,12 @@ mockforge kafka consume --topic orders --partition 0
 ### Throughput Testing
 
 ```bash
-# High-volume message production
-mockforge kafka produce --topic high-volume --value "test message" --count 10000 --batch-size 100
+# High-volume message production: use a fixture with auto_produce
+# (e.g. rate_per_second: 1000, total_count: 10000), then start it
+mockforge kafka fixtures start-auto-produce
 
-# Measure consumer throughput
-mockforge kafka consume --topic high-volume --group perf-test --benchmark
+# Consume a fixed number of messages
+mockforge kafka consume --topic high-volume --group perf-test --count 10000
 ```
 
 ### Latency Testing
@@ -105,8 +106,8 @@ mockforge kafka consume --topic high-volume --group perf-test --benchmark
 # Measure end-to-end latency
 time mockforge kafka produce --topic latency-test --value "ping"
 
-# Consumer measures processing time
-mockforge kafka consume --topic latency-test --measure-latency
+# Time how long it takes to consume the message
+time mockforge kafka consume --topic latency-test --count 1
 ```
 
 ## Error Scenario Testing
@@ -133,7 +134,7 @@ mockforge kafka consume --topic latency-test --measure-latency
 
 ```bash
 # Start multiple mock services
-mockforge serve --kafka --http --grpc
+mockforge serve --http-port 3000 --kafka-port 9092 --grpc-port 50051
 
 # Test end-to-end message flow
 # Order service -> Kafka -> Payment service -> Kafka -> Notification service
@@ -154,13 +155,15 @@ mockforge kafka produce --topic orders --value '{"v1": "data", "v2": "new_field"
 ### Gradual Load Increase
 
 ```bash
-# Start with low rate
-mockforge kafka fixtures start-auto-produce --rate 10
+# The rate is set per fixture with auto_produce.rate_per_second.
+# Start with a low rate (e.g. rate_per_second: 10)
+mockforge kafka fixtures start-auto-produce
 
-# Gradually increase
-mockforge kafka fixtures update-rate --rate 50
-mockforge kafka fixtures update-rate --rate 100
-mockforge kafka fixtures update-rate --rate 500
+# To increase the rate, stop, raise rate_per_second in the fixture
+# file (e.g. 50, 100, 500), reload, and start again
+mockforge kafka fixtures stop-auto-produce
+mockforge kafka fixtures load ./fixtures/kafka/
+mockforge kafka fixtures start-auto-produce
 
 # Monitor system performance
 ```
@@ -168,8 +171,9 @@ mockforge kafka fixtures update-rate --rate 500
 ### Burst Load Testing
 
 ```bash
-# Simulate traffic spikes
-mockforge kafka produce --topic burst-test --value "burst message" --count 1000 --rate 100
+# Simulate traffic spikes with a fixture configured with
+# auto_produce.rate_per_second: 100 and total_count: 1000
+mockforge kafka fixtures start-auto-produce
 
 # Test autoscaling behavior
 # Monitor queue depths
@@ -190,8 +194,8 @@ mockforge kafka groups offsets test-group
 ### Throughput Monitoring
 
 ```bash
-# Monitor message rates
-mockforge kafka topic describe orders --metrics
+# Inspect topic details
+mockforge kafka topic describe orders
 
 # Track partition distribution
 # Monitor broker performance

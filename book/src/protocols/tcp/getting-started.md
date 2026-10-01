@@ -21,10 +21,10 @@ protocol-aware features (route matching, schema validation, streaming).
 ```bash
 # Listen on the default port 9999, no fixtures
 mockforge serve --tcp-port 9999
-
-# Or with the standalone TCP-only command
-mockforge tcp serve --port 9999 --fixtures-dir ./fixtures/tcp
 ```
+
+There is no standalone `mockforge tcp` command; the TCP server runs inside
+`mockforge serve`. Set the fixtures directory in the `tcp` config section.
 
 Point a client at `localhost:9999`:
 
@@ -123,12 +123,10 @@ server walks fixtures top-to-bottom for each connection.
 ```bash
 # Embedded in `mockforge serve`
 mockforge serve --spec api.yaml --tcp-port 9999
-
-# Standalone TCP-only mode
-mockforge tcp serve --port 9999 --host 0.0.0.0 \
-  --fixtures-dir ./fixtures/tcp \
-  --max-connections 50
 ```
+
+Host, fixtures directory, and connection limits are set in the `tcp`
+config section shown above.
 
 ## Environment variables
 

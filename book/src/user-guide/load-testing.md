@@ -237,7 +237,7 @@ of multi-hour runs.
 
 While a bench is running, you usually want to monitor:
 
-- **`mockforge tui`** — live dashboard with current and peak CPU, memory,
+- **`mockforge-tui`** — live dashboard with current and peak CPU, memory,
   error rate. Auto-refreshes every 2 s.
 - **CSV metrics log** — `MOCKFORGE_METRICS_LOG_FILE=path` appends a row per
   10 s. Persistent record for soak tests.

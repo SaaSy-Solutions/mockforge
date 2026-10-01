@@ -306,13 +306,14 @@ grpcurl -plaintext -d '{"user_id": "123"}' \
 When mocking multiple related gRPC services, ensure data coherence:
 
 ```bash
-# Start user service
-MOCKFORGE_DATA_SYNTHESIS_SEED=100 \
-mockforge serve --grpc-port 50051 --proto-dir user-proto &
+# `mockforge serve` loads .proto files from ./proto in the working directory,
+# so run each service from its own directory (use the same seed in each config)
 
-# Start order service with same seed for consistency  
-MOCKFORGE_DATA_SYNTHESIS_SEED=100 \
-mockforge serve --grpc-port 50052 --proto-dir order-proto &
+# Start user service
+(cd user-service && mockforge serve --grpc-port 50051) &
+
+# Start order service
+(cd order-service && mockforge serve --grpc-port 50052) &
 ```
 
 ### Custom Field Overrides
@@ -375,15 +376,11 @@ grpc:
 ### Debug Commands
 
 ```bash
-# Test data synthesis configuration
-mockforge validate-config
+# Validate the configuration file
+mockforge config validate --config mockforge.yaml --warnings
 
-# Show detected schema relationships
-mockforge analyze-schema --proto-dir proto/
-
-# Test deterministic generation
-MOCKFORGE_DATA_SYNTHESIS_DEBUG=true \
-mockforge serve --grpc-port 50051
+# Run the gRPC server with debug logging
+mockforge serve --grpc-port 50051 --log-level debug
 ```
 
 Advanced data synthesis transforms MockForge from a simple mocking tool into a comprehensive test data management platform, enabling realistic, consistent, and validated test scenarios across your entire service architecture.

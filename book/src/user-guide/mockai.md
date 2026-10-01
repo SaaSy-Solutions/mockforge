@@ -115,13 +115,13 @@ mockai:
 mockforge mockai enable
 
 # Enable for specific endpoints
-mockforge mockai enable --endpoints "/users" "/products"
+mockforge mockai enable --endpoint "/users" --endpoint "/products"
 
 # Disable globally
 mockforge mockai disable
 
 # Disable for specific endpoints
-mockforge mockai disable --endpoints "/admin/*"
+mockforge mockai disable --endpoint "/admin/*"
 ```
 
 ### Check Status
@@ -134,17 +134,14 @@ mockforge mockai status
 
 ```bash
 # Learn from example request/response pairs
-mockforge mockai learn --examples examples.json
+mockforge mockai learn --from-examples examples.json
 ```
 
-### Generate Response
+### Generate Rules from OpenAPI
 
 ```bash
-# Generate a response for a request
-mockforge mockai generate \
-  --method POST \
-  --path "/users" \
-  --body '{"name": "John"}'
+# Generate behavioral rules from an OpenAPI spec
+mockforge mockai generate --from-openapi api.yaml --output rules.yaml
 ```
 
 ## Session Management

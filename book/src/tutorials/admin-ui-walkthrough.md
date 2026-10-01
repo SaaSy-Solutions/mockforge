@@ -20,25 +20,13 @@
 
 ## Step 1: Start MockForge with Admin UI
 
-You can run the Admin UI in two modes:
-
-### Standalone Mode (Separate Port)
+The Admin UI runs on its own port, separate from the mock HTTP server:
 
 ```bash
 mockforge serve --admin --admin-port 9080 --http-port 3000
 ```
 
 Access at: **http://localhost:9080**
-
-### Embedded Mode (Under HTTP Server)
-
-```bash
-mockforge serve --admin-embed --admin-mount-path /admin --http-port 3000
-```
-
-Access at: **http://localhost:3000/admin**
-
-For this tutorial, we'll use standalone mode for simplicity.
 
 ## Step 2: Access the Dashboard
 

@@ -173,7 +173,7 @@ Open http://localhost:9080 in your browser to see:
 
 4. **Share with Your Team** using workspace sync:
    ```bash
-   mockforge sync start --directory ./team-mocks
+   mockforge sync --workspace-dir ./team-mocks
    git add team-mocks && git commit -m "Add user API mocks"
    ```
 

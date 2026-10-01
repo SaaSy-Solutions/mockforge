@@ -324,7 +324,7 @@ smtp:
 
 2. **Start server in background**:
    ```bash
-   mockforge serve --smtp &
+   mockforge serve --smtp-port 1025 &
    ```
 
 3. **Use localhost binding** for security:

@@ -121,31 +121,28 @@ def test_user_api():
 
 ### Option 2: Use the Interactive Playground
 
-Start the playground server:
+The playground is a page in the Admin UI. Start the server with the admin UI:
 
 ```bash
-mockforge serve --playground
+mockforge serve --spec openapi.yaml --admin
 ```
 
-Then open `http://localhost:8080/playground` in your browser to:
-- Create mock endpoints visually
-- Test API calls interactively
-- Generate client code
-- Export configurations
+Then open `http://localhost:9080` in your browser and select **Playground** to
+send REST and GraphQL requests to your mocks interactively.
 
 ### Option 3: Generate Client Code
 
 From an OpenAPI spec:
 
 ```bash
-# Generate TypeScript client
-mockforge generate client --lang typescript --spec openapi.yaml --output ./src/api
+# Generate a React client (hooks + TypeScript types)
+mockforge client generate --framework react --spec openapi.yaml --output ./src/api --include-types
 
-# Generate Python client
-mockforge generate client --lang python --spec openapi.yaml --output ./src/api
+# Other frameworks: vue, angular, svelte
+mockforge client generate --framework vue --spec openapi.yaml --output ./src/api
 
-# Generate React hooks
-mockforge generate client --lang react --spec openapi.yaml --output ./src/hooks
+# List supported frameworks
+mockforge client list
 ```
 
 ## Key DevX Features
@@ -172,21 +169,19 @@ Generate type-safe clients for:
 
 ### 3. Interactive Playground
 
-The playground provides:
-- Visual endpoint builder
-- Request/response testing
-- Real-time configuration updates
-- Code snippet generation
-- Export to YAML/JSON
+The playground (Admin UI) provides:
+- A list of the endpoints your mocks serve
+- REST and GraphQL request execution, with GraphQL introspection
+- Request history with replay
+- Code snippet generation for a request
 
 ### 4. CLI Tooling
 
 Comprehensive CLI commands:
 - `mockforge serve` - Start mock server
-- `mockforge generate` - Generate code/configs
-- `mockforge validate` - Validate configurations
-- `mockforge sync` - Sync with OpenAPI specs
-- `mockforge export` - Export scenarios/data
+- `mockforge generate` - Generate mock servers from OpenAPI specs
+- `mockforge config validate` - Validate configurations
+- `mockforge sync` - Bidirectional workspace directory sync
 
 ### 5. Plugin System
 
@@ -199,7 +194,7 @@ Extend MockForge with plugins:
 ## Next Steps
 
 1. **Explore SDKs**: Choose your language and integrate mocks into your tests
-2. **Try the Playground**: Use the interactive UI to build mocks visually
+2. **Try the Playground**: Use the Admin UI to send requests to your mocks interactively
 3. **Generate Clients**: Create type-safe API clients from your OpenAPI specs
 4. **Build Plugins**: Extend MockForge with custom functionality
 

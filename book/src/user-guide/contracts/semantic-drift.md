@@ -1,6 +1,6 @@
 # Semantic Drift Notifications
 
-> **Experimental.** This feature ships in MockForge but is early: the `/api/v1/semantic-drift/*` endpoints exist and the CLI is `mockforge governance semantic analyze`; the `semantic-drift` subcommands and `contract_drift` config shown below are not implemented yet. Behavior, commands, and configuration may change between releases. Report issues at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+> **Experimental.** This feature ships in MockForge but is early: the `/api/v1/semantic-drift/*` endpoints exist and the CLI is `mockforge governance semantic analyze`; there is no CLI for listing or resolving incidents, and the `contract_drift` config shown below is not read yet. Behavior, commands, and configuration may change between releases. Report issues at <https://github.com/SaaSy-Solutions/mockforge/issues>.
 
 **Pillars:** [Contracts]
 
@@ -156,18 +156,14 @@ Detects changes that may break consumers but aren't structurally breaking:
 ### CLI Commands
 
 ```bash
-# Analyze semantic drift
-mockforge governance semantic-drift analyze
+# Analyze semantic drift for an endpoint between two contract versions
+mockforge governance semantic analyze --before old.yaml --after new.yaml --endpoint /api/users/{id} --method GET
 
-# Analyze specific endpoint
-mockforge governance semantic-drift analyze --endpoint /api/users/{id}
-
-# Get semantic drift incidents
-mockforge governance semantic-drift incidents
-
-# Resolve incident
-mockforge governance semantic-drift resolve <incident-id>
+# Write the result to a file
+mockforge governance semantic analyze --before old.yaml --after new.yaml --endpoint /api/users/{id} --method GET --output drift.json
 ```
+
+Listing incidents is only available over the API; there is no CLI command for listing or resolving incidents.
 
 ### API Usage
 
@@ -175,8 +171,10 @@ mockforge governance semantic-drift resolve <incident-id>
 # Analyze semantic drift
 POST /api/v1/semantic-drift/analyze
 {
-  "before_spec": {...},
-  "after_spec": {...}
+  "before_spec": "...",
+  "after_spec": "...",
+  "endpoint": "/api/users/{id}",
+  "method": "GET"
 }
 
 # Get incidents

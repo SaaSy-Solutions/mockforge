@@ -1,6 +1,6 @@
 # Bench Custom Checks: File Uploads + Cookie/CSRF Chains
 
-`mockforge bench --conformance --conformance-custom-checks-file <yaml>` runs
+`mockforge bench --conformance --conformance-custom <yaml>` runs
 a YAML-defined sequence of HTTP probes against a target. Round 38 of issue
 [#79](https://github.com/SaaSy-Solutions/mockforge/issues/79) extends the
 YAML with three pieces that map directly to common load-test scenarios:
@@ -224,7 +224,7 @@ forward a per-repeat value, run them `sequential`.
 ```bash
 mockforge bench \
   --conformance \
-  --conformance-custom-checks-file scenarios/login-and-do-work.yaml \
+  --conformance-custom scenarios/login-and-do-work.yaml \
   --target https://api.example.com/ \
   --output bench-results/
 ```

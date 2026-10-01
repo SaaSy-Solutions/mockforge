@@ -1,6 +1,6 @@
 # Virtual Backend Reality (VBR) Engine
 
-> **Experimental.** This feature ships in MockForge but is early: the engine and the `mockforge vbr` commands work, but it is not yet enabled from `mockforge serve` (there is no `--vbr-enabled` flag or `vbr:` config key), and some CLI examples below use older argument forms. Behavior, commands, and configuration may change between releases. Report issues at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+> **Experimental.** This feature ships in MockForge but is early: the engine and the `mockforge vbr` commands work, but it is not yet enabled from `mockforge serve` (there is no `--vbr-enabled` flag or `vbr:` config key). Behavior, commands, and configuration may change between releases. Report issues at <https://github.com/SaaSy-Solutions/mockforge/issues>.
 
 The Virtual Backend Reality (VBR) Engine provides a virtual "database" layer that automatically generates CRUD operations from OpenAPI specifications. It enables stateful mocking with relationship management, data persistence, and realistic data generation.
 
@@ -18,21 +18,14 @@ The VBR Engine transforms MockForge from a simple request/response mock server i
 
 ### From OpenAPI Specification
 
-The easiest way to get started is to generate a VBR engine from an OpenAPI specification:
+VBR is not enabled from `mockforge serve` (there is no `--vbr-enabled` flag or `vbr:` config key). Use the standalone `mockforge vbr` commands instead:
 
 ```bash
-# Start server with VBR from OpenAPI spec
-mockforge serve --spec api.yaml --vbr-enabled
-```
+# Import entity definitions from an OpenAPI spec
+mockforge vbr import openapi api.yaml --output ./entities
 
-Or in your configuration:
-
-```yaml
-vbr:
-  enabled: true
-  openapi_spec: "./api.yaml"
-  backend: "sqlite"  # or "json", "memory"
-  storage_path: "./vbr-data"
+# Start the standalone VBR API server (default prefix /vbr-api)
+mockforge vbr serve --port 3000 --storage sqlite --db-path ./vbr-data/vbr.db
 ```
 
 ### Programmatic Usage
@@ -119,10 +112,10 @@ Seed your virtual database with initial data:
 
 ```bash
 # Seed from JSON file
-mockforge vbr seed --file seed-data.json
+mockforge vbr seed seed-data.json
 
-# Seed from YAML file
-mockforge vbr seed --file seed-data.yaml
+# Seed from YAML file, only the User entity
+mockforge vbr seed seed-data.yaml --entity User
 ```
 
 **Seed file format:**
@@ -194,7 +187,7 @@ Create point-in-time snapshots of your virtual database:
 
 ```bash
 # Via CLI
-mockforge vbr snapshot create --name initial --description "Initial state"
+mockforge vbr snapshot create initial --description "Initial state"
 
 # Via API
 curl -X POST http://localhost:3000/vbr-api/snapshots \
@@ -206,7 +199,7 @@ curl -X POST http://localhost:3000/vbr-api/snapshots \
 
 ```bash
 # Via CLI
-mockforge vbr snapshot restore --name initial
+mockforge vbr snapshot restore initial
 
 # Via API
 curl -X POST http://localhost:3000/vbr-api/snapshots/initial/restore
@@ -226,7 +219,7 @@ curl http://localhost:3000/vbr-api/snapshots
 
 ```bash
 # Via CLI
-mockforge vbr snapshot delete --name initial
+mockforge vbr snapshot delete initial
 
 # Via API
 curl -X DELETE http://localhost:3000/vbr-api/snapshots/initial
@@ -459,13 +452,13 @@ Create snapshots for consistent demo environments:
 
 ```bash
 # Setup demo data
-mockforge vbr seed --file demo-data.json
+mockforge vbr seed demo-data.json
 
 # Create snapshot
-mockforge vbr snapshot create --name demo
+mockforge vbr snapshot create demo
 
 # Later, restore for consistent demos
-mockforge vbr snapshot restore --name demo
+mockforge vbr snapshot restore demo
 ```
 
 ## Best Practices

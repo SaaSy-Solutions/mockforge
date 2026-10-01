@@ -332,8 +332,8 @@ npm start
 Test that your API matches the OpenAPI specification:
 
 ```bash
-mockforge serve --spec api.json \
-  --validation enforce \
+# Request validation defaults to "enforce"; set it explicitly with an env var
+MOCKFORGE_REQUEST_VALIDATION=enforce mockforge serve --spec api.json \
   --http-port 3000
 ```
 

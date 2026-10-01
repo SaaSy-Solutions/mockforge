@@ -206,7 +206,7 @@ PR Review → Contract Validation → Mock Comparison → Approval
 
 ```bash
 # Initialize a new MOD project
-mockforge mod init my-api-project
+mockforge mod init --name my-api-project
 
 # This creates:
 # - mockforge.yaml (MOD configuration)
@@ -253,7 +253,7 @@ paths:
 
 ```bash
 # Generate mock from OpenAPI contract
-mockforge generate --from-openapi contracts/users-api.yaml --output mocks/
+mockforge generate --spec contracts/users-api.yaml --output mocks/
 ```
 
 ### 4. Use Mock in Development

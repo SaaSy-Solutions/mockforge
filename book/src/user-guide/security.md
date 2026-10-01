@@ -107,21 +107,7 @@ encryption:
 
 ### Key Generation
 
-MockForge automatically generates keys when needed:
-
-```bash
-# Initialize new key store
-mockforge keys init --algorithm aes-256-gcm
-
-# Generate workspace key
-mockforge keys generate --workspace my-workspace
-
-# Rotate all keys
-mockforge keys rotate --all
-
-# Export keys for backup (encrypted)
-mockforge keys export --output keys-backup.enc
-```
+MockForge automatically generates keys when needed. There is no `mockforge keys` CLI for initializing, generating, rotating, or exporting keys; key management is driven by the `encryption` configuration shown in this guide.
 
 ### Key Rotation
 
@@ -457,15 +443,13 @@ client:
 
 ### Certificate Management
 
+MockForge does not generate or import certificates itself (there is no `mockforge certs` command). Create certificates with your usual tooling and pass them to the server:
+
 ```bash
-# Generate self-signed certificates for development
-mockforge certs generate --domain localhost --output ./certs/
+mockforge serve --spec api.json --https-port 3443 --tls-cert ./certs/server.crt --tls-key ./certs/server.key
 
-# Use Let's Encrypt for production
-mockforge certs letsencrypt --domain api.mockforge.dev --email admin@company.com
-
-# Import existing certificates
-mockforge certs import --cert server.crt --key server.key --ca ca.crt
+# Mutual TLS with a CA bundle
+mockforge serve --spec api.json --tls-enabled --tls-cert server.crt --tls-key server.key --tls-ca ca.crt --mtls required
 ```
 
 ## Security Best Practices
@@ -597,44 +581,16 @@ MockForge provides comprehensive audit logging for security and compliance:
 
 ### Common Issues
 
-#### Encryption Not Working
+#### Encryption, Authentication, or Key Store Issues
+
+There are no dedicated `encryption`, `keys`, or `auth` CLI commands. Inspect and validate the effective configuration instead:
 
 ```bash
-# Check encryption status
-mockforge encryption status
+# Validate the configuration file (including encryption and auth sections)
+mockforge config validate --config mockforge.yaml --warnings
 
-# Verify key store
-mockforge keys list
-
-# Test encryption/decryption
-mockforge encrypt test-data --key workspace-key
-```
-
-#### Authentication Failures
-
-```bash
-# Check auth configuration
-mockforge auth status
-
-# Verify JWT secret
-mockforge auth verify-jwt your-token
-
-# Reset admin credentials
-mockforge auth reset-admin
-```
-
-#### Key Store Issues
-
-```bash
-# Initialize key store
-mockforge keys init --force
-
-# Repair key store
-mockforge keys repair
-
-# Backup and restore
-mockforge keys backup --output keys.backup
-mockforge keys restore --input keys.backup
+# Show the effective configuration after env var overrides
+mockforge config show --config mockforge.yaml
 ```
 
 ### Debug Mode

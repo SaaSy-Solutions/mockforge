@@ -185,58 +185,66 @@ GET /vbr-api/orders/123
 
 ## API Endpoints
 
+The state machine API is part of the management API on the HTTP mock server
+(default port 3000), under `/__mockforge/api/state-machines`. State machines
+are keyed by their `resource_type`; instances are keyed by `resource_id`.
+
 ### State Machine CRUD
 
 ```http
-# Create state machine
-POST /__mockforge/state-machines
+# Create (or replace) a state machine
+POST /__mockforge/api/state-machines
 Content-Type: application/json
 
 {
-  "name": "order_workflow",
-  "initial_state": "pending",
-  "states": [...],
-  "transitions": [...]
+  "state_machine": {
+    "resource_type": "order",
+    "initial_state": "pending",
+    "states": ["pending", "processing", "shipped"],
+    "transitions": [...]
+  },
+  "visual_layout": null
 }
 
 # List state machines
-GET /__mockforge/state-machines
+GET /__mockforge/api/state-machines
 
-# Get state machine
-GET /__mockforge/state-machines/{id}
+# Get one state machine
+GET /__mockforge/api/state-machines/{resource_type}
 
-# Update state machine
-PUT /__mockforge/state-machines/{id}
+# Update a state machine (same body as create)
+PUT /__mockforge/api/state-machines/{resource_type}
 
-# Delete state machine
-DELETE /__mockforge/state-machines/{id}
+# Delete a state machine
+DELETE /__mockforge/api/state-machines/{resource_type}
 ```
 
 ### State Instances
 
 ```http
-# Create state instance
-POST /__mockforge/state-machines/{id}/instances
+# Create a state instance
+POST /__mockforge/api/state-machines/instances
 Content-Type: application/json
 
 {
   "resource_id": "order-123",
-  "initial_state": "pending"
+  "resource_type": "order"
 }
 
 # List instances
-GET /__mockforge/state-machines/{id}/instances
+GET /__mockforge/api/state-machines/instances
 
-# Get instance
-GET /__mockforge/state-machines/{id}/instances/{instance_id}
+# Get an instance
+GET /__mockforge/api/state-machines/instances/{resource_id}
 
-# Transition instance
-POST /__mockforge/state-machines/{id}/instances/{instance_id}/transition
+# Transition an instance
+POST /__mockforge/api/state-machines/instances/{resource_id}/transition
 Content-Type: application/json
 
 {
+  "resource_id": "order-123",
   "to_state": "processing",
-  "condition_override": null
+  "context": null
 }
 ```
 
@@ -244,25 +252,27 @@ Content-Type: application/json
 
 ```http
 # Get current state
-GET /__mockforge/state-machines/{id}/instances/{instance_id}/state
+GET /__mockforge/api/state-machines/instances/{resource_id}/state
 
 # Get next possible states
-GET /__mockforge/state-machines/{id}/instances/{instance_id}/next-states
+GET /__mockforge/api/state-machines/instances/{resource_id}/next-states
 ```
 
 ### Import/Export
 
-```http
-# Export state machine
-GET /__mockforge/state-machines/{id}/export
+Export and import work on all state machines at once:
 
-# Import state machine
-POST /__mockforge/state-machines/import
+```http
+# Export all state machines (and their visual layouts)
+GET /__mockforge/api/state-machines/export
+
+# Import state machines (same shape as the export response)
+POST /__mockforge/api/state-machines/import
 Content-Type: application/json
 
 {
-  "name": "order_workflow",
-  "definition": {...}
+  "state_machines": [...],
+  "visual_layouts": {}
 }
 ```
 

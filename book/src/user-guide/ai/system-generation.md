@@ -28,11 +28,7 @@ This becomes **a way to bootstrap an entire startup backend**.
 
 ### Basic Usage
 
-```bash
-# Generate system from natural language
-mockforge ai generate-system \
-  "I'm building a ride-sharing app with drivers, riders, trips, payments, live-location updates, pricing, and surge events."
-```
+There is no CLI for system generation yet. The intended command would take a product description such as "I'm building a ride-sharing app with drivers, riders, trips, payments, live-location updates, pricing, and surge events." and generate the artifacts listed above.
 
 ### Via AI Studio
 
@@ -319,12 +315,7 @@ ai_studio:
 
 ### Output Format Selection
 
-```bash
-# Generate with specific formats
-mockforge ai generate-system \
-  "Description..." \
-  --formats openapi,personas,lifecycles,graphql
-```
+Selecting specific output formats (for example OpenAPI, personas, lifecycles, GraphQL) is planned; there is no CLI option for it yet.
 
 ## Best Practices
 

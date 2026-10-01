@@ -79,9 +79,6 @@ MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true mockforge serve --spec api.json
 # mockforge.yaml
 http:
   response_template_expand: true
-
-# Or via CLI flag
-mockforge serve --spec api.json --response-template-expand
 ```
 
 **Common Mistake**: Forgetting that template expansion is opt-in for security reasons.
@@ -263,7 +260,7 @@ curl -X POST http://localhost:3000/users \
 
 1. **Temporarily disable validation**
 ```bash
-mockforge serve --spec api.json --validation off
+MOCKFORGE_REQUEST_VALIDATION=off mockforge serve --spec api.json
 ```
 
 2. **Fix spec if it's incorrect**
@@ -367,7 +364,7 @@ ls -la mockforge.yaml
 1. **Check variable names**: every recognized env var starts with the
    prefix `MOCKFORGE_` followed by `<SECTION>_<OPTION>` in upper-case
    (e.g. `MOCKFORGE_HTTP_PORT`, not `MOCKFORGE_PORT`). Run
-   `mockforge config env` for the canonical list of recognized names.
+   `mockforge config list-env-vars` for the canonical list of recognized names.
 
 2. **Check shell reload**
 ```bash
@@ -403,7 +400,7 @@ mockforge serve --spec api.json  # No templates = faster
 2. **Reduce validation overhead**
 ```bash
 # Validation adds latency
-mockforge serve --spec api.json --validation warn  # Faster than 'enforce'
+MOCKFORGE_REQUEST_VALIDATION=warn mockforge serve --spec api.json  # Faster than 'enforce'
 ```
 
 3. **Check response complexity**
@@ -433,10 +430,9 @@ mockforge serve --spec api.json
 2. **Disable features not needed**
 ```bash
 # Minimal configuration
-mockforge serve --spec api.json \
-  --validation off \
-  --response-template-expand false \
-  --admin false
+MOCKFORGE_REQUEST_VALIDATION=off \
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=false \
+  mockforge serve --spec api.json  # admin UI is off unless --admin is passed
 ```
 
 3. **Check for memory leaks**
@@ -538,7 +534,7 @@ mockforge serve --spec api.json --admin --admin-port 9090
 curl http://localhost:9080/__mockforge/status
 
 # Enable admin API explicitly
-mockforge serve --spec api.json --admin --admin-api-enabled
+MOCKFORGE_ADMIN_API_ENABLED=true mockforge serve --spec api.json --admin
 ```
 
 ## Plugin Issues
@@ -579,7 +575,8 @@ mockforge --version
 
 1. **Check plugin logs**
 ```bash
-RUST_LOG=mockforge_plugin=debug mockforge serve --plugin ./plugin.wasm
+# Re-run plugin validation with debug logging
+RUST_LOG=mockforge_plugin_loader=debug mockforge plugin validate ./plugin.wasm
 ```
 
 2. **Check resource limits**

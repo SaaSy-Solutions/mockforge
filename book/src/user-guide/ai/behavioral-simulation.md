@@ -64,30 +64,11 @@ Policies define how agents behave:
 
 ### Create Agent
 
-```bash
-# Create agent from persona
-mockforge ai behavioral-sim create-agent \
-  --persona customer:premium-001 \
-  --policy power-user
-
-# Or via API
-POST /api/v1/ai-studio/simulate-behavior/create-agent
-{
-  "persona_id": "customer:premium-001",
-  "behavior_policy": "power-user",
-  "generate_persona": false
-}
-```
+There is no CLI or HTTP endpoint for creating agents yet. The intended flow creates an agent from an existing persona (for example `customer:premium-001`) with a behavior policy (for example `power-user`), or generates a new persona for it.
 
 ### Simulate Behavior
 
-```bash
-# Simulate agent behavior
-mockforge ai behavioral-sim simulate \
-  --agent agent-123 \
-  --state '{"cart_empty": true}' \
-  --trigger "user_landed_on_homepage"
-```
+There is no CLI or HTTP endpoint for running a simulation yet. The intended flow passes an agent, the current app state (for example `{"cart_empty": true}`), and a trigger event (for example `user_landed_on_homepage`), and returns the agent's next intention and actions.
 
 ### Via UI
 

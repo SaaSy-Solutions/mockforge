@@ -692,21 +692,19 @@ graphql:
 #### Schema Loading Errors
 
 ```bash
-# Validate GraphQL schema
-mockforge graphql validate --schema schema.graphql
+# There is no `mockforge graphql` subcommand. Load the schema with debug
+# logging; parse errors are reported at startup
+RUST_LOG=mockforge_graphql=debug mockforge serve --graphql schema.graphql --graphql-port 4000
 
-# Check schema syntax
+# Check schema syntax with a third-party linter
 graphql-schema-linter schema.graphql
 ```
 
 #### Resolver Errors
 
 ```bash
-# Enable debug logging
-RUST_LOG=mockforge_graphql=debug mockforge serve
-
-# Test individual resolvers
-mockforge graphql test-resolver Query.users
+# Enable debug logging, then send the failing query and read the resolver logs
+RUST_LOG=mockforge_graphql=debug mockforge serve --graphql schema.graphql --graphql-port 4000
 ```
 
 #### Subscription Issues
@@ -714,9 +712,6 @@ mockforge graphql test-resolver Query.users
 ```bash
 # Test WebSocket connection
 wscat -c ws://localhost:3000/graphql/ws
-
-# Check subscription resolver
-mockforge graphql test-subscription userCreated
 ```
 
 This comprehensive GraphQL support makes MockForge a powerful tool for mocking modern GraphQL APIs with realistic data and behavior.

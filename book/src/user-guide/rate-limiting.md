@@ -173,7 +173,7 @@ mockforge bench --spec api.yaml --target http://localhost:3000 \
   --vus 5 --duration 1h --scenario soak
 ```
 
-Now scrape Prometheus / watch `mockforge tui` for memory growth — slow
+Now scrape Prometheus / watch `mockforge-tui` for memory growth — slow
 clients tend to surface buffering bugs.
 
 ## Where to go next

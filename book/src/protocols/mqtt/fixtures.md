@@ -211,10 +211,9 @@ mockforge mqtt fixtures start-auto-publish
 
 # Stop auto-publishing
 mockforge mqtt fixtures stop-auto-publish
-
-# Start specific fixture
-mockforge mqtt fixtures start-auto-publish temperature-sensor
 ```
+
+Auto-publish starts and stops for all loaded fixtures at once; there is no per-fixture CLI control.
 
 ### Fixture Validation
 

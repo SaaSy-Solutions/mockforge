@@ -26,7 +26,7 @@ These aren't mutually exclusive — turn on whichever combination fits.
 ## TUI dashboard
 
 ```bash
-mockforge tui
+mockforge-tui
 ```
 
 Live dashboard in the terminal. Auto-refreshes every 2 s. Shows current and
@@ -183,7 +183,7 @@ MOCKFORGE_METRICS_LOG_FILE=/var/log/mockforge-soak.csv \
     --admin --admin-port 9080
 
 # Watch live in one terminal
-mockforge tui
+mockforge-tui
 
 # Drive load in another
 mockforge bench --spec api.yaml --target http://localhost:3000 \

@@ -1,0 +1,6026 @@
+{
+ "mockforge": {
+  "root": {
+   "aliases": {},
+   "flags": {
+    "--help": 0,
+    "--log-level": 1,
+    "--version": 0,
+    "-V": 0,
+    "-h": 0,
+    "-v": 1
+   },
+   "positionals": 0,
+   "subcommands": {
+    "admin": {
+     "aliases": {},
+     "flags": {
+      "--config": 1,
+      "--help": 0,
+      "--log-level": 1,
+      "--port": 1,
+      "-c": 1,
+      "-h": 0,
+      "-p": 1,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    },
+    "amqp": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "bind": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--routing-key": 1,
+        "-h": 0,
+        "-r": 1,
+        "-v": 1
+       },
+       "positionals": 3,
+       "subcommands": {},
+       "variadic": false
+      },
+      "consume": {
+       "aliases": {},
+       "flags": {
+        "--auto-ack": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "--queue": 1,
+        "-h": 0,
+        "-q": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "exchange": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "declare": {
+         "aliases": {},
+         "flags": {
+          "--auto-delete": 0,
+          "--durable": 0,
+          "--help": 0,
+          "--log-level": 1,
+          "--type": 1,
+          "-h": 0,
+          "-t": 1,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "delete": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "list": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "fixtures": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "list": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "load": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "start-auto-publish": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "stop-auto-publish": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "get": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--queue": 1,
+        "-h": 0,
+        "-q": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "list-bindings": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "publish": {
+       "aliases": {},
+       "flags": {
+        "--body": 1,
+        "--content-type": 1,
+        "--exchange": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--persistent": 0,
+        "--routing-key": 1,
+        "-b": 1,
+        "-e": 1,
+        "-h": 0,
+        "-k": 1,
+        "-v": 1
+       },
+       "positionals": 3,
+       "subcommands": {},
+       "variadic": false
+      },
+      "queue": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "declare": {
+         "aliases": {},
+         "flags": {
+          "--auto-delete": 0,
+          "--durable": 0,
+          "--exclusive": 0,
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "delete": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "list": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "purge": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "serve": {
+       "aliases": {},
+       "flags": {
+        "--config": 1,
+        "--help": 0,
+        "--host": 1,
+        "--log-level": 1,
+        "--port": 1,
+        "-c": 1,
+        "-h": 0,
+        "-p": 1,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "unbind": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--routing-key": 1,
+        "-h": 0,
+        "-r": 1,
+        "-v": 1
+       },
+       "positionals": 3,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "backend": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "generate": {
+       "aliases": {},
+       "flags": {
+        "--backend": 1,
+        "--database": 1,
+        "--generate-todo-md": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--port": 1,
+        "--spec": 1,
+        "--with-docs": 0,
+        "--with-tests": 0,
+        "-b": 1,
+        "-h": 0,
+        "-o": 1,
+        "-p": 1,
+        "-s": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "list": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "behavior-rule": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "add": {
+       "aliases": {},
+       "flags": {
+        "--action": 1,
+        "--condition": 1,
+        "--endpoint": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--name": 1,
+        "--parameter": 1,
+        "--priority": 1,
+        "--rule-type": 1,
+        "--script": 1,
+        "--script-language": 1,
+        "--threshold": 1,
+        "-a": 1,
+        "-c": 1,
+        "-h": 0,
+        "-n": 1,
+        "-p": 1,
+        "-v": 1
+       },
+       "positionals": 3,
+       "subcommands": {},
+       "variadic": false
+      },
+      "disable": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "enable": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "list": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "remove": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "status": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "bench": {
+     "aliases": {},
+     "flags": {
+      "--abort-on-error-rate": 1,
+      "--auth": 1,
+      "--auth-bearer": 1,
+      "--base-path": 1,
+      "--chunked-request-bodies": 0,
+      "--conformance": 0,
+      "--conformance-all-operations": 0,
+      "--conformance-api-key": 1,
+      "--conformance-basic-auth": 1,
+      "--conformance-categories": 1,
+      "--conformance-custom": 1,
+      "--conformance-custom-filter": 1,
+      "--conformance-delay": 1,
+      "--conformance-header": 1,
+      "--conformance-report": 1,
+      "--conformance-report-format": 1,
+      "--conformance-self-test": 0,
+      "--conformance-self-test-capture": 0,
+      "--conformance-self-test-duration": 1,
+      "--conformance-self-test-iterations": 1,
+      "--cps": 0,
+      "--crud-flow": 0,
+      "--data-distribution": 1,
+      "--data-file": 1,
+      "--data-mappings": 1,
+      "--dependency-config": 1,
+      "--discard-response-bodies": 0,
+      "--dns-policy": 1,
+      "--duration": 1,
+      "--error-rate": 1,
+      "--error-types": 1,
+      "--exclude-operations": 1,
+      "--export-requests": 0,
+      "--extract-fields": 1,
+      "--flow-config": 1,
+      "--generate-only": 0,
+      "--geo-source-header": 1,
+      "--geo-source-ip": 1,
+      "--headers": 1,
+      "--help": 0,
+      "--insecure": 0,
+      "--keep-rounds": 1,
+      "--log-level": 1,
+      "--max-concurrency": 1,
+      "--max-error-rate": 1,
+      "--merge-conflicts": 1,
+      "--no-abort-on-error": 0,
+      "--no-k6-logs": 0,
+      "--no-per-op-metrics": 0,
+      "--operations": 1,
+      "--output": 1,
+      "--owasp-admin-paths": 1,
+      "--owasp-api-top10": 0,
+      "--owasp-auth-header": 1,
+      "--owasp-auth-token": 1,
+      "--owasp-categories": 1,
+      "--owasp-id-fields": 1,
+      "--owasp-iterations": 1,
+      "--owasp-report": 1,
+      "--owasp-report-format": 1,
+      "--parallel-create": 1,
+      "--params-file": 1,
+      "--per-op-metrics": 0,
+      "--repeat-until": 1,
+      "--report-missed-cap": 1,
+      "--results-format": 1,
+      "--rounds": 1,
+      "--rps": 1,
+      "--scenario": 1,
+      "--script-output": 1,
+      "--security-categories": 1,
+      "--security-payloads": 1,
+      "--security-target-fields": 1,
+      "--security-test": 0,
+      "--source-ip": 1,
+      "--spec": 1,
+      "--spec-dir": 1,
+      "--spec-mode": 1,
+      "--target": 1,
+      "--targets-file": 1,
+      "--threshold-ms": 1,
+      "--threshold-percentile": 1,
+      "--use-k6": 0,
+      "--validate-requests": 0,
+      "--validate-response-schemas": 0,
+      "--verbose": 0,
+      "--vus": 1,
+      "--wafbench-cycle-all": 0,
+      "--wafbench-dir": 1,
+      "--wafbench-verbatim": 0,
+      "-V": 0,
+      "-d": 1,
+      "-h": 0,
+      "-o": 1,
+      "-s": 1,
+      "-t": 1,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    },
+    "bench-chunked": {
+     "aliases": {},
+     "flags": {
+      "--base-path": 1,
+      "--chunk-interval-ms": 1,
+      "--chunk-size-bytes": 1,
+      "--concurrency": 1,
+      "--cps": 0,
+      "--duration": 1,
+      "--export-requests": 0,
+      "--header": 1,
+      "--help": 0,
+      "--insecure": 0,
+      "--keep-rounds": 1,
+      "--log-level": 1,
+      "--max-concurrency": 1,
+      "--method": 1,
+      "--operation-id": 1,
+      "--output": 1,
+      "--repeat-until": 1,
+      "--rounds": 1,
+      "--rps": 1,
+      "--spec": 1,
+      "--target": 1,
+      "--targets-file": 1,
+      "--total-size-bytes": 1,
+      "--validate-requests": 0,
+      "-c": 1,
+      "-d": 1,
+      "-h": 0,
+      "-m": 1,
+      "-o": 1,
+      "-t": 1,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    },
+    "bench-pipeline": {
+     "aliases": {},
+     "flags": {
+      "--body-size": 1,
+      "--connections": 1,
+      "--content-type": 1,
+      "--duration": 1,
+      "--help": 0,
+      "--log-level": 1,
+      "--method": 1,
+      "--pipeline-depth": 1,
+      "--target": 1,
+      "-d": 1,
+      "-h": 0,
+      "-m": 1,
+      "-t": 1,
+      "-v": 1
+     },
+     "positionals": 1,
+     "subcommands": {},
+     "variadic": false
+    },
+    "bench-qos": {
+     "aliases": {},
+     "flags": {
+      "--class": 1,
+      "--concurrency": 1,
+      "--duration": 1,
+      "--help": 0,
+      "--log-level": 1,
+      "--method": 1,
+      "--mss": 1,
+      "--target": 1,
+      "-c": 1,
+      "-d": 1,
+      "-h": 0,
+      "-m": 1,
+      "-t": 1,
+      "-v": 1
+     },
+     "positionals": 1,
+     "subcommands": {},
+     "variadic": false
+    },
+    "blueprint": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "create": {
+       "aliases": {},
+       "flags": {
+        "--blueprint": 1,
+        "--force": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "-b": 1,
+        "-h": 0,
+        "-o": 1,
+        "-v": 1
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "info": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "list": {
+       "aliases": {},
+       "flags": {
+        "--category": 1,
+        "--detailed": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "-c": 1,
+        "-d": 0,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "chaos": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "profile": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "apply": {
+         "aliases": {},
+         "flags": {
+          "--base-url": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "export": {
+         "aliases": {},
+         "flags": {
+          "--base-url": 1,
+          "--format": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "--output": 1,
+          "-h": 0,
+          "-o": 1,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "import": {
+         "aliases": {},
+         "flags": {
+          "--base-url": 1,
+          "--file": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "-f": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "list": {
+         "aliases": {},
+         "flags": {
+          "--base-url": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "client": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "generate": {
+       "aliases": {},
+       "flags": {
+        "--base-url": 1,
+        "--framework": 1,
+        "--help": 0,
+        "--include-mocks": 0,
+        "--include-types": 0,
+        "--log-level": 1,
+        "--options": 1,
+        "--output": 1,
+        "--spec": 1,
+        "--template-dir": 1,
+        "-f": 1,
+        "-h": 0,
+        "-o": 1,
+        "-s": 1,
+        "-v": 1
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "list": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "cloud": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "activity": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--limit": 1,
+        "--log-level": 1,
+        "--service-url": 1,
+        "--workspace": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "delete": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--service-url": 1,
+        "--yes": 0,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "deploy": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--name": 1,
+        "--region": 1,
+        "--service-url": 1,
+        "--slug": 1,
+        "--spec": 1,
+        "--wait": 0,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      },
+      "deployment-status": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--service-url": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "deployments": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--service-url": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "login": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--provider": 1,
+        "--service-url": 1,
+        "--token": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "logout": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "redeploy": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--service-url": 1,
+        "--spec": 1,
+        "--wait": 0,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "set-domain": {
+       "aliases": {},
+       "flags": {
+        "--domain": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--service-url": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      },
+      "sync": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "history": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--limit": 1,
+          "--log-level": 1,
+          "--service-url": 1,
+          "--workspace": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "pending": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "--service-url": 1,
+          "--workspace": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "start": {
+         "aliases": {},
+         "flags": {
+          "--all": 0,
+          "--direction": 1,
+          "--help": 0,
+          "--local-dir": 1,
+          "--log-level": 1,
+          "--project": 1,
+          "--service-url": 1,
+          "--strategy": 1,
+          "--watch": 0,
+          "--workspace": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "status": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "--service-url": 1,
+          "--workspace": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "team": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "invite": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "--role": 1,
+          "--service-url": 1,
+          "--workspace": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 2,
+         "subcommands": {},
+         "variadic": false
+        },
+        "members": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "--service-url": 1,
+          "--workspace": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "remove": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "--service-url": 1,
+          "--workspace": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 2,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "test": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "run": {
+         "aliases": {},
+         "flags": {
+          "--git-ref": 1,
+          "--git-sha": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "--service-url": 1,
+          "--timeout-secs": 1,
+          "--triggered-by": 1,
+          "--wait": 0,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "whoami": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--service-url": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "workspace": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "create": {
+         "aliases": {},
+         "flags": {
+          "--description": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "--name": 1,
+          "--service-url": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 2,
+         "subcommands": {},
+         "variadic": false
+        },
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "info": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "--service-url": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "link": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "--service-url": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 2,
+         "subcommands": {},
+         "variadic": false
+        },
+        "list": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "--service-url": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "unlink": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "completions": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 1,
+     "subcommands": {},
+     "variadic": false
+    },
+    "config": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "generate-template": {
+       "aliases": {},
+       "flags": {
+        "--format": 1,
+        "--full": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "-f": 1,
+        "-h": 0,
+        "-o": 1,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "list-env-vars": {
+       "aliases": {},
+       "flags": {
+        "--category": 1,
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-c": 1,
+        "-f": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "show": {
+       "aliases": {},
+       "flags": {
+        "--config": 1,
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-c": 1,
+        "-f": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "validate": {
+       "aliases": {},
+       "flags": {
+        "--config": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--warnings": 0,
+        "-c": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "contract-diff": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "analyze": {
+       "aliases": {},
+       "flags": {
+        "--capture-id": 1,
+        "--confidence-threshold": 1,
+        "--help": 0,
+        "--llm-api-key": 1,
+        "--llm-model": 1,
+        "--llm-provider": 1,
+        "--log-level": 1,
+        "--output": 1,
+        "--request-path": 1,
+        "--spec": 1,
+        "-h": 0,
+        "-o": 1,
+        "-s": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "apply-patch": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--patch": 1,
+        "--spec": 1,
+        "-h": 0,
+        "-o": 1,
+        "-p": 1,
+        "-s": 1,
+        "-v": 1
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      },
+      "compare": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--new-spec": 1,
+        "--old-spec": 1,
+        "--output": 1,
+        "-h": 0,
+        "-o": 1,
+        "-v": 1
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      },
+      "generate-patch": {
+       "aliases": {},
+       "flags": {
+        "--capture-id": 1,
+        "--help": 0,
+        "--llm-api-key": 1,
+        "--llm-model": 1,
+        "--llm-provider": 1,
+        "--log-level": 1,
+        "--output": 1,
+        "--request-path": 1,
+        "--spec": 1,
+        "-h": 0,
+        "-o": 1,
+        "-s": 1,
+        "-v": 1
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      }
+     },
+     "variadic": false
+    },
+    "contract-sync": {
+     "aliases": {},
+     "flags": {
+      "--auth-token": 1,
+      "--branch": 1,
+      "--cache-dir": 1,
+      "--help": 0,
+      "--log-level": 1,
+      "--mock-config": 1,
+      "--output": 1,
+      "--spec-paths": 1,
+      "--strict": 0,
+      "--update": 0,
+      "-b": 1,
+      "-h": 0,
+      "-o": 1,
+      "-s": 1,
+      "-v": 1
+     },
+     "positionals": 1,
+     "subcommands": {},
+     "variadic": false
+    },
+    "data": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "mock-openapi": {
+       "aliases": {},
+       "flags": {
+        "--array-size": 1,
+        "--format": 1,
+        "--help": 0,
+        "--include-optional": 0,
+        "--log-level": 1,
+        "--max-array-size": 1,
+        "--output": 1,
+        "--realistic": 0,
+        "--rows": 1,
+        "--validate": 0,
+        "-f": 1,
+        "-h": 0,
+        "-o": 1,
+        "-r": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "mock-server": {
+       "aliases": {},
+       "flags": {
+        "--cors": 0,
+        "--delay": 1,
+        "--help": 0,
+        "--host": 1,
+        "--include-optional": 0,
+        "--log-level": 1,
+        "--log-requests": 0,
+        "--port": 1,
+        "--realistic": 0,
+        "--validate": 0,
+        "-h": 0,
+        "-p": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "schema": {
+       "aliases": {},
+       "flags": {
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--rows": 1,
+        "-f": 1,
+        "-h": 0,
+        "-o": 1,
+        "-r": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "template": {
+       "aliases": {},
+       "flags": {
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--rag": 0,
+        "--rag-endpoint": 1,
+        "--rag-max-retries": 1,
+        "--rag-model": 1,
+        "--rag-provider": 1,
+        "--rag-timeout": 1,
+        "--rows": 1,
+        "-f": 1,
+        "-h": 0,
+        "-o": 1,
+        "-r": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "deploy": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "deploy": {
+       "aliases": {},
+       "flags": {
+        "--auto-tunnel": 0,
+        "--config": 1,
+        "--custom-domain": 1,
+        "--dry-run": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "--production-preset": 0,
+        "--spec": 1,
+        "--start-server": 0,
+        "-c": 1,
+        "-h": 0,
+        "-s": 1,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "status": {
+       "aliases": {},
+       "flags": {
+        "--config": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-c": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "stop": {
+       "aliases": {},
+       "flags": {
+        "--config": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-c": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "dev-setup": {
+     "aliases": {},
+     "flags": {
+      "--base-url": 1,
+      "--force": 0,
+      "--help": 0,
+      "--log-level": 1,
+      "--output": 1,
+      "--reality-level": 1,
+      "--spec": 1,
+      "-h": 0,
+      "-o": 1,
+      "-s": 1,
+      "-v": 1
+     },
+     "positionals": 1,
+     "subcommands": {},
+     "variadic": false
+    },
+    "drift-learning": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "disable": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "enable": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--min-samples": 1,
+        "--mode": 1,
+        "--persona-adaptation": 0,
+        "--sensitivity": 1,
+        "--traffic-mirroring": 0,
+        "-h": 0,
+        "-m": 1,
+        "-s": 1,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "endpoint": {
+       "aliases": {},
+       "flags": {
+        "--enable": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "-e": 0,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "persona": {
+       "aliases": {},
+       "flags": {
+        "--enable": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "-e": 0,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "status": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "flow": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "compile": {
+       "aliases": {},
+       "flags": {
+        "--flex-mode": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "--scenario-name": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      },
+      "export": {
+       "aliases": {},
+       "flags": {
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "-f": 1,
+        "-h": 0,
+        "-o": 1,
+        "-v": 1
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "import": {
+       "aliases": {},
+       "flags": {
+        "--format": 1,
+        "--help": 0,
+        "--input": 1,
+        "--log-level": 1,
+        "-f": 1,
+        "-h": 0,
+        "-i": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "list": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--limit": 1,
+        "--log-level": 1,
+        "-h": 0,
+        "-l": 1,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "replay": {
+       "aliases": {},
+       "flags": {
+        "--flex-mode": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "scenarios": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--limit": 1,
+        "--log-level": 1,
+        "-h": 0,
+        "-l": 1,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "tag": {
+       "aliases": {},
+       "flags": {
+        "--description": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--name": 1,
+        "--tags": 1,
+        "-h": 0,
+        "-n": 1,
+        "-t": 1,
+        "-v": 1
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      },
+      "view": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--verbose": 0,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "ftp": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "fixtures": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "list": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "load": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "validate": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "serve": {
+       "aliases": {},
+       "flags": {
+        "--config": 1,
+        "--help": 0,
+        "--host": 1,
+        "--log-level": 1,
+        "--port": 1,
+        "--virtual-root": 1,
+        "-c": 1,
+        "-h": 0,
+        "-p": 1,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "vfs": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "add": {
+         "aliases": {},
+         "flags": {
+          "--content": 1,
+          "--generate": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "--size": 1,
+          "--template": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "info": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "list": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "remove": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "generate": {
+     "aliases": {},
+     "flags": {
+      "--config": 1,
+      "--dry-run": 0,
+      "--help": 0,
+      "--log-level": 1,
+      "--output": 1,
+      "--progress": 0,
+      "--spec": 1,
+      "--verbose": 0,
+      "--watch": 0,
+      "--watch-debounce": 1,
+      "-c": 1,
+      "-h": 0,
+      "-o": 1,
+      "-s": 1,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    },
+    "generate-tests": {
+     "aliases": {},
+     "flags": {
+      "--ai-descriptions": 0,
+      "--base-url": 1,
+      "--database": 1,
+      "--format": 1,
+      "--help": 0,
+      "--limit": 1,
+      "--llm-api-key": 1,
+      "--llm-endpoint": 1,
+      "--llm-model": 1,
+      "--llm-provider": 1,
+      "--log-level": 1,
+      "--max-duration-ms": 1,
+      "--method": 1,
+      "--output": 1,
+      "--path": 1,
+      "--protocol": 1,
+      "--status-code": 1,
+      "--suite-name": 1,
+      "--validate-body": 0,
+      "--validate-headers": 0,
+      "--validate-status": 0,
+      "--validate-timing": 0,
+      "-d": 1,
+      "-f": 1,
+      "-h": 0,
+      "-l": 1,
+      "-o": 1,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    },
+    "git-watch": {
+     "aliases": {},
+     "flags": {
+      "--auth-token": 1,
+      "--branch": 1,
+      "--cache-dir": 1,
+      "--help": 0,
+      "--log-level": 1,
+      "--poll-interval": 1,
+      "--reload-command": 1,
+      "--spec-paths": 1,
+      "-b": 1,
+      "-h": 0,
+      "-s": 1,
+      "-v": 1
+     },
+     "positionals": 1,
+     "subcommands": {},
+     "variadic": false
+    },
+    "governance": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "forecast": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "generate": {
+         "aliases": {},
+         "flags": {
+          "--endpoint": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "--method": 1,
+          "--service-id": 1,
+          "--window-days": 1,
+          "--workspace-id": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        }
+       },
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "semantic": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "analyze": {
+         "aliases": {},
+         "flags": {
+          "--after": 1,
+          "--before": 1,
+          "--endpoint": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "--method": 1,
+          "--output": 1,
+          "-h": 0,
+          "-o": 1,
+          "-v": 1
+         },
+         "positionals": 4,
+         "subcommands": {},
+         "variadic": false
+        },
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        }
+       },
+       "variadic": false
+      },
+      "status": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--service-id": 1,
+        "--workspace-id": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "threat": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "assess": {
+         "aliases": {},
+         "flags": {
+          "--endpoint": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "--method": 1,
+          "--output": 1,
+          "--service-id": 1,
+          "--spec": 1,
+          "--workspace-id": 1,
+          "-h": 0,
+          "-o": 1,
+          "-s": 1,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        }
+       },
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "har-to-conformance": {
+     "aliases": {},
+     "flags": {
+      "--base-url": 1,
+      "--har": 1,
+      "--help": 0,
+      "--include-headers": 1,
+      "--log-level": 1,
+      "--max-entries": 1,
+      "--output": 1,
+      "--skip-static": 0,
+      "--strip-base-path": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 1,
+     "subcommands": {},
+     "variadic": false
+    },
+    "help": {
+     "aliases": {},
+     "flags": {},
+     "free": true,
+     "subcommands": {}
+    },
+    "import": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "asyncapi": {
+       "aliases": {},
+       "flags": {
+        "--base-url": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--protocol": 1,
+        "--verbose": 0,
+        "-V": 0,
+        "-b": 1,
+        "-h": 0,
+        "-o": 1,
+        "-p": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "coverage": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--spec-type": 1,
+        "-h": 0,
+        "-t": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "insomnia": {
+       "aliases": {},
+       "flags": {
+        "--environment": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--verbose": 0,
+        "-V": 0,
+        "-e": 1,
+        "-h": 0,
+        "-o": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "openapi": {
+       "aliases": {},
+       "flags": {
+        "--all-responses": 0,
+        "--base-url": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--verbose": 0,
+        "-V": 0,
+        "-b": 1,
+        "-h": 0,
+        "-o": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "init": {
+     "aliases": {},
+     "flags": {
+      "--blueprint": 1,
+      "--help": 0,
+      "--log-level": 1,
+      "--no-examples": 0,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 1,
+     "subcommands": {},
+     "variadic": false
+    },
+    "kafka": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "consume": {
+       "aliases": {},
+       "flags": {
+        "--count": 1,
+        "--from": 1,
+        "--group": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--partition": 1,
+        "--topic": 1,
+        "-c": 1,
+        "-f": 1,
+        "-g": 1,
+        "-h": 0,
+        "-p": 1,
+        "-t": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "fixtures": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "list": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "load": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "start-auto-produce": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "stop-auto-produce": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "groups": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "describe": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "list": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "offsets": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "metrics": {
+       "aliases": {},
+       "flags": {
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-f": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "produce": {
+       "aliases": {},
+       "flags": {
+        "--header": 1,
+        "--help": 0,
+        "--key": 1,
+        "--log-level": 1,
+        "--partition": 1,
+        "--topic": 1,
+        "--value": 1,
+        "-H": 1,
+        "-h": 0,
+        "-k": 1,
+        "-m": 1,
+        "-p": 1,
+        "-t": 1,
+        "-v": 1
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      },
+      "serve": {
+       "aliases": {},
+       "flags": {
+        "--config": 1,
+        "--help": 0,
+        "--host": 1,
+        "--log-level": 1,
+        "--port": 1,
+        "-c": 1,
+        "-h": 0,
+        "-p": 1,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "simulate": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "lag": {
+         "aliases": {},
+         "flags": {
+          "--group": 1,
+          "--help": 0,
+          "--lag": 1,
+          "--log-level": 1,
+          "--topic": 1,
+          "-g": 1,
+          "-h": 0,
+          "-l": 1,
+          "-t": 1,
+          "-v": 1
+         },
+         "positionals": 3,
+         "subcommands": {},
+         "variadic": false
+        },
+        "rebalance": {
+         "aliases": {},
+         "flags": {
+          "--group": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "-g": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "reset-offsets": {
+         "aliases": {},
+         "flags": {
+          "--group": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "--to": 1,
+          "--topic": 1,
+          "-g": 1,
+          "-h": 0,
+          "-o": 1,
+          "-t": 1,
+          "-v": 1
+         },
+         "positionals": 2,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "topic": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "create": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "--partitions": 1,
+          "--replication-factor": 1,
+          "-h": 0,
+          "-p": 1,
+          "-r": 1,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "delete": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "describe": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "list": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "login": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "--provider": 1,
+      "--service-url": 1,
+      "--token": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    },
+    "logs": {
+     "aliases": {},
+     "flags": {
+      "--admin-url": 1,
+      "--config": 1,
+      "--file": 1,
+      "--follow": 0,
+      "--help": 0,
+      "--json": 0,
+      "--limit": 1,
+      "--log-level": 1,
+      "--method": 1,
+      "--path": 1,
+      "--status": 1,
+      "-F": 0,
+      "-c": 1,
+      "-f": 1,
+      "-h": 0,
+      "-l": 1,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    },
+    "mcp": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    },
+    "mockai": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "disable": {
+       "aliases": {},
+       "flags": {
+        "--config": 1,
+        "--endpoint": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-c": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "enable": {
+       "aliases": {},
+       "flags": {
+        "--config": 1,
+        "--endpoint": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-c": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "generate": {
+       "aliases": {},
+       "flags": {
+        "--from-openapi": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--verbose": 0,
+        "-h": 0,
+        "-o": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "generate-from-traffic": {
+       "aliases": {},
+       "flags": {
+        "--database": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--min-confidence": 1,
+        "--output": 1,
+        "--path-pattern": 1,
+        "--since": 1,
+        "--until": 1,
+        "--verbose": 0,
+        "-h": 0,
+        "-o": 1,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "learn": {
+       "aliases": {},
+       "flags": {
+        "--from-examples": 1,
+        "--from-openapi": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--verbose": 0,
+        "-h": 0,
+        "-o": 1,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "status": {
+       "aliases": {},
+       "flags": {
+        "--config": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-c": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "mod": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "generate": {
+       "aliases": {},
+       "flags": {
+        "--from-graphql": 1,
+        "--from-grpc": 1,
+        "--from-openapi": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--reality-level": 1,
+        "-h": 0,
+        "-o": 1,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "init": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--name": 1,
+        "--output": 1,
+        "--template": 1,
+        "-h": 0,
+        "-n": 1,
+        "-o": 1,
+        "-t": 1,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "review": {
+       "aliases": {},
+       "flags": {
+        "--contract": 1,
+        "--format": 1,
+        "--help": 0,
+        "--implementation": 1,
+        "--log-level": 1,
+        "--mock": 1,
+        "-c": 1,
+        "-f": 1,
+        "-h": 0,
+        "-i": 1,
+        "-m": 1,
+        "-v": 1
+       },
+       "positionals": 3,
+       "subcommands": {},
+       "variadic": false
+      },
+      "templates": {
+       "aliases": {},
+       "flags": {
+        "--detailed": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "-d": 0,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "validate": {
+       "aliases": {},
+       "flags": {
+        "--contract": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--strict": 0,
+        "--target": 1,
+        "-c": 1,
+        "-h": 0,
+        "-t": 1,
+        "-v": 1
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "mqtt": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "clients": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "disconnect": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "list": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "fixtures": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "load": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "start-auto-publish": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "stop-auto-publish": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "publish": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--host": 1,
+        "--log-level": 1,
+        "--payload": 1,
+        "--port": 1,
+        "--qos": 1,
+        "--retain": 0,
+        "--topic": 1,
+        "-h": 0,
+        "-p": 1,
+        "-q": 1,
+        "-t": 1,
+        "-v": 1
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      },
+      "subscribe": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--host": 1,
+        "--log-level": 1,
+        "--port": 1,
+        "--qos": 1,
+        "--topic": 1,
+        "-h": 0,
+        "-q": 1,
+        "-t": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "topics": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "clear-retained": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "list": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "orchestrate": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "start": {
+       "aliases": {},
+       "flags": {
+        "--base-url": 1,
+        "--file": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-f": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "status": {
+       "aliases": {},
+       "flags": {
+        "--base-url": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "stop": {
+       "aliases": {},
+       "flags": {
+        "--base-url": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "template": {
+       "aliases": {},
+       "flags": {
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "-h": 0,
+        "-o": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "validate": {
+       "aliases": {},
+       "flags": {
+        "--file": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-f": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "plugin": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "cache-stats": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "clear-cache": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--stats": 0,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "info": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "init": {
+       "aliases": {},
+       "flags": {
+        "--force": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--plugin-type": 1,
+        "-h": 0,
+        "-o": 1,
+        "-p": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "install": {
+       "aliases": {},
+       "flags": {
+        "--checksum": 1,
+        "--force": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "--no-verify": 0,
+        "--skip-validation": 0,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "list": {
+       "aliases": {},
+       "flags": {
+        "--detailed": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "-d": 0,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "search": {
+       "aliases": {},
+       "flags": {
+        "--category": 1,
+        "--help": 0,
+        "--limit": 1,
+        "--log-level": 1,
+        "-h": 0,
+        "-l": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "uninstall": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "update": {
+       "aliases": {},
+       "flags": {
+        "--all": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "validate": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "quick": {
+     "aliases": {},
+     "flags": {
+      "--admin": 0,
+      "--admin-port": 1,
+      "--help": 0,
+      "--host": 1,
+      "--log-level": 1,
+      "--logging": 0,
+      "--metrics": 0,
+      "--metrics-port": 1,
+      "--port": 1,
+      "-h": 0,
+      "-p": 1,
+      "-v": 1
+     },
+     "positionals": 1,
+     "subcommands": {},
+     "variadic": false
+    },
+    "reality-profile": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "apply": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--workspace": 1,
+        "-h": 0,
+        "-v": 1,
+        "-w": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "info": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "install": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "list": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "recorder": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "convert": {
+       "aliases": {},
+       "flags": {
+        "--deduplicate": 0,
+        "--detect-dynamic-values": 0,
+        "--format": 1,
+        "--help": 0,
+        "--input": 1,
+        "--limit": 1,
+        "--log-level": 1,
+        "--method": 1,
+        "--output": 1,
+        "--path": 1,
+        "--protocol": 1,
+        "--recording-id": 1,
+        "-f": 1,
+        "-h": 0,
+        "-i": 1,
+        "-l": 1,
+        "-o": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      }
+     },
+     "variadic": false
+    },
+    "scenario": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "info": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--version": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "install": {
+       "aliases": {},
+       "flags": {
+        "--checksum": 1,
+        "--force": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "--skip-validation": 0,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "list": {
+       "aliases": {},
+       "flags": {
+        "--detailed": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "-d": 0,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "pack": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "info": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "install": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "list": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "studio": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {
+          "create": {
+           "aliases": {},
+           "flags": {
+            "--help": 0,
+            "--log-level": 1,
+            "--output": 1,
+            "-h": 0,
+            "-o": 1,
+            "-v": 1
+           },
+           "positionals": 1,
+           "subcommands": {},
+           "variadic": false
+          },
+          "help": {
+           "aliases": {},
+           "flags": {},
+           "free": true,
+           "subcommands": {}
+          },
+          "install": {
+           "aliases": {},
+           "flags": {
+            "--help": 0,
+            "--log-level": 1,
+            "--workspace": 1,
+            "-h": 0,
+            "-v": 1,
+            "-w": 1
+           },
+           "positionals": 1,
+           "subcommands": {},
+           "variadic": false
+          },
+          "list": {
+           "aliases": {},
+           "flags": {
+            "--help": 0,
+            "--log-level": 1,
+            "-h": 0,
+            "-v": 1
+           },
+           "positionals": 0,
+           "subcommands": {},
+           "variadic": false
+          }
+         },
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "preview": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "publish": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--registry": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "review": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "list": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "--page": 1,
+          "--per-page": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "submit": {
+         "aliases": {},
+         "flags": {
+          "--comment": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "--rating": 1,
+          "--reviewer": 1,
+          "--reviewer-email": 1,
+          "--scenario-version": 1,
+          "--title": 1,
+          "--verified": 0,
+          "-c": 1,
+          "-h": 0,
+          "-r": 1,
+          "-v": 1
+         },
+         "positionals": 4,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "search": {
+       "aliases": {},
+       "flags": {
+        "--category": 1,
+        "--help": 0,
+        "--limit": 1,
+        "--log-level": 1,
+        "-h": 0,
+        "-l": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "uninstall": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--version": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "update": {
+       "aliases": {},
+       "flags": {
+        "--all": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "use": {
+       "aliases": {},
+       "flags": {
+        "--auto-align": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "--merge-strategy": 1,
+        "--version": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "schema": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "generate": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--type": 1,
+        "-h": 0,
+        "-o": 1,
+        "-t": 1,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "validate": {
+       "aliases": {},
+       "flags": {
+        "--directory": 1,
+        "--file": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--schema-dir": 1,
+        "--schema-type": 1,
+        "--strict": 0,
+        "-d": 1,
+        "-f": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "serve": {
+     "aliases": {},
+     "flags": {
+      "--admin": 0,
+      "--admin-host": 1,
+      "--admin-port": 1,
+      "--ai-enabled": 0,
+      "--amqp-port": 1,
+      "--api-versioning": 1,
+      "--bandwidth-limit": 1,
+      "--base-path": 1,
+      "--bulkhead": 0,
+      "--bulkhead-max-concurrent": 1,
+      "--bulkhead-max-queue": 1,
+      "--bulkhead-queue-timeout-ms": 1,
+      "--burst-size": 1,
+      "--chaos": 0,
+      "--chaos-bandwidth-limit": 1,
+      "--chaos-graphql": 0,
+      "--chaos-graphql-error-codes": 1,
+      "--chaos-graphql-partial-data-probability": 1,
+      "--chaos-graphql-resolver-latency": 0,
+      "--chaos-grpc": 0,
+      "--chaos-grpc-status-codes": 1,
+      "--chaos-grpc-stream-interruption-probability": 1,
+      "--chaos-http-error-probability": 1,
+      "--chaos-http-errors": 1,
+      "--chaos-latency-ms": 1,
+      "--chaos-latency-probability": 1,
+      "--chaos-latency-range": 1,
+      "--chaos-packet-loss": 1,
+      "--chaos-profile": 1,
+      "--chaos-random": 0,
+      "--chaos-random-delay-rate": 1,
+      "--chaos-random-error-rate": 1,
+      "--chaos-random-max-delay": 1,
+      "--chaos-random-min-delay": 1,
+      "--chaos-rate-limit": 1,
+      "--chaos-scenario": 1,
+      "--chaos-websocket": 0,
+      "--chaos-websocket-close-codes": 1,
+      "--chaos-websocket-message-corruption-probability": 1,
+      "--chaos-websocket-message-drop-probability": 1,
+      "--circuit-breaker": 0,
+      "--circuit-breaker-failure-rate": 1,
+      "--circuit-breaker-failure-threshold": 1,
+      "--circuit-breaker-success-threshold": 1,
+      "--circuit-breaker-timeout-ms": 1,
+      "--config": 1,
+      "--conformance-buffer-size": 1,
+      "--conformance-buffer-unique": 0,
+      "--dry-run": 0,
+      "--graphql": 1,
+      "--graphql-port": 1,
+      "--graphql-upstream": 1,
+      "--grpc-port": 1,
+      "--help": 0,
+      "--http-port": 1,
+      "--https-port": 1,
+      "--inject-response-violations": 0,
+      "--jaeger-endpoint": 1,
+      "--kafka-port": 1,
+      "--list-network-profiles": 0,
+      "--llm-mock": 0,
+      "--llm-mock-api-key": 1,
+      "--llm-mock-cassette": 1,
+      "--llm-mock-mode": 1,
+      "--llm-mock-upstream": 1,
+      "--log-level": 1,
+      "--mcp-mock": 0,
+      "--merge-conflicts": 1,
+      "--metrics": 0,
+      "--metrics-port": 1,
+      "--mqtt-port": 1,
+      "--mtls": 1,
+      "--network-profile": 1,
+      "--no-config": 0,
+      "--no-rate-limit": 0,
+      "--profile": 1,
+      "--progress": 0,
+      "--rag-api-key": 1,
+      "--rag-model": 1,
+      "--rag-provider": 1,
+      "--reality-level": 1,
+      "--recorder": 0,
+      "--recorder-api-port": 1,
+      "--recorder-db": 1,
+      "--recorder-max-requests": 1,
+      "--recorder-no-api": 0,
+      "--recorder-retention-days": 1,
+      "--shadow": 0,
+      "--smtp-port": 1,
+      "--spec": 1,
+      "--spec-dir": 1,
+      "--tcp-port": 1,
+      "--tls-ca": 1,
+      "--tls-cert": 1,
+      "--tls-enabled": 0,
+      "--tls-key": 1,
+      "--tls-min-version": 1,
+      "--tracing": 0,
+      "--tracing-environment": 1,
+      "--tracing-sampling-rate": 1,
+      "--tracing-service-name": 1,
+      "--traffic-shaping": 0,
+      "--verbose": 0,
+      "--ws-port": 1,
+      "--ws-replay-file": 1,
+      "-c": 1,
+      "-h": 0,
+      "-p": 1,
+      "-s": 1,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    },
+    "smtp": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "fixtures": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "list": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "reload": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "validate": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "mailbox": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "clear": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "export": {
+         "aliases": {},
+         "flags": {
+          "--format": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "--output": 1,
+          "-f": 1,
+          "-h": 0,
+          "-o": 1,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "list": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "search": {
+         "aliases": {},
+         "flags": {
+          "--body": 1,
+          "--case-sensitive": 0,
+          "--help": 0,
+          "--log-level": 1,
+          "--recipient": 1,
+          "--regex": 0,
+          "--sender": 1,
+          "--since": 1,
+          "--subject": 1,
+          "--until": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "show": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "send": {
+       "aliases": {},
+       "flags": {
+        "--body": 1,
+        "--from": 1,
+        "--help": 0,
+        "--host": 1,
+        "--log-level": 1,
+        "--port": 1,
+        "--subject": 1,
+        "--to": 1,
+        "-b": 1,
+        "-h": 0,
+        "-s": 1,
+        "-t": 1,
+        "-v": 1
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "snapshot": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "delete": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--workspace": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "info": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--workspace": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "list": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--workspace": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "load": {
+       "aliases": {},
+       "flags": {
+        "--components": 1,
+        "--dry-run": 0,
+        "--help": 0,
+        "--log-level": 1,
+        "--workspace": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "save": {
+       "aliases": {},
+       "flags": {
+        "--components": 1,
+        "--description": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--workspace": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "validate": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--workspace": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "suggest": {
+     "aliases": {},
+     "flags": {
+      "--domain": 1,
+      "--format": 1,
+      "--from": 1,
+      "--from-description": 1,
+      "--help": 0,
+      "--include-examples": 0,
+      "--llm-api-key": 1,
+      "--llm-endpoint": 1,
+      "--llm-model": 1,
+      "--llm-provider": 1,
+      "--log-level": 1,
+      "--num-suggestions": 1,
+      "--output": 1,
+      "--print-json": 0,
+      "--temperature": 1,
+      "-f": 1,
+      "-h": 0,
+      "-o": 1,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    },
+    "sync": {
+     "aliases": {},
+     "flags": {
+      "--config": 1,
+      "--help": 0,
+      "--log-level": 1,
+      "--workspace-dir": 1,
+      "-c": 1,
+      "-h": 0,
+      "-v": 1,
+      "-w": 1
+     },
+     "positionals": 1,
+     "subcommands": {},
+     "variadic": false
+    },
+    "template": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "get": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--storage-dir": 1,
+        "--version": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "install": {
+       "aliases": {},
+       "flags": {
+        "--auth-token": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--registry-url": 1,
+        "--storage-dir": 1,
+        "--version": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      },
+      "list": {
+       "aliases": {},
+       "flags": {
+        "--category": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--search": 1,
+        "--storage-dir": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "marketplace": {
+       "aliases": {},
+       "flags": {
+        "--auth-token": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--registry-url": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {
+        "category": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 2,
+         "subcommands": {},
+         "variadic": false
+        },
+        "featured": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "get": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "--version": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 2,
+         "subcommands": {},
+         "variadic": false
+        },
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "search": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 2,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "register": {
+       "aliases": {},
+       "flags": {
+        "--author": 1,
+        "--category": 1,
+        "--content": 1,
+        "--dependencies": 1,
+        "--description": 1,
+        "--example": 1,
+        "--help": 0,
+        "--id": 1,
+        "--log-level": 1,
+        "--name": 1,
+        "--storage-dir": 1,
+        "--tags": 1,
+        "--version": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 3,
+       "subcommands": {},
+       "variadic": false
+      },
+      "remove": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--storage-dir": 1,
+        "--version": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "search": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--storage-dir": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "test-ai": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "drift": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--initial-data": 1,
+        "--iterations": 1,
+        "--log-level": 1,
+        "--output": 1,
+        "-h": 0,
+        "-i": 1,
+        "-n": 1,
+        "-o": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "event-stream": {
+       "aliases": {},
+       "flags": {
+        "--event-count": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--narrative": 1,
+        "--output": 1,
+        "--rag-model": 1,
+        "--rag-provider": 1,
+        "-c": 1,
+        "-h": 0,
+        "-n": 1,
+        "-o": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "intelligent-mock": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--prompt": 1,
+        "--rag-model": 1,
+        "--rag-provider": 1,
+        "-h": 0,
+        "-o": 1,
+        "-p": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "time": {
+     "aliases": {},
+     "flags": {
+      "--admin-url": 1,
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "advance": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "cron": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "create": {
+         "aliases": {},
+         "flags": {
+          "--action-metadata": 1,
+          "--action-type": 1,
+          "--description": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "--name": 1,
+          "--schedule": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 4,
+         "subcommands": {},
+         "variadic": false
+        },
+        "delete": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "disable": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "enable": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "get": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "list": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "disable": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "enable": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--scale": 1,
+        "--time": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "list": {
+       "aliases": {},
+       "flags": {
+        "--dir": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "load": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "mutation": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "create": {
+         "aliases": {},
+         "flags": {
+          "--description": 1,
+          "--entity": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "--operation-config": 1,
+          "--operation-type": 1,
+          "--trigger-config": 1,
+          "--trigger-type": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 6,
+         "subcommands": {},
+         "variadic": false
+        },
+        "delete": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "disable": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "enable": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "get": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "list": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "reset": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "save": {
+       "aliases": {},
+       "flags": {
+        "--description": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "-h": 0,
+        "-o": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "scale": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "set": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "status": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "tunnel": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "list": {
+       "aliases": {},
+       "flags": {
+        "--auth-token": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--server-url": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "start": {
+       "aliases": {},
+       "flags": {
+        "--auth-token": 1,
+        "--custom-domain": 1,
+        "--help": 0,
+        "--local-url": 1,
+        "--log-level": 1,
+        "--protocol": 1,
+        "--provider": 1,
+        "--region": 1,
+        "--server-url": 1,
+        "--subdomain": 1,
+        "--websocket-enabled": 0,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "status": {
+       "aliases": {},
+       "flags": {
+        "--auth-token": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--server-url": 1,
+        "--tunnel-id": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "stop": {
+       "aliases": {},
+       "flags": {
+        "--auth-token": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--server-url": 1,
+        "--tunnel-id": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "validate-fixtures": {
+     "aliases": {},
+     "flags": {
+      "--dir": 1,
+      "--file": 1,
+      "--help": 0,
+      "--log-level": 1,
+      "--verbose": 0,
+      "-d": 1,
+      "-f": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    },
+    "vbr": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "create": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "entity": {
+         "aliases": {},
+         "flags": {
+          "--fields": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "--output": 1,
+          "--schema": 1,
+          "-f": 1,
+          "-h": 0,
+          "-o": 1,
+          "-s": 1,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        }
+       },
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "import": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "openapi": {
+         "aliases": {},
+         "flags": {
+          "--db-path": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "--output": 1,
+          "--storage": 1,
+          "-h": 0,
+          "-o": 1,
+          "-s": 1,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      },
+      "manage": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "data": {
+         "aliases": {},
+         "flags": {
+          "--db-path": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "--storage": 1,
+          "-h": 0,
+          "-s": 1,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "entities": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {
+          "help": {
+           "aliases": {},
+           "flags": {},
+           "free": true,
+           "subcommands": {}
+          },
+          "list": {
+           "aliases": {},
+           "flags": {
+            "--db-path": 1,
+            "--help": 0,
+            "--log-level": 1,
+            "--storage": 1,
+            "-h": 0,
+            "-s": 1,
+            "-v": 1
+           },
+           "positionals": 0,
+           "subcommands": {},
+           "variadic": false
+          },
+          "show": {
+           "aliases": {},
+           "flags": {
+            "--db-path": 1,
+            "--help": 0,
+            "--log-level": 1,
+            "--storage": 1,
+            "-h": 0,
+            "-s": 1,
+            "-v": 1
+           },
+           "positionals": 1,
+           "subcommands": {},
+           "variadic": false
+          }
+         },
+         "variadic": false
+        },
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        }
+       },
+       "variadic": false
+      },
+      "reset": {
+       "aliases": {},
+       "flags": {
+        "--db-path": 1,
+        "--entity": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--storage": 1,
+        "-e": 1,
+        "-h": 0,
+        "-s": 1,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "seed": {
+       "aliases": {},
+       "flags": {
+        "--db-path": 1,
+        "--entity": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--storage": 1,
+        "-e": 1,
+        "-h": 0,
+        "-s": 1,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "serve": {
+       "aliases": {},
+       "flags": {
+        "--api-prefix": 1,
+        "--db-path": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--port": 1,
+        "--session-scoped": 0,
+        "--storage": 1,
+        "-h": 0,
+        "-p": 1,
+        "-s": 1,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "snapshot": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {
+        "create": {
+         "aliases": {},
+         "flags": {
+          "--db-path": 1,
+          "--description": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "--snapshots-dir": 1,
+          "--storage": 1,
+          "-d": 1,
+          "-h": 0,
+          "-s": 1,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "delete": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "--snapshots-dir": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        },
+        "help": {
+         "aliases": {},
+         "flags": {},
+         "free": true,
+         "subcommands": {}
+        },
+        "list": {
+         "aliases": {},
+         "flags": {
+          "--help": 0,
+          "--log-level": 1,
+          "--snapshots-dir": 1,
+          "-h": 0,
+          "-v": 1
+         },
+         "positionals": 0,
+         "subcommands": {},
+         "variadic": false
+        },
+        "restore": {
+         "aliases": {},
+         "flags": {
+          "--db-path": 1,
+          "--help": 0,
+          "--log-level": 1,
+          "--snapshots-dir": 1,
+          "--storage": 1,
+          "-h": 0,
+          "-s": 1,
+          "-v": 1
+         },
+         "positionals": 1,
+         "subcommands": {},
+         "variadic": false
+        }
+       },
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "verify-mocks": {
+     "aliases": {},
+     "flags": {
+      "--capture-db": 1,
+      "--fail-on-drift": 0,
+      "--help": 0,
+      "--limit": 1,
+      "--log-level": 1,
+      "--output": 1,
+      "--spec": 1,
+      "-c": 1,
+      "-h": 0,
+      "-o": 1,
+      "-s": 1,
+      "-v": 1
+     },
+     "positionals": 2,
+     "subcommands": {},
+     "variadic": false
+    },
+    "voice": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "create": {
+       "aliases": {},
+       "flags": {
+        "--command": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--port": 1,
+        "--serve": 0,
+        "-c": 1,
+        "-h": 0,
+        "-o": 1,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "create-workspace": {
+       "aliases": {},
+       "flags": {
+        "--command": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--yes": 0,
+        "-c": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "interactive": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "--port": 1,
+        "--serve": 0,
+        "-h": 0,
+        "-o": 1,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "transpile-hook": {
+       "aliases": {},
+       "flags": {
+        "--description": 1,
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--output": 1,
+        "-d": 1,
+        "-h": 0,
+        "-o": 1,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "wizard": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    },
+    "workspace": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "create": {
+       "aliases": {},
+       "flags": {
+        "--admin-url": 1,
+        "--description": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--name": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      },
+      "delete": {
+       "aliases": {},
+       "flags": {
+        "--admin-url": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--yes": 0,
+        "-h": 0,
+        "-v": 1,
+        "-y": 0
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "disable": {
+       "aliases": {},
+       "flags": {
+        "--admin-url": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "enable": {
+       "aliases": {},
+       "flags": {
+        "--admin-url": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "info": {
+       "aliases": {},
+       "flags": {
+        "--admin-url": 1,
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "list": {
+       "aliases": {},
+       "flags": {
+        "--admin-url": 1,
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "stats": {
+       "aliases": {},
+       "flags": {
+        "--admin-url": 1,
+        "--format": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "update": {
+       "aliases": {},
+       "flags": {
+        "--admin-url": 1,
+        "--description": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--name": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    }
+   },
+   "variadic": false
+  },
+  "version": "mockforge 0.3.229"
+ },
+ "mockforge-plugin": {
+  "root": {
+   "aliases": {},
+   "flags": {
+    "--help": 0,
+    "--version": 0,
+    "-V": 0,
+    "-h": 0
+   },
+   "positionals": 0,
+   "subcommands": {
+    "build": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--path": 1,
+      "--release": 0,
+      "-h": 0,
+      "-p": 1,
+      "-r": 0
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    },
+    "clean": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--path": 1,
+      "-h": 0,
+      "-p": 1
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    },
+    "help": {
+     "aliases": {},
+     "flags": {},
+     "free": true,
+     "subcommands": {}
+    },
+    "info": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--path": 1,
+      "-h": 0,
+      "-p": 1
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    },
+    "init": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--output": 1,
+      "--plugin-type": 1,
+      "-h": 0,
+      "-o": 1,
+      "-p": 1
+     },
+     "positionals": 1,
+     "subcommands": {},
+     "variadic": false
+    },
+    "key": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--registry": 1,
+      "--token": 1,
+      "-h": 0
+     },
+     "positionals": 0,
+     "subcommands": {
+      "add": {
+       "aliases": {},
+       "flags": {
+        "--file": 1,
+        "--help": 0,
+        "--label": 1,
+        "--public-key": 1,
+        "-h": 0
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "gen": {
+       "aliases": {},
+       "flags": {
+        "--force": 0,
+        "--help": 0,
+        "--out": 1,
+        "-h": 0
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      },
+      "list": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "-h": 0
+       },
+       "positionals": 0,
+       "subcommands": {},
+       "variadic": false
+      },
+      "revoke": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "-h": 0
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "rotate": {
+       "aliases": {},
+       "flags": {
+        "--force": 0,
+        "--help": 0,
+        "--label": 1,
+        "--out": 1,
+        "--revoke": 1,
+        "-h": 0
+       },
+       "positionals": 2,
+       "subcommands": {},
+       "variadic": false
+      },
+      "sign": {
+       "aliases": {},
+       "flags": {
+        "--checksum": 1,
+        "--help": 0,
+        "--key-file": 1,
+        "--sbom": 1,
+        "-h": 0
+       },
+       "positionals": 3,
+       "subcommands": {},
+       "variadic": false
+      }
+     },
+     "variadic": false
+    },
+    "new": {
+     "aliases": {},
+     "flags": {
+      "--author": 1,
+      "--email": 1,
+      "--help": 0,
+      "--no-git": 0,
+      "--output": 1,
+      "--plugin-type": 1,
+      "-h": 0,
+      "-o": 1,
+      "-p": 1
+     },
+     "positionals": 2,
+     "subcommands": {},
+     "variadic": false
+    },
+    "package": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--output": 1,
+      "--path": 1,
+      "-h": 0,
+      "-o": 1,
+      "-p": 1
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    },
+    "publish": {
+     "aliases": {},
+     "flags": {
+      "--dry-run": 0,
+      "--help": 0,
+      "--key-file": 1,
+      "--path": 1,
+      "--registry": 1,
+      "--sbom": 1,
+      "--sign": 0,
+      "--token": 1,
+      "-h": 0,
+      "-p": 1
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    },
+    "test": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--path": 1,
+      "--test": 1,
+      "-h": 0,
+      "-p": 1
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    },
+    "validate": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--path": 1,
+      "-h": 0,
+      "-p": 1
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    }
+   },
+   "variadic": false
+  },
+  "version": "mockforge-plugin 0.3.229"
+ },
+ "mockforge-tui": {
+  "root": {
+   "aliases": {},
+   "flags": {
+    "--admin-url": 2,
+    "--help": 0,
+    "--log-file": 1,
+    "--refresh-interval": 1,
+    "--theme": 1,
+    "--token": 1,
+    "--version": 0,
+    "-V": 0,
+    "-h": 0
+   },
+   "positionals": 0,
+   "subcommands": {},
+   "variadic": false
+  },
+  "version": "mockforge-tui 0.3.229"
+ }
+}

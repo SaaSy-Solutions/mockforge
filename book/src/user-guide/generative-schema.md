@@ -1,6 +1,6 @@
 # Generative Schema Mode
 
-> **Planned / not yet available.** The generative-schema library exists in `mockforge-core`, but it is not exposed yet: `mockforge generate` does not accept `--from-json`, `--serve`, or the other flags shown below. This page describes the intended design and is kept for reference; do not rely on it in a released build. Track progress at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+> **Planned / not yet available.** The generative-schema library exists in `mockforge-core`, but it is not exposed yet: there is no CLI for it (`mockforge generate` only accepts an OpenAPI `--spec`), and no preview, edit, or VBR-integration commands. This page describes the intended design and is kept for reference; do not rely on it in a released build. Track progress at <https://github.com/SaaSy-Solutions/mockforge/issues>.
 
 Generative Schema Mode enables you to generate complete API ecosystems from JSON payloads. Simply provide example JSON data, and MockForge automatically creates routes, schemas, and entity relationships for a fully functional mock API.
 
@@ -16,28 +16,17 @@ Generative Schema Mode transforms example JSON payloads into:
 
 ## Quick Start
 
-### Generate from JSON File
+### Generate from JSON
+
+There is no CLI for generating an OpenAPI ecosystem from JSON payloads yet. `mockforge generate` only generates from an OpenAPI spec (`--spec`), and does not accept JSON payload files, inline JSON, or a `--serve` option.
+
+### Serving JSON Data Today
+
+To get CRUD routes from a JSON file right now, use quick mode. It serves the data directly (it does not produce an OpenAPI spec or infer relationships):
 
 ```bash
-# Generate API ecosystem from JSON payloads
-mockforge generate --from-json examples.json --output ./generated-api
-
-# Or from multiple files
-mockforge generate --from-json file1.json file2.json --output ./generated-api
-```
-
-### Generate from JSON Payloads
-
-```bash
-# Generate from inline JSON
-mockforge generate --from-json '{"users": [{"id": 1, "name": "Alice"}]}' --output ./api
-```
-
-### One-Click Environment Creation
-
-```bash
-# Generate and start server in one command
-mockforge generate --from-json data.json --serve --port 3000
+# Serve CRUD routes for every root-level key in data.json
+mockforge quick data.json --port 3000
 ```
 
 ## How It Works
@@ -161,36 +150,7 @@ naming_rules:
 
 ## CLI Commands
 
-### Generate from JSON
-
-```bash
-# Basic generation
-mockforge generate --from-json data.json
-
-# With output directory
-mockforge generate --from-json data.json --output ./generated
-
-# With options
-mockforge generate \
-  --from-json data.json \
-  --title "My API" \
-  --version "1.0.0" \
-  --output ./generated
-```
-
-### Preview Before Generation
-
-```bash
-# Preview generated schema without creating files
-mockforge generate --from-json data.json --preview
-```
-
-### Generate and Serve
-
-```bash
-# Generate and start server
-mockforge generate --from-json data.json --serve --port 3000
-```
+There are no CLI commands for Generative Schema Mode yet. The intended CLI would generate from one or more JSON files, set the API title and version, preview the generated schema without writing files, and optionally start a server with the result.
 
 ## Programmatic Usage
 
@@ -266,14 +226,7 @@ Detected from junction patterns:
 
 ## Schema Merging
 
-When generating from multiple JSON files, schemas are intelligently merged:
-
-```bash
-# Generate from multiple files
-mockforge generate \
-  --from-json users.json posts.json comments.json \
-  --output ./generated
-```
+When generating from multiple JSON payloads, schemas are intended to be merged:
 
 **Merging Strategy:**
 - Common fields are preserved
@@ -283,41 +236,15 @@ mockforge generate \
 
 ## Preview and Edit
 
-Before deploying, preview and edit the generated schema:
-
-### Preview Generated Schema
+The intended workflow is to preview the generated schema (in the terminal or a browser) and edit it before deployment. There is no CLI for preview or edit yet. Once you have an OpenAPI file, you can serve it as usual:
 
 ```bash
-# Preview in terminal
-mockforge generate --from-json data.json --preview
-
-# Preview in browser (opens generated OpenAPI spec)
-mockforge generate --from-json data.json --preview --open-browser
-```
-
-### Edit Before Deployment
-
-```bash
-# Generate and open in editor
-mockforge generate --from-json data.json --output ./generated --edit
-
-# Manually edit generated/openapi.yaml, then deploy
 mockforge serve --spec ./generated/openapi.yaml
 ```
 
 ## Integration with VBR
 
-Generated schemas can be automatically integrated with VBR:
-
-```bash
-# Generate with VBR integration
-mockforge generate \
-  --from-json data.json \
-  --vbr-enabled \
-  --output ./generated
-```
-
-This creates:
+Generated schemas are intended to integrate with VBR (there is no CLI option for this yet). The integration would create:
 - VBR entity definitions
 - Relationship mappings
 - Seed data from JSON
@@ -326,30 +253,19 @@ This creates:
 
 ### Rapid Prototyping
 
-Quickly create mock APIs from example data:
+Quickly create mock APIs from example data. Until generative schema is exposed, `mockforge quick` serves sample JSON directly:
 
 ```bash
-# Generate API from sample responses
-mockforge generate --from-json sample-responses.json --serve
+mockforge quick sample-responses.json
 ```
 
 ### API Design
 
-Design APIs by example:
-
-```bash
-# Create API from design mockups
-mockforge generate --from-json design-mockups.json --output ./api-design
-```
+Design APIs by example, producing an OpenAPI spec from design mockups (planned).
 
 ### Testing Data Generation
 
-Generate test APIs with realistic data:
-
-```bash
-# Generate API with test data
-mockforge generate --from-json test-data.json --output ./test-api
-```
+Generate test APIs with realistic data from sample payloads (planned).
 
 ## Best Practices
 
