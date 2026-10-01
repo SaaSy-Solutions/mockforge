@@ -135,17 +135,23 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      # Self-hosted runners on one host share the `actions` user's HOME and
+      # docker daemon: give each run its own kubeconfig and cluster name so
+      # concurrent KinD jobs cannot clobber each other's context.
+      - name: Isolate kubeconfig
+        run: echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
       # Single node on purpose: k8s/deployment.yaml runs 3 replicas against one
       # ReadWriteOnce PVC, which only schedules when all replicas share a node.
       - name: Create KinD cluster
         uses: helm/kind-action@v1
         with:
-          cluster_name: mockforge-test
+          cluster_name: mockforge-test-${{ github.run_id }}
 
       - name: Build and load Docker image
         run: |
           docker build -t mockforge:test .
-          kind load docker-image mockforge:test --name mockforge-test
+          kind load docker-image mockforge:test --name mockforge-test-${{ github.run_id }}
 
       # Applies the core manifests (namespace with the "restricted" Pod
       # Security Standard, RBAC, config, PVC, services, deployment, CRDs) and
@@ -183,10 +189,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      # Self-hosted runners on one host share the `actions` user's HOME and
+      # docker daemon: give each run its own kubeconfig and cluster name so
+      # concurrent KinD jobs cannot clobber each other's context.
+      - name: Isolate kubeconfig
+        run: echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
       - name: Create KinD cluster
         uses: helm/kind-action@v1
         with:
-          cluster_name: mockforge-integration
+          cluster_name: mockforge-integration-${{ github.run_id }}
 
       - name: Setup Helm
         uses: azure/setup-helm@v5
@@ -203,7 +215,7 @@ jobs:
       - name: Build and load image
         run: |
           docker build -t mockforge:test .
-          kind load docker-image mockforge:test --name mockforge-integration
+          kind load docker-image mockforge:test --name mockforge-integration-${{ github.run_id }}
 
       - name: Install MockForge with Helm
         run: |
@@ -257,10 +269,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v7
 
+      # Self-hosted runners on one host share the `actions` user's HOME and
+      # docker daemon: give each run its own kubeconfig and cluster name so
+      # concurrent KinD jobs cannot clobber each other's context.
+      - name: Isolate kubeconfig
+        run: echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
+
       - name: Create KinD cluster
         uses: helm/kind-action@v1
         with:
-          cluster_name: mockforge-chaos
+          cluster_name: mockforge-chaos-${{ github.run_id }}
 
       - name: Install Chaos Mesh
         run: |
@@ -269,7 +287,7 @@ jobs:
       - name: Deploy MockForge
         run: |
           docker build -t mockforge:test .
-          kind load docker-image mockforge:test --name mockforge-chaos
+          kind load docker-image mockforge:test --name mockforge-chaos-${{ github.run_id }}
           scripts/k8s-deploy-core.sh mockforge:test mockforge
           kubectl rollout status deployment/mockforge -n mockforge --timeout=300s
 
