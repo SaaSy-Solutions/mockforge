@@ -3,6 +3,7 @@
 from pathlib import Path
 import json
 import os
+import re
 import subprocess
 import unittest
 
@@ -47,9 +48,11 @@ class AshburnImagesTest(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/ashburn-images.yml").read_text()
         core_workflow = (ROOT / ".github/workflows/docker-build.yml").read_text()
         smoke = (ROOT / ".github/workflows/ashburn-image-smoke.yml").read_text()
-        for dockerfile in ("Dockerfile.registry", "Dockerfile.tunnel"):
+        for dockerfile in ("Dockerfile.registry", "Dockerfile.runner", "Dockerfile.tunnel"):
             self.assertTrue((ROOT / dockerfile).is_file())
             self.assertIn(dockerfile, workflow)
+            # A Dockerfile-only change must still trigger the publisher.
+            self.assertIn(f"      - '{dockerfile}'", workflow.split("workflow_dispatch:", 1)[0])
         self.assertIn("max-parallel: 1", workflow)
         self.assertIn("group: mockforge-image-builds", workflow)
         self.assertIn("group: mockforge-image-builds", core_workflow)
@@ -72,6 +75,7 @@ class AshburnImagesTest(unittest.TestCase):
         self.assertNotIn("docker/login-action", smoke)
         self.assertIn("push: false", smoke)
         self.assertIn("Dockerfile.registry", smoke)
+        self.assertIn("Dockerfile.runner", smoke)
         self.assertIn("BUILD_DATE=${{ steps.build-date.outputs.value }}", core_workflow)
         self.assertIn("docker buildx imagetools create", core_workflow)
         self.assertIn("image_digest: ${{ steps.build-and-push.outputs.digest }}", core_workflow)
@@ -106,10 +110,53 @@ class AshburnImagesTest(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         matrix = json.loads(result.stdout.removeprefix("matrix="))
         self.assertEqual(matrix["include"], [{"app": "mockforge-tunnel-relay", "dockerfile": "Dockerfile.tunnel"}])
+        env["WANTED_IMAGE"] = "mockforge-test-runner"
+        runner = subprocess.run(["python3", "-c", script], env=env, text=True, capture_output=True)
+        self.assertEqual(runner.returncode, 0, runner.stderr)
+        self.assertEqual(
+            json.loads(runner.stdout.removeprefix("matrix="))["include"],
+            [{"app": "mockforge-test-runner", "dockerfile": "Dockerfile.runner"}],
+        )
+        env["WANTED_IMAGE"] = ""
+        everything = subprocess.run(["python3", "-c", script], env=env, text=True, capture_output=True)
+        self.assertEqual(everything.returncode, 0, everything.stderr)
+        self.assertEqual(
+            [entry["app"] for entry in json.loads(everything.stdout.removeprefix("matrix="))["include"]],
+            ["mockforge-registry", "mockforge-test-runner", "mockforge-tunnel-relay"],
+        )
         env["WANTED_IMAGE"] = "not-an-image"
         invalid = subprocess.run(["python3", "-c", script], env=env, text=True, capture_output=True)
         self.assertNotEqual(invalid.returncode, 0)
         self.assertIn("unknown image", invalid.stderr)
+
+    def test_runner_env_docs_match_what_the_runner_reads(self) -> None:
+        # fly.runner.toml once documented REDIS_URL, MOCKFORGE_RUNNER_REGISTRY_URL
+        # and MOCKFORGE_RUNNER_CALLBACK_TOKEN, none of which the runner reads,
+        # so a deploy following it would exit at startup on a missing variable.
+        config = (ROOT / "crates/mockforge-test-runner/src/config.rs").read_text()
+        read = set(re.findall(r'"(MOCKFORGE_RUNNER_[A-Z_]+)"', config))
+        required = set(re.findall(r'required_env\("(MOCKFORGE_RUNNER_[A-Z_]+)"\)', config))
+        self.assertEqual(
+            required,
+            {
+                "MOCKFORGE_RUNNER_REDIS_URL",
+                "MOCKFORGE_RUNNER_REGISTRY_INTERNAL_BASE_URL",
+                "MOCKFORGE_RUNNER_REGISTRY_INTERNAL_TOKEN",
+            },
+        )
+        guide = (ROOT / "docs/ASHBURN_IMAGE_SUPPLY.md").read_text()
+        fly = (ROOT / "fly.runner.toml").read_text()
+        for name in read:
+            self.assertIn(f"`{name}`", guide)
+        for name in required:
+            self.assertIn(name, fly)
+        for stale in ("MOCKFORGE_RUNNER_REGISTRY_URL ", "MOCKFORGE_RUNNER_CALLBACK_TOKEN", "#   REDIS_URL"):
+            self.assertNotIn(stale, fly)
+        # The registry hardcodes the queue key; the runner default must match it.
+        run_queue = (ROOT / "crates/mockforge-registry-server/src/run_queue.rs").read_text()
+        self.assertIn('DEFAULT_QUEUE_KEY: &str = "test_runs:queued"', run_queue)
+        self.assertIn('"test_runs:queued"', config)
+        self.assertIn("MOCKFORGE_SSRF_ALLOW_LOOPBACK = \"0\"", fly)
 
     def test_demo_command_is_documented_before_repointing_image(self) -> None:
         fly_config = (ROOT / "fly.demo.toml").read_text()

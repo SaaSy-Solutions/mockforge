@@ -13,13 +13,15 @@ primary_region = "iad"
   # ONLY in non-production deployments — never on prod-runner.
   MOCKFORGE_SSRF_ALLOW_LOOPBACK = "0"
 
-# Secrets to set via `flyctl secrets set`:
-#   REDIS_URL                          - Same Redis instance the registry pushes jobs to
-#   MOCKFORGE_RUNNER_QUEUE_KEY         - Optional override; defaults to "test_runs:queued"
-#   MOCKFORGE_RUNNER_REGISTRY_URL      - Internal registry callback URL
-#   MOCKFORGE_RUNNER_CALLBACK_TOKEN    - Bearer token the registry validates on
-#                                        /api/v1/internal/test-runs/{id}/* callbacks
-#   MOCKFORGE_RUNNER_MAX_CONCURRENT_JOBS - Worker concurrency (default 4)
+# Secrets to set via `flyctl secrets set` (names must match
+# crates/mockforge-test-runner/src/config.rs):
+#   MOCKFORGE_RUNNER_REDIS_URL                  - Same Redis the registry's REDIS_URL points at
+#   MOCKFORGE_RUNNER_REGISTRY_INTERNAL_BASE_URL - Internal registry base URL for callbacks
+#   MOCKFORGE_RUNNER_REGISTRY_INTERNAL_TOKEN    - The registry's MOCKFORGE_INTERNAL_API_TOKEN;
+#                                                 validated on /api/v1/internal/* callbacks
+#   MOCKFORGE_RUNNER_QUEUE_KEY                  - Optional; leave unset. The registry always
+#                                                 pushes to "test_runs:queued"
+#   MOCKFORGE_RUNNER_MAX_CONCURRENT_JOBS        - Worker concurrency (default 4)
 
 # No public HTTP service — the runner only consumes from Redis and
 # pushes status via outbound HTTPS to the registry.

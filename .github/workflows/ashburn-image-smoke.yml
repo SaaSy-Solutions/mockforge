@@ -19,7 +19,7 @@ permissions:
 
 jobs:
   build:
-    name: Build root and registry images without publishing
+    name: Build root, registry and runner images without publishing
     runs-on: [self-hosted, linux, x64, rust]
     timeout-minutes: 90
     steps:
@@ -44,5 +44,11 @@ jobs:
         with:
           context: .
           file: Dockerfile.registry
+          platforms: linux/amd64
+          push: false
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.runner
           platforms: linux/amd64
           push: false
