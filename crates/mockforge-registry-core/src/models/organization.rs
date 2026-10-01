@@ -152,6 +152,38 @@ impl Organization {
         .await
     }
 
+    /// The org a request with no `X-Organization-*` header runs against.
+    ///
+    /// An org the user owns wins; among several owned orgs the newest is
+    /// picked, which is what header-less resolution has always returned. A
+    /// user who owns nothing (invited into someone else's org, never created
+    /// their own) falls back to the org they joined first. Every tie is broken
+    /// by id so the answer never flips between requests.
+    ///
+    /// `resolve_org_context` and `GET /api/v1/users/me` (`default_org_id`)
+    /// both call this, so the UI's default org and the server's always agree.
+    pub async fn find_default_for_user(
+        executor: impl sqlx::PgExecutor<'_>,
+        user_id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
+        sqlx::query_as::<_, Self>(
+            r#"
+            SELECT o.*
+            FROM organizations o
+            LEFT JOIN org_members om ON om.org_id = o.id AND om.user_id = $1
+            WHERE o.owner_id = $1 OR om.user_id IS NOT NULL
+            ORDER BY (o.owner_id = $1) DESC,
+                     CASE WHEN o.owner_id = $1 THEN o.created_at END DESC,
+                     om.created_at ASC,
+                     o.id ASC
+            LIMIT 1
+            "#,
+        )
+        .bind(user_id)
+        .fetch_optional(executor)
+        .await
+    }
+
     /// Get or create user's personal organization
     /// This ensures every user has at least one org (backward compatibility)
     pub async fn get_or_create_personal_org(

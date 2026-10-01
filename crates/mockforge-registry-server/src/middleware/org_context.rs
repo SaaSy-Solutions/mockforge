@@ -4,7 +4,7 @@
 //! it to handlers via extractors. Supports:
 //! - X-Organization-Id header
 //! - X-Organization-Slug header
-//! - Default org from user's personal org
+//! - Default org: an owned org, else the user's oldest membership
 
 use axum::http::{HeaderMap, StatusCode};
 use uuid::Uuid;
@@ -125,14 +125,13 @@ pub async fn resolve_org_context(
 
         org
     } else {
-        // Get user's default/personal org
-        // For now, get the first org where user is owner
-        // In the future, we might store a "default_org_id" on users
-        let orgs = Organization::find_by_user(pool, user_id)
+        // No header: the user's default org. An owned org first, else the
+        // org they joined first, so a user who is only a member of someone
+        // else's org still resolves instead of getting NOT_FOUND (#1087).
+        Organization::find_default_for_user(pool, user_id)
             .await
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-
-        orgs.into_iter().find(|o| o.owner_id == user_id).ok_or(StatusCode::NOT_FOUND)?
+            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+            .ok_or(StatusCode::NOT_FOUND)?
     };
 
     Ok(OrgContext {

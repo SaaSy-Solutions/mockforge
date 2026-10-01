@@ -127,6 +127,9 @@ E2E_TESTS=(
   --test cloud_conformance_e2e
   --test paid_flow_e2e
   --test hosted_mock_overrides_e2e
+  --test audit_integrity_e2e
+  --test rls_coverage_e2e
+  --test hosted_mock_rls_routes_e2e
 )
 
 # Server + test env. Values are literals from registry-e2e.yml; none are secret.
