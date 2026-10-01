@@ -14,7 +14,7 @@ Critical reliability degradation. At this rate, the entire monthly error budget 
 2. **Check for active incidents** in dependent services
 3. **Check recent deployments** and rollback if suspect
    ```bash
-   kubectl rollout undo deployment/mockforge
+   kubectl rollout undo statefulset/mockforge
    ```
 
 ## Investigation

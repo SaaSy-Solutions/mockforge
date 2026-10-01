@@ -1,0 +1,29 @@
+{{- /*
+Releases before the switch to a StatefulSet created one claim shared by every
+replica, <fullname>-data. Nothing mounts it any more, but dropping it from the
+chart would make `helm upgrade` delete it, and with the usual Delete reclaim
+policy the recorder data with it. While that claim exists, keep it in the
+release, annotated so Helm never deletes it; delete it by hand once the data
+is migrated (or no longer needed). Fresh installs never render this.
+*/}}
+{{- $name := printf "%s-data" (include "mockforge.fullname" .) }}
+{{- $legacy := lookup "v1" "PersistentVolumeClaim" .Release.Namespace $name }}
+{{- if $legacy }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ $name }}
+  labels:
+    {{- include "mockforge.labels" . | nindent 4 }}
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes:
+    {{- toYaml $legacy.spec.accessModes | nindent 4 }}
+  {{- with $legacy.spec.storageClassName }}
+  storageClassName: {{ . }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ index $legacy.spec.resources.requests "storage" }}
+{{- end }}

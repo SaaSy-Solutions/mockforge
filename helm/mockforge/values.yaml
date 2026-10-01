@@ -163,7 +163,10 @@ fixtures: {}
   # users.json: |
   #   [{"id": 1, "name": "Alice"}]
 
-# Persistent storage for recorder
+# Persistent storage for the recorder's SQLite database (/app/data).
+# Enabled: the chart renders a StatefulSet and each replica gets its own
+# claim (data-<fullname>-N) from volumeClaimTemplates. Disabled: a Deployment
+# with no recorder volume.
 persistence:
   enabled: true
   storageClass: ""

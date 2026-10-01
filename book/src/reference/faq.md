@@ -522,7 +522,7 @@ Use the Helm chart or create Deployment/Service manifests:
 helm install mockforge ./charts/mockforge
 
 # Or use kubectl
-kubectl apply -f k8s/deployment.yaml
+kubectl apply -f k8s/statefulset.yaml
 ```
 
 ### What ports does MockForge use?

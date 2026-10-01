@@ -34,7 +34,7 @@ A significant portion of mock API requests are failing, which may block CI/CD pi
 
 1. **Bad deployment**: Roll back to previous version
    ```bash
-   kubectl rollout undo deployment/mockforge
+   kubectl rollout undo statefulset/mockforge
    ```
 2. **Database issues**: Check connection, run `SELECT 1` health check
 3. **Invalid spec**: Check if a recently loaded OpenAPI spec has issues

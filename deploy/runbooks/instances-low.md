@@ -28,6 +28,6 @@ Reduced availability and no redundancy. If the remaining instance goes down, the
 
 ## Remediation
 
-1. **Scale up manually** if needed: `kubectl scale deployment/mockforge --replicas=2`
+1. **Scale up manually** if needed: `kubectl scale statefulset/mockforge --replicas=2`
 2. **Fix scheduling issues**: Check for node affinity/anti-affinity rules, resource constraints
-3. **Check for failed rollout**: `kubectl rollout status deployment/mockforge`
+3. **Check for failed rollout**: `kubectl rollout status statefulset/mockforge`

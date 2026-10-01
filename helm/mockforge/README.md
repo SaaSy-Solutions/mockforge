@@ -169,7 +169,7 @@ The following table lists the configurable parameters of the MockForge chart and
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| `persistence.enabled` | Enable persistent storage | `true` |
+| `persistence.enabled` | Give each replica its own recorder volume (renders a StatefulSet with `volumeClaimTemplates`; when false, a Deployment without one) | `true` |
 | `persistence.storageClass` | Storage class | `""` |
 | `persistence.accessMode` | Access mode | `ReadWriteOnce` |
 | `persistence.size` | Storage size | `10Gi` |
@@ -287,6 +287,19 @@ helm upgrade mockforge mockforge/mockforge
 
 # Upgrade with new values
 helm upgrade mockforge mockforge/mockforge -f new-values.yaml
+```
+
+### Upgrading from a chart that used one shared recorder claim
+
+Older charts ran a Deployment whose replicas all mounted one claim,
+`<fullname>-data`. With `persistence.enabled` the chart now runs a StatefulSet
+and each replica gets its own claim, `data-<fullname>-N`. The upgrade replaces
+the Deployment and leaves the old claim in place (annotated
+`helm.sh/resource-policy: keep`) but unmounted. Copy any recordings you want
+to keep out of it, then delete it:
+
+```bash
+kubectl delete pvc <fullname>-data -n <namespace>
 ```
 
 ## Troubleshooting

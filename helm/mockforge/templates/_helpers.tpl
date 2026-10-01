@@ -70,3 +70,11 @@ imagePullSecrets:
 {{- end }}
 {{- end }}
 {{- end }}
+
+{{/*
+Workload kind: a StatefulSet (one recorder volume per replica) when
+persistence is enabled, otherwise a Deployment.
+*/}}
+{{- define "mockforge.workloadKind" -}}
+{{- if .Values.persistence.enabled }}StatefulSet{{ else }}Deployment{{ end }}
+{{- end }}

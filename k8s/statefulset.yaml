@@ -1,5 +1,9 @@
+# A StatefulSet rather than a Deployment so every replica gets its own
+# recorder volume (volumeClaimTemplates below). The recorder keeps a SQLite
+# database at /app/data, and SQLite must not be shared between processes,
+# let alone mounted ReadWriteOnce into pods on different nodes.
 apiVersion: apps/v1
-kind: Deployment
+kind: StatefulSet
 metadata:
   name: mockforge
   labels:
@@ -7,6 +11,14 @@ metadata:
     version: v1
 spec:
   replicas: 3
+  # Governing headless Service (k8s/service.yaml); gives each pod a stable
+  # DNS name, mockforge-N.mockforge-headless.<namespace>.svc.
+  serviceName: mockforge-headless
+  # Replicas do not depend on each other, so start and replace them all at
+  # once instead of one at a time (OrderedReady).
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
   selector:
     matchLabels:
       app: mockforge
@@ -126,6 +138,7 @@ spec:
           readOnly: true
         - name: cache
           mountPath: /app/cache
+        # Per-pod claim from volumeClaimTemplates (recorder-db-mockforge-N).
         - name: recorder-db
           mountPath: /app/data
       volumes:
@@ -137,9 +150,6 @@ spec:
           name: mockforge-fixtures
       - name: cache
         emptyDir: {}
-      - name: recorder-db
-        persistentVolumeClaim:
-          claimName: mockforge-recorder-pvc
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -161,3 +171,15 @@ spec:
         fsGroup: 999
         seccompProfile:
           type: RuntimeDefault
+  volumeClaimTemplates:
+  - metadata:
+      name: recorder-db
+      labels:
+        app: mockforge
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 10Gi
+      storageClassName: standard  # Adjust based on your cluster
