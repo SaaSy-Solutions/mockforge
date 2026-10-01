@@ -650,9 +650,15 @@ pub async fn get_tunnel_reservation_by_subdomain(
 /// URL and POST to its `/__mockforge/chaos/toggle`. Lets the runner
 /// inject real faults without needing direct network access to the
 /// container's admin port.
+///
+/// `run_id` is the chaos run doing the toggling. The deployment must belong
+/// to that run's org: the campaign's `target_ref` is user-supplied, so this
+/// is the last line of defense against one org fault-injecting another
+/// org's mock.
 #[derive(Debug, Deserialize)]
 pub struct ChaosToggleRequest {
     pub enabled: bool,
+    pub run_id: Uuid,
 }
 
 pub async fn proxy_chaos_toggle(
@@ -664,10 +670,24 @@ pub async fn proxy_chaos_toggle(
     use mockforge_registry_core::models::HostedMock;
     require_internal_auth(&headers)?;
 
+    let not_found = || ApiError::InvalidRequest("Deployment not found".into());
+    let run = TestRun::find_by_id(state.db.pool(), body.run_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Run not found".into()))?;
     let deployment = HostedMock::find_by_id(state.db.pool(), deployment_id)
         .await
         .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".into()))?;
+        .ok_or_else(not_found)?;
+    if deployment.org_id != run.org_id {
+        tracing::warn!(
+            %deployment_id,
+            run_id = %run.id,
+            run_org_id = %run.org_id,
+            "chaos toggle refused: deployment is not in the run's org"
+        );
+        return Err(not_found());
+    }
 
     let base = deployment
         .internal_url
@@ -759,31 +779,32 @@ pub async fn get_workspace_endpoint_hits(
 /// captured exchanges it should replay against the target URL.
 /// Cross-deployment because runtime_captures rows can come from any
 /// hosted-mock in the org; the session itself owns the authoritative
-/// list via capture_session_members.
+/// list via capture_session_members. Only captures recorded by a
+/// deployment in the session's own org are returned: a member row naming
+/// another org's capture (added before membership was ownership-checked)
+/// must not ship that org's bodies into this replay.
 pub async fn get_capture_exchanges(
     State(state): State<AppState>,
     Path(session_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<CaptureExchangeRow>>> {
     require_internal_auth(&headers)?;
+    // `capture_id` is TEXT: the CASE guards the cast so one malformed row
+    // cannot fail every replay with 22P02.
     let rows = sqlx::query_as::<_, CaptureExchangeRow>(
         r#"
-        SELECT rc.capture_id,
-               rc.method,
-               rc.path,
-               rc.query_params,
-               rc.request_headers,
-               rc.request_body,
-               rc.request_body_encoding,
-               rc.response_status_code,
-               rc.response_headers,
-               rc.response_body,
-               rc.response_body_encoding,
-               rc.duration_ms,
-               rc.occurred_at
-          FROM runtime_captures rc
-          JOIN capture_session_members csm
-            ON csm.capture_id = rc.capture_id::uuid
+        SELECT rc.capture_id, rc.method, rc.path, rc.query_params,
+               rc.request_headers, rc.request_body, rc.request_body_encoding,
+               rc.response_status_code, rc.response_headers, rc.response_body,
+               rc.response_body_encoding, rc.duration_ms, rc.occurred_at
+          FROM capture_session_members csm
+          JOIN capture_sessions cs ON cs.id = csm.session_id
+          JOIN workspaces w ON w.id = cs.workspace_id
+          JOIN hosted_mocks hm ON hm.org_id = w.org_id
+          JOIN runtime_captures rc
+            ON rc.deployment_id = hm.id
+           AND CASE WHEN rc.capture_id ~* '^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$'
+                    THEN rc.capture_id::uuid END = csm.capture_id
          WHERE csm.session_id = $1
          ORDER BY rc.occurred_at ASC
          LIMIT 1000

@@ -341,6 +341,39 @@ async fn rls_join_chaos_campaigns() {
     );
 }
 
+/// Insert a hosted mock for `org_id` with one runtime capture; returns the
+/// capture id.
+async fn seed_capture(org_id: &str) -> String {
+    let db = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&std::env::var("DATABASE_URL").expect("DATABASE_URL must be set"))
+        .await
+        .expect("DB connect failed");
+    let deployment_id = uuid::Uuid::new_v4();
+    sqlx::query(
+        "INSERT INTO hosted_mocks (id, org_id, name, slug, config_json, status, metadata_json) \
+         VALUES ($1, $2, 'rls-join capture fixture', $3, '{}'::jsonb, 'active', '{}'::jsonb)",
+    )
+    .bind(deployment_id)
+    .bind(uuid::Uuid::parse_str(org_id).expect("org id"))
+    .bind(format!("rlsj-cap-{}", deployment_id.simple()))
+    .execute(&db)
+    .await
+    .expect("insert hosted_mock");
+    let capture_id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        "INSERT INTO runtime_captures (deployment_id, capture_id, protocol, occurred_at, method, \
+         path, request_headers, request_body_encoding) \
+         VALUES ($1, $2, 'http', NOW(), 'GET', '/', '{}', 'utf8')",
+    )
+    .bind(deployment_id)
+    .bind(&capture_id)
+    .execute(&db)
+    .await
+    .expect("insert runtime_capture");
+    capture_id
+}
+
 /// capture_sessions + capture_session_members (`captures.rs`).
 #[tokio::test]
 #[ignore]
@@ -363,7 +396,9 @@ async fn rls_join_capture_sessions() {
         &session_id,
     );
 
-    let capture_id = uuid::Uuid::new_v4().to_string();
+    // A member must be a capture recorded by one of A's deployments, so seed
+    // one (owner DB: the deployment-token ingest path isn't under test here).
+    let capture_id = seed_capture(&a.org_id).await;
     let members = format!("/api/v1/capture-sessions/{session_id}/members");
     let added = ok(
         "add member",
