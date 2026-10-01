@@ -2172,7 +2172,7 @@ impl OpenApiRouteRegistry {
                         return (status, Json(payload)).into_response();
                     }
 
-                    tracing::info!(
+                    tracing::debug!(
                         "[FIXTURE DEBUG] Starting fixture check for {} {} (custom_loader available: {})",
                         route.method,
                         route.path,
@@ -2200,7 +2200,7 @@ impl OpenApiRouteRegistry {
                         let normalized_request_path =
                             crate::custom_fixture::CustomFixtureLoader::normalize_path(&route.path);
 
-                        tracing::info!(
+                        tracing::debug!(
                             "[FIXTURE DEBUG] Path normalization: original='{}', normalized='{}'",
                             route.path,
                             normalized_request_path
@@ -2213,7 +2213,7 @@ impl OpenApiRouteRegistry {
                             format!("{}?{}", normalized_request_path, query_string)
                         };
 
-                        tracing::info!(
+                        tracing::debug!(
                             "[FIXTURE DEBUG] URI construction: uri_str='{}', query_string='{}'",
                             uri_str,
                             query_string
@@ -2231,7 +2231,7 @@ impl OpenApiRouteRegistry {
                             let fingerprint =
                                 RequestFingerprint::new(http_method, &uri, &headers, body_slice);
 
-                            tracing::info!(
+                            tracing::debug!(
                                 "[FIXTURE DEBUG] RequestFingerprint created: method='{}', path='{}', query='{}', body_hash={:?}",
                                 fingerprint.method,
                                 fingerprint.path,
@@ -2241,13 +2241,13 @@ impl OpenApiRouteRegistry {
 
                             // Check what fixtures are available for this method
                             let available_fixtures = loader.has_fixture(&fingerprint);
-                            tracing::info!(
+                            tracing::debug!(
                                 "[FIXTURE DEBUG] Fixture check result: has_fixture={}",
                                 available_fixtures
                             );
 
                             if let Some(custom_fixture) = loader.load_fixture(&fingerprint) {
-                                tracing::info!(
+                                tracing::debug!(
                                     "[FIXTURE DEBUG] ✅ FIXTURE MATCHED! Using custom fixture for {} {} (status: {}, path: '{}')",
                                     route.method,
                                     route.path,
@@ -2283,7 +2283,7 @@ impl OpenApiRouteRegistry {
                                 // Return as tuple (StatusCode, Json) to match handler signature
                                 return (status, Json(json_value)).into_response();
                             } else {
-                                tracing::warn!(
+                                tracing::debug!(
                                     "[FIXTURE DEBUG] ❌ No fixture match found for {} {} (fingerprint.path='{}', normalized='{}')",
                                     route.method,
                                     route.path,
@@ -2295,7 +2295,7 @@ impl OpenApiRouteRegistry {
                             tracing::warn!("[FIXTURE DEBUG] Failed to parse URI: '{}'", uri_str);
                         }
                     } else {
-                        tracing::warn!(
+                        tracing::debug!(
                             "[FIXTURE DEBUG] Custom fixture loader not available for {} {}",
                             route.method,
                             route.path
