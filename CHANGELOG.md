@@ -1,9 +1,15 @@
 ## [Unreleased]
 
+## [0.3.229] - 2026-10-01
+
 ### Changed
 
 - **[Cloud]** Tenant isolation is now also enforced in the database for every org-scoped table (36 tables under Postgres row-level security, up from 5). Request-path queries run bound to the caller's org; background workers, webhooks and platform-admin paths run on the owner role. Requires the owner role (`DATABASE_URL`) to have `BYPASSRLS`; the migration refuses to apply otherwise. Startup now logs which roles back each pool and flags a misconfigured one at ERROR. (#1087)
 - **[Cloud]** `PUT /api/v1/organizations/{org_id}/quota` is now platform-admin only. Org owners can no longer set their own quota overrides, because overrides are merged over plan limits. `GET` now requires membership in the org. (#1087)
+- **[Cloud]** Row-level security now also covers 38 tenant tables that have no `org_id` column of their own (workspace, hosted-mock and other child tables). Each is isolated through its parent's org, and per-user tables are scoped with a new `app.current_user_id` setting. (#1087, #1120)
+- **[Cloud]** Requests without an organization header now resolve to an org the user belongs to even when they own none (SSO-provisioned members, or users who deleted their personal org). Previously every such request returned 404. (#1087, #1117)
+- **[DevX]** Kubernetes manifests and the Helm chart now meet the "restricted" Pod Security Standard (non-root uid 999, no privilege escalation, all capabilities dropped), and liveness/readiness probes use the HTTP port instead of the auth-protected admin port. (#1118)
+- **[DevX]** Dependency refresh: 33 patch and minor updates, including tokio 1.53.1 and hyper 1.11. (#1104)
 
 ### Fixed
 
@@ -12,6 +18,11 @@
 - **[Cloud][AI]** Security: `POST /api/v1/organizations/{org_id}/mockai/generate-openapi-from-traffic` did not check that the caller belongs to the org. (#1087)
 - **[Cloud]** Security: the GDPR data export included pending invitation payloads, which let a plain member redeem an invite meant for someone else. (#1087)
 - **[Cloud]** `GET /api/v1/organizations/{org_id}/incidents/stats` no longer returns 500 once the org has a resolved incident. (#1087)
+- **[Cloud]** Security: a workspace could aim a chaos campaign at another org's hosted mock and inject faults into it. Campaign targets are now checked against the caller's org at create, trigger and snapshot restore, and the internal chaos toggle requires the run that owns it. (#1124)
+- **[Cloud]** Security: adding a capture to a capture session did not check who owned the capture, so a replay could read another org's captured request bodies. (#1124)
+- **[Cloud]** Capture sessions, clone models, monitored services, diff runs and fitness functions belonging to another org now return exactly the same "not found" response as missing ones. (#1087, #1128)
+- **[Reality][AI]** MockAI no longer stores a session for every write request that arrives without a session ID. Those sessions were never read again and every write waited on one shared lock, so throughput fell steadily under sustained load (about 2x faster writes, flat memory). Per-request fixture-matching logs are now at debug level instead of warning. (#1125)
+- **[Cloud]** Returning visitors no longer see "Something went wrong" after a cloud UI deploy: the app's entry JS and CSS are content-hashed so browsers can't keep a stale copy. (#1116)
 
 ## [0.3.228] - 2026-09-30
 
