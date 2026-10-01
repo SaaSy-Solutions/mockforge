@@ -3,7 +3,7 @@
 Compare load test results against baseline.
 
 Usage:
-    python3 compare_baseline.py <results.json> [baseline.json]
+    python3 compare_baseline.py <summary.json> [baseline.json]
 """
 
 import json
@@ -27,7 +27,7 @@ def calculate_percentage_change(current, baseline):
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: compare_baseline.py <results.json> [baseline.json]")
+        print("Usage: compare_baseline.py <summary.json> [baseline.json]")
         sys.exit(1)
 
     results_file = Path(sys.argv[1])
@@ -44,13 +44,22 @@ def main():
         print("\n=== Performance Comparison vs Baseline ===\n")
 
         # Compare metrics
-        results_metrics = results.get('metrics', {})
-        baseline_metrics = baseline.get('metrics', {})
+        # Accept both --summary-export (flat) and handleSummary (nested
+        # under `values`) layouts.
+        def flat(metrics):
+            return {k: dict(v.get('values', v)) for k, v in metrics.items()}
+
+        results_metrics = flat(results.get('metrics', {}))
+        baseline_metrics = flat(baseline.get('metrics', {}))
+        for m in (results_metrics, baseline_metrics):
+            failed = m.get('http_req_failed', {})
+            if 'rate' not in failed and 'value' in failed:
+                failed['rate'] = failed['value']
 
         # HTTP request duration
         if 'http_req_duration' in results_metrics and 'http_req_duration' in baseline_metrics:
             print("HTTP Request Duration:")
-            for percentile in ['p50', 'p95', 'p99', 'p99.9']:
+            for percentile in ['med', 'p(95)', 'p(99)', 'p(99.9)']:
                 if percentile in results_metrics['http_req_duration'] and percentile in baseline_metrics['http_req_duration']:
                     current = results_metrics['http_req_duration'][percentile]
                     baseline_val = baseline_metrics['http_req_duration'][percentile]
