@@ -1895,3 +1895,94 @@ async fn gdpr_export_omits_invitation_payloads() {
     let text = body.to_string();
     assert!(!text.contains("\"invite:"), "export leaked an invite payload: {text}");
 }
+
+// ─── MEMBER-ONLY default org ─────────────────────────────────────────────────
+
+/// A user who owns no org (an SSO-provisioned member, or someone who deleted
+/// their personal org) used to get NOT_FOUND on every request without an
+/// `X-Organization-Id` header, because the default-org fallback only looked at
+/// owned orgs. It now falls back to the org the user joined first (#1087), and
+/// `/api/v1/users/me`'s `default_org_id` names the same org.
+#[tokio::test]
+#[ignore]
+async fn member_only_user_defaults_to_first_joined_org() {
+    let a = setup_team_org("rlsmba").await;
+    let org_a = a.org_id.clone();
+    let body = ok(
+        "A create workspace",
+        a.post(
+            "/api/v1/workspaces",
+            json!({ "name": "member-default-ws", "description": "e2e" }),
+        )
+        .await,
+    );
+    let ws_a = str_field("A workspace", &body, "id");
+
+    let b = setup_team_org("rlsmbb").await;
+    let org_b = b.org_id.clone();
+    let body = ok(
+        "B create workspace",
+        b.post(
+            "/api/v1/workspaces",
+            json!({ "name": "member-default-ws-b", "description": "e2e" }),
+        )
+        .await,
+    );
+    let ws_b = str_field("B workspace", &body, "id");
+
+    // C registers (which provisions a personal org), then deletes it, so C
+    // owns nothing.
+    let (c, _) = register_user("rlsmbc").await;
+    let body = ok("C /me", c.get("/api/v1/users/me").await);
+    let personal = str_field("C /me", &body, "default_org_id");
+    ok(
+        "C delete personal org",
+        c.delete(&format!("/api/v1/organizations/{personal}")).await,
+    );
+    let body = ok("C /me with no orgs", c.get("/api/v1/users/me").await);
+    assert!(body["default_org_id"].is_null(), "C owns and belongs to nothing: {body}");
+    client_err("C with no orgs, header-less", c.get("/api/v1/workspaces").await);
+
+    // C joins A first, then B.
+    for (owner, org) in [(&a, &org_a), (&b, &org_b)] {
+        ok(
+            "add C as member",
+            owner
+                .post(
+                    &format!("/api/v1/organizations/{org}/members"),
+                    json!({ "user_id": c.user_id, "role": "member" }),
+                )
+                .await,
+        );
+    }
+
+    // Header-less requests resolve to A (joined first), every time.
+    for round in 0..3 {
+        let body = ok("C /me as member", c.get("/api/v1/users/me").await);
+        assert_eq!(
+            body["default_org_id"],
+            org_a.as_str(),
+            "round {round}: /me default_org_id should be the first-joined org: {body}"
+        );
+        let listed = list_ids(&c, "C header-less workspaces", "/api/v1/workspaces").await;
+        assert_contains("C header-less sees A's workspace", &listed, &ws_a);
+        assert_absent("C header-less does not see B's workspace", &listed, &ws_b);
+    }
+
+    // An explicit header still wins.
+    let listed = list_ids(&c.as_org(&org_b), "C as B workspaces", "/api/v1/workspaces").await;
+    assert_contains("C with B header sees B's workspace", &listed, &ws_b);
+    assert_absent("C with B header does not see A's workspace", &listed, &ws_a);
+
+    // Membership is still the gate: an org C never joined stays closed.
+    let d = setup_free_org("rlsmbd").await;
+    client_err(
+        "C with a non-member org header",
+        c.as_org(&d.org_id).get("/api/v1/workspaces").await,
+    );
+
+    // Owners are unaffected: A still defaults to their newest owned org (the
+    // Team org, created after the personal one).
+    let body = ok("A /me", a.without_org_header().get("/api/v1/users/me").await);
+    assert_eq!(body["default_org_id"], org_a.as_str(), "owner default changed: {body}");
+}

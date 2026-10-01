@@ -41,22 +41,25 @@ pub struct UserResponse {
     pub email_notifications: bool,
     pub security_alerts: bool,
     pub preferences: serde_json::Value,
-    /// First owned org. UI uses this to call org-scoped routes
-    /// without an explicit selector. Null for users with no orgs
-    /// (e.g., freshly registered, no org bootstrap yet).
+    /// The org header-less requests resolve to: the newest owned org, else
+    /// the first-joined membership. UI uses this to call org-scoped routes
+    /// without an explicit selector. Null only for users with no orgs.
     #[serde(default)]
     pub default_org_id: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-/// Look up the user's first owned org. Mirrors the resolve_org_context
-/// fallback path so /me's `default_org_id` matches what
-/// resolve_org_context would pick when no header is supplied.
+/// The org `resolve_org_context` falls back to when no header is supplied,
+/// so /me's `default_org_id` always matches the server's own pick. A
+/// member-only user gets the org they joined first rather than `None`.
 async fn find_default_org_id(state: &AppState, user_id: uuid::Uuid) -> Option<uuid::Uuid> {
     use mockforge_registry_core::models::Organization;
-    let orgs = Organization::find_by_user(state.db.pool(), user_id).await.ok()?;
-    orgs.into_iter().find(|o| o.owner_id == user_id).map(|o| o.id)
+    Organization::find_default_for_user(state.db.pool(), user_id)
+        .await
+        .ok()
+        .flatten()
+        .map(|o| o.id)
 }
 
 /// `GET /api/v1/users/me`
