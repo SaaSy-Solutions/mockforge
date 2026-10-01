@@ -37,8 +37,6 @@ pub async fn create_deployment(
     headers: HeaderMap,
     Json(request): Json<CreateDeploymentRequest>,
 ) -> ApiResult<Json<DeploymentResponse>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -221,8 +219,9 @@ pub async fn create_deployment(
         .await?;
 
     // Log deployment creation
-    DeploymentLog::create(
-        pool,
+    log_deployment_event(
+        state.db.runtime_pool(),
+        org_ctx.org_id,
         deployment.id,
         "info",
         "Deployment created",
@@ -231,8 +230,7 @@ pub async fn create_deployment(
             "slug": slug,
         })),
     )
-    .await
-    .map_err(ApiError::Database)?;
+    .await?;
 
     // Mark as pending - the deployment orchestrator will pick it up and deploy it
     // The orchestrator polls for pending/deploying deployments every 10 seconds
@@ -436,8 +434,6 @@ pub async fn delete_deployment(
     headers: HeaderMap,
     Path(deployment_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -519,8 +515,9 @@ pub async fn delete_deployment(
             // Delete the specific machine
             match flyio_client.delete_machine(&app_name, machine_id).await {
                 Ok(_) => {
-                    DeploymentLog::create(
-                        pool,
+                    log_deployment_event(
+                        state.db.runtime_pool(),
+                        org_ctx.org_id,
                         deployment_id,
                         "info",
                         &format!("Deleted Fly.io machine: {}", machine_id),
@@ -531,8 +528,9 @@ pub async fn delete_deployment(
                 }
                 Err(e) => {
                     warn!("Failed to delete Fly.io machine {}: {}", machine_id, e);
-                    DeploymentLog::create(
-                        pool,
+                    log_deployment_event(
+                        state.db.runtime_pool(),
+                        org_ctx.org_id,
                         deployment_id,
                         "warning",
                         &format!("Failed to delete Fly.io machine: {}", e),
@@ -555,8 +553,9 @@ pub async fn delete_deployment(
                         if let Err(e) = flyio_client.delete_machine(&app_name, &machine.id).await {
                             warn!("Failed to delete Fly.io machine {}: {}", machine.id, e);
                         } else {
-                            DeploymentLog::create(
-                                pool,
+                            log_deployment_event(
+                                state.db.runtime_pool(),
+                                org_ctx.org_id,
                                 deployment_id,
                                 "info",
                                 &format!("Deleted Fly.io machine: {}", machine.id),
@@ -577,8 +576,9 @@ pub async fn delete_deployment(
         // Delete the Fly.io app itself to avoid empty apps piling up
         match flyio_client.delete_app(&app_name).await {
             Ok(_) => {
-                DeploymentLog::create(
-                    pool,
+                log_deployment_event(
+                    state.db.runtime_pool(),
+                    org_ctx.org_id,
                     deployment_id,
                     "info",
                     &format!("Deleted Fly.io app: {}", app_name),
@@ -596,9 +596,16 @@ pub async fn delete_deployment(
     // Soft delete from database
     state.store.delete_hosted_mock(deployment_id).await?;
 
-    DeploymentLog::create(pool, deployment_id, "info", "Deployment deleted successfully", None)
-        .await
-        .ok(); // Log but don't fail on log error
+    log_deployment_event(
+        state.db.runtime_pool(),
+        org_ctx.org_id,
+        deployment_id,
+        "info",
+        "Deployment deleted successfully",
+        None,
+    )
+    .await
+    .ok(); // Log but don't fail on log error
 
     Ok(Json(serde_json::json!({
         "success": true,
@@ -625,8 +632,6 @@ pub async fn redeploy_deployment(
     Path(deployment_id): Path<Uuid>,
     body: Option<Json<RedeployRequest>>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -637,7 +642,6 @@ pub async fn redeploy_deployment(
     checker
         .require_permission(user_id, org_ctx.org_id, Permission::HostedMockCreate)
         .await?;
-    // pool kept for DeploymentLog + the spawned redeploy orchestration task below
 
     // Get existing deployment
     let deployment = state
@@ -705,20 +709,25 @@ pub async fn redeploy_deployment(
         .update_hosted_mock_status(deployment_id, DeploymentStatus::Deploying, None)
         .await?;
 
-    DeploymentLog::create(pool, deployment_id, "info", "Redeployment initiated", None)
-        .await
-        .ok();
+    log_deployment_event(
+        state.db.runtime_pool(),
+        org_ctx.org_id,
+        deployment_id,
+        "info",
+        "Redeployment initiated",
+        None,
+    )
+    .await
+    .ok();
 
     // Trigger redeployment in background
-    let pool_clone = pool.clone();
     let deployment_id_clone = deployment_id;
-    // hosted_mocks is RLS-forced. The spawned task has no request task-local,
-    // so it binds the org authorized above explicitly on the runtime pool
-    // (#1087). deployment_logs is not forced and stays on `pool`.
+    // hosted_mocks and deployment_logs are RLS-forced. The spawned task has no
+    // request task-local, so it binds the org authorized above explicitly on
+    // the runtime pool (#1087).
     let rt_pool = state.db.runtime_pool().clone();
     let bg_org_id = org_ctx.org_id;
     tokio::spawn(async move {
-        let pool = &pool_clone;
         let rt_pool = &rt_pool;
         let set_status = |status: DeploymentStatus, msg: Option<String>| async move {
             crate::store::with_org_context(rt_pool, bg_org_id, move |tx| {
@@ -878,8 +887,9 @@ pub async fn redeploy_deployment(
                     .await
                 {
                     Ok(_) => {
-                        let _ = DeploymentLog::create(
-                            pool,
+                        let _ = log_deployment_event(
+                            rt_pool,
+                            bg_org_id,
                             deployment_id_clone,
                             "info",
                             "Machine updated and restarting",
@@ -894,8 +904,9 @@ pub async fn redeploy_deployment(
                             Some(format!("Redeployment failed: {}", e)),
                         )
                         .await;
-                        let _ = DeploymentLog::create(
-                            pool,
+                        let _ = log_deployment_event(
+                            rt_pool,
+                            bg_org_id,
                             deployment_id_clone,
                             "error",
                             &format!("Redeployment failed: {}", e),
@@ -922,8 +933,9 @@ pub async fn redeploy_deployment(
         // Mark as active
         let _ = set_status(DeploymentStatus::Active, None).await;
 
-        let _ = DeploymentLog::create(
-            pool,
+        let _ = log_deployment_event(
+            rt_pool,
+            bg_org_id,
             deployment_id_clone,
             "info",
             "Redeployment completed successfully",
@@ -939,6 +951,32 @@ pub async fn redeploy_deployment(
         "status": "deploying",
         "message": "Redeployment initiated"
     })))
+}
+
+/// Append a `deployment_logs` row bound to `org_id`.
+///
+/// `deployment_logs` is RLS-forced through `hosted_mocks.org_id` (#1087), so
+/// the insert runs on the runtime pool with the GUC bound to the org the
+/// caller already verified owns `deployment_id`. The org is bound explicitly
+/// (not via the request task-local), so this also works from spawned tasks.
+/// A soft-deleted deployment keeps its `org_id`, so logging after
+/// `delete_hosted_mock` still passes the policy's WITH CHECK.
+async fn log_deployment_event(
+    rt_pool: &sqlx::PgPool,
+    org_id: Uuid,
+    deployment_id: Uuid,
+    level: &'static str,
+    message: impl Into<String>,
+    metadata: Option<serde_json::Value>,
+) -> crate::error::StoreResult<()> {
+    let message = message.into();
+    crate::store::with_org_context(rt_pool, org_id, move |tx| {
+        Box::pin(async move {
+            DeploymentLog::create(&mut **tx, deployment_id, level, &message, metadata).await?;
+            Ok(())
+        })
+    })
+    .await
 }
 
 fn deployment_app_name(deployment: &HostedMock) -> String {
@@ -965,8 +1003,6 @@ pub async fn stop_deployment(
     headers: HeaderMap,
     Path(deployment_id): Path<Uuid>,
 ) -> ApiResult<Json<DeploymentResponse>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
@@ -1016,9 +1052,16 @@ pub async fn stop_deployment(
         .update_hosted_mock_status(deployment_id, DeploymentStatus::Stopped, None)
         .await?;
 
-    DeploymentLog::create(pool, deployment_id, "info", "Deployment stopped", None)
-        .await
-        .ok();
+    log_deployment_event(
+        state.db.runtime_pool(),
+        org_ctx.org_id,
+        deployment_id,
+        "info",
+        "Deployment stopped",
+        None,
+    )
+    .await
+    .ok();
 
     let updated = state.store.find_hosted_mock_by_id(deployment_id).await?.ok_or_else(|| {
         ApiError::Internal(anyhow::anyhow!("Failed to retrieve updated deployment"))
@@ -1034,8 +1077,6 @@ pub async fn start_deployment(
     headers: HeaderMap,
     Path(deployment_id): Path<Uuid>,
 ) -> ApiResult<Json<DeploymentResponse>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
@@ -1084,9 +1125,16 @@ pub async fn start_deployment(
         .update_hosted_mock_status(deployment_id, DeploymentStatus::Active, None)
         .await?;
 
-    DeploymentLog::create(pool, deployment_id, "info", "Deployment started", None)
-        .await
-        .ok();
+    log_deployment_event(
+        state.db.runtime_pool(),
+        org_ctx.org_id,
+        deployment_id,
+        "info",
+        "Deployment started",
+        None,
+    )
+    .await
+    .ok();
 
     let updated = state.store.find_hosted_mock_by_id(deployment_id).await?.ok_or_else(|| {
         ApiError::Internal(anyhow::anyhow!("Failed to retrieve updated deployment"))
@@ -1102,8 +1150,6 @@ pub async fn get_deployment_logs(
     headers: HeaderMap,
     Path(deployment_id): Path<Uuid>,
 ) -> ApiResult<Json<Vec<LogResponse>>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -1125,9 +1171,12 @@ pub async fn get_deployment_logs(
     }
 
     // Get logs
-    let logs = DeploymentLog::find_by_mock(pool, deployment_id, Some(100))
-        .await
-        .map_err(ApiError::Database)?;
+    let logs = crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+        Box::pin(async move {
+            Ok(DeploymentLog::find_by_mock(&mut **tx, deployment_id, Some(100)).await?)
+        })
+    })
+    .await?;
 
     let responses: Vec<LogResponse> = logs.into_iter().map(LogResponse::from).collect();
 
@@ -1634,8 +1683,6 @@ pub async fn get_runtime_requests(
     Path(deployment_id): Path<Uuid>,
     Query(params): Query<RuntimeRequestsQuery>,
 ) -> ApiResult<Json<Vec<RuntimeRequestEvent>>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
@@ -1674,42 +1721,48 @@ pub async fn get_runtime_requests(
         Option<i64>,
     );
 
-    let rows: Vec<RuntimeRequestRow> = if let Some(since) = since {
-        sqlx::query_as(
-            r#"
-            SELECT occurred_at, method, path, status, latency_ms,
-                   matched_route, client_ip, user_agent, request_id,
-                   bytes_in, bytes_out
-            FROM runtime_request_logs
-            WHERE deployment_id = $1 AND occurred_at > $2
-            ORDER BY occurred_at DESC
-            LIMIT $3
-            "#,
-        )
-        .bind(deployment_id)
-        .bind(since)
-        .bind(limit)
-        .fetch_all(pool)
-        .await
-        .map_err(ApiError::Database)?
-    } else {
-        sqlx::query_as(
-            r#"
-            SELECT occurred_at, method, path, status, latency_ms,
-                   matched_route, client_ip, user_agent, request_id,
-                   bytes_in, bytes_out
-            FROM runtime_request_logs
-            WHERE deployment_id = $1
-            ORDER BY occurred_at DESC
-            LIMIT $2
-            "#,
-        )
-        .bind(deployment_id)
-        .bind(limit)
-        .fetch_all(pool)
-        .await
-        .map_err(ApiError::Database)?
-    };
+    // The deployment was verified to belong to `org_ctx.org_id` above.
+    let rows: Vec<RuntimeRequestRow> =
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move {
+                let rows = if let Some(since) = since {
+                    sqlx::query_as(
+                        r#"
+                        SELECT occurred_at, method, path, status, latency_ms,
+                               matched_route, client_ip, user_agent, request_id,
+                               bytes_in, bytes_out
+                        FROM runtime_request_logs
+                        WHERE deployment_id = $1 AND occurred_at > $2
+                        ORDER BY occurred_at DESC
+                        LIMIT $3
+                        "#,
+                    )
+                    .bind(deployment_id)
+                    .bind(since)
+                    .bind(limit)
+                    .fetch_all(&mut **tx)
+                    .await?
+                } else {
+                    sqlx::query_as(
+                        r#"
+                        SELECT occurred_at, method, path, status, latency_ms,
+                               matched_route, client_ip, user_agent, request_id,
+                               bytes_in, bytes_out
+                        FROM runtime_request_logs
+                        WHERE deployment_id = $1
+                        ORDER BY occurred_at DESC
+                        LIMIT $2
+                        "#,
+                    )
+                    .bind(deployment_id)
+                    .bind(limit)
+                    .fetch_all(&mut **tx)
+                    .await?
+                };
+                Ok(rows)
+            })
+        })
+        .await?;
 
     let events: Vec<RuntimeRequestEvent> = rows
         .into_iter()
@@ -1879,8 +1932,6 @@ pub async fn list_recorder_captures(
     Path(deployment_id): Path<Uuid>,
     Query(params): Query<RecorderCapturesQuery>,
 ) -> ApiResult<axum::http::Response<axum::body::Body>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
@@ -1901,22 +1952,33 @@ pub async fn list_recorder_captures(
     // If this deployment has synced any captures, always serve from
     // Postgres. The EXISTS check is index-bound (single row probe on
     // the `(deployment_id, occurred_at DESC)` index) and adds <1ms.
-    let has_synced: bool = sqlx::query_scalar(
-        "SELECT EXISTS(SELECT 1 FROM runtime_captures WHERE deployment_id = $1 LIMIT 1)",
-    )
-    .bind(deployment_id)
-    .fetch_one(pool)
-    .await
-    .map_err(ApiError::Database)?;
+    //
+    // Both reads are bound to `org_ctx.org_id`, which was verified to own the
+    // deployment above (runtime_captures is RLS-forced via hosted_mocks).
+    let limit = params.limit.unwrap_or(100).min(500) as i64;
+    let since = params
+        .since
+        .as_deref()
+        .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
+        .map(|d| d.with_timezone(&Utc));
+    let synced =
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move {
+                let has_synced: bool = sqlx::query_scalar(
+                    "SELECT EXISTS(SELECT 1 FROM runtime_captures WHERE deployment_id = $1 LIMIT 1)",
+                )
+                .bind(deployment_id)
+                .fetch_one(&mut **tx)
+                .await?;
+                if !has_synced {
+                    return Ok(None);
+                }
+                Ok(Some(list_cloud_captures(tx, deployment_id, limit, since).await?))
+            })
+        })
+        .await?;
 
-    if has_synced {
-        let limit = params.limit.unwrap_or(100).min(500) as i64;
-        let since = params
-            .since
-            .as_deref()
-            .and_then(|s| DateTime::parse_from_rfc3339(s).ok())
-            .map(|d| d.with_timezone(&Utc));
-        let captures = list_cloud_captures(pool, deployment_id, limit, since).await?;
+    if let Some(captures) = synced {
         let body = serde_json::to_vec(&captures).map_err(|e| {
             ApiError::InvalidRequest(format!("Failed to serialize captures: {}", e))
         })?;
@@ -1946,11 +2008,11 @@ pub async fn list_recorder_captures(
 /// Cloud-Postgres list query mapped into the same shape the recorder
 /// proxy emits. Kept private — callers go through `list_recorder_captures`.
 async fn list_cloud_captures(
-    pool: &sqlx::PgPool,
+    executor: &mut sqlx::PgConnection,
     deployment_id: Uuid,
     limit: i64,
     since: Option<DateTime<Utc>>,
-) -> ApiResult<Vec<serde_json::Value>> {
+) -> sqlx::Result<Vec<serde_json::Value>> {
     type Row = (
         String,         // capture_id
         String,         // protocol
@@ -1984,9 +2046,8 @@ async fn list_cloud_captures(
         .bind(deployment_id)
         .bind(since)
         .bind(limit)
-        .fetch_all(pool)
-        .await
-        .map_err(ApiError::Database)?
+        .fetch_all(&mut *executor)
+        .await?
     } else {
         sqlx::query_as(
             r#"
@@ -2001,9 +2062,8 @@ async fn list_cloud_captures(
         )
         .bind(deployment_id)
         .bind(limit)
-        .fetch_all(pool)
-        .await
-        .map_err(ApiError::Database)?
+        .fetch_all(&mut *executor)
+        .await?
     };
 
     let captures = rows
@@ -2039,8 +2099,6 @@ pub async fn get_recorder_capture(
     headers: HeaderMap,
     Path((deployment_id, capture_id)): Path<(Uuid, String)>,
 ) -> ApiResult<axum::http::Response<axum::body::Body>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
@@ -2064,7 +2122,16 @@ pub async fn get_recorder_capture(
         return Err(ApiError::InvalidRequest("Invalid capture id".to_string()));
     }
 
-    if let Some(row) = fetch_cloud_capture(pool, deployment_id, &capture_id).await? {
+    // Bound to the org verified to own the deployment above.
+    let capture_id_c = capture_id.clone();
+    let cloud_row =
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move {
+                Ok(fetch_cloud_capture(&mut **tx, deployment_id, &capture_id_c).await?)
+            })
+        })
+        .await?;
+    if let Some(row) = cloud_row {
         let body = serde_json::to_vec(&row)
             .map_err(|e| ApiError::InvalidRequest(format!("Failed to serialize capture: {}", e)))?;
         return Ok(axum::http::Response::builder()
@@ -2082,10 +2149,10 @@ pub async fn get_recorder_capture(
 /// Single-row counterpart to `list_cloud_captures`. Returns None when
 /// the capture isn't in cloud Postgres — caller can then proxy.
 async fn fetch_cloud_capture(
-    pool: &sqlx::PgPool,
+    executor: impl sqlx::PgExecutor<'_>,
     deployment_id: Uuid,
     capture_id: &str,
-) -> ApiResult<Option<serde_json::Value>> {
+) -> sqlx::Result<Option<serde_json::Value>> {
     type Row = (
         String,
         String,
@@ -2115,9 +2182,8 @@ async fn fetch_cloud_capture(
     )
     .bind(deployment_id)
     .bind(capture_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(ApiError::Database)?;
+    .fetch_optional(executor)
+    .await?;
     Ok(row.map(|r| {
         serde_json::json!({
             "id": r.0,
@@ -2148,8 +2214,6 @@ pub async fn get_recorder_capture_response(
     headers: HeaderMap,
     Path((deployment_id, capture_id)): Path<(Uuid, String)>,
 ) -> ApiResult<axum::http::Response<axum::body::Body>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
@@ -2171,7 +2235,16 @@ pub async fn get_recorder_capture_response(
         return Err(ApiError::InvalidRequest("Invalid capture id".to_string()));
     }
 
-    if let Some(row) = fetch_cloud_capture_response(pool, deployment_id, &capture_id).await? {
+    // Bound to the org verified to own the deployment above.
+    let capture_id_c = capture_id.clone();
+    let cloud_row =
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move {
+                Ok(fetch_cloud_capture_response(&mut **tx, deployment_id, &capture_id_c).await?)
+            })
+        })
+        .await?;
+    if let Some(row) = cloud_row {
         let body = serde_json::to_vec(&row).map_err(|e| {
             ApiError::InvalidRequest(format!("Failed to serialize response: {}", e))
         })?;
@@ -2191,10 +2264,10 @@ pub async fn get_recorder_capture_response(
 /// None when the row isn't synced or the response side hasn't been
 /// recorded yet (request-only exchanges).
 async fn fetch_cloud_capture_response(
-    pool: &sqlx::PgPool,
+    executor: impl sqlx::PgExecutor<'_>,
     deployment_id: Uuid,
     capture_id: &str,
-) -> ApiResult<Option<serde_json::Value>> {
+) -> sqlx::Result<Option<serde_json::Value>> {
     type Row = (Option<i32>, Option<String>, Option<String>, Option<String>, Option<i64>);
     let row: Option<Row> = sqlx::query_as(
         r#"
@@ -2207,9 +2280,8 @@ async fn fetch_cloud_capture_response(
     )
     .bind(deployment_id)
     .bind(capture_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(ApiError::Database)?;
+    .fetch_optional(executor)
+    .await?;
     Ok(row.and_then(|r| {
         let status_code = r.0?;
         Some(serde_json::json!({
@@ -2433,8 +2505,6 @@ pub async fn get_deployment_metrics(
     headers: HeaderMap,
     Path(deployment_id): Path<Uuid>,
 ) -> ApiResult<Json<MetricsResponse>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -2489,9 +2559,13 @@ pub async fn get_deployment_metrics(
 
     // Fallback: return the local aggregate counters. Until the in-container
     // log shipper lands (#232) this table has no writer and returns zeros.
-    let metrics = DeploymentMetrics::get_or_create_current(pool, deployment_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let metrics =
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move {
+                Ok(DeploymentMetrics::get_or_create_current(tx, deployment_id).await?)
+            })
+        })
+        .await?;
 
     Ok(Json(MetricsResponse::from(metrics)))
 }
@@ -2732,8 +2806,6 @@ pub async fn set_domain(
     Path(deployment_id): Path<Uuid>,
     Json(request): Json<SetDomainRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -2799,8 +2871,9 @@ pub async fn set_domain(
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to update deployment URL: {}", e)))?;
 
-    DeploymentLog::create(
-        pool,
+    log_deployment_event(
+        state.db.runtime_pool(),
+        org_ctx.org_id,
         deployment_id,
         "info",
         &format!("Custom domain set: {}", hostname),
@@ -2846,8 +2919,6 @@ pub async fn clear_custom_domain(
     headers: HeaderMap,
     Path(deployment_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let pool = state.db.pool();
-
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
@@ -2899,9 +2970,16 @@ pub async fn clear_custom_domain(
     .await
     .map_err(|e| ApiError::Internal(anyhow::anyhow!("Failed to clear custom domain: {}", e)))?;
 
-    DeploymentLog::create(pool, deployment_id, "info", "Custom domain removed", None)
-        .await
-        .ok();
+    log_deployment_event(
+        state.db.runtime_pool(),
+        org_ctx.org_id,
+        deployment_id,
+        "info",
+        "Custom domain removed",
+        None,
+    )
+    .await
+    .ok();
 
     Ok(Json(serde_json::json!({
         "hostname": serde_json::Value::Null,

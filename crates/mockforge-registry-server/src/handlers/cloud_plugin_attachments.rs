@@ -55,6 +55,7 @@ use crate::{
     middleware::{
         permission_check::PermissionChecker, permissions::Permission, resolve_org_context, AuthUser,
     },
+    store::with_org_context,
     AppState,
 };
 
@@ -151,12 +152,22 @@ pub async fn list_attachments(
     Path(deployment_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<AttachmentResponse>>> {
-    authorize_deployment(&state, user_id, &headers, deployment_id, Permission::HostedMockUpdate)
-        .await?;
+    let org_ctx = authorize_deployment(
+        &state,
+        user_id,
+        &headers,
+        deployment_id,
+        Permission::HostedMockUpdate,
+    )
+    .await?;
 
-    let rows = HostedMockPlugin::list_by_deployment(state.db.pool(), deployment_id)
-        .await
-        .map_err(ApiError::Database)?;
+    // The deployment was verified to belong to `org_ctx.org_id` above.
+    let rows = with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+        Box::pin(async move {
+            Ok(HostedMockPlugin::list_by_deployment(&mut **tx, deployment_id).await?)
+        })
+    })
+    .await?;
 
     Ok(Json(rows.into_iter().map(AttachmentResponse::from).collect()))
 }
@@ -217,20 +228,29 @@ pub async fn attach_plugin(
     // distinct-plugins check.
     enforce_plan_limit(&state, &org_ctx, deployment_id, plugin.id).await?;
 
-    let row = HostedMockPlugin::attach(
-        state.db.pool(),
-        AttachHostedMockPlugin {
-            deployment_id,
-            plugin_id: plugin.id,
-            plugin_version_id: plugin_version.id,
-            config_json: &request.config,
-            permissions_json: &request.permissions,
-            enabled: request.enabled,
-            attached_by: Some(user_id),
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let plugin_id = plugin.id;
+    let plugin_version_id = plugin_version.id;
+    let config_json = request.config.clone();
+    let permissions_json = request.permissions.clone();
+    let enabled = request.enabled;
+    let row = with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+        Box::pin(async move {
+            Ok(HostedMockPlugin::attach(
+                &mut **tx,
+                AttachHostedMockPlugin {
+                    deployment_id,
+                    plugin_id,
+                    plugin_version_id,
+                    config_json: &config_json,
+                    permissions_json: &permissions_json,
+                    enabled,
+                    attached_by: Some(user_id),
+                },
+            )
+            .await?)
+        })
+    })
+    .await?;
 
     // Telemetry + audit. Order: feature_usage first (cheap), audit
     // log second. Both are best-effort — failures here don't undo the
@@ -284,13 +304,20 @@ pub async fn update_attachment(
     headers: HeaderMap,
     Json(request): Json<UpdateAttachmentRequest>,
 ) -> ApiResult<Json<AttachmentResponse>> {
-    authorize_deployment(&state, user_id, &headers, deployment_id, Permission::HostedMockUpdate)
-        .await?;
+    let org_ctx = authorize_deployment(
+        &state,
+        user_id,
+        &headers,
+        deployment_id,
+        Permission::HostedMockUpdate,
+    )
+    .await?;
+    let org_id = org_ctx.org_id;
 
     // Load the row and verify it belongs to this deployment. Cross-
     // deployment writes via path manipulation get a "not found" so we
     // don't leak whether the attachment exists in another deployment.
-    let existing = load_authorized_attachment(&state, deployment_id, attachment_id).await?;
+    let existing = load_authorized_attachment(&state, org_id, deployment_id, attachment_id).await?;
 
     // Validate updated permissions if provided.
     if let Some(ref new_perms) = request.permissions {
@@ -301,20 +328,29 @@ pub async fn update_attachment(
     // existing fields rather than a partial UPDATE because the
     // `attach` method is the only mutating path on the model — keeps
     // the model surface small.
-    let row = HostedMockPlugin::attach(
-        state.db.pool(),
-        AttachHostedMockPlugin {
-            deployment_id,
-            plugin_id: existing.plugin_id,
-            plugin_version_id: existing.plugin_version_id,
-            config_json: request.config.as_ref().unwrap_or(&existing.config_json),
-            permissions_json: request.permissions.as_ref().unwrap_or(&existing.permissions_json),
-            enabled: request.enabled.unwrap_or(existing.enabled),
-            attached_by: Some(user_id),
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let plugin_id = existing.plugin_id;
+    let plugin_version_id = existing.plugin_version_id;
+    let enabled = request.enabled.unwrap_or(existing.enabled);
+    let config_json = request.config.unwrap_or(existing.config_json);
+    let permissions_json = request.permissions.unwrap_or(existing.permissions_json);
+    let row = with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+        Box::pin(async move {
+            Ok(HostedMockPlugin::attach(
+                &mut **tx,
+                AttachHostedMockPlugin {
+                    deployment_id,
+                    plugin_id,
+                    plugin_version_id,
+                    config_json: &config_json,
+                    permissions_json: &permissions_json,
+                    enabled,
+                    attached_by: Some(user_id),
+                },
+            )
+            .await?)
+        })
+    })
+    .await?;
 
     Ok(Json(AttachmentResponse::from(row)))
 }
@@ -335,11 +371,13 @@ pub async fn detach_plugin(
     )
     .await?;
 
-    let existing = load_authorized_attachment(&state, deployment_id, attachment_id).await?;
+    let existing =
+        load_authorized_attachment(&state, org_ctx.org_id, deployment_id, attachment_id).await?;
 
-    let deleted = HostedMockPlugin::delete(state.db.pool(), attachment_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let deleted = with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+        Box::pin(async move { Ok(HostedMockPlugin::delete(&mut **tx, attachment_id).await?) })
+    })
+    .await?;
     if !deleted {
         // Lost a race — already detached. Idempotent: surface 200, not
         // 404, since the desired end state holds.
@@ -456,7 +494,7 @@ pub async fn get_plugin_usage(
     let (period_start, period_end) = current_billing_period();
 
     let org_id = org_ctx.org_id;
-    let rows = crate::store::with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+    let rows = with_org_context(state.db.runtime_pool(), org_id, move |tx| {
         Box::pin(async move {
             Ok(FeatureUsage::aggregate_plugin_invoke_ms_by_deployment(
                 &mut **tx,
@@ -564,15 +602,21 @@ async fn authorize_deployment(
 /// Load an attachment and verify it belongs to `deployment_id`.
 /// Cross-deployment access surfaces as "not found" rather than
 /// "forbidden" to avoid leaking existence.
+///
+/// `org_id` must be the org the caller was already authorized against
+/// (and that owns `deployment_id`); the lookup is bound to it so RLS
+/// hides attachments of any other org.
 async fn load_authorized_attachment(
     state: &AppState,
+    org_id: Uuid,
     deployment_id: Uuid,
     attachment_id: Uuid,
 ) -> ApiResult<HostedMockPlugin> {
-    let row = HostedMockPlugin::find_by_id(state.db.pool(), attachment_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Plugin attachment not found".into()))?;
+    let row = with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+        Box::pin(async move { Ok(HostedMockPlugin::find_by_id(&mut **tx, attachment_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Plugin attachment not found".into()))?;
     if row.deployment_id != deployment_id {
         return Err(ApiError::InvalidRequest("Plugin attachment not found".into()));
     }
@@ -632,18 +676,22 @@ async fn enforce_plan_limit(
     }
 
     // Quick existence check first — re-attach doesn't bump the count.
-    let already_attached = HostedMockPlugin::list_by_deployment(state.db.pool(), deployment_id)
-        .await
-        .map_err(ApiError::Database)?
-        .iter()
-        .any(|p| p.plugin_id == plugin_id && p.enabled);
+    // The deployment was verified to belong to `org_ctx.org_id` by
+    // `authorize_deployment`.
+    let (attached, active) = with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+        Box::pin(async move {
+            let attached = HostedMockPlugin::list_by_deployment(&mut **tx, deployment_id).await?;
+            let active =
+                HostedMockPlugin::count_active_by_deployment(&mut **tx, deployment_id).await?;
+            Ok((attached, active))
+        })
+    })
+    .await?;
+    let already_attached = attached.iter().any(|p| p.plugin_id == plugin_id && p.enabled);
     if already_attached {
         return Ok(());
     }
 
-    let active = HostedMockPlugin::count_active_by_deployment(state.db.pool(), deployment_id)
-        .await
-        .map_err(ApiError::Database)?;
     if active >= max {
         return Err(ApiError::InvalidRequest(format!(
             "Plugin attachment limit reached: your plan allows {} active plugins per hosted mock. Upgrade to attach more.",

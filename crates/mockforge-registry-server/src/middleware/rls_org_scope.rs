@@ -14,6 +14,12 @@
 //! reads it and binds the GUC on every covered-table query without threading
 //! `org_id` through dozens of signatures.
 //!
+//! It also binds the authenticated user into the
+//! [`CURRENT_USER`](mockforge_registry_core::store::CURRENT_USER) task-local,
+//! whether or not an org resolved, for the user-scoped tables
+//! (`user_public_keys`, `cloud_plugin_beta_interest`) policed by
+//! `app.current_user_id` (#1087).
+//!
 //! ## Mounting
 //!
 //! Must run **after** `auth_middleware` (it reads the `user_id` that auth
@@ -45,7 +51,11 @@ use axum::{
 };
 use uuid::Uuid;
 
-use crate::{middleware::resolve_org_context, store::CURRENT_ORG, AppState};
+use crate::{
+    middleware::resolve_org_context,
+    store::{CURRENT_ORG, CURRENT_USER},
+    AppState,
+};
 
 /// Bind the request's organization into the [`CURRENT_ORG`] task-local for the
 /// duration of the downstream handler, so RLS-covered queries are org-scoped
@@ -76,7 +86,7 @@ pub async fn rls_org_scope_middleware(
             let org_id = org_ctx.org_id;
             // Cache for downstream `resolve_org_context` callers.
             request.extensions_mut().insert(org_ctx);
-            CURRENT_ORG.scope(org_id, next.run(request)).await
+            CURRENT_USER.scope(user_id, CURRENT_ORG.scope(org_id, next.run(request))).await
         }
         Err(status) => {
             // Common and expected on org-less routes (e.g. GET
@@ -88,7 +98,8 @@ pub async fn rls_org_scope_middleware(
                 ?status,
                 "rls_org_scope: no org bound for this request",
             );
-            next.run(request).await
+            // The user is still known, so user-scoped tables stay reachable.
+            CURRENT_USER.scope(user_id, next.run(request)).await
         }
     }
 }

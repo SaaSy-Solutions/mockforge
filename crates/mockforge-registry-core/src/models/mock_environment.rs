@@ -76,7 +76,7 @@ impl MockEnvironment {
 
     /// Create a new mock environment
     pub async fn create(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
         name: MockEnvironmentName,
         reality_config: Option<serde_json::Value>,
@@ -97,21 +97,24 @@ impl MockEnvironment {
         .bind(reality_config.unwrap_or_else(|| serde_json::json!({})))
         .bind(chaos_config.unwrap_or_else(|| serde_json::json!({})))
         .bind(drift_budget_config.unwrap_or_else(|| serde_json::json!({})))
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Find by ID
-    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM mock_environments WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// Find by workspace ID and environment name
     pub async fn find_by_workspace_and_name(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
         name: MockEnvironmentName,
     ) -> sqlx::Result<Option<Self>> {
@@ -120,27 +123,27 @@ impl MockEnvironment {
         )
         .bind(workspace_id)
         .bind(name.as_str())
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
     /// List all environments for a workspace
     pub async fn list_by_workspace(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
     ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM mock_environments WHERE workspace_id = $1 ORDER BY name",
         )
         .bind(workspace_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     /// Update environment configuration
     pub async fn update_config(
         &self,
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         reality_config: Option<serde_json::Value>,
         chaos_config: Option<serde_json::Value>,
         drift_budget_config: Option<serde_json::Value>,
@@ -161,24 +164,27 @@ impl MockEnvironment {
         .bind(chaos_config)
         .bind(drift_budget_config)
         .bind(self.id)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Delete environment
-    pub async fn delete(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<()> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<()> {
         sqlx::query("DELETE FROM mock_environments WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?;
         Ok(())
     }
 
     /// Delete all environments for a workspace
-    pub async fn delete_by_workspace(pool: &sqlx::PgPool, workspace_id: Uuid) -> sqlx::Result<()> {
+    pub async fn delete_by_workspace(
+        executor: impl sqlx::PgExecutor<'_>,
+        workspace_id: Uuid,
+    ) -> sqlx::Result<()> {
         sqlx::query("DELETE FROM mock_environments WHERE workspace_id = $1")
             .bind(workspace_id)
-            .execute(pool)
+            .execute(executor)
             .await?;
         Ok(())
     }

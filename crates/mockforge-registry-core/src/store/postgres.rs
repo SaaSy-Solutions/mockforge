@@ -885,61 +885,80 @@ impl RegistryStore for PgRegistryStore {
         per_service_state: &serde_json::Value,
         activated_by: Uuid,
     ) -> StoreResult<FederationScenarioActivation> {
-        sqlx::query_as::<_, FederationScenarioActivation>(
-            r#"
-            INSERT INTO federation_scenario_activations (
-                federation_id, scenario_id, scenario_name,
-                manifest_snapshot, service_overrides, per_service_state,
-                activated_by
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7)
-            RETURNING *
-            "#,
-        )
-        .bind(federation_id)
-        .bind(scenario_id)
-        .bind(scenario_name)
-        .bind(manifest_snapshot)
-        .bind(service_overrides)
-        .bind(per_service_state)
-        .bind(activated_by)
-        .fetch_one(&self.pool)
+        let scenario_name = scenario_name.to_string();
+        let manifest_snapshot = manifest_snapshot.clone();
+        let service_overrides = service_overrides.clone();
+        let per_service_state = per_service_state.clone();
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(async move {
+                sqlx::query_as::<_, FederationScenarioActivation>(
+                    r#"
+                    INSERT INTO federation_scenario_activations (
+                        federation_id, scenario_id, scenario_name,
+                        manifest_snapshot, service_overrides, per_service_state,
+                        activated_by
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7)
+                    RETURNING *
+                    "#,
+                )
+                .bind(federation_id)
+                .bind(scenario_id)
+                .bind(scenario_name)
+                .bind(manifest_snapshot)
+                .bind(service_overrides)
+                .bind(per_service_state)
+                .bind(activated_by)
+                .fetch_one(&mut **tx)
+                .await
+                .map_err(Into::into)
+            })
+        })
         .await
-        .map_err(Into::into)
     }
 
     async fn find_active_federation_scenario_activation(
         &self,
         federation_id: Uuid,
     ) -> StoreResult<Option<FederationScenarioActivation>> {
-        sqlx::query_as::<_, FederationScenarioActivation>(
-            r#"
-            SELECT * FROM federation_scenario_activations
-            WHERE federation_id = $1 AND status = 'active'
-            "#,
-        )
-        .bind(federation_id)
-        .fetch_optional(&self.pool)
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(async move {
+                sqlx::query_as::<_, FederationScenarioActivation>(
+                    r#"
+                    SELECT * FROM federation_scenario_activations
+                    WHERE federation_id = $1 AND status = 'active'
+                    "#,
+                )
+                .bind(federation_id)
+                .fetch_optional(&mut **tx)
+                .await
+                .map_err(Into::into)
+            })
+        })
         .await
-        .map_err(Into::into)
     }
 
     async fn deactivate_federation_scenario_activation(
         &self,
         id: Uuid,
     ) -> StoreResult<Option<FederationScenarioActivation>> {
-        sqlx::query_as::<_, FederationScenarioActivation>(
-            r#"
-            UPDATE federation_scenario_activations
-            SET status = 'deactivated', deactivated_at = NOW()
-            WHERE id = $1 AND status = 'active'
-            RETURNING *
-            "#,
-        )
-        .bind(id)
-        .fetch_optional(&self.pool)
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(async move {
+                sqlx::query_as::<_, FederationScenarioActivation>(
+                    r#"
+                    UPDATE federation_scenario_activations
+                    SET status = 'deactivated', deactivated_at = NOW()
+                    WHERE id = $1 AND status = 'active'
+                    RETURNING *
+                    "#,
+                )
+                .bind(id)
+                .fetch_optional(&mut **tx)
+                .await
+                .map_err(Into::into)
+            })
+        })
         .await
-        .map_err(Into::into)
     }
 
     async fn update_federation_scenario_per_service_state(
@@ -947,19 +966,25 @@ impl RegistryStore for PgRegistryStore {
         id: Uuid,
         per_service_state: &serde_json::Value,
     ) -> StoreResult<Option<FederationScenarioActivation>> {
-        sqlx::query_as::<_, FederationScenarioActivation>(
-            r#"
-            UPDATE federation_scenario_activations
-            SET per_service_state = $2
-            WHERE id = $1
-            RETURNING *
-            "#,
-        )
-        .bind(id)
-        .bind(per_service_state)
-        .fetch_optional(&self.pool)
+        let per_service_state = per_service_state.clone();
+        crate::store::with_current_org(&self.pool, move |tx| {
+            Box::pin(async move {
+                sqlx::query_as::<_, FederationScenarioActivation>(
+                    r#"
+                    UPDATE federation_scenario_activations
+                    SET per_service_state = $2
+                    WHERE id = $1
+                    RETURNING *
+                    "#,
+                )
+                .bind(id)
+                .bind(per_service_state)
+                .fetch_optional(&mut **tx)
+                .await
+                .map_err(Into::into)
+            })
+        })
         .await
-        .map_err(Into::into)
     }
 
     async fn find_active_federation_scenarios_for_workspace(
@@ -2167,19 +2192,25 @@ impl RegistryStore for PgRegistryStore {
     }
 
     async fn list_user_public_keys(&self, user_id: Uuid) -> StoreResult<Vec<UserPublicKey>> {
-        sqlx::query_as::<_, UserPublicKey>(
-            r#"
-            SELECT id, user_id, algorithm, public_key_b64, label,
-                   created_at, revoked_at, org_id
-            FROM user_public_keys
-            WHERE user_id = $1 AND revoked_at IS NULL
-            ORDER BY created_at ASC
-            "#,
-        )
-        .bind(user_id)
-        .fetch_all(&self.pool)
+        // `user_public_keys` is policed by `app.current_user_id` (#1087).
+        crate::store::with_current_user(&self.pool, move |tx| {
+            Box::pin(async move {
+                sqlx::query_as::<_, UserPublicKey>(
+                    r#"
+                    SELECT id, user_id, algorithm, public_key_b64, label,
+                           created_at, revoked_at, org_id
+                    FROM user_public_keys
+                    WHERE user_id = $1 AND revoked_at IS NULL
+                    ORDER BY created_at ASC
+                    "#,
+                )
+                .bind(user_id)
+                .fetch_all(&mut **tx)
+                .await
+                .map_err(Into::into)
+            })
+        })
         .await
-        .map_err(Into::into)
     }
 
     async fn list_user_public_keys_with_usage(
@@ -2202,22 +2233,28 @@ impl RegistryStore for PgRegistryStore {
             Option<Uuid>,
             i64,
         );
-        let rows: Vec<Row> = sqlx::query_as(
-            r#"
-                SELECT k.id, k.user_id, k.algorithm, k.public_key_b64, k.label,
-                       k.created_at, k.revoked_at, k.org_id,
-                       COUNT(pv.id) AS usage_count
-                FROM user_public_keys k
-                LEFT JOIN plugin_versions pv ON pv.sbom_signed_key_id = k.id
-                WHERE k.user_id = $1 AND ($2 OR k.revoked_at IS NULL)
-                GROUP BY k.id, k.user_id, k.algorithm, k.public_key_b64,
-                         k.label, k.created_at, k.revoked_at, k.org_id
-                ORDER BY k.created_at ASC
-                "#,
-        )
-        .bind(user_id)
-        .bind(include_revoked)
-        .fetch_all(&self.pool)
+        let rows: Vec<Row> = crate::store::with_current_user(&self.pool, move |tx| {
+            Box::pin(async move {
+                sqlx::query_as(
+                    r#"
+                    SELECT k.id, k.user_id, k.algorithm, k.public_key_b64, k.label,
+                           k.created_at, k.revoked_at, k.org_id,
+                           COUNT(pv.id) AS usage_count
+                    FROM user_public_keys k
+                    LEFT JOIN plugin_versions pv ON pv.sbom_signed_key_id = k.id
+                    WHERE k.user_id = $1 AND ($2 OR k.revoked_at IS NULL)
+                    GROUP BY k.id, k.user_id, k.algorithm, k.public_key_b64,
+                             k.label, k.created_at, k.revoked_at, k.org_id
+                    ORDER BY k.created_at ASC
+                    "#,
+                )
+                .bind(user_id)
+                .bind(include_revoked)
+                .fetch_all(&mut **tx)
+                .await
+                .map_err(Into::into)
+            })
+        })
         .await?;
 
         Ok(rows
@@ -2260,25 +2297,37 @@ impl RegistryStore for PgRegistryStore {
         label: &str,
         org_id: Option<Uuid>,
     ) -> StoreResult<UserPublicKey> {
-        sqlx::query_as::<_, UserPublicKey>(
-            r#"
-            INSERT INTO user_public_keys (user_id, algorithm, public_key_b64, label, org_id)
-            VALUES ($1, $2, $3, $4, $5)
-            RETURNING id, user_id, algorithm, public_key_b64, label,
-                      created_at, revoked_at, org_id
-            "#,
-        )
-        .bind(user_id)
-        .bind(algorithm)
-        .bind(public_key_b64)
-        .bind(label)
-        .bind(org_id)
-        .fetch_one(&self.pool)
+        let algorithm = algorithm.to_string();
+        let public_key_b64 = public_key_b64.to_string();
+        let label = label.to_string();
+        crate::store::with_current_user(&self.pool, move |tx| {
+            Box::pin(async move {
+                sqlx::query_as::<_, UserPublicKey>(
+                    r#"
+                    INSERT INTO user_public_keys (user_id, algorithm, public_key_b64, label, org_id)
+                    VALUES ($1, $2, $3, $4, $5)
+                    RETURNING id, user_id, algorithm, public_key_b64, label,
+                              created_at, revoked_at, org_id
+                    "#,
+                )
+                .bind(user_id)
+                .bind(algorithm)
+                .bind(public_key_b64)
+                .bind(label)
+                .bind(org_id)
+                .fetch_one(&mut **tx)
+                .await
+                .map_err(Into::into)
+            })
+        })
         .await
-        .map_err(Into::into)
     }
 
     async fn find_user_public_key_by_id(&self, key_id: Uuid) -> StoreResult<Option<UserPublicKey>> {
+        // Owner pool on purpose: the only caller (`revoke_my_public_key`)
+        // uses this to learn the key's org tag, then checks the caller is an
+        // admin of THAT org before revoking. The org to bind is derived from
+        // this answer, so the lookup itself cannot be bound.
         sqlx::query_as::<_, UserPublicKey>(
             r#"
             SELECT id, user_id, algorithm, public_key_b64, label,
@@ -2288,24 +2337,31 @@ impl RegistryStore for PgRegistryStore {
             "#,
         )
         .bind(key_id)
-        .fetch_optional(&self.pool)
+        .fetch_optional(&self.owner_pool)
         .await
         .map_err(Into::into)
     }
 
     async fn revoke_org_public_key(&self, org_id: Uuid, key_id: Uuid) -> StoreResult<bool> {
-        let res = sqlx::query(
-            r#"
-            UPDATE user_public_keys
-            SET revoked_at = NOW()
-            WHERE id = $1 AND org_id = $2 AND revoked_at IS NULL
-            "#,
-        )
-        .bind(key_id)
-        .bind(org_id)
-        .execute(&self.pool)
-        .await?;
-        Ok(res.rows_affected() > 0)
+        // Org-shared key: the `org_shared_keys` policy admits it under the
+        // key's org (the handler already checked the caller is its admin).
+        crate::store::with_org_context(&self.pool, org_id, move |tx| {
+            Box::pin(async move {
+                let res = sqlx::query(
+                    r#"
+                    UPDATE user_public_keys
+                    SET revoked_at = NOW()
+                    WHERE id = $1 AND org_id = $2 AND revoked_at IS NULL
+                    "#,
+                )
+                .bind(key_id)
+                .bind(org_id)
+                .execute(&mut **tx)
+                .await?;
+                Ok(res.rows_affected() > 0)
+            })
+        })
+        .await
     }
 
     async fn list_org_public_keys_with_usage(
@@ -2324,22 +2380,28 @@ impl RegistryStore for PgRegistryStore {
             Option<Uuid>,
             i64,
         );
-        let rows: Vec<Row> = sqlx::query_as(
-            r#"
-                SELECT k.id, k.user_id, k.algorithm, k.public_key_b64, k.label,
-                       k.created_at, k.revoked_at, k.org_id,
-                       COUNT(pv.id) AS usage_count
-                FROM user_public_keys k
-                LEFT JOIN plugin_versions pv ON pv.sbom_signed_key_id = k.id
-                WHERE k.org_id = $1 AND ($2 OR k.revoked_at IS NULL)
-                GROUP BY k.id, k.user_id, k.algorithm, k.public_key_b64,
-                         k.label, k.created_at, k.revoked_at, k.org_id
-                ORDER BY k.created_at ASC
-                "#,
-        )
-        .bind(org_id)
-        .bind(include_revoked)
-        .fetch_all(&self.pool)
+        let rows: Vec<Row> = crate::store::with_org_context(&self.pool, org_id, move |tx| {
+            Box::pin(async move {
+                sqlx::query_as(
+                    r#"
+                    SELECT k.id, k.user_id, k.algorithm, k.public_key_b64, k.label,
+                           k.created_at, k.revoked_at, k.org_id,
+                           COUNT(pv.id) AS usage_count
+                    FROM user_public_keys k
+                    LEFT JOIN plugin_versions pv ON pv.sbom_signed_key_id = k.id
+                    WHERE k.org_id = $1 AND ($2 OR k.revoked_at IS NULL)
+                    GROUP BY k.id, k.user_id, k.algorithm, k.public_key_b64,
+                             k.label, k.created_at, k.revoked_at, k.org_id
+                    ORDER BY k.created_at ASC
+                    "#,
+                )
+                .bind(org_id)
+                .bind(include_revoked)
+                .fetch_all(&mut **tx)
+                .await
+                .map_err(Into::into)
+            })
+        })
         .await?;
 
         Ok(rows
@@ -2407,77 +2469,88 @@ impl RegistryStore for PgRegistryStore {
         new_public_key_b64: &str,
         new_label: &str,
     ) -> StoreResult<UserPublicKey> {
-        let mut tx = self.pool.begin().await?;
-        // Read inside the txn so the new key inherits the same org tag
-        // and we can reject revoked/foreign keys atomically.
-        let row: Option<(Option<Uuid>, Option<DateTime<Utc>>)> = sqlx::query_as(
-            r#"
+        let algorithm = algorithm.to_string();
+        let new_public_key_b64 = new_public_key_b64.to_string();
+        let new_label = new_label.to_string();
+        crate::store::with_current_user(&self.pool, move |tx| {
+            Box::pin(async move {
+                // Read inside the txn so the new key inherits the same org tag
+                // and we can reject revoked/foreign keys atomically.
+                let row: Option<(Option<Uuid>, Option<DateTime<Utc>>)> = sqlx::query_as(
+                    r#"
             SELECT org_id, revoked_at
             FROM user_public_keys
             WHERE id = $1 AND user_id = $2
             "#,
-        )
-        .bind(old_key_id)
-        .bind(user_id)
-        .fetch_optional(&mut *tx)
-        .await?;
-        let (inherited_org_id, revoked_at) = match row {
-            Some(r) => r,
-            None => return Err(StoreError::NotFound),
-        };
-        if revoked_at.is_some() {
-            return Err(StoreError::NotFound);
-        }
+                )
+                .bind(old_key_id)
+                .bind(user_id)
+                .fetch_optional(&mut **tx)
+                .await?;
+                let (inherited_org_id, revoked_at) = match row {
+                    Some(r) => r,
+                    None => return Err(StoreError::NotFound),
+                };
+                if revoked_at.is_some() {
+                    return Err(StoreError::NotFound);
+                }
 
-        let new_key: UserPublicKey = sqlx::query_as::<_, UserPublicKey>(
-            r#"
+                let new_key: UserPublicKey = sqlx::query_as::<_, UserPublicKey>(
+                    r#"
             INSERT INTO user_public_keys
                 (user_id, algorithm, public_key_b64, label, org_id)
             VALUES ($1, $2, $3, $4, $5)
             RETURNING id, user_id, algorithm, public_key_b64, label,
                       created_at, revoked_at, org_id
             "#,
-        )
-        .bind(user_id)
-        .bind(algorithm)
-        .bind(new_public_key_b64)
-        .bind(new_label)
-        .bind(inherited_org_id)
-        .fetch_one(&mut *tx)
-        .await?;
+                )
+                .bind(user_id)
+                .bind(algorithm)
+                .bind(new_public_key_b64)
+                .bind(new_label)
+                .bind(inherited_org_id)
+                .fetch_one(&mut **tx)
+                .await?;
 
-        sqlx::query(
-            r#"
+                sqlx::query(
+                    r#"
             UPDATE user_public_keys
             SET revoked_at = NOW()
             WHERE id = $1 AND user_id = $2
             "#,
-        )
-        .bind(old_key_id)
-        .bind(user_id)
-        .execute(&mut *tx)
-        .await?;
+                )
+                .bind(old_key_id)
+                .bind(user_id)
+                .execute(&mut **tx)
+                .await?;
 
-        tx.commit().await?;
-        Ok(new_key)
+                Ok(new_key)
+            })
+        })
+        .await
     }
 
     async fn revoke_user_public_key(&self, user_id: Uuid, key_id: Uuid) -> StoreResult<bool> {
         // Scoped to the requesting user so one account can't revoke
         // another's key via id guessing. `revoked_at IS NULL` guards
         // against idempotent re-revocation.
-        let res = sqlx::query(
-            r#"
+        crate::store::with_current_user(&self.pool, move |tx| {
+            Box::pin(async move {
+                let res = sqlx::query(
+                    r#"
             UPDATE user_public_keys
             SET revoked_at = NOW()
             WHERE id = $1 AND user_id = $2 AND revoked_at IS NULL
             "#,
-        )
-        .bind(key_id)
-        .bind(user_id)
-        .execute(&self.pool)
-        .await?;
-        Ok(res.rows_affected() > 0)
+                )
+                .bind(key_id)
+                .bind(user_id)
+                .execute(&mut **tx)
+                .await?;
+                Ok(res.rows_affected() > 0)
+            })
+        })
+        .await
     }
 
     async fn record_plugin_version_attestation(

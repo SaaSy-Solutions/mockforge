@@ -32,7 +32,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[cfg(feature = "postgres")]
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 
 #[cfg_attr(feature = "postgres", derive(FromRow))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -65,7 +65,10 @@ impl HostedMockPlugin {
     /// Attach (or re-attach) a plugin to a deployment. UPSERT on the
     /// `(deployment_id, plugin_id)` UNIQUE constraint — re-attach of
     /// the same plugin updates the version, config, and grant.
-    pub async fn attach(pool: &PgPool, input: AttachHostedMockPlugin<'_>) -> sqlx::Result<Self> {
+    pub async fn attach(
+        executor: impl sqlx::PgExecutor<'_>,
+        input: AttachHostedMockPlugin<'_>,
+    ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"
             INSERT INTO hosted_mock_plugins (
@@ -90,18 +93,24 @@ impl HostedMockPlugin {
         .bind(input.permissions_json)
         .bind(input.enabled)
         .bind(input.attached_by)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM hosted_mock_plugins WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
-    pub async fn list_by_deployment(pool: &PgPool, deployment_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_by_deployment(
+        executor: impl sqlx::PgExecutor<'_>,
+        deployment_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             r#"
             SELECT * FROM hosted_mock_plugins
@@ -110,14 +119,14 @@ impl HostedMockPlugin {
             "#,
         )
         .bind(deployment_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     /// Enabled-only listing. The plugin-host calls this on boot to
     /// build its load manifest.
     pub async fn list_enabled_by_deployment(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         deployment_id: Uuid,
     ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
@@ -128,12 +137,12 @@ impl HostedMockPlugin {
             "#,
         )
         .bind(deployment_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     pub async fn count_active_by_deployment(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         deployment_id: Uuid,
     ) -> sqlx::Result<i64> {
         let row: (Option<i64>,) = sqlx::query_as(
@@ -144,13 +153,17 @@ impl HostedMockPlugin {
             "#,
         )
         .bind(deployment_id)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await?;
         Ok(row.0.unwrap_or(0))
     }
 
     /// Soft toggle. Detach (hard delete) is `delete`.
-    pub async fn set_enabled(pool: &PgPool, id: Uuid, enabled: bool) -> sqlx::Result<Option<Self>> {
+    pub async fn set_enabled(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+        enabled: bool,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>(
             r#"
             UPDATE hosted_mock_plugins
@@ -162,16 +175,16 @@ impl HostedMockPlugin {
         )
         .bind(id)
         .bind(enabled)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
     /// Hard detach. Audit trail is preserved separately via
     /// `audit_logs` (event type `plugin_detached`); this row goes away.
-    pub async fn delete(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<bool> {
         let rows = sqlx::query("DELETE FROM hosted_mock_plugins WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?
             .rows_affected();
         Ok(rows > 0)

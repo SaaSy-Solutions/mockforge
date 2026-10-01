@@ -32,7 +32,7 @@ async fn require_workspace(
     user_id: Uuid,
     headers: &HeaderMap,
     workspace_id: Uuid,
-) -> ApiResult<()> {
+) -> ApiResult<Uuid> {
     let org_ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
@@ -46,7 +46,7 @@ async fn require_workspace(
             "Workspace does not belong to this organization".to_string(),
         ));
     }
-    Ok(())
+    Ok(org_ctx.org_id)
 }
 
 // ---------- Parsed-route IR ----------
@@ -262,13 +262,15 @@ pub async fn import_to_workspace(
     Path(workspace_id): Path<Uuid>,
     Json(request): Json<ImportRequestBody>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = require_workspace(&state, user_id, &headers, workspace_id).await?;
 
     // Parent folder check (if caller specified one)
     if let Some(folder_id) = request.folder_id {
-        let folder = WorkspaceFolder::find_by_id(state.db.pool(), folder_id)
-            .await?
-            .ok_or_else(|| ApiError::InvalidRequest("Folder not found".to_string()))?;
+        let folder = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+            Box::pin(async move { Ok(WorkspaceFolder::find_by_id(&mut **tx, folder_id).await?) })
+        })
+        .await?
+        .ok_or_else(|| ApiError::InvalidRequest("Folder not found".to_string()))?;
         if folder.workspace_id != workspace_id {
             return Err(ApiError::InvalidRequest(
                 "Folder does not belong to this workspace".to_string(),
@@ -285,69 +287,81 @@ pub async fn import_to_workspace(
         request.environment.as_deref(),
     )?;
 
-    // Optionally bucket routes into one folder per HTTP method.
-    let method_folder_cache: HashMap<String, Uuid> = if create_folders {
-        let mut cache = HashMap::new();
-        let mut unique_methods: Vec<String> =
-            parsed.routes.iter().map(|r| r.method.to_uppercase()).collect();
-        unique_methods.sort();
-        unique_methods.dedup();
-        for method in unique_methods {
-            let folder = WorkspaceFolder::create(
-                state.db.pool(),
-                workspace_id,
-                request.folder_id,
-                &method,
-                &format!("Imported {method} routes"),
-            )
-            .await?;
-            cache.insert(method, folder.id);
-        }
-        cache
-    } else {
-        HashMap::new()
-    };
+    let parent_folder_id = request.folder_id;
+    // All rows of one import share a single org-bound transaction.
+    let (imported, warnings) = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            // Optionally bucket routes into one folder per HTTP method.
+            let method_folder_cache: HashMap<String, Uuid> = if create_folders {
+                let mut cache = HashMap::new();
+                let mut unique_methods: Vec<String> =
+                    parsed.routes.iter().map(|r| r.method.to_uppercase()).collect();
+                unique_methods.sort();
+                unique_methods.dedup();
+                for method in unique_methods {
+                    let folder = WorkspaceFolder::create(
+                        &mut **tx,
+                        workspace_id,
+                        parent_folder_id,
+                        &method,
+                        &format!("Imported {method} routes"),
+                    )
+                    .await?;
+                    cache.insert(method, folder.id);
+                }
+                cache
+            } else {
+                HashMap::new()
+            };
 
-    let mut imported = 0usize;
-    for (idx, route) in parsed.routes.iter().enumerate() {
-        if let Some(ref sel) = selected {
-            if !sel.contains(&idx) {
-                continue;
+            let mut imported = 0usize;
+            for (idx, route) in parsed.routes.iter().enumerate() {
+                if let Some(ref sel) = selected {
+                    if !sel.contains(&idx) {
+                        continue;
+                    }
+                }
+
+                let method_upper = route.method.to_uppercase();
+                let target_folder = if create_folders {
+                    method_folder_cache.get(&method_upper).copied()
+                } else {
+                    parent_folder_id
+                };
+
+                let name = route
+                    .name
+                    .clone()
+                    .unwrap_or_else(|| format!("{} {}", method_upper, route.path));
+                let req_headers = serde_json::to_value(&route.headers).unwrap_or(json!({}));
+                let resp_headers =
+                    serde_json::to_value(&route.response.headers).unwrap_or(json!({}));
+
+                WorkspaceRequest::create(
+                    &mut **tx,
+                    workspace_id,
+                    target_folder,
+                    &name,
+                    route.description.as_deref().unwrap_or(""),
+                    &method_upper,
+                    &route.path,
+                    route.response.status as i32,
+                    &route.response.body,
+                    &req_headers,
+                    &resp_headers,
+                )
+                .await?;
+                imported += 1;
             }
-        }
-
-        let method_upper = route.method.to_uppercase();
-        let target_folder = if create_folders {
-            method_folder_cache.get(&method_upper).copied()
-        } else {
-            request.folder_id
-        };
-
-        let name = route.name.clone().unwrap_or_else(|| format!("{} {}", method_upper, route.path));
-        let req_headers = serde_json::to_value(&route.headers).unwrap_or(json!({}));
-        let resp_headers = serde_json::to_value(&route.response.headers).unwrap_or(json!({}));
-
-        WorkspaceRequest::create(
-            state.db.pool(),
-            workspace_id,
-            target_folder,
-            &name,
-            route.description.as_deref().unwrap_or(""),
-            &method_upper,
-            &route.path,
-            route.response.status as i32,
-            &route.response.body,
-            &req_headers,
-            &resp_headers,
-        )
-        .await?;
-        imported += 1;
-    }
+            Ok((imported, parsed.warnings))
+        })
+    })
+    .await?;
 
     Ok(Json(json!({
         "success": true,
         "imported": imported,
-        "warnings": parsed.warnings,
+        "warnings": warnings,
     })))
 }
 
@@ -416,7 +430,7 @@ pub async fn autocomplete(
     Path(workspace_id): Path<Uuid>,
     Json(request): Json<AutocompleteRequest>,
 ) -> ApiResult<Json<AutocompleteResponse>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = require_workspace(&state, user_id, &headers, workspace_id).await?;
 
     let span = detect_template_span(&request.input, request.cursor_position);
     let (start, end, prefix) = match span {
@@ -431,19 +445,31 @@ pub async fn autocomplete(
     };
 
     // Collect variable names from the active environment (fallback: every env in the workspace).
-    let envs = WorkspaceEnvironment::list_by_workspace(state.db.pool(), workspace_id).await?;
-    let active = envs.iter().find(|e| e.is_active);
+    // Load the candidate environments and their variables in one org-bound
+    // transaction; the prefix filtering below is pure.
+    let env_vars: Vec<(WorkspaceEnvironment, Vec<WorkspaceEnvVariable>)> =
+        with_org_context(state.db.runtime_pool(), org_id, |tx| {
+            Box::pin(async move {
+                let envs = WorkspaceEnvironment::list_by_workspace(&mut **tx, workspace_id).await?;
+                let active = envs.iter().position(|e| e.is_active);
+                let source_envs: Vec<WorkspaceEnvironment> = match active {
+                    Some(idx) => vec![envs[idx].clone()],
+                    None => envs,
+                };
+                let mut out = Vec::with_capacity(source_envs.len());
+                for env in source_envs {
+                    let vars = WorkspaceEnvVariable::list_by_environment(&mut **tx, env.id).await?;
+                    out.push((env, vars));
+                }
+                Ok(out)
+            })
+        })
+        .await?;
 
     let mut seen = std::collections::HashSet::new();
     let mut suggestions: Vec<AutocompleteSuggestion> = Vec::new();
 
-    let source_envs: Vec<&WorkspaceEnvironment> = match active {
-        Some(e) => vec![e],
-        None => envs.iter().collect(),
-    };
-
-    for env in source_envs {
-        let vars = WorkspaceEnvVariable::list_by_environment(state.db.pool(), env.id).await?;
+    for (env, vars) in env_vars {
         for var in vars {
             if !var.name.starts_with(&prefix) {
                 continue;

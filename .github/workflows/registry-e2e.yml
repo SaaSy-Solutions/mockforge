@@ -265,6 +265,7 @@ jobs:
             --test audit_integrity_e2e \
             --test rls_coverage_e2e \
             --test hosted_mock_rls_routes_e2e \
+            --test rls_join_coverage_e2e \
             -- --ignored --nocapture --test-threads=1
 
       - name: Dump registry-server log on failure

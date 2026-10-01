@@ -40,7 +40,7 @@ async fn authorize_workspace(
     user_id: Uuid,
     headers: &HeaderMap,
     workspace_id: Uuid,
-) -> ApiResult<()> {
+) -> ApiResult<Uuid> {
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
@@ -54,7 +54,7 @@ async fn authorize_workspace(
     if ctx.org_id != workspace.org_id {
         return Err(ApiError::InvalidRequest("Workspace not found".into()));
     }
-    Ok(())
+    Ok(ctx.org_id)
 }
 
 // --- list / get -------------------------------------------------------------
@@ -81,15 +81,19 @@ pub async fn list_rule_explanations(
     headers: HeaderMap,
     Query(query): Query<ListExplanationsQuery>,
 ) -> ApiResult<Json<ListExplanationsResponse>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
-    let rows = MockaiRuleExplanation::list_by_workspace(
-        state.db.pool(),
-        workspace_id,
-        query.rule_type.as_deref(),
-        query.min_confidence,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let rows = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(MockaiRuleExplanation::list_by_workspace(
+                &mut **tx,
+                workspace_id,
+                query.rule_type.as_deref(),
+                query.min_confidence,
+            )
+            .await?)
+        })
+    })
+    .await?;
     let total = rows.len();
     Ok(Json(ListExplanationsResponse {
         explanations: rows,
@@ -109,11 +113,16 @@ pub async fn get_rule_explanation(
     Path((workspace_id, rule_id)): Path<(Uuid, String)>,
     headers: HeaderMap,
 ) -> ApiResult<Json<GetExplanationResponse>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
-    let row = MockaiRuleExplanation::get_by_rule_id(state.db.pool(), workspace_id, &rule_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest(format!("Rule {rule_id} not found")))?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let lookup_rule_id = rule_id.clone();
+    let row = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(MockaiRuleExplanation::get_by_rule_id(&mut **tx, workspace_id, &lookup_rule_id)
+                .await?)
+        })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest(format!("Rule {rule_id} not found")))?;
     Ok(Json(GetExplanationResponse { explanation: row }))
 }
 
@@ -202,7 +211,7 @@ pub async fn learn_from_examples(
 ) -> ApiResult<Json<LearnResponse>> {
     // Cross-tenant write guard: don't let a caller poison rule explanations
     // into a workspace their org doesn't own.
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
     if request.examples.is_empty() {
         return Err(ApiError::InvalidRequest("examples must not be empty".into()));
     }
@@ -237,30 +246,41 @@ pub async fn learn_from_examples(
     let parsed: ModelLearnOutput = serde_json::from_value(parsed_value)
         .map_err(|e| ApiError::InvalidRequest(format!("Model output schema mismatch: {e}")))?;
 
-    let pool = state.db.pool();
-    let mut summaries = Vec::with_capacity(parsed.rules.len());
-    for rule in &parsed.rules {
-        MockaiRuleExplanation::upsert(
-            pool,
-            UpsertMockaiRuleExplanation {
-                workspace_id,
-                rule_id: &rule.rule_id,
-                rule_type: &rule.rule_type,
-                confidence: rule.confidence,
-                source_examples: &serde_json::Value::Array(request.examples.clone()),
-                reasoning: &rule.reasoning,
-                pattern_matches: &rule.pattern_matches,
-            },
-        )
-        .await
-        .map_err(ApiError::Database)?;
-        summaries.push(RuleSummary {
+    let summaries: Vec<RuleSummary> = parsed
+        .rules
+        .iter()
+        .map(|rule| RuleSummary {
             rule_id: rule.rule_id.clone(),
             rule_type: rule.rule_type.clone(),
             confidence: rule.confidence,
             reasoning: rule.reasoning.clone(),
-        });
-    }
+        })
+        .collect();
+    // The LLM call above is done; persist the rules in one short
+    // transaction bound to the org `authorize_workspace` proved.
+    let rules = parsed.rules;
+    let source_examples = serde_json::Value::Array(request.examples);
+    with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            for rule in &rules {
+                MockaiRuleExplanation::upsert(
+                    &mut **tx,
+                    UpsertMockaiRuleExplanation {
+                        workspace_id,
+                        rule_id: &rule.rule_id,
+                        rule_type: &rule.rule_type,
+                        confidence: rule.confidence,
+                        source_examples: &source_examples,
+                        reasoning: &rule.reasoning,
+                        pattern_matches: &rule.pattern_matches,
+                    },
+                )
+                .await?;
+            }
+            Ok(())
+        })
+    })
+    .await?;
 
     let counts = parsed.rules_generated.unwrap_or_default();
     let total = summaries.len();

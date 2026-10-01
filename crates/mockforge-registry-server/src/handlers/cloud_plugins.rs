@@ -21,6 +21,7 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
     models::CloudPluginBetaInterest,
+    store::with_current_user,
     AppState,
 };
 
@@ -72,17 +73,23 @@ pub async fn submit_interest(
         Err(_) => (None, None),
     };
 
-    let row = CloudPluginBetaInterest::upsert(
-        state.db.pool(),
-        crate::models::cloud_plugin_beta_interest::UpsertCloudPluginBetaInterest {
-            user_id,
-            org_id,
-            use_case: use_case.as_deref(),
-            plan_at_signup: plan_at_signup.as_deref(),
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    // `cloud_plugin_beta_interest` is policed by `app.current_user_id`
+    // (#1087): bind the request's authenticated user.
+    let row = with_current_user(state.db.runtime_pool(), move |tx| {
+        Box::pin(async move {
+            Ok(CloudPluginBetaInterest::upsert(
+                &mut **tx,
+                crate::models::cloud_plugin_beta_interest::UpsertCloudPluginBetaInterest {
+                    user_id,
+                    org_id,
+                    use_case: use_case.as_deref(),
+                    plan_at_signup: plan_at_signup.as_deref(),
+                },
+            )
+            .await?)
+        })
+    })
+    .await?;
 
     Ok(Json(BetaInterestResponse {
         id: row.id.to_string(),
@@ -96,9 +103,12 @@ pub async fn get_my_interest(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
 ) -> ApiResult<Json<BetaInterestStatusResponse>> {
-    let existing = CloudPluginBetaInterest::find_by_user(state.db.pool(), user_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let existing = with_current_user(state.db.runtime_pool(), move |tx| {
+        Box::pin(
+            async move { Ok(CloudPluginBetaInterest::find_by_user(&mut **tx, user_id).await?) },
+        )
+    })
+    .await?;
 
     Ok(Json(match existing {
         Some(row) => BetaInterestStatusResponse {

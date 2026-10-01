@@ -49,11 +49,37 @@ async fn require_workspace(
     Ok(workspace)
 }
 
+/// Load `environment_id` bound to `org_id` and confirm it belongs to
+/// `workspace_id`. An environment in another org reads as `None` under RLS and
+/// maps to the same "Environment not found" error as a missing row.
+async fn find_env_in_workspace(
+    state: &AppState,
+    org_id: Uuid,
+    workspace_id: Uuid,
+    environment_id: Uuid,
+) -> ApiResult<WorkspaceEnvironment> {
+    let env = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(
+            async move { Ok(WorkspaceEnvironment::find_by_id(&mut **tx, environment_id).await?) },
+        )
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Environment not found".to_string()))?;
+    if env.workspace_id != workspace_id {
+        return Err(ApiError::InvalidRequest(
+            "Environment does not belong to this workspace".to_string(),
+        ));
+    }
+    Ok(env)
+}
+
+/// `conn` must be bound to the workspace's org (callers run this inside
+/// `with_org_context`).
 async fn build_summary(
-    pool: &sqlx::PgPool,
+    conn: &mut sqlx::PgConnection,
     env: &WorkspaceEnvironment,
-) -> ApiResult<EnvironmentSummaryResponse> {
-    let variable_count = WorkspaceEnvironment::variable_count(pool, env.id).await?;
+) -> sqlx::Result<EnvironmentSummaryResponse> {
+    let variable_count = WorkspaceEnvironment::variable_count(&mut *conn, env.id).await?;
     Ok(EnvironmentSummaryResponse {
         id: env.id,
         name: env.name.clone(),
@@ -73,13 +99,19 @@ pub async fn list_environments(
     headers: HeaderMap,
     Path(workspace_id): Path<Uuid>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = require_workspace(&state, user_id, &headers, workspace_id).await?.org_id;
 
-    let envs = WorkspaceEnvironment::list_by_workspace(state.db.pool(), workspace_id).await?;
-    let mut summaries = Vec::with_capacity(envs.len());
-    for env in &envs {
-        summaries.push(build_summary(state.db.pool(), env).await?);
-    }
+    let summaries = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            let envs = WorkspaceEnvironment::list_by_workspace(&mut **tx, workspace_id).await?;
+            let mut summaries = Vec::with_capacity(envs.len());
+            for env in &envs {
+                summaries.push(build_summary(tx, env).await?);
+            }
+            Ok(summaries)
+        })
+    })
+    .await?;
     let total = summaries.len();
     Ok(Json(serde_json::json!({
         "environments": summaries,
@@ -118,7 +150,7 @@ pub async fn create_environment(
     Path(workspace_id): Path<Uuid>,
     Json(request): Json<CreateEnvironmentRequest>,
 ) -> ApiResult<Json<CreateEnvironmentResponse>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = require_workspace(&state, user_id, &headers, workspace_id).await?.org_id;
 
     let name = request.name.trim();
     if name.is_empty() {
@@ -130,15 +162,24 @@ pub async fn create_environment(
         name: String::new(),
     });
 
-    let env = WorkspaceEnvironment::create(
-        state.db.pool(),
-        workspace_id,
-        name,
-        &request.description,
-        &color.hex,
-        &color.name,
-    )
-    .await
+    let name_owned = name.to_string();
+    let description = request.description.clone();
+    // The closure returns the raw sqlx result so the unique-violation mapping
+    // below still sees the `sqlx::Error`.
+    let env = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(WorkspaceEnvironment::create(
+                tx,
+                workspace_id,
+                &name_owned,
+                &description,
+                &color.hex,
+                &color.name,
+            )
+            .await)
+        })
+    })
+    .await?
     .map_err(|e| match e {
         sqlx::Error::Database(ref db) if db.is_unique_violation() => ApiError::InvalidRequest(
             format!("An environment named '{name}' already exists in this workspace"),
@@ -167,30 +208,28 @@ pub async fn update_environment(
     Path((workspace_id, environment_id)): Path<(Uuid, Uuid)>,
     Json(request): Json<UpdateEnvironmentRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = require_workspace(&state, user_id, &headers, workspace_id).await?.org_id;
 
-    let existing = WorkspaceEnvironment::find_by_id(state.db.pool(), environment_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Environment not found".to_string()))?;
-    if existing.workspace_id != workspace_id {
-        return Err(ApiError::InvalidRequest(
-            "Environment does not belong to this workspace".to_string(),
-        ));
-    }
+    find_env_in_workspace(&state, org_id, workspace_id, environment_id).await?;
 
     let (color_hex, color_name) = match request.color {
         Some(c) => (Some(c.hex), Some(c.name)),
         None => (None, None),
     };
 
-    WorkspaceEnvironment::update(
-        state.db.pool(),
-        environment_id,
-        request.name.as_deref(),
-        request.description.as_deref(),
-        color_hex.as_deref(),
-        color_name.as_deref(),
-    )
+    with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(WorkspaceEnvironment::update(
+                &mut **tx,
+                environment_id,
+                request.name.as_deref(),
+                request.description.as_deref(),
+                color_hex.as_deref(),
+                color_name.as_deref(),
+            )
+            .await?)
+        })
+    })
     .await?;
 
     Ok(Json(serde_json::json!({ "message": "Environment updated" })))
@@ -203,18 +242,14 @@ pub async fn delete_environment(
     headers: HeaderMap,
     Path((workspace_id, environment_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = require_workspace(&state, user_id, &headers, workspace_id).await?.org_id;
 
-    let existing = WorkspaceEnvironment::find_by_id(state.db.pool(), environment_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Environment not found".to_string()))?;
-    if existing.workspace_id != workspace_id {
-        return Err(ApiError::InvalidRequest(
-            "Environment does not belong to this workspace".to_string(),
-        ));
-    }
+    find_env_in_workspace(&state, org_id, workspace_id, environment_id).await?;
 
-    WorkspaceEnvironment::delete(state.db.pool(), environment_id).await?;
+    with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(WorkspaceEnvironment::delete(&mut **tx, environment_id).await?) })
+    })
+    .await?;
     Ok(Json(serde_json::json!({ "message": "Environment deleted" })))
 }
 
@@ -225,10 +260,14 @@ pub async fn activate_environment(
     headers: HeaderMap,
     Path((workspace_id, environment_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = require_workspace(&state, user_id, &headers, workspace_id).await?.org_id;
 
-    let activated =
-        WorkspaceEnvironment::set_active(state.db.pool(), workspace_id, environment_id).await?;
+    let activated = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(WorkspaceEnvironment::set_active(&mut **tx, workspace_id, environment_id).await?)
+        })
+    })
+    .await?;
     if activated.is_none() {
         return Err(ApiError::InvalidRequest("Environment not found".to_string()));
     }
@@ -249,9 +288,15 @@ pub async fn reorder_environments(
     Path(workspace_id): Path<Uuid>,
     Json(request): Json<EnvironmentOrderRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = require_workspace(&state, user_id, &headers, workspace_id).await?.org_id;
 
-    WorkspaceEnvironment::reorder(state.db.pool(), workspace_id, &request.environment_ids).await?;
+    with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(WorkspaceEnvironment::reorder(&mut **tx, workspace_id, &request.environment_ids)
+                .await?)
+        })
+    })
+    .await?;
     Ok(Json(serde_json::json!({ "message": "Environment order updated" })))
 }
 
@@ -262,18 +307,16 @@ pub async fn list_variables(
     headers: HeaderMap,
     Path((workspace_id, environment_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = require_workspace(&state, user_id, &headers, workspace_id).await?.org_id;
 
-    let env = WorkspaceEnvironment::find_by_id(state.db.pool(), environment_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Environment not found".to_string()))?;
-    if env.workspace_id != workspace_id {
-        return Err(ApiError::InvalidRequest(
-            "Environment does not belong to this workspace".to_string(),
-        ));
-    }
+    find_env_in_workspace(&state, org_id, workspace_id, environment_id).await?;
 
-    let vars = WorkspaceEnvVariable::list_by_environment(state.db.pool(), environment_id).await?;
+    let vars = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(WorkspaceEnvVariable::list_by_environment(&mut **tx, environment_id).await?)
+        })
+    })
+    .await?;
     let variables: Vec<_> = vars.iter().map(|v| v.to_response()).collect();
     Ok(Json(serde_json::json!({ "variables": variables })))
 }
@@ -294,29 +337,28 @@ pub async fn set_variable(
     Path((workspace_id, environment_id)): Path<(Uuid, Uuid)>,
     Json(request): Json<SetVariableRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = require_workspace(&state, user_id, &headers, workspace_id).await?.org_id;
 
-    let env = WorkspaceEnvironment::find_by_id(state.db.pool(), environment_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Environment not found".to_string()))?;
-    if env.workspace_id != workspace_id {
-        return Err(ApiError::InvalidRequest(
-            "Environment does not belong to this workspace".to_string(),
-        ));
-    }
+    find_env_in_workspace(&state, org_id, workspace_id, environment_id).await?;
 
     let key = request.key.trim();
     if key.is_empty() {
         return Err(ApiError::InvalidRequest("Variable name is required".to_string()));
     }
 
-    WorkspaceEnvVariable::upsert(
-        state.db.pool(),
-        environment_id,
-        key,
-        &request.value,
-        request.encrypted,
-    )
+    let key = key.to_string();
+    with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(WorkspaceEnvVariable::upsert(
+                &mut **tx,
+                environment_id,
+                &key,
+                &request.value,
+                request.encrypted,
+            )
+            .await?)
+        })
+    })
     .await?;
 
     Ok(Json(serde_json::json!({ "message": "Variable saved" })))
@@ -329,19 +371,16 @@ pub async fn delete_variable(
     headers: HeaderMap,
     Path((workspace_id, environment_id, variable_name)): Path<(Uuid, Uuid, String)>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = require_workspace(&state, user_id, &headers, workspace_id).await?.org_id;
 
-    let env = WorkspaceEnvironment::find_by_id(state.db.pool(), environment_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Environment not found".to_string()))?;
-    if env.workspace_id != workspace_id {
-        return Err(ApiError::InvalidRequest(
-            "Environment does not belong to this workspace".to_string(),
-        ));
-    }
+    find_env_in_workspace(&state, org_id, workspace_id, environment_id).await?;
 
-    let deleted =
-        WorkspaceEnvVariable::delete(state.db.pool(), environment_id, &variable_name).await?;
+    let deleted = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(WorkspaceEnvVariable::delete(&mut **tx, environment_id, &variable_name).await?)
+        })
+    })
+    .await?;
     if !deleted {
         return Err(ApiError::InvalidRequest("Variable not found".to_string()));
     }

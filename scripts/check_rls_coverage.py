@@ -49,6 +49,16 @@ The other classes:
 The forced-table set is read from the migrations (`FORCE ROW LEVEL SECURITY`),
 so adding a policy automatically widens the audit.
 
+## Which GUC a statement needs
+
+Each table's required GUC is read from its policies (`app.current_org_id`,
+`app.current_user_id`). A statement inside a helper that binds none of them is
+UNBOUND. `user_public_keys` reads both (owner via the user GUC, org-shared keys
+via the org GUC); under an org-only helper a statement on it is accepted only
+if its SQL filters on `org_id = $n`, otherwise it is a personal-key query that
+would see nothing and is reported UNBOUND. The check is lexical: it looks at
+the statement text, not at what the bound value is.
+
 ## Known blind spots (it is a lexical scanner, not a type checker)
 
   * Variable SQL: `sqlx::query(&query)` / `query_as(&sql)` where the SQL text
@@ -138,6 +148,7 @@ ELEVATED_ALLOWLIST = {
     "store/postgres.rs::list_user_api_tokens": "GDPR export of the user's own tokens across orgs (user-scoped)",
     "store/postgres.rs::delete_user_data_cascade": "GDPR erasure of the user across every org they belong to",
     "store/postgres.rs::list_keys_for_publisher": "publish-time signature check: keys of every org the author belongs to",
+    "store/postgres.rs::find_user_public_key_by_id": "learns a key's org tag so the caller's admin role on THAT org can be checked; the org to bind comes from the answer",
     "handlers/users_me.rs::find_default_org_id": "mirrors resolve_org_context's default-org pick across the user's orgs",
     "handlers/public_keys.rs::enforce_publisher_key_quota": "finds the user's owned org across tenants to pick the quota",
     # ---- the lookups that PRODUCE the org to bind ---------------------------
@@ -150,6 +161,7 @@ ELEVATED_ALLOWLIST = {
     "store/postgres.rs::find_sso_config_by_email_domain": "pre-auth SSO discovery by email domain, cross-org by definition",
     # ---- genuinely cross-tenant lookups -------------------------------------
     "handlers/tunnels.rs::subdomain_taken_by_any_org": "tunnel subdomains are globally unique across tenants",
+    "handlers/scenario_promotions.rs::find_promotable_scenario": "reads another org's PUBLISHED marketplace scenario to promote it; visibility rule (own / public / non-yanked version) is in the SQL",
     # Marketplace rating aggregates: the reviewer is (by construction) usually
     # in a different org than the template/scenario owner; the stats are
     # derived solely from the reviews table.
@@ -164,6 +176,18 @@ ELEVATED_ALLOWLIST = {
     "handlers/internal_test_runs.rs::maybe_raise_finding_incident": "internal shared-token runner callback, no user org context",
     "handlers/internal_test_runs.rs::get_tunnel_reservation_by_subdomain": "internal shared-token tunnel lookup by subdomain, cross-org",
     "handlers/token_rotation.rs::send_rotation_reminders": "cross-org reminder sweep driven by a worker",
+    "handlers/internal_test_runs.rs::ingest_runner_event": "internal shared-token runner callback, no user org context",
+    "handlers/internal_test_runs.rs::get_workspace_endpoint_hits": "internal shared-token runner API, no user org context",
+    "handlers/internal_test_runs.rs::get_capture_exchanges": "internal shared-token runner API, no user org context",
+    "handlers/internal_test_runs.rs::get_fitness_function": "internal shared-token runner API, no user org context",
+    "handlers/internal_test_runs.rs::get_deployment_latency_stats": "internal shared-token runner API, no user org context",
+    "handlers/internal_test_runs.rs::get_monitored_service_contract_stability": "internal shared-token runner API, no user org context",
+    "handlers/internal_contract_diff.rs::fetch_samples": "internal shared-token runner API; the org comes from the runner payload, not a user",
+    # Data-plane ingest: authenticated by a per-deployment ingest token, not a
+    # user. The token names the deployment; there is no request org to bind.
+    "handlers/hosted_mocks.rs::ingest_runtime_logs": "data-plane log shipper, per-deployment ingest token, no user org",
+    "handlers/hosted_mocks.rs::ingest_runtime_captures": "data-plane recorder sync, per-deployment ingest token, no user org",
+    "handlers/otlp.rs::persist_span_rows": "OTLP span ingest (HTTP + gRPC), per-deployment token, no user org",
     # Stripe webhooks: no user; the org comes from the signed payload.
     "handlers/billing.rs::handle_subscription_event": "Stripe webhook: no user, org resolved from the signed payload",
     "handlers/billing.rs::handle_subscription_deleted": "Stripe webhook: no user, org resolved from the signed payload",
@@ -200,7 +224,27 @@ OWNER_EXECUTOR_PATTERNS = (
     r"\bstore\.pool\(\)",
 )
 
-BINDING_HELPERS = ("with_current_org", "with_optional_org", "with_org_context", "with_org_or_elevated")
+BINDING_HELPERS = (
+    "with_current_org",
+    "with_optional_org",
+    "with_org_context",
+    "with_org_or_elevated",
+    "with_current_user",
+    "with_user_context",
+)
+
+# Which GUC each helper binds. A statement inside a helper is only COVERED when
+# the helper binds a GUC that one of the table's policies actually reads:
+# a `user_public_keys` query inside `with_org_context` sees only org-shared
+# keys, and a `flows` query inside `with_current_user` sees nothing.
+HELPER_GUCS = {
+    "with_current_org": {"org"},
+    "with_optional_org": {"org"},
+    "with_org_context": {"org"},
+    "with_org_or_elevated": {"org"},
+    "with_current_user": {"user"},
+    "with_user_context": {"user"},
+}
 
 INSTANCE_CALL_RE = re.compile(
     r"\.(\w+)\(\s*(?:&self\.pool|self\.pool|&?self\.owner_pool|state\.db\.pool\(\)"
@@ -226,6 +270,30 @@ def forced_tables() -> tuple[str, ...]:
         for m in re.finditer(r"ALTER\s+TABLE\s+(?:IF\s+EXISTS\s+)?(?:ONLY\s+)?(?:public\.)?(\w+)\s+NO\s+FORCE\s+ROW\s+LEVEL\s+SECURITY", text, re.I):
             forced.discard(m.group(1).lower())
     return tuple(sorted(forced))
+
+
+def table_gucs() -> dict[str, set[str]]:
+    """
+    {table: {"org", "user"}}: the GUCs the table's policies read, from every
+    `CREATE POLICY .. ON <table> ..;` in the migrations. Policies are OR-ed, so
+    binding any one of them makes the table reachable.
+    """
+    gucs: dict[str, set[str]] = {}
+    for mig in sorted(MIGRATIONS_DIR.glob("*.sql")):
+        text = "\n".join(l.split("--", 1)[0] for l in mig.read_text(encoding="utf-8").split("\n"))
+        for m in re.finditer(r"CREATE\s+POLICY\s+\w+\s+ON\s+(?:public\.)?(\w+)(.*?);", text, re.I | re.S):
+            found = set(re.findall(r"app\.current_(org|user)_id", m.group(2)))
+            gucs.setdefault(m.group(1).lower(), set()).update(found)
+    return gucs
+
+
+TABLE_GUCS: dict[str, set[str]] = {}
+TABLE_GUCS_NEEDED: dict[str, set[str]] = {}
+
+# Tables whose org-GUC policy only SHARES rows owned by a user (the owner is
+# policed by app.current_user_id). An org-only binding is accepted for them
+# only when the statement filters on the sharing column.
+ORG_SHARED_ONLY_WHEN_FILTERED = {"user_public_keys": "org_id"}
 
 
 def table_re(tables: tuple[str, ...]) -> re.Pattern:
@@ -566,6 +634,25 @@ def scan_file(path: Path, table_pattern: re.Pattern, methods: dict, free: dict) 
         helper_span = enclosing_helper(body, stmt_offset)
         kind = classify(snippet, body, owner_alias, runtime_alias, helper_span)
         reason = None
+        if kind == "COVERED" and helper_span:
+            bound = HELPER_GUCS.get(helper_span[0], set())
+            wrong = sorted(t for t in tables if TABLE_GUCS.get(t) and not (TABLE_GUCS[t] & bound))
+            # A table whose policies read BOTH GUCs (user_public_keys: owner OR
+            # org-shared) is satisfied by either binding on paper, but under an
+            # org-only binding it shows just the org-shared rows. A personal-key
+            # statement there silently reads/writes nothing. Require the SQL to
+            # filter on the sharing column to accept an org-only binding.
+            if bound == {"org"}:
+                for t, col in ORG_SHARED_ONLY_WHEN_FILTERED.items():
+                    if t in tables and t not in wrong and not re.search(
+                        rf"\b(?:\w+\.)?{col}\s*=\s*\$\d", snippet
+                    ):
+                        wrong.append(t)
+                        TABLE_GUCS_NEEDED[t] = {"user"}
+            if wrong:
+                kind = "UNBOUND"
+                need = set().union(*(TABLE_GUCS_NEEDED.get(t, TABLE_GUCS[t]) for t in wrong))
+                reason = f"{helper_span[0]} binds {sorted(bound)}, but {','.join(wrong)} need {sorted(need)}"
         if kind in ("UNCOVERED", "UNKNOWN"):
             for prefix, why in ELEVATED_PATH_PREFIXES.items():
                 if prefix in rel:
@@ -613,9 +700,23 @@ def main() -> int:
     ap.add_argument("--list", action="store_true", help="print findings")
     ap.add_argument("--kind", default="", help="comma-separated kinds to print with --list")
     ap.add_argument("--update-baseline", action="store_true", help="rewrite the baseline file")
+    ap.add_argument(
+        "--print-forced-tables",
+        action="store_true",
+        help="print the FORCE-RLS tables, one per line (used by scripts/rls-e2e-gate.sh)",
+    )
     args = ap.parse_args()
 
+    if args.print_forced_tables:
+        print("\n".join(forced_tables()))
+        return 0
+
     tables = forced_tables()
+    TABLE_GUCS.update(table_gucs())
+    missing_policy = sorted(t for t in tables if not TABLE_GUCS.get(t))
+    if missing_policy:
+        print(f"error: FORCE RLS without a policy reading a GUC: {', '.join(missing_policy)}", file=sys.stderr)
+        return 2
     if not tables:
         print("error: no FORCE ROW LEVEL SECURITY tables found in migrations", file=sys.stderr)
         return 2
@@ -641,7 +742,8 @@ def main() -> int:
         for f in sorted(findings, key=lambda x: (x["kind"], x["file"], x["line"])):
             if f["kind"] in want:
                 short = f["file"].split("/src/", 1)[-1]
-                print(f"  {f['kind']:10} {short}:{f['line']}  {f['fn']}()  [{f['via']}]  {','.join(f['tables'])}")
+                why = f"  ({f['reason']})" if f["kind"] == "UNBOUND" and f["reason"] else ""
+                print(f"  {f['kind']:10} {short}:{f['line']}  {f['fn']}()  [{f['via']}]  {','.join(f['tables'])}{why}")
         print()
 
     # Stale allowlist entries would silently cover whatever lands in that fn

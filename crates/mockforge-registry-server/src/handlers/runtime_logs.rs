@@ -71,15 +71,20 @@ pub async fn list_workspace_request_logs(
     Query(query): Query<ListLogsQuery>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<RequestLogEntry>>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
 
     let limit = query.limit.unwrap_or(100).clamp(1, 1000);
     let method_filter = query.method.as_ref().map(|s| s.to_uppercase());
-    let path_filter = query.path.as_deref().filter(|s| !s.is_empty());
+    let path_filter = query.path.filter(|s| !s.is_empty());
     let (status_min, status_max) = parse_status_filter(query.status.as_deref());
 
-    let rows: Vec<RuntimeCaptureRow> = sqlx::query_as::<_, RuntimeCaptureRow>(
-        r#"
+    // runtime_captures is RLS-forced; bind the workspace's org, verified by
+    // `authorize_workspace` above.
+    let rows: Vec<RuntimeCaptureRow> =
+        with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+            Box::pin(async move {
+                Ok(sqlx::query_as::<_, RuntimeCaptureRow>(
+                    r#"
         SELECT id, occurred_at, method, path,
                COALESCE(response_status_code, status_code, 0) AS effective_status,
                COALESCE(duration_ms, 0) AS duration_ms,
@@ -94,16 +99,18 @@ pub async fn list_workspace_request_logs(
         ORDER BY occurred_at DESC
         LIMIT $6
         "#,
-    )
-    .bind(workspace_id)
-    .bind(method_filter)
-    .bind(path_filter)
-    .bind(status_min)
-    .bind(status_max)
-    .bind(limit)
-    .fetch_all(state.db.pool())
-    .await
-    .map_err(ApiError::Database)?;
+                )
+                .bind(workspace_id)
+                .bind(method_filter)
+                .bind(path_filter)
+                .bind(status_min)
+                .bind(status_max)
+                .bind(limit)
+                .fetch_all(&mut **tx)
+                .await?)
+            })
+        })
+        .await?;
 
     let entries = rows.into_iter().map(row_to_entry).collect();
     Ok(Json(entries))
@@ -184,7 +191,7 @@ async fn authorize_workspace(
     user_id: Uuid,
     headers: &HeaderMap,
     workspace_id: Uuid,
-) -> ApiResult<()> {
+) -> ApiResult<Uuid> {
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
@@ -198,7 +205,7 @@ async fn authorize_workspace(
     if ctx.org_id != workspace.org_id {
         return Err(ApiError::InvalidRequest("Workspace not found".into()));
     }
-    Ok(())
+    Ok(workspace.org_id)
 }
 
 #[cfg(test)]

@@ -63,14 +63,10 @@ pub async fn trigger_run(
     Json(request): Json<TriggerRunRequest>,
 ) -> ApiResult<Json<TestRun>> {
     // 1. Load the suite + verify org membership.
-    let suite = TestSuite::find_by_id(state.db.pool(), suite_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Test suite not found".into()))?;
-
     let ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    let suite = find_suite_in_org(&state, ctx.org_id, suite_id).await?;
 
     // Suite is workspace-scoped; verify the workspace belongs to caller's org.
     authorize_suite_workspace(&state, ctx.org_id, suite.workspace_id).await?;
@@ -183,13 +179,10 @@ pub async fn list_suite_runs(
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<TestRun>>> {
     // Verify suite belongs to caller's org via the workspace check.
-    let suite = TestSuite::find_by_id(state.db.pool(), suite_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Test suite not found".into()))?;
     let ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    let suite = find_suite_in_org(&state, ctx.org_id, suite_id).await?;
     authorize_suite_workspace(&state, ctx.org_id, suite.workspace_id).await?;
 
     let limit = query.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
@@ -474,6 +467,17 @@ async fn load_authorized_run(
 /// Verify a suite's workspace belongs to `org_id`. The lookup is bound to
 /// that org, so a workspace in another org reads as absent and yields the
 /// same "not found" as an explicit mismatch.
+/// Load a suite bound to the caller's (already resolved) org. A suite in
+/// another org reads as absent and yields the same "Test suite not found" as a
+/// missing row.
+async fn find_suite_in_org(state: &AppState, org_id: Uuid, suite_id: Uuid) -> ApiResult<TestSuite> {
+    with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(TestSuite::find_by_id(&mut **tx, suite_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Test suite not found".into()))
+}
+
 async fn authorize_suite_workspace(
     state: &AppState,
     org_id: Uuid,

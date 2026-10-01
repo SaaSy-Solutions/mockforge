@@ -222,17 +222,23 @@ pub async fn security_check(
     use crate::models::workspace_environment::WorkspaceEnvironment;
 
     let ws = require_workspace(&state, user_id, &headers, workspace_id).await?;
-    let pool = state.db.pool();
 
-    // Every variable in every environment in this workspace.
-    let envs = WorkspaceEnvironment::list_by_workspace(pool, workspace_id).await?;
-    let mut all_vars: Vec<(String, WorkspaceEnvVariable)> = Vec::new();
-    for env in &envs {
-        let vars = WorkspaceEnvVariable::list_by_environment(pool, env.id).await?;
-        for v in vars {
-            all_vars.push((env.name.clone(), v));
-        }
-    }
+    // Every variable in every environment in this workspace. Bound to the org
+    // `require_workspace` proved owns the workspace.
+    let all_vars = with_org_context(state.db.runtime_pool(), ws.org_id, |tx| {
+        Box::pin(async move {
+            let envs = WorkspaceEnvironment::list_by_workspace(&mut **tx, workspace_id).await?;
+            let mut all_vars: Vec<(String, WorkspaceEnvVariable)> = Vec::new();
+            for env in &envs {
+                let vars = WorkspaceEnvVariable::list_by_environment(&mut **tx, env.id).await?;
+                for v in vars {
+                    all_vars.push((env.name.clone(), v));
+                }
+            }
+            Ok(all_vars)
+        })
+    })
+    .await?;
 
     let mut warnings = Vec::new();
     let mut errors = Vec::new();

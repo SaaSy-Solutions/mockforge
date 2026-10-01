@@ -547,7 +547,7 @@ pub struct DeploymentLog {
 impl DeploymentLog {
     /// Create a new log entry
     pub async fn create(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         hosted_mock_id: Uuid,
         level: &str,
         message: &str,
@@ -564,13 +564,13 @@ impl DeploymentLog {
         .bind(level)
         .bind(message)
         .bind(metadata.unwrap_or_else(|| serde_json::json!({})))
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Get logs for a deployment
     pub async fn find_by_mock(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         hosted_mock_id: Uuid,
         limit: Option<i64>,
     ) -> sqlx::Result<Vec<Self>> {
@@ -580,7 +580,7 @@ impl DeploymentLog {
         )
         .bind(hosted_mock_id)
         .bind(limit)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 }
@@ -605,7 +605,7 @@ pub struct DeploymentMetrics {
 impl DeploymentMetrics {
     /// Get or create metrics for current period
     pub async fn get_or_create_current(
-        pool: &sqlx::PgPool,
+        conn: &mut sqlx::PgConnection,
         hosted_mock_id: Uuid,
     ) -> sqlx::Result<Self> {
         use chrono::Datelike;
@@ -619,7 +619,7 @@ impl DeploymentMetrics {
         )
         .bind(hosted_mock_id)
         .bind(period_start)
-        .fetch_optional(pool)
+        .fetch_optional(&mut *conn)
         .await?
         {
             return Ok(metrics);
@@ -635,18 +635,18 @@ impl DeploymentMetrics {
         )
         .bind(hosted_mock_id)
         .bind(period_start)
-        .fetch_one(pool)
+        .fetch_one(&mut *conn)
         .await
     }
 
     /// Increment request counters
     pub async fn increment_requests(
-        pool: &sqlx::PgPool,
+        conn: &mut sqlx::PgConnection,
         hosted_mock_id: Uuid,
         status_code: u16,
         response_time_ms: u64,
     ) -> sqlx::Result<()> {
-        let metrics = Self::get_or_create_current(pool, hosted_mock_id).await?;
+        let metrics = Self::get_or_create_current(&mut *conn, hosted_mock_id).await?;
 
         let (increment_2xx, increment_4xx, increment_5xx) = if (200..300).contains(&status_code) {
             (1, 0, 0)
@@ -685,7 +685,7 @@ impl DeploymentMetrics {
         .bind(increment_5xx)
         .bind(new_avg)
         .bind(metrics.id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
 
         Ok(())
@@ -693,11 +693,11 @@ impl DeploymentMetrics {
 
     /// Increment egress bytes
     pub async fn increment_egress(
-        pool: &sqlx::PgPool,
+        conn: &mut sqlx::PgConnection,
         hosted_mock_id: Uuid,
         bytes: i64,
     ) -> sqlx::Result<()> {
-        let metrics = Self::get_or_create_current(pool, hosted_mock_id).await?;
+        let metrics = Self::get_or_create_current(&mut *conn, hosted_mock_id).await?;
 
         sqlx::query(
             r#"
@@ -708,7 +708,7 @@ impl DeploymentMetrics {
         )
         .bind(bytes)
         .bind(metrics.id)
-        .execute(pool)
+        .execute(&mut *conn)
         .await?;
 
         Ok(())

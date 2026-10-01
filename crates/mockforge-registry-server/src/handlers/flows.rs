@@ -49,10 +49,14 @@ pub async fn list_flows(
     Query(query): Query<ListFlowsQuery>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<Flow>>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
-    let flows = Flow::list_by_workspace(state.db.pool(), workspace_id, query.kind.as_deref())
-        .await
-        .map_err(ApiError::Database)?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let kind = query.kind;
+    let flows = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(Flow::list_by_workspace(&mut **tx, workspace_id, kind.as_deref()).await?)
+        })
+    })
+    .await?;
     Ok(Json(flows))
 }
 
@@ -81,7 +85,7 @@ pub async fn create_flow(
     headers: HeaderMap,
     Json(request): Json<CreateFlowRequest>,
 ) -> ApiResult<Json<FlowWithVersion>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
 
     if request.name.trim().is_empty() {
         return Err(ApiError::InvalidRequest("name must not be empty".into()));
@@ -93,19 +97,23 @@ pub async fn create_flow(
         )));
     }
 
-    let (flow, version) = Flow::create_with_initial_version(
-        state.db.pool(),
-        CreateFlow {
-            workspace_id,
-            kind: &request.kind,
-            name: &request.name,
-            description: request.description.as_deref(),
-            config: &request.config,
-            created_by: Some(user_id),
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let (flow, version) = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(Flow::create_with_initial_version(
+                &mut **tx,
+                CreateFlow {
+                    workspace_id,
+                    kind: &request.kind,
+                    name: &request.name,
+                    description: request.description.as_deref(),
+                    config: &request.config,
+                    created_by: Some(user_id),
+                },
+            )
+            .await?)
+        })
+    })
+    .await?;
 
     Ok(Json(FlowWithVersion { flow, version }))
 }
@@ -118,14 +126,15 @@ pub async fn get_flow(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<FlowWithVersion>> {
-    let flow = load_authorized_flow(&state, user_id, &headers, id).await?;
+    let (flow, org_id) = load_authorized_flow_with_org(&state, user_id, &headers, id).await?;
     let version_id = flow
         .current_version_id
         .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Flow has no current version")))?;
-    let version = FlowVersion::find_by_id(state.db.pool(), version_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Flow version row missing")))?;
+    let version = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(FlowVersion::find_by_id(&mut **tx, version_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Flow version row missing")))?;
     Ok(Json(FlowWithVersion { flow, version }))
 }
 
@@ -148,16 +157,20 @@ pub async fn update_flow(
     headers: HeaderMap,
     Json(request): Json<UpdateFlowRequest>,
 ) -> ApiResult<Json<Flow>> {
-    load_authorized_flow(&state, user_id, &headers, id).await?;
+    let (_, org_id) = load_authorized_flow_with_org(&state, user_id, &headers, id).await?;
 
-    let updated = Flow::rename(
-        state.db.pool(),
-        id,
-        request.name.as_deref(),
-        request.description.as_ref().map(|d| d.as_deref()),
-    )
-    .await
-    .map_err(ApiError::Database)?
+    let updated = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(Flow::rename(
+                &mut **tx,
+                id,
+                request.name.as_deref(),
+                request.description.as_ref().map(|d| d.as_deref()),
+            )
+            .await?)
+        })
+    })
+    .await?
     .ok_or_else(|| ApiError::InvalidRequest("Flow not found".into()))?;
     Ok(Json(updated))
 }
@@ -169,9 +182,12 @@ pub async fn delete_flow(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    load_authorized_flow(&state, user_id, &headers, id).await?;
+    let (_, org_id) = load_authorized_flow_with_org(&state, user_id, &headers, id).await?;
 
-    let deleted = Flow::delete(state.db.pool(), id).await.map_err(ApiError::Database)?;
+    let deleted = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(Flow::delete(&mut **tx, id).await?) })
+    })
+    .await?;
     if !deleted {
         return Err(ApiError::InvalidRequest("Flow not found".into()));
     }
@@ -194,11 +210,14 @@ pub async fn save_flow_version(
     headers: HeaderMap,
     Json(request): Json<SaveVersionRequest>,
 ) -> ApiResult<Json<FlowVersion>> {
-    load_authorized_flow(&state, user_id, &headers, id).await?;
+    let (_, org_id) = load_authorized_flow_with_org(&state, user_id, &headers, id).await?;
 
-    let version = Flow::save_new_version(state.db.pool(), id, &request.config, Some(user_id))
-        .await
-        .map_err(ApiError::Database)?;
+    let version = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(Flow::save_new_version(&mut **tx, id, &request.config, Some(user_id)).await?)
+        })
+    })
+    .await?;
     Ok(Json(version))
 }
 
@@ -269,7 +288,11 @@ pub async fn trigger_run(
     // run still queues with whatever metadata we have, so the runner
     // can record the failure with context.
     let version_config: Option<serde_json::Value> = match flow.current_version_id {
-        Some(vid) => match FlowVersion::find_by_id(state.db.pool(), vid).await {
+        Some(vid) => match with_org_context(state.db.runtime_pool(), org_id, |tx| {
+            Box::pin(async move { Ok(FlowVersion::find_by_id(&mut **tx, vid).await?) })
+        })
+        .await
+        {
             Ok(Some(v)) => Some(v.config),
             Ok(None) => {
                 tracing::warn!(
@@ -321,10 +344,11 @@ pub async fn list_flow_versions(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<FlowVersion>>> {
-    load_authorized_flow(&state, user_id, &headers, id).await?;
-    let versions = FlowVersion::list_by_flow(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?;
+    let (_, org_id) = load_authorized_flow_with_org(&state, user_id, &headers, id).await?;
+    let versions = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(FlowVersion::list_by_flow(&mut **tx, id).await?) })
+    })
+    .await?;
     Ok(Json(versions))
 }
 
@@ -336,12 +360,19 @@ pub async fn get_flow_version(
     Path(version_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<FlowVersion>> {
-    let version = FlowVersion::find_by_id(state.db.pool(), version_id)
+    // Resolve the caller's org first and read the version bound to it: a
+    // version whose flow lives in another org reads as `None` under RLS and
+    // gets the same "not found" as a missing id.
+    let ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Flow version not found".into()))?;
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    let version = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+        Box::pin(async move { Ok(FlowVersion::find_by_id(&mut **tx, version_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Flow version not found".into()))?;
     // Authorize against the parent flow.
-    load_authorized_flow(&state, user_id, &headers, version.flow_id).await?;
+    load_authorized_flow_with_org(&state, user_id, &headers, version.flow_id).await?;
     Ok(Json(version))
 }
 
@@ -350,7 +381,7 @@ async fn authorize_workspace(
     user_id: Uuid,
     headers: &HeaderMap,
     workspace_id: Uuid,
-) -> ApiResult<()> {
+) -> ApiResult<Uuid> {
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
@@ -360,32 +391,26 @@ async fn authorize_workspace(
     if ctx.org_id != workspace.org_id {
         return Err(ApiError::InvalidRequest("Workspace not found".into()));
     }
-    Ok(())
+    Ok(ctx.org_id)
 }
 
-async fn load_authorized_flow(
-    state: &AppState,
-    user_id: Uuid,
-    headers: &HeaderMap,
-    id: Uuid,
-) -> ApiResult<Flow> {
-    Ok(load_authorized_flow_with_org(state, user_id, headers, id).await?.0)
-}
-
-/// Like [`load_authorized_flow`], also returning the authorized org id.
+/// Load a flow the caller may access, returning it with the authorized org
+/// id. The flow is read bound to the caller's org, so a flow in another org
+/// reads as `None` and gets the same "Flow not found" as a missing id.
 async fn load_authorized_flow_with_org(
     state: &AppState,
     user_id: Uuid,
     headers: &HeaderMap,
     id: Uuid,
 ) -> ApiResult<(Flow, Uuid)> {
-    let flow = Flow::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Flow not found".into()))?;
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    let flow = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+        Box::pin(async move { Ok(Flow::find_by_id(&mut **tx, id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Flow not found".into()))?;
     let workspace = find_workspace_in_org(state, ctx.org_id, flow.workspace_id)
         .await?
         .ok_or_else(|| ApiError::InvalidRequest("Flow not found".into()))?;

@@ -53,7 +53,7 @@ impl WorkspaceRequest {
 #[cfg(feature = "postgres")]
 impl WorkspaceRequest {
     pub async fn list_by_workspace(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
     ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
@@ -62,31 +62,37 @@ impl WorkspaceRequest {
                ORDER BY sort_order, created_at"#,
         )
         .bind(workspace_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
-    pub async fn list_by_folder(pool: &sqlx::PgPool, folder_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_by_folder(
+        executor: impl sqlx::PgExecutor<'_>,
+        folder_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             r#"SELECT * FROM workspace_requests
                WHERE folder_id = $1
                ORDER BY sort_order, created_at"#,
         )
         .bind(folder_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM workspace_requests WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     #[allow(clippy::too_many_arguments)]
     pub async fn create(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
         folder_id: Option<Uuid>,
         name: &str,
@@ -115,22 +121,25 @@ impl WorkspaceRequest {
         .bind(response_body)
         .bind(request_headers)
         .bind(response_headers)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
-    pub async fn delete(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<()> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<()> {
         sqlx::query("DELETE FROM workspace_requests WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?;
         Ok(())
     }
 
-    pub async fn count_in_workspace(pool: &sqlx::PgPool, workspace_id: Uuid) -> sqlx::Result<i64> {
+    pub async fn count_in_workspace(
+        executor: impl sqlx::PgExecutor<'_>,
+        workspace_id: Uuid,
+    ) -> sqlx::Result<i64> {
         sqlx::query_scalar("SELECT COUNT(*) FROM workspace_requests WHERE workspace_id = $1")
             .bind(workspace_id)
-            .fetch_one(pool)
+            .fetch_one(executor)
             .await
     }
 }
@@ -193,7 +202,7 @@ impl WorkspaceRequestHistory {
 impl WorkspaceRequestHistory {
     /// Return up to `limit` most-recent executions for a request, newest first.
     pub async fn list_for_request(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         request_id: Uuid,
         limit: i64,
     ) -> sqlx::Result<Vec<Self>> {
@@ -205,14 +214,14 @@ impl WorkspaceRequestHistory {
         )
         .bind(request_id)
         .bind(limit)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     /// Record a single execution.
     #[allow(clippy::too_many_arguments)]
     pub async fn insert(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         request_id: Uuid,
         workspace_id: Uuid,
         executed_by: Option<Uuid>,
@@ -249,14 +258,17 @@ impl WorkspaceRequestHistory {
         .bind(response_time_ms)
         .bind(response_size_bytes)
         .bind(error_message)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
-    pub async fn count_for_request(pool: &sqlx::PgPool, request_id: Uuid) -> sqlx::Result<i64> {
+    pub async fn count_for_request(
+        executor: impl sqlx::PgExecutor<'_>,
+        request_id: Uuid,
+    ) -> sqlx::Result<i64> {
         sqlx::query_scalar("SELECT COUNT(*) FROM workspace_request_history WHERE request_id = $1")
             .bind(request_id)
-            .fetch_one(pool)
+            .fetch_one(executor)
             .await
     }
 }

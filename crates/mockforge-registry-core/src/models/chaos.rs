@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[cfg(feature = "postgres")]
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 
 #[cfg_attr(feature = "postgres", derive(FromRow))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -81,23 +81,32 @@ impl ChaosCampaign {
         Self::VALID_TARGET_KINDS.contains(&kind)
     }
 
-    pub async fn list_by_workspace(pool: &PgPool, workspace_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_by_workspace(
+        executor: impl sqlx::PgExecutor<'_>,
+        workspace_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM chaos_campaigns WHERE workspace_id = $1 ORDER BY updated_at DESC",
         )
         .bind(workspace_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM chaos_campaigns WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
-    pub async fn create(pool: &PgPool, input: CreateChaosCampaign<'_>) -> sqlx::Result<Self> {
+    pub async fn create(
+        executor: impl sqlx::PgExecutor<'_>,
+        input: CreateChaosCampaign<'_>,
+    ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"
             INSERT INTO chaos_campaigns
@@ -115,14 +124,14 @@ impl ChaosCampaign {
         .bind(input.config)
         .bind(input.safety_config)
         .bind(input.created_by)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
-    pub async fn delete(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<bool> {
         let rows = sqlx::query("DELETE FROM chaos_campaigns WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?
             .rows_affected();
         Ok(rows > 0)
@@ -145,7 +154,10 @@ impl ChaosCampaignReport {
     /// Worker-callback: chaos run finished, persist the report row.
     /// Idempotent on (campaign_id, run_id) — re-running with the same
     /// run_id returns the existing row instead of inserting a duplicate.
-    pub async fn create(pool: &PgPool, input: CreateChaosCampaignReport<'_>) -> sqlx::Result<Self> {
+    pub async fn create(
+        executor: impl sqlx::PgExecutor<'_>,
+        input: CreateChaosCampaignReport<'_>,
+    ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"
             INSERT INTO chaos_campaign_reports
@@ -168,24 +180,30 @@ impl ChaosCampaignReport {
         .bind(input.abort_reason)
         .bind(input.summary)
         .bind(input.recommendations)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
-    pub async fn list_by_campaign(pool: &PgPool, campaign_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_by_campaign(
+        executor: impl sqlx::PgExecutor<'_>,
+        campaign_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM chaos_campaign_reports WHERE campaign_id = $1 \
              ORDER BY created_at DESC",
         )
         .bind(campaign_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM chaos_campaign_reports WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 }
@@ -202,7 +220,7 @@ impl ResiliencePattern {
     /// Patterns visible to a workspace = platform patterns (workspace_id
     /// IS NULL) ∪ this workspace's own patterns.
     pub async fn list_visible_to_workspace(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
     ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
@@ -211,7 +229,7 @@ impl ResiliencePattern {
              ORDER BY workspace_id NULLS FIRST, created_at",
         )
         .bind(workspace_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 }

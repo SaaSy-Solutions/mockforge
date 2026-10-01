@@ -73,15 +73,14 @@ pub async fn get_workspace_graph(
     let workspace = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
 
     let org_id = workspace.org_id;
-    let services = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+    let (services, flows) = with_org_context(state.db.runtime_pool(), org_id, |tx| {
         Box::pin(async move {
-            Ok(CloudService::find_by_workspace(&mut **tx, org_id, workspace_id).await?)
+            let services = CloudService::find_by_workspace(&mut **tx, org_id, workspace_id).await?;
+            let flows = Flow::list_by_workspace(&mut **tx, workspace_id, None).await?;
+            Ok((services, flows))
         })
     })
     .await?;
-    let flows = Flow::list_by_workspace(state.db.pool(), workspace_id, None)
-        .await
-        .map_err(ApiError::Database)?;
 
     let mut nodes: Vec<GraphNode> = Vec::with_capacity(services.len() + flows.len());
     let mut node_ids: Vec<String> = Vec::with_capacity(services.len() + flows.len());

@@ -51,6 +51,28 @@ async fn require_workspace(
     Ok(workspace)
 }
 
+/// Load `request_id` bound to `org_id` and confirm it belongs to `workspace_id`.
+/// A request in another org reads as `None` under RLS and maps to the same
+/// "Request not found" error as a missing row.
+async fn find_request_in_workspace(
+    state: &AppState,
+    org_id: Uuid,
+    workspace_id: Uuid,
+    request_id: Uuid,
+) -> ApiResult<WorkspaceRequest> {
+    let req = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(WorkspaceRequest::find_by_id(&mut **tx, request_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Request not found".to_string()))?;
+    if req.workspace_id != workspace_id {
+        return Err(ApiError::InvalidRequest(
+            "Request does not belong to this workspace".to_string(),
+        ));
+    }
+    Ok(req)
+}
+
 /// Replace every `{{name}}` token in `input` with the value in `vars` if present.
 /// Unknown tokens are left in place so users see exactly which var is missing. We use a
 /// simple byte-level scan (not regex) because the substitution is narrow and we'd rather
@@ -92,17 +114,19 @@ fn expand_headers(headers: &Value, vars: &HashMap<String, String>) -> Map<String
     out
 }
 
+/// `conn` must be bound to the workspace's org (callers run this inside
+/// `with_org_context`).
 async fn gather_variables(
-    pool: &sqlx::PgPool,
+    conn: &mut sqlx::PgConnection,
     workspace_id: Uuid,
     overrides: &HashMap<String, Value>,
-) -> ApiResult<HashMap<String, String>> {
+) -> sqlx::Result<HashMap<String, String>> {
     let mut vars: HashMap<String, String> = HashMap::new();
 
     // Base layer: active environment's variables, if any.
-    let envs = WorkspaceEnvironment::list_by_workspace(pool, workspace_id).await?;
+    let envs = WorkspaceEnvironment::list_by_workspace(&mut *conn, workspace_id).await?;
     if let Some(active) = envs.iter().find(|e| e.is_active) {
-        let active_vars = WorkspaceEnvVariable::list_by_environment(pool, active.id).await?;
+        let active_vars = WorkspaceEnvVariable::list_by_environment(&mut *conn, active.id).await?;
         for v in active_vars {
             vars.insert(v.name, v.value);
         }
@@ -149,18 +173,14 @@ pub async fn execute_request(
     Path((workspace_id, request_id)): Path<(Uuid, Uuid)>,
     Json(body): Json<ExecuteRequestBody>,
 ) -> ApiResult<Json<ExecuteRequestResponse>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = require_workspace(&state, user_id, &headers, workspace_id).await?.org_id;
 
-    let req = WorkspaceRequest::find_by_id(state.db.pool(), request_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Request not found".to_string()))?;
-    if req.workspace_id != workspace_id {
-        return Err(ApiError::InvalidRequest(
-            "Request does not belong to this workspace".to_string(),
-        ));
-    }
+    let req = find_request_in_workspace(&state, org_id, workspace_id, request_id).await?;
 
-    let vars = gather_variables(state.db.pool(), workspace_id, &body.variables).await?;
+    let vars = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(gather_variables(tx, workspace_id, &body.variables).await?) })
+    })
+    .await?;
 
     let start = Instant::now();
     let rendered_path = expand(&req.path, &vars);
@@ -172,22 +192,34 @@ pub async fn execute_request(
     let response_size = rendered_body.len() as i32;
 
     // Persist the execution so the History modal can list it later.
-    let _ = WorkspaceRequestHistory::insert(
-        state.db.pool(),
-        request_id,
-        workspace_id,
-        Some(user_id),
-        &req.method,
-        &rendered_path,
-        &Value::Object(rendered_req_headers.clone()),
-        None,
-        req.status_code,
-        &Value::Object(rendered_resp_headers.clone()),
-        Some(&rendered_body),
-        elapsed_ms,
-        response_size,
-        None,
-    )
+    let method = req.method.clone();
+    let history_path = rendered_path.clone();
+    let history_req_headers = Value::Object(rendered_req_headers.clone());
+    let history_resp_headers = Value::Object(rendered_resp_headers.clone());
+    let history_body = rendered_body.clone();
+    let status_code = req.status_code;
+    with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            WorkspaceRequestHistory::insert(
+                &mut **tx,
+                request_id,
+                workspace_id,
+                Some(user_id),
+                &method,
+                &history_path,
+                &history_req_headers,
+                None,
+                status_code,
+                &history_resp_headers,
+                Some(&history_body),
+                elapsed_ms,
+                response_size,
+                None,
+            )
+            .await?;
+            Ok(())
+        })
+    })
     .await?;
 
     Ok(Json(ExecuteRequestResponse {
@@ -218,23 +250,22 @@ pub async fn list_request_history(
     headers: HeaderMap,
     Path((workspace_id, request_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<HistoryListResponse>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = require_workspace(&state, user_id, &headers, workspace_id).await?.org_id;
 
-    let req = WorkspaceRequest::find_by_id(state.db.pool(), request_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Request not found".to_string()))?;
-    if req.workspace_id != workspace_id {
-        return Err(ApiError::InvalidRequest(
-            "Request does not belong to this workspace".to_string(),
-        ));
-    }
+    find_request_in_workspace(&state, org_id, workspace_id, request_id).await?;
 
-    let entries = WorkspaceRequestHistory::list_for_request(state.db.pool(), request_id, 100)
-        .await?
-        .into_iter()
-        .map(|h| h.to_response())
-        .collect::<Vec<_>>();
-    let total = WorkspaceRequestHistory::count_for_request(state.db.pool(), request_id).await?;
+    let (entries, total) = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            let entries = WorkspaceRequestHistory::list_for_request(&mut **tx, request_id, 100)
+                .await?
+                .into_iter()
+                .map(|h| h.to_response())
+                .collect::<Vec<_>>();
+            let total = WorkspaceRequestHistory::count_for_request(&mut **tx, request_id).await?;
+            Ok((entries, total))
+        })
+    })
+    .await?;
 
     Ok(Json(HistoryListResponse {
         history: entries,

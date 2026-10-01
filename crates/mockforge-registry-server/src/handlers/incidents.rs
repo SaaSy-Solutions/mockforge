@@ -160,9 +160,13 @@ pub async fn list_incident_events(
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<IncidentEvent>>> {
     let incident = load_authorized_incident(&state, user_id, &headers, id).await?;
-    let events = Incident::list_events(state.db.pool(), incident.id)
-        .await
-        .map_err(ApiError::Database)?;
+    // `incident.org_id` was verified against the caller by
+    // `load_authorized_incident`.
+    let incident_id = incident.id;
+    let events = with_org_context(state.db.runtime_pool(), incident.org_id, |tx| {
+        Box::pin(async move { Ok(Incident::list_events(&mut **tx, incident_id).await?) })
+    })
+    .await?;
     Ok(Json(events))
 }
 

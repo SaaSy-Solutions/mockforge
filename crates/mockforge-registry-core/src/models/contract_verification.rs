@@ -129,12 +129,15 @@ impl MonitoredService {
         Self::VALID_TRAFFIC_SOURCES.contains(&s)
     }
 
-    pub async fn list_by_workspace(pool: &PgPool, workspace_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_by_workspace(
+        executor: impl sqlx::PgExecutor<'_>,
+        workspace_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM monitored_services WHERE workspace_id = $1 ORDER BY name",
         )
         .bind(workspace_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
@@ -143,7 +146,7 @@ impl MonitoredService {
     /// pick services that can actually be fetched from a network URL;
     /// services with only `openapi_spec_inline` or no spec are skipped
     /// because the probe is "go fetch the live spec and diff it."
-    pub async fn list_probeable(pool: &PgPool) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_probeable(executor: impl sqlx::PgExecutor<'_>) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             r#"
             SELECT *
@@ -154,7 +157,7 @@ impl MonitoredService {
             ORDER BY workspace_id, name
             "#,
         )
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
@@ -166,7 +169,7 @@ impl MonitoredService {
     /// 5-minute service and a 6-hour service coexist under one global
     /// tick without wasted enqueues.
     pub async fn list_probeable_due(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         default_interval_secs: i64,
     ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
@@ -186,28 +189,34 @@ impl MonitoredService {
             "#,
         )
         .bind(default_interval_secs as i32)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     /// #720 — stamp the probe timestamp after a successful enqueue so
     /// the due-filter above holds even when the global tick runs often.
-    pub async fn mark_probed(pool: &PgPool, id: Uuid) -> sqlx::Result<()> {
+    pub async fn mark_probed(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<()> {
         sqlx::query("UPDATE monitored_services SET last_probed_at = NOW() WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?;
         Ok(())
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM monitored_services WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
-    pub async fn create(pool: &PgPool, input: CreateMonitoredService<'_>) -> sqlx::Result<Self> {
+    pub async fn create(
+        executor: impl sqlx::PgExecutor<'_>,
+        input: CreateMonitoredService<'_>,
+    ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"
             INSERT INTO monitored_services
@@ -226,14 +235,14 @@ impl MonitoredService {
         .bind(input.traffic_source)
         .bind(input.traffic_source_ref)
         .bind(input.probe_interval_secs)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
-    pub async fn delete(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<bool> {
         let rows = sqlx::query("DELETE FROM monitored_services WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?
             .rows_affected();
         Ok(rows > 0)
@@ -253,24 +262,30 @@ impl FitnessFunction {
         Self::VALID_KINDS.contains(&s)
     }
 
-    pub async fn list_by_workspace(pool: &PgPool, workspace_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_by_workspace(
+        executor: impl sqlx::PgExecutor<'_>,
+        workspace_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM fitness_functions WHERE workspace_id = $1 ORDER BY name",
         )
         .bind(workspace_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM fitness_functions WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     pub async fn create(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
         name: &str,
         kind: &str,
@@ -287,14 +302,14 @@ impl FitnessFunction {
         .bind(name)
         .bind(kind)
         .bind(config)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
-    pub async fn delete(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<bool> {
         let rows = sqlx::query("DELETE FROM fitness_functions WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?
             .rows_affected();
         Ok(rows > 0)
@@ -305,7 +320,7 @@ impl FitnessFunction {
     /// rather than erroring — caller can map that to a 404. Bumps
     /// `updated_at` (no DB trigger covers this column on the table).
     pub async fn update(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         name: &str,
         kind: &str,
@@ -323,7 +338,7 @@ impl FitnessFunction {
         .bind(name)
         .bind(kind)
         .bind(config)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
@@ -378,7 +393,7 @@ impl FitnessFunction {
 #[cfg(feature = "postgres")]
 impl ContractDiffRun {
     pub async fn list_by_service(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         service_id: Uuid,
         limit: i64,
     ) -> sqlx::Result<Vec<Self>> {
@@ -388,21 +403,27 @@ impl ContractDiffRun {
         )
         .bind(service_id)
         .bind(limit)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM contract_diff_runs WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 }
 
 #[cfg(feature = "postgres")]
 impl ContractDiffFinding {
-    pub async fn list_by_run(pool: &PgPool, run_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_by_run(
+        executor: impl sqlx::PgExecutor<'_>,
+        run_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM contract_diff_findings WHERE run_id = $1 \
              ORDER BY CASE severity \
@@ -412,31 +433,37 @@ impl ContractDiffFinding {
                  ELSE 3 END",
         )
         .bind(run_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 }
 
 #[cfg(feature = "postgres")]
 impl VerificationSuite {
-    pub async fn list_by_workspace(pool: &PgPool, workspace_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_by_workspace(
+        executor: impl sqlx::PgExecutor<'_>,
+        workspace_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM verification_suites WHERE workspace_id = $1 ORDER BY name",
         )
         .bind(workspace_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM verification_suites WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     pub async fn create(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
         name: &str,
         contract_check_ids: &[Uuid],
@@ -454,14 +481,14 @@ impl VerificationSuite {
         .bind(name)
         .bind(contract_check_ids)
         .bind(fitness_function_ids)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
-    pub async fn delete(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<bool> {
         let rows = sqlx::query("DELETE FROM verification_suites WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?
             .rows_affected();
         Ok(rows > 0)

@@ -303,12 +303,15 @@ impl Incident {
         Ok(updated)
     }
 
-    pub async fn list_events(pool: &PgPool, incident_id: Uuid) -> sqlx::Result<Vec<IncidentEvent>> {
+    pub async fn list_events(
+        executor: impl sqlx::PgExecutor<'_>,
+        incident_id: Uuid,
+    ) -> sqlx::Result<Vec<IncidentEvent>> {
         sqlx::query_as::<_, IncidentEvent>(
             "SELECT * FROM incident_events WHERE incident_id = $1 ORDER BY created_at ASC",
         )
         .bind(incident_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 

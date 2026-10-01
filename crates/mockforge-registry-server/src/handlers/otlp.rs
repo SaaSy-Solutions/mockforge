@@ -436,7 +436,6 @@ pub async fn list_traces(
     Path(deployment_id): Path<Uuid>,
     Query(params): Query<ListTracesQuery>,
 ) -> ApiResult<Json<Vec<TraceSummary>>> {
-    let pool = state.db.pool();
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
@@ -466,78 +465,65 @@ pub async fn list_traces(
     // well-formed trace.
     type Row = (String, i64, DateTime<Utc>, f64, Option<String>, Option<String>, bool);
 
-    let rows: Vec<Row> = if let Some(since) = since {
-        sqlx::query_as(
-            r#"
+    // runtime_traces is RLS-forced via hosted_mocks; bind the org verified
+    // to own the deployment above.
+    let rows: Vec<Row> =
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move {
+                let rows = if let Some(since) = since {
+                    sqlx::query_as(
+                        r#"
             SELECT
                 t.trace_id,
                 COUNT(*)::bigint AS span_count,
                 MIN(t.occurred_at) AS start,
                 (MAX(t.end_unix_nano) - MIN(t.start_unix_nano))::float8 / 1.0e6 AS duration_ms,
-                (
-                    SELECT name FROM runtime_traces
-                    WHERE deployment_id = t.deployment_id
-                      AND trace_id = t.trace_id
-                      AND parent_span_id IS NULL
-                    LIMIT 1
-                ) AS root_name,
-                (
-                    SELECT service_name FROM runtime_traces
-                    WHERE deployment_id = t.deployment_id
-                      AND trace_id = t.trace_id
-                      AND parent_span_id IS NULL
-                    LIMIT 1
-                ) AS service_name,
-                BOOL_OR(t.status_code = 2) AS has_error
+                (SELECT name FROM runtime_traces WHERE deployment_id = t.deployment_id
+                    AND trace_id = t.trace_id AND parent_span_id IS NULL LIMIT 1) AS root_name,
+                (SELECT service_name FROM runtime_traces WHERE deployment_id = t.deployment_id
+                    AND trace_id = t.trace_id AND parent_span_id IS NULL LIMIT 1) AS service_name,
+                COALESCE(BOOL_OR(t.status_code = 2), false) AS has_error
             FROM runtime_traces t
             WHERE t.deployment_id = $1 AND t.occurred_at > $2
             GROUP BY t.deployment_id, t.trace_id
             ORDER BY MIN(t.occurred_at) DESC
             LIMIT $3
             "#,
-        )
-        .bind(deployment_id)
-        .bind(since)
-        .bind(limit)
-        .fetch_all(pool)
-        .await
-        .map_err(ApiError::Database)?
-    } else {
-        sqlx::query_as(
-            r#"
+                    )
+                    .bind(deployment_id)
+                    .bind(since)
+                    .bind(limit)
+                    .fetch_all(&mut **tx)
+                    .await?
+                } else {
+                    sqlx::query_as(
+                        r#"
             SELECT
                 t.trace_id,
                 COUNT(*)::bigint AS span_count,
                 MIN(t.occurred_at) AS start,
                 (MAX(t.end_unix_nano) - MIN(t.start_unix_nano))::float8 / 1.0e6 AS duration_ms,
-                (
-                    SELECT name FROM runtime_traces
-                    WHERE deployment_id = t.deployment_id
-                      AND trace_id = t.trace_id
-                      AND parent_span_id IS NULL
-                    LIMIT 1
-                ) AS root_name,
-                (
-                    SELECT service_name FROM runtime_traces
-                    WHERE deployment_id = t.deployment_id
-                      AND trace_id = t.trace_id
-                      AND parent_span_id IS NULL
-                    LIMIT 1
-                ) AS service_name,
-                BOOL_OR(t.status_code = 2) AS has_error
+                (SELECT name FROM runtime_traces WHERE deployment_id = t.deployment_id
+                    AND trace_id = t.trace_id AND parent_span_id IS NULL LIMIT 1) AS root_name,
+                (SELECT service_name FROM runtime_traces WHERE deployment_id = t.deployment_id
+                    AND trace_id = t.trace_id AND parent_span_id IS NULL LIMIT 1) AS service_name,
+                COALESCE(BOOL_OR(t.status_code = 2), false) AS has_error
             FROM runtime_traces t
             WHERE t.deployment_id = $1
             GROUP BY t.deployment_id, t.trace_id
             ORDER BY MIN(t.occurred_at) DESC
             LIMIT $2
             "#,
-        )
-        .bind(deployment_id)
-        .bind(limit)
-        .fetch_all(pool)
-        .await
-        .map_err(ApiError::Database)?
-    };
+                    )
+                    .bind(deployment_id)
+                    .bind(limit)
+                    .fetch_all(&mut **tx)
+                    .await?
+                };
+                Ok(rows)
+            })
+        })
+        .await?;
 
     let summaries = rows
         .into_iter()
@@ -587,7 +573,6 @@ pub async fn get_trace(
     headers: HeaderMap,
     Path((deployment_id, trace_id)): Path<(Uuid, String)>,
 ) -> ApiResult<Json<Vec<SpanResponse>>> {
-    let pool = state.db.pool();
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
@@ -619,8 +604,13 @@ pub async fn get_trace(
         serde_json::Value,
     );
 
-    let rows: Vec<Row> = sqlx::query_as(
-        r#"
+    // runtime_traces is RLS-forced via hosted_mocks; bind the org verified
+    // to own the deployment above.
+    let rows: Vec<Row> =
+        crate::store::with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move {
+                Ok(sqlx::query_as(
+                    r#"
         SELECT
             trace_id, span_id, parent_span_id, service_name, name, kind,
             start_unix_nano, end_unix_nano, status_code, status_message,
@@ -629,12 +619,14 @@ pub async fn get_trace(
         WHERE deployment_id = $1 AND trace_id = $2
         ORDER BY start_unix_nano ASC
         "#,
-    )
-    .bind(deployment_id)
-    .bind(&trace_id)
-    .fetch_all(pool)
-    .await
-    .map_err(ApiError::Database)?;
+                )
+                .bind(deployment_id)
+                .bind(&trace_id)
+                .fetch_all(&mut **tx)
+                .await?)
+            })
+        })
+        .await?;
 
     let spans = rows
         .into_iter()

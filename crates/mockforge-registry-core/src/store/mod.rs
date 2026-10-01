@@ -58,7 +58,8 @@ pub mod org_context;
 
 #[cfg(feature = "postgres")]
 pub use org_context::{
-    with_current_org, with_optional_org, with_org_context, with_org_or_elevated, CURRENT_ORG,
+    with_current_org, with_current_user, with_optional_org, with_org_context, with_org_or_elevated,
+    with_user_context, CURRENT_ORG, CURRENT_USER,
 };
 
 #[cfg(feature = "sqlite")]
