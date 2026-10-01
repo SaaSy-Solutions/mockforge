@@ -610,8 +610,14 @@ mod tests {
         assert_eq!(perms, vec![Permission::ManageSettings]);
     }
 
+    /// Serializes the tests that write `MOCKFORGE_ALLOW_UNAUTHENTICATED`: the
+    /// env is process-wide and the harness runs tests in parallel, so one test
+    /// removing it while the other has just set it fails either at random.
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
     #[test]
     fn test_get_default_user_context_without_env_var() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::remove_var("MOCKFORGE_ALLOW_UNAUTHENTICATED");
         let context = get_default_user_context();
         assert!(context.is_none());
@@ -619,6 +625,7 @@ mod tests {
 
     #[test]
     fn test_get_default_user_context_with_env_var() {
+        let _guard = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         std::env::set_var("MOCKFORGE_ALLOW_UNAUTHENTICATED", "1");
         let context = get_default_user_context();
         assert!(context.is_some());

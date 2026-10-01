@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { RunLiveTail } from '../RunLiveTail';
 
 // Minimal EventSource stub: captures listeners so tests can dispatch
@@ -59,17 +59,23 @@ describe('RunLiveTail', () => {
         vi.stubGlobal('EventSource', MockEventSource);
         const onDone = vi.fn();
         render(<RunLiveTail runId="run-abc" inflight onDone={onDone} />);
+        await waitFor(() => expect(MockEventSource.instances.length).toBeGreaterThan(0));
         const es = MockEventSource.instances.at(-1)!;
 
-        es.emit('node_visited', { node_name: 'checkout', duration_ms: 12 });
-        es.emit('done', { status: 'passed' });
+        // The handler calls onDone synchronously, so waiting on onDone alone
+        // can pass before React re-renders the new events; flush inside act
+        // and wait for the rendered text itself.
+        act(() => {
+            es.emit('node_visited', { node_name: 'checkout', duration_ms: 12 });
+            es.emit('done', { status: 'passed' });
+        });
 
         await waitFor(() => expect(onDone).toHaveBeenCalled());
         // Called once per mounted stream (StrictMode double-invokes effects).
         for (const [arg] of onDone.mock.calls) {
             expect(arg).toEqual({ status: 'passed' });
         }
-        expect(screen.getByText(/node_visited/)).toBeInTheDocument();
+        expect(await screen.findByText(/node_visited/)).toBeInTheDocument();
         expect(screen.queryByText('Waiting for events…')).not.toBeInTheDocument();
     });
 
