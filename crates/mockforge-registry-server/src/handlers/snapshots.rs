@@ -47,11 +47,14 @@ pub async fn list_snapshots(
     Query(query): Query<ListSnapshotsQuery>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<Snapshot>>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let ctx = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
     let limit = query.limit.unwrap_or(DEFAULT_LIMIT).clamp(1, MAX_LIMIT);
-    let snapshots = Snapshot::list_by_workspace(state.db.pool(), workspace_id, limit)
-        .await
-        .map_err(ApiError::Database)?;
+    let snapshots = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+        Box::pin(
+            async move { Ok(Snapshot::list_by_workspace(&mut **tx, workspace_id, limit).await?) },
+        )
+    })
+    .await?;
     Ok(Json(snapshots))
 }
 
@@ -82,6 +85,7 @@ pub async fn capture_snapshot(
     Json(request): Json<CaptureSnapshotRequest>,
 ) -> ApiResult<Json<Snapshot>> {
     let ctx = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = ctx.org_id;
 
     // Plan-limit checks.
     let limits = effective_limits(&state, &ctx.org).await?;
@@ -92,9 +96,12 @@ pub async fn capture_snapshot(
         ));
     }
     if max_snapshots > 0 {
-        let used = Snapshot::count_by_workspace(state.db.pool(), workspace_id)
-            .await
-            .map_err(ApiError::Database)?;
+        let used = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+            Box::pin(
+                async move { Ok(Snapshot::count_by_workspace(&mut **tx, workspace_id).await?) },
+            )
+        })
+        .await?;
         if used >= max_snapshots {
             return Err(ApiError::ResourceLimitExceeded(format!(
                 "Snapshot limit reached ({used}/{max_snapshots}). Delete an old \
@@ -122,20 +129,29 @@ pub async fn capture_snapshot(
         None
     };
 
-    let snapshot = Snapshot::create(
-        state.db.pool(),
-        CreateSnapshot {
-            workspace_id,
-            hosted_deployment_id: request.hosted_deployment_id,
-            name: request.name.as_deref(),
-            description: request.description.as_deref(),
-            triggered_by,
-            triggered_by_user: Some(user_id),
-            expires_at,
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    // Each DB step below is its own short org-bound transaction: the
+    // manifest build and the object-storage upload happen between them and
+    // must never run with a transaction held open.
+    let triggered_by = triggered_by.to_string();
+    let snapshot = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(Snapshot::create(
+                &mut **tx,
+                CreateSnapshot {
+                    workspace_id,
+                    hosted_deployment_id: request.hosted_deployment_id,
+                    name: request.name.as_deref(),
+                    description: request.description.as_deref(),
+                    triggered_by: &triggered_by,
+                    triggered_by_user: Some(user_id),
+                    expires_at,
+                },
+            )
+            .await?)
+        })
+    })
+    .await?;
+    let snapshot_id = snapshot.id;
 
     // Capture the workspace state synchronously. Sub-second on a
     // typical workspace, so the request stays interactive without a
@@ -148,16 +164,16 @@ pub async fn capture_snapshot(
     // summary stub so the UI's quick-look still has something without
     // a follow-up fetch.
     const INLINE_THRESHOLD: i64 = 256 * 1024; // 256 KB
-    let (manifest, size_bytes) =
-        match build_workspace_manifest(&state, ctx.org_id, workspace_id).await {
-            Ok((m, s)) => (m, s),
-            Err(e) => {
-                tracing::error!(snapshot_id = %snapshot.id, error = %e, "manifest build failed");
-                // Flip status to 'failed' so list_by_workspace reflects reality.
-                let _ = Snapshot::mark_failed(state.db.pool(), snapshot.id).await;
-                return Err(ApiError::Database(e));
-            }
-        };
+    let (manifest, size_bytes) = match build_workspace_manifest(&state, org_id, workspace_id).await
+    {
+        Ok((m, s)) => (m, s),
+        Err(e) => {
+            tracing::error!(snapshot_id = %snapshot.id, error = %e, "manifest build failed");
+            // Flip status to 'failed' so list_by_workspace reflects reality.
+            let _ = mark_snapshot_failed(&state, org_id, snapshot_id).await;
+            return Err(ApiError::Database(e));
+        }
+    };
 
     let (storage_url, stored_manifest) = if size_bytes > INLINE_THRESHOLD {
         // Upload the full blob; keep a small summary on the row so
@@ -184,15 +200,20 @@ pub async fn capture_snapshot(
     } else {
         (format!("inline-manifest://snapshot/{}", snapshot.id), manifest)
     };
-    match Snapshot::mark_ready(
-        state.db.pool(),
-        snapshot.id,
-        &storage_url,
-        size_bytes,
-        &stored_manifest,
-    )
-    .await
-    {
+    let ready = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(Snapshot::mark_ready(
+                &mut **tx,
+                snapshot_id,
+                &storage_url,
+                size_bytes,
+                &stored_manifest,
+            )
+            .await?)
+        })
+    })
+    .await;
+    match ready {
         Ok(Some(ready)) => {
             // Storage metering is a gauge (set_snapshot_bytes) not a
             // counter; updating it correctly requires reading the
@@ -205,10 +226,22 @@ pub async fn capture_snapshot(
         }
         Ok(None) => Ok(Json(snapshot)), // already terminal — return what we have
         Err(e) => {
-            let _ = Snapshot::mark_failed(state.db.pool(), snapshot.id).await;
-            Err(ApiError::Database(e))
+            let _ = mark_snapshot_failed(&state, org_id, snapshot_id).await;
+            Err(e.into())
         }
     }
+}
+
+/// Flip a snapshot to `failed` in its own short org-bound transaction.
+async fn mark_snapshot_failed(
+    state: &AppState,
+    org_id: Uuid,
+    snapshot_id: Uuid,
+) -> ApiResult<Option<Snapshot>> {
+    Ok(with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(Snapshot::mark_failed(&mut **tx, snapshot_id).await?) })
+    })
+    .await?)
 }
 
 /// Build a JSON manifest of the workspace's authoritative state.
@@ -226,14 +259,22 @@ async fn build_workspace_manifest(
     use mockforge_registry_core::models::{
         flow::Flow, mock_environment::MockEnvironment, ChaosCampaign,
     };
-    let pool = state.db.pool();
+    let pool = state.db.runtime_pool();
 
     // Each list is best-effort — if a resource family fails to load we
     // log + include an empty array. A partial snapshot is more useful
     // than no snapshot at all, and `restored_partial: true` in the
-    // manifest tells a future restore worker to be cautious.
+    // manifest tells a future restore worker to be cautious. Each family
+    // gets its own org-bound transaction so one failure (which aborts a
+    // Postgres transaction) cannot poison the others.
     let mut partial = false;
-    let environments = match MockEnvironment::list_by_workspace(pool, workspace_id).await {
+    let environments = match with_org_context(pool, org_id, |tx| {
+        Box::pin(
+            async move { Ok(MockEnvironment::list_by_workspace(&mut **tx, workspace_id).await?) },
+        )
+    })
+    .await
+    {
         Ok(rows) => rows,
         Err(e) => {
             tracing::warn!(workspace_id = %workspace_id, error = %e, "snapshot: mock_environments fetch failed");
@@ -241,7 +282,11 @@ async fn build_workspace_manifest(
             Vec::new()
         }
     };
-    let flows = match Flow::list_by_workspace(pool, workspace_id, None).await {
+    let flows = match with_org_context(pool, org_id, |tx| {
+        Box::pin(async move { Ok(Flow::list_by_workspace(&mut **tx, workspace_id, None).await?) })
+    })
+    .await
+    {
         Ok(rows) => rows,
         Err(e) => {
             tracing::warn!(workspace_id = %workspace_id, error = %e, "snapshot: flows fetch failed");
@@ -249,7 +294,13 @@ async fn build_workspace_manifest(
             Vec::new()
         }
     };
-    let chaos = match ChaosCampaign::list_by_workspace(pool, workspace_id).await {
+    let chaos = match with_org_context(pool, org_id, |tx| {
+        Box::pin(
+            async move { Ok(ChaosCampaign::list_by_workspace(&mut **tx, workspace_id).await?) },
+        )
+    })
+    .await
+    {
         Ok(rows) => rows,
         Err(e) => {
             tracing::warn!(workspace_id = %workspace_id, error = %e, "snapshot: chaos fetch failed");
@@ -515,13 +566,16 @@ pub async fn restore_snapshot(
     use mockforge_registry_core::models::mock_environment::{MockEnvironment, MockEnvironmentName};
     use mockforge_registry_core::models::ChaosCampaign;
 
-    let (snapshot, _) = load_authorized_snapshot(&state, user_id, &headers, id).await?;
+    let (snapshot, org_id) = load_authorized_snapshot(&state, user_id, &headers, id).await?;
     let manifest = resolve_manifest(&state, &snapshot).await;
     if manifest.as_object().map(|o| o.is_empty()).unwrap_or(true) {
         return Err(ApiError::InvalidRequest("Snapshot has no manifest to restore".into()));
     }
 
-    let pool = state.db.pool();
+    // Every write is bound to the org `load_authorized_snapshot` proved.
+    // One short transaction per row keeps the per-row best-effort
+    // semantics: a failed insert must not abort the rest of the restore.
+    let pool = state.db.runtime_pool();
     let workspace_id = snapshot.workspace_id;
     let mut envs_created = 0u32;
     let mut envs_skipped = 0u32;
@@ -545,7 +599,14 @@ pub async fn restore_snapshot(
                     continue;
                 }
             };
-            match MockEnvironment::find_by_workspace_and_name(pool, workspace_id, parsed).await {
+            match with_org_context(pool, org_id, |tx| {
+                Box::pin(async move {
+                    Ok(MockEnvironment::find_by_workspace_and_name(&mut **tx, workspace_id, parsed)
+                        .await?)
+                })
+            })
+            .await
+            {
                 Ok(Some(_)) => {
                     envs_skipped += 1;
                     continue;
@@ -563,7 +624,21 @@ pub async fn restore_snapshot(
             let reality = env.get("reality_config").cloned();
             let chaos = env.get("chaos_config").cloned();
             let drift = env.get("drift_budget_config").cloned();
-            match MockEnvironment::create(pool, workspace_id, parsed, reality, chaos, drift).await {
+            match with_org_context(pool, org_id, |tx| {
+                Box::pin(async move {
+                    Ok(MockEnvironment::create(
+                        &mut **tx,
+                        workspace_id,
+                        parsed,
+                        reality,
+                        chaos,
+                        drift,
+                    )
+                    .await?)
+                })
+            })
+            .await
+            {
                 Ok(_) => envs_created += 1,
                 Err(e) => errors.push(serde_json::json!({
                     "kind": "environment",
@@ -576,9 +651,12 @@ pub async fn restore_snapshot(
 
     // Chaos campaigns — keyed on name within workspace. Same merge rule.
     if let Some(camps) = manifest.get("chaos_campaigns").and_then(|v| v.as_array()) {
-        let existing = ChaosCampaign::list_by_workspace(pool, workspace_id)
-            .await
-            .map_err(ApiError::Database)?;
+        let existing = with_org_context(pool, org_id, |tx| {
+            Box::pin(
+                async move { Ok(ChaosCampaign::list_by_workspace(&mut **tx, workspace_id).await?) },
+            )
+        })
+        .await?;
         let existing_names: std::collections::HashSet<String> =
             existing.into_iter().map(|c| c.name).collect();
 
@@ -591,24 +669,31 @@ pub async fn restore_snapshot(
                 chaos_skipped += 1;
                 continue;
             }
-            let target_kind = c.get("target_kind").and_then(|v| v.as_str()).unwrap_or("external");
-            let target_ref = c.get("target_ref").and_then(|v| v.as_str()).unwrap_or("");
+            let target_kind =
+                c.get("target_kind").and_then(|v| v.as_str()).unwrap_or("external").to_string();
+            let target_ref = c.get("target_ref").and_then(|v| v.as_str()).unwrap_or("").to_string();
             let cfg = c.get("config").cloned().unwrap_or_else(|| serde_json::json!({}));
             let safety = c.get("safety_config").cloned().unwrap_or_else(|| serde_json::json!({}));
-            let description = c.get("description").and_then(|v| v.as_str());
-            match ChaosCampaign::create(
-                pool,
-                CreateChaosCampaign {
-                    workspace_id,
-                    name,
-                    description,
-                    target_kind,
-                    target_ref,
-                    config: &cfg,
-                    safety_config: &safety,
-                    created_by: Some(user_id),
-                },
-            )
+            let description = c.get("description").and_then(|v| v.as_str()).map(str::to_string);
+            let owned_name = name.to_string();
+            match with_org_context(pool, org_id, |tx| {
+                Box::pin(async move {
+                    Ok(ChaosCampaign::create(
+                        &mut **tx,
+                        CreateChaosCampaign {
+                            workspace_id,
+                            name: &owned_name,
+                            description: description.as_deref(),
+                            target_kind: &target_kind,
+                            target_ref: &target_ref,
+                            config: &cfg,
+                            safety_config: &safety,
+                            created_by: Some(user_id),
+                        },
+                    )
+                    .await?)
+                })
+            })
             .await
             {
                 Ok(_) => chaos_created += 1,
@@ -647,18 +732,21 @@ pub async fn delete_snapshot(
     let (snapshot, org_id) = load_authorized_snapshot(&state, user_id, &headers, id).await?;
     let workspace_id = snapshot.workspace_id;
 
-    let deleted = Snapshot::delete(state.db.pool(), id).await.map_err(ApiError::Database)?;
+    let deleted = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(Snapshot::delete(&mut **tx, id).await?) })
+    })
+    .await?;
     if !deleted {
         return Err(ApiError::InvalidRequest("Snapshot not found".into()));
     }
 
     // Re-sync the storage gauge for the org (the workspace's org, already
     // authorized by `load_authorized_snapshot`).
-    let bytes = Snapshot::sum_ready_bytes_by_workspace(state.db.pool(), workspace_id)
-        .await
-        .map_err(ApiError::Database)?;
     with_org_context(state.db.runtime_pool(), org_id, |tx| {
-        Box::pin(async move { Ok(UsageCounter::set_snapshot_bytes(tx, org_id, bytes).await?) })
+        Box::pin(async move {
+            let bytes = Snapshot::sum_ready_bytes_by_workspace(&mut **tx, workspace_id).await?;
+            Ok(UsageCounter::set_snapshot_bytes(tx, org_id, bytes).await?)
+        })
     })
     .await?;
 
@@ -693,13 +781,16 @@ async fn load_authorized_snapshot(
     headers: &HeaderMap,
     id: Uuid,
 ) -> ApiResult<(Snapshot, Uuid)> {
-    let snapshot = Snapshot::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Snapshot not found".into()))?;
+    // Resolve the caller's org first and read the snapshot bound to it: a
+    // snapshot in another org reads as `None` -> the same "not found".
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    let snapshot = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+        Box::pin(async move { Ok(Snapshot::find_by_id(&mut **tx, id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Snapshot not found".into()))?;
     let workspace = find_workspace_in_org(state, ctx.org_id, snapshot.workspace_id)
         .await?
         .ok_or_else(|| ApiError::InvalidRequest("Snapshot not found".into()))?;

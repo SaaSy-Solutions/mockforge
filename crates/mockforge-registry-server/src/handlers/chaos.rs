@@ -37,10 +37,13 @@ pub async fn list_campaigns(
     Path(workspace_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<ChaosCampaign>>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
-    let campaigns = ChaosCampaign::list_by_workspace(state.db.pool(), workspace_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let campaigns = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(
+            async move { Ok(ChaosCampaign::list_by_workspace(&mut **tx, workspace_id).await?) },
+        )
+    })
+    .await?;
     Ok(Json(campaigns))
 }
 
@@ -63,7 +66,7 @@ pub async fn create_campaign(
     headers: HeaderMap,
     Json(request): Json<CreateCampaignRequest>,
 ) -> ApiResult<Json<ChaosCampaign>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
 
     if request.name.trim().is_empty() {
         return Err(ApiError::InvalidRequest("name must not be empty".into()));
@@ -77,21 +80,25 @@ pub async fn create_campaign(
         return Err(ApiError::InvalidRequest("target_ref must not be empty".into()));
     }
 
-    let campaign = ChaosCampaign::create(
-        state.db.pool(),
-        CreateChaosCampaign {
-            workspace_id,
-            name: &request.name,
-            description: request.description.as_deref(),
-            target_kind: &request.target_kind,
-            target_ref: &request.target_ref,
-            config: &request.config,
-            safety_config: &request.safety_config,
-            created_by: Some(user_id),
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let campaign = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(ChaosCampaign::create(
+                &mut **tx,
+                CreateChaosCampaign {
+                    workspace_id,
+                    name: &request.name,
+                    description: request.description.as_deref(),
+                    target_kind: &request.target_kind,
+                    target_ref: &request.target_ref,
+                    config: &request.config,
+                    safety_config: &request.safety_config,
+                    created_by: Some(user_id),
+                },
+            )
+            .await?)
+        })
+    })
+    .await?;
 
     Ok(Json(campaign))
 }
@@ -103,7 +110,7 @@ pub async fn get_campaign(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<ChaosCampaign>> {
-    let campaign = load_authorized_campaign(&state, user_id, &headers, id).await?;
+    let (campaign, _) = load_authorized_campaign_with_org(&state, user_id, &headers, id).await?;
     Ok(Json(campaign))
 }
 
@@ -114,9 +121,12 @@ pub async fn delete_campaign(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    load_authorized_campaign(&state, user_id, &headers, id).await?;
+    let (_, org_id) = load_authorized_campaign_with_org(&state, user_id, &headers, id).await?;
 
-    let deleted = ChaosCampaign::delete(state.db.pool(), id).await.map_err(ApiError::Database)?;
+    let deleted = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(ChaosCampaign::delete(&mut **tx, id).await?) })
+    })
+    .await?;
     if !deleted {
         return Err(ApiError::InvalidRequest("Campaign not found".into()));
     }
@@ -130,10 +140,15 @@ pub async fn list_campaign_reports(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<ChaosCampaignReport>>> {
-    let campaign = load_authorized_campaign(&state, user_id, &headers, id).await?;
-    let reports = ChaosCampaignReport::list_by_campaign(state.db.pool(), campaign.id)
-        .await
-        .map_err(ApiError::Database)?;
+    let (campaign, org_id) =
+        load_authorized_campaign_with_org(&state, user_id, &headers, id).await?;
+    let campaign_id = campaign.id;
+    let reports = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(
+            async move { Ok(ChaosCampaignReport::list_by_campaign(&mut **tx, campaign_id).await?) },
+        )
+    })
+    .await?;
     Ok(Json(reports))
 }
 
@@ -236,10 +251,15 @@ pub async fn list_patterns(
     Path(workspace_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<ResiliencePattern>>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
-    let patterns = ResiliencePattern::list_visible_to_workspace(state.db.pool(), workspace_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    // Bound to the caller's org: the policy also admits the platform rows
+    // (`workspace_id IS NULL`) that the query asks for.
+    let patterns = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(ResiliencePattern::list_visible_to_workspace(&mut **tx, workspace_id).await?)
+        })
+    })
+    .await?;
     Ok(Json(patterns))
 }
 
@@ -248,7 +268,7 @@ async fn authorize_workspace(
     user_id: Uuid,
     headers: &HeaderMap,
     workspace_id: Uuid,
-) -> ApiResult<()> {
+) -> ApiResult<Uuid> {
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
@@ -258,32 +278,26 @@ async fn authorize_workspace(
     if ctx.org_id != workspace.org_id {
         return Err(ApiError::InvalidRequest("Workspace not found".into()));
     }
-    Ok(())
+    Ok(ctx.org_id)
 }
 
-async fn load_authorized_campaign(
-    state: &AppState,
-    user_id: Uuid,
-    headers: &HeaderMap,
-    id: Uuid,
-) -> ApiResult<ChaosCampaign> {
-    Ok(load_authorized_campaign_with_org(state, user_id, headers, id).await?.0)
-}
-
-/// Like [`load_authorized_campaign`], also returning the authorized org id.
+/// Load a campaign the caller may access, returning it with the authorized
+/// org id. The campaign is read bound to the caller's org, so a campaign in
+/// another org reads as `None` and gets the same "Campaign not found".
 async fn load_authorized_campaign_with_org(
     state: &AppState,
     user_id: Uuid,
     headers: &HeaderMap,
     id: Uuid,
 ) -> ApiResult<(ChaosCampaign, Uuid)> {
-    let campaign = ChaosCampaign::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Campaign not found".into()))?;
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    let campaign = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+        Box::pin(async move { Ok(ChaosCampaign::find_by_id(&mut **tx, id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Campaign not found".into()))?;
     let workspace = find_workspace_in_org(state, ctx.org_id, campaign.workspace_id)
         .await?
         .ok_or_else(|| ApiError::InvalidRequest("Campaign not found".into()))?;

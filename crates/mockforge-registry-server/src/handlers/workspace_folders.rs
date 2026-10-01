@@ -28,7 +28,7 @@ async fn require_workspace_owner(
     user_id: Uuid,
     headers: &HeaderMap,
     workspace_id: Uuid,
-) -> ApiResult<()> {
+) -> ApiResult<Uuid> {
     let org_ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".to_string()))?;
@@ -44,7 +44,29 @@ async fn require_workspace_owner(
             "Workspace does not belong to this organization".to_string(),
         ));
     }
-    Ok(())
+    Ok(org_ctx.org_id)
+}
+
+/// Load `folder_id` bound to `org_id` and confirm it belongs to `workspace_id`.
+/// A folder in another org reads as `None` under RLS and maps to the same
+/// "not found" error as a missing row.
+async fn find_folder_in_workspace(
+    state: &AppState,
+    org_id: Uuid,
+    workspace_id: Uuid,
+    folder_id: Uuid,
+    not_found: &str,
+    wrong_workspace: &str,
+) -> ApiResult<WorkspaceFolder> {
+    let folder = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(WorkspaceFolder::find_by_id(&mut **tx, folder_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest(not_found.to_string()))?;
+    if folder.workspace_id != workspace_id {
+        return Err(ApiError::InvalidRequest(wrong_workspace.to_string()));
+    }
+    Ok(folder)
 }
 
 #[derive(Debug, Serialize)]
@@ -60,23 +82,28 @@ pub async fn get_folder(
     headers: HeaderMap,
     Path((workspace_id, folder_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_workspace_owner(&state, user_id, &headers, workspace_id).await?;
+    let org_id = require_workspace_owner(&state, user_id, &headers, workspace_id).await?;
 
-    let folder = WorkspaceFolder::find_by_id(state.db.pool(), folder_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Folder not found".to_string()))?;
-    if folder.workspace_id != workspace_id {
-        return Err(ApiError::InvalidRequest(
-            "Folder does not belong to this workspace".to_string(),
-        ));
-    }
-
-    let summary = folder.to_summary_response(state.db.pool()).await?;
-    let requests = WorkspaceRequest::list_by_folder(state.db.pool(), folder_id)
-        .await?
-        .into_iter()
-        .map(|r| r.to_summary())
-        .collect::<Vec<_>>();
+    let (summary, requests) = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            let Some(folder) = WorkspaceFolder::find_by_id(&mut **tx, folder_id).await? else {
+                return Ok(Err(ApiError::InvalidRequest("Folder not found".to_string())));
+            };
+            if folder.workspace_id != workspace_id {
+                return Ok(Err(ApiError::InvalidRequest(
+                    "Folder does not belong to this workspace".to_string(),
+                )));
+            }
+            let summary = folder.to_summary_response(tx).await?;
+            let requests = WorkspaceRequest::list_by_folder(&mut **tx, folder_id)
+                .await?
+                .into_iter()
+                .map(|r| r.to_summary())
+                .collect::<Vec<_>>();
+            Ok(Ok((summary, requests)))
+        })
+    })
+    .await??;
 
     Ok(Json(serde_json::json!({
         "folder": FolderDetailResponse { summary, requests },
@@ -100,7 +127,7 @@ pub async fn create_folder(
     Path(workspace_id): Path<Uuid>,
     Json(request): Json<CreateFolderRequest>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_workspace_owner(&state, user_id, &headers, workspace_id).await?;
+    let org_id = require_workspace_owner(&state, user_id, &headers, workspace_id).await?;
 
     let name = request.name.trim();
     if name.is_empty() {
@@ -108,23 +135,26 @@ pub async fn create_folder(
     }
 
     if let Some(parent_id) = request.parent_id {
-        let parent = WorkspaceFolder::find_by_id(state.db.pool(), parent_id)
-            .await?
-            .ok_or_else(|| ApiError::InvalidRequest("Parent folder not found".to_string()))?;
-        if parent.workspace_id != workspace_id {
-            return Err(ApiError::InvalidRequest(
-                "Parent folder does not belong to this workspace".to_string(),
-            ));
-        }
+        find_folder_in_workspace(
+            &state,
+            org_id,
+            workspace_id,
+            parent_id,
+            "Parent folder not found",
+            "Parent folder does not belong to this workspace",
+        )
+        .await?;
     }
 
-    let folder = WorkspaceFolder::create(
-        state.db.pool(),
-        workspace_id,
-        request.parent_id,
-        name,
-        &request.description,
-    )
+    let parent_id = request.parent_id;
+    let name = name.to_string();
+    let description = request.description.clone();
+    let folder = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(WorkspaceFolder::create(&mut **tx, workspace_id, parent_id, &name, &description)
+                .await?)
+        })
+    })
     .await?;
 
     Ok(Json(serde_json::json!({
@@ -164,7 +194,7 @@ pub async fn create_request(
     Path(workspace_id): Path<Uuid>,
     Json(request): Json<CreateRequestRequestBody>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_workspace_owner(&state, user_id, &headers, workspace_id).await?;
+    let org_id = require_workspace_owner(&state, user_id, &headers, workspace_id).await?;
 
     let name = request.name.trim();
     let path = request.path.trim();
@@ -173,33 +203,41 @@ pub async fn create_request(
     }
 
     if let Some(folder_id) = request.folder_id {
-        let folder = WorkspaceFolder::find_by_id(state.db.pool(), folder_id)
-            .await?
-            .ok_or_else(|| ApiError::InvalidRequest("Folder not found".to_string()))?;
-        if folder.workspace_id != workspace_id {
-            return Err(ApiError::InvalidRequest(
-                "Folder does not belong to this workspace".to_string(),
-            ));
-        }
+        find_folder_in_workspace(
+            &state,
+            org_id,
+            workspace_id,
+            folder_id,
+            "Folder not found",
+            "Folder does not belong to this workspace",
+        )
+        .await?;
     }
 
     let method_upper = request.method.to_uppercase();
     let req_headers = request.request_headers.unwrap_or(serde_json::json!({}));
     let resp_headers = request.response_headers.unwrap_or(serde_json::json!({}));
 
-    let created = WorkspaceRequest::create(
-        state.db.pool(),
-        workspace_id,
-        request.folder_id,
-        name,
-        &request.description,
-        &method_upper,
-        path,
-        request.status_code,
-        &request.response_body,
-        &req_headers,
-        &resp_headers,
-    )
+    let name = name.to_string();
+    let path = path.to_string();
+    let created = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(WorkspaceRequest::create(
+                &mut **tx,
+                workspace_id,
+                request.folder_id,
+                &name,
+                &request.description,
+                &method_upper,
+                &path,
+                request.status_code,
+                &request.response_body,
+                &req_headers,
+                &resp_headers,
+            )
+            .await?)
+        })
+    })
     .await?;
 
     Ok(Json(serde_json::json!({
@@ -215,18 +253,22 @@ pub async fn delete_folder(
     headers: HeaderMap,
     Path((workspace_id, folder_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_workspace_owner(&state, user_id, &headers, workspace_id).await?;
+    let org_id = require_workspace_owner(&state, user_id, &headers, workspace_id).await?;
 
-    let folder = WorkspaceFolder::find_by_id(state.db.pool(), folder_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Folder not found".to_string()))?;
-    if folder.workspace_id != workspace_id {
-        return Err(ApiError::InvalidRequest(
-            "Folder does not belong to this workspace".to_string(),
-        ));
-    }
+    find_folder_in_workspace(
+        &state,
+        org_id,
+        workspace_id,
+        folder_id,
+        "Folder not found",
+        "Folder does not belong to this workspace",
+    )
+    .await?;
 
-    WorkspaceFolder::delete(state.db.pool(), folder_id).await?;
+    with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(WorkspaceFolder::delete(&mut **tx, folder_id).await?) })
+    })
+    .await?;
 
     Ok(Json(serde_json::json!({
         "id": folder_id,
@@ -241,18 +283,23 @@ pub async fn delete_request(
     headers: HeaderMap,
     Path((workspace_id, request_id)): Path<(Uuid, Uuid)>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    require_workspace_owner(&state, user_id, &headers, workspace_id).await?;
+    let org_id = require_workspace_owner(&state, user_id, &headers, workspace_id).await?;
 
-    let request = WorkspaceRequest::find_by_id(state.db.pool(), request_id)
-        .await?
-        .ok_or_else(|| ApiError::InvalidRequest("Request not found".to_string()))?;
+    let request = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(WorkspaceRequest::find_by_id(&mut **tx, request_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Request not found".to_string()))?;
     if request.workspace_id != workspace_id {
         return Err(ApiError::InvalidRequest(
             "Request does not belong to this workspace".to_string(),
         ));
     }
 
-    WorkspaceRequest::delete(state.db.pool(), request_id).await?;
+    with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(WorkspaceRequest::delete(&mut **tx, request_id).await?) })
+    })
+    .await?;
 
     Ok(Json(serde_json::json!({
         "id": request_id,

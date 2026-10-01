@@ -177,14 +177,20 @@ struct CaptureRow {
     response_size_bytes: Option<i64>,
 }
 
+/// `org_id` must be the workspace's org, already verified by
+/// `require_workspace`. `runtime_captures` is RLS-forced (via the capturing
+/// deployment's `hosted_mocks.org_id`), so the read is bound to it.
 async fn load_captures(
     state: &AppState,
+    org_id: Uuid,
     workspace_id: Uuid,
     since: DateTime<Utc>,
     until: DateTime<Utc>,
 ) -> ApiResult<Vec<CaptureRow>> {
-    sqlx::query_as::<_, CaptureRow>(
-        r#"
+    let rows = with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+        Box::pin(async move {
+            Ok(sqlx::query_as::<_, CaptureRow>(
+                r#"
         SELECT occurred_at,
                method,
                path,
@@ -202,14 +208,17 @@ async fn load_captures(
          ORDER BY occurred_at DESC
          LIMIT $4
         "#,
-    )
-    .bind(workspace_id)
-    .bind(since)
-    .bind(until)
-    .bind(MAX_CAPTURE_ROWS)
-    .fetch_all(state.db.pool())
-    .await
-    .map_err(ApiError::Database)
+            )
+            .bind(workspace_id)
+            .bind(since)
+            .bind(until)
+            .bind(MAX_CAPTURE_ROWS)
+            .fetch_all(&mut **tx)
+            .await?)
+        })
+    })
+    .await?;
+    Ok(rows)
 }
 
 /// Convert a capture row into the in-memory shape the local matcher
@@ -257,9 +266,9 @@ pub async fn verify(
     Path(workspace_id): Path<Uuid>,
     Json(body): Json<VerifyBody>,
 ) -> ApiResult<Json<VerificationResult>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let workspace = require_workspace(&state, user_id, &headers, workspace_id).await?;
     let (since, until) = resolve_window(&body.window)?;
-    let rows = load_captures(&state, workspace_id, since, until).await?;
+    let rows = load_captures(&state, workspace.org_id, workspace_id, since, until).await?;
     let entries: Vec<RequestLogEntry> = rows.into_iter().map(row_to_entry).collect();
     Ok(Json(verify_entries(&entries, &body.pattern, body.expected)))
 }
@@ -272,9 +281,9 @@ pub async fn count(
     Path(workspace_id): Path<Uuid>,
     Json(body): Json<CountBody>,
 ) -> ApiResult<Json<CountResponse>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let workspace = require_workspace(&state, user_id, &headers, workspace_id).await?;
     let (since, until) = resolve_window(&body.window)?;
-    let rows = load_captures(&state, workspace_id, since, until).await?;
+    let rows = load_captures(&state, workspace.org_id, workspace_id, since, until).await?;
     let entries: Vec<RequestLogEntry> = rows.into_iter().map(row_to_entry).collect();
     let result = verify_entries(&entries, &body.pattern, VerificationCount::AtLeast(0));
     Ok(Json(CountResponse {
@@ -290,9 +299,9 @@ pub async fn sequence(
     Path(workspace_id): Path<Uuid>,
     Json(body): Json<SequenceBody>,
 ) -> ApiResult<Json<VerificationResult>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let workspace = require_workspace(&state, user_id, &headers, workspace_id).await?;
     let (since, until) = resolve_window(&body.window)?;
-    let rows = load_captures(&state, workspace_id, since, until).await?;
+    let rows = load_captures(&state, workspace.org_id, workspace_id, since, until).await?;
     // Captures come back DESC; sequence verification expects chronological order.
     let entries: Vec<RequestLogEntry> = rows.into_iter().rev().map(row_to_entry).collect();
     Ok(Json(verify_sequence_entries(&entries, &body.patterns)))
@@ -306,9 +315,9 @@ pub async fn never(
     Path(workspace_id): Path<Uuid>,
     Json(body): Json<NeverBody>,
 ) -> ApiResult<Json<VerificationResult>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let workspace = require_workspace(&state, user_id, &headers, workspace_id).await?;
     let (since, until) = resolve_window(&body.window)?;
-    let rows = load_captures(&state, workspace_id, since, until).await?;
+    let rows = load_captures(&state, workspace.org_id, workspace_id, since, until).await?;
     let entries: Vec<RequestLogEntry> = rows.into_iter().map(row_to_entry).collect();
     Ok(Json(verify_entries(&entries, &body.pattern, VerificationCount::Never)))
 }
@@ -321,9 +330,9 @@ pub async fn at_least(
     Path(workspace_id): Path<Uuid>,
     Json(body): Json<AtLeastBody>,
 ) -> ApiResult<Json<VerificationResult>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let workspace = require_workspace(&state, user_id, &headers, workspace_id).await?;
     let (since, until) = resolve_window(&body.window)?;
-    let rows = load_captures(&state, workspace_id, since, until).await?;
+    let rows = load_captures(&state, workspace.org_id, workspace_id, since, until).await?;
     let entries: Vec<RequestLogEntry> = rows.into_iter().map(row_to_entry).collect();
     Ok(Json(verify_entries(
         &entries,
@@ -353,20 +362,27 @@ pub async fn status(
     headers: HeaderMap,
     Path(workspace_id): Path<Uuid>,
 ) -> ApiResult<Json<WorkspaceCaptureStatus>> {
-    require_workspace(&state, user_id, &headers, workspace_id).await?;
+    let workspace = require_workspace(&state, user_id, &headers, workspace_id).await?;
 
-    let recent_capture_count: i64 = sqlx::query_scalar(
-        r#"
+    // Bound to the workspace's org (verified above); runtime_captures is
+    // RLS-forced.
+    let recent_capture_count: i64 =
+        with_org_context(state.db.runtime_pool(), workspace.org_id, move |tx| {
+            Box::pin(async move {
+                Ok(sqlx::query_scalar(
+                    r#"
         SELECT COUNT(*)
           FROM runtime_captures
          WHERE workspace_id = $1
            AND occurred_at >= NOW() - INTERVAL '1 hour'
         "#,
-    )
-    .bind(workspace_id)
-    .fetch_one(state.db.pool())
-    .await
-    .map_err(ApiError::Database)?;
+                )
+                .bind(workspace_id)
+                .fetch_one(&mut **tx)
+                .await?)
+            })
+        })
+        .await?;
 
     Ok(Json(WorkspaceCaptureStatus {
         has_captures: recent_capture_count > 0,

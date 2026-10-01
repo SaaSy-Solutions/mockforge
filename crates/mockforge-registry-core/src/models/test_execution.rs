@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[cfg(feature = "postgres")]
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 
 /// A user-authored test/chaos/scenario suite.
 ///
@@ -61,7 +61,7 @@ pub struct CreateTestSuite<'a> {
 impl TestSuite {
     /// List all suites in a workspace, optionally filtered by `kind`.
     pub async fn list_by_workspace(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
         kind: Option<&str>,
     ) -> sqlx::Result<Vec<Self>> {
@@ -73,7 +73,7 @@ impl TestSuite {
                 )
                 .bind(workspace_id)
                 .bind(k)
-                .fetch_all(pool)
+                .fetch_all(executor)
                 .await
             }
             None => {
@@ -81,20 +81,26 @@ impl TestSuite {
                     "SELECT * FROM test_suites WHERE workspace_id = $1 ORDER BY updated_at DESC",
                 )
                 .bind(workspace_id)
-                .fetch_all(pool)
+                .fetch_all(executor)
                 .await
             }
         }
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM test_suites WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
-    pub async fn create(pool: &PgPool, input: CreateTestSuite<'_>) -> sqlx::Result<Self> {
+    pub async fn create(
+        executor: impl sqlx::PgExecutor<'_>,
+        input: CreateTestSuite<'_>,
+    ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"
             INSERT INTO test_suites
@@ -110,13 +116,13 @@ impl TestSuite {
         .bind(input.config)
         .bind(input.target_workspace_id)
         .bind(input.created_by)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Patch-style update: any `Some(_)` field overwrites; `None` leaves it.
     pub async fn update(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         name: Option<&str>,
         description: Option<Option<&str>>,
@@ -142,14 +148,14 @@ impl TestSuite {
         .bind(config)
         .bind(target_workspace_id.is_some())
         .bind(target_workspace_id.flatten())
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
-    pub async fn delete(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<bool> {
         let rows = sqlx::query("DELETE FROM test_suites WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?
             .rows_affected();
         Ok(rows > 0)
@@ -177,7 +183,7 @@ pub struct TestSchedule {
 #[cfg(feature = "postgres")]
 impl TestSchedule {
     pub async fn create(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         suite_id: Uuid,
         cron: &str,
         timezone: &str,
@@ -192,34 +198,41 @@ impl TestSchedule {
         .bind(suite_id)
         .bind(cron)
         .bind(timezone)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
-    pub async fn list_by_suite(pool: &PgPool, suite_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_by_suite(
+        executor: impl sqlx::PgExecutor<'_>,
+        suite_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM test_schedules WHERE suite_id = $1 ORDER BY created_at",
         )
         .bind(suite_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     /// All enabled schedules. The worker filters in-memory rather than in
     /// SQL because cron-expression evaluation lives in Rust.
-    pub async fn list_enabled(pool: &PgPool) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_enabled(executor: impl sqlx::PgExecutor<'_>) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM test_schedules WHERE enabled = TRUE")
-            .fetch_all(pool)
+            .fetch_all(executor)
             .await
     }
 
-    pub async fn set_enabled(pool: &PgPool, id: Uuid, enabled: bool) -> sqlx::Result<Option<Self>> {
+    pub async fn set_enabled(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+        enabled: bool,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>(
             "UPDATE test_schedules SET enabled = $2 WHERE id = $1 RETURNING *",
         )
         .bind(id)
         .bind(enabled)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
@@ -227,7 +240,7 @@ impl TestSchedule {
     /// the (id, fired_at) pair via the WHERE clause — re-running with an
     /// older timestamp is a no-op so a worker restart won't double-fire.
     pub async fn mark_triggered(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         fired_at: DateTime<Utc>,
     ) -> sqlx::Result<Option<Self>> {
@@ -242,14 +255,14 @@ impl TestSchedule {
         )
         .bind(id)
         .bind(fired_at)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
-    pub async fn delete(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<bool> {
         let rows = sqlx::query("DELETE FROM test_schedules WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?
             .rows_affected();
         Ok(rows > 0)

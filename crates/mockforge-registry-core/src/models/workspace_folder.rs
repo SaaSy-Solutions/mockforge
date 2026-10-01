@@ -32,7 +32,7 @@ pub struct FolderSummaryResponse {
 #[cfg(feature = "postgres")]
 impl WorkspaceFolder {
     pub async fn list_by_workspace(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
     ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
@@ -41,19 +41,22 @@ impl WorkspaceFolder {
                ORDER BY sort_order, created_at"#,
         )
         .bind(workspace_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM workspace_folders WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     pub async fn create(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
         parent_folder_id: Option<Uuid>,
         name: &str,
@@ -69,33 +72,35 @@ impl WorkspaceFolder {
         .bind(parent_folder_id)
         .bind(name)
         .bind(description)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
-    pub async fn delete(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<()> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<()> {
         sqlx::query("DELETE FROM workspace_folders WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?;
         Ok(())
     }
 
+    /// Two statements; takes a connection so callers can run it inside an
+    /// org-bound (RLS) transaction.
     pub async fn to_summary_response(
         &self,
-        pool: &sqlx::PgPool,
+        conn: &mut sqlx::PgConnection,
     ) -> sqlx::Result<FolderSummaryResponse> {
         let subfolder_count: i64 = sqlx::query_scalar(
             "SELECT COUNT(*) FROM workspace_folders WHERE parent_folder_id = $1",
         )
         .bind(self.id)
-        .fetch_one(pool)
+        .fetch_one(&mut *conn)
         .await?;
 
         let request_count: i64 =
             sqlx::query_scalar("SELECT COUNT(*) FROM workspace_requests WHERE folder_id = $1")
                 .bind(self.id)
-                .fetch_one(pool)
+                .fetch_one(&mut *conn)
                 .await?;
 
         Ok(FolderSummaryResponse {

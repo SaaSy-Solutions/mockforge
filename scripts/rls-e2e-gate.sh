@@ -130,6 +130,7 @@ E2E_TESTS=(
   --test audit_integrity_e2e
   --test rls_coverage_e2e
   --test hosted_mock_rls_routes_e2e
+  --test rls_join_coverage_e2e
 )
 
 # Server + test env. Values are literals from registry-e2e.yml; none are secret.
@@ -151,6 +152,7 @@ warn() { printf '\033[1;33mwarn: %s\033[0m\n' "$*" >&2; }
 die()  { printf '\033[1;31merror: %s\033[0m\n' "$*" >&2; exit 1; }
 
 psql_owner() { PGPASSWORD="$PG_SUPERPASS" psql -h localhost -p "$PG_PORT" -U "$PG_SUPERUSER" -d "$PG_DB" "$@"; }
+psql_app()   { PGPASSWORD="$APP_ROLE_PASSWORD" psql -h localhost -p "$PG_PORT" -U "$APP_ROLE" -d "$PG_DB" "$@"; }
 
 # ---------------------------------------------------------------------------
 
@@ -290,22 +292,66 @@ verify_gate_armed() {
   bypass="$(psql_owner -tAc "SELECT rolbypassrls FROM pg_roles WHERE rolname = '${APP_ROLE}'")"
   [ "$bypass" = "f" ] || die "$APP_ROLE has rolbypassrls=$bypass — RLS would be bypassed and the gate would false-pass"
 
-  local covered
-  covered="$(psql_owner -tAc "SELECT count(*) FROM pg_class WHERE relrowsecurity AND relname IN ('projects','audit_logs','hosted_mocks','templates','scenarios')")"
-  [ "$covered" = "5" ] || die "expected RLS enabled on 5 tables, found $covered — did migration 20250101000082 run?"
+  # Every table the migrations FORCE RLS on, as the coverage scanner reads them.
+  # Checking a hard-coded handful (the original five) let the 30+ tables added
+  # later go unverified: a migration that silently failed to force one of them
+  # would still arm the gate.
+  local tables
+  tables="$(python3 "$REPO_ROOT/scripts/check_rls_coverage.py" --print-forced-tables)" \
+    || die "could not read the forced-table list from scripts/check_rls_coverage.py"
+  local expected
+  expected="$(printf '%s\n' "$tables" | grep -c .)"
+  [ "$expected" -gt 0 ] || die "scanner returned no forced tables"
+  local in_list
+  in_list="$(printf "'%s'," $tables)"
+  in_list="${in_list%,}"
 
-  local forced
-  forced="$(psql_owner -tAc "SELECT count(*) FROM pg_class WHERE relforcerowsecurity AND relname IN ('projects','audit_logs','hosted_mocks','templates','scenarios')")"
-  [ "$forced" = "5" ] || die "expected FORCE RLS on 5 tables, found $forced"
+  local covered forced with_policy
+  covered="$(psql_owner -tAc "SELECT count(*) FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relrowsecurity AND relname IN ($in_list)")"
+  [ "$covered" = "$expected" ] || die "expected RLS enabled on $expected tables, found $covered — did every RLS migration run?"
+  forced="$(psql_owner -tAc "SELECT count(*) FROM pg_class WHERE relnamespace = 'public'::regnamespace AND relforcerowsecurity AND relname IN ($in_list)")"
+  [ "$forced" = "$expected" ] || die "expected FORCE RLS on $expected tables, found $forced"
+  with_policy="$(psql_owner -tAc "SELECT count(DISTINCT tablename) FROM pg_policies WHERE schemaname = 'public' AND tablename IN ($in_list)")"
+  [ "$with_policy" = "$expected" ] || die "expected a policy on each of $expected forced tables, found $with_policy"
 
-  # Positive control: as the app role with no GUC bound, a covered table must
-  # return 0 rows. If this returns rows the policies are not doing anything.
-  local leaked
-  leaked="$(PGPASSWORD="$APP_ROLE_PASSWORD" psql -h localhost -p "$PG_PORT" -U "$APP_ROLE" -d "$PG_DB" -tAc \
-    "SELECT count(*) FROM projects")"
-  [ "$leaked" = "0" ] || die "app role saw $leaked projects rows with no org GUC bound — RLS is not enforcing"
+  # Seed one row the app role must NOT see, in a parent-scoped (join-policy)
+  # table, so the probe below is a real positive control even on a freshly
+  # migrated database: an EXISTS policy that matched everything would leak it.
+  psql_owner -v ON_ERROR_STOP=1 -q <<'SQL' >/dev/null
+DO $$
+DECLARE u uuid; o uuid; w uuid;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM users WHERE username = 'rls_gate_probe') THEN
+    INSERT INTO users (username, email, password_hash)
+      VALUES ('rls_gate_probe', 'rls-gate-probe@e2e-test.local', 'x') RETURNING id INTO u;
+    INSERT INTO organizations (name, slug, owner_id) VALUES ('rls gate probe', 'rls-gate-probe', u)
+      RETURNING id INTO o;
+    INSERT INTO workspaces (org_id, name, created_by) VALUES (o, 'rls gate probe', u) RETURNING id INTO w;
+    INSERT INTO flows (workspace_id, kind, name) VALUES (w, 'scenario', 'rls gate probe');
+    INSERT INTO user_public_keys (user_id, algorithm, public_key_b64, label)
+      VALUES (u, 'ed25519', 'cmxzLWdhdGUtcHJvYmUtcHVibGljLWtleS1ieXRlcyE=', 'rls gate probe');
+  END IF;
+END $$;
+SQL
 
-  echo "gate armed: $APP_ROLE is NOBYPASSRLS, 5/5 covered tables ENABLE+FORCE RLS, unbound reads see 0 rows"
+  # Positive control on EVERY forced table: as the app role with no GUC bound
+  # (org or user), each must return 0 rows. `resilience_patterns` platform rows
+  # (workspace_id IS NULL) are public by design and excluded from its count.
+  local t leaked
+  for t in $tables; do
+    if [ "$t" = "resilience_patterns" ]; then
+      leaked="$(psql_app -tAc "SELECT count(*) FROM resilience_patterns WHERE workspace_id IS NOT NULL")"
+    else
+      leaked="$(psql_app -tAc "SELECT count(*) FROM $t")"
+    fi
+    [ "$leaked" = "0" ] || die "app role saw $leaked $t rows with no GUC bound — RLS is not enforcing on $t"
+  done
+  local probe_flows probe_keys
+  probe_flows="$(psql_owner -tAc "SELECT count(*) FROM flows WHERE name = 'rls gate probe'")"
+  probe_keys="$(psql_owner -tAc "SELECT count(*) FROM user_public_keys WHERE label = 'rls gate probe'")"
+  [ "$probe_flows" -ge 1 ] && [ "$probe_keys" -ge 1 ] || die "probe rows missing; the 0-row checks above prove nothing"
+
+  echo "gate armed: $APP_ROLE is NOBYPASSRLS, $expected/$expected forced tables ENABLE+FORCE RLS with a policy, unbound reads see 0 rows on every one"
 }
 
 cmd_up() {

@@ -54,10 +54,13 @@ pub async fn list_monitored_services(
     Path(workspace_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<MonitoredService>>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
-    let rows = MonitoredService::list_by_workspace(state.db.pool(), workspace_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let rows = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(
+            async move { Ok(MonitoredService::list_by_workspace(&mut **tx, workspace_id).await?) },
+        )
+    })
+    .await?;
     Ok(Json(rows))
 }
 
@@ -88,7 +91,7 @@ pub async fn create_monitored_service(
     headers: HeaderMap,
     Json(request): Json<CreateMonitoredServiceRequest>,
 ) -> ApiResult<Json<MonitoredService>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
 
     if request.name.trim().is_empty() {
         return Err(ApiError::InvalidRequest("name must not be empty".into()));
@@ -108,22 +111,26 @@ pub async fn create_monitored_service(
         ));
     }
 
-    let row = MonitoredService::create(
-        state.db.pool(),
-        CreateMonitoredService {
-            workspace_id,
-            name: &request.name,
-            base_url: &request.base_url,
-            openapi_spec_url: request.openapi_spec_url.as_deref(),
-            openapi_spec_inline: request.openapi_spec_inline.as_ref(),
-            auth_config: request.auth_config.as_ref(),
-            traffic_source: &request.traffic_source,
-            traffic_source_ref: request.traffic_source_ref.as_deref(),
-            probe_interval_secs: request.probe_interval_secs,
-        },
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let row = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(MonitoredService::create(
+                &mut **tx,
+                CreateMonitoredService {
+                    workspace_id,
+                    name: &request.name,
+                    base_url: &request.base_url,
+                    openapi_spec_url: request.openapi_spec_url.as_deref(),
+                    openapi_spec_inline: request.openapi_spec_inline.as_ref(),
+                    auth_config: request.auth_config.as_ref(),
+                    traffic_source: &request.traffic_source,
+                    traffic_source_ref: request.traffic_source_ref.as_deref(),
+                    probe_interval_secs: request.probe_interval_secs,
+                },
+            )
+            .await?)
+        })
+    })
+    .await?;
     Ok(Json(row))
 }
 
@@ -134,15 +141,12 @@ pub async fn delete_monitored_service(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let svc = MonitoredService::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Monitored service not found".into()))?;
-    authorize_workspace(&state, user_id, &headers, svc.workspace_id).await?;
+    let (_svc, org_id) = load_authorized_service(&state, user_id, &headers, id).await?;
 
-    let deleted = MonitoredService::delete(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?;
+    let deleted = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(MonitoredService::delete(&mut **tx, id).await?) })
+    })
+    .await?;
     if !deleted {
         return Err(ApiError::InvalidRequest("Monitored service not found".into()));
     }
@@ -156,15 +160,14 @@ pub async fn list_service_diff_runs(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<ContractDiffRun>>> {
-    let svc = MonitoredService::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Monitored service not found".into()))?;
-    authorize_workspace(&state, user_id, &headers, svc.workspace_id).await?;
+    let (_svc, org_id) = load_authorized_service(&state, user_id, &headers, id).await?;
 
-    let runs = ContractDiffRun::list_by_service(state.db.pool(), id, MAX_RUN_LIMIT)
-        .await
-        .map_err(ApiError::Database)?;
+    let runs = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(ContractDiffRun::list_by_service(&mut **tx, id, MAX_RUN_LIMIT).await?)
+        })
+    })
+    .await?;
     let _ = DEFAULT_RUN_LIMIT; // reserved for future ?limit= query
     Ok(Json(runs))
 }
@@ -176,15 +179,7 @@ pub async fn get_diff_run(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<ContractDiffRun>> {
-    let run = ContractDiffRun::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Diff run not found".into()))?;
-    let svc = MonitoredService::find_by_id(state.db.pool(), run.monitored_service_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Diff run not found".into()))?;
-    authorize_workspace(&state, user_id, &headers, svc.workspace_id).await?;
+    let (run, _org_id) = load_authorized_diff_run(&state, user_id, &headers, id).await?;
     Ok(Json(run))
 }
 
@@ -195,19 +190,12 @@ pub async fn list_diff_findings(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<ContractDiffFinding>>> {
-    let run = ContractDiffRun::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Diff run not found".into()))?;
-    let svc = MonitoredService::find_by_id(state.db.pool(), run.monitored_service_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Diff run not found".into()))?;
-    authorize_workspace(&state, user_id, &headers, svc.workspace_id).await?;
+    let (_run, org_id) = load_authorized_diff_run(&state, user_id, &headers, id).await?;
 
-    let findings = ContractDiffFinding::list_by_run(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?;
+    let findings = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(ContractDiffFinding::list_by_run(&mut **tx, id).await?) })
+    })
+    .await?;
     Ok(Json(findings))
 }
 
@@ -223,12 +211,8 @@ pub async fn trigger_diff_run(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<TestRun>> {
-    let svc = MonitoredService::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Monitored service not found".into()))?;
     // `org_id` is the service's workspace org, verified against the caller.
-    let org_id = authorize_workspace(&state, user_id, &headers, svc.workspace_id).await?;
+    let (svc, org_id) = load_authorized_service(&state, user_id, &headers, id).await?;
 
     let svc_id = svc.id;
     let run = with_org_context(state.db.runtime_pool(), org_id, |tx| {
@@ -283,10 +267,13 @@ pub async fn list_fitness_functions(
     Path(workspace_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<FitnessFunction>>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
-    let rows = FitnessFunction::list_by_workspace(state.db.pool(), workspace_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let rows = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(
+            async move { Ok(FitnessFunction::list_by_workspace(&mut **tx, workspace_id).await?) },
+        )
+    })
+    .await?;
     Ok(Json(rows))
 }
 
@@ -305,7 +292,7 @@ pub async fn create_fitness_function(
     headers: HeaderMap,
     Json(request): Json<CreateFitnessFunctionRequest>,
 ) -> ApiResult<Json<FitnessFunction>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
 
     if request.name.trim().is_empty() {
         return Err(ApiError::InvalidRequest("name must not be empty".into()));
@@ -333,15 +320,19 @@ pub async fn create_fitness_function(
         ));
     }
 
-    let row = FitnessFunction::create(
-        state.db.pool(),
-        workspace_id,
-        &request.name,
-        &request.kind,
-        &request.config,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let row = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(FitnessFunction::create(
+                &mut **tx,
+                workspace_id,
+                &request.name,
+                &request.kind,
+                &request.config,
+            )
+            .await?)
+        })
+    })
+    .await?;
     Ok(Json(row))
 }
 
@@ -364,11 +355,8 @@ pub async fn update_fitness_function(
     // Existence + auth check via the existing row's workspace_id, mirroring
     // delete_fitness_function. The body's workspace_id is implicit (we don't
     // allow re-homing fitness functions across workspaces in the same call).
-    let existing = FitnessFunction::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Fitness function not found".into()))?;
-    authorize_workspace(&state, user_id, &headers, existing.workspace_id).await?;
+    let (_existing, org_id) =
+        load_authorized_fitness_function(&state, user_id, &headers, id).await?;
 
     if request.name.trim().is_empty() {
         return Err(ApiError::InvalidRequest("name must not be empty".into()));
@@ -380,15 +368,19 @@ pub async fn update_fitness_function(
         )));
     }
 
-    let row = FitnessFunction::update(
-        state.db.pool(),
-        id,
-        request.name.trim(),
-        &request.kind,
-        &request.config,
-    )
-    .await
-    .map_err(ApiError::Database)?
+    let row = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(FitnessFunction::update(
+                &mut **tx,
+                id,
+                request.name.trim(),
+                &request.kind,
+                &request.config,
+            )
+            .await?)
+        })
+    })
+    .await?
     // Lost a race with a concurrent delete — surface as not-found, same
     // as the cross-org check above.
     .ok_or_else(|| ApiError::InvalidRequest("Fitness function not found".into()))?;
@@ -402,13 +394,12 @@ pub async fn delete_fitness_function(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let fn_row = FitnessFunction::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Fitness function not found".into()))?;
-    authorize_workspace(&state, user_id, &headers, fn_row.workspace_id).await?;
+    let (_fn_row, org_id) = load_authorized_fitness_function(&state, user_id, &headers, id).await?;
 
-    let deleted = FitnessFunction::delete(state.db.pool(), id).await.map_err(ApiError::Database)?;
+    let deleted = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(FitnessFunction::delete(&mut **tx, id).await?) })
+    })
+    .await?;
     if !deleted {
         return Err(ApiError::InvalidRequest("Fitness function not found".into()));
     }
@@ -424,10 +415,13 @@ pub async fn list_verification_suites(
     Path(workspace_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<VerificationSuite>>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
-    let rows = VerificationSuite::list_by_workspace(state.db.pool(), workspace_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let rows = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(
+            async move { Ok(VerificationSuite::list_by_workspace(&mut **tx, workspace_id).await?) },
+        )
+    })
+    .await?;
     Ok(Json(rows))
 }
 
@@ -448,7 +442,7 @@ pub async fn create_verification_suite(
     headers: HeaderMap,
     Json(request): Json<CreateVerificationSuiteRequest>,
 ) -> ApiResult<Json<VerificationSuite>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
 
     if request.name.trim().is_empty() {
         return Err(ApiError::InvalidRequest("name must not be empty".into()));
@@ -459,15 +453,19 @@ pub async fn create_verification_suite(
         ));
     }
 
-    let row = VerificationSuite::create(
-        state.db.pool(),
-        workspace_id,
-        &request.name,
-        &request.contract_check_ids,
-        &request.fitness_function_ids,
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let row = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(VerificationSuite::create(
+                &mut **tx,
+                workspace_id,
+                &request.name,
+                &request.contract_check_ids,
+                &request.fitness_function_ids,
+            )
+            .await?)
+        })
+    })
+    .await?;
     Ok(Json(row))
 }
 
@@ -478,15 +476,18 @@ pub async fn delete_verification_suite(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let suite = VerificationSuite::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Verification suite not found".into()))?;
-    authorize_workspace(&state, user_id, &headers, suite.workspace_id).await?;
+    let org_id = resolve_org(&state, user_id, &headers).await?;
+    let suite = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(VerificationSuite::find_by_id(&mut **tx, id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Verification suite not found".into()))?;
+    check_workspace_in_org(&state, org_id, suite.workspace_id).await?;
 
-    let deleted = VerificationSuite::delete(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?;
+    let deleted = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(VerificationSuite::delete(&mut **tx, id).await?) })
+    })
+    .await?;
     if !deleted {
         return Err(ApiError::InvalidRequest("Verification suite not found".into()));
     }
@@ -500,18 +501,96 @@ async fn authorize_workspace(
     headers: &HeaderMap,
     workspace_id: Uuid,
 ) -> ApiResult<Uuid> {
+    let org_id = resolve_org(state, user_id, headers).await?;
+    check_workspace_in_org(state, org_id, workspace_id).await?;
+    Ok(org_id)
+}
+
+/// Resolve the caller's org (header / default org).
+async fn resolve_org(state: &AppState, user_id: Uuid, headers: &HeaderMap) -> ApiResult<Uuid> {
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    Ok(ctx.org_id)
+}
+
+/// Verify `workspace_id` belongs to the already-resolved caller org.
+async fn check_workspace_in_org(
+    state: &AppState,
+    org_id: Uuid,
+    workspace_id: Uuid,
+) -> ApiResult<()> {
     // Bound to the caller's org: a workspace in another org reads as absent
     // and yields the same "Workspace not found" as an explicit mismatch.
-    let workspace = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+    let workspace = with_org_context(state.db.runtime_pool(), org_id, |tx| {
         Box::pin(async move { Ok(CloudWorkspace::find_by_id(&mut **tx, workspace_id).await?) })
     })
     .await?
     .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
-    if ctx.org_id != workspace.org_id {
+    if org_id != workspace.org_id {
         return Err(ApiError::InvalidRequest("Workspace not found".into()));
     }
-    Ok(ctx.org_id)
+    Ok(())
+}
+
+/// Load a monitored service bound to the caller's org, then verify its
+/// workspace. A service in another org reads as absent and yields the same
+/// "Monitored service not found" as a missing row.
+async fn load_authorized_service(
+    state: &AppState,
+    user_id: Uuid,
+    headers: &HeaderMap,
+    id: Uuid,
+) -> ApiResult<(MonitoredService, Uuid)> {
+    let org_id = resolve_org(state, user_id, headers).await?;
+    let svc = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(MonitoredService::find_by_id(&mut **tx, id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Monitored service not found".into()))?;
+    check_workspace_in_org(state, org_id, svc.workspace_id).await?;
+    Ok((svc, org_id))
+}
+
+/// Load a diff run and its monitored service bound to the caller's org, then
+/// verify the service's workspace. Either row in another org reads as absent
+/// and yields the same "Diff run not found" as a missing row.
+async fn load_authorized_diff_run(
+    state: &AppState,
+    user_id: Uuid,
+    headers: &HeaderMap,
+    id: Uuid,
+) -> ApiResult<(ContractDiffRun, Uuid)> {
+    let org_id = resolve_org(state, user_id, headers).await?;
+    let found = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            let Some(run) = ContractDiffRun::find_by_id(&mut **tx, id).await? else {
+                return Ok(None);
+            };
+            let svc = MonitoredService::find_by_id(&mut **tx, run.monitored_service_id).await?;
+            Ok(svc.map(|svc| (run, svc)))
+        })
+    })
+    .await?;
+    let (run, svc) = found.ok_or_else(|| ApiError::InvalidRequest("Diff run not found".into()))?;
+    check_workspace_in_org(state, org_id, svc.workspace_id).await?;
+    Ok((run, org_id))
+}
+
+/// Load a fitness function bound to the caller's org, then verify its
+/// workspace. A function in another org reads as "Fitness function not found".
+async fn load_authorized_fitness_function(
+    state: &AppState,
+    user_id: Uuid,
+    headers: &HeaderMap,
+    id: Uuid,
+) -> ApiResult<(FitnessFunction, Uuid)> {
+    let org_id = resolve_org(state, user_id, headers).await?;
+    let row = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(FitnessFunction::find_by_id(&mut **tx, id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Fitness function not found".into()))?;
+    check_workspace_in_org(state, org_id, row.workspace_id).await?;
+    Ok((row, org_id))
 }

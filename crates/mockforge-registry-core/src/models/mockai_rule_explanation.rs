@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[cfg(feature = "postgres")]
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 
 #[cfg_attr(feature = "postgres", derive(FromRow))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -44,7 +44,7 @@ impl MockaiRuleExplanation {
     /// List rule explanations for a workspace, optionally filtering by
     /// rule_type and a minimum confidence.
     pub async fn list_by_workspace(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
         rule_type: Option<&str>,
         min_confidence: Option<f32>,
@@ -63,13 +63,13 @@ impl MockaiRuleExplanation {
         .bind(workspace_id)
         .bind(rule_type)
         .bind(min_confidence)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     /// Get a single rule explanation by (workspace_id, rule_id).
     pub async fn get_by_rule_id(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
         rule_id: &str,
     ) -> sqlx::Result<Option<Self>> {
@@ -83,7 +83,7 @@ impl MockaiRuleExplanation {
         )
         .bind(workspace_id)
         .bind(rule_id)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
@@ -91,7 +91,7 @@ impl MockaiRuleExplanation {
     /// rewrites — the LLM is free to revise the explanation as more
     /// examples arrive.
     pub async fn upsert(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         input: UpsertMockaiRuleExplanation<'_>,
     ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
@@ -118,7 +118,7 @@ impl MockaiRuleExplanation {
         .bind(input.source_examples)
         .bind(input.reasoning)
         .bind(input.pattern_matches)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 }

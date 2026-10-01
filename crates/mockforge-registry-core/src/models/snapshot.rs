@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[cfg(feature = "postgres")]
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 
 #[cfg_attr(feature = "postgres", derive(FromRow))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -59,7 +59,7 @@ pub struct CreateSnapshot<'a> {
 #[cfg(feature = "postgres")]
 impl Snapshot {
     pub async fn list_by_workspace(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
         limit: i64,
     ) -> sqlx::Result<Vec<Self>> {
@@ -68,21 +68,27 @@ impl Snapshot {
         )
         .bind(workspace_id)
         .bind(limit)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM snapshots WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// Insert a snapshot row in `capturing` status. The capture worker
     /// transitions it to `ready` (with storage_url + size_bytes + manifest
     /// + captured_at) once the blob is safely uploaded.
-    pub async fn create(pool: &PgPool, input: CreateSnapshot<'_>) -> sqlx::Result<Self> {
+    pub async fn create(
+        executor: impl sqlx::PgExecutor<'_>,
+        input: CreateSnapshot<'_>,
+    ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"
             INSERT INTO snapshots
@@ -99,14 +105,14 @@ impl Snapshot {
         .bind(input.triggered_by)
         .bind(input.triggered_by_user)
         .bind(input.expires_at)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Worker callback: snapshot blob is durably stored; transition to
     /// `ready`. Idempotent — only updates rows currently in `capturing`.
     pub async fn mark_ready(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         storage_url: &str,
         size_bytes: i64,
@@ -128,25 +134,28 @@ impl Snapshot {
         .bind(storage_url)
         .bind(size_bytes)
         .bind(manifest)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
     /// Worker callback for the failure path. Idempotent.
-    pub async fn mark_failed(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn mark_failed(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>(
             "UPDATE snapshots SET status = 'failed' WHERE id = $1 AND status = 'capturing' \
              RETURNING *",
         )
         .bind(id)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
-    pub async fn delete(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<bool> {
         let rows = sqlx::query("DELETE FROM snapshots WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?
             .rows_affected();
         Ok(rows > 0)
@@ -156,7 +165,10 @@ impl Snapshot {
     /// `expires_at` has passed to `expired`. Returns the snapshots
     /// affected so the worker can reclaim their blobs after the row
     /// flip lands. Idempotent: rows already in `expired` are skipped.
-    pub async fn mark_expired_batch(pool: &PgPool, limit: i64) -> sqlx::Result<Vec<Self>> {
+    pub async fn mark_expired_batch(
+        executor: impl sqlx::PgExecutor<'_>,
+        limit: i64,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             r#"
             UPDATE snapshots SET status = 'expired'
@@ -172,16 +184,19 @@ impl Snapshot {
             "#,
         )
         .bind(limit)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     /// Workspace-scoped count, used for the `max_snapshots` plan-limit
     /// check before allowing a new capture.
-    pub async fn count_by_workspace(pool: &PgPool, workspace_id: Uuid) -> sqlx::Result<i64> {
+    pub async fn count_by_workspace(
+        executor: impl sqlx::PgExecutor<'_>,
+        workspace_id: Uuid,
+    ) -> sqlx::Result<i64> {
         let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM snapshots WHERE workspace_id = $1")
             .bind(workspace_id)
-            .fetch_one(pool)
+            .fetch_one(executor)
             .await?;
         Ok(row.0)
     }
@@ -189,7 +204,7 @@ impl Snapshot {
     /// Sum of size_bytes for all `ready` snapshots in a workspace —
     /// used by the storage-quota gauge update path.
     pub async fn sum_ready_bytes_by_workspace(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
     ) -> sqlx::Result<i64> {
         let row: (Option<i64>,) = sqlx::query_as(
@@ -197,7 +212,7 @@ impl Snapshot {
              FROM snapshots WHERE workspace_id = $1 AND status = 'ready'",
         )
         .bind(workspace_id)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await?;
         Ok(row.0.unwrap_or(0))
     }

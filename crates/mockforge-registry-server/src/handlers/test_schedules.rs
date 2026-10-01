@@ -71,10 +71,11 @@ pub async fn list_for_suite(
     Path(suite_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<ScheduleWithNextFire>>> {
-    let _suite = load_authorized_suite(&state, user_id, &headers, suite_id).await?;
-    let rows = TestSchedule::list_by_suite(state.db.pool(), suite_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let (_suite, org_id) = load_authorized_suite(&state, user_id, &headers, suite_id).await?;
+    let rows = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(TestSchedule::list_by_suite(&mut **tx, suite_id).await?) })
+    })
+    .await?;
     let with_next = rows
         .into_iter()
         .map(|s| ScheduleWithNextFire {
@@ -93,7 +94,7 @@ pub async fn create(
     headers: HeaderMap,
     Json(body): Json<CreateScheduleRequest>,
 ) -> ApiResult<Json<TestSchedule>> {
-    let _suite = load_authorized_suite(&state, user_id, &headers, suite_id).await?;
+    let (_suite, org_id) = load_authorized_suite(&state, user_id, &headers, suite_id).await?;
 
     if body.cron.trim().is_empty() {
         return Err(ApiError::InvalidRequest("cron must not be empty".into()));
@@ -105,9 +106,12 @@ pub async fn create(
         return Err(ApiError::InvalidRequest("timezone is not an IANA name".into()));
     }
 
-    let row = TestSchedule::create(state.db.pool(), suite_id, &body.cron, &body.timezone)
-        .await
-        .map_err(ApiError::Database)?;
+    let row = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(TestSchedule::create(&mut **tx, suite_id, &body.cron, &body.timezone).await?)
+        })
+    })
+    .await?;
     Ok(Json(row))
 }
 
@@ -128,20 +132,17 @@ pub async fn set_enabled(
     headers: HeaderMap,
     Json(body): Json<UpdateScheduleRequest>,
 ) -> ApiResult<Json<TestSchedule>> {
-    let pool = state.db.pool();
     // Authorize via the parent suite.
-    let existing = sqlx::query_as::<_, TestSchedule>("SELECT * FROM test_schedules WHERE id = $1")
-        .bind(id)
-        .fetch_optional(pool)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Test schedule not found".into()))?;
-    let _suite = load_authorized_suite(&state, user_id, &headers, existing.suite_id).await?;
+    let (existing, _org_id) = load_authorized_schedule(&state, user_id, &headers, id).await?;
+    let (_suite, org_id) =
+        load_authorized_suite(&state, user_id, &headers, existing.suite_id).await?;
 
-    let updated = TestSchedule::set_enabled(pool, id, body.enabled)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Test schedule not found".into()))?;
+    let enabled = body.enabled;
+    let updated = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(TestSchedule::set_enabled(&mut **tx, id, enabled).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Test schedule not found".into()))?;
     Ok(Json(updated))
 }
 
@@ -152,44 +153,73 @@ pub async fn delete(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let pool = state.db.pool();
-    let existing = sqlx::query_as::<_, TestSchedule>("SELECT * FROM test_schedules WHERE id = $1")
-        .bind(id)
-        .fetch_optional(pool)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Test schedule not found".into()))?;
-    let _suite = load_authorized_suite(&state, user_id, &headers, existing.suite_id).await?;
+    let (existing, _org_id) = load_authorized_schedule(&state, user_id, &headers, id).await?;
+    let (_suite, org_id) =
+        load_authorized_suite(&state, user_id, &headers, existing.suite_id).await?;
 
-    let deleted = TestSchedule::delete(pool, id).await.map_err(ApiError::Database)?;
+    let deleted = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(TestSchedule::delete(&mut **tx, id).await?) })
+    })
+    .await?;
     if !deleted {
         return Err(ApiError::InvalidRequest("Test schedule not found".into()));
     }
     Ok(Json(serde_json::json!({ "deleted": true })))
 }
 
+/// Load a schedule row bound to the caller's org. A schedule whose suite lives
+/// in another org reads as absent (RLS joins test_schedules -> test_suites ->
+/// workspaces) and yields the same "Test schedule not found" as a missing row.
+/// The parent suite is then authorized explicitly by `load_authorized_suite`.
+async fn load_authorized_schedule(
+    state: &AppState,
+    user_id: Uuid,
+    headers: &HeaderMap,
+    id: Uuid,
+) -> ApiResult<(TestSchedule, Uuid)> {
+    let ctx = resolve_org_context(state, user_id, headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    let existing = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+        Box::pin(async move {
+            Ok(sqlx::query_as::<_, TestSchedule>("SELECT * FROM test_schedules WHERE id = $1")
+                .bind(id)
+                .fetch_optional(&mut **tx)
+                .await?)
+        })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Test schedule not found".into()))?;
+    Ok((existing, ctx.org_id))
+}
+
+/// Load a test suite only if it belongs to the caller's org; returns the suite
+/// and that org. Cross-org suites read as "Test suite not found".
 async fn load_authorized_suite(
     state: &AppState,
     user_id: Uuid,
     headers: &HeaderMap,
     suite_id: Uuid,
-) -> ApiResult<TestSuite> {
-    let suite = TestSuite::find_by_id(state.db.pool(), suite_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Test suite not found".into()))?;
+) -> ApiResult<(TestSuite, Uuid)> {
     let ctx = resolve_org_context(state, user_id, headers, None)
         .await
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
-    // Bound to the caller's org: a cross-org workspace reads as absent.
-    let workspace_id = suite.workspace_id;
-    let workspace = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
-        Box::pin(async move { Ok(CloudWorkspace::find_by_id(&mut **tx, workspace_id).await?) })
+    // Bound to the caller's org: a suite or workspace in another org reads as
+    // absent and yields the same "Test suite not found" as a missing row.
+    let found = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+        Box::pin(async move {
+            let Some(suite) = TestSuite::find_by_id(&mut **tx, suite_id).await? else {
+                return Ok(None);
+            };
+            let workspace = CloudWorkspace::find_by_id(&mut **tx, suite.workspace_id).await?;
+            Ok(workspace.map(|ws| (suite, ws)))
+        })
     })
-    .await?
-    .ok_or_else(|| ApiError::InvalidRequest("Test suite not found".into()))?;
+    .await?;
+    let (suite, workspace) =
+        found.ok_or_else(|| ApiError::InvalidRequest("Test suite not found".into()))?;
     if ctx.org_id != workspace.org_id {
         return Err(ApiError::InvalidRequest("Test suite not found".into()));
     }
-    Ok(suite)
+    Ok((suite, ctx.org_id))
 }

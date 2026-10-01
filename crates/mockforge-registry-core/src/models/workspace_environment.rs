@@ -87,7 +87,7 @@ impl WorkspaceEnvVariable {
 #[cfg(feature = "postgres")]
 impl WorkspaceEnvironment {
     pub async fn list_by_workspace(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
     ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
@@ -96,19 +96,24 @@ impl WorkspaceEnvironment {
                ORDER BY sort_order, created_at"#,
         )
         .bind(workspace_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM workspace_environments WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
+    /// Two statements; takes a connection so callers can run it inside an
+    /// org-bound (RLS) transaction.
     pub async fn create(
-        pool: &sqlx::PgPool,
+        conn: &mut sqlx::PgConnection,
         workspace_id: Uuid,
         name: &str,
         description: &str,
@@ -120,7 +125,7 @@ impl WorkspaceEnvironment {
             "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM workspace_environments WHERE workspace_id = $1",
         )
         .bind(workspace_id)
-        .fetch_one(pool)
+        .fetch_one(&mut *conn)
         .await?;
 
         sqlx::query_as::<_, Self>(
@@ -135,12 +140,12 @@ impl WorkspaceEnvironment {
         .bind(color_hex)
         .bind(color_name)
         .bind(next_order)
-        .fetch_one(pool)
+        .fetch_one(&mut *conn)
         .await
     }
 
     pub async fn update(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         name: Option<&str>,
         description: Option<&str>,
@@ -162,26 +167,29 @@ impl WorkspaceEnvironment {
         .bind(description)
         .bind(color_hex)
         .bind(color_name)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
-    pub async fn delete(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<()> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<()> {
         sqlx::query("DELETE FROM workspace_environments WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?;
         Ok(())
     }
 
     /// Deactivate every environment in the workspace, then mark the target active.
     /// Intended to run inside a transaction so "only one active" stays invariant.
-    pub async fn set_active(
-        pool: &sqlx::PgPool,
+    pub async fn set_active<'c, A>(
+        conn: A,
         workspace_id: Uuid,
         environment_id: Uuid,
-    ) -> sqlx::Result<Option<Self>> {
-        let mut tx = pool.begin().await?;
+    ) -> sqlx::Result<Option<Self>>
+    where
+        A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
+    {
+        let mut tx = conn.begin().await?;
         sqlx::query(
             "UPDATE workspace_environments SET is_active = FALSE, updated_at = NOW() WHERE workspace_id = $1",
         )
@@ -205,12 +213,15 @@ impl WorkspaceEnvironment {
     }
 
     /// Reassign sort_order to match the supplied id list.
-    pub async fn reorder(
-        pool: &sqlx::PgPool,
+    pub async fn reorder<'c, A>(
+        conn: A,
         workspace_id: Uuid,
         ordered_ids: &[Uuid],
-    ) -> sqlx::Result<()> {
-        let mut tx = pool.begin().await?;
+    ) -> sqlx::Result<()>
+    where
+        A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
+    {
+        let mut tx = conn.begin().await?;
         for (idx, id) in ordered_ids.iter().enumerate() {
             sqlx::query(
                 r#"UPDATE workspace_environments
@@ -227,10 +238,13 @@ impl WorkspaceEnvironment {
         Ok(())
     }
 
-    pub async fn variable_count(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<i64> {
+    pub async fn variable_count(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<i64> {
         sqlx::query_scalar("SELECT COUNT(*) FROM workspace_env_variables WHERE environment_id = $1")
             .bind(id)
-            .fetch_one(pool)
+            .fetch_one(executor)
             .await
     }
 }
@@ -238,7 +252,7 @@ impl WorkspaceEnvironment {
 #[cfg(feature = "postgres")]
 impl WorkspaceEnvVariable {
     pub async fn list_by_environment(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         environment_id: Uuid,
     ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
@@ -247,12 +261,12 @@ impl WorkspaceEnvVariable {
                ORDER BY name"#,
         )
         .bind(environment_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     pub async fn upsert(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         environment_id: Uuid,
         name: &str,
         value: &str,
@@ -271,12 +285,12 @@ impl WorkspaceEnvVariable {
         .bind(name)
         .bind(value)
         .bind(is_secret)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     pub async fn delete(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         environment_id: Uuid,
         name: &str,
     ) -> sqlx::Result<bool> {
@@ -285,7 +299,7 @@ impl WorkspaceEnvVariable {
         )
         .bind(environment_id)
         .bind(name)
-        .execute(pool)
+        .execute(executor)
         .await?
         .rows_affected();
         Ok(rows > 0)

@@ -35,7 +35,7 @@ pub struct UpsertCloudPluginBetaInterest<'a> {
 #[cfg(feature = "postgres")]
 impl CloudPluginBetaInterest {
     pub async fn upsert(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         input: UpsertCloudPluginBetaInterest<'_>,
     ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
@@ -54,14 +54,17 @@ impl CloudPluginBetaInterest {
         .bind(input.org_id)
         .bind(input.use_case)
         .bind(input.plan_at_signup)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
-    pub async fn find_by_user(pool: &PgPool, user_id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_user(
+        executor: impl sqlx::PgExecutor<'_>,
+        user_id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM cloud_plugin_beta_interest WHERE user_id = $1")
             .bind(user_id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 

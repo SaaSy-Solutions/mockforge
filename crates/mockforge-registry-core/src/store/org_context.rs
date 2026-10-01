@@ -219,3 +219,85 @@ where
         }
     }
 }
+
+// ── Per-user binding (`app.current_user_id`) ─────────────────────────────────
+//
+// A few tables are owned by a USER, not an org: `user_public_keys` (publisher
+// signing keys) and `cloud_plugin_beta_interest`. Migration
+// `20250101000088_rls_user_scoped_tables` polices them with
+// `user_id = nullif(current_setting('app.current_user_id', true), '')::uuid`.
+// The binding mirrors the org one exactly: a task-local set once per request
+// by the `rls_org_scope` middleware, and a transaction-local `set_config` so
+// the value can never outlive the transaction on a pooled connection.
+
+tokio::task_local! {
+    /// The authenticated user of the current request, set by the
+    /// `rls_org_scope` middleware right after auth. Absent on unauthenticated
+    /// routes, in workers, and anywhere outside a request.
+    pub static CURRENT_USER: Uuid;
+}
+
+/// Run `f` inside a transaction with `app.current_user_id` bound to `user_id`
+/// (transaction-local), then commit. The user-scoped counterpart of
+/// [`with_org_context`].
+pub async fn with_user_context<'a, T, F>(pool: &'a PgPool, user_id: Uuid, f: F) -> StoreResult<T>
+where
+    F: for<'t> FnOnce(
+        &'t mut Transaction<'a, Postgres>,
+    ) -> Pin<Box<dyn Future<Output = StoreResult<T>> + Send + 't>>,
+{
+    let mut tx = pool.begin().await.map_err(StoreError::Database)?;
+
+    sqlx::query("SELECT set_config('app.current_user_id', $1, true)")
+        .bind(user_id.to_string())
+        .execute(&mut *tx)
+        .await
+        .map_err(StoreError::Database)?;
+
+    let result = f(&mut tx).await;
+
+    match result {
+        Ok(value) => {
+            tx.commit().await.map_err(StoreError::Database)?;
+            Ok(value)
+        }
+        Err(err) => {
+            let _ = tx.rollback().await;
+            Err(err)
+        }
+    }
+}
+
+/// Run `f` bound to the request's authenticated user (the [`CURRENT_USER`]
+/// task-local).
+///
+/// Deliberately ignores any `user_id` the caller holds: the binding comes from
+/// the request's auth, not from an argument, so a store method handed the
+/// wrong user id reads zero rows instead of someone else's keys. With no user
+/// in scope, `f` runs in a transaction with the GUC unset, which under the
+/// `NOBYPASSRLS` runtime role means zero rows / a `WITH CHECK` failure. Fail
+/// closed, never open.
+pub async fn with_current_user<'a, T, F>(pool: &'a PgPool, f: F) -> StoreResult<T>
+where
+    F: for<'t> FnOnce(
+        &'t mut Transaction<'a, Postgres>,
+    ) -> Pin<Box<dyn Future<Output = StoreResult<T>> + Send + 't>>,
+{
+    match CURRENT_USER.try_with(|user| *user) {
+        Ok(user_id) => with_user_context(pool, user_id, f).await,
+        Err(_) => {
+            let mut tx = pool.begin().await.map_err(StoreError::Database)?;
+            let result = f(&mut tx).await;
+            match result {
+                Ok(value) => {
+                    tx.commit().await.map_err(StoreError::Database)?;
+                    Ok(value)
+                }
+                Err(err) => {
+                    let _ = tx.rollback().await;
+                    Err(err)
+                }
+            }
+        }
+    }
+}

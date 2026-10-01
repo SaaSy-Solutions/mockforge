@@ -45,10 +45,13 @@ pub async fn list_sessions(
     Path(workspace_id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<CaptureSession>>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
-    let rows = CaptureSession::list_by_workspace(state.db.pool(), workspace_id)
-        .await
-        .map_err(ApiError::Database)?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let rows = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(
+            async move { Ok(CaptureSession::list_by_workspace(&mut **tx, workspace_id).await?) },
+        )
+    })
+    .await?;
     Ok(Json(rows))
 }
 
@@ -67,19 +70,23 @@ pub async fn create_session(
     headers: HeaderMap,
     Json(request): Json<CreateSessionRequest>,
 ) -> ApiResult<Json<CaptureSession>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
     if request.name.trim().is_empty() {
         return Err(ApiError::InvalidRequest("name must not be empty".into()));
     }
-    let row = CaptureSession::create(
-        state.db.pool(),
-        workspace_id,
-        &request.name,
-        request.description.as_deref(),
-        Some(user_id),
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    let row = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(CaptureSession::create(
+                &mut **tx,
+                workspace_id,
+                &request.name,
+                request.description.as_deref(),
+                Some(user_id),
+            )
+            .await?)
+        })
+    })
+    .await?;
     Ok(Json(row))
 }
 
@@ -102,19 +109,21 @@ pub async fn modify_session_members(
     headers: HeaderMap,
     Json(op): Json<MembersOp>,
 ) -> ApiResult<Json<serde_json::Value>> {
-    let session = load_authorized_session(&state, user_id, &headers, id).await?;
-    let changed = match op {
-        MembersOp::Add { capture_id } => {
-            CaptureSession::add_member(state.db.pool(), session.id, capture_id)
-                .await
-                .map_err(ApiError::Database)?
-        }
-        MembersOp::Remove { capture_id } => {
-            CaptureSession::remove_member(state.db.pool(), session.id, capture_id)
-                .await
-                .map_err(ApiError::Database)?
-        }
-    };
+    let (session, org_id) = load_authorized_session_with_org(&state, user_id, &headers, id).await?;
+    let sid = session.id;
+    let changed = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(match op {
+                MembersOp::Add { capture_id } => {
+                    CaptureSession::add_member(&mut **tx, sid, capture_id).await?
+                }
+                MembersOp::Remove { capture_id } => {
+                    CaptureSession::remove_member(&mut **tx, sid, capture_id).await?
+                }
+            })
+        })
+    })
+    .await?;
     Ok(Json(serde_json::json!({ "changed": changed })))
 }
 
@@ -125,8 +134,11 @@ pub async fn delete_session(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<serde_json::Value>> {
-    load_authorized_session(&state, user_id, &headers, id).await?;
-    let deleted = CaptureSession::delete(state.db.pool(), id).await.map_err(ApiError::Database)?;
+    let (_, org_id) = load_authorized_session_with_org(&state, user_id, &headers, id).await?;
+    let deleted = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(CaptureSession::delete(&mut **tx, id).await?) })
+    })
+    .await?;
     if !deleted {
         return Err(ApiError::InvalidRequest("Capture session not found".into()));
     }
@@ -371,27 +383,22 @@ async fn authorize_workspace_in_org(
     Ok(())
 }
 
-async fn load_authorized_session(
-    state: &AppState,
-    user_id: Uuid,
-    headers: &HeaderMap,
-    id: Uuid,
-) -> ApiResult<CaptureSession> {
-    Ok(load_authorized_session_with_org(state, user_id, headers, id).await?.0)
-}
-
-/// Like [`load_authorized_session`], also returning the authorized org id.
+/// Load a capture session bound to the caller's org (a session in another
+/// org reads as absent -> "Capture session not found"), then verify its
+/// workspace. Returns the session and the authorized org id.
 async fn load_authorized_session_with_org(
     state: &AppState,
     user_id: Uuid,
     headers: &HeaderMap,
     id: Uuid,
 ) -> ApiResult<(CaptureSession, Uuid)> {
-    let session = CaptureSession::find_by_id(state.db.pool(), id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Capture session not found".into()))?;
-    let org_id = authorize_workspace(state, user_id, headers, session.workspace_id).await?;
+    let org_id = resolve_org_id(state, user_id, headers).await?;
+    let session = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(CaptureSession::find_by_id(&mut **tx, id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Capture session not found".into()))?;
+    authorize_workspace_in_org(state, org_id, session.workspace_id).await?;
     Ok((session, org_id))
 }
 

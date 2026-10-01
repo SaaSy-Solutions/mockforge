@@ -17,19 +17,23 @@ use crate::{
         workspace_request::{RequestSummaryResponse, WorkspaceRequest},
         AuditEventType, FeatureType,
     },
+    store::with_org_context,
     AppState,
 };
 
+/// Fill folder/request counts. `conn` must be bound to the workspace's org
+/// (callers run this inside `with_org_context`), since `workspace_folders` and
+/// `workspace_requests` are RLS-forced via their parent workspace.
 async fn summarize_workspace(
-    pool: &sqlx::PgPool,
+    conn: &mut sqlx::PgConnection,
     workspace: &crate::models::CloudWorkspace,
-) -> ApiResult<WorkspaceSummaryResponse> {
+) -> sqlx::Result<WorkspaceSummaryResponse> {
     let folder_count: i64 =
         sqlx::query_scalar("SELECT COUNT(*) FROM workspace_folders WHERE workspace_id = $1")
             .bind(workspace.id)
-            .fetch_one(pool)
+            .fetch_one(&mut *conn)
             .await?;
-    let request_count = WorkspaceRequest::count_in_workspace(pool, workspace.id).await?;
+    let request_count = WorkspaceRequest::count_in_workspace(&mut *conn, workspace.id).await?;
 
     let mut summary = workspace.to_summary();
     summary.folder_count = folder_count;
@@ -49,10 +53,16 @@ pub async fn list_workspaces(
 
     let workspaces = state.store.list_cloud_workspaces_by_org(org_ctx.org_id).await?;
 
-    let mut summaries: Vec<WorkspaceSummaryResponse> = Vec::with_capacity(workspaces.len());
-    for ws in &workspaces {
-        summaries.push(summarize_workspace(state.db.pool(), ws).await?);
-    }
+    let summaries = with_org_context(state.db.runtime_pool(), org_ctx.org_id, |tx| {
+        Box::pin(async move {
+            let mut summaries: Vec<WorkspaceSummaryResponse> = Vec::with_capacity(workspaces.len());
+            for ws in &workspaces {
+                summaries.push(summarize_workspace(tx, ws).await?);
+            }
+            Ok(summaries)
+        })
+    })
+    .await?;
 
     Ok(Json(summaries))
 }
@@ -93,20 +103,27 @@ pub async fn get_workspace(
         ));
     }
 
-    let pool = state.db.pool();
-    let summary = summarize_workspace(pool, &workspace).await?;
+    let (summary, folder_summaries, top_level_requests) =
+        with_org_context(state.db.runtime_pool(), org_ctx.org_id, |tx| {
+            Box::pin(async move {
+                let summary = summarize_workspace(tx, &workspace).await?;
 
-    let folders = WorkspaceFolder::list_by_workspace(pool, id).await?;
-    let mut folder_summaries: Vec<FolderSummaryResponse> = Vec::with_capacity(folders.len());
-    for f in &folders {
-        folder_summaries.push(f.to_summary_response(pool).await?);
-    }
+                let folders = WorkspaceFolder::list_by_workspace(&mut **tx, id).await?;
+                let mut folder_summaries: Vec<FolderSummaryResponse> =
+                    Vec::with_capacity(folders.len());
+                for f in &folders {
+                    folder_summaries.push(f.to_summary_response(tx).await?);
+                }
 
-    let top_level_requests = WorkspaceRequest::list_by_workspace(pool, id)
-        .await?
-        .into_iter()
-        .map(|r| r.to_summary())
-        .collect::<Vec<_>>();
+                let top_level_requests = WorkspaceRequest::list_by_workspace(&mut **tx, id)
+                    .await?
+                    .into_iter()
+                    .map(|r| r.to_summary())
+                    .collect::<Vec<_>>();
+                Ok((summary, folder_summaries, top_level_requests))
+            })
+        })
+        .await?;
 
     Ok(Json(WorkspaceResponseEnvelope {
         workspace: WorkspaceDetailResponse {

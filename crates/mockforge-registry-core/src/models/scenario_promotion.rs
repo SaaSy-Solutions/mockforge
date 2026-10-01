@@ -103,7 +103,7 @@ impl ScenarioPromotion {
     /// Create a new promotion request
     #[allow(clippy::too_many_arguments)]
     pub async fn create(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         scenario_id: Uuid,
         scenario_version: &str,
         workspace_id: Uuid,
@@ -133,21 +133,24 @@ impl ScenarioPromotion {
         .bind(requires_approval)
         .bind(approval_required_reason)
         .bind(comments)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Find by ID
-    pub async fn find_by_id(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM scenario_promotions WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// List promotions for a workspace
     pub async fn list_by_workspace(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
         status: Option<PromotionStatus>,
     ) -> sqlx::Result<Vec<Self>> {
@@ -157,35 +160,35 @@ impl ScenarioPromotion {
             )
             .bind(workspace_id)
             .bind(status.as_str())
-            .fetch_all(pool)
+            .fetch_all(executor)
             .await
         } else {
             sqlx::query_as::<_, Self>(
                 "SELECT * FROM scenario_promotions WHERE workspace_id = $1 ORDER BY created_at DESC",
             )
             .bind(workspace_id)
-            .fetch_all(pool)
+            .fetch_all(executor)
             .await
         }
     }
 
     /// List promotions for a scenario
     pub async fn list_by_scenario(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         scenario_id: Uuid,
     ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM scenario_promotions WHERE scenario_id = $1 ORDER BY created_at DESC",
         )
         .bind(scenario_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
     /// Approve a promotion
     pub async fn approve(
         &self,
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         approved_by: Uuid,
         approval_comments: Option<&str>,
     ) -> sqlx::Result<Self> {
@@ -204,14 +207,14 @@ impl ScenarioPromotion {
         .bind(approved_by)
         .bind(approval_comments)
         .bind(self.id)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Reject a promotion
     pub async fn reject(
         &self,
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         rejected_by: Uuid,
         rejection_reason: &str,
     ) -> sqlx::Result<Self> {
@@ -230,12 +233,15 @@ impl ScenarioPromotion {
         .bind(rejected_by)
         .bind(Some(rejection_reason))
         .bind(self.id)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Mark promotion as completed
-    pub async fn mark_completed(pool: &sqlx::PgPool, id: Uuid) -> sqlx::Result<Self> {
+    pub async fn mark_completed(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"
             UPDATE scenario_promotions
@@ -248,13 +254,13 @@ impl ScenarioPromotion {
             "#,
         )
         .bind(id)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Mark promotion as failed
     pub async fn mark_failed(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         error_message: &str,
     ) -> sqlx::Result<Self> {
@@ -271,7 +277,7 @@ impl ScenarioPromotion {
         )
         .bind(Some(error_message))
         .bind(id)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 }
@@ -310,7 +316,7 @@ impl ScenarioEnvironmentVersion {
     /// If a version already exists for this scenario/workspace/environment,
     /// updates it. Otherwise creates a new record.
     pub async fn set_version(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         scenario_id: Uuid,
         workspace_id: Uuid,
         environment: &str,
@@ -341,13 +347,13 @@ impl ScenarioEnvironmentVersion {
         .bind(scenario_version)
         .bind(promoted_by)
         .bind(promotion_id)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Get current version for a scenario in an environment
     pub async fn get_version(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         scenario_id: Uuid,
         workspace_id: Uuid,
         environment: &str,
@@ -361,13 +367,13 @@ impl ScenarioEnvironmentVersion {
         .bind(scenario_id)
         .bind(workspace_id)
         .bind(environment)
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
     /// List all environment versions for a scenario in a workspace
     pub async fn list_by_scenario_workspace(
-        pool: &sqlx::PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         scenario_id: Uuid,
         workspace_id: Uuid,
     ) -> sqlx::Result<Vec<Self>> {
@@ -380,7 +386,7 @@ impl ScenarioEnvironmentVersion {
         )
         .bind(scenario_id)
         .bind(workspace_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 }

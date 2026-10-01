@@ -16,7 +16,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[cfg(feature = "postgres")]
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 
 #[cfg_attr(feature = "postgres", derive(FromRow))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -71,7 +71,7 @@ impl Flow {
     /// List flows in a workspace, optionally filtered by kind. Newest
     /// updates first.
     pub async fn list_by_workspace(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
         kind: Option<&str>,
     ) -> sqlx::Result<Vec<Self>> {
@@ -83,7 +83,7 @@ impl Flow {
                 )
                 .bind(workspace_id)
                 .bind(k)
-                .fetch_all(pool)
+                .fetch_all(executor)
                 .await
             }
             None => {
@@ -91,27 +91,37 @@ impl Flow {
                     "SELECT * FROM flows WHERE workspace_id = $1 ORDER BY updated_at DESC",
                 )
                 .bind(workspace_id)
-                .fetch_all(pool)
+                .fetch_all(executor)
                 .await
             }
         }
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM flows WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     /// Create a flow + its first flow_version in a single transaction.
     /// `flows.current_version_id` is set to the new version's id before
     /// commit so callers always see a valid pointer.
-    pub async fn create_with_initial_version(
-        pool: &PgPool,
+    ///
+    /// Generic over [`sqlx::Acquire`] so it accepts a `&PgPool` or a
+    /// `&mut PgConnection` from an org-bound transaction (a nested `begin`
+    /// is a savepoint, so the RLS GUC stays bound).
+    pub async fn create_with_initial_version<'c, A>(
+        conn: A,
         input: CreateFlow<'_>,
-    ) -> sqlx::Result<(Self, FlowVersion)> {
-        let mut tx = pool.begin().await?;
+    ) -> sqlx::Result<(Self, FlowVersion)>
+    where
+        A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
+    {
+        let mut tx = conn.begin().await?;
 
         // 1. Insert the flow row (current_version_id is NULL for now).
         let flow: Self = sqlx::query_as::<_, Self>(
@@ -160,13 +170,18 @@ impl Flow {
     /// row, and updates `flows.current_version_id`. Returns the new
     /// version. The old `current_version_id` value stays in
     /// `flow_versions` — that's the rollback target.
-    pub async fn save_new_version(
-        pool: &PgPool,
+    ///
+    /// Generic over [`sqlx::Acquire`]; see [`Flow::create_with_initial_version`].
+    pub async fn save_new_version<'c, A>(
+        conn: A,
         flow_id: Uuid,
         config: &serde_json::Value,
         created_by: Option<Uuid>,
-    ) -> sqlx::Result<FlowVersion> {
-        let mut tx = pool.begin().await?;
+    ) -> sqlx::Result<FlowVersion>
+    where
+        A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
+    {
+        let mut tx = conn.begin().await?;
 
         let next_version: (i32,) = sqlx::query_as(
             "SELECT COALESCE(MAX(version_number), 0) + 1 FROM flow_versions WHERE flow_id = $1",
@@ -200,7 +215,7 @@ impl Flow {
     }
 
     pub async fn rename(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         id: Uuid,
         name: Option<&str>,
         description: Option<Option<&str>>,
@@ -219,14 +234,14 @@ impl Flow {
         .bind(name)
         .bind(description.is_some())
         .bind(description.flatten())
-        .fetch_optional(pool)
+        .fetch_optional(executor)
         .await
     }
 
-    pub async fn delete(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<bool> {
         let rows = sqlx::query("DELETE FROM flows WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?
             .rows_affected();
         Ok(rows > 0)
@@ -235,19 +250,25 @@ impl Flow {
 
 #[cfg(feature = "postgres")]
 impl FlowVersion {
-    pub async fn list_by_flow(pool: &PgPool, flow_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_by_flow(
+        executor: impl sqlx::PgExecutor<'_>,
+        flow_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM flow_versions WHERE flow_id = $1 ORDER BY version_number DESC",
         )
         .bind(flow_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM flow_versions WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 }

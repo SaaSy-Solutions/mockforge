@@ -15,7 +15,7 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
     models::{
-        OrgMember, OrgRole, PromotionStatus, Scenario, ScenarioEnvironmentVersion,
+        CloudWorkspace, OrgMember, OrgRole, PromotionStatus, Scenario, ScenarioEnvironmentVersion,
         ScenarioPromotion,
     },
     store::with_org_context,
@@ -35,8 +35,6 @@ pub async fn promote_scenario(
     Path((workspace_id, _environment)): Path<(Uuid, String)>,
     Json(request): Json<PromoteScenarioRequest>,
 ) -> ApiResult<Json<PromoteScenarioResponse>> {
-    let pool = state.db.pool();
-
     // Resolve org context for authorization
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -87,42 +85,52 @@ pub async fn promote_scenario(
             &approval_rules,
         );
 
-    // Create promotion record
-    let promotion = ScenarioPromotion::create(
-        pool,
-        request.scenario_id,
-        &request.scenario_version,
-        workspace_id,
-        from_env.as_str(),
-        to_env.as_str(),
-        user_id,
-        requires_approval,
-        approval_reason.as_deref(),
-        request.comments.as_deref(),
-    )
-    .await
-    .map_err(ApiError::Database)?;
+    // Create promotion record (and auto-complete it when no approval is
+    // required), bound to the caller's org. Promotion rows are keyed by
+    // workspace, so the workspace must belong to that org; a workspace in
+    // another org reads as absent under RLS.
+    let reason = approval_reason.clone();
+    let promotion = with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+        Box::pin(async move {
+            if !workspace_in_org(tx, workspace_id, org_ctx.org_id).await? {
+                return Ok(None);
+            }
+            let promotion = ScenarioPromotion::create(
+                &mut **tx,
+                request.scenario_id,
+                &request.scenario_version,
+                workspace_id,
+                from_env.as_str(),
+                to_env.as_str(),
+                user_id,
+                requires_approval,
+                reason.as_deref(),
+                request.comments.as_deref(),
+            )
+            .await?;
 
-    // If no approval required, auto-complete the promotion
-    if !requires_approval {
-        // Set the version in the target environment
-        ScenarioEnvironmentVersion::set_version(
-            pool,
-            request.scenario_id,
-            workspace_id,
-            to_env.as_str(),
-            &request.scenario_version,
-            user_id,
-            Some(promotion.id),
-        )
-        .await
-        .map_err(ApiError::Database)?;
+            // If no approval required, auto-complete the promotion
+            if !requires_approval {
+                // Set the version in the target environment
+                ScenarioEnvironmentVersion::set_version(
+                    &mut **tx,
+                    request.scenario_id,
+                    workspace_id,
+                    to_env.as_str(),
+                    &request.scenario_version,
+                    user_id,
+                    Some(promotion.id),
+                )
+                .await?;
 
-        // Mark promotion as completed
-        ScenarioPromotion::mark_completed(pool, promotion.id)
-            .await
-            .map_err(ApiError::Database)?;
-    }
+                // Mark promotion as completed
+                ScenarioPromotion::mark_completed(&mut **tx, promotion.id).await?;
+            }
+            Ok(Some(promotion))
+        })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".to_string()))?;
 
     Ok(Json(PromoteScenarioResponse {
         promotion_id: promotion.id,
@@ -147,8 +155,6 @@ pub async fn list_promotions(
     Path(workspace_id): Path<Uuid>,
     Query(params): Query<PromotionListQuery>,
 ) -> ApiResult<Json<PromotionListResponse>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -170,13 +176,21 @@ pub async fn list_promotions(
         return Err(ApiError::PermissionDenied);
     }
 
+    require_workspace_in_org(&state, org_ctx.org_id, workspace_id).await?;
+
     // Parse status filter
     let status_filter = params.status.and_then(|s| PromotionStatus::from_str(&s));
 
-    // Get promotions
-    let promotions = ScenarioPromotion::list_by_workspace(pool, workspace_id, status_filter)
-        .await
-        .map_err(ApiError::Database)?;
+    // Get promotions, bound to the caller's org: a workspace in another org
+    // has no visible promotions.
+    let promotions =
+        with_org_context(state.db.runtime_pool(), org_ctx.org_id, move |tx| {
+            Box::pin(async move {
+                Ok(ScenarioPromotion::list_by_workspace(&mut **tx, workspace_id, status_filter)
+                    .await?)
+            })
+        })
+        .await?;
 
     Ok(Json(PromotionListResponse { promotions }))
 }
@@ -191,8 +205,6 @@ pub async fn approve_promotion(
     Path((workspace_id, promotion_id)): Path<(Uuid, Uuid)>,
     Json(request): Json<ApprovePromotionRequest>,
 ) -> ApiResult<Json<ApprovePromotionResponse>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -214,11 +226,11 @@ pub async fn approve_promotion(
         return Err(ApiError::PermissionDenied);
     }
 
-    // Get promotion
-    let promotion = ScenarioPromotion::find_by_id(pool, promotion_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Promotion not found".to_string()))?;
+    // Get promotion, bound to the caller's org: a promotion in another org's
+    // workspace reads as absent ("Promotion not found").
+    let org_id = org_ctx.org_id;
+    require_workspace_in_org(&state, org_id, workspace_id).await?;
+    let promotion = find_promotion(&state, org_id, promotion_id).await?;
 
     // Verify it's for the correct workspace
     if promotion.workspace_id != workspace_id {
@@ -235,29 +247,30 @@ pub async fn approve_promotion(
         )));
     }
 
-    // Approve the promotion
-    let approved = promotion
-        .approve(pool, user_id, request.comments.as_deref())
-        .await
-        .map_err(ApiError::Database)?;
+    let approved = with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+        Box::pin(async move {
+            // Approve the promotion
+            let approved =
+                promotion.approve(&mut **tx, user_id, request.comments.as_deref()).await?;
 
-    // Complete the promotion by setting the version in the target environment
-    ScenarioEnvironmentVersion::set_version(
-        pool,
-        approved.scenario_id,
-        workspace_id,
-        &approved.to_environment,
-        &approved.scenario_version,
-        user_id,
-        Some(approved.id),
-    )
-    .await
-    .map_err(ApiError::Database)?;
+            // Complete the promotion by setting the version in the target environment
+            ScenarioEnvironmentVersion::set_version(
+                &mut **tx,
+                approved.scenario_id,
+                workspace_id,
+                &approved.to_environment,
+                &approved.scenario_version,
+                user_id,
+                Some(approved.id),
+            )
+            .await?;
 
-    // Mark promotion as completed
-    ScenarioPromotion::mark_completed(pool, approved.id)
-        .await
-        .map_err(ApiError::Database)?;
+            // Mark promotion as completed
+            ScenarioPromotion::mark_completed(&mut **tx, approved.id).await?;
+            Ok(approved)
+        })
+    })
+    .await?;
 
     Ok(Json(ApprovePromotionResponse {
         promotion_id: approved.id,
@@ -276,8 +289,6 @@ pub async fn reject_promotion(
     Path((workspace_id, promotion_id)): Path<(Uuid, Uuid)>,
     Json(request): Json<RejectPromotionRequest>,
 ) -> ApiResult<Json<RejectPromotionResponse>> {
-    let pool = state.db.pool();
-
     // Resolve org context
     let org_ctx = resolve_org_context(&state, user_id, &headers, None)
         .await
@@ -299,11 +310,11 @@ pub async fn reject_promotion(
         return Err(ApiError::PermissionDenied);
     }
 
-    // Get promotion
-    let promotion = ScenarioPromotion::find_by_id(pool, promotion_id)
-        .await
-        .map_err(ApiError::Database)?
-        .ok_or_else(|| ApiError::InvalidRequest("Promotion not found".to_string()))?;
+    // Get promotion, bound to the caller's org: a promotion in another org's
+    // workspace reads as absent ("Promotion not found").
+    let org_id = org_ctx.org_id;
+    require_workspace_in_org(&state, org_id, workspace_id).await?;
+    let promotion = find_promotion(&state, org_id, promotion_id).await?;
 
     // Verify it's for the correct workspace
     if promotion.workspace_id != workspace_id {
@@ -313,10 +324,10 @@ pub async fn reject_promotion(
     }
 
     // Reject the promotion
-    let rejected = promotion
-        .reject(pool, user_id, &request.reason)
-        .await
-        .map_err(ApiError::Database)?;
+    let rejected = with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+        Box::pin(async move { Ok(promotion.reject(&mut **tx, user_id, &request.reason).await?) })
+    })
+    .await?;
 
     Ok(Json(RejectPromotionResponse {
         promotion_id: rejected.id,
@@ -390,4 +401,50 @@ async fn find_member(
         Box::pin(async move { Ok(OrgMember::find(&mut **tx, org_id, user_id).await?) })
     })
     .await?)
+}
+
+/// Load a promotion bound to `org_id` (already authorized via membership).
+/// A promotion in another org's workspace is invisible under RLS and surfaces
+/// as the same "Promotion not found" as a missing row.
+async fn find_promotion(
+    state: &AppState,
+    org_id: Uuid,
+    promotion_id: Uuid,
+) -> ApiResult<ScenarioPromotion> {
+    with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+        Box::pin(async move { Ok(ScenarioPromotion::find_by_id(&mut **tx, promotion_id).await?) })
+    })
+    .await?
+    .ok_or_else(|| ApiError::InvalidRequest("Promotion not found".to_string()))
+}
+
+/// App-layer twin of the RLS policy: reject a workspace outside the caller's
+/// org before touching its promotions. Without it the owner pool (RLS inert)
+/// would list or act on another org's promotions.
+async fn require_workspace_in_org(
+    state: &AppState,
+    org_id: Uuid,
+    workspace_id: Uuid,
+) -> ApiResult<()> {
+    let in_org = with_org_context(state.db.runtime_pool(), org_id, move |tx| {
+        Box::pin(async move { Ok(workspace_in_org(tx, workspace_id, org_id).await?) })
+    })
+    .await?;
+    if in_org {
+        Ok(())
+    } else {
+        Err(ApiError::InvalidRequest("Workspace not found".to_string()))
+    }
+}
+
+/// Whether `workspace_id` belongs to `org_id`, read on the caller's bound
+/// transaction (a workspace in another org reads as absent).
+async fn workspace_in_org(
+    tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+    workspace_id: Uuid,
+    org_id: Uuid,
+) -> sqlx::Result<bool> {
+    Ok(CloudWorkspace::find_by_id(&mut **tx, workspace_id)
+        .await?
+        .is_some_and(|ws| ws.org_id == org_id))
 }

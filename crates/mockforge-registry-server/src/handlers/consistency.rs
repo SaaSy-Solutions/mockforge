@@ -175,25 +175,29 @@ pub async fn list_workspace_entities(
     Query(query): Query<ListEntitiesQuery>,
     headers: HeaderMap,
 ) -> ApiResult<Json<Vec<VirtualEntity>>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
-    let rows: Vec<VirtualEntity> = sqlx::query_as::<_, VirtualEntity>(
-        r#"
-        SELECT id, workspace_id, entity_type, entity_id, persona_id,
-               current_state, data, seen_in_protocols, created_at, updated_at
-        FROM virtual_entities
-        WHERE workspace_id = $1
-          AND ($2::text IS NULL OR entity_type = $2)
-          AND ($3::text IS NULL OR persona_id = $3)
-        ORDER BY updated_at DESC
-        LIMIT 500
-        "#,
-    )
-    .bind(workspace_id)
-    .bind(query.entity_type)
-    .bind(query.persona_id)
-    .fetch_all(state.db.pool())
-    .await
-    .map_err(ApiError::Database)?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let rows: Vec<VirtualEntity> = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(sqlx::query_as::<_, VirtualEntity>(
+                r#"
+                SELECT id, workspace_id, entity_type, entity_id, persona_id,
+                       current_state, data, seen_in_protocols, created_at, updated_at
+                FROM virtual_entities
+                WHERE workspace_id = $1
+                  AND ($2::text IS NULL OR entity_type = $2)
+                  AND ($3::text IS NULL OR persona_id = $3)
+                ORDER BY updated_at DESC
+                LIMIT 500
+                "#,
+            )
+            .bind(workspace_id)
+            .bind(query.entity_type)
+            .bind(query.persona_id)
+            .fetch_all(&mut **tx)
+            .await?)
+        })
+    })
+    .await?;
     Ok(Json(rows))
 }
 
@@ -204,18 +208,25 @@ pub async fn get_entity(
     Path(id): Path<Uuid>,
     headers: HeaderMap,
 ) -> ApiResult<Json<VirtualEntity>> {
-    let row: Option<VirtualEntity> = sqlx::query_as::<_, VirtualEntity>(
-        r#"
-        SELECT id, workspace_id, entity_type, entity_id, persona_id,
-               current_state, data, seen_in_protocols, created_at, updated_at
-        FROM virtual_entities
-        WHERE id = $1
-        "#,
-    )
-    .bind(id)
-    .fetch_optional(state.db.pool())
-    .await
-    .map_err(ApiError::Database)?;
+    // Resolve the caller's org first and read the entity bound to it: an
+    // entity in another org reads as absent -> the same "Entity not found".
+    let org_id = resolve_org_id(&state, user_id, &headers).await?;
+    let row: Option<VirtualEntity> = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(sqlx::query_as::<_, VirtualEntity>(
+                r#"
+                SELECT id, workspace_id, entity_type, entity_id, persona_id,
+                       current_state, data, seen_in_protocols, created_at, updated_at
+                FROM virtual_entities
+                WHERE id = $1
+                "#,
+            )
+            .bind(id)
+            .fetch_optional(&mut **tx)
+            .await?)
+        })
+    })
+    .await?;
     let entity = row.ok_or_else(|| ApiError::InvalidRequest("Entity not found".into()))?;
     authorize_workspace(&state, user_id, &headers, entity.workspace_id).await?;
     Ok(Json(entity))
@@ -256,7 +267,7 @@ pub async fn apply_lifecycle_preset(
     headers: HeaderMap,
     Json(req): Json<ApplyPresetRequest>,
 ) -> ApiResult<Json<VirtualEntity>> {
-    authorize_workspace(&state, user_id, &headers, workspace_id).await?;
+    let org_id = authorize_workspace(&state, user_id, &headers, workspace_id).await?;
 
     let preset = lookup_preset(&req.preset).ok_or_else(|| {
         ApiError::InvalidRequest(format!(
@@ -279,35 +290,38 @@ pub async fn apply_lifecycle_preset(
         .filter(|s| !s.trim().is_empty())
         .unwrap_or_else(|| format!("{}:{}", req.persona_id, entity_type));
 
-    let row: VirtualEntity = sqlx::query_as::<_, VirtualEntity>(
-        r#"
-        INSERT INTO virtual_entities
-            (workspace_id, entity_type, entity_id, persona_id, current_state,
-             data, seen_in_protocols)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-        ON CONFLICT (workspace_id, entity_type, entity_id) DO UPDATE
-            SET persona_id    = EXCLUDED.persona_id,
-                current_state = EXCLUDED.current_state,
-                data          = EXCLUDED.data,
-                updated_at    = NOW()
-        RETURNING id, workspace_id, entity_type, entity_id, persona_id,
-                  current_state, data, seen_in_protocols, created_at, updated_at
-        "#,
-    )
-    .bind(workspace_id)
-    .bind(&entity_type)
-    .bind(&entity_id)
-    .bind(&req.persona_id)
-    .bind(preset.initial_state)
-    .bind(serde_json::json!({
+    let persona_id = req.persona_id;
+    let data = serde_json::json!({
         "preset_id": preset.id,
         "preset_name": preset.name,
         "applied_at": Utc::now(),
-    }))
-    .bind(serde_json::json!([]))
-    .fetch_one(state.db.pool())
-    .await
-    .map_err(ApiError::Database)?;
+    });
+    let row: VirtualEntity = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(sqlx::query_as::<_, VirtualEntity>(
+                r#"
+                INSERT INTO virtual_entities (workspace_id, entity_type, entity_id,
+                    persona_id, current_state, data, seen_in_protocols)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                ON CONFLICT (workspace_id, entity_type, entity_id) DO UPDATE
+                    SET persona_id = EXCLUDED.persona_id, current_state = EXCLUDED.current_state,
+                        data = EXCLUDED.data, updated_at = NOW()
+                RETURNING id, workspace_id, entity_type, entity_id, persona_id,
+                          current_state, data, seen_in_protocols, created_at, updated_at
+                "#,
+            )
+            .bind(workspace_id)
+            .bind(&entity_type)
+            .bind(&entity_id)
+            .bind(&persona_id)
+            .bind(preset.initial_state)
+            .bind(data)
+            .bind(serde_json::json!([]))
+            .fetch_one(&mut **tx)
+            .await?)
+        })
+    })
+    .await?;
 
     Ok(Json(row))
 }
@@ -317,21 +331,26 @@ async fn authorize_workspace(
     user_id: Uuid,
     headers: &HeaderMap,
     workspace_id: Uuid,
-) -> ApiResult<()> {
-    let ctx = resolve_org_context(state, user_id, headers, None)
-        .await
-        .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+) -> ApiResult<Uuid> {
+    let org_id = resolve_org_id(state, user_id, headers).await?;
     // Bound to the caller's org: a workspace in another org reads as absent
     // and yields the same "Workspace not found" as an explicit mismatch.
-    let workspace = with_org_context(state.db.runtime_pool(), ctx.org_id, |tx| {
+    let workspace = with_org_context(state.db.runtime_pool(), org_id, |tx| {
         Box::pin(async move { Ok(CloudWorkspace::find_by_id(&mut **tx, workspace_id).await?) })
     })
     .await?
     .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
-    if ctx.org_id != workspace.org_id {
+    if org_id != workspace.org_id {
         return Err(ApiError::InvalidRequest("Workspace not found".into()));
     }
-    Ok(())
+    Ok(org_id)
+}
+
+async fn resolve_org_id(state: &AppState, user_id: Uuid, headers: &HeaderMap) -> ApiResult<Uuid> {
+    let ctx = resolve_org_context(state, user_id, headers, None)
+        .await
+        .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
+    Ok(ctx.org_id)
 }
 
 #[cfg(test)]

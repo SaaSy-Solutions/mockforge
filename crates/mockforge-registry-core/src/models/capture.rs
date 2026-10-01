@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[cfg(feature = "postgres")]
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 
 #[cfg_attr(feature = "postgres", derive(FromRow))]
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -52,24 +52,30 @@ pub struct CloneModel {
 
 #[cfg(feature = "postgres")]
 impl CaptureSession {
-    pub async fn list_by_workspace(pool: &PgPool, workspace_id: Uuid) -> sqlx::Result<Vec<Self>> {
+    pub async fn list_by_workspace(
+        executor: impl sqlx::PgExecutor<'_>,
+        workspace_id: Uuid,
+    ) -> sqlx::Result<Vec<Self>> {
         sqlx::query_as::<_, Self>(
             "SELECT * FROM capture_sessions WHERE workspace_id = $1 ORDER BY updated_at DESC",
         )
         .bind(workspace_id)
-        .fetch_all(pool)
+        .fetch_all(executor)
         .await
     }
 
-    pub async fn find_by_id(pool: &PgPool, id: Uuid) -> sqlx::Result<Option<Self>> {
+    pub async fn find_by_id(
+        executor: impl sqlx::PgExecutor<'_>,
+        id: Uuid,
+    ) -> sqlx::Result<Option<Self>> {
         sqlx::query_as::<_, Self>("SELECT * FROM capture_sessions WHERE id = $1")
             .bind(id)
-            .fetch_optional(pool)
+            .fetch_optional(executor)
             .await
     }
 
     pub async fn create(
-        pool: &PgPool,
+        executor: impl sqlx::PgExecutor<'_>,
         workspace_id: Uuid,
         name: &str,
         description: Option<&str>,
@@ -86,18 +92,21 @@ impl CaptureSession {
         .bind(name)
         .bind(description)
         .bind(created_by)
-        .fetch_one(pool)
+        .fetch_one(executor)
         .await
     }
 
     /// Add a capture to a session. Idempotent (ON CONFLICT DO NOTHING)
     /// + bumps capture_count if a row was inserted.
-    pub async fn add_member(
-        pool: &PgPool,
+    pub async fn add_member<'c, A>(
+        conn: A,
         session_id: Uuid,
         capture_id: Uuid,
-    ) -> sqlx::Result<bool> {
-        let mut tx = pool.begin().await?;
+    ) -> sqlx::Result<bool>
+    where
+        A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
+    {
+        let mut tx = conn.begin().await?;
         let inserted = sqlx::query(
             "INSERT INTO capture_session_members (session_id, capture_id) \
              VALUES ($1, $2) ON CONFLICT DO NOTHING",
@@ -122,12 +131,15 @@ impl CaptureSession {
     }
 
     /// Remove a capture. Idempotent on missing rows.
-    pub async fn remove_member(
-        pool: &PgPool,
+    pub async fn remove_member<'c, A>(
+        conn: A,
         session_id: Uuid,
         capture_id: Uuid,
-    ) -> sqlx::Result<bool> {
-        let mut tx = pool.begin().await?;
+    ) -> sqlx::Result<bool>
+    where
+        A: sqlx::Acquire<'c, Database = sqlx::Postgres>,
+    {
+        let mut tx = conn.begin().await?;
         let removed = sqlx::query(
             "DELETE FROM capture_session_members WHERE session_id = $1 AND capture_id = $2",
         )
@@ -151,10 +163,10 @@ impl CaptureSession {
         Ok(removed > 0)
     }
 
-    pub async fn delete(pool: &PgPool, id: Uuid) -> sqlx::Result<bool> {
+    pub async fn delete(executor: impl sqlx::PgExecutor<'_>, id: Uuid) -> sqlx::Result<bool> {
         let rows = sqlx::query("DELETE FROM capture_sessions WHERE id = $1")
             .bind(id)
-            .execute(pool)
+            .execute(executor)
             .await?
             .rows_affected();
         Ok(rows > 0)
