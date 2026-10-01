@@ -577,8 +577,8 @@ struct ServeCliArgs {
     /// Pass `::` to dual-stack bind on IPv6 + IPv4-mapped-IPv6.
     ///
     /// SECURITY NOTE: `0.0.0.0` exposes the admin API on every interface
-    /// in your network. Pair with `--admin-auth-required` when binding
-    /// publicly.
+    /// in your network. Only bind publicly on a trusted network or behind
+    /// an authenticating reverse proxy.
     #[arg(long, help_heading = "Admin & UI")]
     pub admin_host: Option<String>,
 

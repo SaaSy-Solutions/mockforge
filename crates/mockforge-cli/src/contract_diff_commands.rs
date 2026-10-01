@@ -12,7 +12,6 @@ use mockforge_core::{
         CapturedRequest, ContractDiffAnalyzer, ContractDiffConfig, ContractDiffResult,
     },
     openapi::OpenApiSpec,
-    request_capture::{get_global_capture_manager, init_global_capture_manager},
     Error, Result,
 };
 use std::path::PathBuf;
@@ -24,7 +23,7 @@ pub(crate) enum ContractDiffCommands {
     ///
     /// Examples:
     ///   mockforge contract-diff analyze --spec api.yaml --request-path request.json
-    ///   mockforge contract-diff analyze --spec api.yaml --capture-id abc123 --output results.json
+    ///   mockforge contract-diff analyze --spec api.yaml --request-path request.json --output results.json
     #[command(verbatim_doc_comment)]
     Analyze {
         /// Path to contract specification file (OpenAPI YAML/JSON)
@@ -35,8 +34,9 @@ pub(crate) enum ContractDiffCommands {
         #[arg(long, conflicts_with = "capture_id")]
         request_path: Option<PathBuf>,
 
-        /// Capture ID from request capture system
-        #[arg(long, conflicts_with = "request_path")]
+        /// Unsupported: captures live only in the running server's memory.
+        /// Kept (hidden) so old invocations get an explanatory error.
+        #[arg(long, conflicts_with = "request_path", hide = true)]
         capture_id: Option<String>,
 
         /// Output file path for results (default: stdout)
@@ -84,7 +84,6 @@ pub(crate) enum ContractDiffCommands {
     ///
     /// Examples:
     ///   mockforge contract-diff generate-patch --spec api.yaml --request-path request.json --output patch.json
-    ///   mockforge contract-diff generate-patch --spec api.yaml --capture-id abc123 --output patch.json
     #[command(verbatim_doc_comment)]
     GeneratePatch {
         /// Path to contract specification file
@@ -95,8 +94,9 @@ pub(crate) enum ContractDiffCommands {
         #[arg(long, conflicts_with = "capture_id")]
         request_path: Option<PathBuf>,
 
-        /// Capture ID from request capture system
-        #[arg(long, conflicts_with = "request_path")]
+        /// Unsupported: captures live only in the running server's memory.
+        /// Kept (hidden) so old invocations get an explanatory error.
+        #[arg(long, conflicts_with = "request_path", hide = true)]
         capture_id: Option<String>,
 
         /// Output file path for patch file
@@ -226,6 +226,31 @@ pub(crate) async fn handle_contract_diff(
     Ok(())
 }
 
+/// Load the request to analyze from `--request-path`.
+///
+/// `--capture-id` cannot work from the CLI: request captures are held only in
+/// the memory of the running server (there is no persisted capture store), and
+/// a fresh CLI process starts with an empty one. Fail with an explanation and a
+/// way to export the capture instead of a misleading "Capture not found".
+fn load_request(
+    request_path: Option<PathBuf>,
+    capture_id: Option<String>,
+) -> Result<CapturedRequest> {
+    if let Some(id) = capture_id {
+        return Err(Error::internal(format!(
+            "--capture-id is not supported: captures live only in the running server's memory. \
+             Export the capture to a file and pass it with --request-path, e.g. \
+             `curl -s http://localhost:3000/__mockforge/api/contract-diff/captures/{id} | jq .request > request.json`"
+        )));
+    }
+    let Some(req_path) = request_path else {
+        return Err(Error::internal("--request-path must be provided"));
+    };
+    let request_json = std::fs::read_to_string(&req_path)?;
+    serde_json::from_str(&request_json)
+        .map_err(|e| Error::internal(format!("Failed to parse request file: {}", e)))
+}
+
 /// Handle the contract-diff analyze command
 pub async fn handle_contract_diff_analyze(
     spec_path: PathBuf,
@@ -241,25 +266,7 @@ pub async fn handle_contract_diff_analyze(
     info!("Loaded contract spec from: {:?}", spec_path);
 
     // Get the request to analyze
-    let request = if let Some(req_path) = request_path {
-        // Load request from file
-        let request_json = std::fs::read_to_string(&req_path)?;
-        let request: CapturedRequest = serde_json::from_str(&request_json)
-            .map_err(|e| Error::internal(format!("Failed to parse request file: {}", e)))?;
-        request
-    } else if let Some(id) = capture_id {
-        // Get request from capture manager
-        init_global_capture_manager(1000);
-        let manager = get_global_capture_manager()
-            .ok_or_else(|| Error::internal("Capture manager not initialized"))?;
-        let (request, _) = manager
-            .get_capture(&id)
-            .await
-            .ok_or_else(|| Error::internal(format!("Capture not found: {}", id)))?;
-        request
-    } else {
-        return Err(Error::internal("Either --request-path or --capture-id must be provided"));
-    };
+    let request = load_request(request_path, capture_id)?;
 
     // Create analyzer
     let analyzer_config = config.unwrap_or_default();
@@ -342,23 +349,7 @@ pub async fn handle_contract_diff_generate_patch(
     let spec = OpenApiSpec::from_file(&spec_path).await?;
 
     // Get the request
-    let request = if let Some(req_path) = request_path {
-        let request_json = std::fs::read_to_string(&req_path)?;
-        let request: CapturedRequest = serde_json::from_str(&request_json)
-            .map_err(|e| Error::internal(format!("Failed to parse request file: {}", e)))?;
-        request
-    } else if let Some(id) = capture_id {
-        init_global_capture_manager(1000);
-        let manager = get_global_capture_manager()
-            .ok_or_else(|| Error::internal("Capture manager not initialized"))?;
-        let (request, _) = manager
-            .get_capture(&id)
-            .await
-            .ok_or_else(|| Error::internal(format!("Capture not found: {}", id)))?;
-        request
-    } else {
-        return Err(Error::internal("Either --request-path or --capture-id must be provided"));
-    };
+    let request = load_request(request_path, capture_id)?;
 
     // Analyze
     let analyzer_config = config.unwrap_or_default();
@@ -585,5 +576,38 @@ fn print_analysis_results(result: &ContractDiffResult) {
     if !result.corrections.is_empty() {
         println!("Corrections Available: {}", result.corrections.len());
         println!("  Use 'contract-diff generate-patch' to create a patch file");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn capture_id_is_rejected_with_explanation() {
+        let err = load_request(None, Some("abc123".to_string())).unwrap_err().to_string();
+        assert!(err.contains("--capture-id is not supported"), "unexpected error: {err}");
+        assert!(err.contains("--request-path"), "error should point at --request-path: {err}");
+        assert!(
+            err.contains("/contract-diff/captures/abc123"),
+            "error should show export URL: {err}"
+        );
+    }
+
+    #[test]
+    fn missing_request_source_is_an_error() {
+        let err = load_request(None, None).unwrap_err().to_string();
+        assert!(err.contains("--request-path"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn request_path_loads_captured_request() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("request.json");
+        let req = CapturedRequest::new("GET", "/users", "test");
+        std::fs::write(&path, serde_json::to_string(&req).unwrap()).unwrap();
+        let loaded = load_request(Some(path), None).unwrap();
+        assert_eq!(loaded.method, "GET");
+        assert_eq!(loaded.path, "/users");
     }
 }

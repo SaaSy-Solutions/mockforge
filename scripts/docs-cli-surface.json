@@ -1445,7 +1445,6 @@
       "analyze": {
        "aliases": {},
        "flags": {
-        "--capture-id": 1,
         "--confidence-threshold": 1,
         "--help": 0,
         "--llm-api-key": 1,
@@ -1501,7 +1500,6 @@
       "generate-patch": {
        "aliases": {},
        "flags": {
-        "--capture-id": 1,
         "--help": 0,
         "--llm-api-key": 1,
         "--llm-model": 1,

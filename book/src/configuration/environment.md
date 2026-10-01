@@ -14,6 +14,12 @@ MockForge supports extensive configuration through environment variables. This p
   - Enable/disable failure injection
   - When enabled, can simulate HTTP errors and timeouts
 
+- `MOCKFORGE_OVERRIDES_ENABLED=true|false` (default: `true`)
+  - Sets the `core.overrides_enabled` config field (`1`/`true` enables; any
+    other value disables)
+  - Note: no code reads this field yet, so it does not currently turn the
+    `overrides:` rules on or off; they apply whenever they are configured
+
 - `MOCKFORGE_LOG_LEVEL=debug|info|warn|error` (default: `info`)
   - Set the logging verbosity level
   - Available: `debug`, `info`, `warn`, `error`
