@@ -25,6 +25,13 @@ spec:
       - name: mockforge
         image: ghcr.io/saasy-solutions/mockforge:latest
         imagePullPolicy: IfNotPresent
+        # Satisfies the "restricted" Pod Security Standard enforced on the
+        # mockforge namespace (k8s/pod-security.yaml).
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
         ports:
         - name: http
           containerPort: 3000
@@ -81,10 +88,12 @@ spec:
           limits:
             memory: "512Mi"
             cpu: "500m"
+        # Probes use the HTTP port: the admin port puts /health/* behind admin
+        # auth, so kubelet probes there get 401.
         livenessProbe:
           httpGet:
             path: /health/live
-            port: admin
+            port: http
           initialDelaySeconds: 30
           periodSeconds: 10
           timeoutSeconds: 5
@@ -93,7 +102,7 @@ spec:
         readinessProbe:
           httpGet:
             path: /health/ready
-            port: admin
+            port: http
           initialDelaySeconds: 10
           periodSeconds: 5
           timeoutSeconds: 3
@@ -102,7 +111,7 @@ spec:
         startupProbe:
           httpGet:
             path: /health/startup
-            port: admin
+            port: http
           initialDelaySeconds: 0
           periodSeconds: 5
           timeoutSeconds: 3
@@ -143,7 +152,12 @@ spec:
                   values:
                   - mockforge
               topologyKey: kubernetes.io/hostname
+      # UID/GID 999 is the `mockforge` user baked into the image (Dockerfile
+      # `useradd -r`); it owns /app and $HOME, which the server writes to.
       securityContext:
         runAsNonRoot: true
-        runAsUser: 1000
-        fsGroup: 1000
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        seccompProfile:
+          type: RuntimeDefault

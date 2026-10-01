@@ -173,10 +173,12 @@ spec:
         memory: 256Mi
       type: Container
 
+    # Pod-level min must not exceed what a single-container pod requests
+    # (mockforge requests 250m / 256Mi), or the pod is rejected at admission.
     - max:
         cpu: "4"
         memory: 8Gi
       min:
-        cpu: 500m
-        memory: 512Mi
+        cpu: 100m
+        memory: 128Mi
       type: Pod
