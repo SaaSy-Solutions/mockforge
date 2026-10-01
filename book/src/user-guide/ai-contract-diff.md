@@ -17,16 +17,19 @@ AI Contract Diff helps you:
 ### Analyze a Request
 
 ```bash
-# Analyze a captured request against an OpenAPI spec
-mockforge contract-diff analyze \
-  --spec api.yaml \
-  --capture-id <capture-id>
+# Export a capture from the running server (captures live only in its memory)
+curl -s http://localhost:3000/__mockforge/api/contract-diff/captures/<capture-id> | jq .request > request.json
 
-# Or analyze from file
+# Analyze the request against an OpenAPI spec
 mockforge contract-diff analyze \
   --spec api.yaml \
   --request-path request.json
 ```
+
+The CLI reads requests from a file. Captures are held only in the running
+server's memory, so there is no `--capture-id` option; export a capture as
+shown above, or analyze a capture in place on the server with
+`POST /__mockforge/api/contract-diff/analyze/{id}`.
 
 ### Compare Two Specs
 
@@ -43,7 +46,7 @@ mockforge contract-diff compare \
 # Generate JSON Patch file for corrections
 mockforge contract-diff generate-patch \
   --spec api.yaml \
-  --capture-id <capture-id> \
+  --request-path request.json \
   --output patch.json
 ```
 
@@ -156,12 +159,7 @@ core:
 ### Analyze Request
 
 ```bash
-# Analyze captured request
-mockforge contract-diff analyze \
-  --spec api.yaml \
-  --capture-id <capture-id>
-
-# Analyze from file
+# Analyze a request from a file (see Quick Start for exporting a capture)
 mockforge contract-diff analyze \
   --spec api.yaml \
   --request-path request.json
@@ -169,7 +167,7 @@ mockforge contract-diff analyze \
 # With AI recommendations
 mockforge contract-diff analyze \
   --spec api.yaml \
-  --capture-id <capture-id> \
+  --request-path request.json \
   --llm-provider ollama \
   --llm-model llama3.2
 ```
@@ -195,7 +193,7 @@ mockforge contract-diff compare \
 # Generate correction patch
 mockforge contract-diff generate-patch \
   --spec api.yaml \
-  --capture-id <capture-id> \
+  --request-path request.json \
   --output patch.json
 ```
 
@@ -296,13 +294,13 @@ jobs:
         run: |
           mockforge contract-diff analyze \
             --spec api.yaml \
-            --capture-id ${{ github.event.pull_request.number }}
+            --request-path tests/contract/request.json
       
       - name: Generate patch
         run: |
           mockforge contract-diff generate-patch \
             --spec api.yaml \
-            --capture-id ${{ github.event.pull_request.number }} \
+            --request-path tests/contract/request.json \
             --output patch.json
       
       - name: Upload patch
@@ -317,8 +315,8 @@ jobs:
 ```yaml
 contract-diff:
   script:
-    - mockforge contract-diff analyze --spec api.yaml --capture-id $CI_PIPELINE_ID
-    - mockforge contract-diff generate-patch --spec api.yaml --capture-id $CI_PIPELINE_ID --output patch.json
+    - mockforge contract-diff analyze --spec api.yaml --request-path tests/contract/request.json
+    - mockforge contract-diff generate-patch --spec api.yaml --request-path tests/contract/request.json --output patch.json
   artifacts:
     paths:
       - patch.json
@@ -340,10 +338,10 @@ curl -X POST "http://localhost:3000/__mockforge/api/contract-diff/analyze?limit=
 Keep specs up-to-date automatically:
 
 ```bash
-# Generate patches for all mismatches
+# Generate a patch for a request's mismatches
 mockforge contract-diff generate-patch \
   --spec api.yaml \
-  --capture-id <capture-id> \
+  --request-path request.json \
   --output patches/patch-1.json
 
 # Review and apply patches

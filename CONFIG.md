@@ -375,6 +375,7 @@ All configuration options can be overridden using environment variables.
 |----------|-------------|---------|
 | `MOCKFORGE_LATENCY_ENABLED` | Enable latency injection | `true` |
 | `MOCKFORGE_FAILURES_ENABLED` | Enable failure injection | `true` |
+| `MOCKFORGE_OVERRIDES_ENABLED` | Sets `core.overrides_enabled` (not yet read at runtime; `overrides:` rules always apply) | `true` |
 
 ### AI/RAG Configuration
 
