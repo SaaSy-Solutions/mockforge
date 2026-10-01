@@ -107,11 +107,11 @@ Request → Rate Limiting → Authentication → Logging → Metrics → Handler
 ### Management API
 
 #### REST Endpoints
-- `GET /__mockforge/health` - Health check
-- `GET /__mockforge/stats` - Server statistics
+- `GET /__mockforge/api/health` - Health check
+- `GET /__mockforge/api/stats` - Server statistics
 - `GET /__mockforge/routes` - Route information
 - `GET /__mockforge/coverage` - API coverage metrics
-- `GET/POST/PUT/DELETE /__mockforge/mocks` - Mock management
+- `GET/POST /__mockforge/api/mocks`, `GET/PUT/DELETE /__mockforge/api/mocks/{id}` - Mock management
 
 #### WebSocket Integration
 - Real-time server events

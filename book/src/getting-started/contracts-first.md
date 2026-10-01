@@ -46,8 +46,8 @@ workspaces:
             }
 EOF
 
-# Start the server with validation
-mockforge serve --config mockforge.yaml --validate
+# Start the server (request validation is "enforce" by default)
+mockforge serve --config mockforge.yaml
 ```
 
 Now test validation:

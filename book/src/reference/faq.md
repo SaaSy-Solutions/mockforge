@@ -225,7 +225,7 @@ Three modes:
 - **`enforce`**: Reject invalid requests with 400/422
 
 ```bash
-mockforge serve --validation enforce --spec api.json
+MOCKFORGE_REQUEST_VALIDATION=enforce mockforge serve --spec api.json
 ```
 
 ### Why aren't my template variables working?
@@ -233,9 +233,6 @@ mockforge serve --validation enforce --spec api.json
 Template expansion must be **explicitly enabled**:
 
 ```bash
-# Via CLI
-mockforge serve --response-template-expand
-
 # Via environment
 export MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true
 
@@ -368,13 +365,7 @@ See [README-websocket-jsonpath.md](https://github.com/SaaSy-Solutions/mockforge/
 
 ### What's AI event generation?
 
-Generate realistic WebSocket event streams from narrative descriptions:
-
-```bash
-mockforge serve --ws-ai-enabled \
-  --ws-ai-narrative "Simulate 5 minutes of stock trading" \
-  --ws-ai-event-count 20
-```
+Generate realistic WebSocket event streams from narrative descriptions (for example, "Simulate 5 minutes of stock trading"). This is currently exposed as a library API (`AiEventGenerator` and `WebSocketAiConfig` in the `mockforge-ws` crate); there are no `mockforge serve` flags for it yet.
 
 Perfect for testing real-time features without manually scripting events.
 
@@ -464,19 +455,14 @@ See [Plugin Security Model](../../docs/plugins/security/model.md).
 
 ### How do I access the Admin UI?
 
-Two modes:
+The Admin UI runs on its own port:
 
-**Standalone** (separate port):
 ```bash
 mockforge serve --admin --admin-port 9080
 # Access: http://localhost:9080
 ```
 
-**Embedded** (under HTTP server):
-```bash
-mockforge serve --admin-embed --admin-mount-path /admin
-# Access: http://localhost:3000/admin
-```
+Use `mockforge admin` to run the Admin UI as a standalone server without starting the mock servers.
 
 ### Is authentication available?
 
@@ -597,14 +583,14 @@ mockforge serve --http-port 3001
 
 Enable template expansion:
 ```bash
-mockforge serve --response-template-expand
+MOCKFORGE_RESPONSE_TEMPLATE_EXPAND=true mockforge serve --spec api.json
 ```
 
 ### Validation rejecting valid requests
 
 Adjust validation mode:
 ```bash
-mockforge serve --validation warn  # or 'off'
+MOCKFORGE_REQUEST_VALIDATION=warn mockforge serve --spec api.json  # or 'off'
 ```
 
 ### WebSocket connection fails
@@ -738,16 +724,14 @@ No separate server process required. See [SDK Documentation](../../sdk/README.md
 
 ### How do I replace external APIs in my tests?
 
-Use MockForge's proxy mode with record/replay:
+Record traffic with the API Flight Recorder, then convert the recordings into replayable fixtures:
 
 ```bash
-# Record real API interactions
-mockforge serve --proxy-enabled \
-  --proxy-target https://api.external-service.com \
-  --record-responses ./recordings/
+# Record interactions into a SQLite database
+mockforge serve --spec api.json --recorder --recorder-db ./recordings.db
 
-# Replay from recordings
-mockforge serve --replay-from ./recordings/
+# Convert recordings into fixtures
+mockforge recorder convert --input ./recordings.db --output fixtures/ --format yaml
 ```
 
 Or use the SDK to programmatically stub responses. See [Service Virtualization](../../docs/ECOSYSTEM_AND_USE_CASES.md#use-case-3-service-virtualization) for details.
@@ -758,10 +742,10 @@ Yes! MockForge provides built-in latency and fault injection:
 
 ```bash
 # Add latency
-mockforge serve --latency-mode normal --latency-mean-ms 500
+mockforge serve --chaos --chaos-latency-ms 500
 
 # Inject failures
-mockforge serve --failure-rate 0.1 --failure-codes 500,503
+mockforge serve --chaos --chaos-http-errors 500,503 --chaos-http-error-probability 0.1
 ```
 
 Or configure in your SDK:
@@ -783,10 +767,10 @@ Generate mocks from API specifications:
 mockforge serve --spec api-spec.yaml
 
 # From GraphQL schema
-mockforge serve --graphql-schema schema.graphql
+mockforge serve --graphql schema.graphql
 
-# From gRPC proto files
-mockforge serve --grpc-port 50051 --proto-dir ./proto
+# From gRPC proto files (loaded from ./proto in the working directory)
+mockforge serve --grpc-port 50051
 ```
 
 All endpoints are automatically available with schema-validated responses. See [Simulating APIs That Don't Exist Yet](../../docs/ECOSYSTEM_AND_USE_CASES.md#use-case-6-simulating-apis-that-dont-exist-yet) for details.

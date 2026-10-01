@@ -14,17 +14,14 @@ Cloud Workspaces provides:
 
 ## Quick Start
 
-### Authenticate and Set Org Context
+### Authenticate
 
 ```bash
 # Authenticate with MockForge Cloud
 mockforge cloud login
 
-# Inspect available organizations
-mockforge org list
-
-# Set the active organization context
-mockforge org use my-org
+# Check authentication status
+mockforge cloud whoami
 ```
 
 ### Create and Inspect a Cloud Workspace
@@ -98,7 +95,7 @@ mockforge cloud sync history --workspace my-workspace
 
 - The cloud workspace and sync commands above are present in the CLI source and are the safest public workflow to document.
 - Other collaboration surfaces exist in the codebase, but some older docs examples referenced command shapes that are not part of the current public CLI.
-- If you are documenting a buyer-facing hosted workflow, prefer the verified `cloud`, `org`, and `workspace` flows above over speculative collaboration examples.
+- If you are documenting a buyer-facing hosted workflow, prefer the verified `cloud` and `workspace` flows above over speculative collaboration examples.
 
 ## Local Admin Workspaces vs Cloud Workspaces
 

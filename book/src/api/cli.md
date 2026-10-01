@@ -451,14 +451,14 @@ mockforge validate-fixtures --dir ./fixtures --verbose
 
 Exit code 0 on clean, non-zero on any validation failure.
 
-### `tui` - Terminal Dashboard
+### `mockforge-tui` - Terminal Dashboard (separate binary)
 
 Live dashboard in the terminal showing server status, system metrics
 (current and lifetime peak CPU / memory / error rate), request stats, and
 recent logs. Auto-refreshes every 2 s.
 
 ```bash
-mockforge tui
+mockforge-tui
 ```
 
 Optionally pair with `MOCKFORGE_METRICS_LOG_FILE=path.csv` to also append a
@@ -498,7 +498,7 @@ mockforge verify-mocks --spec openapi.json --capture-db recorder.sqlite
 #### Options
 
 - `--spec <path>` (required): OpenAPI spec the mocks were generated from (3.x natively; Swagger 2.0 is up-converted automatically).
-- `--capture-db <path>` (required): recorder SQLite database holding captured traffic (what `mockforge record` writes).
+- `--capture-db <path>` (required): recorder SQLite database holding captured traffic (what `mockforge serve --recorder` writes; the default path is `./mockforge-recordings.db`).
 - `--limit <n>`: maximum exchanges to evaluate, oldest first (default `500`).
 - `--fail-on-drift`: exit with code 1 when any drift is found — use as a CI gate.
 - `--output <path>`: write the structured drift report as JSON.

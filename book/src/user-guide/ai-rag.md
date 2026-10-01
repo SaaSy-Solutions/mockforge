@@ -59,7 +59,7 @@ mockforge data mock-openapi api.yaml --rows 25 --realistic \
 Spin up a mock server backed by AI-generated data:
 
 ```bash
-mockforge data mock-server api.yaml --port 3000 --rows 100
+mockforge data mock-server api.yaml --port 3000 --realistic
 ```
 
 ## Subcommand reference
@@ -121,23 +121,12 @@ End-to-end shortcut: spin up a HTTP server backed by AI-generated data
 without writing config files.
 
 ```bash
-mockforge data mock-server api.yaml --port 3000 --rows 100
+mockforge data mock-server api.yaml --port 3000 --realistic
 ```
 
 This is what you reach for when you want to demo a third-party API to your
 team in 30 seconds. For long-term mocks, write a config file and use
 `mockforge serve`.
-
-### `data rag-config`
-
-Validate and print the resolved RAG config (provider, model, endpoint,
-key presence) MockForge would use for the current environment. Useful
-when an LLM call is failing and you want to confirm what was actually
-loaded.
-
-```bash
-mockforge data rag-config
-```
 
 ## Provider setup
 
@@ -248,7 +237,7 @@ jobs:
 
 ```bash
 # In CI before tests
-mockforge data mock-server api.yaml --port 3000 --rows 100 &
+mockforge data mock-server api.yaml --port 3000 --realistic &
 export MOCK_URL=http://localhost:3000
 npm test
 ```

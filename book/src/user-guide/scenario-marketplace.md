@@ -101,20 +101,15 @@ This copies scenario files to the current directory, allowing you to start using
 Search for scenarios in the registry:
 
 ```bash
-mockforge scenario search <query> [--category <category>] [--tags <tags>]
+mockforge scenario search <query> [--category <category>] [--limit <n>]
 ```
 
 ### Publish
 
-Publish your scenario to the marketplace:
+Publish your scenario to the marketplace. Name, version, description, category, and tags are read from the package's `scenario.yaml`:
 
 ```bash
-mockforge scenario publish \
-  --name "my-scenario" \
-  --version "1.0.0" \
-  --description "My awesome scenario" \
-  --category "ecommerce" \
-  --tags "api,rest,mock"
+mockforge scenario publish ./my-scenario
 ```
 
 ## Scenario Structure
@@ -167,11 +162,11 @@ Scenarios are organized by:
 Rate and review scenarios:
 
 ```bash
-# Rate a scenario
-mockforge scenario rate <name> --rating 5 --comment "Great scenario!"
+# Rate and review a scenario
+mockforge scenario review submit <name> --rating 5 --comment "Great scenario!" --reviewer <username>
 
-# View ratings
-mockforge scenario info <name> --show-ratings
+# View reviews
+mockforge scenario review list <name>
 ```
 
 ### Versioning
@@ -341,8 +336,7 @@ Share scenarios within your team:
 
 ```bash
 # Publish to internal registry
-mockforge scenario publish \
-  --name "internal-api" \
+mockforge scenario publish ./internal-api \
   --registry "https://internal-registry.example.com"
 ```
 
@@ -351,10 +345,8 @@ mockforge scenario publish \
 Contribute scenarios to the community:
 
 ```bash
-# Publish to public marketplace
-mockforge scenario publish \
-  --name "my-awesome-scenario" \
-  --public
+# Publish to the default registry
+mockforge scenario publish ./my-awesome-scenario
 ```
 
 ## Best Practices

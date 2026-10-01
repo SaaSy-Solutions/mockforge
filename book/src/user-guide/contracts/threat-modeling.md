@@ -1,6 +1,6 @@
 # Contract Threat Modeling
 
-> **Experimental.** This feature ships in MockForge but is early: the `/api/v1/threats/*` endpoints exist (assessment is `POST /api/v1/threats/assess`) and the CLI is `mockforge governance threat assess`; the `threat-model` subcommands shown below are not implemented yet. Behavior, commands, and configuration may change between releases. Report issues at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+> **Experimental.** This feature ships in MockForge but is early: the `/api/v1/threats/*` endpoints exist (assessment is `POST /api/v1/threats/assess`) and the CLI is `mockforge governance threat assess`. Listing assessments and remediations is only available over the API (findings and remediations are read from the database and return empty lists without one). Behavior, commands, and configuration may change between releases. Report issues at <https://github.com/SaaSy-Solutions/mockforge/issues>.
 
 **Pillars:** [Contracts]
 
@@ -122,37 +122,37 @@ Detects problematic schema patterns:
 ### CLI Commands
 
 ```bash
-# Analyze contract for threats
-mockforge governance threat-model analyze
+# Assess a contract for threats
+mockforge governance threat assess --spec api.yaml
 
-# Analyze specific service
-mockforge governance threat-model analyze --service payments
+# Scope the assessment to a workspace/service
+mockforge governance threat assess --spec api.yaml --workspace-id workspace-123 --service-id payments
 
-# Analyze specific endpoint
-mockforge governance threat-model analyze --endpoint /api/users/{id}
-
-# Get threat assessments
-mockforge governance threat-model assessments
-
-# Get remediation suggestions
-mockforge governance threat-model remediations <assessment-id>
+# Assess a specific endpoint and write the result to a file
+mockforge governance threat assess --spec api.yaml --endpoint /api/users/{id} --method GET --output threats.json
 ```
 
 ### API Usage
 
 ```bash
-# Analyze contract
-POST /api/v1/threats/analyze
+# Assess a contract (spec is the OpenAPI document as a YAML/JSON string)
+POST /api/v1/threats/assess
 {
-  "spec": {...},
-  "workspace_id": "workspace-123"
+  "spec": "...",
+  "workspace_id": "workspace-123",
+  "service_name": "payments"
 }
 
-# Get assessments
-GET /api/v1/threats/assessments?workspace_id=workspace-123
+# Get assessments for a workspace, service, or endpoint
+GET /api/v1/threats/workspace/{workspace_id}
+GET /api/v1/threats/service/{service_id}
+GET /api/v1/threats/endpoint/{endpoint}
 
-# Get remediation
-GET /api/v1/threats/assessments/{id}/remediations
+# List findings
+GET /api/v1/threats/findings
+
+# Get remediation suggestions
+GET /api/v1/threats/remediations
 ```
 
 ## Threat Assessment Results

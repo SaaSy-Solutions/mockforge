@@ -104,24 +104,27 @@ Schedule recurring events using cron expressions:
 ### Create Cron Job
 
 ```bash
-# Via CLI
-mockforge time cron create \
+# Via CLI (action metadata is read from a JSON file)
+echo '{"status": 200, "body": {"event": "cleanup"}}' > cleanup-action.json
+mockforge time cron create cleanup-job \
+  --name "Cleanup" \
   --schedule "0 */6 * * *" \
-  --action "callback" \
-  --callback-url "http://localhost:3000/api/cleanup"
+  --action-type "response" \
+  --action-metadata cleanup-action.json
 
 # Via API
 curl -X POST http://localhost:9080/__mockforge/time-travel/cron \
   -H "Content-Type: application/json" \
   -d '{
+    "id": "cleanup-job",
+    "name": "Cleanup",
     "schedule": "0 */6 * * *",
-    "action": {
-      "type": "callback",
-      "url": "http://localhost:3000/api/cleanup"
-    },
-    "enabled": true
+    "action_type": "response",
+    "action_metadata": {"status": 200, "body": {"event": "cleanup"}}
   }'
 ```
+
+Supported action types are `callback` (logs the execution), `response` (metadata keys `body`, `status`, `headers`), and `mutation`.
 
 ### Cron Expression Format
 
@@ -160,27 +163,29 @@ Automatically mutate data based on time triggers:
 Mutate data at regular intervals:
 
 ```bash
-# Create mutation rule
-mockforge time mutation create \
+# Create mutation rule (trigger and operation configs are JSON files)
+echo '{"duration_seconds": 3600}' > trigger.json
+echo '{"status": "shipped"}' > operation.json
+mockforge time mutation create ship-orders \
   --entity "orders" \
-  --trigger "interval:1h" \
-  --operation "update_status" \
-  --field "status" \
-  --value "shipped"
+  --trigger-type interval \
+  --trigger-config trigger.json \
+  --operation-type status \
+  --operation-config operation.json
 
 # Via API
 curl -X POST http://localhost:9080/__mockforge/time-travel/mutations \
   -H "Content-Type: application/json" \
   -d '{
-    "entity": "orders",
+    "id": "ship-orders",
+    "entity_name": "orders",
     "trigger": {
       "type": "interval",
-      "duration": "1h"
+      "duration_seconds": 3600
     },
     "operation": {
-      "type": "update_status",
-      "field": "status",
-      "value": "shipped"
+      "type": "updatestatus",
+      "status": "shipped"
     }
   }'
 ```
@@ -316,7 +321,7 @@ Content-Type: application/json
 ### Set Time
 
 ```http
-PUT /__mockforge/time-travel/time
+POST /__mockforge/time-travel/set
 Content-Type: application/json
 
 {
@@ -373,13 +378,14 @@ mockforge time reset
 mockforge time cron list
 
 # Create
-mockforge time cron create --schedule "<cron>" --action "<action>"
+mockforge time cron create <id> --name "<name>" --schedule "<cron>" --action-type <callback|response|mutation> [--action-metadata <file.json>]
 
 # Get
 mockforge time cron get <id>
 
-# Update
-mockforge time cron update <id> --enabled false
+# Enable / disable
+mockforge time cron enable <id>
+mockforge time cron disable <id>
 
 # Delete
 mockforge time cron delete <id>
@@ -392,13 +398,16 @@ mockforge time cron delete <id>
 mockforge time mutation list
 
 # Create
-mockforge time mutation create --entity "<entity>" --trigger "<trigger>" --operation "<operation>"
+mockforge time mutation create <id> --entity "<entity>" \
+  --trigger-type <interval|attime> --trigger-config <trigger.json> \
+  --operation-type <set|increment|decrement|status> --operation-config <operation.json>
 
 # Get
 mockforge time mutation get <id>
 
-# Update
-mockforge time mutation update <id> --enabled false
+# Enable / disable
+mockforge time mutation enable <id>
+mockforge time mutation disable <id>
 
 # Delete
 mockforge time mutation delete <id>
@@ -437,11 +446,13 @@ vbr:
 Test scheduled notifications:
 
 ```bash
-# Schedule notification for 1 day from now
-mockforge time cron create \
+# Schedule a daily report response at midnight
+echo '{"status": 200, "body": {"event": "daily_report"}}' > daily-report.json
+mockforge time cron create daily-report \
+  --name "Daily report" \
   --schedule "0 0 * * *" \
-  --action "callback" \
-  --callback-url "http://localhost:3000/api/send-daily-report"
+  --action-type "response" \
+  --action-metadata daily-report.json
 ```
 
 ### Data Aging
@@ -449,12 +460,15 @@ mockforge time cron create \
 Test data that changes over time:
 
 ```bash
-# Create mutation rule to age orders
-mockforge time mutation create \
+# Create mutation rule to age orders once per day
+echo '{"duration_seconds": 86400}' > daily.json
+echo '{"field": "age_days", "amount": 1}' > increment.json
+mockforge time mutation create age-orders \
   --entity "orders" \
-  --trigger "interval:1d" \
-  --operation "increment" \
-  --field "age_days"
+  --trigger-type interval \
+  --trigger-config daily.json \
+  --operation-type increment \
+  --operation-config increment.json
 ```
 
 ## Best Practices

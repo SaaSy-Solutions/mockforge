@@ -217,7 +217,7 @@ If you want to exercise downstream handling of varied 4xx / 5xx
 
 - `mockforge serve --chaos` — global random failure injection with
   configurable per-status weight.
-- `mockforge route-chaos` — per-route status overrides.
+- The route-chaos API under `/__mockforge/api/route-chaos`: per-route status overrides.
 
 Those are documented in the book's chaos chapter; they're
 intentionally separate knobs from request-body conformance.

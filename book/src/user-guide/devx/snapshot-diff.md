@@ -29,37 +29,24 @@ Snapshot Diff enables you to:
 ### API Usage
 
 ```bash
-# Compare snapshots
-POST /api/v1/snapshots/compare
+# Compare snapshots (management API on the HTTP server)
+POST /__mockforge/api/snapshot-diff/snapshots/compare
 {
   "left_environment_id": "test",
-  "right_environment_id": "prod",
-  "endpoint": "/api/users/{id}",
-  "method": "GET"
+  "right_environment_id": "prod"
 }
+
+# Capture and list snapshots
+POST /__mockforge/api/snapshot-diff/snapshots
+GET  /__mockforge/api/snapshot-diff/snapshots
+GET  /__mockforge/api/snapshot-diff/snapshots/{id}
 ```
+
+The compare request also accepts `left_snapshot_id`/`right_snapshot_id`, `left_persona_id`/`right_persona_id`, `left_scenario_id`/`right_scenario_id`, and `left_reality_level`/`right_reality_level`.
 
 ### CLI Usage
 
-```bash
-# Compare environments
-mockforge snapshot diff \
-  --left-env test \
-  --right-env prod \
-  --endpoint /api/users/{id}
-
-# Compare personas
-mockforge snapshot diff \
-  --left-persona premium-customer \
-  --right-persona regular-customer \
-  --endpoint /api/users/{id}
-
-# Compare reality levels
-mockforge snapshot diff \
-  --left-reality 0.1 \
-  --right-reality 0.9 \
-  --endpoint /api/users/{id}
-```
+There is no `mockforge snapshot diff` command yet. The `mockforge snapshot` command manages time-travel state snapshots (`save`, `load`, `list`, `info`, `delete`, `validate`) and does not compare them; use the API above instead.
 
 ## Comparison Types
 
@@ -154,10 +141,11 @@ Compare scenarios to prepare demos:
 
 ```bash
 # Compare demo scenarios
-mockforge snapshot diff \
-  --left-scenario demo-basic \
-  --right-scenario demo-premium \
-  --endpoint /api/features
+POST /__mockforge/api/snapshot-diff/snapshots/compare
+{
+  "left_scenario_id": "demo-basic",
+  "right_scenario_id": "demo-premium"
+}
 ```
 
 ### Debugging
@@ -166,10 +154,11 @@ Compare behavior to debug issues:
 
 ```bash
 # Compare test vs prod to find differences
-mockforge snapshot diff \
-  --left-env test \
-  --right-env prod \
-  --endpoint /api/users/{id}
+POST /__mockforge/api/snapshot-diff/snapshots/compare
+{
+  "left_environment_id": "test",
+  "right_environment_id": "prod"
+}
 ```
 
 ### Reality Progression
@@ -178,10 +167,11 @@ Compare reality levels to understand progression:
 
 ```bash
 # Compare low vs high reality
-mockforge snapshot diff \
-  --left-reality 0.1 \
-  --right-reality 0.9 \
-  --endpoint /api/users/{id}
+POST /__mockforge/api/snapshot-diff/snapshots/compare
+{
+  "left_reality_level": 0.1,
+  "right_reality_level": 0.9
+}
 ```
 
 ## Configuration

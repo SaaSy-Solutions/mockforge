@@ -447,7 +447,7 @@ mockforge client generate --spec petstore-api.json --framework react
 
 2. **Enable validation for contract testing**
    ```bash
-   mockforge serve --spec api.json --validation enforce
+   MOCKFORGE_REQUEST_VALIDATION=enforce mockforge serve --spec api.json
    ```
 
 3. **Record test scenarios**

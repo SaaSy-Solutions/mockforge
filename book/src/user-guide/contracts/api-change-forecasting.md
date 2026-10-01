@@ -58,29 +58,36 @@ Forecasts are generated for multiple time windows:
 
 ```bash
 # Generate forecasts for all endpoints
-mockforge governance forecast
+mockforge governance forecast generate
 
 # Forecast for specific service
-mockforge governance forecast --service payments
+mockforge governance forecast generate --service-id payments
 
 # Forecast for specific endpoint
-mockforge governance forecast --endpoint /api/users/{id}
+mockforge governance forecast generate --endpoint /api/users/{id} --method GET
 
-# Forecast with specific window
-mockforge governance forecast --window 90  # 90-day forecast
+# Forecast with specific window (30, 90, or 180 days)
+mockforge governance forecast generate --window-days 90
 ```
 
 ### API Usage
 
 ```bash
 # Get forecasts
-GET /api/v1/forecasts?workspace_id=workspace-123&window=90
+GET /api/v1/forecasts?workspace_id=workspace-123&window_days=90
 
-# Get forecast for specific endpoint
-GET /api/v1/forecasts/endpoint?endpoint=/api/users/{id}&method=GET&window=90
+# Get forecast for specific endpoint (endpoint is a path parameter)
+GET /api/v1/forecasts/endpoint/{endpoint}?method=GET&window_days=90
 
 # Get service-level forecast
-GET /api/v1/forecasts/service?service_id=payments&window=90
+GET /api/v1/forecasts/service/{service_id}?window_days=90
+
+# Refresh forecasts
+POST /api/v1/forecasts/refresh
+{
+  "workspace_id": "workspace-123",
+  "service_id": "payments"
+}
 ```
 
 ## Forecast Results

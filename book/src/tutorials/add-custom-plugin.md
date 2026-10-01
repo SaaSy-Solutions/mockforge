@@ -442,20 +442,18 @@ MOCKFORGE_LOG_LEVEL=debug mockforge serve --config api-with-auth.yaml
 
 ### Test Plugin in Isolation
 ```bash
-mockforge plugin test auth-jwt --action generate_token --input '{"username": "test"}'
+# Runs the plugin project's own test suite (cargo test), from its project directory
+mockforge-plugin test --path ./my-plugin
 ```
 
-### Plugin Benchmarking
-```bash
-mockforge plugin bench auth-jwt --iterations 1000
-```
+There is no built-in plugin benchmarking command.
 
 ## Troubleshooting
 
 **Plugin not found after installation?**
 ```bash
 # Check plugin directory
-mockforge plugin list --verbose
+mockforge plugin list --detailed
 
 # Reinstall
 mockforge plugin install ./path/to/plugin.wasm --force
@@ -464,7 +462,7 @@ mockforge plugin install ./path/to/plugin.wasm --force
 **Plugin execution fails?**
 - Check plugin logs with `MOCKFORGE_LOG_LEVEL=debug`
 - Verify plugin configuration syntax
-- Test plugin in isolation with `mockforge plugin test`
+- Test plugin in isolation with `mockforge-plugin test`
 
 **Plugin build fails?**
 ```bash

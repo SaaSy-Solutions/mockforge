@@ -447,11 +447,11 @@ MockForge supports advanced behavior simulation features for realistic API testi
 Automatically record API interactions and convert them to replayable fixtures:
 
 ```bash
-# Record requests while proxying
-mockforge serve --spec api-spec.json --proxy --record
+# Record the requests the server handles
+mockforge serve --spec api-spec.json --recorder --recorder-db ./mockforge-recordings.db
 
 # Convert recordings to stub mappings
-mockforge recorder convert --input recordings.db --output fixtures/
+mockforge recorder convert --input ./mockforge-recordings.db --output fixtures/
 ```
 
 ### Stateful Behavior

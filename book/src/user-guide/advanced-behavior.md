@@ -9,7 +9,6 @@ MockForge provides advanced behavior and simulation features that allow you to c
 - [Per-Route Fault Injection](#per-route-fault-injection)
 - [Per-Route Latency Simulation](#per-route-latency-simulation)
 - [Conditional Proxying](#conditional-proxying)
-- [Browser Proxy with Conditional Forwarding](#browser-proxy-with-conditional-forwarding)
 
 ## Record & Playback
 
@@ -17,10 +16,10 @@ The record & playback feature allows you to capture real API interactions and co
 
 ### Quick Start
 
-1. **Start recording** while proxying to a real service:
+1. **Start recording** the requests the server handles:
 
 ```bash
-mockforge serve --spec api-spec.json --proxy --record
+mockforge serve --spec api-spec.json --recorder --recorder-db ./mockforge-recordings.db
 ```
 
 2. **Convert recordings** to stub mappings:
@@ -248,27 +247,32 @@ core:
 
 Proxy requests conditionally based on request attributes using expressions.
 
+> **Availability:** conditional proxy rules are applied by the HTTP router when it
+> is built with a `ProxyConfig`, which today happens through the Rust SDK
+> (`MockServerBuilder::proxy(config)` in `mockforge-sdk`). `mockforge serve` does
+> not read a `proxy:` section from the config file yet. The YAML below shows the
+> `ProxyConfig` / `ProxyRule` field names.
+
 ### Basic Examples
 
 ```yaml
-core:
-  proxy:
-    enabled: true
-    rules:
-      # Proxy admin requests
-      - pattern: "/api/admin/*"
-        upstream_url: "https://admin-api.example.com"
-        condition: "$.user.role == 'admin'"
-      
-      # Proxy authenticated requests
-      - pattern: "/api/protected/*"
-        upstream_url: "https://protected-api.example.com"
-        condition: "header[authorization] != ''"
-      
-      # Proxy based on query parameter
-      - pattern: "/api/data/*"
-        upstream_url: "https://data-api.example.com"
-        condition: "query[env] == 'production'"
+# ProxyConfig
+enabled: true
+rules:
+  # Proxy admin requests
+  - pattern: "/api/admin/*"
+    upstream_url: "https://admin-api.example.com"
+    condition: "$.user.role == 'admin'"
+  
+  # Proxy authenticated requests
+  - pattern: "/api/protected/*"
+    upstream_url: "https://protected-api.example.com"
+    condition: "header[authorization] != ''"
+  
+  # Proxy based on query parameter
+  - pattern: "/api/data/*"
+    upstream_url: "https://data-api.example.com"
+    condition: "query[env] == 'production'"
 ```
 
 ### Condition Types
@@ -305,36 +309,6 @@ condition: "OR(query[env] == 'production', query[env] == 'staging')"
 
 # NOT
 condition: "NOT(query[env] == 'development')"
-```
-
-## Browser Proxy with Conditional Forwarding
-
-The browser proxy mode supports the same conditional forwarding rules.
-
-### Usage
-
-```bash
-# Start browser proxy with conditional rules
-mockforge proxy --port 8081 --config config.yaml
-```
-
-Configure your browser/mobile app to use `127.0.0.1:8081` as the HTTP proxy. All requests will be evaluated against conditional rules before proxying.
-
-### Example Configuration
-
-```yaml
-proxy:
-  enabled: true
-  rules:
-    # Route admin users to production
-    - pattern: "/api/admin/*"
-      upstream_url: "https://admin-api.production.com"
-      condition: "$.user.role == 'admin'"
-    
-    # Route authenticated users to staging
-    - pattern: "/api/*"
-      upstream_url: "https://api.staging.com"
-      condition: "header[authorization] != ''"
 ```
 
 ## Priority Chain

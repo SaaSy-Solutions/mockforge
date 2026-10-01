@@ -17,18 +17,7 @@ Performance Mode enables:
 
 ## Quick Start
 
-### Start Performance Mode
-
-```bash
-# Start performance mode
-mockforge performance start --rps 100
-
-# Start with bottlenecks
-mockforge performance start \
-  --rps 100 \
-  --bottleneck checkout:500ms \
-  --bottleneck payments:1000ms
-```
+There is no `mockforge performance` CLI. Performance mode is driven through the HTTP API.
 
 ### Via API
 
@@ -37,15 +26,20 @@ mockforge performance start \
 POST /api/performance/start
 {
   "initial_rps": 100,
-  "rps_profile": "constant",
   "bottlenecks": [
     {
-      "endpoint": "/api/checkout/*",
-      "delay_ms": 500
+      "bottleneck_type": "network",
+      "severity": 0.5,
+      "endpoint_pattern": "/api/checkout/*"
     }
   ]
 }
+
+# Stop it
+POST /api/performance/stop
 ```
+
+Other endpoints: `GET /api/performance/status`, `GET /api/performance/snapshot`, `POST /api/performance/rps`, and `POST`/`DELETE /api/performance/bottlenecks`.
 
 ## RPS Profiles
 
@@ -186,34 +180,53 @@ Error rate: 5%  # Increased errors
 
 ## Usage Examples
 
+There is no `mockforge performance` CLI. The simulator is controlled through the `/api/performance` endpoints on the HTTP server.
+
 ### Example 1: Constant Load
 
 ```bash
-# Run at constant 100 RPS
-mockforge performance start --rps 100
+# Start at a constant 100 RPS
+curl -X POST http://localhost:3000/api/performance/start \
+  -H "Content-Type: application/json" \
+  -d '{"initial_rps": 100}'
 
 # Monitor
-GET /api/performance/snapshot
+curl http://localhost:3000/api/performance/snapshot
 ```
 
 ### Example 2: Ramp Load
 
 ```bash
-# Ramp from 10 to 100 RPS over 60 seconds
-mockforge performance start \
-  --rps-profile ramp \
-  --start-rps 10 \
-  --end-rps 100 \
-  --duration 60
+# Ramp from 10 to 100 RPS using profile stages
+curl -X POST http://localhost:3000/api/performance/start \
+  -H "Content-Type: application/json" \
+  -d '{
+    "initial_rps": 10,
+    "rps_profile": {
+      "name": "ramp",
+      "stages": [
+        {"duration_secs": 30, "target_rps": 10},
+        {"duration_secs": 30, "target_rps": 100}
+      ]
+    }
+  }'
+
+# Or change the target RPS of a running simulation
+curl -X POST http://localhost:3000/api/performance/rps \
+  -H "Content-Type: application/json" \
+  -d '{"target_rps": 100}'
 ```
 
 ### Example 3: With Bottlenecks
 
 ```bash
-# Run with checkout bottleneck
-mockforge performance start \
-  --rps 100 \
-  --bottleneck "/api/checkout/*:500ms"
+# Add a database bottleneck on checkout endpoints
+curl -X POST http://localhost:3000/api/performance/bottlenecks \
+  -H "Content-Type: application/json" \
+  -d '{"bottleneck": {"bottleneck_type": "database", "severity": 0.5, "endpoint_pattern": "/api/checkout/*"}}'
+
+# Clear all bottlenecks
+curl -X DELETE http://localhost:3000/api/performance/bottlenecks
 ```
 
 ## Configuration

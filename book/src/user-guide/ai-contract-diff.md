@@ -20,12 +20,12 @@ AI Contract Diff helps you:
 # Analyze a captured request against an OpenAPI spec
 mockforge contract-diff analyze \
   --spec api.yaml \
-  --request-id <capture-id>
+  --capture-id <capture-id>
 
 # Or analyze from file
 mockforge contract-diff analyze \
   --spec api.yaml \
-  --request-file request.json
+  --request-path request.json
 ```
 
 ### Compare Two Specs
@@ -33,8 +33,8 @@ mockforge contract-diff analyze \
 ```bash
 # Compare two OpenAPI specifications
 mockforge contract-diff compare \
-  --spec1 api-v1.yaml \
-  --spec2 api-v2.yaml
+  --old-spec api-v1.yaml \
+  --new-spec api-v2.yaml
 ```
 
 ### Generate Correction Patch
@@ -43,7 +43,7 @@ mockforge contract-diff compare \
 # Generate JSON Patch file for corrections
 mockforge contract-diff generate-patch \
   --spec api.yaml \
-  --request-id <capture-id> \
+  --capture-id <capture-id> \
   --output patch.json
 ```
 
@@ -159,19 +159,19 @@ core:
 # Analyze captured request
 mockforge contract-diff analyze \
   --spec api.yaml \
-  --request-id <capture-id>
+  --capture-id <capture-id>
 
 # Analyze from file
 mockforge contract-diff analyze \
   --spec api.yaml \
-  --request-file request.json
+  --request-path request.json
 
 # With AI recommendations
 mockforge contract-diff analyze \
   --spec api.yaml \
-  --request-id <capture-id> \
-  --ai-enabled \
-  --ai-provider ollama
+  --capture-id <capture-id> \
+  --llm-provider ollama \
+  --llm-model llama3.2
 ```
 
 ### Compare Specs
@@ -179,13 +179,13 @@ mockforge contract-diff analyze \
 ```bash
 # Compare two OpenAPI specs
 mockforge contract-diff compare \
-  --spec1 api-v1.yaml \
-  --spec2 api-v2.yaml
+  --old-spec api-v1.yaml \
+  --new-spec api-v2.yaml
 
 # Output to file
 mockforge contract-diff compare \
-  --spec1 api-v1.yaml \
-  --spec2 api-v2.yaml \
+  --old-spec api-v1.yaml \
+  --new-spec api-v2.yaml \
   --output diff.json
 ```
 
@@ -195,15 +195,11 @@ mockforge contract-diff compare \
 # Generate correction patch
 mockforge contract-diff generate-patch \
   --spec api.yaml \
-  --request-id <capture-id> \
+  --capture-id <capture-id> \
   --output patch.json
-
-# Apply patch automatically
-mockforge contract-diff generate-patch \
-  --spec api.yaml \
-  --request-id <capture-id> \
-  --apply
 ```
+
+`generate-patch` always writes the patch to the `--output` file; use `apply-patch` (below) to apply it.
 
 ### Apply Patch
 
@@ -300,13 +296,13 @@ jobs:
         run: |
           mockforge contract-diff analyze \
             --spec api.yaml \
-            --request-id ${{ github.event.pull_request.number }}
+            --capture-id ${{ github.event.pull_request.number }}
       
       - name: Generate patch
         run: |
           mockforge contract-diff generate-patch \
             --spec api.yaml \
-            --request-id ${{ github.event.pull_request.number }} \
+            --capture-id ${{ github.event.pull_request.number }} \
             --output patch.json
       
       - name: Upload patch
@@ -321,8 +317,8 @@ jobs:
 ```yaml
 contract-diff:
   script:
-    - mockforge contract-diff analyze --spec api.yaml --request-id $CI_PIPELINE_ID
-    - mockforge contract-diff generate-patch --spec api.yaml --request-id $CI_PIPELINE_ID --output patch.json
+    - mockforge contract-diff analyze --spec api.yaml --capture-id $CI_PIPELINE_ID
+    - mockforge contract-diff generate-patch --spec api.yaml --capture-id $CI_PIPELINE_ID --output patch.json
   artifacts:
     paths:
       - patch.json
@@ -335,10 +331,8 @@ contract-diff:
 Ensure your API spec matches actual usage:
 
 ```bash
-# Run analysis on all captured requests
-for id in $(mockforge contract-diff list-captures --ids); do
-  mockforge contract-diff analyze --spec api.yaml --request-id $id
-done
+# Analyze the most recent captured requests against the spec the server was started with
+curl -X POST "http://localhost:3000/__mockforge/api/contract-diff/analyze?limit=50"
 ```
 
 ### Spec Maintenance
@@ -349,8 +343,8 @@ Keep specs up-to-date automatically:
 # Generate patches for all mismatches
 mockforge contract-diff generate-patch \
   --spec api.yaml \
-  --request-id <capture-id> \
-  --output patches/
+  --capture-id <capture-id> \
+  --output patches/patch-1.json
 
 # Review and apply patches
 mockforge contract-diff apply-patch \
@@ -366,8 +360,8 @@ Compare API versions:
 ```bash
 # Compare v1 and v2
 mockforge contract-diff compare \
-  --spec1 api-v1.yaml \
-  --spec2 api-v2.yaml \
+  --old-spec api-v1.yaml \
+  --new-spec api-v2.yaml \
   --output version-diff.json
 ```
 

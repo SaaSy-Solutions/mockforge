@@ -25,11 +25,8 @@ cargo install mockforge-cli
 # Login to MockForge Cloud
 mockforge cloud login
 
-# See which organizations are available to your account
-mockforge org list
-
-# Set the active organization context
-mockforge org use my-org
+# Confirm which account you are authenticated as
+mockforge cloud whoami
 ```
 
 ### Option 1: Create a Shared Workspace
@@ -78,7 +75,6 @@ mockforge cloud sync history --workspace my-workspace
 
 ### 1. Organization Management
 
-- **Organization context** - Switch between org scopes with `mockforge org use`
 - **Shared workspaces** - Keep team mocks under a common cloud workspace
 - **Basic access control flows** - Invite collaborators and manage roles
 - **Activity visibility** - Review workspace-level team activity
@@ -100,9 +96,8 @@ mockforge cloud sync history --workspace my-workspace
 ## Example: Team Workflow
 
 ```bash
-# 1. Authenticate and set org context
+# 1. Authenticate
 mockforge cloud login
-mockforge org use acme-corp
 
 # 2. Create a shared cloud workspace
 mockforge cloud workspace create api-mocks --name "API Mocks"
@@ -119,7 +114,7 @@ mockforge cloud sync start --workspace api-mocks --watch
 
 ## Next Steps
 
-1. **Set up your organization context**: Run `mockforge org list` and `mockforge org use`
+1. **Authenticate**: Run `mockforge cloud login` and confirm with `mockforge cloud whoami`
 2. **Create a shared workspace**: Use `mockforge cloud workspace create`
 3. **Connect local work**: Use `mockforge cloud workspace link` and `mockforge cloud sync start`
 4. **Invite collaborators**: Use `mockforge cloud team invite`

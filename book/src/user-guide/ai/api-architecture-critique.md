@@ -20,28 +20,11 @@ Beyond structural validation, API Architecture Critique provides:
 
 ### CLI Commands
 
-```bash
-# Critique API schema
-mockforge ai critique --spec openapi.json
-
-# Critique with focus areas
-mockforge ai critique --spec openapi.json --focus anti-patterns,naming
-
-# Critique specific endpoint
-mockforge ai critique --spec openapi.json --endpoint /api/users/{id}
-```
+There is no CLI for API critique yet. The intended command would critique a whole schema, optionally narrowed to focus areas (anti-patterns, naming, tone) or to a single endpoint.
 
 ### API Usage
 
-```bash
-# Critique API
-POST /api/v1/ai-studio/critique
-{
-  "schema": {...},
-  "schema_type": "openapi",
-  "focus_areas": ["anti-patterns", "naming", "tone"]
-}
-```
+There is no HTTP endpoint for API critique yet. The intended request would send the schema, its type (OpenAPI, GraphQL, or Protobuf), and the focus areas to analyze.
 
 ### UI Usage
 

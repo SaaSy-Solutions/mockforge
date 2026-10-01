@@ -141,25 +141,24 @@ mockforge voice create \
 mockforge voice create \
   --command "<description>" \
   --output <file> \
-  --format yaml \
-  --ai-provider ollama \
-  --ai-model llama3.2
+  --serve --port 3000
 ```
 
 **Options:**
-- `--command`: Natural language description of API
-- `--output`: Output file path (default: `generated-api.yaml`)
-- `--format`: Output format (`yaml` or `json`)
-- `--ai-provider`: LLM provider (`ollama`, `openai`, `anthropic`)
-- `--ai-model`: Model name (e.g., `llama3.2`, `gpt-3.5-turbo`)
+- `-c, --command`: Natural language description of API (prompts or reads stdin if omitted)
+- `-o, --output`: Output file path. The format follows the extension (`.yaml`/`.yml` for YAML, otherwise JSON). If omitted, the spec is not saved.
+- `--serve`: Start a mock server with the generated spec
+- `--port`: HTTP port used with `--serve` (default: `3000`)
+
+There are no per-command provider or model flags; the LLM provider is configured as described in [AI Provider Configuration](#ai-provider-configuration).
 
 ### Interactive (Conversational)
 
 ```bash
-mockforge voice interactive \
-  --ai-provider ollama \
-  --ai-model llama3.2
+mockforge voice interactive --output api.yaml
 ```
+
+Options: `-o, --output`, `--serve`, and `--port` (same meaning as for `create`).
 
 **Special Commands:**
 - `help` - Show available commands

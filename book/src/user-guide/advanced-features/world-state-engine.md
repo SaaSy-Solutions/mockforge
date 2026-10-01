@@ -1,6 +1,6 @@
 # World State Engine
 
-> **Planned / not yet available.** A read-only `/api/world-state/*` API and UI page exist, but no data sources are registered yet (snapshots are empty), and the `mockforge world-state` CLI and `/api/v1/world-state/*` endpoints shown below do not exist. This page describes the intended design and is kept for reference; do not rely on it in a released build. Track progress at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+> **Planned / not yet available.** A read-only `/api/world-state/*` API and UI page exist, but no data sources are registered yet (snapshots are empty), and there is no `mockforge world-state` CLI, no snapshot-creation endpoint, no time-travel queries, and no GraphML/DOT export. This page describes the intended design and is kept for reference; do not rely on it in a released build. Track progress at <https://github.com/SaaSy-Solutions/mockforge/issues>.
 
 **Pillars:** [Reality][DevX]
 
@@ -31,41 +31,20 @@ The World State Engine aggregates and visualizes:
 
 ## Usage
 
-### Create Snapshot
+There is no `mockforge world-state` CLI yet. The HTTP server exposes a read-only API under `/api/world-state`:
 
 ```bash
-# Create world state snapshot
-mockforge world-state snapshot create
+# Current snapshot (optional ?workspace=, ?layers=, ?node_types= filters)
+curl http://localhost:3000/api/world-state/snapshot
 
-# Or via API
-POST /api/v1/world-state/snapshots
-{
-  "workspace_id": "workspace-123",
-  "include_layers": ["personas", "reality", "time"]
-}
+# Current state as a graph (nodes and edges)
+curl http://localhost:3000/api/world-state/graph
+
+# Available layers
+curl http://localhost:3000/api/world-state/layers
 ```
 
-### Query State
-
-```bash
-# Query world state
-mockforge world-state query \
-  --layers personas,reality \
-  --filter "persona_id=premium-customer"
-
-# Or via API
-GET /api/v1/world-state/query?layers=personas,reality&filter=persona_id=premium-customer
-```
-
-### Visualize State
-
-```bash
-# Export as graph
-mockforge world-state export --format graphml --output state.graphml
-
-# View in UI
-# Navigate to World State page in Admin UI
-```
+A WebSocket stream of state changes is available at `/api/world-state/stream`, and the Admin UI has a World State page. Because no data sources are registered yet, these currently return empty state.
 
 ## State Layers
 
@@ -148,66 +127,23 @@ Protocol-specific state:
 
 ## Query Interface
 
-### Filter by Layer
+The intended design supports filtering by layer, by criteria (persona, reality level, time), and combining several filters. There is no `mockforge world-state` CLI for this yet. The existing read-only API accepts a structured filter body:
 
 ```bash
-# Query specific layers
-mockforge world-state query --layers personas,reality
+curl -X POST http://localhost:3000/api/world-state/query \
+  -H "Content-Type: application/json" \
+  -d '{"layers": ["personas", "reality"], "node_types": ["persona"], "include_edges": true}'
 ```
 
-### Filter by Criteria
-
-```bash
-# Filter by persona
-mockforge world-state query --filter "persona_id=premium-customer"
-
-# Filter by reality level
-mockforge world-state query --filter "reality_level>=3"
-
-# Filter by time
-mockforge world-state query --filter "time>=2025-01-27"
-```
-
-### Complex Queries
-
-```bash
-# Multiple filters
-mockforge world-state query \
-  --layers personas,reality \
-  --filter "persona_id=premium-customer" \
-  --filter "reality_level>=3"
-```
+Free-form criteria filters (for example `reality_level>=3`) are not implemented.
 
 ## Time Travel
 
-View state at any point in time:
-
-```bash
-# View state at specific time
-mockforge world-state query \
-  --time "2025-01-27T10:00:00Z" \
-  --layers personas,reality
-```
+Viewing world state at an arbitrary point in time is planned but not implemented. Previously captured snapshots can be fetched by ID with `GET /api/world-state/snapshot/{id}`.
 
 ## Export Formats
 
-### JSON
-
-```bash
-mockforge world-state export --format json --output state.json
-```
-
-### GraphML
-
-```bash
-mockforge world-state export --format graphml --output state.graphml
-```
-
-### DOT
-
-```bash
-mockforge world-state export --format dot --output state.dot
-```
+Exporting world state as JSON, GraphML, or DOT is planned. There is no export command yet; `GET /api/world-state/graph` returns the current graph as JSON.
 
 ## Real-World Example
 

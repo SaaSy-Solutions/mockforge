@@ -5,6 +5,9 @@ on:
     paths:
       - 'book/**'
       - 'scripts/automated-tests/test-docs.sh'
+      - 'scripts/check_docs_cli.py'
+      - 'scripts/docs-cli-surface.json'
+      - 'crates/mockforge-cli/src/main.rs'
       - '.github/workflows/docs-check.yml'
   workflow_dispatch:
 
@@ -67,3 +70,11 @@ jobs:
         # scripts/check_config_field_drift.py for the target list and
         # allowlist.
         run: python3 scripts/check_config_field_drift.py
+
+      - name: CLI / HTTP path accuracy gate
+        # Fails if any `mockforge ...` command in a book code block uses a
+        # subcommand or flag the CLI does not have, or if a documented
+        # /__mockforge/... or /api/... path is not a registered route.
+        # Baseline is 0. CLI surface comes from scripts/docs-cli-surface.json;
+        # refresh it with --refresh-cli (see the script docstring).
+        run: python3 scripts/check_docs_cli.py

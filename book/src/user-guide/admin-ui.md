@@ -19,13 +19,13 @@ The Admin UI replaces the legacy static HTML interface with a rich, interactive 
 
 ### Enabling the Admin UI
 
-The Admin UI is enabled by default when starting MockForge with the admin interface:
+Start MockForge with the `--admin` flag:
 
 ```bash
-mockforge serve --admin-ui
+mockforge serve --admin
 ```
 
-Access the interface at `http://localhost:9080/admin` (or your configured admin port).
+Access the interface at `http://localhost:9080` (or the port set with `--admin-port`).
 
 ### Authentication
 
@@ -364,7 +364,7 @@ overhead. Memory tuning is YAML-only (`admin.memory_limit_mb`).
 Enable debug logging for troubleshooting:
 
 ```bash
-MOCKFORGE_LOG_LEVEL=debug mockforge serve --admin-ui
+MOCKFORGE_LOG_LEVEL=debug mockforge serve --admin
 ```
 
 ### Browser Compatibility

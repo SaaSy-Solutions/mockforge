@@ -280,17 +280,16 @@ Pipeline steps support template variables:
 
 ## Pipeline Management
 
+There is no `mockforge pipelines` CLI. Pipelines are managed through the HTTP API, which is mounted on the HTTP server when MockForge is built with the `pipelines` feature. Pipelines are held in memory.
+
 ### Create Pipeline
 
 ```bash
-# Create pipeline from YAML
-mockforge pipelines create pipeline.yaml
-
-# Or via API
 POST /api/v1/pipelines
 {
   "name": "my-pipeline",
-  "definition": {...}
+  "definition": {...},
+  "workspace_id": "<workspace-uuid>"
 }
 ```
 
@@ -298,30 +297,36 @@ POST /api/v1/pipelines
 
 ```bash
 # List all pipelines
-mockforge pipelines list
+GET /api/v1/pipelines
 
 # List pipelines for workspace
-mockforge pipelines list --workspace workspace-123
+GET /api/v1/pipelines?workspace_id=<workspace-uuid>
 ```
 
 ### Enable/Disable Pipeline
 
 ```bash
-# Enable pipeline
-mockforge pipelines enable <pipeline-id>
+# Enable or disable a pipeline
+PATCH /api/v1/pipelines/{id}
+{
+  "enabled": false
+}
 
-# Disable pipeline
-mockforge pipelines disable <pipeline-id>
+# Trigger a pipeline manually (request body is a pipeline event)
+POST /api/v1/pipelines/{id}/trigger
 ```
 
 ### View Pipeline Executions
 
 ```bash
 # View pipeline executions
-mockforge pipelines executions <pipeline-id>
+GET /api/v1/pipelines/executions?pipeline_id=<pipeline-id>
 
 # View execution details
-mockforge pipelines execution <execution-id>
+GET /api/v1/pipelines/executions/{id}
+
+# View pipeline statistics
+GET /api/v1/pipelines/{id}/stats
 ```
 
 ## Best Practices

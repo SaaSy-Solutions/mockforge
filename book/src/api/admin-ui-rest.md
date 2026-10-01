@@ -16,23 +16,17 @@ The MockForge Admin UI provides a web-based interface for managing and monitorin
 
 ## Base URL
 
-All API endpoints are prefixed with `/__mockforge/api` to avoid conflicts with user-defined routes.
+All admin endpoints live under the `/__mockforge` prefix to avoid conflicts with user-defined routes. Two routers use it:
 
-### Standalone Mode vs Embedded Mode
+- The **admin server** (`--admin`, default port 9080) serves the endpoints on this page, such as `/__mockforge/dashboard`, `/__mockforge/logs` and `/__mockforge/config`.
+- The **HTTP mock server** (default port 3000) serves the management API under `/__mockforge/api/*`, for example `/__mockforge/api/mocks`.
 
-The REST API works identically in both standalone and embedded modes:
+### Ports
 
-**Standalone Mode (Default):**
-- Admin UI runs on a separate port (default: 9080)
-- REST API endpoints available at: `http://localhost:9080/__mockforge/api/*`
-- Main HTTP server runs on port 3000 (or configured port)
-- Example: `curl http://localhost:9080/__mockforge/api/mocks`
+- Admin UI and admin endpoints run on a separate port (default: 9080): `http://localhost:9080/__mockforge/*`, for example `curl http://localhost:9080/__mockforge/dashboard`
+- The management API runs on the HTTP server (default: 3000): `http://localhost:3000/__mockforge/api/*`, for example `curl http://localhost:3000/__mockforge/api/mocks`
 
-**Embedded Mode:**
-- Admin UI mounted under HTTP server (e.g., `/admin`)
-- REST API endpoints available at: `http://localhost:3000/__mockforge/api/*`
-- Same endpoints, different base URL
-- Example: `curl http://localhost:3000/__mockforge/api/mocks`
+The Admin UI always runs on its own port; it cannot be mounted under a path of the HTTP server.
 
 **Configuration via REST API (JSON over HTTP):**
 
@@ -48,8 +42,8 @@ All endpoints accept and return JSON, following standard REST conventions.
 
 **Starting MockForge in Standalone Mode:**
 ```bash
-# Start MockForge with standalone admin UI
-mockforge serve --admin --admin-standalone --admin-port 9080
+# Start MockForge with the admin UI
+mockforge serve --admin --admin-port 9080
 
 # Or via config file
 # admin:
@@ -289,16 +283,9 @@ Get information about server addresses and configuration.
 }
 ```
 
-#### POST `/__mockforge/servers/restart`
+#### POST `/__mockforge/restart`
 
-Initiate server restart.
-
-**Request Body:**
-```json
-{
-  "reason": "Manual restart requested"
-}
-```
+Initiate server restart. No request body is required.
 
 **Response:**
 ```json
@@ -310,7 +297,7 @@ Initiate server restart.
 }
 ```
 
-#### GET `/__mockforge/servers/restart/status`
+#### GET `/__mockforge/restart/status`
 
 Get restart status.
 
@@ -373,7 +360,7 @@ GET /__mockforge/logs?path=/api/users&status=200
 }
 ```
 
-#### POST `/__mockforge/logs/clear`
+#### DELETE `/__mockforge/logs`
 
 Clear all request logs.
 

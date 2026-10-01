@@ -1,6 +1,6 @@
 # TUI Dashboard
 
-`mockforge tui` is a terminal dashboard you point at a running MockForge
+`mockforge-tui` is a terminal dashboard (a separate binary in the `mockforge-tui` crate) you point at a running MockForge
 admin server. It's the fastest way to see what's happening: live metrics,
 recent requests, chaos events, fixture inventory, error logs — all on one
 screen, no browser.
@@ -10,7 +10,7 @@ screen, no browser.
 mockforge serve --spec api.yaml --admin --admin-port 9080
 
 # In another terminal
-mockforge tui
+mockforge-tui
 ```
 
 The TUI talks to the admin server's HTTP API (default

@@ -46,8 +46,8 @@ mockforge plugin install auth-jwt
 # Install specific version
 mockforge plugin install auth-jwt@1.2.0
 
-# List available plugins
-mockforge plugin search
+# Search the registry
+mockforge plugin search auth
 ```
 
 ### From Local File
@@ -56,8 +56,8 @@ mockforge plugin search
 # Install from local WASM file
 mockforge plugin install ./my-plugin.wasm
 
-# Install with manifest
-mockforge plugin install ./my-plugin/ --manifest plugin.yaml
+# Install from a local plugin directory (reads plugin.yaml from the directory)
+mockforge plugin install ./my-plugin/
 ```
 
 ### From Git Repository
@@ -79,23 +79,10 @@ mockforge plugin install https://github.com/example/mockforge-plugin-custom.git#
 mockforge plugin list
 
 # Show detailed information
-mockforge plugin list --verbose
+mockforge plugin list --detailed
 
-# Filter by type
-mockforge plugin list --type auth
-```
-
-### Enable/Disable Plugins
-
-```bash
-# Enable plugin
-mockforge plugin enable auth-jwt
-
-# Disable plugin
-mockforge plugin disable auth-jwt
-
-# Enable plugin for specific workspace
-mockforge plugin enable auth-jwt --workspace my-workspace
+# Show details for one plugin
+mockforge plugin info auth-jwt
 ```
 
 ### Update Plugins
@@ -106,19 +93,13 @@ mockforge plugin update auth-jwt
 
 # Update all plugins
 mockforge plugin update --all
-
-# Check for updates
-mockforge plugin outdated
 ```
 
 ### Remove Plugins
 
 ```bash
 # Remove plugin
-mockforge plugin remove auth-jwt
-
-# Remove plugin and its data
-mockforge plugin remove auth-jwt --purge
+mockforge plugin uninstall auth-jwt
 ```
 
 ## Plugin Configuration
@@ -640,22 +621,27 @@ for the canonical trait definitions.
 ## Publishing to the Registry
 
 The plugin registry at [registry.mockforge.dev](https://registry.mockforge.dev)
-hosts community plugins, signed and checksummed, with semver-pinnable
-versions. Publishing is a four-step flow.
+hosts community plugins, checksummed and optionally signed, with
+semver-pinnable versions. Authoring and publishing commands live in the
+separate `mockforge-plugin` binary. Publishing is a four-step flow.
 
 ### 1. Generate publisher keys
 
 ```bash
-# One-time setup: create a publisher key pair stored in your config dir
-mockforge plugin keygen --name "your-name"
+# One-time setup: writes the private key (PKCS#8 PEM, mode 0600) and prints the base64 public key
+mockforge-plugin key gen --out mockforge_publisher_key.pem
 
-# Inspect: prints the public key + key ID
-mockforge plugin keygen --show
+# Register the public key with your registry account
+mockforge-plugin key add --label laptop --public-key <base64-public-key>
+
+# List the keys registered on your account
+mockforge-plugin key list
 ```
 
-Your private key signs every release; the public key gets registered with
-the registry on first publish. Keep the private key file readable only by
-your user account.
+Your private key signs the SBOM attestation for each release; the registry
+verifies it against your registered public keys. Keep the private key file
+readable only by your user account. Use `mockforge-plugin key rotate` to
+replace a key and `mockforge-plugin key revoke <id>` to retire one.
 
 ### 2. Authenticate to the registry
 
@@ -664,8 +650,8 @@ your user account.
 export MOCKFORGE_REGISTRY_TOKEN=mfreg_...
 ```
 
-You can also store the token in `~/.config/mockforge/registry-token` so
-it's not in your shell history.
+All `mockforge-plugin key` and `publish` commands also accept `--token`
+and `--registry` (or `MOCKFORGE_REGISTRY_URL`).
 
 ### 3. Prepare the manifest
 
@@ -701,36 +687,46 @@ include:
   - "LICENSE-*"
 ```
 
-Validate before pushing:
+Validate before pushing (run from the plugin project directory):
 
 ```bash
-mockforge plugin validate ./plugin.yaml
+mockforge-plugin validate
 ```
 
 ### 4. Publish
 
 ```bash
-# Build for WASM target, then publish
-cargo build --target wasm32-unknown-unknown --release
-mockforge plugin publish ./plugin.yaml
+# Build the WASM module, package it as a .zip, then publish
+mockforge-plugin build --release
+mockforge-plugin package
+mockforge-plugin publish
+
+# Attach a signed SBOM attestation
+mockforge-plugin publish --sign --key-file mockforge_publisher_key.pem --sbom sbom.json
+
+# Validate and describe the upload without sending it
+mockforge-plugin publish --dry-run
 ```
 
 Under the hood:
 
-1. Bundle is zipped from the `include:` list
-2. SHA-256 checksum is computed
-3. Bundle + checksum are signed with your publisher key
-4. Signed package is uploaded with the bearer
-   token from `MOCKFORGE_REGISTRY_TOKEN`
-5. Registry validates the signature against your registered public key
+1. The `.zip` package produced by `package` is located and validated
+   (it must contain the manifest and a `.wasm` module)
+2. With `--sign`, the SBOM is signed over
+   `SHA-256(artifact_checksum || canonical(sbom))` with your private key
+3. The package (plus SBOM and signature, if signed) is uploaded with the
+   bearer token from `--token` or `MOCKFORGE_REGISTRY_TOKEN`
+4. The registry verifies the signature against your registered public keys
 
 ### Yanking a release
 
-If a release has a critical bug, yank it (existing pins keep working but
-the version disappears from search):
+If a release has a critical bug, yank it. There is no CLI command for
+this; call the registry API with your token:
 
 ```bash
-mockforge plugin yank my-cool-plugin@1.0.0 --reason "panics on empty input"
+curl -X DELETE \
+  -H "Authorization: Bearer $MOCKFORGE_REGISTRY_TOKEN" \
+  https://registry.mockforge.dev/api/v1/plugins/my-cool-plugin/versions/1.0.0/yank
 ```
 
 Yanks aren't deletions — they're advisory. To fully remove a release for
@@ -750,56 +746,17 @@ When you `mockforge plugin install <name>@<version>`, MockForge:
 If any verification step fails, install aborts with a clear error and
 nothing gets unpacked.
 
-### Lockfile
-
-A `mockforge-plugins.lock` file at your project root pins exact versions
-and checksums:
-
-```toml
-# Generated by `mockforge plugin install` — commit this file.
-[[plugin]]
-name = "auth-jwt"
-version = "1.2.0"
-source = "registry"
-checksum = "sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"
-publisher = "did:key:z6Mki..."
-```
-
-Every subsequent `mockforge plugin install` (no version specified) resolves
-to the lockfile, so CI and dev get byte-identical bundles. To intentionally
-upgrade, run `mockforge plugin update <name>` which rewrites the lockfile.
-
-### Air-gapped installs
-
-Mirror the registry to your own filesystem / object store:
-
-```bash
-# Pull the plugins your project uses into a local cache
-mockforge plugin mirror --output ./plugin-mirror
-
-# On the air-gapped box, point installs at the mirror
-export MOCKFORGE_PLUGIN_REGISTRY_URL=file:///path/to/plugin-mirror
-mockforge plugin install my-cool-plugin@1.0.0
-```
-
-The verification flow is identical against a mirror — checksums + signatures
-travel with the bundle, so trust doesn't depend on the registry being online.
-
 ### Verifying a third-party plugin manually
 
 ```bash
-# Inspect a bundle without installing it
-mockforge plugin inspect ./suspicious-plugin.tar.gz
+# Validate a plugin without installing it
+mockforge plugin validate ./suspicious-plugin/
 
-# Output includes:
-#   - Manifest contents
-#   - Declared capabilities (with red flags highlighted)
-#   - SHA-256 checksum
-#   - Signer public key + first-seen date
-#   - List of WASM imports (host functions called)
+# Install from a URL, pinning the expected SHA-256 checksum
+mockforge plugin install https://example.com/plugin.zip --checksum <sha256>
 ```
 
-Always run `inspect` on plugins from unfamiliar publishers before installing.
+Always validate plugins from unfamiliar publishers before installing.
 
 ## Troubleshooting
 
@@ -808,14 +765,14 @@ Always run `inspect` on plugins from unfamiliar publishers before installing.
 #### Plugin Won't Load
 
 ```bash
-# Check plugin status
-mockforge plugin status my-plugin
+# Show plugin information
+mockforge plugin info my-plugin
 
-# Validate plugin manifest
-mockforge plugin validate ./my-plugin/plugin.yaml
+# Validate the plugin
+mockforge plugin validate ./my-plugin/
 
 # Check logs for errors
-mockforge logs --filter "plugin"
+mockforge logs --json | grep -i plugin
 ```
 
 #### Runtime Errors
@@ -823,36 +780,12 @@ mockforge logs --filter "plugin"
 ```bash
 # Enable debug logging
 RUST_LOG=mockforge_plugin_loader=debug mockforge serve
-
-# Check resource limits
-mockforge plugin stats my-plugin
-
-# Validate configuration
-mockforge plugin config validate my-plugin
 ```
 
 #### Performance Issues
 
-```bash
-# Monitor plugin performance
-mockforge plugin stats --watch
-
-# Check memory usage
-mockforge plugin stats --memory
-
-# Profile plugin execution
-mockforge plugin profile my-plugin
-```
-
-### Debug Mode
-
-Enable debug mode for plugin development:
-
-```yaml
-plugins:
-  debug_mode: true
-  verbose_logging: true
-  enable_profiling: true
-```
+There is no CLI for per-plugin runtime stats or profiling. Use debug
+logging (above) and `mockforge plugin cache-stats` to inspect the plugin
+download cache.
 
 This comprehensive plugin system enables powerful extensibility while maintaining security and performance. Plugins can significantly extend MockForge's capabilities for specialized use cases and integrations.

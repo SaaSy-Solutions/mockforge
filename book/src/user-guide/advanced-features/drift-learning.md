@@ -1,6 +1,6 @@
 # Synthetic → Recorded Drift Learning
 
-> **Planned / not yet available.** `mockforge drift-learning enable/disable/status` can set configuration, but the learning engine is not yet wired into request handling, so no drift is learned at runtime; several commands shown below do not exist. This page describes the intended design and is kept for reference; do not rely on it in a released build. Track progress at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+> **Planned / not yet available.** `mockforge drift-learning enable`, `disable` and `status` can set configuration, but the learning engine is not yet wired into request handling, so no drift is learned at runtime. There is no CLI for viewing or resetting learned patterns. This page describes the intended design and is kept for reference; do not rely on it in a released build. Track progress at <https://github.com/SaaSy-Solutions/mockforge/issues>.
 
 **Pillars:** [Reality]
 
@@ -146,18 +146,21 @@ drift_learning:
 ### CLI Commands
 
 ```bash
-# Enable drift learning
-mockforge config set drift_learning.enabled true
+# Enable drift learning (and set the learning mode)
+mockforge drift-learning enable --mode hybrid --sensitivity 0.2 --min-samples 10
 
-# Set learning mode
-mockforge config set drift_learning.mode hybrid
+# Show current drift learning configuration
+mockforge drift-learning status
 
-# View learned patterns
-mockforge drift-learning patterns
+# Enable learning for a specific endpoint or persona
+mockforge drift-learning endpoint "/api/users/*" --enable
+mockforge drift-learning persona premium-customer --enable
 
-# Reset learned patterns
-mockforge drift-learning reset
+# Disable drift learning
+mockforge drift-learning disable
 ```
+
+There is no CLI yet for viewing or resetting learned patterns.
 
 ## Learning Parameters
 

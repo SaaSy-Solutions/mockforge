@@ -1,6 +1,6 @@
 # Zero-Config Mode (Runtime Daemon)
 
-> **Planned / not yet available.** The runtime daemon exists as the `mockforge-runtime-daemon` crate behind an optional build feature that the released `mockforge` binary does not enable; the `--runtime-daemon` flag and `runtime_daemon:` config key shown below do not exist. This page describes the intended design and is kept for reference; do not rely on it in a released build. Track progress at <https://github.com/SaaSy-Solutions/mockforge/issues>.
+> **Planned / not yet available.** The runtime daemon exists as the `mockforge-runtime-daemon` crate behind an optional build feature that the released `mockforge` binary does not enable; there is no `--runtime-daemon` flag, and the `runtime_daemon:` config key shown below does not exist (in a feature-enabled build the daemon is configured only through `MOCKFORGE_RUNTIME_DAEMON_*` environment variables). This page describes the intended design and is kept for reference; do not rely on it in a released build. Track progress at <https://github.com/SaaSy-Solutions/mockforge/issues>.
 
 **Pillars:** [DevX]
 
@@ -23,11 +23,9 @@ This is "mock server in your shadow"—an AI-assisted backend-on-demand.
 
 ### Enable Zero-Config Mode
 
-```bash
-# Start MockForge with runtime daemon
-mockforge serve --runtime-daemon
+There is no `--runtime-daemon` flag. In a build that enables the `runtime-daemon` feature of `mockforge-http` (the released binary does not), the daemon is turned on with an environment variable:
 
-# Or via environment variable
+```bash
 MOCKFORGE_RUNTIME_DAEMON_ENABLED=true mockforge serve
 ```
 
@@ -177,8 +175,8 @@ Creates basic scenarios for auto-generated endpoints.
 ### 1. Start Development
 
 ```bash
-# Start MockForge with runtime daemon
-mockforge serve --runtime-daemon
+# Start MockForge with runtime daemon (requires a runtime-daemon build)
+MOCKFORGE_RUNTIME_DAEMON_ENABLED=true mockforge serve
 ```
 
 ### 2. Make Request
@@ -290,13 +288,13 @@ The AI infers:
 
 - Check `auto_create_on_404` is enabled
 - Verify endpoint isn't in `exclude_patterns`
-- Check daemon is running: `mockforge serve --runtime-daemon`
+- Check the daemon is enabled: `MOCKFORGE_RUNTIME_DAEMON_ENABLED=true` (requires a runtime-daemon build)
 
 ### Generated Code Issues
 
 - Review generated types for accuracy
 - Update OpenAPI spec manually if needed
-- Regenerate: `mockforge generate --from-openapi openapi.json`
+- Regenerate: `mockforge generate --spec openapi.json`
 
 ### AI Generation Quality
 
