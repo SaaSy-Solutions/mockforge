@@ -73,15 +73,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Bundle Microsoft WAFBench CRS rule YAMLs at the path
-# `mockforge-bench::wafbench` defaults to. Pinned to a specific tag
-# would be more reproducible but the upstream project's tagging is
-# inconsistent — pulling main is acceptable for now since we don't
-# ship a fixed CRS version in the cloud_api contract.
-RUN mkdir -p /usr/share/mockforge/wafbench && \
-    curl -fsSL https://github.com/microsoft/WAFBench/archive/refs/heads/main.tar.gz \
-        | tar -xz -C /tmp && \
-    find /tmp/WAFBench-main -name '*.yaml' -exec cp {} /usr/share/mockforge/wafbench/ \; && \
-    rm -rf /tmp/WAFBench-main
+# `mockforge-bench::wafbench` defaults to. Upstream has no tags and its
+# default branch is `master`; the old `refs/heads/main` URL 404s and failed
+# every build of this image. Pin a commit so the bundled rules only change
+# when this line does.
+ARG WAFBENCH_COMMIT=fc498731c8a565af3cfd313bef9732bebf689a11
+RUN mkdir -p /usr/share/mockforge/wafbench /tmp/wafbench && \
+    curl -fsSL "https://github.com/microsoft/WAFBench/archive/${WAFBENCH_COMMIT}.tar.gz" \
+        | tar -xz -C /tmp/wafbench --strip-components=1 && \
+    find /tmp/wafbench -name '*.yaml' -exec cp {} /usr/share/mockforge/wafbench/ \; && \
+    test -n "$(ls -A /usr/share/mockforge/wafbench)" && \
+    rm -rf /tmp/wafbench
 
 RUN groupadd -r mockforge && useradd -r -g mockforge mockforge
 
