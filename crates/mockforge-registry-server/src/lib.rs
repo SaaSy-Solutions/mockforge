@@ -48,6 +48,7 @@ compile_error!(
 /// JWT/password auth helpers moved to `mockforge-registry-core`.
 pub use mockforge_registry_core::auth;
 pub mod ai;
+pub mod audit_entries;
 pub mod cache;
 pub mod circuit_breaker;
 pub mod config;

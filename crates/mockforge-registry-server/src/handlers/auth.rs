@@ -281,17 +281,18 @@ pub async fn login(
             // Unknown-user branch — emit LoginFailed so password-spray against
             // non-existent accounts is still visible (#871). user_id is NULL;
             // org is nil since we have no user to attribute to.
+            let entry = crate::audit_entries::login_failed_unknown_user(
+                &state.config.jwt_secret,
+                &request.email,
+            );
             state
                 .store
                 .record_audit_event(
                     Uuid::nil(),
                     None,
                     AuditEventType::LoginFailed,
-                    "Login failed: unknown email".to_string(),
-                    Some(serde_json::json!({
-                        "attempted_email": request.email,
-                        "reason": "unknown_user",
-                    })),
+                    entry.description,
+                    entry.metadata,
                     source_ip.as_deref(),
                     None,
                 )
@@ -308,17 +309,18 @@ pub async fn login(
         // Wrong-password branch — emit LoginFailed for brute-force visibility
         // (#871). We know the user, so attribute the org + user_id.
         let org_id = audit_org_for_user(&state, user.id).await;
+        let entry = crate::audit_entries::login_failed_bad_password(
+            &state.config.jwt_secret,
+            &request.email,
+        );
         state
             .store
             .record_audit_event(
                 org_id,
                 Some(user.id),
                 AuditEventType::LoginFailed,
-                "Login failed: incorrect password".to_string(),
-                Some(serde_json::json!({
-                    "attempted_email": request.email,
-                    "reason": "bad_password",
-                })),
+                entry.description,
+                entry.metadata,
                 source_ip.as_deref(),
                 None,
             )

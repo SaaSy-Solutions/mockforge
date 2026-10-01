@@ -1,5 +1,6 @@
 //! Background workers for periodic tasks
 
+pub mod audit_log_retention;
 pub mod contract_probe;
 pub mod fly_spend_alert;
 pub mod incident_dispatcher;

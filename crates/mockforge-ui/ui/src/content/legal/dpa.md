@@ -47,7 +47,7 @@ We process Customer Personal Data in the United States. For transfers of persona
 
 ## 10. Return and deletion
 
-Customer can export Customer Content during the term and for 30 days after termination. We then delete Customer Personal Data from active systems within 30 days, and from backups within 90 days, unless the law requires us to keep it.
+Customer can export Customer Content during the term and for 30 days after termination. We then delete Customer Personal Data from active systems within 30 days, and from backups within 90 days, unless the law requires us to keep it. Security and audit logs that we keep to secure the Service (event type, timestamp, IP address, user agent and pseudonymous identifiers, but no email addresses or usernames) are retained for 400 days from the event and then deleted, including after termination, as described in Section 5 of our [Privacy Policy](/legal/privacy).
 
 ## 11. Audits
 

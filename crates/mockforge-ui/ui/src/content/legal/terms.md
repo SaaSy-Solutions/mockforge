@@ -77,7 +77,7 @@ You will defend and indemnify us against third-party claims arising from your Cu
 
 ## 15. Governing law
 
-These Terms are governed by the laws of the state in which SaaSy Solutions LLC is organized, and the federal laws of the United States, without regard to conflict-of-law rules. The courts located in that state have exclusive jurisdiction, except that either party may seek injunctive relief in any competent court.
+These Terms are governed by the laws of the State of Delaware, USA, and the federal laws of the United States, without regard to conflict-of-law rules. The state and federal courts located in Delaware have exclusive jurisdiction, except that either party may seek injunctive relief in any competent court.
 
 ## 16. Changes
 

@@ -548,18 +548,15 @@ pub async fn oidc_callback(
     // Audit the successful SSO login (#871). The domain-ownership gate
     // (`assert_email_in_verified_domain`, enforced inside `provision_sso_user`)
     // has already passed for this user, identical to the SAML path.
+    let entry = crate::audit_entries::oidc_login_succeeded(&user, jit_created);
     state
         .store
         .record_audit_event(
             org.id,
             Some(user.id),
             crate::models::AuditEventType::LoginSucceeded,
-            format!("SSO login via OIDC for {}", email),
-            Some(serde_json::json!({
-                "method": "oidc",
-                "jit_created": jit_created,
-                "email": email,
-            })),
+            entry.description,
+            entry.metadata,
             None, // IdP redirect callback; no meaningful end-user IP/UA here.
             None,
         )

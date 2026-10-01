@@ -4040,9 +4040,66 @@ impl RegistryStore for SqliteRegistryStore {
         Ok(Vec::new())
     }
 
-    #[allow(unused_variables)]
+    /// Same semantics as the Postgres store: an owned org with other members
+    /// passes to the best-ranked remaining member (admin before member), an
+    /// owned org with no other members is deleted (FK cascades take its
+    /// rows), then the user's memberships, settings, API tokens and user row
+    /// go. `audit_logs` rows are kept: their `user_id` is a bare id once the
+    /// user row is gone. Returns the number of orgs the user owned.
     async fn delete_user_data_cascade(&self, user_id: Uuid) -> StoreResult<usize> {
-        Ok(0)
+        let uid = user_id.to_string();
+        let mut tx = self.pool.begin().await?;
+
+        let owned_orgs: Vec<(String,)> =
+            sqlx::query_as("SELECT id FROM organizations WHERE owner_id = ?")
+                .bind(&uid)
+                .fetch_all(&mut *tx)
+                .await?;
+        let owned_count = owned_orgs.len();
+
+        for (org_id,) in &owned_orgs {
+            let new_owner: Option<(String, String)> = sqlx::query_as(
+                "SELECT id, user_id FROM org_members WHERE org_id = ? AND user_id != ? \
+                 ORDER BY CASE role WHEN 'admin' THEN 1 WHEN 'member' THEN 2 ELSE 3 END, \
+                 created_at LIMIT 1",
+            )
+            .bind(org_id)
+            .bind(&uid)
+            .fetch_optional(&mut *tx)
+            .await?;
+
+            match new_owner {
+                Some((member_id, new_owner_user_id)) => {
+                    sqlx::query("UPDATE organizations SET owner_id = ? WHERE id = ?")
+                        .bind(&new_owner_user_id)
+                        .bind(org_id)
+                        .execute(&mut *tx)
+                        .await?;
+                    sqlx::query("UPDATE org_members SET role = 'owner' WHERE id = ?")
+                        .bind(&member_id)
+                        .execute(&mut *tx)
+                        .await?;
+                }
+                None => {
+                    sqlx::query("DELETE FROM organizations WHERE id = ?")
+                        .bind(org_id)
+                        .execute(&mut *tx)
+                        .await?;
+                }
+            }
+        }
+
+        for sql in [
+            "DELETE FROM org_members WHERE user_id = ?",
+            "DELETE FROM user_settings WHERE user_id = ?",
+            "DELETE FROM api_tokens WHERE user_id = ?",
+            "DELETE FROM users WHERE id = ?",
+        ] {
+            sqlx::query(sql).bind(&uid).execute(&mut *tx).await?;
+        }
+
+        tx.commit().await?;
+        Ok(owned_count)
     }
 }
 
@@ -4056,6 +4113,105 @@ mod tests {
         SqliteRegistryStore::connect("sqlite::memory:")
             .await
             .expect("connect and migrate in-memory sqlite")
+    }
+
+    /// GDPR erase on the SQLite backend used to be a stub returning `Ok(0)`,
+    /// so `DELETE /api/v1/gdpr/erase` reported success and deleted nothing.
+    /// It must match the Postgres store: transfer an owned org that has other
+    /// members to the best-ranked remaining member, delete an owned org that
+    /// has none, remove the user's memberships, settings, API tokens and the
+    /// user row, keep audit rows, and return the number of owned orgs.
+    #[tokio::test]
+    async fn test_delete_user_data_cascade_erases_user() {
+        let store = memory_store().await;
+        let leaver = store.create_user("leaver", "leaver@example.com", "hash").await.unwrap();
+        let admin = store.create_user("admin", "admin@example.com", "hash").await.unwrap();
+        let member = store.create_user("member", "member@example.com", "hash").await.unwrap();
+
+        // Shared org: leaver owns it, admin + member stay behind.
+        let shared = store
+            .create_organization("Shared", "shared-org", leaver.id, Plan::Free)
+            .await
+            .unwrap();
+        if store.find_org_member(shared.id, leaver.id).await.unwrap().is_none() {
+            store.create_org_member(shared.id, leaver.id, OrgRole::Owner).await.unwrap();
+        }
+        store.create_org_member(shared.id, member.id, OrgRole::Member).await.unwrap();
+        store.create_org_member(shared.id, admin.id, OrgRole::Admin).await.unwrap();
+
+        // Solo org: leaver is the only member, so it goes away.
+        let solo = store
+            .create_organization("Solo", "solo-org", leaver.id, Plan::Free)
+            .await
+            .unwrap();
+
+        // Someone else's org the leaver merely belongs to.
+        let other = store
+            .create_organization("Other", "other-org", admin.id, Plan::Free)
+            .await
+            .unwrap();
+        store.create_org_member(other.id, leaver.id, OrgRole::Member).await.unwrap();
+
+        store
+            .create_api_token(shared.id, Some(leaver.id), "ci", &[], None)
+            .await
+            .unwrap();
+        sqlx::query(
+            "INSERT INTO user_settings (id, user_id, setting_key, setting_value) \
+             VALUES (?, ?, 'theme', '\"dark\"')",
+        )
+        .bind(Uuid::new_v4().to_string())
+        .bind(leaver.id.to_string())
+        .execute(store.pool())
+        .await
+        .unwrap();
+        store
+            .record_audit_event(
+                shared.id,
+                Some(leaver.id),
+                AuditEventType::LoginSucceeded,
+                "login".to_string(),
+                None,
+                Some("203.0.113.1"),
+                None,
+            )
+            .await;
+
+        let owned = store.delete_user_data_cascade(leaver.id).await.unwrap();
+        assert_eq!(owned, 2, "returns the number of orgs the user owned");
+
+        assert!(store.find_user_by_id(leaver.id).await.unwrap().is_none(), "user row deleted");
+        assert!(store.find_user_by_email("leaver@example.com").await.unwrap().is_none());
+
+        let shared_after = store.find_organization_by_id(shared.id).await.unwrap().unwrap();
+        assert_eq!(shared_after.owner_id, admin.id, "admin outranks member as the new owner");
+        let new_owner = store.find_org_member(shared.id, admin.id).await.unwrap().unwrap();
+        assert_eq!(new_owner.role(), OrgRole::Owner);
+        assert!(store.find_org_member(shared.id, member.id).await.unwrap().is_some());
+
+        assert!(store.find_organization_by_id(solo.id).await.unwrap().is_none(), "solo org gone");
+        assert!(store.find_organization_by_id(other.id).await.unwrap().is_some());
+
+        for (table, sql) in [
+            ("org_members", "SELECT COUNT(*) FROM org_members WHERE user_id = ?"),
+            ("user_settings", "SELECT COUNT(*) FROM user_settings WHERE user_id = ?"),
+            ("api_tokens", "SELECT COUNT(*) FROM api_tokens WHERE user_id = ?"),
+        ] {
+            let (n,): (i64,) = sqlx::query_as(sql)
+                .bind(leaver.id.to_string())
+                .fetch_one(store.pool())
+                .await
+                .unwrap();
+            assert_eq!(n, 0, "{table} rows for the erased user must be gone");
+        }
+
+        // Audit rows are retained (pseudonymous user_id only), as on Postgres.
+        let (audit,): (i64,) = sqlx::query_as("SELECT COUNT(*) FROM audit_logs WHERE user_id = ?")
+            .bind(leaver.id.to_string())
+            .fetch_one(store.pool())
+            .await
+            .unwrap();
+        assert_eq!(audit, 1);
     }
 
     #[tokio::test]

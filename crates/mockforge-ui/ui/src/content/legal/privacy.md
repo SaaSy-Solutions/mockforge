@@ -45,7 +45,7 @@ MockForge Cloud is hosted in the United States. If you access it from outside th
 - Account and Customer Content: kept while your account is active and deleted within 30 days of account deletion (backups age out within 90 days).
 - Request logs and diagnostic data: generally kept for up to 90 days.
 - Billing records: kept as long as tax and accounting law requires.
-- Audit logs: kept for the retention period of your plan, then deleted.
+- Security and audit logs: records of security-relevant events (the event type, timestamp, IP address, user agent, and pseudonymous identifiers such as internal account, organization or invitation IDs) are kept for 400 days from the event and then deleted automatically. They do not record your email address or username; a failed sign-in for an email address that has no account is recorded with a keyed hash of that address, not the address itself. We keep these logs after you delete your account, for security, fraud prevention and to comply with legal obligations (GDPR Art. 17(3)(b) and (e)). Once your account is deleted, they are no longer linked to your account details.
 
 ## 6. Security
 
@@ -53,7 +53,7 @@ All traffic is encrypted in transit with TLS 1.2+, including the hop from Cloudf
 
 ## 7. Your rights
 
-Depending on where you live, you may have the right to access, correct, export or delete your personal data, to restrict or object to processing, and to withdraw consent. You can update most account data in Settings and delete your account there. For other requests, email privacy@mockforge.dev; we respond within 30 days. If your data is in Customer Content controlled by another organization, we will refer your request to that organization. You may also complain to your local data-protection authority.
+Depending on where you live, you may have the right to access, correct, export or delete your personal data, to restrict or object to processing, and to withdraw consent. You can update most account data in Settings and delete your account there. Deleting your account does not delete security and audit logs before the end of their retention period (Section 5). For other requests, email privacy@mockforge.dev; we respond within 30 days. If your data is in Customer Content controlled by another organization, we will refer your request to that organization. You may also complain to your local data-protection authority.
 
 California residents have the rights described in the CCPA/CPRA, including to know, delete and correct personal information. We do not sell or share personal information for cross-context behavioral advertising.
 
