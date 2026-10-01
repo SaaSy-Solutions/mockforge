@@ -367,6 +367,18 @@ async fn resolve_org_id(state: &AppState, user_id: Uuid, headers: &HeaderMap) ->
     Ok(ctx.org_id)
 }
 
+/// A row that loaded but whose workspace fails the org check must answer
+/// exactly like a missing row, or the difference tells a caller which ids
+/// exist in other tenants. RLS already hides foreign rows; this keeps the
+/// answer identical when RLS is bypassed (the owner-role rollback path).
+/// Storage errors still propagate.
+fn as_not_found(err: ApiError, message: &str) -> ApiError {
+    match err {
+        ApiError::InvalidRequest(_) => ApiError::InvalidRequest(message.into()),
+        other => other,
+    }
+}
+
 /// Verify `workspace_id` belongs to `org_id`. The lookup is bound to that
 /// org, so a workspace in another org reads as absent ("Workspace not
 /// found", same as an explicit mismatch).
@@ -435,7 +447,9 @@ async fn load_authorized_session_with_org(
     })
     .await?
     .ok_or_else(|| ApiError::InvalidRequest("Capture session not found".into()))?;
-    authorize_workspace_in_org(state, org_id, session.workspace_id).await?;
+    authorize_workspace_in_org(state, org_id, session.workspace_id)
+        .await
+        .map_err(|e| as_not_found(e, "Capture session not found"))?;
     Ok((session, org_id))
 }
 
@@ -453,7 +467,9 @@ async fn load_authorized_clone(
     })
     .await?
     .ok_or_else(|| ApiError::InvalidRequest("Clone model not found".into()))?;
-    authorize_workspace_in_org(state, org_id, model.workspace_id).await?;
+    authorize_workspace_in_org(state, org_id, model.workspace_id)
+        .await
+        .map_err(|e| as_not_found(e, "Clone model not found"))?;
     Ok((model, org_id))
 }
 
