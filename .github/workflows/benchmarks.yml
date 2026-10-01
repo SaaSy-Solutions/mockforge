@@ -5,8 +5,8 @@ on:
   # just benchmark code + workspace deps. The PR signal we care about is
   # "did this change regress benchmarks" — broader paths burned a 10-15 min
   # self-hosted run per PR for output that wasn't driving review decisions.
-  # Main-push still runs the full bench so the baseline tracked in
-  # benches/baseline/ stays current.
+  # Main-push still runs the full bench so the baseline published to the
+  # `bench-baseline` branch stays current.
   pull_request:
     paths:
       - 'crates/*/benches/**'
@@ -19,7 +19,7 @@ on:
       - main
   workflow_dispatch:
 
-# Push-on-main retained — it updates .github/benchmarks/baseline.json.
+# Push-on-main retained: it republishes the bench-baseline branch.
 # Concurrency keys are GitHub-internal context (not user-supplied), safe.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -74,12 +74,20 @@ jobs:
           path: target
           key: ${{ runner.os }}-target-bench-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Fetch baseline from main branch
+      # main is a protected branch, so main-push runs publish the baseline to
+      # the unprotected `bench-baseline` branch instead of committing it.
+      # The copy committed on main is only a fallback for the first run.
+      - name: Fetch baseline
         if: github.event_name == 'pull_request'
         run: |
-          echo "Fetching baseline from main branch..."
-          git fetch origin main:main || true
-          git show main:.github/benchmarks/baseline.json > .github/benchmarks/baseline.json.tmp 2>/dev/null || echo "{}" > .github/benchmarks/baseline.json.tmp
+          if git fetch --no-tags --depth=1 origin bench-baseline 2>/dev/null \
+            && git show FETCH_HEAD:baseline.json > .github/benchmarks/baseline.json.tmp 2>/dev/null; then
+            echo "Using baseline from the bench-baseline branch"
+          else
+            git fetch origin main:main || true
+            git show main:.github/benchmarks/baseline.json > .github/benchmarks/baseline.json.tmp 2>/dev/null || echo "{}" > .github/benchmarks/baseline.json.tmp
+            echo "bench-baseline branch missing; using main's committed baseline"
+          fi
           mv .github/benchmarks/baseline.json.tmp .github/benchmarks/baseline.json
 
       - name: Run benchmarks
@@ -104,14 +112,21 @@ jobs:
           echo "Saving new baseline from main branch..."
           node .github/scripts/compare-benchmarks.js save-baseline
 
-      - name: Commit baseline updates (main branch only)
+      - name: Publish baseline to bench-baseline branch (main branch only)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ github.sha }}
         run: |
+          dir="$(mktemp -d)"
+          cp .github/benchmarks/baseline.json "$dir/baseline.json"
+          cd "$dir"
+          git init -q -b bench-baseline
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .github/benchmarks/baseline.json
-          git diff --staged --quiet || git commit -m "chore: update benchmark baseline [skip ci]"
-          git push
+          git add baseline.json
+          git commit -qm "benchmark baseline from main@${SOURCE_SHA}"
+          git push -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" bench-baseline
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v7.0.1
