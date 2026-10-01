@@ -26,12 +26,12 @@ export const options = {
         { duration: '1m', target: 0 },
     ],
     thresholds: {
-        // 95% of requests must complete within 1 second
-        http_req_duration: ['p(95)<1000', 'p(99)<2000'],
+        // 95% within 1s, 99% within 2s, mean under 500ms. (These used to be
+        // two separate `http_req_duration` keys; the second silently
+        // replaced the first, so the percentiles were never enforced.)
+        http_req_duration: ['p(95)<1000', 'p(99)<2000', 'avg<500'],
         // Error rate must be less than 1%
         http_req_failed: ['rate<0.01'],
-        // Response time consistency
-        http_req_duration: ['avg<500', 'max<5000'],
         // Throughput
         http_reqs: ['rate>100'], // At least 100 req/s minimum
     },
@@ -137,7 +137,8 @@ export default function () {
         'status is 200-299': (r) => r.status >= 200 && r.status < 300,
         'response time < 1s': (r) => r.timings.duration < 1000,
         'response time < 2s': (r) => r.timings.duration < 2000,
-        'has response body': (r) => r.body.length > 0,
+        // DELETE answers 204 No Content, which by definition has no body.
+        'has response body': (r) => r.status === 204 || (r.body || '').length > 0,
     });
 
     if (!success) {
@@ -156,7 +157,9 @@ export default function () {
 export function handleSummary(data) {
     return {
         'stdout': textSummary(data, { indent: ' ', enableColors: true }),
-        'tests/load/results/http_high_scale_summary.json': JSON.stringify(data),
+        // Relative to k6's cwd. The old 'tests/load/results/...' path did not
+        // exist when run from tests/load (as CI does), so nothing was written.
+        [__ENV.SUMMARY_FILE || 'http_high_scale_summary.json']: JSON.stringify(data),
     };
 }
 

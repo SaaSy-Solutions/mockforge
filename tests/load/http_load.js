@@ -22,6 +22,8 @@ export const options = {
     'http_req_failed': ['rate<0.05'],                  // Error rate under 5%
     'errors': ['rate<0.05'],                           // Custom error rate under 5%
   },
+  // p(99) must be in the summary so check_thresholds.py can read it.
+  summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)'],
 };
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:3000';

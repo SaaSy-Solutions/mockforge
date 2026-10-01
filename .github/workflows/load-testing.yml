@@ -64,22 +64,31 @@ jobs:
           cargo build --release --bin mockforge
 
       - name: Start MockForge server
+        # --no-rate-limit: the built-in limiter defaults to 1000 req/min
+        # (burst 2000) for the whole server. k6 drives ~100 req/s, so ~78% of
+        # requests were 429s and the run measured the limiter, not mockforge.
+        # RUST_LOG=warn + file redirect: at info the server writes ~7 lines per
+        # request (millions in the extended run) into the job's stdout pipe.
+        env:
+          RUST_LOG: warn
         run: |
-          ./target/release/mockforge serve --spec examples/user-management-api.json --http-port 3000 --admin &
-          sleep 5
-          curl -f http://localhost:3000/health || exit 1
+          ./target/release/mockforge serve --spec examples/user-management-api.json --http-port 3000 --admin --no-rate-limit > mockforge-server.log 2>&1 &
+          for _ in $(seq 1 30); do curl -sf http://localhost:3000/health > /dev/null && break; sleep 1; done
+          curl -f http://localhost:3000/health
 
       - name: Run standard load test
         run: |
           cd tests/load
-          k6 run --out json=load-test-results.json http_load.js
+          k6 run --summary-export=load-test-results.json http_load.js
 
       - name: Upload load test results
         uses: actions/upload-artifact@v7.0.1
         if: always()
         with:
           name: load-test-results-standard
-          path: tests/load/load-test-results.json
+          path: |
+            tests/load/load-test-results.json
+            mockforge-server.log
           retention-days: 30
 
       - name: Check performance thresholds
@@ -113,22 +122,31 @@ jobs:
           cargo build --release --bin mockforge
 
       - name: Start MockForge server
+        # --no-rate-limit: the built-in limiter defaults to 1000 req/min
+        # (burst 2000) for the whole server. k6 drives ~100 req/s, so ~78% of
+        # requests were 429s and the run measured the limiter, not mockforge.
+        # RUST_LOG=warn + file redirect: at info the server writes ~7 lines per
+        # request (millions in the extended run) into the job's stdout pipe.
+        env:
+          RUST_LOG: warn
         run: |
-          ./target/release/mockforge serve --spec examples/user-management-api.json --http-port 3000 --admin &
-          sleep 5
-          curl -f http://localhost:3000/health || exit 1
+          ./target/release/mockforge serve --spec examples/user-management-api.json --http-port 3000 --admin --no-rate-limit > mockforge-server.log 2>&1 &
+          for _ in $(seq 1 30); do curl -sf http://localhost:3000/health > /dev/null && break; sleep 1; done
+          curl -f http://localhost:3000/health
 
       - name: Run extended load test
         run: |
           cd tests/load
-          k6 run --out json=load-test-results-extended.json http_load_high_scale.js
+          SUMMARY_FILE=load-test-results-extended.json k6 run http_load_high_scale.js
 
       - name: Upload load test results
         uses: actions/upload-artifact@v7.0.1
         if: always()
         with:
           name: load-test-results-extended
-          path: tests/load/load-test-results-extended.json
+          path: |
+            tests/load/load-test-results-extended.json
+            mockforge-server.log
           retention-days: 90
 
       - name: Check performance thresholds
@@ -168,15 +186,19 @@ jobs:
             ${{ runner.os }}-cargo-
 
       - name: Run benchmarks
+        # criterion 0.5 has no `json` output format (only `criterion` and
+        # `bencher`), and without pipefail `tee` hid the resulting error.
+        shell: bash
         run: |
-          cargo bench --bench core_benchmarks -- --output-format json | tee benchmark-results.json
+          set -o pipefail
+          cargo bench -p mockforge-core --bench core_benchmarks -- --output-format bencher | tee benchmark-results.txt
 
       - name: Upload benchmark results
         uses: actions/upload-artifact@v7.0.1
         if: always()
         with:
           name: benchmark-results
-          path: benchmark-results.json
+          path: benchmark-results.txt
           retention-days: 90
 
       - name: Check for performance regressions
