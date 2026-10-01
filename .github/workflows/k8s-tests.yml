@@ -113,6 +113,13 @@ jobs:
         with:
           sarif_file: checkov-results.sarif
 
+      # The Checkov docker action runs as root and leaves a root-owned
+      # checkov-results.sarif/ in the workspace. On a self-hosted runner that
+      # breaks actions/checkout (EACCES) for every later job on the runner.
+      - name: Restore workspace ownership
+        if: always()
+        run: docker run --rm -v "$GITHUB_WORKSPACE:/w" alpine:3 chown -R "$(id -u):$(id -g)" /w
+
       - name: Run kube-score
         run: |
           # Advisory report; kube-score exits non-zero on any finding.
