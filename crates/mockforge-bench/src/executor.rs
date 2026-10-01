@@ -132,6 +132,52 @@ pub(crate) fn merge_godebug_http2client_off(existing: Option<&str>) -> String {
 }
 
 /// k6 executor
+static K6_EGRESS_PROXY: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+
+/// Route every k6 process this crate starts through `proxy_url` (an
+/// `http://host:port` forward proxy). The cloud runner installs this from
+/// `MOCKFORGE_RUNNER_K6_EGRESS_PROXY`. Returns `false` if already set.
+pub fn install_k6_egress_proxy(proxy_url: String) -> bool {
+    K6_EGRESS_PROXY.set(proxy_url).is_ok()
+}
+
+/// The proxy installed by [`install_k6_egress_proxy`], if any.
+pub fn k6_egress_proxy() -> Option<&'static str> {
+    K6_EGRESS_PROXY.get().map(String::as_str)
+}
+
+/// Environment for a k6 child process.
+///
+/// No guard and no proxy (the CLI): nothing is added. A proxy: k6 sends
+/// http and https through it (Go's `ProxyFromEnvironment`), with `NO_PROXY`
+/// cleared so nothing is exempted, and redirects off. Go never proxies a
+/// literal loopback or `localhost` URL, and the target itself is
+/// pre-checked, so a redirect is the only way k6 could reach one;
+/// `K6_MAX_REDIRECTS=0` removes it. A guard without a proxy: refuse, since
+/// k6 would then reach any address it resolves.
+pub fn k6_egress_env(
+    guard: Option<crate::ssrf::Policy>,
+    proxy: Option<&str>,
+) -> Result<Vec<(&'static str, String)>> {
+    match (guard, proxy) {
+        (_, Some(proxy)) => Ok(vec![
+            ("HTTP_PROXY", proxy.to_string()),
+            ("HTTPS_PROXY", proxy.to_string()),
+            ("http_proxy", proxy.to_string()),
+            ("https_proxy", proxy.to_string()),
+            ("NO_PROXY", String::new()),
+            ("no_proxy", String::new()),
+            ("K6_MAX_REDIRECTS", "0".to_string()),
+            // k6 otherwise phones home to stats.grafana.org on every run.
+            ("K6_NO_USAGE_REPORT", "true".to_string()),
+        ]),
+        (Some(_), None) => Err(BenchError::K6ExecutionFailed(
+            "k6 refused: SSRF guard is active and no k6 egress proxy is configured".to_string(),
+        )),
+        (None, None) => Ok(Vec::new()),
+    }
+}
+
 pub struct K6Executor {
     k6_path: String,
     /// Comma-joined IPs/ranges/CIDRs forwarded to `k6 run --local-ips`.
@@ -317,8 +363,15 @@ impl K6Executor {
     ) -> Result<K6Results> {
         println!("Starting load test...\n");
 
+        // Cloud runner containment. k6 resolves names and follows redirects
+        // itself, so the SSRF pre-check cannot bind it; under a process guard
+        // it may only run through an egress proxy that enforces the IP policy
+        // after DNS resolution.
+        let egress_env = k6_egress_env(crate::ssrf::process_guard(), k6_egress_proxy())?;
+
         let mut cmd = TokioCommand::new(&self.k6_path);
         cmd.arg("run");
+        cmd.envs(egress_env);
 
         // When running multiple k6 instances in parallel, each needs its own API server port
         // to avoid "bind: address already in use" on the default port 6565.
@@ -967,5 +1020,21 @@ mod tests {
             src.contains("if self.force_http1"),
             "GODEBUG must be gated on force_http1, not applied to every k6 run"
         );
+    }
+
+    #[test]
+    fn k6_egress_env_requires_a_proxy_under_the_guard() {
+        assert!(k6_egress_env(None, None).unwrap().is_empty());
+        let err = k6_egress_env(Some(crate::ssrf::Policy::strict()), None).unwrap_err();
+        assert!(err.to_string().contains("no k6 egress proxy"), "{err}");
+        let env =
+            k6_egress_env(Some(crate::ssrf::Policy::strict()), Some("http://egress:4750")).unwrap();
+        let get = |k: &str| env.iter().find(|(n, _)| *n == k).map(|(_, v)| v.as_str());
+        assert_eq!(get("HTTP_PROXY"), Some("http://egress:4750"));
+        assert_eq!(get("HTTPS_PROXY"), Some("http://egress:4750"));
+        assert_eq!(get("NO_PROXY"), Some(""));
+        assert_eq!(get("no_proxy"), Some(""));
+        assert_eq!(get("K6_MAX_REDIRECTS"), Some("0"));
+        assert_eq!(get("K6_NO_USAGE_REPORT"), Some("true"));
     }
 }

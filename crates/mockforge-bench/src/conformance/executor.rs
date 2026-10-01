@@ -263,7 +263,17 @@ pub struct NetworkEvent {
 impl NativeConformanceExecutor {
     /// Create a new executor from a `ConformanceConfig`
     pub fn new(config: ConformanceConfig) -> Result<Self> {
-        let mut builder = Client::builder()
+        Self::with_ssrf_guard(config, crate::ssrf::process_guard())
+    }
+
+    /// Like [`Self::new`] with an explicit SSRF guard. With `Some`, the
+    /// client refuses blocked addresses at DNS time and on every redirect
+    /// hop, and ignores proxy env vars (see `ssrf::guarded_client_builder`).
+    pub fn with_ssrf_guard(
+        config: ConformanceConfig,
+        guard: Option<crate::ssrf::Policy>,
+    ) -> Result<Self> {
+        let mut builder = crate::ssrf::client_builder_for(guard)
             .timeout(Duration::from_secs(30))
             .connect_timeout(Duration::from_secs(10));
 
@@ -2407,5 +2417,45 @@ custom_checks:
         let json = openapi_schema_to_json_schema(&schema);
         assert_eq!(json["type"], "object");
         assert_eq!(json["required"][0], "name");
+    }
+
+    #[tokio::test]
+    async fn guarded_client_refuses_internal_names_and_redirects() {
+        use crate::ssrf::{test_server, Policy};
+        use std::sync::atomic::Ordering;
+
+        let config = || ConformanceConfig {
+            target_url: "https://example.com".to_string(),
+            skip_tls_verify: true,
+            ..Default::default()
+        };
+
+        // A name resolving to an internal address (stand-in for a Compose
+        // service name or a rebinding domain).
+        let (port, hits) = test_server::serve(test_server::OK).await;
+        let strict = NativeConformanceExecutor::with_ssrf_guard(config(), Some(Policy::strict()))
+            .expect("skip_tls_verify still builds under the guard");
+        let err = strict.client.get(format!("http://localhost:{port}/")).send().await.unwrap_err();
+        assert!(err.is_connect(), "{err:?}");
+        assert_eq!(hits.load(Ordering::SeqCst), 0);
+
+        // A redirect inward.
+        let (outer, _) =
+            test_server::serve(test_server::redirect_to(&format!("http://0.0.0.0:{port}/"))).await;
+        let relaxed =
+            NativeConformanceExecutor::with_ssrf_guard(config(), Some(Policy::for_test())).unwrap();
+        let err = relaxed
+            .client
+            .get(format!("http://127.0.0.1:{outer}/"))
+            .send()
+            .await
+            .unwrap_err();
+        assert!(err.is_redirect(), "{err:?}");
+        assert_eq!(hits.load(Ordering::SeqCst), 0);
+
+        // Control: the unguarded client (the CLI) follows it.
+        let open = NativeConformanceExecutor::with_ssrf_guard(config(), None).unwrap();
+        open.client.get(format!("http://127.0.0.1:{outer}/")).send().await.unwrap();
+        assert_eq!(hits.load(Ordering::SeqCst), 1);
     }
 }

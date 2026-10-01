@@ -67,10 +67,13 @@ impl ChaosExecutor {
     /// `config.external_target_authorized: true` flag must be set
     /// before we'll point chaos at an arbitrary URL. Full
     /// DNS-TXT / `.well-known/mockforge-chaos-authorized` proof is
-    /// out of scope per #349; this is the minimal "did the user
-    /// type 'yes I authorize this'" gate so an attacker who hijacks
-    /// the suite-create surface can't smuggle chaos at a customer's
-    /// production payment gateway.
+    /// out of scope per #349.
+    ///
+    /// This is NOT a security control. The flag lives in tenant-authored
+    /// suite config, so any tenant can set it; it only stops a user from
+    /// pointing chaos at a URL by accident. Isolation from internal
+    /// addresses comes from `ChaosClient`'s SSRF-guarded client, and
+    /// ownership of the external target is not verified at all.
     fn external_target_authorized(payload: &serde_json::Value) -> bool {
         payload
             .get("config")

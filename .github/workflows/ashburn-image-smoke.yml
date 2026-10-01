@@ -9,6 +9,7 @@ on:
       - '.github/workflows/docker-build.yml'
       - 'Dockerfile*'
       - '.dockerignore'
+      - 'scripts/tests/k6_egress_e2e.sh'
 
 concurrency:
   group: mockforge-image-builds
@@ -19,7 +20,7 @@ permissions:
 
 jobs:
   build:
-    name: Build root, registry and runner images without publishing
+    name: Build root, registry, runner and egress images without publishing
     runs-on: [self-hosted, linux, x64, rust]
     timeout-minutes: 90
     steps:
@@ -52,3 +53,20 @@ jobs:
           file: Dockerfile.runner
           platforms: linux/amd64
           push: false
+      - uses: docker/build-push-action@v7
+        with:
+          context: .
+          file: Dockerfile.egress
+          platforms: linux/amd64
+          push: false
+          load: true
+          tags: mockforge-egress:smoke-${{ github.run_id }}
+      # k6 through the egress proxy reaches public targets and not internal
+      # ones (the runner's k6 containment).
+      - name: k6 egress containment
+        env:
+          EGRESS_IMAGE: mockforge-egress:smoke-${{ github.run_id }}
+        run: bash scripts/tests/k6_egress_e2e.sh
+      - name: Remove smoke egress image
+        if: always()
+        run: docker image rm -f "mockforge-egress:smoke-${{ github.run_id }}" || true

@@ -227,7 +227,13 @@ impl ChaosClient {
         directive: ChaosDirective,
         ssrf_policy: mockforge_bench::ssrf::Policy,
     ) -> Result<Self> {
-        let http = reqwest::Client::builder()
+        // The guarded builder refuses blocked addresses when the target
+        // name is resolved for the connection and on every redirect hop.
+        // The `validate_target_url` pre-check in `probe` stays as defence in
+        // depth, but alone it is bypassable: a name can resolve publicly for
+        // the check and internally for the connect, and a public target can
+        // redirect inward.
+        let http = mockforge_bench::ssrf::guarded_client_builder(ssrf_policy)
             .timeout(directive.timeout)
             .user_agent("mockforge-chaos-proxy/1.0")
             .build()
@@ -598,5 +604,57 @@ mod tests {
         assert_eq!(outcome.status_code, Some(200));
         assert!(outcome.succeeded);
         assert_eq!(outcome.fault_kind, FaultKind::None);
+    }
+
+    /// Serve `response` on 127.0.0.1; returns the port and a request count.
+    async fn serve(response: String) -> (u16, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let hits = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counter = hits.clone();
+        tokio::spawn(async move {
+            while let Ok((mut sock, _)) = listener.accept().await {
+                let mut buf = [0u8; 1024];
+                if matches!(sock.read(&mut buf).await, Ok(n) if n > 0) {
+                    counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                }
+                let _ = sock.write_all(response.as_bytes()).await;
+            }
+        });
+        (port, hits)
+    }
+
+    const OK: &str = "HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok";
+
+    #[tokio::test]
+    async fn external_probe_does_not_follow_a_redirect_inward() {
+        use std::sync::atomic::Ordering;
+        let (inner, hits) = serve(OK.to_string()).await;
+        // 0.0.0.0 reaches local listeners and is blocked even when loopback
+        // is allowed for the first hop.
+        let (outer, _) = serve(format!(
+            "HTTP/1.1 302 Found\r\nlocation: http://0.0.0.0:{inner}/\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+        ))
+        .await;
+        let client = ChaosClient::with_policy(ChaosDirective::default(), test_policy()).unwrap();
+        let outcome =
+            client.probe("GET", &format!("http://127.0.0.1:{outer}/"), None).await.unwrap();
+        assert!(!outcome.succeeded);
+        assert!(outcome.error_message.contains("redirect"), "{}", outcome.error_message);
+        assert_eq!(hits.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn external_client_refuses_a_name_resolving_internally_at_connect() {
+        // The pre-check in `probe` would also refuse `localhost`; this
+        // exercises the client on its own, as for a name that resolved
+        // publicly at pre-check time and internally at connect (rebinding).
+        use std::sync::atomic::Ordering;
+        let (port, hits) = serve(OK.to_string()).await;
+        let client = ChaosClient::new(ChaosDirective::default()).unwrap();
+        let err = client.http.get(format!("http://localhost:{port}/")).send().await.unwrap_err();
+        assert!(err.is_connect(), "{err:?}");
+        assert_eq!(hits.load(Ordering::SeqCst), 0);
     }
 }

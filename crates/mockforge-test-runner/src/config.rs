@@ -22,6 +22,12 @@ pub struct RunnerConfig {
     /// with `max_concurrent_runs` per org plan-limit, the registry sets
     /// the upper bound on Fly machine count.
     pub max_concurrent_jobs: usize,
+    /// Forward proxy every k6 process must use
+    /// (`MOCKFORGE_RUNNER_K6_EGRESS_PROXY`, e.g. `http://mockforge-egress:4750`).
+    /// It must enforce the SSRF IP policy after DNS resolution. Unset, the
+    /// k6-backed kinds (cloud bench, OWASP, security, WAFBench, CRUD flow)
+    /// are refused.
+    pub k6_egress_proxy: Option<String>,
     /// Polling timeout for `BLPOP`. Shorter values cost more Redis ops
     /// but make graceful shutdown faster.
     pub poll_timeout_secs: usize,
@@ -46,12 +52,18 @@ impl RunnerConfig {
             .and_then(|s| s.parse().ok())
             .unwrap_or(5);
 
+        let k6_egress_proxy = std::env::var("MOCKFORGE_RUNNER_K6_EGRESS_PROXY")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
         Ok(Self {
             redis_url,
             queue_key,
             registry_internal_base_url,
             registry_internal_token,
             max_concurrent_jobs,
+            k6_egress_proxy,
             poll_timeout_secs,
         })
     }

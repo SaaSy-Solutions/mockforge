@@ -90,6 +90,12 @@ impl Executor for TestExecutor {
         // bench/owasp fall through to the lighter-weight reqwest paths
         // below and conformance falls through to synthetic mode.
         if uses_cloud_api(&job.payload) {
+            if let Some(reason) = crate::target_client::k6_refusal(
+                self.kind,
+                mockforge_bench::executor::k6_egress_proxy(),
+            ) {
+                return refuse_k6_run(job, callbacks, started, self.kind, reason).await;
+            }
             match self.kind {
                 "conformance" => {
                     return run_cloud_conformance(job, callbacks, started).await;
@@ -397,6 +403,36 @@ async fn finish_cloud_error(
     })
 }
 
+/// Finish a k6-backed run that this runner will not start (no egress
+/// proxy configured). Errored, not failed: the target was never contacted.
+async fn refuse_k6_run(
+    job: RunJob,
+    callbacks: &RegistryCallbacks,
+    started: Instant,
+    kind: &str,
+    reason: String,
+) -> Result<JobOutcome> {
+    tracing::warn!(run_id = %job.run_id, kind, "{reason}");
+    callbacks
+        .run_event(
+            job.run_id,
+            1,
+            "step_fail",
+            serde_json::json!({ "step": 1, "name": format!("cloud_api_{kind}"), "error": reason }),
+        )
+        .await?;
+    let elapsed = started.elapsed();
+    Ok(JobOutcome {
+        status: JobStatus::Errored,
+        runner_seconds: (elapsed.as_secs_f64().ceil() as i32).max(1),
+        summary: Some(serde_json::json!({
+            "executor_phase": "k6_refused",
+            "kind": kind,
+            "error": reason,
+        })),
+    })
+}
+
 /// Drive a k6 load test via `cloud_api::run_bench`.
 async fn run_cloud_bench(
     job: RunJob,
@@ -685,7 +721,7 @@ async fn run_cloud_conformance(
     // to a follow-up so the first cloud iteration matches the local
     // "no spec, just probe the reference endpoints" UX which is what
     // the page form exposes.
-    let executor = match NativeConformanceExecutor::new(config) {
+    let executor = match NativeConformanceExecutor::with_ssrf_guard(config, Some(ssrf_policy())) {
         Ok(e) => {
             let e = e.with_reference_checks();
             match custom_checks_config {

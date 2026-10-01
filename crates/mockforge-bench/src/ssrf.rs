@@ -162,6 +162,34 @@ pub fn check_url(url: &url::Url, policy: Policy) -> Result<(), SsrfError> {
     }
 }
 
+static PROCESS_GUARD: std::sync::OnceLock<Policy> = std::sync::OnceLock::new();
+
+/// Make every outbound client this crate builds for a target (native
+/// conformance, the pre-flight latency probe) enforce `policy`, and refuse
+/// to start k6 without an egress proxy (see
+/// [`crate::executor::install_k6_egress_proxy`]).
+///
+/// The cloud runner calls this once at startup. The `mockforge bench` CLI
+/// never does, because pointing it at `localhost` is its normal use.
+/// Returns `false` if a guard was already installed.
+pub fn install_process_guard(policy: Policy) -> bool {
+    PROCESS_GUARD.set(policy).is_ok()
+}
+
+/// The policy installed by [`install_process_guard`], if any.
+pub fn process_guard() -> Option<Policy> {
+    PROCESS_GUARD.get().copied()
+}
+
+/// [`guarded_client_builder`] when `guard` is set, else a plain builder.
+/// For crate code that serves both the CLI (unguarded) and the cloud runner.
+pub fn client_builder_for(guard: Option<Policy>) -> reqwest::ClientBuilder {
+    match guard {
+        Some(policy) => guarded_client_builder(policy),
+        None => reqwest::Client::builder(),
+    }
+}
+
 /// reqwest DNS resolver that fails the lookup when any resolved address is in
 /// a blocked range. Checking at connect time, on the addresses the connection
 /// will actually use, closes the DNS-rebinding gap that a separate
@@ -255,8 +283,8 @@ fn blocked_reason_v4(ip: Ipv4Addr, policy: Policy) -> Option<&'static str> {
         }
         return Some("IPv4 loopback (127.0.0.0/8)");
     }
-    if ip.is_unspecified() {
-        return Some("IPv4 unspecified (0.0.0.0)");
+    if ip.octets()[0] == 0 {
+        return Some("IPv4 \"this network\" (0.0.0.0/8)");
     }
     if ip.is_broadcast() {
         return Some("IPv4 broadcast");
@@ -308,7 +336,65 @@ fn blocked_reason_v6(ip: Ipv6Addr, policy: Policy) -> Option<&'static str> {
     if let Some(v4) = ip.to_ipv4_mapped() {
         return blocked_reason_v4(v4, policy);
     }
+    let [a, b, c, d, e, f, g, h] = segments;
+    let embedded = Ipv4Addr::new((g >> 8) as u8, g as u8, (h >> 8) as u8, h as u8);
+    // NAT64 well-known prefix 64:ff9b::/96 (RFC 6052): a DNS64 resolver
+    // synthesizes these for v4-only names, and the NAT64 gateway forwards
+    // them to the embedded v4 address, private or not.
+    if [a, b, c, d, e, f] == [0x64, 0xff9b, 0, 0, 0, 0] {
+        return blocked_reason_v4(embedded, policy);
+    }
+    // NAT64 local-use prefix 64:ff9b:1::/48 (RFC 8215). The embedding
+    // position depends on the operator's prefix length, so block it whole.
+    if [a, b, c] == [0x64, 0xff9b, 1] {
+        return Some("IPv6 NAT64 local-use (64:ff9b:1::/48)");
+    }
+    // IPv4-compatible ::a.b.c.d (deprecated, RFC 4291). :: and ::1 were
+    // handled above.
+    if [a, b, c, d, e, f] == [0; 6] {
+        return blocked_reason_v4(embedded, policy);
+    }
     None
+}
+
+/// Tiny HTTP servers for SSRF tests across this crate.
+#[cfg(test)]
+pub(crate) mod test_server {
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::Arc;
+
+    pub(crate) const OK: &str =
+        "HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok";
+
+    /// A 302 to `location`.
+    pub(crate) fn redirect_to(location: &str) -> &'static str {
+        Box::leak(
+            format!(
+                "HTTP/1.1 302 Found\r\nlocation: {location}\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+            )
+            .into_boxed_str(),
+        )
+    }
+
+    /// Serve `response` to every connection on 127.0.0.1. Returns the port
+    /// and a count of connections that sent a request.
+    pub(crate) async fn serve(response: &'static str) -> (u16, Arc<AtomicUsize>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        let hits = Arc::new(AtomicUsize::new(0));
+        let counter = hits.clone();
+        tokio::spawn(async move {
+            while let Ok((mut sock, _)) = listener.accept().await {
+                let mut buf = [0u8; 1024];
+                if matches!(sock.read(&mut buf).await, Ok(n) if n > 0) {
+                    counter.fetch_add(1, Ordering::SeqCst);
+                }
+                let _ = sock.write_all(response.as_bytes()).await;
+            }
+        });
+        (port, hits)
+    }
 }
 
 #[cfg(test)]
@@ -478,23 +564,11 @@ mod tests {
         check_url(&url("http://127.0.0.1:3000/"), Policy::for_test()).unwrap();
     }
 
-    /// One-shot HTTP server on 127.0.0.1 that answers every connection with
-    /// `response`. Returns its port.
     async fn serve(response: &'static str) -> u16 {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let port = listener.local_addr().unwrap().port();
-        tokio::spawn(async move {
-            while let Ok((mut sock, _)) = listener.accept().await {
-                let mut buf = [0u8; 1024];
-                let _ = sock.read(&mut buf).await;
-                let _ = sock.write_all(response.as_bytes()).await;
-            }
-        });
-        port
+        test_server::serve(response).await.0
     }
 
-    const OK: &str = "HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok";
+    use test_server::OK;
 
     #[tokio::test]
     async fn guarded_client_refuses_a_name_resolving_to_loopback() {
@@ -510,13 +584,50 @@ mod tests {
 
     #[tokio::test]
     async fn guarded_client_refuses_a_redirect_to_a_private_address() {
-        let port = serve(
-            "HTTP/1.1 302 Found\r\nlocation: http://10.0.0.1/\r\ncontent-length: 0\r\nconnection: close\r\n\r\n",
-        )
-        .await;
-        // Loopback allowed so the first hop connects; RFC1918 never is.
-        let client = guarded_client_builder(Policy::for_test()).build().unwrap();
-        let err = client.get(format!("http://127.0.0.1:{port}/")).send().await.unwrap_err();
-        assert!(err.is_redirect(), "{err:?}");
+        use std::sync::atomic::Ordering;
+        let (inner, hits) = test_server::serve(OK).await;
+        for location in [
+            "http://10.0.0.1/".to_string(),
+            format!("http://0.0.0.0:{inner}/"),
+        ] {
+            let port = serve(test_server::redirect_to(&location)).await;
+            // Loopback allowed so the first hop connects; the hop never is.
+            let client = guarded_client_builder(Policy::for_test()).build().unwrap();
+            let err = client.get(format!("http://127.0.0.1:{port}/")).send().await.unwrap_err();
+            assert!(err.is_redirect(), "{location}: {err:?}");
+        }
+        // 0.0.0.0 reaches the local listener, so this proves the hop was not
+        // followed rather than that it merely failed to connect.
+        assert_eq!(hits.load(Ordering::SeqCst), 0);
+    }
+
+    #[test]
+    fn embedded_v4_in_v6_is_checked() {
+        for addr in [
+            "64:ff9b::a00:1",     // NAT64 of 10.0.0.1
+            "64:ff9b::7f00:1",    // NAT64 of 127.0.0.1
+            "64:ff9b::a9fe:a9fe", // NAT64 of 169.254.169.254
+            "64:ff9b:1::a00:1",   // NAT64 local-use
+            "::a00:1",            // IPv4-compatible 10.0.0.1
+            "::ac12:5",           // IPv4-compatible 172.18.0.5
+            "::7f00:1",           // IPv4-compatible 127.0.0.1
+        ] {
+            let ip: IpAddr = addr.parse().unwrap();
+            assert!(blocked_reason(ip, Policy::strict()).is_some(), "{addr} allowed");
+        }
+        for addr in ["64:ff9b::808:808", "::808:808", "2606:4700::1"] {
+            let ip: IpAddr = addr.parse().unwrap();
+            assert!(blocked_reason(ip, Policy::strict()).is_none(), "{addr} blocked");
+        }
+        let err = check_url(&url("http://[64:ff9b::a00:1]/"), Policy::strict()).unwrap_err();
+        assert!(matches!(err, SsrfError::BlockedAddress { .. }));
+    }
+
+    #[test]
+    fn this_network_range_is_blocked() {
+        for addr in ["0.0.0.0", "0.1.2.3"] {
+            let ip: IpAddr = addr.parse().unwrap();
+            assert!(blocked_reason(ip, Policy::strict()).is_some(), "{addr} allowed");
+        }
     }
 }

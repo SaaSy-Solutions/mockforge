@@ -25,6 +25,34 @@ pub fn ssrf_policy() -> Policy {
     }
 }
 
+/// Install the process-wide guards in `mockforge-bench`: the SSRF policy
+/// for clients it builds internally (native conformance, pre-flight probe),
+/// and the k6 egress proxy. Without a proxy, bench refuses to start k6 at
+/// all while the guard is installed. Called once from `Dispatcher::new`.
+pub fn install_process_guards(k6_egress_proxy: Option<String>) {
+    mockforge_bench::ssrf::install_process_guard(ssrf_policy());
+    if let Some(proxy) = k6_egress_proxy {
+        mockforge_bench::executor::install_k6_egress_proxy(proxy);
+    }
+}
+
+/// Kinds that run k6 when `use_cloud_api` is set. k6 does its own DNS and
+/// follows redirects, so only an egress proxy can contain it.
+pub const K6_KINDS: &[&str] = &["bench", "owasp", "security", "wafbench", "crud_flow"];
+
+/// The refusal message for a k6-backed `kind` when no egress proxy is
+/// configured, or `None` when the job may run.
+pub fn k6_refusal(kind: &str, egress_proxy: Option<&str>) -> Option<String> {
+    if K6_KINDS.contains(&kind) && egress_proxy.is_none() {
+        Some(format!(
+            "{kind} runs use k6, which this runner only starts through an egress proxy; \
+             MOCKFORGE_RUNNER_K6_EGRESS_PROXY is not set, so the run was refused"
+        ))
+    } else {
+        None
+    }
+}
+
 /// A reqwest client that can only reach addresses the SSRF policy allows.
 #[derive(Clone)]
 pub struct TargetClient {
@@ -117,5 +145,18 @@ mod tests {
     #[test]
     fn public_targets_are_allowed_to_build() {
         strict().check("https://demo.mocks.mockforge.dev/health").unwrap();
+    }
+
+    #[test]
+    fn k6_kinds_are_refused_without_an_egress_proxy() {
+        for kind in K6_KINDS {
+            let msg = k6_refusal(kind, None).expect("refused");
+            assert!(msg.contains("MOCKFORGE_RUNNER_K6_EGRESS_PROXY"), "{msg}");
+            assert_eq!(k6_refusal(kind, Some("http://mockforge-egress:4750")), None);
+        }
+        // Native (non-k6) kinds are unaffected.
+        for kind in ["conformance", "integration", "smoke", "chaos_campaign"] {
+            assert_eq!(k6_refusal(kind, None), None);
+        }
     }
 }
