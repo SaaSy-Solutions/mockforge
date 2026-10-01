@@ -25,8 +25,12 @@
 -- under a parent that belongs to the bound org.
 --
 -- `resilience_patterns` is the one variation: `workspace_id IS NULL` marks a
--- platform-provided pattern every tenant may READ, so USING also admits NULL;
--- WITH CHECK does not, so platform rows are written only by the owner role.
+-- platform-provided pattern every tenant may READ. It gets the usual
+-- `org_isolation` (all commands, chain only) plus a separate FOR SELECT
+-- `platform_read` policy admitting NULL. Platform rows are therefore readable
+-- by everyone but can be inserted, updated or deleted only by the owner role;
+-- a single FOR ALL policy with `IS NULL` in USING would have let any tenant
+-- DELETE them or UPDATE-claim them.
 --
 -- The `nullif(.., '')` is load-bearing, as in 082/086: a transaction-local GUC
 -- reverts to the EMPTY STRING at COMMIT on a pooled connection, and a bare
@@ -115,6 +119,14 @@
 --   osv_vulnerabilities, learning_tracks, learning_lessons,
 --   learning_recipes, waitlist_subscribers.
 --
+-- ── LOCKING ────────────────────────────────────────────────────────────────
+-- ALTER TABLE .. ENABLE/FORCE and CREATE POLICY take ACCESS EXCLUSIVE on each
+-- table, and sqlx runs this file in one transaction, so all 38 tables are
+-- locked until COMMIT. The statements are catalog-only (no rewrite, no scan)
+-- and these tables are empty or near-empty in production, so the window is
+-- milliseconds (4.6 s total on the rehearsal branch, dominated by round
+-- trips). A long-running query on any of them would make the migration wait.
+--
 -- ── ROLLBACK ───────────────────────────────────────────────────────────────
 -- sqlx has no down migrations. To revert, run as the table owner:
 --   DROP POLICY IF EXISTS org_isolation ON capture_session_members; ALTER TABLE capture_session_members NO FORCE ROW LEVEL SECURITY; ALTER TABLE capture_session_members DISABLE ROW LEVEL SECURITY;
@@ -135,7 +147,7 @@
 --   DROP POLICY IF EXISTS org_isolation ON incident_events; ALTER TABLE incident_events NO FORCE ROW LEVEL SECURITY; ALTER TABLE incident_events DISABLE ROW LEVEL SECURITY;
 --   DROP POLICY IF EXISTS org_isolation ON mock_environments; ALTER TABLE mock_environments NO FORCE ROW LEVEL SECURITY; ALTER TABLE mock_environments DISABLE ROW LEVEL SECURITY;
 --   DROP POLICY IF EXISTS org_isolation ON monitored_services; ALTER TABLE monitored_services NO FORCE ROW LEVEL SECURITY; ALTER TABLE monitored_services DISABLE ROW LEVEL SECURITY;
---   DROP POLICY IF EXISTS org_isolation ON resilience_patterns; ALTER TABLE resilience_patterns NO FORCE ROW LEVEL SECURITY; ALTER TABLE resilience_patterns DISABLE ROW LEVEL SECURITY;
+--   DROP POLICY IF EXISTS org_isolation ON resilience_patterns; DROP POLICY IF EXISTS platform_read ON resilience_patterns; ALTER TABLE resilience_patterns NO FORCE ROW LEVEL SECURITY; ALTER TABLE resilience_patterns DISABLE ROW LEVEL SECURITY;
 --   DROP POLICY IF EXISTS org_isolation ON runtime_captures; ALTER TABLE runtime_captures NO FORCE ROW LEVEL SECURITY; ALTER TABLE runtime_captures DISABLE ROW LEVEL SECURITY;
 --   DROP POLICY IF EXISTS org_isolation ON runtime_request_logs; ALTER TABLE runtime_request_logs NO FORCE ROW LEVEL SECURITY; ALTER TABLE runtime_request_logs DISABLE ROW LEVEL SECURITY;
 --   DROP POLICY IF EXISTS org_isolation ON runtime_traces; ALTER TABLE runtime_traces NO FORCE ROW LEVEL SECURITY; ALTER TABLE runtime_traces DISABLE ROW LEVEL SECURITY;
@@ -755,15 +767,25 @@ END $$;
 ALTER TABLE resilience_patterns ENABLE ROW LEVEL SECURITY;
 ALTER TABLE resilience_patterns FORCE ROW LEVEL SECURITY;
 DO $$ BEGIN
+    -- Every command: only the bound org's workspace patterns. Platform rows
+    -- (workspace_id IS NULL) fail this, so a tenant can never UPDATE, DELETE
+    -- or INSERT one.
     IF NOT EXISTS (SELECT 1 FROM pg_policies
                    WHERE schemaname = 'public' AND tablename = 'resilience_patterns' AND policyname = 'org_isolation') THEN
         CREATE POLICY org_isolation ON resilience_patterns
-            USING (resilience_patterns.workspace_id IS NULL
-                OR EXISTS (SELECT 1 FROM workspaces p1
+            USING (EXISTS (SELECT 1 FROM workspaces p1
                 WHERE p1.id = resilience_patterns.workspace_id
                   AND p1.org_id = nullif(current_setting('app.current_org_id', true), '')::uuid))
             WITH CHECK (EXISTS (SELECT 1 FROM workspaces p1
                 WHERE p1.id = resilience_patterns.workspace_id
                   AND p1.org_id = nullif(current_setting('app.current_org_id', true), '')::uuid));
+    END IF;
+    -- SELECT only: platform patterns are readable by every tenant. Permissive
+    -- policies are OR-ed per command, and this one exists only for SELECT.
+    IF NOT EXISTS (SELECT 1 FROM pg_policies
+                   WHERE schemaname = 'public' AND tablename = 'resilience_patterns' AND policyname = 'platform_read') THEN
+        CREATE POLICY platform_read ON resilience_patterns
+            FOR SELECT
+            USING (resilience_patterns.workspace_id IS NULL);
     END IF;
 END $$;

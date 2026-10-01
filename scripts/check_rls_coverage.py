@@ -49,6 +49,16 @@ The other classes:
 The forced-table set is read from the migrations (`FORCE ROW LEVEL SECURITY`),
 so adding a policy automatically widens the audit.
 
+## Which GUC a statement needs
+
+Each table's required GUC is read from its policies (`app.current_org_id`,
+`app.current_user_id`). A statement inside a helper that binds none of them is
+UNBOUND. `user_public_keys` reads both (owner via the user GUC, org-shared keys
+via the org GUC); under an org-only helper a statement on it is accepted only
+if its SQL filters on `org_id = $n`, otherwise it is a personal-key query that
+would see nothing and is reported UNBOUND. The check is lexical: it looks at
+the statement text, not at what the bound value is.
+
 ## Known blind spots (it is a lexical scanner, not a type checker)
 
   * Variable SQL: `sqlx::query(&query)` / `query_as(&sql)` where the SQL text
@@ -151,6 +161,7 @@ ELEVATED_ALLOWLIST = {
     "store/postgres.rs::find_sso_config_by_email_domain": "pre-auth SSO discovery by email domain, cross-org by definition",
     # ---- genuinely cross-tenant lookups -------------------------------------
     "handlers/tunnels.rs::subdomain_taken_by_any_org": "tunnel subdomains are globally unique across tenants",
+    "handlers/scenario_promotions.rs::find_promotable_scenario": "reads another org's PUBLISHED marketplace scenario to promote it; visibility rule (own / public / non-yanked version) is in the SQL",
     # Marketplace rating aggregates: the reviewer is (by construction) usually
     # in a different org than the template/scenario owner; the stats are
     # derived solely from the reviews table.
@@ -277,6 +288,12 @@ def table_gucs() -> dict[str, set[str]]:
 
 
 TABLE_GUCS: dict[str, set[str]] = {}
+TABLE_GUCS_NEEDED: dict[str, set[str]] = {}
+
+# Tables whose org-GUC policy only SHARES rows owned by a user (the owner is
+# policed by app.current_user_id). An org-only binding is accepted for them
+# only when the statement filters on the sharing column.
+ORG_SHARED_ONLY_WHEN_FILTERED = {"user_public_keys": "org_id"}
 
 
 def table_re(tables: tuple[str, ...]) -> re.Pattern:
@@ -620,9 +637,22 @@ def scan_file(path: Path, table_pattern: re.Pattern, methods: dict, free: dict) 
         if kind == "COVERED" and helper_span:
             bound = HELPER_GUCS.get(helper_span[0], set())
             wrong = sorted(t for t in tables if TABLE_GUCS.get(t) and not (TABLE_GUCS[t] & bound))
+            # A table whose policies read BOTH GUCs (user_public_keys: owner OR
+            # org-shared) is satisfied by either binding on paper, but under an
+            # org-only binding it shows just the org-shared rows. A personal-key
+            # statement there silently reads/writes nothing. Require the SQL to
+            # filter on the sharing column to accept an org-only binding.
+            if bound == {"org"}:
+                for t, col in ORG_SHARED_ONLY_WHEN_FILTERED.items():
+                    if t in tables and t not in wrong and not re.search(
+                        rf"\b(?:\w+\.)?{col}\s*=\s*\$\d", snippet
+                    ):
+                        wrong.append(t)
+                        TABLE_GUCS_NEEDED[t] = {"user"}
             if wrong:
                 kind = "UNBOUND"
-                reason = f"{helper_span[0]} binds {sorted(bound)}, but {','.join(wrong)} need {sorted(set().union(*(TABLE_GUCS[t] for t in wrong)))}"
+                need = set().union(*(TABLE_GUCS_NEEDED.get(t, TABLE_GUCS[t]) for t in wrong))
+                reason = f"{helper_span[0]} binds {sorted(bound)}, but {','.join(wrong)} need {sorted(need)}"
         if kind in ("UNCOVERED", "UNKNOWN"):
             for prefix, why in ELEVATED_PATH_PREFIXES.items():
                 if prefix in rel:

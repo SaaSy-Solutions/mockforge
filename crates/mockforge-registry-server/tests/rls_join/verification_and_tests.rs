@@ -320,6 +320,11 @@ async fn test_suites_schedules_runs_round_trip_and_cross_tenant() {
 
 /// Publish a minimal marketplace scenario in `e`'s org and return its id.
 async fn publish_scenario(e: &E2e) -> String {
+    publish_named_scenario(e).await.0
+}
+
+/// Like [`publish_scenario`], also returning the scenario's name.
+async fn publish_named_scenario(e: &E2e) -> (String, String) {
     // Minimal gzip stream, same fixture as marketplace_e2e.rs.
     let package: Vec<u8> = vec![
         0x1F, 0x8B, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xFF, 0x03, 0x00, 0x00, 0x00, 0x00,
@@ -341,12 +346,13 @@ async fn publish_scenario(e: &E2e) -> String {
         .await,
     );
     let list = ok("list org scenarios", e.get("/api/v1/scenarios").await);
-    arr("list org scenarios", &list)
+    let id = arr("list org scenarios", &list)
         .iter()
         .find(|s| s["name"].as_str() == Some(name.as_str()))
         .and_then(|s| s["id"].as_str())
         .unwrap_or_else(|| panic!("published scenario {name} not in {list}"))
-        .to_string()
+        .to_string();
+    (id, name)
 }
 
 fn promotion_ids(what: &str, body: &Value) -> Vec<String> {
@@ -493,5 +499,56 @@ async fn incident_events_round_trip_and_cross_tenant() {
         other
             .post(&format!("/api/v1/incidents/{incident_id}/acknowledge"), json!({}))
             .await,
+    );
+}
+
+/// Promoting ANOTHER org's scenario: allowed when it is published in the
+/// marketplace (has a non-yanked version), 404 once its only version is
+/// yanked. The promotion is authorized by the caller's workspace, not by
+/// scenario ownership.
+#[tokio::test]
+#[ignore]
+async fn promote_other_orgs_published_scenario() {
+    let a = setup_team_org("rlsjxp").await;
+    let b = setup_team_org("rlsjxpb").await;
+    let ws = create_workspace(&a, &format!("xp-{}", unique())).await;
+    let promote_path = format!("/api/v1/workspaces/{ws}/environments/dev/promote-scenario");
+    let body = |id: &str| {
+        json!({
+            "scenario_id": id,
+            "scenario_version": "1.0.0",
+            "from_environment": "dev",
+            "to_environment": "test",
+        })
+    };
+
+    let (published, _) = publish_named_scenario(&b).await;
+    let res = ok(
+        "A promotes B's published scenario",
+        a.post(&promote_path, body(&published)).await,
+    );
+    let pid = str_field("cross-org promotion", &res, "promotion_id");
+    let listed = promotion_ids(
+        "A promotions",
+        &ok("A list promotions", a.get(&format!("/api/v1/workspaces/{ws}/promotions")).await),
+    );
+    assert_contains("A sees its promotion of B's scenario", &listed, &pid);
+
+    let (unpublished, name) = publish_named_scenario(&b).await;
+    ok(
+        "B yanks its only version",
+        b.delete(&format!("/api/v1/marketplace/scenarios/{name}/versions/1.0.0/yank"))
+            .await,
+    );
+    expect_status(
+        "A promotes B's unpublished scenario",
+        StatusCode::NOT_FOUND,
+        a.post(&promote_path, body(&unpublished)).await,
+    );
+    // A random id is the same 404.
+    expect_status(
+        "A promotes a missing scenario",
+        StatusCode::NOT_FOUND,
+        a.post(&promote_path, body(&uuid::Uuid::new_v4().to_string())).await,
     );
 }

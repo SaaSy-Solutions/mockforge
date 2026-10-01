@@ -66,15 +66,13 @@ pub async fn promote_scenario(
     mockforge_core::workspace::ScenarioPromotionWorkflow::validate_promotion_path(from_env, to_env)
         .map_err(ApiError::InvalidRequest)?;
 
-    // Get scenario
-    // Runtime pool bound to the caller's org: the scenarios policy admits this
-    // org's scenarios plus public (org_id IS NULL) ones.
-    let (scenario_org_id, scenario_id) = (org_ctx.org_id, request.scenario_id);
-    let scenario = with_org_context(state.db.runtime_pool(), scenario_org_id, move |tx| {
-        Box::pin(async move { Ok(Scenario::find_by_id(&mut **tx, scenario_id).await?) })
-    })
-    .await?
-    .ok_or_else(|| ApiError::ScenarioNotFound("Scenario not found".to_string()))?;
+    // Get scenario. Any scenario the caller could see in the marketplace may
+    // be promoted: their own org's, a public one, or one another org has
+    // published. Authorization is the workspace check below, not scenario
+    // ownership.
+    let scenario = find_promotable_scenario(&state, org_ctx.org_id, request.scenario_id)
+        .await?
+        .ok_or_else(|| ApiError::ScenarioNotFound("Scenario not found".to_string()))?;
 
     // Determine if approval is required
     let approval_rules = mockforge_core::workspace::ApprovalRules::default();
@@ -416,6 +414,37 @@ async fn find_promotion(
     })
     .await?
     .ok_or_else(|| ApiError::InvalidRequest("Promotion not found".to_string()))
+}
+
+/// Load a scenario the caller's org may promote: its own, a public one
+/// (`org_id IS NULL`), or another org's scenario that is published in the
+/// marketplace (has at least one non-yanked version).
+///
+/// Owner pool on purpose: the `scenarios` policy only admits the bound org's
+/// rows and public ones, but promoting another org's published marketplace
+/// scenario is a supported flow (on main it ran on the owner pool). The
+/// visibility rule above is applied in SQL, and the promotion itself is
+/// authorized by `workspace_in_org` and written on the runtime pool.
+async fn find_promotable_scenario(
+    state: &AppState,
+    org_id: Uuid,
+    scenario_id: Uuid,
+) -> ApiResult<Option<Scenario>> {
+    sqlx::query_as::<_, Scenario>(
+        r#"
+        SELECT s.* FROM scenarios s
+        WHERE s.id = $1
+          AND (s.org_id = $2
+               OR s.org_id IS NULL
+               OR EXISTS (SELECT 1 FROM scenario_versions v
+                          WHERE v.scenario_id = s.id AND NOT v.yanked))
+        "#,
+    )
+    .bind(scenario_id)
+    .bind(org_id)
+    .fetch_optional(state.db.pool())
+    .await
+    .map_err(ApiError::Database)
 }
 
 /// App-layer twin of the RLS policy: reject a workspace outside the caller's

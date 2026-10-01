@@ -331,6 +331,10 @@ BEGIN
     INSERT INTO user_public_keys (user_id, algorithm, public_key_b64, label)
       VALUES (u, 'ed25519', 'cmxzLWdhdGUtcHJvYmUtcHVibGljLWtleS1ieXRlcyE=', 'rls gate probe');
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM resilience_patterns WHERE name = 'rls gate platform probe') THEN
+    INSERT INTO resilience_patterns (workspace_id, kind, name, config)
+      VALUES (NULL, 'retry', 'rls gate platform probe', '{}');
+  END IF;
 END $$;
 SQL
 
@@ -346,6 +350,27 @@ SQL
     fi
     [ "$leaked" = "0" ] || die "app role saw $leaked $t rows with no GUC bound — RLS is not enforcing on $t"
   done
+  # Platform resilience patterns (workspace_id IS NULL) are readable by every
+  # tenant but must never be writable from the request path: with or without
+  # an org bound, UPDATE and DELETE must touch 0 rows.
+  local probe_org pw
+  probe_org="$(psql_owner -tAc "SELECT id FROM organizations WHERE slug = 'rls-gate-probe'")"
+  # Runs one statement as the app role inside a rolled-back transaction with
+  # app.current_org_id = $1 and prints the single integer it returns.
+  app_count_as_org() {
+    printf "BEGIN;\nDO \$\$ BEGIN PERFORM set_config('app.current_org_id', '%s', true); END \$\$;\n%s\nROLLBACK;\n" "$1" "$2" \
+      | psql_app -tAq -v ON_ERROR_STOP=1 | grep -E '^[0-9]+$'
+  }
+  for pw in "" "$probe_org"; do
+    local seen upd del
+    seen="$(app_count_as_org "$pw" "SELECT count(*) FROM resilience_patterns WHERE name = 'rls gate platform probe';")"
+    [ "$seen" = "1" ] || die "app role (org='${pw}') cannot READ the platform resilience pattern (saw $seen)"
+    upd="$(app_count_as_org "$pw" "WITH u AS (UPDATE resilience_patterns SET name = 'claimed' WHERE name = 'rls gate platform probe' RETURNING 1) SELECT count(*) FROM u;")"
+    [ "$upd" = "0" ] || die "app role (org='${pw}') UPDATED a platform resilience pattern ($upd rows)"
+    del="$(app_count_as_org "$pw" "WITH d AS (DELETE FROM resilience_patterns WHERE name = 'rls gate platform probe' RETURNING 1) SELECT count(*) FROM d;")"
+    [ "$del" = "0" ] || die "app role (org='${pw}') DELETED a platform resilience pattern ($del rows)"
+  done
+
   local probe_flows probe_keys
   probe_flows="$(psql_owner -tAc "SELECT count(*) FROM flows WHERE name = 'rls gate probe'")"
   probe_keys="$(psql_owner -tAc "SELECT count(*) FROM user_public_keys WHERE label = 'rls gate probe'")"
