@@ -192,7 +192,14 @@ impl MockAI {
         &self,
         session_id: Option<String>,
     ) -> Result<StatefulAiContext> {
-        let session_id = session_id.unwrap_or_else(|| format!("session_{}", uuid::Uuid::new_v4()));
+        // Without a client-supplied session ID nothing can ever look this
+        // context up again (the generated ID is never returned to the
+        // client), so it must not be stored: doing so leaked one context per
+        // mutating request and serialized every write on the map's lock.
+        let Some(session_id) = session_id else {
+            let ephemeral_id = format!("session_{}", uuid::Uuid::new_v4());
+            return Ok(StatefulAiContext::new(ephemeral_id, self.config.clone()));
+        };
 
         // Try to get existing context
         {
@@ -1069,5 +1076,24 @@ mod tests {
                 body
             );
         }
+    }
+
+    #[tokio::test]
+    async fn test_requests_without_session_id_are_not_retained() {
+        let mockai = MockAI::new(IntelligentBehaviorConfig::default());
+
+        for _ in 0..100 {
+            mockai.get_or_create_session_context(None).await.unwrap();
+        }
+        assert!(
+            mockai.session_contexts.read().await.is_empty(),
+            "contexts without a client session ID can never be looked up again, so storing \
+             them leaks one per request"
+        );
+
+        let first = mockai.get_or_create_session_context(Some("s1".to_string())).await.unwrap();
+        let again = mockai.get_or_create_session_context(Some("s1".to_string())).await.unwrap();
+        assert_eq!(first.session_id(), again.session_id());
+        assert_eq!(mockai.session_contexts.read().await.len(), 1);
     }
 }
