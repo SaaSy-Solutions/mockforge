@@ -7,7 +7,7 @@ metadata:
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
-    kind: Deployment
+    kind: StatefulSet
     name: mockforge
   minReplicas: 3
   maxReplicas: 20

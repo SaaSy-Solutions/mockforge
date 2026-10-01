@@ -8,6 +8,10 @@ on:
       - 'helm/**'
       - '.github/workflows/k8s-tests.yml'
   workflow_dispatch:
+  # Weekly run against main. The Chaos Engineering job only runs here and on
+  # workflow_dispatch: it is too slow for every PR.
+  schedule:
+    - cron: '0 6 * * 1'
 
 # Push-on-main trigger removed: PR run already verifies the change. Only
 # GitHub-internal context is interpolated below (workflow / ref / event_name).
@@ -148,8 +152,6 @@ jobs:
       - name: Isolate kubeconfig
         run: echo "KUBECONFIG=$RUNNER_TEMP/kubeconfig" >> "$GITHUB_ENV"
 
-      # Single node on purpose: k8s/deployment.yaml runs 3 replicas against one
-      # ReadWriteOnce PVC, which only schedules when all replicas share a node.
       - name: Create KinD cluster
         uses: helm/kind-action@v1
         with:
@@ -161,15 +163,28 @@ jobs:
           kind load docker-image mockforge:test --name mockforge-test-${{ github.run_id }}
 
       # Applies the core manifests (namespace with the "restricted" Pod
-      # Security Standard, RBAC, config, PVC, services, deployment, CRDs) and
+      # Security Standard, RBAC, config, services, StatefulSet, CRDs) and
       # server-side dry-runs the CRD-free add-ons. ServiceMonitor and
       # ExternalSecrets need operator CRDs; kubeconform covers those.
       - name: Deploy MockForge
         run: scripts/k8s-deploy-core.sh mockforge:test mockforge
 
-      - name: Wait for deployment
+      - name: Wait for rollout
         run: |
-          kubectl rollout status deployment/mockforge -n mockforge --timeout=300s
+          kubectl rollout status statefulset/mockforge -n mockforge --timeout=300s
+
+      # Each replica must own its recorder volume (SQLite must not be shared).
+      - name: Verify per-replica recorder volumes
+        run: |
+          kubectl get pvc -n mockforge
+          replicas="$(kubectl get statefulset mockforge -n mockforge -o jsonpath='{.spec.replicas}')"
+          for i in $(seq 0 $((replicas - 1))); do
+            claim="$(kubectl get pod "mockforge-$i" -n mockforge \
+              -o jsonpath='{.spec.volumes[?(@.name=="recorder-db")].persistentVolumeClaim.claimName}')"
+            phase="$(kubectl get pvc "$claim" -n mockforge -o jsonpath='{.status.phase}')"
+            echo "mockforge-$i -> $claim ($phase)"
+            [ "$claim" = "recorder-db-mockforge-$i" ] && [ "$phase" = "Bound" ]
+          done
 
       - name: Run smoke tests
         run: |
@@ -270,7 +285,9 @@ jobs:
     name: Chaos Engineering Tests
     runs-on: [self-hosted, linux, x64, rust]
     timeout-minutes: 30
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # Slow (Chaos Mesh install + two timed experiments), so manual and weekly
+    # only. Gating this on `push` left it dead: push is not a trigger here.
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'schedule'
 
     steps:
       - name: Checkout repository
@@ -287,16 +304,30 @@ jobs:
         with:
           cluster_name: mockforge-chaos-${{ github.run_id }}
 
+      - name: Setup Helm
+        uses: azure/setup-helm@v5
+
+      # KinD nodes run containerd, not docker (the chart's default runtime).
       - name: Install Chaos Mesh
         run: |
-          curl -sSL https://mirrors.chaos-mesh.org/v2.6.0/install.sh | bash
+          helm repo add chaos-mesh https://charts.chaos-mesh.org
+          helm repo update chaos-mesh
+          helm install chaos-mesh chaos-mesh/chaos-mesh \
+            --version 2.8.4 \
+            --namespace chaos-mesh \
+            --create-namespace \
+            --set chaosDaemon.runtime=containerd \
+            --set chaosDaemon.socketPath=/run/containerd/containerd.sock \
+            --set dashboard.create=false \
+            --wait \
+            --timeout 5m
 
       - name: Deploy MockForge
         run: |
           docker build -t mockforge:test .
           kind load docker-image mockforge:test --name mockforge-chaos-${{ github.run_id }}
           scripts/k8s-deploy-core.sh mockforge:test mockforge
-          kubectl rollout status deployment/mockforge -n mockforge --timeout=300s
+          kubectl rollout status statefulset/mockforge -n mockforge --timeout=300s
 
       - name: Run pod failure chaos
         run: |
@@ -318,10 +349,14 @@ jobs:
           EOF
           sleep 35
 
+      # StatefulSets have no Available condition: wait for every replica to
+      # be Ready again, then hit the service.
       - name: Verify recovery
         run: |
-          kubectl wait --for=condition=available --timeout=60s \
-            deployment/mockforge -n mockforge
+          kubectl rollout status statefulset/mockforge -n mockforge --timeout=180s
+          kubectl wait --for=condition=Ready pod -l app=mockforge -n mockforge --timeout=180s
+          kubectl run curl-recovery --image=curlimages/curl:latest --rm -i --restart=Never -n default -- \
+            curl -fsS http://mockforge.mockforge.svc.cluster.local:3000/health/ready
 
       - name: Run network delay chaos
         run: |
@@ -353,6 +388,13 @@ jobs:
           kubectl delete podchaos pod-failure-test -n mockforge || true
           kubectl delete networkchaos network-delay-test -n mockforge || true
 
+      - name: Check pod logs
+        if: failure()
+        run: |
+          kubectl get pods,pvc -n mockforge
+          kubectl describe pods -n mockforge
+          kubectl logs -n mockforge -l app=mockforge --tail=100
+
   cost-estimation:
     name: Cost Estimation
     runs-on: [self-hosted, linux, x64, rust]
@@ -370,7 +412,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### CPU and Memory Requests/Limits:" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          grep -A 10 "resources:" k8s/deployment.yaml | grep -E "(cpu|memory):" || echo "No resource limits found"
+          grep -A 10 "resources:" k8s/statefulset.yaml | grep -E "(cpu|memory):" || echo "No resource limits found"
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Note: Actual costs depend on your cloud provider and cluster configuration." >> $GITHUB_STEP_SUMMARY

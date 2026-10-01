@@ -20,7 +20,7 @@ IMAGE="${1:-ghcr.io/saasy-solutions/mockforge:latest}"
 NAMESPACE="${2:-mockforge}"
 K8S_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../k8s" && pwd)"
 
-CORE=(pod-security.yaml rbac.yaml configmap.yaml pvc.yaml service.yaml deployment.yaml)
+CORE=(pod-security.yaml rbac.yaml configmap.yaml service.yaml statefulset.yaml)
 DRY_RUN_ONLY=(network-policy.yaml hpa.yaml ingress.yaml cdn-config.yaml redis.yaml)
 
 kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
@@ -29,7 +29,7 @@ kubectl create namespace "$NAMESPACE" --dry-run=client -o yaml | kubectl apply -
 kubectl apply -f "$K8S_DIR/crd/"
 
 # The API server only *warns* about Pod Security "restricted" violations on
-# workload objects (the pods are then rejected later by the ReplicaSet), so
+# workload objects (the pods are then rejected later by the workload controller), so
 # fail fast on those warnings here. Not --warnings-as-errors: recent API
 # servers emit an unrelated, spurious sessionAffinity warning for headless
 # Services.

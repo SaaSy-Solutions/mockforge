@@ -1,0 +1,24 @@
+{{- if .Values.persistence.enabled }}
+# Governing Service for the StatefulSet (templates/workload.yaml): gives each
+# replica a stable DNS name, <fullname>-N.<fullname>-headless.<namespace>.svc.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "mockforge.fullname" . }}-headless
+  labels:
+    {{- include "mockforge.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - port: {{ .Values.service.http.port }}
+    targetPort: http
+    protocol: TCP
+    name: http
+  - port: {{ .Values.service.grpc.port }}
+    targetPort: grpc
+    protocol: TCP
+    name: grpc
+  selector:
+    {{- include "mockforge.selectorLabels" . | nindent 4 }}
+{{- end }}

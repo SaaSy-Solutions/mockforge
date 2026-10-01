@@ -20,7 +20,7 @@ Service Level Objectives are being violated. If sustained, this will exhaust the
 
 3. **Check recent deployments**
    ```bash
-   kubectl rollout history deployment/mockforge
+   kubectl rollout history statefulset/mockforge
    ```
 
 4. **Check for external factors**

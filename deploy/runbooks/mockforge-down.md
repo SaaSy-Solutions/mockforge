@@ -40,7 +40,7 @@ MockForge instance is completely unreachable. Mock API responses are unavailable
 2. **OOMKilled**: Increase memory limits in deployment manifest or Helm values
 3. **Node issues**: Cordon unhealthy node, pods should reschedule automatically
 4. **Network issues**: Check service endpoints and network policies
-5. **Manual restart**: `kubectl rollout restart deployment/mockforge`
+5. **Manual restart**: `kubectl rollout restart statefulset/mockforge`
 
 ## Escalation
 If not resolved within 5 minutes, page the on-call engineer.

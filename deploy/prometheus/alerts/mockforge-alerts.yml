@@ -148,9 +148,9 @@ groups:
       - alert: MockForgePVCAlmostFull
         expr: |
           (
-            kubelet_volume_stats_used_bytes{persistentvolumeclaim="mockforge-recorder-pvc"}
+            kubelet_volume_stats_used_bytes{persistentvolumeclaim=~"(recorder-db|data)-mockforge-[0-9]+"}
             /
-            kubelet_volume_stats_capacity_bytes{persistentvolumeclaim="mockforge-recorder-pvc"}
+            kubelet_volume_stats_capacity_bytes{persistentvolumeclaim=~"(recorder-db|data)-mockforge-[0-9]+"}
           ) > 0.85
         for: 10m
         labels:

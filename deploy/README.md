@@ -287,7 +287,7 @@ curl http://localhost:9090/metrics
 docker exec -it mockforge /bin/sh
 
 # Kubernetes
-kubectl exec -it deployment/mockforge -- /bin/sh
+kubectl exec -it statefulset/mockforge -- /bin/sh
 ```
 
 ## Security Considerations
