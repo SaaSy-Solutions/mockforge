@@ -174,6 +174,7 @@ ELEVATED_ALLOWLIST = {
     "handlers/internal_test_runs.rs::run_finished": "internal shared-token runner callback, no user org context",
     "handlers/internal_test_runs.rs::mirror_kind_status": "internal shared-token runner callback, no user org context",
     "handlers/internal_test_runs.rs::maybe_raise_finding_incident": "internal shared-token runner callback, no user org context",
+    "handlers/internal_test_runs.rs::get_capture_exchanges": "internal shared-token replay callback, no user org context; SQL constrains captures to the session's org",
     "handlers/internal_test_runs.rs::get_tunnel_reservation_by_subdomain": "internal shared-token tunnel lookup by subdomain, cross-org",
     "handlers/token_rotation.rs::send_rotation_reminders": "cross-org reminder sweep driven by a worker",
     "handlers/internal_test_runs.rs::ingest_runner_event": "internal shared-token runner callback, no user org context",

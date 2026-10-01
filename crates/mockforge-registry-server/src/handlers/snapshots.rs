@@ -674,6 +674,16 @@ pub async fn restore_snapshot(
             let target_ref = c.get("target_ref").and_then(|v| v.as_str()).unwrap_or("").to_string();
             let cfg = c.get("config").cloned().unwrap_or_else(|| serde_json::json!({}));
             let safety = c.get("safety_config").cloned().unwrap_or_else(|| serde_json::json!({}));
+            if let Err(e) =
+                super::chaos::ensure_target_in_org(&state, org_id, &target_kind, &target_ref).await
+            {
+                errors.push(serde_json::json!({
+                    "kind": "chaos_campaign",
+                    "name": name,
+                    "error": e.to_string(),
+                }));
+                continue;
+            }
             let description = c.get("description").and_then(|v| v.as_str()).map(str::to_string);
             let owned_name = name.to_string();
             match with_org_context(pool, org_id, |tx| {

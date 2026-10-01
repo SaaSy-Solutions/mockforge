@@ -1610,13 +1610,26 @@ pub async fn ingest_runtime_captures(
     // bodies), so the cap is tighter — a runaway shipper shouldn't fill
     // a single transaction with megabytes of payload.
     const MAX_BATCH: usize = 100;
-    let exchanges: Vec<CaptureIngestExchange> =
-        payload.exchanges.into_iter().take(MAX_BATCH).collect();
+    // The recorder's capture id is a UUID; replay and session membership
+    // key on it as one. Drop malformed ids (rather than failing the batch,
+    // which the shipper would retry forever) and store the canonical form.
+    let exchanges: Vec<(String, CaptureIngestExchange)> = payload
+        .exchanges
+        .into_iter()
+        .take(MAX_BATCH)
+        .filter_map(|exchange| match Uuid::parse_str(&exchange.request.id) {
+            Ok(id) => Some((id.to_string(), exchange)),
+            Err(_) => {
+                tracing::warn!(%deployment_id, "dropping capture with non-UUID id");
+                None
+            }
+        })
+        .collect();
     let accepted = exchanges.len();
 
     let pool = state.db.pool();
     let mut tx = pool.begin().await.map_err(ApiError::Database)?;
-    for exchange in &exchanges {
+    for (capture_id, exchange) in &exchanges {
         let req = &exchange.request;
         let resp = exchange.response.as_ref();
         sqlx::query(
@@ -1636,7 +1649,7 @@ pub async fn ingest_runtime_captures(
             "#,
         )
         .bind(deployment_id)
-        .bind(&req.id)
+        .bind(capture_id)
         .bind(&req.protocol)
         .bind(req.timestamp)
         .bind(&req.method)

@@ -231,8 +231,14 @@ impl RegistryCallbacks {
     /// internal proxy. Used by the chaos executor for
     /// target_kind=hosted_mock — the registry resolves the
     /// deployment's internal Fly URL and forwards the request to
-    /// the container's `/__mockforge/chaos/toggle`.
-    pub async fn toggle_hosted_chaos(&self, deployment_id: Uuid, enabled: bool) -> Result<()> {
+    /// the container's `/__mockforge/chaos/toggle`. `run_id` lets the
+    /// registry refuse a deployment outside the run's org.
+    pub async fn toggle_hosted_chaos(
+        &self,
+        run_id: Uuid,
+        deployment_id: Uuid,
+        enabled: bool,
+    ) -> Result<()> {
         let url = format!(
             "{}/api/v1/internal/hosted-mocks/{deployment_id}/chaos",
             self.base_url.trim_end_matches('/'),
@@ -241,7 +247,7 @@ impl RegistryCallbacks {
             .http
             .post(&url)
             .bearer_auth(&self.token)
-            .json(&serde_json::json!({ "enabled": enabled }))
+            .json(&serde_json::json!({ "enabled": enabled, "run_id": run_id }))
             .send()
             .await?;
         resp.error_for_status()?;

@@ -110,6 +110,9 @@ pub async fn modify_session_members(
     Json(op): Json<MembersOp>,
 ) -> ApiResult<Json<serde_json::Value>> {
     let (session, org_id) = load_authorized_session_with_org(&state, user_id, &headers, id).await?;
+    if let MembersOp::Add { capture_id } = &op {
+        ensure_capture_in_org(&state, org_id, *capture_id).await?;
+    }
     let sid = session.id;
     let changed = with_org_context(state.db.runtime_pool(), org_id, |tx| {
         Box::pin(async move {
@@ -379,6 +382,40 @@ async fn authorize_workspace_in_org(
     .ok_or_else(|| ApiError::InvalidRequest("Workspace not found".into()))?;
     if org_id != workspace.org_id {
         return Err(ApiError::InvalidRequest("Workspace not found".into()));
+    }
+    Ok(())
+}
+
+/// A session member must be a capture recorded by a deployment in `org_id`.
+/// The replay executor ships every member's full request/response bodies
+/// back into the session's run, so an unchecked id would let one org read
+/// another org's traffic. A foreign or unknown capture reads the same.
+async fn ensure_capture_in_org(state: &AppState, org_id: Uuid, capture_id: Uuid) -> ApiResult<()> {
+    let owned = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            // `capture_id` is TEXT; the CASE guards the cast so a malformed
+            // legacy row cannot fail the whole query with 22P02.
+            Ok(sqlx::query_scalar::<_, bool>(
+                r#"
+                SELECT EXISTS (
+                    SELECT 1
+                      FROM runtime_captures rc
+                      JOIN hosted_mocks hm ON hm.id = rc.deployment_id
+                     WHERE hm.org_id = $1
+                       AND CASE WHEN rc.capture_id ~* '^[0-9a-f]{8}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{4}-?[0-9a-f]{12}$'
+                                THEN rc.capture_id::uuid END = $2
+                )
+                "#,
+            )
+            .bind(org_id)
+            .bind(capture_id)
+            .fetch_one(&mut **tx)
+            .await?)
+        })
+    })
+    .await?;
+    if !owned {
+        return Err(ApiError::InvalidRequest("Capture not found".into()));
     }
     Ok(())
 }

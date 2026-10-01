@@ -131,6 +131,7 @@ E2E_TESTS=(
   --test rls_coverage_e2e
   --test hosted_mock_rls_routes_e2e
   --test rls_join_coverage_e2e
+  --test cross_tenant_chaos_capture_e2e
 )
 
 # Server + test env. Values are literals from registry-e2e.yml; none are secret.

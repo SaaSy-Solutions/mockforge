@@ -170,7 +170,7 @@ impl Executor for ChaosExecutor {
             None
         };
         let real_chaos_enabled = if let Some(deployment_id) = real_chaos_target_id {
-            match callbacks.toggle_hosted_chaos(deployment_id, true).await {
+            match callbacks.toggle_hosted_chaos(job.run_id, deployment_id, true).await {
                 Ok(()) => {
                     callbacks
                         .run_event(
@@ -294,7 +294,9 @@ impl Executor for ChaosExecutor {
         // cap still bounds blast radius).
         if real_chaos_enabled {
             if let Some(deployment_id) = real_chaos_target_id {
-                if let Err(e) = callbacks.toggle_hosted_chaos(deployment_id, false).await {
+                if let Err(e) =
+                    callbacks.toggle_hosted_chaos(job.run_id, deployment_id, false).await
+                {
                     tracing::error!(
                         error = %e,
                         %deployment_id,

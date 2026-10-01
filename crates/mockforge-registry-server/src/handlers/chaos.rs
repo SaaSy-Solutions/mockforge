@@ -25,7 +25,9 @@ use uuid::Uuid;
 use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser},
-    models::{ChaosCampaign, ChaosCampaignReport, CloudWorkspace, ResiliencePattern, TestRun},
+    models::{
+        ChaosCampaign, ChaosCampaignReport, CloudWorkspace, HostedMock, ResiliencePattern, TestRun,
+    },
     store::with_org_context,
     AppState,
 };
@@ -79,6 +81,7 @@ pub async fn create_campaign(
     if request.target_ref.trim().is_empty() {
         return Err(ApiError::InvalidRequest("target_ref must not be empty".into()));
     }
+    ensure_target_in_org(&state, org_id, &request.target_kind, &request.target_ref).await?;
 
     let campaign = with_org_context(state.db.runtime_pool(), org_id, |tx| {
         Box::pin(async move {
@@ -168,6 +171,9 @@ pub async fn trigger_run(
     // `org_id` is the campaign's workspace org, verified against the caller.
     let (campaign, org_id) =
         load_authorized_campaign_with_org(&state, user_id, &headers, id).await?;
+    // Re-check at trigger time: campaigns created before create-time
+    // validation existed may still name another org's deployment.
+    ensure_target_in_org(&state, org_id, &campaign.target_kind, &campaign.target_ref).await?;
 
     // Reuse the test_runs concurrency cap so chaos campaigns and unit
     // tests fight over the same runner-pool slots — a single org can't
@@ -279,6 +285,32 @@ async fn authorize_workspace(
         return Err(ApiError::InvalidRequest("Workspace not found".into()));
     }
     Ok(ctx.org_id)
+}
+
+/// A `hosted_mock` target must name a live deployment in `org_id`: the runner
+/// toggles chaos on whatever deployment `target_ref` names, so an unchecked
+/// ref lets one org fault-inject another org's mock. A foreign or missing
+/// deployment reads the same ("not found") so ids are not enumerable.
+pub(crate) async fn ensure_target_in_org(
+    state: &AppState,
+    org_id: Uuid,
+    target_kind: &str,
+    target_ref: &str,
+) -> ApiResult<()> {
+    if target_kind != "hosted_mock" {
+        return Ok(());
+    }
+    let not_found = || ApiError::InvalidRequest("target_ref: deployment not found".into());
+    let deployment_id = Uuid::parse_str(target_ref.trim()).map_err(|_| not_found())?;
+    let deployment = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(HostedMock::find_by_id(&mut **tx, deployment_id).await?) })
+    })
+    .await?
+    .ok_or_else(not_found)?;
+    if deployment.org_id != org_id {
+        return Err(not_found());
+    }
+    Ok(())
 }
 
 /// Load a campaign the caller may access, returning it with the authorized
