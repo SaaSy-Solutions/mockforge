@@ -345,6 +345,14 @@ jobs:
     # signal that was never acted on at PR-review time. Codecov tracks the
     # trend on main; if a PR needs per-branch coverage, use workflow_dispatch.
     if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    # The instrumented workspace build is the largest thing this runner pool
+    # builds. Without these it filled the shared disk mid-run (2026-10-01) and
+    # the job died with no log. llvm-cov needs -C instrument-coverage, not
+    # debuginfo.
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
     - name: Set per-runner CARGO_HOME
       # `runner.name` is unavailable in workflow- or job-level `env:` blocks
@@ -388,6 +396,12 @@ jobs:
       with:
         files: lcov.info
         fail_ci_if_error: false
+
+    # Self-hosted disks persist between jobs; don't leave the instrumented
+    # build (tens of GB) behind for the next job to trip over.
+    - name: Remove instrumented build output
+      if: always()
+      run: rm -rf target/llvm-cov-target
 
   msrv:
     name: Minimum Supported Rust Version
