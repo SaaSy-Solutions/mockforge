@@ -515,6 +515,15 @@ async fn resolve_org(state: &AppState, user_id: Uuid, headers: &HeaderMap) -> Ap
 }
 
 /// Verify `workspace_id` belongs to the already-resolved caller org.
+/// See `captures::as_not_found`: a loaded row whose workspace fails the org
+/// check must answer exactly like a missing row.
+fn as_not_found(err: ApiError, message: &str) -> ApiError {
+    match err {
+        ApiError::InvalidRequest(_) => ApiError::InvalidRequest(message.into()),
+        other => other,
+    }
+}
+
 async fn check_workspace_in_org(
     state: &AppState,
     org_id: Uuid,
@@ -548,7 +557,9 @@ async fn load_authorized_service(
     })
     .await?
     .ok_or_else(|| ApiError::InvalidRequest("Monitored service not found".into()))?;
-    check_workspace_in_org(state, org_id, svc.workspace_id).await?;
+    check_workspace_in_org(state, org_id, svc.workspace_id)
+        .await
+        .map_err(|e| as_not_found(e, "Monitored service not found"))?;
     Ok((svc, org_id))
 }
 
@@ -573,7 +584,9 @@ async fn load_authorized_diff_run(
     })
     .await?;
     let (run, svc) = found.ok_or_else(|| ApiError::InvalidRequest("Diff run not found".into()))?;
-    check_workspace_in_org(state, org_id, svc.workspace_id).await?;
+    check_workspace_in_org(state, org_id, svc.workspace_id)
+        .await
+        .map_err(|e| as_not_found(e, "Diff run not found"))?;
     Ok((run, org_id))
 }
 
@@ -591,6 +604,8 @@ async fn load_authorized_fitness_function(
     })
     .await?
     .ok_or_else(|| ApiError::InvalidRequest("Fitness function not found".into()))?;
-    check_workspace_in_org(state, org_id, row.workspace_id).await?;
+    check_workspace_in_org(state, org_id, row.workspace_id)
+        .await
+        .map_err(|e| as_not_found(e, "Fitness function not found"))?;
     Ok((row, org_id))
 }

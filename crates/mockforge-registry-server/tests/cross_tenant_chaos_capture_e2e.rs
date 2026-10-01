@@ -458,3 +458,46 @@ async fn capture_ingest_rejects_non_uuid_capture_id() {
 
     assert_eq!(ids, vec![good.to_string()], "a non-UUID capture_id was stored");
 }
+
+/// Another org's capture session must be indistinguishable from one that does
+/// not exist, on every session-scoped route: same status, same body. Any
+/// difference lets a caller probe which session ids exist in other tenants.
+#[tokio::test]
+#[ignore]
+async fn foreign_capture_session_reads_like_a_missing_one() {
+    let victim = register("ov").await;
+    let prober = register("op").await;
+    let victim_session = create_session(&victim).await;
+    let missing_session = Uuid::new_v4();
+    let capture = Uuid::new_v4();
+
+    let probes: [(Method, &str, Value); 5] = [
+        (Method::PATCH, "/members", json!({ "op": "add", "capture_id": capture })),
+        (Method::PATCH, "/members", json!({ "op": "remove", "capture_id": capture })),
+        (Method::POST, "/train", json!({ "name": "probe" })),
+        (Method::POST, "/replay", json!({})),
+        (Method::DELETE, "", json!({})),
+    ];
+
+    for (method, suffix, body) in probes {
+        let mut seen = Vec::new();
+        for session in [victim_session, missing_session] {
+            let path = format!("/api/v1/capture-sessions/{session}{suffix}");
+            let (status, mut resp) = prober.send(method.clone(), &path, body.clone()).await;
+            if let Some(obj) = resp.as_object_mut() {
+                obj.remove("request_id");
+            }
+            seen.push((status, resp));
+        }
+        assert_eq!(
+            seen[0], seen[1],
+            "{method} /capture-sessions/{{id}}{suffix}: a foreign session answers differently \
+             from a missing one (existence oracle)"
+        );
+        assert!(
+            seen[0].0.is_client_error(),
+            "{method} {suffix} on a foreign session: {:?}",
+            seen[0]
+        );
+    }
+}
