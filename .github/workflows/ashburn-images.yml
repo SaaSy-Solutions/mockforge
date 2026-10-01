@@ -1,4 +1,4 @@
-name: Ashburn registry and tunnel images
+name: Ashburn registry, tunnel and runner images
 
 on:
   push:
@@ -6,13 +6,14 @@ on:
     paths:
       - '.github/workflows/ashburn-images.yml'
       - 'Dockerfile.registry'
+      - 'Dockerfile.runner'
       - 'Dockerfile.tunnel'
       - 'crates/**'
       - 'Cargo.lock'
   workflow_dispatch:
     inputs:
       image:
-        description: 'One image for a canary (mockforge-tunnel-relay or mockforge-registry); blank builds both'
+        description: 'One image for a canary (mockforge-registry, mockforge-test-runner or mockforge-tunnel-relay); blank builds all'
         required: false
         default: ''
 
@@ -44,6 +45,7 @@ jobs:
           import os
           sources = {
               'mockforge-registry': 'Dockerfile.registry',
+              'mockforge-test-runner': 'Dockerfile.runner',
               'mockforge-tunnel-relay': 'Dockerfile.tunnel',
           }
           wanted = os.environ.get('WANTED_IMAGE', '')

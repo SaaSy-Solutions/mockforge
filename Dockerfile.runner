@@ -6,6 +6,10 @@
 # OWASP / security / WAFBench / CRUD-flow paths) and bundles the
 # Microsoft WAFBench CRS rule YAMLs at /usr/share/mockforge/wafbench/
 # so wafbench runs work without the operator pre-uploading rules.
+#
+# Runtime configuration is environment only; see "Cloud test runner" in
+# docs/ASHBURN_IMAGE_SUPPLY.md for the variables and their Ashburn values.
+# Published to GHCR as mockforge-test-runner by ashburn-images.yml.
 
 # Base images pinned once; override from CI with --build-arg RUST_IMAGE / DEBIAN_IMAGE.
 ARG RUST_IMAGE=rust:1.96-slim
