@@ -21,7 +21,6 @@
 //!   "openapi_spec_url":   "https://...",  // OR spec
 //!   "latency_budget_ms":  5000,           // default 5000
 //!   "methods":            ["GET"],        // default ["GET"]
-//!   "allow_loopback":     false           // default false; true for local dev
 //! }
 //! ```
 //!
@@ -33,12 +32,13 @@
 use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
-use mockforge_bench::{validate_target_url, SsrfPolicy};
+use mockforge_bench::validate_target_url;
 use uuid::Uuid;
 
 use crate::callbacks::RegistryCallbacks;
 use crate::error::Result;
 use crate::executors::{Executor, JobOutcome, JobStatus, RunJob};
+use crate::target_client::{ssrf_policy, TargetClient};
 
 /// Default per-route latency budget. A 5-second ceiling on a hosted
 /// mock is generous; anything slower probably indicates a stuck
@@ -73,15 +73,11 @@ impl Executor for SmokeTestExecutor {
         let mut next_seq: u32 = 1;
 
         // ─── Validate target URL up front ───────────────────────────
-        // Strict policy by default — reject loopback/RFC1918 to prevent
-        // a misconfigured payload from probing the cloud worker's
-        // internal network. Local dev opts in via `allow_loopback: true`.
-        let policy = if config.allow_loopback {
-            SsrfPolicy::for_test()
-        } else {
-            SsrfPolicy::strict()
-        };
-        if let Err(e) = validate_target_url(&config.base_url, policy).await {
+        // Reject loopback/RFC1918 so a payload cannot probe the worker's
+        // internal network. The policy comes from the process environment
+        // only (`MOCKFORGE_SSRF_ALLOW_LOOPBACK`); suite config reaches this
+        // payload unfiltered, so it must not be able to relax the guard.
+        if let Err(e) = validate_target_url(&config.base_url, ssrf_policy()).await {
             return errored_run(
                 callbacks,
                 &job,
@@ -126,11 +122,7 @@ impl Executor for SmokeTestExecutor {
         // assertion is what reports the budget breach, not the timeout
         // itself eating the response.
         let request_timeout = Duration::from_millis(config.latency_budget_ms + 1_000);
-        let client = match reqwest::Client::builder()
-            .timeout(request_timeout)
-            .user_agent("mockforge-smoke/1.0")
-            .build()
-        {
+        let client = match TargetClient::new(request_timeout, "mockforge-smoke/1.0") {
             Ok(c) => c,
             Err(e) => {
                 return errored_run(
@@ -177,7 +169,10 @@ impl Executor for SmokeTestExecutor {
 
             let url = join_url(&config.base_url, &ep.path);
             let probe_start = Instant::now();
-            let probe_result = client.request(method_from_str(&ep.method), &url).send().await;
+            let probe_result = match client.request(method_from_str(&ep.method), &url) {
+                Ok(req) => req.send().await.map_err(|e| truncate_error(&e)),
+                Err(e) => Err(format!("url rejected by SSRF guard: {e}")),
+            };
             let latency_ms = probe_start.elapsed().as_millis() as u64;
 
             let (event_type, payload, is_pass) = match probe_result {
@@ -209,7 +204,7 @@ impl Executor for SmokeTestExecutor {
                         "method": ep.method,
                         "status": serde_json::Value::Null,
                         "latency_ms": latency_ms,
-                        "reason": format!("request error: {}", truncate_error(&e)),
+                        "reason": format!("request error: {e}"),
                     });
                     ("route_fail", body, false)
                 }
@@ -297,7 +292,6 @@ struct SmokeConfig {
     base_url: String,
     latency_budget_ms: u64,
     methods: Vec<String>,
-    allow_loopback: bool,
 }
 
 impl SmokeConfig {
@@ -327,15 +321,12 @@ impl SmokeConfig {
             })
             .filter(|v| !v.is_empty())
             .unwrap_or_else(|| vec!["GET".to_string()]);
-        let allow_loopback =
-            payload.get("allow_loopback").and_then(|v| v.as_bool()).unwrap_or(false);
 
         Self {
             deployment_id,
             base_url,
             latency_budget_ms,
             methods,
-            allow_loopback,
         }
     }
 }
@@ -446,13 +437,16 @@ async fn load_spec(payload: &serde_json::Value) -> std::result::Result<serde_jso
         return Err("payload must include either 'spec' or 'openapi_spec_url'".to_string());
     }
 
-    let client = reqwest::Client::builder()
-        .timeout(Duration::from_secs(SPEC_FETCH_TIMEOUT_SECS))
-        .user_agent("mockforge-smoke/1.0")
-        .build()
-        .map_err(|e| format!("failed to build spec-fetch client: {e}"))?;
+    let client =
+        TargetClient::new(Duration::from_secs(SPEC_FETCH_TIMEOUT_SECS), "mockforge-smoke/1.0")
+            .map_err(|e| format!("failed to build spec-fetch client: {e}"))?;
 
-    let resp = client.get(url).send().await.map_err(|e| format!("spec fetch failed: {e}"))?;
+    let resp = client
+        .get(url)
+        .map_err(|e| format!("openapi_spec_url rejected by SSRF guard: {e}"))?
+        .send()
+        .await
+        .map_err(|e| format!("spec fetch failed: {e}"))?;
     let status = resp.status();
     let body = resp.text().await.map_err(|e| format!("spec body read failed: {e}"))?;
     if !status.is_success() {
@@ -516,7 +510,6 @@ mod tests {
         assert_eq!(cfg.base_url, "");
         assert_eq!(cfg.latency_budget_ms, DEFAULT_LATENCY_BUDGET_MS);
         assert_eq!(cfg.methods, vec!["GET".to_string()]);
-        assert!(!cfg.allow_loopback);
     }
 
     #[test]
@@ -526,13 +519,11 @@ mod tests {
             "base_url": "https://example.com/",
             "latency_budget_ms": 1000,
             "methods": ["get", "head"],
-            "allow_loopback": true,
         }));
         assert!(cfg.deployment_id.is_some());
         assert_eq!(cfg.base_url, "https://example.com/");
         assert_eq!(cfg.latency_budget_ms, 1000);
         assert_eq!(cfg.methods, vec!["GET".to_string(), "HEAD".to_string()]);
-        assert!(cfg.allow_loopback);
     }
 
     #[test]

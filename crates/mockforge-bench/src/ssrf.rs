@@ -31,7 +31,8 @@
 //! var (see [`Policy::for_test`]) for integration-test endpoints on
 //! `127.0.0.1`.
 
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
+use std::sync::Arc;
 
 use thiserror::Error;
 
@@ -139,6 +140,94 @@ pub async fn validate_target_url(url: &str, policy: Policy) -> Result<(), SsrfEr
     }
 
     Ok(())
+}
+
+/// Check a URL without DNS: the scheme must be http/https, and a literal-IP
+/// host must not be in a blocked range. Hostnames pass here; a client from
+/// [`guarded_client_builder`] checks what they resolve to at connect time.
+///
+/// reqwest never calls the DNS resolver for a literal IP, so this is the half
+/// of the guard the resolver cannot do. Run it on every URL handed to a
+/// guarded client; the redirect policy runs it on every hop.
+pub fn check_url(url: &url::Url, policy: Policy) -> Result<(), SsrfError> {
+    let scheme = url.scheme();
+    if scheme != "http" && scheme != "https" {
+        return Err(SsrfError::DisallowedScheme(scheme.to_string()));
+    }
+    match url.host() {
+        None => Err(SsrfError::MissingHost),
+        Some(url::Host::Ipv4(ip)) => check_ip(&ip.to_string(), IpAddr::V4(ip), policy),
+        Some(url::Host::Ipv6(ip)) => check_ip(&ip.to_string(), IpAddr::V6(ip), policy),
+        Some(url::Host::Domain(_)) => Ok(()),
+    }
+}
+
+/// reqwest DNS resolver that fails the lookup when any resolved address is in
+/// a blocked range. Checking at connect time, on the addresses the connection
+/// will actually use, closes the DNS-rebinding gap that a separate
+/// [`validate_target_url`] pre-check leaves open.
+#[derive(Debug, Clone, Copy)]
+pub struct GuardedResolver {
+    policy: Policy,
+}
+
+impl GuardedResolver {
+    /// Resolver enforcing `policy`.
+    pub const fn new(policy: Policy) -> Self {
+        Self { policy }
+    }
+}
+
+impl reqwest::dns::Resolve for GuardedResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let policy = self.policy;
+        let host = name.as_str().to_string();
+        Box::pin(async move {
+            let addrs: Vec<SocketAddr> = tokio::net::lookup_host((host.as_str(), 0))
+                .await
+                .map_err(|source| SsrfError::DnsResolutionFailed {
+                    host: host.clone(),
+                    source,
+                })?
+                .collect();
+            if addrs.is_empty() {
+                return Err(SsrfError::NoAddressesResolved(host).into());
+            }
+            for addr in &addrs {
+                check_ip(&host, addr.ip(), policy)?;
+            }
+            let addrs: reqwest::dns::Addrs = Box::new(addrs.into_iter());
+            Ok(addrs)
+        })
+    }
+}
+
+/// A reqwest redirect policy that follows at most `max` redirects and runs
+/// [`check_url`] on every hop, so a public target cannot bounce the client to
+/// `http://10.0.0.1/`.
+pub fn guarded_redirect_policy(policy: Policy, max: usize) -> reqwest::redirect::Policy {
+    reqwest::redirect::Policy::custom(move |attempt| {
+        if attempt.previous().len() >= max {
+            return attempt.error(format!("more than {max} redirects"));
+        }
+        match check_url(attempt.url(), policy) {
+            Ok(()) => attempt.follow(),
+            Err(e) => attempt.error(e),
+        }
+    })
+}
+
+/// A reqwest client builder whose connections can only reach addresses the
+/// policy allows: the [`GuardedResolver`], a [`guarded_redirect_policy`] of 10
+/// hops, and no proxy (a proxy would resolve the target itself, out of the
+/// resolver's sight). Callers must still run [`check_url`] on each URL for the
+/// literal-IP case, and must not replace the resolver, redirect policy, or
+/// proxy setting on the returned builder.
+pub fn guarded_client_builder(policy: Policy) -> reqwest::ClientBuilder {
+    reqwest::Client::builder()
+        .no_proxy()
+        .dns_resolver(Arc::new(GuardedResolver::new(policy)))
+        .redirect(guarded_redirect_policy(policy, 10))
 }
 
 fn check_ip(host: &str, ip: IpAddr, policy: Policy) -> Result<(), SsrfError> {
@@ -358,5 +447,76 @@ mod tests {
     #[tokio::test]
     async fn validate_allows_loopback_in_test_policy() {
         validate_target_url("http://127.0.0.1:8080/", Policy::for_test()).await.unwrap();
+    }
+
+    fn url(s: &str) -> url::Url {
+        url::Url::parse(s).unwrap()
+    }
+
+    #[test]
+    fn check_url_blocks_literal_ips_in_every_spelling() {
+        for u in [
+            "http://127.0.0.1/",
+            "http://2130706433/",
+            "http://0x7f000001/",
+            "http://10.0.0.1:6379/",
+            "http://[::1]/",
+            "http://[::ffff:172.18.0.2]/",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://example.com@10.0.0.1/",
+        ] {
+            let err = check_url(&url(u), Policy::strict()).unwrap_err();
+            assert!(matches!(err, SsrfError::BlockedAddress { .. }), "{u}: {err:?}");
+        }
+    }
+
+    #[test]
+    fn check_url_rejects_other_schemes_and_defers_hostnames_to_the_resolver() {
+        let err = check_url(&url("file:///etc/passwd"), Policy::strict()).unwrap_err();
+        assert!(matches!(err, SsrfError::DisallowedScheme(_)));
+        check_url(&url("https://example.com/"), Policy::strict()).unwrap();
+        check_url(&url("http://127.0.0.1:3000/"), Policy::for_test()).unwrap();
+    }
+
+    /// One-shot HTTP server on 127.0.0.1 that answers every connection with
+    /// `response`. Returns its port.
+    async fn serve(response: &'static str) -> u16 {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let port = listener.local_addr().unwrap().port();
+        tokio::spawn(async move {
+            while let Ok((mut sock, _)) = listener.accept().await {
+                let mut buf = [0u8; 1024];
+                let _ = sock.read(&mut buf).await;
+                let _ = sock.write_all(response.as_bytes()).await;
+            }
+        });
+        port
+    }
+
+    const OK: &str = "HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\nok";
+
+    #[tokio::test]
+    async fn guarded_client_refuses_a_name_resolving_to_loopback() {
+        let port = serve(OK).await;
+        let client = guarded_client_builder(Policy::strict()).build().unwrap();
+        let err = client.get(format!("http://localhost:{port}/")).send().await.unwrap_err();
+        assert!(err.is_connect(), "{err:?}");
+
+        let relaxed = guarded_client_builder(Policy::for_test()).build().unwrap();
+        let resp = relaxed.get(format!("http://localhost:{port}/")).send().await.unwrap();
+        assert_eq!(resp.status(), 200);
+    }
+
+    #[tokio::test]
+    async fn guarded_client_refuses_a_redirect_to_a_private_address() {
+        let port = serve(
+            "HTTP/1.1 302 Found\r\nlocation: http://10.0.0.1/\r\ncontent-length: 0\r\nconnection: close\r\n\r\n",
+        )
+        .await;
+        // Loopback allowed so the first hop connects; RFC1918 never is.
+        let client = guarded_client_builder(Policy::for_test()).build().unwrap();
+        let err = client.get(format!("http://127.0.0.1:{port}/")).send().await.unwrap_err();
+        assert!(err.is_redirect(), "{err:?}");
     }
 }

@@ -176,11 +176,10 @@ pub async fn run_integration(
         .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
         .collect();
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_millis(timeout_ms))
-        .user_agent("mockforge-integration/1.0")
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
+    let client = crate::target_client::TargetClient::new(
+        std::time::Duration::from_millis(timeout_ms),
+        "mockforge-integration/1.0",
+    )?;
 
     let mut next_seq: u32 = 2;
     let mut passed = 0u32;
@@ -316,7 +315,7 @@ enum StepOutcome {
 }
 
 async fn execute_step(
-    client: &reqwest::Client,
+    client: &crate::target_client::TargetClient,
     base_url: &str,
     step: &StepConfig,
     setup_headers: &HashMap<String, String>,
@@ -333,7 +332,14 @@ async fn execute_step(
         }
     };
 
-    let mut req = client.request(method, &url);
+    let mut req = match client.request(method, &url) {
+        Ok(r) => r,
+        Err(e) => {
+            return StepOutcome::Error {
+                message: format!("url rejected by SSRF guard: {e}"),
+            };
+        }
+    };
     // Setup headers first, step headers can override.
     for (k, v) in setup_headers {
         req = req.header(k, substitute(v, variables));

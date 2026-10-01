@@ -110,11 +110,10 @@ async fn run_real_replay(
         return run_synthetic(job, callbacks, started).await;
     }
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .user_agent("mockforge-replay/1.0")
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
+    let client = crate::target_client::TargetClient::new(
+        std::time::Duration::from_secs(30),
+        "mockforge-replay/1.0",
+    )?;
 
     let mut next_seq: u32 = 2;
     let mut matched_count = 0u32;
@@ -237,7 +236,7 @@ enum ReplayResult {
 }
 
 async fn replay_one(
-    client: &reqwest::Client,
+    client: &crate::target_client::TargetClient,
     target_url: &str,
     ex: &CaptureExchange,
 ) -> ReplayResult {
@@ -251,7 +250,14 @@ async fn replay_one(
         }
     };
 
-    let mut req = client.request(method, &url);
+    let mut req = match client.request(method, &url) {
+        Ok(r) => r,
+        Err(e) => {
+            return ReplayResult::Error {
+                error: format!("url rejected by SSRF guard: {e}"),
+            };
+        }
+    };
 
     // Replay request body if present. The recorder stores body as a
     // string + encoding label ('utf8' / 'base64' / 'binary'). For non-
