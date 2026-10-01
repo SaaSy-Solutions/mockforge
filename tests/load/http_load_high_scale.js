@@ -33,7 +33,9 @@ export const options = {
         // Error rate must be less than 1%
         http_req_failed: ['rate<0.01'],
         // Throughput
-        http_reqs: ['rate>100'], // At least 100 req/s minimum
+        // The stages average ~6k VUs, which is ~2.9k req/s at a 2s think time
+        // when the server keeps up. Under 2k req/s means requests are queueing.
+        http_reqs: ['rate>2000'],
     },
     summaryTrendStats: ['avg', 'min', 'med', 'max', 'p(90)', 'p(95)', 'p(99)', 'p(99.9)', 'count'],
 };
@@ -150,8 +152,14 @@ export default function () {
     p95Latency.add(response.timings.duration);
     p99Latency.add(response.timings.duration);
 
-    // Small random sleep to simulate real user behavior
-    sleep(Math.random() * 0.1);
+    // Think time of 1-3s (mean 2s). With the old 0-100ms sleep, 10k VUs was
+    // a closed loop pinned at the server's capacity: latency was just
+    // VUs / throughput (Little's law), about 1.4s at ~7k req/s on the CI
+    // runner, so the latency thresholds could never pass. At a 2s mean,
+    // 10k connections offer ~5k req/s, below the ~7k req/s the runner
+    // sustains. A throughput regression past that margin saturates the
+    // server again and trips the thresholds.
+    sleep(1 + Math.random() * 2);
 }
 
 export function handleSummary(data) {

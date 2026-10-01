@@ -69,17 +69,37 @@ jobs:
         # requests were 429s and the run measured the limiter, not mockforge.
         # RUST_LOG=warn + file redirect: at info the server writes ~7 lines per
         # request (millions in the extended run) into the job's stdout pipe.
+        #
+        # Ports are picked at random: the runner host is shared with other
+        # projects' runners (a Next.js server held :3000 and answered our
+        # health check with 404), and the standard and extended jobs can run
+        # at the same time on the two mockforge runners there.
         env:
           RUST_LOG: warn
         run: |
-          ./target/release/mockforge serve --spec examples/user-management-api.json --http-port 3000 --admin --no-rate-limit > mockforge-server.log 2>&1 &
-          for _ in $(seq 1 30); do curl -sf http://localhost:3000/health > /dev/null && break; sleep 1; done
-          curl -f http://localhost:3000/health
+          python3 - >> "$GITHUB_ENV" <<'EOF'
+          import socket
+          held = []
+          for name in ("HTTP", "WS", "GRPC", "ADMIN", "METRICS"):
+              s = socket.socket()
+              s.bind(("", 0))
+              held.append(s)
+              print(f"MF_{name}_PORT={s.getsockname()[1]}")
+          EOF
+          . <(grep '^MF_' "$GITHUB_ENV" | sed 's/^/export /')
+          ./target/release/mockforge serve --spec examples/user-management-api.json --no-rate-limit \
+            --http-port "$MF_HTTP_PORT" --ws-port "$MF_WS_PORT" --grpc-port "$MF_GRPC_PORT" \
+            --admin --admin-port "$MF_ADMIN_PORT" --metrics-port "$MF_METRICS_PORT" \
+            > mockforge-server.log 2>&1 &
+          pid=$!
+          for _ in $(seq 1 30); do curl -sf "http://localhost:$MF_HTTP_PORT/health" > /dev/null && break; sleep 1; done
+          kill -0 "$pid" || { echo "::error::mockforge exited during startup"; cat mockforge-server.log; exit 1; }
+          curl -f "http://localhost:$MF_HTTP_PORT/health"
 
       - name: Run standard load test
         run: |
           cd tests/load
-          k6 run --summary-export=load-test-results.json http_load.js
+          BASE_URL="http://localhost:$MF_HTTP_PORT" k6 run --summary-export=load-test-results.json http_load.js
 
       - name: Upload load test results
         uses: actions/upload-artifact@v7.0.1
@@ -127,17 +147,37 @@ jobs:
         # requests were 429s and the run measured the limiter, not mockforge.
         # RUST_LOG=warn + file redirect: at info the server writes ~7 lines per
         # request (millions in the extended run) into the job's stdout pipe.
+        #
+        # Ports are picked at random: the runner host is shared with other
+        # projects' runners (a Next.js server held :3000 and answered our
+        # health check with 404), and the standard and extended jobs can run
+        # at the same time on the two mockforge runners there.
         env:
           RUST_LOG: warn
         run: |
-          ./target/release/mockforge serve --spec examples/user-management-api.json --http-port 3000 --admin --no-rate-limit > mockforge-server.log 2>&1 &
-          for _ in $(seq 1 30); do curl -sf http://localhost:3000/health > /dev/null && break; sleep 1; done
-          curl -f http://localhost:3000/health
+          python3 - >> "$GITHUB_ENV" <<'EOF'
+          import socket
+          held = []
+          for name in ("HTTP", "WS", "GRPC", "ADMIN", "METRICS"):
+              s = socket.socket()
+              s.bind(("", 0))
+              held.append(s)
+              print(f"MF_{name}_PORT={s.getsockname()[1]}")
+          EOF
+          . <(grep '^MF_' "$GITHUB_ENV" | sed 's/^/export /')
+          ./target/release/mockforge serve --spec examples/user-management-api.json --no-rate-limit \
+            --http-port "$MF_HTTP_PORT" --ws-port "$MF_WS_PORT" --grpc-port "$MF_GRPC_PORT" \
+            --admin --admin-port "$MF_ADMIN_PORT" --metrics-port "$MF_METRICS_PORT" \
+            > mockforge-server.log 2>&1 &
+          pid=$!
+          for _ in $(seq 1 30); do curl -sf "http://localhost:$MF_HTTP_PORT/health" > /dev/null && break; sleep 1; done
+          kill -0 "$pid" || { echo "::error::mockforge exited during startup"; cat mockforge-server.log; exit 1; }
+          curl -f "http://localhost:$MF_HTTP_PORT/health"
 
       - name: Run extended load test
         run: |
           cd tests/load
-          SUMMARY_FILE=load-test-results-extended.json k6 run http_load_high_scale.js
+          BASE_URL="http://localhost:$MF_HTTP_PORT" SUMMARY_FILE=load-test-results-extended.json k6 run http_load_high_scale.js
 
       - name: Upload load test results
         uses: actions/upload-artifact@v7.0.1
