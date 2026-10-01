@@ -23,10 +23,16 @@ podAnnotations:
   prometheus.io/port: "9090"
   prometheus.io/path: "/metrics"
 
+# UID/GID 999 is the `mockforge` user baked into the image (Dockerfile
+# `useradd -r`); it owns /app and $HOME, which the server writes to.
+# Compatible with the "restricted" Pod Security Standard.
 podSecurityContext:
   runAsNonRoot: true
-  runAsUser: 1000
-  fsGroup: 1000
+  runAsUser: 999
+  runAsGroup: 999
+  fsGroup: 999
+  seccompProfile:
+    type: RuntimeDefault
 
 securityContext:
   capabilities:
@@ -170,11 +176,12 @@ serviceMonitor:
   interval: 30s
   scrapeTimeout: 10s
 
-# Health checks
+# Health checks. These hit the HTTP port: the admin port puts its routes
+# (including /health/*) behind admin auth, so kubelet probes there get 401.
 livenessProbe:
   httpGet:
     path: /health/live
-    port: admin
+    port: http
   initialDelaySeconds: 30
   periodSeconds: 10
   timeoutSeconds: 5
@@ -183,7 +190,7 @@ livenessProbe:
 readinessProbe:
   httpGet:
     path: /health/ready
-    port: admin
+    port: http
   initialDelaySeconds: 10
   periodSeconds: 5
   timeoutSeconds: 3
@@ -192,7 +199,7 @@ readinessProbe:
 startupProbe:
   httpGet:
     path: /health/startup
-    port: admin
+    port: http
   initialDelaySeconds: 0
   periodSeconds: 5
   timeoutSeconds: 3

@@ -19,9 +19,21 @@ spec:
         app: redis
         component: cache
     spec:
+      # Pod Security Standard "restricted" (enforced on the mockforge namespace)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: redis
           image: redis:7-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - name: redis
               containerPort: 6379
@@ -143,9 +155,21 @@ spec:
       labels:
         app: redis-sentinel
     spec:
+      # Pod Security Standard "restricted" (enforced on the mockforge namespace)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 1000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: sentinel
           image: redis:7-alpine
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 26379
               name: sentinel
@@ -222,9 +246,21 @@ spec:
         prometheus.io/scrape: "true"
         prometheus.io/port: "9121"
     spec:
+      # Pod Security Standard "restricted" (enforced on the mockforge namespace)
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 59000
+        runAsGroup: 59000
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: redis-exporter
           image: oliver006/redis_exporter:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           ports:
             - containerPort: 9121
               name: metrics
