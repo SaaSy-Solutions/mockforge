@@ -89,6 +89,11 @@ impl Executor for TestExecutor {
         // runner Dockerfile installs it). When the payload doesn't opt in,
         // bench/owasp fall through to the lighter-weight reqwest paths
         // below and conformance falls through to synthetic mode.
+        if let Some(reason) = crate::target_client::base_path_refusal(
+            extract_string(&job.payload, "base_path").as_deref(),
+        ) {
+            return refuse_k6_run(job, callbacks, started, self.kind, reason).await;
+        }
         if uses_cloud_api(&job.payload) {
             if let Some(reason) = crate::target_client::k6_refusal(
                 self.kind,

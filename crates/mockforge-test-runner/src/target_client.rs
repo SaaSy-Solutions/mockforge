@@ -53,6 +53,33 @@ pub fn k6_refusal(kind: &str, egress_proxy: Option<&str>) -> Option<String> {
     }
 }
 
+/// The refusal message for a tenant-supplied `base_path` that could rewrite
+/// the request URL's authority, or `None` when it is safe.
+///
+/// Script generators concatenate `target_url + base_path + path`. A value
+/// like `@localhost:6565` turns `http://attacker.tld` into
+/// `http://attacker.tld@localhost:6565/...`, and k6 never proxies loopback
+/// hosts, so it would reach other jobs' k6 REST APIs in this container.
+/// The target URL was already SSRF-checked; the path must stay a path.
+pub fn base_path_refusal(base_path: Option<&str>) -> Option<String> {
+    let bp = base_path?;
+    if bp.is_empty() {
+        return None;
+    }
+    let bad = !bp.starts_with('/')
+        || bp.starts_with("//")
+        || bp.contains('@')
+        || bp.contains('\\')
+        || bp.contains("://")
+        || bp.chars().any(|c| c.is_whitespace() || c.is_control());
+    bad.then(|| {
+        format!(
+            "base_path {bp:?} was refused: it must be a plain path starting with a single \'/\' \
+             and may not contain '@', '\\\\', '://', whitespace or control characters"
+        )
+    })
+}
+
 /// A reqwest client that can only reach addresses the SSRF policy allows.
 #[derive(Clone)]
 pub struct TargetClient {
@@ -158,5 +185,25 @@ mod tests {
         for kind in ["conformance", "integration", "smoke", "chaos_campaign"] {
             assert_eq!(k6_refusal(kind, None), None);
         }
+    }
+
+    #[test]
+    fn base_path_that_rewrites_the_authority_is_refused() {
+        for bad in [
+            "@localhost:6565",
+            "v1",
+            "//evil.example/x",
+            "/v1@localhost:6565",
+            "/v1\\..",
+            "/http://127.0.0.1",
+            "/v 1",
+            "/v1\n",
+        ] {
+            assert!(base_path_refusal(Some(bad)).is_some(), "{bad:?} must be refused");
+        }
+        for ok in ["", "/", "/v1", "/api/v2/", "/a-b_c.d~e"] {
+            assert_eq!(base_path_refusal(Some(ok)), None, "{ok:?} must be allowed");
+        }
+        assert_eq!(base_path_refusal(None), None);
     }
 }
