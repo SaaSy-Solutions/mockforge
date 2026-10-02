@@ -199,7 +199,7 @@ impl SpecParser {
 
                 operations.push(ApiOperation {
                     method: method.to_string(),
-                    path: path.to_string(),
+                    path: as_url_path(path),
                     operation: resolved_op,
                     operation_id: op.operation_id.clone(),
                 });
@@ -284,8 +284,28 @@ impl SpecParser {
     }
 }
 
+/// A spec path as a URL path: always starting with '/'.
+///
+/// OpenAPI requires path keys to begin with '/', but the parser does not
+/// enforce it. Generators append the path to the target URL, so a key like
+/// "@localhost:6565/x" would otherwise become part of the URL authority.
+fn as_url_path(path: &str) -> String {
+    if path.starts_with('/') {
+        path.to_string()
+    } else {
+        format!("/{path}")
+    }
+}
+
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn spec_path_keys_always_become_url_paths() {
+        assert_eq!(as_url_path("/pets"), "/pets");
+        assert_eq!(as_url_path("pets"), "/pets");
+        assert_eq!(as_url_path("@localhost:6565/x"), "/@localhost:6565/x");
+    }
     use super::*;
     use openapiv3::Operation;
 
