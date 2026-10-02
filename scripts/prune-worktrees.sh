@@ -40,6 +40,10 @@ flush() {
   if is_merged "$branch"; then
     if [ -n "$(git -C "$path" status --porcelain 2>/dev/null)" ]; then
       echo "  SKIP (uncommitted changes): $path [$branch]"; skipped_dirty=$((skipped_dirty+1))
+    elif [ -n "$(git rev-list --max-count=1 "$branch" --not --remotes 2>/dev/null)" ]; then
+      # Merged-ness is matched by branch NAME, so a reused name with new local
+      # commits would look merged. Never remove a tree holding unpushed work.
+      echo "  SKIP (unpushed commits): $path [$branch]"; skipped_dirty=$((skipped_dirty+1))
     else
       local sz; sz="$(du -sh "$path" 2>/dev/null | cut -f1)"
       if [ "$EXECUTE" = true ]; then
