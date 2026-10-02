@@ -7,7 +7,7 @@ name: Self-hosted Runner Health
 #
 # Runs on a GitHub-hosted runner so it can't be blocked by the pool it checks.
 # The runners API needs admin scope, so this watches the symptom instead:
-# queued jobs targeting the pool. The runner host also runs a watchdog timer
+# queued jobs targeting the pool while none of its jobs are running. The runner host also runs a watchdog timer
 # (mockforge-runner-watchdog.timer) that starts enabled-but-stopped runners.
 
 on:
@@ -49,9 +49,21 @@ jobs:
               ".jobs[] | select(.status == \"queued\" and (.labels | index(\"rust\")) and ((.created_at | fromdateiso8601) < $cutoff) and ((.created_at | fromdateiso8601) > $oldest)) | \"- [\\(.name)](\\(.html_url)) queued since \\(.created_at)\"" \
               >> stuck.md 2>/dev/null || true
           done
-          if [ -s stuck.md ]; then
+          # A busy pool also leaves jobs queued (one extended load test holds a
+          # runner for over an hour). It's only dead if nothing is running.
+          running=0
+          for run in $(gh api "repos/$GH_REPO/actions/runs?status=in_progress&per_page=100" --jq '.workflow_runs[].id'); do
+            n=$(gh api "repos/$GH_REPO/actions/runs/$run/jobs?per_page=100" --jq \
+              '[.jobs[] | select(.status == "in_progress" and (.labels | index("rust")))] | length' 2>/dev/null || echo 0)
+            running=$((running + n))
+          done
+          echo "rust-labelled jobs running now: $running"
+          if [ -s stuck.md ] && [ "$running" -eq 0 ]; then
             echo "stuck=true" >> "$GITHUB_OUTPUT"
             echo "Stuck jobs:"; cat stuck.md
+          elif [ -s stuck.md ]; then
+            echo "stuck=false" >> "$GITHUB_OUTPUT"
+            echo "Jobs are waiting, but the pool is busy ($running running), not dead:"; cat stuck.md
           else
             echo "stuck=false" >> "$GITHUB_OUTPUT"
             echo "No rust-labelled job queued longer than ${STUCK_MINUTES} minutes."
