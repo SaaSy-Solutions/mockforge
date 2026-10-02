@@ -19,7 +19,9 @@ concurrency:
 jobs:
   deploy:
     name: Build & Deploy to Cloudflare Pages
-    runs-on: [self-hosted, linux, x64, rust]
+    # Node + wrangler only; nothing here needs the 2-runner self-hosted Rust
+    # pool, where every main push used to queue behind hour-long load tests.
+    runs-on: ubuntu-latest
     timeout-minutes: 20
 
     env:
