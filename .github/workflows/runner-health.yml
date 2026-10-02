@@ -1,0 +1,83 @@
+name: Self-hosted Runner Health
+
+# Opens an issue when jobs for the self-hosted `rust` pool sit queued, and
+# closes it once the queue drains. On 2026-09-25 both mockforge runners were
+# stopped and nothing noticed for 5 days: every rust-labelled job queued until
+# its 24h timeout and image publishing silently stalled (#1061).
+#
+# Runs on a GitHub-hosted runner so it can't be blocked by the pool it checks.
+# The runners API needs admin scope, so this watches the symptom instead:
+# queued jobs targeting the pool. The runner host also runs a watchdog timer
+# (mockforge-runner-watchdog.timer) that starts enabled-but-stopped runners.
+
+on:
+  schedule:
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  issues: write
+
+concurrency:
+  group: runner-health
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      # A job queued this long means no runner is taking work.
+      STUCK_MINUTES: 45
+      # GitHub fails self-hosted jobs after 24h in the queue, so anything older
+      # is a ghost record GitHub won't cancel or delete, not a live signal.
+      MAX_AGE_HOURS: 24
+      TITLE: Self-hosted rust runner pool is not picking up jobs
+    steps:
+      - name: Find jobs stuck in the queue
+        id: scan
+        run: |
+          cutoff=$(date -u -d "-${STUCK_MINUTES} minutes" +%s)
+          oldest=$(date -u -d "-${MAX_AGE_HOURS} hours" +%s)
+          : > stuck.md
+          for run in $(gh api "repos/$GH_REPO/actions/runs?status=queued&per_page=100" --jq '.workflow_runs[].id'); do
+            # gh's --jq has no --arg; $cutoff/$oldest are integers from `date`.
+            gh api "repos/$GH_REPO/actions/runs/$run/jobs?per_page=100" --jq \
+              ".jobs[] | select(.status == \"queued\" and (.labels | index(\"rust\")) and ((.created_at | fromdateiso8601) < $cutoff) and ((.created_at | fromdateiso8601) > $oldest)) | \"- [\\(.name)](\\(.html_url)) queued since \\(.created_at)\"" \
+              >> stuck.md 2>/dev/null || true
+          done
+          if [ -s stuck.md ]; then
+            echo "stuck=true" >> "$GITHUB_OUTPUT"
+            echo "Stuck jobs:"; cat stuck.md
+          else
+            echo "stuck=false" >> "$GITHUB_OUTPUT"
+            echo "No rust-labelled job queued longer than ${STUCK_MINUTES} minutes."
+          fi
+
+      - name: Open or update the alert issue
+        if: steps.scan.outputs.stuck == 'true'
+        run: |
+          {
+            echo "Jobs for \`[self-hosted, linux, x64, rust]\` have been queued for more than ${STUCK_MINUTES} minutes:"
+            echo
+            head -c 60000 stuck.md
+            echo
+            echo "Check the pool: \`gh api repos/$GH_REPO/actions/runners\` (both runners should be online), then on the runner host \`systemctl status 'actions.runner.SaaSy-Solutions-mockforge.*'\`, \`df -h /\` and \`free -g\`."
+            echo "This issue closes itself once the queue drains."
+          } > body.md
+          existing=$(gh issue list --state open --search "in:title \"$TITLE\"" --json number --jq '.[0].number // empty')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file body.md
+          else
+            gh issue create --title "$TITLE" --body-file body.md
+          fi
+
+      - name: Close the alert issue once the queue drains
+        if: steps.scan.outputs.stuck == 'false'
+        run: |
+          for n in $(gh issue list --state open --search "in:title \"$TITLE\"" --json number --jq '.[].number'); do
+            gh issue close "$n" --comment "No rust-labelled job has been queued longer than ${STUCK_MINUTES} minutes; closing."
+          done
