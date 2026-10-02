@@ -253,3 +253,182 @@ async fn gdpr_erase_succeeds_for_user_with_audit_rows_and_chain_survives() {
     assert!(description.contains(&user_id.to_string()));
     assert!(metadata.contains(&user_id.to_string()));
 }
+
+/// Bounded retention (400 days) stays compatible with the append-only trigger
+/// and the hash chain:
+///   * an expired row cannot be deleted without the purge opt-in;
+///   * with the opt-in, a row inside the window still cannot be deleted;
+///   * `purge_expired` removes the expired prefix of an org's chain, and
+///     `verify_chain` accepts the oldest survivor as the chain start;
+///   * tampering with a surviving row is still detected afterwards.
+#[tokio::test]
+#[ignore = "requires DATABASE_URL Postgres"]
+async fn retention_purges_expired_prefix_and_chain_still_verifies() {
+    use chrono::{Duration, Utc};
+    use mockforge_registry_core::models::audit_log::AUDIT_LOG_RETENTION_DAYS;
+
+    let pool = pool().await;
+    let org_id = Uuid::new_v4();
+    let now = Utc::now();
+    let ages = [
+        AUDIT_LOG_RETENTION_DAYS + 100,
+        AUDIT_LOG_RETENTION_DAYS + 1,
+        30,
+        1,
+    ];
+    let mut ids = Vec::new();
+    for (n, age) in ages.iter().enumerate() {
+        let row = AuditLog::create_at(
+            &mut pool.acquire().await.expect("acquire"),
+            org_id,
+            None,
+            AuditEventType::LoginSucceeded,
+            format!("retention event {n}"),
+            Some(serde_json::json!({ "seq": n })),
+            Some("203.0.113.7"),
+            None,
+            now - Duration::days(*age),
+        )
+        .await
+        .expect("create backdated audit event");
+        ids.push(row.id);
+    }
+    assert!(AuditLog::verify_chain(&pool, org_id).await.unwrap());
+
+    // No opt-in: even an expired row is protected.
+    let plain = sqlx::query("DELETE FROM audit_logs WHERE id = $1")
+        .bind(ids[0])
+        .execute(&pool)
+        .await;
+    assert!(plain.is_err(), "DELETE without the purge opt-in must be rejected");
+
+    // Opt-in, but the row is inside the window: still rejected.
+    let mut tx = pool.begin().await.unwrap();
+    sqlx::query("SELECT set_config('mockforge.audit_retention_purge', 'on', true)")
+        .execute(&mut *tx)
+        .await
+        .unwrap();
+    let young = sqlx::query("DELETE FROM audit_logs WHERE id = $1")
+        .bind(ids[2])
+        .execute(&mut *tx)
+        .await;
+    assert!(
+        young.is_err(),
+        "a row younger than the retention window must never be deletable"
+    );
+    tx.rollback().await.unwrap();
+
+    let purged = AuditLog::purge_expired(&pool).await.expect("purge_expired");
+    assert!(purged >= 2, "both expired rows must be purged (got {purged})");
+
+    let left: Vec<Uuid> =
+        sqlx::query_scalar("SELECT id FROM audit_logs WHERE org_id = $1 ORDER BY created_at")
+            .bind(org_id)
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+    assert_eq!(left, ids[2..].to_vec(), "only rows inside the window survive");
+    assert!(
+        AuditLog::verify_chain(&pool, org_id).await.unwrap(),
+        "oldest surviving row is accepted as the chain start"
+    );
+
+    // Appending after a purge extends the chain normally.
+    insert_event(&pool, org_id, 99).await;
+    assert!(AuditLog::verify_chain(&pool, org_id).await.unwrap());
+
+    // Tamper detection still covers the surviving rows.
+    sqlx::query("ALTER TABLE audit_logs DISABLE TRIGGER audit_logs_append_only")
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("UPDATE audit_logs SET description = 'tampered' WHERE id = $1")
+        .bind(ids[3])
+        .execute(&pool)
+        .await
+        .unwrap();
+    sqlx::query("ALTER TABLE audit_logs ENABLE TRIGGER audit_logs_append_only")
+        .execute(&pool)
+        .await
+        .unwrap();
+    assert!(!AuditLog::verify_chain(&pool, org_id).await.unwrap());
+}
+
+/// Rows written from the person-related builders hold no email address or
+/// username once stored, for every converted event type.
+#[tokio::test]
+#[ignore = "requires DATABASE_URL Postgres"]
+async fn person_related_audit_rows_store_no_email_or_username() {
+    use mockforge_registry_server::audit_entries as ae;
+
+    let pool = pool().await;
+    let org_id = Uuid::new_v4();
+    let tag = Uuid::new_v4().simple().to_string();
+    let email = format!("pii-{tag}@example.test");
+    let username = format!("pii-{tag}");
+    let user: mockforge_registry_core::models::User = serde_json::from_value(serde_json::json!({
+        "id": Uuid::new_v4(),
+        "username": username,
+        "email": email,
+        "password_hash": "x",
+        "api_token": null,
+        "is_verified": true,
+        "is_admin": false,
+        "two_factor_enabled": false,
+        "two_factor_secret": null,
+        "two_factor_backup_codes": null,
+        "two_factor_verified_at": null,
+        "created_at": chrono::Utc::now(),
+        "updated_at": chrono::Utc::now(),
+    }))
+    .expect("build user");
+
+    let events = [
+        (AuditEventType::MemberAdded, ae::member_added(&user, "member")),
+        (AuditEventType::MemberRemoved, ae::member_removed(&user)),
+        (
+            AuditEventType::MemberRoleChanged,
+            ae::member_role_changed(&user, "member", "admin"),
+        ),
+        (AuditEventType::InvitationCreated, ae::invitation_created("n-1", "member")),
+        (AuditEventType::InvitationRevoked, ae::invitation_revoked("n-1", "member")),
+        (
+            AuditEventType::InvitationAccepted,
+            ae::invitation_accepted("n-1", &user, "member"),
+        ),
+        (AuditEventType::LoginFailed, ae::login_failed_unknown_user("secret", &email)),
+        (AuditEventType::LoginFailed, ae::login_failed_bad_password("secret", &email)),
+        (AuditEventType::LoginSucceeded, ae::saml_login_succeeded(&user, true)),
+        (AuditEventType::LoginSucceeded, ae::oidc_login_succeeded(&user, false)),
+        (AuditEventType::PasswordChanged, ae::password_reset_completed(&user)),
+    ];
+    for (event_type, entry) in events {
+        AuditLog::create(
+            &mut pool.acquire().await.expect("acquire"),
+            org_id,
+            Some(user.id),
+            event_type,
+            entry.description,
+            entry.metadata,
+            Some("203.0.113.7"),
+            Some("pii-test/1.0"),
+        )
+        .await
+        .expect("create");
+    }
+
+    let rows: Vec<(String, String, Option<serde_json::Value>)> = sqlx::query_as(
+        "SELECT event_type::text, description, metadata FROM audit_logs WHERE org_id = $1",
+    )
+    .bind(org_id)
+    .fetch_all(&pool)
+    .await
+    .unwrap();
+    assert_eq!(rows.len(), 11);
+    for (event, description, metadata) in rows {
+        let text = format!("{description}|{}", metadata.map(|m| m.to_string()).unwrap_or_default());
+        assert!(!text.contains('@'), "{event} row holds an email: {text}");
+        assert!(!text.contains(&username), "{event} row holds the username: {text}");
+    }
+    assert!(AuditLog::verify_chain(&pool, org_id).await.unwrap());
+}

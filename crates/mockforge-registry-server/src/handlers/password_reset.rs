@@ -135,17 +135,18 @@ pub async fn confirm_password_reset(
     // Mark token as used
     state.store.mark_verification_token_used(reset_token.id).await?;
 
-    tracing::info!("Password reset completed: user_id={}, email={}", user.id, user.email);
+    tracing::info!("Password reset completed: user_id={}", user.id);
 
     // Record audit event for password change
+    let entry = crate::audit_entries::password_reset_completed(&user);
     state
         .store
         .record_audit_event(
             Uuid::nil(), // System-level operation (no org context)
             Some(user.id),
             AuditEventType::PasswordChanged,
-            format!("Password reset completed for user {}", user.email),
-            None,
+            entry.description,
+            entry.metadata,
             None,
             None,
         )

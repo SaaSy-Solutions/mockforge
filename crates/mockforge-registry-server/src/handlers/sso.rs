@@ -854,19 +854,15 @@ pub async fn saml_acs(
     // (`assert_email_in_verified_domain`, enforced inside `provision_sso_user`)
     // has already passed by the time we reach here, so every audited row
     // corresponds to a provisioning decision that cleared the #746/#778 gate.
+    let entry = crate::audit_entries::saml_login_succeeded(&user, jit_created);
     state
         .store
         .record_audit_event(
             org.id,
             Some(user.id),
             AuditEventType::LoginSucceeded,
-            format!("SSO login via SAML for {}", user.email),
-            Some(serde_json::json!({
-                "method": "saml",
-                "jit_created": jit_created,
-                "name_id": user_info.name_id,
-                "email": user.email,
-            })),
+            entry.description,
+            entry.metadata,
             None, // ACS is an IdP POST; no meaningful end-user IP/UA here.
             None,
         )

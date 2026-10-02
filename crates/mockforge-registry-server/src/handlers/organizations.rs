@@ -357,17 +357,15 @@ pub async fn add_organization_member(
         .map(|s| s.to_string());
     let user_agent = headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
+    let entry = crate::audit_entries::member_added(&target_user, &role.to_string());
     state
         .store
         .record_audit_event(
             org_id,
             Some(user_id),
             AuditEventType::MemberAdded,
-            format!(
-                "Added member {} ({}) with role {}",
-                target_user.username, target_user.email, role
-            ),
-            None,
+            entry.description,
+            entry.metadata,
             ip_address.as_deref(),
             user_agent.as_deref(),
         )
@@ -444,14 +442,15 @@ pub async fn remove_organization_member(
         .map(|s| s.to_string());
     let user_agent = headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
+    let entry = crate::audit_entries::member_removed(&target_user);
     state
         .store
         .record_audit_event(
             org_id,
             Some(user_id),
             AuditEventType::MemberRemoved,
-            format!("Removed member {} ({})", target_user.username, target_user.email),
-            None,
+            entry.description,
+            entry.metadata,
             ip_address.as_deref(),
             user_agent.as_deref(),
         )
@@ -541,20 +540,19 @@ pub async fn update_organization_member_role(
         .map(|s| s.to_string());
     let user_agent = headers.get("user-agent").and_then(|h| h.to_str().ok()).map(|s| s.to_string());
 
+    let entry = crate::audit_entries::member_role_changed(
+        &target_user,
+        &member.role().to_string(),
+        &new_role.to_string(),
+    );
     state
         .store
         .record_audit_event(
             org_id,
             Some(user_id),
             AuditEventType::MemberRoleChanged,
-            format!(
-                "Changed role of {} ({}) from {} to {}",
-                target_user.username,
-                target_user.email,
-                member.role(),
-                new_role
-            ),
-            None,
+            entry.description,
+            entry.metadata,
             ip_address.as_deref(),
             user_agent.as_deref(),
         )
@@ -959,14 +957,15 @@ pub async fn create_invitation(
         .await?;
 
     let (ip_address, user_agent) = audit_context(&headers);
+    let entry = crate::audit_entries::invitation_created(&nonce, &role.to_string());
     state
         .store
         .record_audit_event(
             org_id,
             Some(user_id),
             AuditEventType::InvitationCreated,
-            format!("Created invitation for {} ({})", req.email, role),
-            Some(serde_json::json!({ "nonce": nonce, "email": req.email, "role": role })),
+            entry.description,
+            entry.metadata,
             ip_address.as_deref(),
             user_agent.as_deref(),
         )
@@ -1050,14 +1049,15 @@ pub async fn revoke_invitation(
     state.store.delete_org_setting(org_id, &setting_key).await?;
 
     let (ip_address, user_agent) = audit_context(&headers);
+    let entry = crate::audit_entries::invitation_revoked(&nonce, &stored.role);
     state
         .store
         .record_audit_event(
             org_id,
             Some(user_id),
             AuditEventType::InvitationRevoked,
-            format!("Revoked invitation for {} ({})", stored.email, stored.role),
-            Some(serde_json::json!({ "nonce": nonce, "email": stored.email, "role": stored.role })),
+            entry.description,
+            entry.metadata,
             ip_address.as_deref(),
             user_agent.as_deref(),
         )
@@ -1199,18 +1199,15 @@ pub async fn accept_invitation(
 
     state.store.delete_org_setting(payload.org_id, &setting_key).await?;
 
+    let entry = crate::audit_entries::invitation_accepted(&payload.nonce, &user, &stored.role);
     state
         .store
         .record_audit_event(
             stored.org_id,
             Some(user.id),
             AuditEventType::InvitationAccepted,
-            format!("Invitation accepted by {} ({})", user.username, user.email),
-            Some(serde_json::json!({
-                "nonce": payload.nonce,
-                "email": stored.email,
-                "role": stored.role,
-            })),
+            entry.description,
+            entry.metadata,
             None,
             None,
         )

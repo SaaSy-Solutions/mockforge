@@ -2,11 +2,15 @@
 
 ### Changed
 
+- **[Cloud]** Audit logs no longer record email addresses, usernames or SAML NameIDs. Member, invitation, SSO login and password-reset events identify people by user id or invitation id; failed logins store a keyed hash of the attempted email instead of the address. (#1087)
+- **[Cloud]** Audit logs are now kept for 400 days and then deleted by a daily retention worker. The append-only trigger allows only this purge, and only for rows past the window; `verify_chain` treats the oldest surviving row as the chain start. (#1087)
+- **[Cloud]** Privacy Policy 2.2 and DPA 2.2 describe audit-log retention after account deletion. Terms 2.1 name Delaware as governing law and venue.
 - **[DevX]** The Kubernetes manifests (`k8s/`) and the Helm chart now give every MockForge replica its own recorder volume. Previously all replicas mounted one ReadWriteOnce claim holding the recorder's SQLite database, so pods on other nodes could not start and pods on the same node shared one SQLite file. `k8s/deployment.yaml` + `k8s/pvc.yaml` are replaced by `k8s/statefulset.yaml` (a StatefulSet with a `volumeClaimTemplates` entry, one `recorder-db-mockforge-N` claim per pod), and the HPA now targets it. The Helm chart renders a StatefulSet (plus a `<fullname>-headless` Service) when `persistence.enabled` is true, the default, and a Deployment without a recorder volume when it is false. Upgrading an existing Helm release replaces its Deployment with a StatefulSet and creates per-pod claims (`data-<fullname>-N`); the old shared `<fullname>-data` claim is kept (annotated `helm.sh/resource-policy: keep`) but no longer mounted, so copy any recordings you need out of it, then delete it. The Kubernetes test workflow's Chaos Engineering job, which never ran, now runs on manual dispatch and weekly.
 
 ### Fixed
 
 - **[DevX]** `cargo install --locked mockforge-cli` no longer warns about yanked dependencies (`chacha20` 0.10.0 and `spin` 0.9.8/0.10.0 bumped to their patched releases).
+- **[DevX]** GDPR erase on the SQLite backend did nothing (`delete_user_data_cascade` returned 0). It now matches the Postgres store. (#1087)
 
 ## [0.3.229] - 2026-10-01
 

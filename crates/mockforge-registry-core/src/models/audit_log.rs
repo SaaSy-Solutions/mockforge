@@ -10,6 +10,14 @@ use uuid::Uuid;
 #[cfg(feature = "postgres")]
 use sha2::{Digest, Sha256};
 
+/// How long audit rows are kept, in days (#1087 follow-up).
+///
+/// Mirrored by the age floor in the `audit_logs_block_mutation` trigger
+/// (migration `20250101000089_audit_logs_bounded_retention.sql`): the trigger
+/// refuses to delete any row younger than this, whatever the caller asks for.
+/// Stated in the privacy policy (§5) and DPA (§10); change all three together.
+pub const AUDIT_LOG_RETENTION_DAYS: i64 = 400;
+
 /// Audit event types
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, sqlx::Type)]
 #[sqlx(type_name = "audit_event_type", rename_all = "snake_case")]
@@ -368,6 +376,37 @@ impl AuditLog {
         ip_address: Option<&str>,
         user_agent: Option<&str>,
     ) -> sqlx::Result<Self> {
+        Self::create_at(
+            conn,
+            org_id,
+            user_id,
+            event_type,
+            description,
+            metadata,
+            ip_address,
+            user_agent,
+            Utc::now(),
+        )
+        .await
+    }
+
+    /// [`Self::create`] with an explicit `created_at`, for tests that need
+    /// rows older than the retention window. Production code calls `create`.
+    /// The row still extends the org's chain from its current latest row, so
+    /// callers must insert in chronological order.
+    #[doc(hidden)]
+    #[allow(clippy::too_many_arguments)]
+    pub async fn create_at(
+        conn: &mut sqlx::PgConnection,
+        org_id: Uuid,
+        user_id: Option<Uuid>,
+        event_type: AuditEventType,
+        description: String,
+        metadata: Option<serde_json::Value>,
+        ip_address: Option<&str>,
+        user_agent: Option<&str>,
+        created_at: DateTime<Utc>,
+    ) -> sqlx::Result<Self> {
         // Normalize BEFORE hashing so the canonical form and the stored column
         // agree — otherwise `verify_chain` would recompute a different hash and
         // report the chain broken.
@@ -398,7 +437,7 @@ impl AuditLog {
         // precision `Utc::now()` would be truncated on store and the read-back
         // value in verify_chain would no longer match what we hashed. Truncating
         // up-front keeps insert-time and verify-time canonical bytes identical.
-        let created_at = truncate_to_micros(Utc::now());
+        let created_at = truncate_to_micros(created_at);
         let canonical = canonical_entry(
             org_id,
             user_id,
@@ -444,6 +483,14 @@ impl AuditLog {
     /// (mutated field, deleted row, reordered row, or forged hash). Rows whose
     /// `entry_hash` is NULL (pre-#872 history) are treated as a fresh chain
     /// start: the chain is validated from the first hashed row onward.
+    ///
+    /// Retention ([`Self::purge_expired`]) removes each org's oldest rows, so
+    /// the oldest surviving row may carry a `prev_hash` that points at a purged
+    /// row. The first row returned is therefore a chain start whatever its
+    /// `prev_hash`: its own `entry_hash` is still checked, and every later link
+    /// must match exactly. What this cannot detect is removal of rows from the
+    /// head of the chain; inside the retention window the append-only trigger
+    /// prevents that.
     pub async fn verify_chain(
         executor: impl sqlx::PgExecutor<'_>,
         org_id: Uuid,
@@ -462,15 +509,16 @@ impl AuditLog {
         .await?;
 
         let mut prev_hash: Option<String> = None;
-        for row in rows {
+        for (i, row) in rows.into_iter().enumerate() {
             // Skip un-chained historical rows but keep walking forward.
             let Some(stored) = row.entry_hash.as_deref() else {
                 prev_hash = None;
                 continue;
             };
 
-            // The stored prev_hash must match the running chain head.
-            if row.prev_hash.as_deref() != prev_hash.as_deref() {
+            // The stored prev_hash must match the running chain head, except on
+            // the oldest surviving row, whose predecessor may have been purged.
+            if i > 0 && row.prev_hash.as_deref() != prev_hash.as_deref() {
                 return Ok(false);
             }
 
@@ -549,17 +597,44 @@ impl AuditLog {
         query.build_query_as::<Self>().fetch_all(executor).await
     }
 
-    /// Audit-log retention is disabled for tamper-evidence (#872).
+    /// Delete audit rows older than [`AUDIT_LOG_RETENTION_DAYS`], across all
+    /// orgs, and return how many were removed.
     ///
-    /// `audit_logs` is append-only at the DB level (a trigger raises on any
-    /// DELETE/UPDATE — see migration `20250101000080_audit_log_integrity.sql`),
-    /// and deleting rows would also break the per-org hash chain. SOC2 / ISO
-    /// retention is "keep", not "prune", so this is intentionally a no-op that
-    /// logs a warning and reports 0 rows removed. The `_pool`/`_days` arguments
-    /// are kept so the call sites and trait shape are unchanged.
-    pub async fn cleanup_old(_pool: &sqlx::PgPool, _days: i64) -> sqlx::Result<u64> {
-        tracing::warn!("audit retention disabled for immutability (#872)");
-        Ok(0)
+    /// Must run on the owner pool (it is cross-org). Each batch runs in its
+    /// own transaction that opts in with `mockforge.audit_retention_purge`;
+    /// the append-only trigger then permits DELETE of rows past the 400-day
+    /// floor and still rejects everything else. Rows go oldest-first, so each
+    /// org's chain loses only a prefix and [`Self::verify_chain`] still passes.
+    pub async fn purge_expired(pool: &sqlx::PgPool) -> sqlx::Result<u64> {
+        const BATCH: i64 = 5_000;
+        let mut total = 0;
+        loop {
+            let mut tx = pool.begin().await?;
+            sqlx::query("SELECT set_config('mockforge.audit_retention_purge', 'on', true)")
+                .execute(&mut *tx)
+                .await?;
+            let deleted = sqlx::query(
+                r#"
+                DELETE FROM audit_logs
+                WHERE id IN (
+                    SELECT id FROM audit_logs
+                    WHERE created_at < now() - make_interval(days => $1)
+                    ORDER BY created_at ASC, id ASC
+                    LIMIT $2
+                )
+                "#,
+            )
+            .bind(AUDIT_LOG_RETENTION_DAYS as i32)
+            .bind(BATCH)
+            .execute(&mut *tx)
+            .await?
+            .rows_affected();
+            tx.commit().await?;
+            total += deleted;
+            if deleted < BATCH as u64 {
+                return Ok(total);
+            }
+        }
     }
 }
 
@@ -604,6 +679,25 @@ fn normalize_client_ip(ip: Option<&str>) -> Option<String> {
         return None;
     }
     Some(first.chars().take(IP_ADDRESS_MAX_CHARS).collect())
+}
+
+/// Keyed pseudonym for an email address in audit metadata.
+///
+/// Audit rows are immutable and outlive account erasure (#872, #1087), so they
+/// must not hold the address itself. Where an address is the only signal (a
+/// failed login for an email that has no account), this stands in for it:
+/// HMAC-SHA256 under the server's `JWT_SECRET`, over the trimmed, lowercased
+/// address with a domain-separation prefix. Attempts against one address
+/// correlate on one value, while recovering the address needs the secret plus
+/// a guess to test. Rotating `JWT_SECRET` starts a new pseudonym space, so
+/// correlation across a rotation is lost; that is acceptable for this use.
+pub fn audit_email_pseudonym(email: &str, secret: &str) -> String {
+    use hmac::{Hmac, Mac};
+    let mut mac = Hmac::<sha2::Sha256>::new_from_slice(secret.as_bytes())
+        .expect("HMAC accepts keys of any length");
+    mac.update(b"mockforge-audit-email-v1:");
+    mac.update(email.trim().to_lowercase().as_bytes());
+    hex::encode(mac.finalize().into_bytes())
 }
 
 /// Helper function to record audit events from request context

@@ -7,8 +7,8 @@
  * `lastUpdated` below.
  *
  * Status: approved for launch (September 2026); counsel should review after
- * launch, notably governing law / venue (Terms §15, which names the state of
- * organization of SaaSy Solutions LLC generically).
+ * launch, notably governing law / venue (Terms §15 names Delaware, matching
+ * SaaSy Solutions' other customer agreements; counsel to confirm).
  *
  * The sub-processor list (DPA §7) reflects production as verified on the
  * Ashburn host. Keep it in sync with infrastructure: adding a provider
@@ -35,24 +35,24 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentId, LegalDocument> = {
     id: 'terms',
     title: 'Terms of Service',
     path: '/legal/terms',
-    version: '2.0',
-    lastUpdated: 'September 27, 2026',
+    version: '2.1',
+    lastUpdated: 'October 1, 2026',
     markdown: termsMarkdown,
   },
   privacy: {
     id: 'privacy',
     title: 'Privacy Policy',
     path: '/legal/privacy',
-    version: '2.1',
-    lastUpdated: 'September 30, 2026',
+    version: '2.2',
+    lastUpdated: 'October 1, 2026',
     markdown: privacyMarkdown,
   },
   dpa: {
     id: 'dpa',
     title: 'Data Processing Agreement',
     path: '/legal/dpa',
-    version: '2.1',
-    lastUpdated: 'September 30, 2026',
+    version: '2.2',
+    lastUpdated: 'October 1, 2026',
     markdown: dpaMarkdown,
   },
 };
