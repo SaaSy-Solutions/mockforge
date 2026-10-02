@@ -523,8 +523,12 @@ fn extract_target_url(config: &serde_json::Value) -> Option<String> {
 /// `MOCKFORGE_SSRF_ALLOW_LOOPBACK=1` opts into [`SsrfPolicy::for_test`]
 /// for non-prod deployments. Production must NOT set this.
 fn ssrf_policy() -> SsrfPolicy {
-    match std::env::var("MOCKFORGE_SSRF_ALLOW_LOOPBACK").as_deref() {
-        Ok("1") | Ok("true") => SsrfPolicy::for_test(),
+    ssrf_policy_from(std::env::var("MOCKFORGE_SSRF_ALLOW_LOOPBACK").ok().as_deref())
+}
+
+fn ssrf_policy_from(allow_loopback: Option<&str>) -> SsrfPolicy {
+    match allow_loopback {
+        Some("1") | Some("true") => SsrfPolicy::for_test(),
         _ => SsrfPolicy::strict(),
     }
 }
@@ -572,16 +576,14 @@ mod tests {
 
     #[tokio::test]
     async fn ssrf_policy_blocks_loopback_target_in_strict_mode() {
-        std::env::remove_var("MOCKFORGE_SSRF_ALLOW_LOOPBACK");
-        let policy = ssrf_policy();
+        let policy = ssrf_policy_from(None);
         let err = validate_target_url("http://127.0.0.1/", policy).await.unwrap_err();
         assert!(err.to_string().contains("loopback"), "got: {err}");
     }
 
     #[tokio::test]
     async fn ssrf_policy_blocks_metadata_ip() {
-        std::env::remove_var("MOCKFORGE_SSRF_ALLOW_LOOPBACK");
-        let policy = ssrf_policy();
+        let policy = ssrf_policy_from(Some("0"));
         let err = validate_target_url("http://169.254.169.254/latest/meta-data/", policy)
             .await
             .unwrap_err();
@@ -590,10 +592,8 @@ mod tests {
 
     #[tokio::test]
     async fn ssrf_policy_loose_allows_loopback() {
-        std::env::set_var("MOCKFORGE_SSRF_ALLOW_LOOPBACK", "1");
-        let policy = ssrf_policy();
+        let policy = ssrf_policy_from(Some("1"));
         validate_target_url("http://127.0.0.1:8080/", policy).await.unwrap();
-        std::env::remove_var("MOCKFORGE_SSRF_ALLOW_LOOPBACK");
     }
 }
 
