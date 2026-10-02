@@ -48,7 +48,7 @@ class AshburnImagesTest(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/ashburn-images.yml").read_text()
         core_workflow = (ROOT / ".github/workflows/docker-build.yml").read_text()
         smoke = (ROOT / ".github/workflows/ashburn-image-smoke.yml").read_text()
-        for dockerfile in ("Dockerfile.registry", "Dockerfile.runner", "Dockerfile.tunnel"):
+        for dockerfile in ("Dockerfile.egress", "Dockerfile.registry", "Dockerfile.runner", "Dockerfile.tunnel"):
             self.assertTrue((ROOT / dockerfile).is_file())
             self.assertIn(dockerfile, workflow)
             # A Dockerfile-only change must still trigger the publisher.
@@ -76,6 +76,8 @@ class AshburnImagesTest(unittest.TestCase):
         self.assertIn("push: false", smoke)
         self.assertIn("Dockerfile.registry", smoke)
         self.assertIn("Dockerfile.runner", smoke)
+        self.assertIn("Dockerfile.egress", smoke)
+        self.assertIn("bash scripts/tests/k6_egress_e2e.sh", smoke)
         self.assertIn("BUILD_DATE=${{ steps.build-date.outputs.value }}", core_workflow)
         self.assertIn("docker buildx imagetools create", core_workflow)
         self.assertIn("image_digest: ${{ steps.build-and-push.outputs.digest }}", core_workflow)
@@ -122,7 +124,7 @@ class AshburnImagesTest(unittest.TestCase):
         self.assertEqual(everything.returncode, 0, everything.stderr)
         self.assertEqual(
             [entry["app"] for entry in json.loads(everything.stdout.removeprefix("matrix="))["include"]],
-            ["mockforge-registry", "mockforge-test-runner", "mockforge-tunnel-relay"],
+            ["mockforge-egress", "mockforge-registry", "mockforge-test-runner", "mockforge-tunnel-relay"],
         )
         env["WANTED_IMAGE"] = "not-an-image"
         invalid = subprocess.run(["python3", "-c", script], env=env, text=True, capture_output=True)
@@ -134,8 +136,8 @@ class AshburnImagesTest(unittest.TestCase):
         # and MOCKFORGE_RUNNER_CALLBACK_TOKEN, none of which the runner reads,
         # so a deploy following it would exit at startup on a missing variable.
         config = (ROOT / "crates/mockforge-test-runner/src/config.rs").read_text()
-        read = set(re.findall(r'"(MOCKFORGE_RUNNER_[A-Z_]+)"', config))
-        required = set(re.findall(r'required_env\("(MOCKFORGE_RUNNER_[A-Z_]+)"\)', config))
+        read = set(re.findall(r'"(MOCKFORGE_RUNNER_[A-Z0-9_]+)"', config))
+        required = set(re.findall(r'required_env\("(MOCKFORGE_RUNNER_[A-Z0-9_]+)"\)', config))
         self.assertEqual(
             required,
             {

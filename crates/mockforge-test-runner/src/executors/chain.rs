@@ -98,11 +98,10 @@ pub async fn run_chain(
         .map(|m| m.iter().map(|(k, v)| (k.clone(), v.clone())).collect())
         .unwrap_or_default();
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(global_timeout))
-        .user_agent("mockforge-chain/1.0")
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
+    let client = crate::target_client::TargetClient::new(
+        std::time::Duration::from_secs(global_timeout),
+        "mockforge-chain/1.0",
+    )?;
 
     let mut variables = initial_variables;
     let mut next_seq: u32 = 2;
@@ -230,7 +229,7 @@ enum LinkOutcome {
 }
 
 async fn execute_link(
-    client: &reqwest::Client,
+    client: &crate::target_client::TargetClient,
     link: &ChainLinkConfig,
     variables: &HashMap<String, serde_json::Value>,
 ) -> LinkOutcome {
@@ -244,7 +243,14 @@ async fn execute_link(
         }
     };
 
-    let mut req = client.request(method, &url);
+    let mut req = match client.request(method, &url) {
+        Ok(r) => r,
+        Err(e) => {
+            return LinkOutcome::Error {
+                message: format!("url rejected by SSRF guard: {e}"),
+            };
+        }
+    };
     for (k, v) in &link.request.headers {
         req = req.header(k, substitute(v, variables));
     }

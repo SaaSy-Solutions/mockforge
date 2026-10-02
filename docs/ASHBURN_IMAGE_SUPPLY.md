@@ -5,7 +5,9 @@ The repository publishes the root `Dockerfile` to
 supplies both the persistent `mockforge-server` and the `mockforge-demo` services.
 `ashburn-images.yml` publishes `Dockerfile.registry` as
 `ghcr.io/saasy-solutions/mockforge-registry`, `Dockerfile.runner` as
-`ghcr.io/saasy-solutions/mockforge-test-runner`, and `Dockerfile.tunnel` as
+`ghcr.io/saasy-solutions/mockforge-test-runner`, `Dockerfile.egress` (Stripe's
+smokescreen, pinned, the runner's k6 egress proxy) as
+`ghcr.io/saasy-solutions/mockforge-egress`, and `Dockerfile.tunnel` as
 `ghcr.io/saasy-solutions/mockforge-tunnel-relay`. Both workflows build on the
 self-hosted runners (see `IMAGE_PUBLISHER_ISOLATION.md`) and share one
 concurrency group. Production image tags are
@@ -48,6 +50,7 @@ publishes no port. It reads exactly these variables
 | `MOCKFORGE_RUNNER_QUEUE_KEY` | no | Leave unset. The registry always pushes to `test_runs:queued` |
 | `MOCKFORGE_RUNNER_MAX_CONCURRENT_JOBS` | no | Default 4 |
 | `MOCKFORGE_RUNNER_POLL_TIMEOUT_SECS` | no | Default 5 |
+| `MOCKFORGE_RUNNER_K6_EGRESS_PROXY` | for k6 kinds | `http://mockforge-egress:4750`, the smokescreen sidecar. Unset, cloud bench, OWASP, security, WAFBench and CRUD-flow runs are refused |
 | `MOCKFORGE_SSRF_ALLOW_LOOPBACK` | no | `0` in production. `1` only for local tests |
 
 The registry only enqueues when its own `REDIS_URL` is set. Without it a run is
@@ -56,6 +59,14 @@ execute.
 
 The runner reaches hosted mocks by their public URLs (`*.mocks.mockforge.dev`
 and the Fly `https://<app>.fly.dev` origin), which pass the strict SSRF policy.
+Every URL the runner fetches itself goes through an SSRF-guarded client: it
+refuses loopback, private, link-local, CGNAT and NAT64-embedded private
+addresses when the name is resolved for the connection and on every redirect
+hop. k6 does its own DNS and follows redirects, so the runner only starts it
+with `HTTP_PROXY`/`HTTPS_PROXY` set to `MOCKFORGE_RUNNER_K6_EGRESS_PROXY` and
+`K6_MAX_REDIRECTS=0`. That proxy must apply the same IP policy after it
+resolves the name.
+
 Chaos toggles for `target_kind=hosted_mock` do not go to the mock directly: the
 runner calls the registry's `/api/v1/internal/hosted-mocks/{id}/chaos` with the
 run's `run_id`, and the registry checks the deployment belongs to that run's

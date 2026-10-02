@@ -156,10 +156,17 @@ impl OwaspApiGenerator {
         // Helper to prepend base_path to API paths
         let base_path = self.config.base_path.clone().unwrap_or_default();
         let build_path = |path: &str| -> String {
-            if base_path.is_empty() {
+            let joined = if base_path.is_empty() {
                 path.to_string()
             } else {
                 format!("{}{}", base_path.trim_end_matches('/'), path)
+            };
+            // Appended to BASE_URL: anything not starting with '/' would
+            // become part of the URL authority.
+            if joined.starts_with('/') {
+                joined
+            } else {
+                format!("/{joined}")
             }
         };
 

@@ -24,6 +24,7 @@ impl Dispatcher {
     /// Wire up from config. Connects to Redis up-front so config errors
     /// surface before the main loop starts.
     pub async fn new(cfg: RunnerConfig) -> Result<Self> {
+        crate::target_client::install_process_guards(cfg.k6_egress_proxy.clone());
         let consumer =
             Consumer::connect(&cfg.redis_url, cfg.queue_key.clone(), cfg.poll_timeout_secs).await?;
         let callbacks = Arc::new(RegistryCallbacks::new(

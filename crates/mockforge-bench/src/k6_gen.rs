@@ -860,6 +860,18 @@ impl K6ScriptGenerator {
 /// with a traffic-file URI that already starts with `/` sent
 /// `//oauth/authorize` on Srikanth's --targets-file + verbatim command (#79).
 fn join_base_path(base_path: &str, raw_path: &str) -> String {
+    let joined = join_base_path_raw(base_path, raw_path);
+    // Always a path: a joined value without a leading '/' (e.g. a base path
+    // of "@host:port") would become part of the URL authority once appended
+    // to the target URL.
+    if joined.starts_with('/') {
+        joined
+    } else {
+        format!("/{joined}")
+    }
+}
+
+fn join_base_path_raw(base_path: &str, raw_path: &str) -> String {
     match base_path {
         "" | "/" => raw_path.to_string(),
         bp => {
@@ -889,6 +901,8 @@ mod tests {
         assert_eq!(join_base_path("", "/pets"), "/pets");
         assert_eq!(join_base_path("/v1", "/pets"), "/v1/pets");
         assert_eq!(join_base_path("/v1/", "pets"), "/v1/pets");
+        assert_eq!(join_base_path("@localhost:6565", "/pets"), "/@localhost:6565/pets");
+        assert_eq!(join_base_path("", "pets"), "/pets");
     }
 
     #[test]

@@ -50,8 +50,10 @@ pub mod dispatcher;
 pub mod error;
 pub mod executors;
 pub mod queue;
+pub mod target_client;
 
 pub use config::RunnerConfig;
 pub use dispatcher::Dispatcher;
 pub use error::{Error, Result};
 pub use executors::{Executor, ExecutorRegistry, JobOutcome, RunJob};
+pub use target_client::TargetClient;

@@ -36,12 +36,13 @@ use mockforge_bench::cloud_api::{
 use mockforge_bench::conformance::custom::CustomConformanceConfig;
 use mockforge_bench::conformance::executor::{ConformanceProgress, NativeConformanceExecutor};
 use mockforge_bench::conformance::generator::ConformanceConfig;
-use mockforge_bench::ssrf::{validate_target_url, Policy as SsrfPolicy};
+use mockforge_bench::ssrf::validate_target_url;
 use tokio::sync::mpsc;
 
 use crate::callbacks::RegistryCallbacks;
 use crate::error::Result;
 use crate::executors::{Executor, JobOutcome, JobStatus, RunJob};
+use crate::target_client::{ssrf_policy, TargetClient};
 
 /// Executor for all five test_suites.kind values.
 pub struct TestExecutor {
@@ -88,7 +89,18 @@ impl Executor for TestExecutor {
         // runner Dockerfile installs it). When the payload doesn't opt in,
         // bench/owasp fall through to the lighter-weight reqwest paths
         // below and conformance falls through to synthetic mode.
+        if let Some(reason) = crate::target_client::base_path_refusal(
+            extract_string(&job.payload, "base_path").as_deref(),
+        ) {
+            return refuse_k6_run(job, callbacks, started, self.kind, reason).await;
+        }
         if uses_cloud_api(&job.payload) {
+            if let Some(reason) = crate::target_client::k6_refusal(
+                self.kind,
+                mockforge_bench::executor::k6_egress_proxy(),
+            ) {
+                return refuse_k6_run(job, callbacks, started, self.kind, reason).await;
+            }
             match self.kind {
                 "conformance" => {
                     return run_cloud_conformance(job, callbacks, started).await;
@@ -396,6 +408,36 @@ async fn finish_cloud_error(
     })
 }
 
+/// Finish a k6-backed run that this runner will not start (no egress
+/// proxy configured). Errored, not failed: the target was never contacted.
+async fn refuse_k6_run(
+    job: RunJob,
+    callbacks: &RegistryCallbacks,
+    started: Instant,
+    kind: &str,
+    reason: String,
+) -> Result<JobOutcome> {
+    tracing::warn!(run_id = %job.run_id, kind, "{reason}");
+    callbacks
+        .run_event(
+            job.run_id,
+            1,
+            "step_fail",
+            serde_json::json!({ "step": 1, "name": format!("cloud_api_{kind}"), "error": reason }),
+        )
+        .await?;
+    let elapsed = started.elapsed();
+    Ok(JobOutcome {
+        status: JobStatus::Errored,
+        runner_seconds: (elapsed.as_secs_f64().ceil() as i32).max(1),
+        summary: Some(serde_json::json!({
+            "executor_phase": "k6_refused",
+            "kind": kind,
+            "error": reason,
+        })),
+    })
+}
+
 /// Drive a k6 load test via `cloud_api::run_bench`.
 async fn run_cloud_bench(
     job: RunJob,
@@ -580,11 +622,7 @@ async fn run_cloud_conformance(
     // worker, so we re-validate on this side too. Same env-var
     // contract (`MOCKFORGE_SSRF_ALLOW_LOOPBACK=1` for tests) as
     // mockforge_bench::cloud_api uses for the other kinds.
-    let policy = match std::env::var("MOCKFORGE_SSRF_ALLOW_LOOPBACK").as_deref() {
-        Ok("1") | Ok("true") => SsrfPolicy::for_test(),
-        _ => SsrfPolicy::strict(),
-    };
-    if let Err(e) = validate_target_url(&target_url, policy).await {
+    if let Err(e) = validate_target_url(&target_url, ssrf_policy()).await {
         return finish_cloud_error(
             job.run_id,
             callbacks,
@@ -688,7 +726,7 @@ async fn run_cloud_conformance(
     // to a follow-up so the first cloud iteration matches the local
     // "no spec, just probe the reference endpoints" UX which is what
     // the page form exposes.
-    let executor = match NativeConformanceExecutor::new(config) {
+    let executor = match NativeConformanceExecutor::with_ssrf_guard(config, Some(ssrf_policy())) {
         Ok(e) => {
             let e = e.with_reference_checks();
             match custom_checks_config {
@@ -1065,11 +1103,10 @@ async fn run_real_bench(
         )
         .await?;
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .user_agent("mockforge-bench/1.0")
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
+    let client = TargetClient::new(std::time::Duration::from_secs(10), "mockforge-bench/1.0")?;
+    client.check(target_url).map_err(|e| {
+        crate::error::Error::Executor(format!("target_url rejected by SSRF guard: {e}"))
+    })?;
 
     let target = target_url.to_string();
     let deadline = Instant::now() + std::time::Duration::from_secs(duration_secs);
@@ -1083,7 +1120,11 @@ async fn run_real_bench(
             let mut err = 0u64;
             while Instant::now() < deadline {
                 let started = Instant::now();
-                match client.get(&target).send().await {
+                let sent = match client.get(&target) {
+                    Ok(req) => req.send().await,
+                    Err(_) => break,
+                };
+                match sent {
                     Ok(resp) => {
                         if resp.status().is_success() {
                             ok += 1;
@@ -1202,14 +1243,18 @@ async fn run_real_owasp_scan(
         )
         .await?;
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(15))
-        .user_agent("mockforge-owasp-scan/1.0")
-        .redirect(reqwest::redirect::Policy::limited(5))
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
+    let client = TargetClient::with_policy(
+        ssrf_policy(),
+        std::time::Duration::from_secs(15),
+        "mockforge-owasp-scan/1.0",
+        5,
+    )?;
 
-    let response = match client.get(target_url).send().await {
+    let sent = match client.get(target_url) {
+        Ok(req) => req.send().await.map_err(|e| e.to_string()),
+        Err(e) => Err(format!("target_url rejected by SSRF guard: {e}")),
+    };
+    let response = match sent {
         Ok(r) => r,
         Err(e) => {
             callbacks

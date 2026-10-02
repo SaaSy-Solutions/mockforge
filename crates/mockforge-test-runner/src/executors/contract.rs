@@ -88,13 +88,15 @@ async fn run_real_contract_diff(
         )
         .await?;
 
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .user_agent("mockforge-contract-diff/1.0")
-        .build()
-        .unwrap_or_else(|_| reqwest::Client::new());
+    let client = crate::target_client::TargetClient::new(
+        std::time::Duration::from_secs(30),
+        "mockforge-contract-diff/1.0",
+    )?;
+    let request = client.get(spec_url).map_err(|e| {
+        crate::error::Error::Executor(format!("openapi_spec_url rejected by SSRF guard: {e}"))
+    })?;
 
-    let spec_text = match client.get(spec_url).send().await {
+    let spec_text = match request.send().await {
         Ok(resp) => {
             let status = resp.status();
             match resp.text().await {

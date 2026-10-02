@@ -60,7 +60,22 @@ pub async fn probe_target_latency(
     samples: u32,
     skip_tls_verify: bool,
 ) -> Option<ProbeResult> {
-    let client = reqwest::Client::builder()
+    probe_target_latency_guarded(target, samples, skip_tls_verify, crate::ssrf::process_guard())
+        .await
+}
+
+/// [`probe_target_latency`] with an explicit SSRF guard; `None` is unguarded.
+pub async fn probe_target_latency_guarded(
+    target: &str,
+    samples: u32,
+    skip_tls_verify: bool,
+    guard: Option<crate::ssrf::Policy>,
+) -> Option<ProbeResult> {
+    if let Some(policy) = guard {
+        let parsed = url::Url::parse(target).ok()?;
+        crate::ssrf::check_url(&parsed, policy).ok()?;
+    }
+    let client = crate::ssrf::client_builder_for(guard)
         .timeout(Duration::from_secs(5))
         .danger_accept_invalid_certs(skip_tls_verify)
         .build()
@@ -158,5 +173,41 @@ mod tests {
         // fast (no DNS lookup) without hanging.
         let result = probe_target_latency("http://127.0.0.1:1/", 1, false).await;
         assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn guarded_probe_never_reaches_an_internal_target() {
+        use crate::ssrf::{test_server, Policy};
+        use std::sync::atomic::Ordering;
+
+        let (port, hits) = test_server::serve(test_server::OK).await;
+        // Literal loopback and a name that resolves to it.
+        for target in [
+            format!("http://127.0.0.1:{port}/"),
+            format!("http://localhost:{port}/"),
+        ] {
+            let r = probe_target_latency_guarded(&target, 2, false, Some(Policy::strict())).await;
+            assert!(r.is_none(), "{target}");
+        }
+        assert_eq!(hits.load(Ordering::SeqCst), 0);
+
+        // A first hop that redirects inward is refused too. 0.0.0.0 reaches
+        // local listeners on Linux and is blocked even when loopback is
+        // allowed, so the inner server proves whether the hop was followed.
+        let (inner, inner_hits) = test_server::serve(test_server::OK).await;
+        let (outer, _) =
+            test_server::serve(test_server::redirect_to(&format!("http://0.0.0.0:{inner}/"))).await;
+        let outer_url = format!("http://127.0.0.1:{outer}/");
+        let r = probe_target_latency_guarded(&outer_url, 1, false, Some(Policy::for_test())).await;
+        assert!(r.is_none());
+        assert_eq!(inner_hits.load(Ordering::SeqCst), 0);
+        // Control: unguarded, the same redirect does reach the inner server.
+        probe_target_latency_guarded(&outer_url, 1, false, None).await;
+        assert!(inner_hits.load(Ordering::SeqCst) > 0);
+
+        // Unguarded (the CLI) still probes localhost.
+        let r = probe_target_latency_guarded(&format!("http://127.0.0.1:{port}/"), 1, false, None)
+            .await;
+        assert!(r.is_some());
     }
 }

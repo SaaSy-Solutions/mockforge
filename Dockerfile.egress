@@ -1,0 +1,35 @@
+# Egress proxy for the MockForge cloud test runner's k6 processes.
+#
+# k6 resolves names and follows redirects itself, so the runner's in-process
+# SSRF guard cannot bind it. The runner starts k6 with HTTP_PROXY/HTTPS_PROXY
+# pointing here, and Stripe's smokescreen applies the IP policy after it
+# resolves each name, for CONNECT (https) and plain http alike. Smokescreen
+# denies private ranges by default; the deployment adds explicit --deny-range
+# flags (see infrastructure/ashburn/apps-compose.yml in saas-platform).
+#
+# Upstream publishes no image. Build a pinned tag from source (vendored Go
+# modules, so the build fetches nothing but the tarball).
+# Published to GHCR as mockforge-egress by ashburn-images.yml.
+
+ARG GO_IMAGE=golang:1.25-trixie
+ARG DEBIAN_IMAGE=debian:trixie-slim
+FROM ${GO_IMAGE} AS builder
+
+# smokescreen v0.1.0
+ARG SMOKESCREEN_COMMIT=609eb8931420453daf5893509be0b25b21bd9edb
+WORKDIR /src
+RUN curl -fsSL "https://github.com/stripe/smokescreen/archive/${SMOKESCREEN_COMMIT}.tar.gz" \
+        | tar -xz --strip-components=1 && \
+    CGO_ENABLED=0 go build -mod=vendor -trimpath -ldflags='-s -w' -o /smokescreen .
+
+FROM ${DEBIAN_IMAGE}
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -r smokescreen && useradd -r -g smokescreen smokescreen
+COPY --from=builder /smokescreen /usr/local/bin/smokescreen
+USER smokescreen
+EXPOSE 4750
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD bash -c 'echo > /dev/tcp/127.0.0.1/4750' || exit 1
+ENTRYPOINT ["/usr/local/bin/smokescreen"]
+CMD ["--listen-ip=0.0.0.0", "--listen-port=4750"]
