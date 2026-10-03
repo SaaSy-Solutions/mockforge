@@ -74,9 +74,9 @@ describe('useAuthStore', () => {
       throw new Error('Invalid username or password');
     });
     vi.mocked(authApi.logout).mockResolvedValue(undefined);
-    vi.mocked(authApi.refreshToken).mockImplementation(async (refreshToken: string) => ({
+    vi.mocked(authApi.refreshToken).mockImplementation(async (refreshToken?: string) => ({
       token: createToken(adminUser),
-      refresh_token: refreshToken,
+      refresh_token: refreshToken ?? 'cookie-refresh',
       user: adminUser,
       expires_in: 3600,
     }));
@@ -387,7 +387,7 @@ describe('useAuthStore', () => {
       user_id: 'cookie-user', username: 'root', email: 'root@example.com', is_admin: true,
     })));
     const user: User = { id: 'cookie-user', username: 'root', email: 'root@example.com', role: 'admin' };
-    vi.mocked(authApi.refreshToken).mockResolvedValueOnce({ token: createToken(user), expires_in: 3600 });
+    vi.mocked(authApi.refreshToken).mockResolvedValueOnce({ token: createToken(user), refresh_token: 'cookie-refresh', expires_in: 3600 });
     await useAuthStore.getState().checkAuth();
     expect(useAuthStore.getState()).toMatchObject({
       isAuthenticated: true, user: { id: 'cookie-user', role: 'admin' },

@@ -4,7 +4,7 @@ import { persist } from 'zustand/middleware';
 import type { User, AuthState, AuthActions } from '../types';
 import { authApi } from '../services/authApi';
 import { hydrateUserFromServer } from '../services/authUser';
-import { isMissingRefreshCookie } from '../services/authSession';
+import { isMissingRefreshCookie, resolveRefreshedUser } from '../services/authSession';
 import { parseToken, setAuthToken, clearAuthToken } from '../services/tokenStorage';
 
 interface AuthStore extends AuthState, AuthActions {
@@ -89,7 +89,7 @@ export const useAuthStore = create<AuthStore>()(
             if (generation !== authGeneration) return;
             const parsedUser = parseToken(response.token).user;
             const currentUser = get().user;
-            const user = response.user ?? (currentUser?.id === parsedUser?.id ? currentUser : parsedUser);
+            const user = resolveRefreshedUser(response.user, currentUser, parsedUser);
             if (!user) throw new Error('Invalid refreshed session');
             set({ token: response.token, refreshToken: response.refresh_token,
               user, isAuthenticated: true, isLoading: false });
