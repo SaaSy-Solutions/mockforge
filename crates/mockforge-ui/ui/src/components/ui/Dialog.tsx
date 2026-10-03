@@ -10,7 +10,7 @@ interface DialogProps {
   children: React.ReactNode;
 }
 
-interface DialogContentProps {
+interface DialogContentProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
   className?: string;
 }
@@ -55,7 +55,7 @@ const useDialogContext = () => {
   return context;
 };
 
-export function DialogContent({ children, className }: DialogContentProps) {
+export function DialogContent({ children, className, ...props }: DialogContentProps) {
   const { open, onOpenChange } = useDialogContext();
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedElement = useRef<HTMLElement | null>(null);
@@ -132,12 +132,13 @@ export function DialogContent({ children, className }: DialogContentProps) {
 
       {/* Dialog */}
       <div
+        {...props}
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         tabIndex={-1}
         className={cn(
-          "relative bg-bg-primary border border-border rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto focus:outline-none",
+          "relative bg-bg-primary text-foreground border border-border rounded-lg shadow-xl max-w-md w-full mx-4 max-h-[90vh] overflow-y-auto focus:outline-none",
           className
         )}
       >
@@ -177,7 +178,7 @@ export function DialogDescription({ children, className, id = "dialog-descriptio
 
 export function DialogFooter({ children, className }: DialogFooterProps) {
   return (
-    <div className={cn("flex items-center justify-end gap-3 pt-4 border-t border-border", className)}>
+    <div className={cn("flex flex-wrap items-center justify-end gap-3 pt-4 border-t border-border", className)}>
       {children}
     </div>
   );
@@ -213,6 +214,7 @@ export function DialogClose({ onClick, className }: { onClick?: () => void; clas
   return (
     <Button
       variant="ghost"
+      aria-label="Close dialog"
       size="sm"
       className={cn("h-8 w-8 p-0 hover:bg-bg-tertiary", className)}
       onClick={handleClick}

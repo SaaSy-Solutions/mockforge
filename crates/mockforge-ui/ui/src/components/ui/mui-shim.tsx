@@ -35,6 +35,9 @@ function spacing(v: number | string | undefined): string | undefined {
 
 const COLOR_KEYWORDS: Record<string, string> = {
   'primary.main': 'hsl(var(--primary))',
+  'primary.contrastText': 'hsl(var(--primary-foreground))',
+  'common.white': '#ffffff',
+  'common.black': '#000000',
   'primary.light': 'hsl(var(--primary) / 0.8)',
   'primary.dark': 'hsl(var(--primary) / 1.1)',
   // --secondary is a neutral surface now; as a text colour it means muted text.
@@ -46,7 +49,7 @@ const COLOR_KEYWORDS: Record<string, string> = {
   'success.main': 'hsl(var(--success))',
   'text.primary': 'hsl(var(--foreground))',
   'text.secondary': 'hsl(var(--muted-foreground))',
-  'text.disabled': 'hsl(var(--muted-foreground) / 0.6)',
+  'text.disabled': 'hsl(var(--muted-foreground))',
   'background.paper': 'hsl(var(--card))',
   'background.default': 'hsl(var(--background))',
   'divider': 'hsl(var(--border))',
@@ -413,12 +416,12 @@ export function Typography({
     color === 'primary' ? 'text-primary' :
     color === 'secondary' ? 'text-muted-foreground' :
     color === 'error' || color === 'error.main' ? 'text-destructive' :
-    color === 'warning' || color === 'warning.main' ? 'text-warning' :
-    color === 'info' || color === 'info.main' ? 'text-info' :
-    color === 'success' || color === 'success.main' ? 'text-success' :
+    color === 'warning' || color === 'warning.main' ? 'text-amber-700 dark:text-amber-400' :
+    color === 'info' || color === 'info.main' ? 'text-blue-700 dark:text-blue-400' :
+    color === 'success' || color === 'success.main' ? 'text-green-700 dark:text-green-400' :
     color === 'text.primary' ? 'text-foreground' :
     color === 'text.secondary' ? 'text-muted-foreground' :
-    color === 'text.disabled' ? 'text-muted-foreground/60' :
+    color === 'text.disabled' ? 'text-muted-foreground' :
     color === 'textSecondary' ? 'text-muted-foreground' :
     color === 'textPrimary' ? 'text-foreground' : '';
   const inlineColor = !colorClass && color ? colorVal(color) : undefined;
@@ -465,27 +468,27 @@ function buttonColorClasses(variant: string, color: string): string {
       primary: 'bg-primary text-primary-foreground hover:bg-primary/90',
       secondary: 'bg-secondary text-secondary-foreground hover:bg-secondary/70',
       error: 'bg-destructive text-destructive-foreground hover:bg-destructive/90',
-      warning: 'bg-warning text-text-inverse hover:bg-warning-600',
-      info: 'bg-info text-text-inverse hover:bg-info-600',
-      success: 'bg-success text-text-inverse hover:bg-success-600',
+      warning: 'bg-amber-700 text-white hover:bg-amber-800',
+      info: 'bg-blue-700 text-white hover:bg-blue-800',
+      success: 'bg-green-700 text-white hover:bg-green-800',
       inherit: 'bg-muted text-foreground hover:bg-muted/80',
     },
     outlined: {
       primary: 'border border-input bg-background text-foreground shadow-xs hover:bg-muted',
       secondary: 'border border-input bg-background text-foreground shadow-xs hover:bg-muted',
       error: 'border border-destructive text-destructive hover:bg-destructive/10',
-      warning: 'border border-warning text-warning hover:bg-warning/10',
-      info: 'border border-info text-info hover:bg-info/10',
-      success: 'border border-success text-success hover:bg-success/10',
+      warning: 'border border-warning text-amber-700 dark:text-amber-400 hover:bg-warning/10',
+      info: 'border border-info text-blue-700 dark:text-blue-400 hover:bg-info/10',
+      success: 'border border-success text-green-700 dark:text-green-400 hover:bg-success/10',
       inherit: 'border border-input bg-background text-foreground shadow-xs hover:bg-muted',
     },
     text: {
       primary: 'text-primary hover:bg-primary/10',
       secondary: 'text-muted-foreground hover:bg-muted hover:text-foreground',
       error: 'text-destructive hover:bg-destructive/10',
-      warning: 'text-warning hover:bg-warning/10',
-      info: 'text-info hover:bg-info/10',
-      success: 'text-success hover:bg-success/10',
+      warning: 'text-amber-700 dark:text-amber-400 hover:bg-warning/10',
+      info: 'text-blue-700 dark:text-blue-400 hover:bg-info/10',
+      success: 'text-green-700 dark:text-green-400 hover:bg-success/10',
       inherit: 'text-foreground hover:bg-muted',
     },
   };
@@ -520,7 +523,7 @@ export const Button = React.forwardRef<HTMLButtonElement, MuiButtonProps>(functi
       ref={ref}
       disabled={disabled}
       className={cn(
-        'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:opacity-50 disabled:pointer-events-none [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
+        'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:opacity-100 disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none disabled:pointer-events-none [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
         buttonColorClasses(variant, color),
         sizes[size],
         fullWidth && 'w-full',
@@ -555,9 +558,9 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(f
     primary: 'text-primary hover:bg-primary/10',
     secondary: 'text-muted-foreground hover:bg-muted hover:text-foreground',
     error: 'text-destructive hover:bg-destructive/10',
-    warning: 'text-warning hover:bg-warning/10',
-    info: 'text-info hover:bg-info/10',
-    success: 'text-success hover:bg-success/10',
+    warning: 'text-amber-700 dark:text-amber-400 hover:bg-warning/10',
+    info: 'text-blue-700 dark:text-blue-400 hover:bg-info/10',
+    success: 'text-green-700 dark:text-green-400 hover:bg-success/10',
     inherit: 'text-current hover:bg-muted',
     default: 'text-muted-foreground hover:bg-muted hover:text-foreground',
   };
@@ -565,7 +568,7 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(f
     <button
       ref={ref}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:pointer-events-none',
+        'inline-flex shrink-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-100 disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none disabled:pointer-events-none',
         sizes[size],
         colors[color],
         className
@@ -817,7 +820,7 @@ export function DialogContentText({ className, children, sx, style, ...rest }: B
 
 export function DialogActions({ className, children, sx, style, ...rest }: BoxProps) {
   return (
-    <div className={cn('flex items-center justify-end gap-2 px-6 py-4', className)} style={{ ...sxToStyle(sx), ...style }} {...rest}>
+    <div className={cn('flex flex-wrap items-center justify-end gap-2 px-6 py-4', className)} style={{ ...sxToStyle(sx), ...style }} {...rest}>
       {children}
     </div>
   );
@@ -874,7 +877,7 @@ export function Drawer({ open, onClose, anchor = 'left', variant = 'temporary', 
 const inputBase =
   'w-full rounded-lg border border-input bg-background text-foreground shadow-xs placeholder:text-muted-foreground ' +
   'focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30 ' +
-  'transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+  'transition-colors disabled:opacity-100 disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none disabled:cursor-not-allowed';
 
 interface TextFieldProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size' | 'color'> {
   label?: React.ReactNode;
@@ -1243,18 +1246,18 @@ export function Chip({ label, variant = 'filled', color = 'default', size = 'med
     primary: 'bg-primary text-primary-foreground',
     secondary: 'bg-secondary text-secondary-foreground',
     error: 'bg-destructive text-destructive-foreground',
-    warning: 'bg-warning text-text-inverse',
-    info: 'bg-info text-text-inverse',
-    success: 'bg-success text-text-inverse',
+    warning: 'bg-amber-700 text-white',
+    info: 'bg-blue-700 text-white',
+    success: 'bg-green-700 text-white',
   };
   const outlined: Record<string, string> = {
     default: 'border border-border text-foreground',
     primary: 'border border-primary text-primary',
     secondary: 'border border-border text-muted-foreground',
     error: 'border border-destructive text-destructive',
-    warning: 'border border-warning text-warning',
-    info: 'border border-info text-info',
-    success: 'border border-success text-success',
+    warning: 'border border-warning text-amber-700 dark:text-amber-400',
+    info: 'border border-info text-blue-700 dark:text-blue-400',
+    success: 'border border-success text-green-700 dark:text-green-400',
   };
   const variants = variant === 'outlined' ? outlined : filled;
   const sizeCls = size === 'small' ? 'px-2 py-0.5 text-xs h-6' : 'px-2.5 py-1 text-sm h-7';
@@ -1302,9 +1305,9 @@ export function Badge({ badgeContent, color = 'default', variant = 'standard', i
     primary: 'bg-primary text-primary-foreground',
     secondary: 'bg-secondary text-secondary-foreground',
     error: 'bg-destructive text-destructive-foreground',
-    warning: 'bg-warning text-text-inverse',
-    info: 'bg-info text-text-inverse',
-    success: 'bg-success text-text-inverse',
+    warning: 'bg-amber-700 text-white',
+    info: 'bg-blue-700 text-white',
+    success: 'bg-green-700 text-white',
   };
   const v = anchorOrigin?.vertical ?? 'top';
   const h = anchorOrigin?.horizontal ?? 'right';
@@ -1603,8 +1606,8 @@ export function TablePagination(props: any) {
   return (
     <div className="flex items-center justify-end gap-3 px-4 py-2 text-sm text-muted-foreground" style={sxToStyle(sx)} {...rest}>
       <span>{page * rowsPerPage + 1}-{Math.min((page + 1) * rowsPerPage, count)} of {count}</span>
-      <button type="button" disabled={page === 0} onClick={(e) => onPageChange?.(e, page - 1)} className="px-2 disabled:opacity-50">‹</button>
-      <button type="button" disabled={(page + 1) * rowsPerPage >= count} onClick={(e) => onPageChange?.(e, page + 1)} className="px-2 disabled:opacity-50">›</button>
+      <button type="button" disabled={page === 0} onClick={(e) => onPageChange?.(e, page - 1)} className="px-2 disabled:opacity-100 disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none">‹</button>
+      <button type="button" disabled={(page + 1) * rowsPerPage >= count} onClick={(e) => onPageChange?.(e, page + 1)} className="px-2 disabled:opacity-100 disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none">›</button>
       {rowsPerPageOptions && onRowsPerPageChange && (
         <select className={cn(inputBase, 'px-2 py-0.5 text-xs')} value={rowsPerPage} onChange={onRowsPerPageChange}>
           {(rowsPerPageOptions as number[]).map((n) => <option key={n} value={n}>{n} / page</option>)}
@@ -1930,9 +1933,9 @@ export function CircularProgress({ variant = 'indeterminate', value = 0, size = 
     primary: 'text-primary',
     secondary: 'text-muted-foreground',
     error: 'text-destructive',
-    warning: 'text-warning',
-    info: 'text-info',
-    success: 'text-success',
+    warning: 'text-amber-700 dark:text-amber-400',
+    info: 'text-blue-700 dark:text-blue-400',
+    success: 'text-green-700 dark:text-green-400',
     inherit: 'text-current',
   };
   const radius = (size - thickness) / 2;

@@ -120,7 +120,7 @@ const AdminView: React.FC = () => {
                     </button>
                     <button
                         onClick={() => setShowCreate(true)}
-                        className="flex items-center px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium"
+                        className="flex items-center px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-lg font-medium"
                     >
                         <Plus className="w-4 h-4 mr-2" />
                         New Entry
@@ -368,7 +368,7 @@ const CreateModal: React.FC<{
                 <button
                     onClick={onSubmit}
                     disabled={!state.slug || !state.title || !state.description || submitting}
-                    className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg disabled:opacity-50"
+                    className="px-4 py-2 bg-amber-700 hover:bg-amber-800 text-white rounded-lg disabled:opacity-50"
                 >
                     {submitting ? 'Submitting…' : 'Submit'}
                 </button>

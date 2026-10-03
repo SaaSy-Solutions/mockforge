@@ -9,6 +9,7 @@ on:
       - 'scripts/docs-cli-surface.json'
       - 'crates/mockforge-cli/src/main.rs'
       - '.github/workflows/docs-check.yml'
+      - '.github/actions/setup-mdbook/**'
   workflow_dispatch:
 
 # Push-on-main trigger removed: PR run already verifies the change. Only
@@ -31,9 +32,7 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup mdBook
-        uses: peaceiris/actions-mdbook@v2
-        with:
-          mdbook-version: '0.4.40'
+        uses: ./.github/actions/setup-mdbook
 
       - name: Install Rust toolchain
         uses: ./.github/actions/rust-toolchain

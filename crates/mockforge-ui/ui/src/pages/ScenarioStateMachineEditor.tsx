@@ -458,7 +458,6 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
             state_machine: updatedStateMachine,
             visual_layout: updatedStateMachine.visual_layout,
           },
-          set_current: true,
         });
         setStateMachine(updatedStateMachine);
         logger.info('State machine saved successfully');
@@ -505,7 +504,7 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
       const flow = await cloudFlowsApi.create(activeWorkspace.id, {
         kind: 'state_machine',
         name,
-        initial_config: {
+        config: {
           state_machine: {
             resource_type: name,
             states: ['initial'],

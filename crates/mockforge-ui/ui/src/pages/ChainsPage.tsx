@@ -655,7 +655,7 @@ const ChainCreationForm: React.FC<ChainCreationFormProps> = ({ onClose, onSucces
           setError('No active workspace selected.');
           return;
         }
-        // Cloud-mode chains expect a JSON body with name + initial_config.
+        // Cloud-mode chains expect a JSON body with name + config.
         // We parse what the user pasted into the textarea — JSON is the
         // only supported form in cloud (YAML→JSON conversion would need
         // a parser dep; not worth it for one page).
@@ -675,7 +675,7 @@ const ChainCreationForm: React.FC<ChainCreationFormProps> = ({ onClose, onSucces
           kind: 'chain',
           name,
           description,
-          initial_config: parsed,
+          config: parsed,
         });
         onSuccess({
           id: flow.id,

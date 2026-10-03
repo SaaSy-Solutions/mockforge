@@ -282,7 +282,7 @@ export function TimeTravelWidget({ workspace = 'default' }: TimeTravelWidgetProp
             <Button
               onClick={handleEnable}
               disabled={enableMutation.isPending}
-              className="flex-1 bg-brand-600 hover:bg-brand-700 text-white transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
+              className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground transition-all duration-200 hover:scale-[1.02] active:scale-[0.98]"
             >
               <Play className="h-4 w-4 mr-2" />
               Enable Time Travel

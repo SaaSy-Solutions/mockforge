@@ -1359,7 +1359,7 @@ export const HostedMocksPage: React.FC = () => {
                               py: 0.1,
                               borderRadius: 1,
                               bgcolor: opt.minPlan === 'team' ? 'secondary.main' : 'primary.main',
-                              color: 'common.white',
+                              color: opt.minPlan === 'team' ? 'background.default' : 'primary.contrastText',
                               textTransform: 'uppercase',
                             }}
                           >

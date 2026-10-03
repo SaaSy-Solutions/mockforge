@@ -333,7 +333,7 @@ export function ScenarioStudioPage() {
         const created = await cloudFlowsApi.create(activeWorkspace.id, {
           kind: 'scenario',
           name: newFlowName,
-          initial_config: {
+          config: {
             flow_type: newFlowType,
             steps: [],
             connections: [],
@@ -443,7 +443,6 @@ export function ScenarioStudioPage() {
             connections,
             tags: selectedFlow.tags,
           },
-          set_current: true,
         });
         const updated: FlowDefinition = {
           ...selectedFlow,

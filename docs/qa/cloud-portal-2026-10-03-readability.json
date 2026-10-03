@@ -1,0 +1,2673 @@
+{
+  "date": "2026-10-03",
+  "flows": [
+    {
+      "name": "create-save-history-delete-scenario",
+      "pass": true
+    },
+    {
+      "name": "create-save-history-delete-orchestration",
+      "pass": true
+    },
+    {
+      "name": "create-save-history-delete-state_machine",
+      "pass": true
+    },
+    {
+      "name": "create-save-history-delete-chain",
+      "pass": true
+    }
+  ],
+  "readability": [
+    {
+      "name": "service-light-desktop",
+      "url": "https://app.mockforge.dev/services",
+      "failures": [],
+      "controls": [
+        {
+          "text": "User Service",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Handles user authentication and profile management",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "https://api.example.com",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Cancel",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create Service",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 464,
+      "scopeRight": 976,
+      "scopeTop": 242,
+      "scopeBottom": 758,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 510,
+      "clientWidth": 510
+    },
+    {
+      "name": "service-light-mobile",
+      "url": "https://app.mockforge.dev/services",
+      "failures": [],
+      "controls": [
+        {
+          "text": "User Service",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Handles user authentication and profile management",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "https://api.example.com",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Cancel",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create Service",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 164,
+      "scopeBottom": 680,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "flow-light-desktop",
+      "url": "https://app.mockforge.dev/cloud-flows",
+      "failures": [],
+      "controls": [
+        {
+          "text": "flow-name",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "flow-description",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Cancel",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 496,
+      "scopeRight": 944,
+      "scopeTop": 265.5,
+      "scopeBottom": 734.5,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 446,
+      "clientWidth": 446
+    },
+    {
+      "name": "flow-light-mobile",
+      "url": "https://app.mockforge.dev/cloud-flows",
+      "failures": [],
+      "controls": [
+        {
+          "text": "flow-name",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "flow-description",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Cancel",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 187.5,
+      "scopeBottom": 656.5,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "flow-editor-light-desktop",
+      "url": "https://app.mockforge.dev/cloud-flows",
+      "failures": [],
+      "controls": [
+        {
+          "text": "Back to flows",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "{\n  \"nodes\": [\n    {\n      \"id\": \"start\",\n      \"name\": \"start\"\n    },\n    {\n   ",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Hide version history",
+          "ratio": 5.25,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Save Version",
+          "ratio": 5.31,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 336,
+      "scopeRight": 1104,
+      "scopeTop": 171.5,
+      "scopeBottom": 828.5,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 766,
+      "clientWidth": 766
+    },
+    {
+      "name": "flow-editor-light-mobile",
+      "url": "https://app.mockforge.dev/cloud-flows",
+      "failures": [],
+      "controls": [
+        {
+          "text": "Back to flows",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "{\n  \"nodes\": [\n    {\n      \"id\": \"start\",\n      \"name\": \"start\"\n    },\n    {\n   ",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Hide version history",
+          "ratio": 5.25,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Save Version",
+          "ratio": 5.42,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 42.203125,
+      "scopeBottom": 801.796875,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "fixtures-light-desktop",
+      "url": "https://app.mockforge.dev/fixtures",
+      "failures": [],
+      "controls": [
+        {
+          "text": "Close dialog",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "e.g., Get Users Response",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "e.g., /api/users",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "e.g., /api/users/{id} \u2014 canonical path with placeholders",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Optional description",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "comma-separated, e.g. auth, users, billing",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "{\n  \"users\": []\n}",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Cancel",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create Fixture",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 384,
+      "scopeRight": 1056,
+      "scopeTop": 112,
+      "scopeBottom": 888,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 670,
+      "clientWidth": 670
+    },
+    {
+      "name": "fixtures-light-mobile",
+      "url": "https://app.mockforge.dev/fixtures",
+      "failures": [],
+      "controls": [
+        {
+          "text": "Close dialog",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "e.g., Get Users Response",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "e.g., /api/users",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "e.g., /api/users/{id} \u2014 canonical path with placeholders",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Optional description",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "comma-separated, e.g. auth, users, billing",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "{\n  \"users\": []\n}",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Cancel",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create Fixture",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 70.796875,
+      "scopeBottom": 773.1875,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "fitness-functions-light-desktop",
+      "url": "https://app.mockforge.dev/fitness-functions",
+      "failures": [],
+      "controls": [
+        {
+          "text": "e.g., API Latency Budget",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Describe what this fitness function checks...",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "cloud-fitness-latency",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "cloud-fitness-window",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Cancel",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create Fitness Function",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 384,
+      "scopeRight": 1056,
+      "scopeTop": 119,
+      "scopeBottom": 881,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 670,
+      "clientWidth": 670
+    },
+    {
+      "name": "fitness-functions-light-mobile",
+      "url": "https://app.mockforge.dev/fitness-functions",
+      "failures": [],
+      "controls": [
+        {
+          "text": "e.g., API Latency Budget",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Describe what this fitness function checks...",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "cloud-fitness-latency",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "cloud-fitness-window",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Cancel",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create Fitness Function",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 42.203125,
+      "scopeBottom": 801.796875,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "cloud-snapshots-light-desktop",
+      "url": "https://app.mockforge.dev/cloud-snapshots",
+      "failures": [],
+      "controls": [
+        {
+          "text": "e.g., Pre-chaos baseline",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "What's the snapshot for?",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Cancel",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Capture",
+          "ratio": 5.25,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 496,
+      "scopeRight": 944,
+      "scopeTop": 268.5,
+      "scopeBottom": 731.5,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 446,
+      "clientWidth": 446
+    },
+    {
+      "name": "cloud-snapshots-light-mobile",
+      "url": "https://app.mockforge.dev/cloud-snapshots",
+      "failures": [],
+      "controls": [
+        {
+          "text": "e.g., Pre-chaos baseline",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "What's the snapshot for?",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Cancel",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Capture",
+          "ratio": 5.25,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 190.5,
+      "scopeBottom": 653.5,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "tunnels-light-desktop",
+      "url": "https://app.mockforge.dev/tunnels",
+      "failures": [],
+      "controls": [
+        {
+          "text": "e.g., Payment Service Dev",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "e.g., payments-dev",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "e.g., api.example.com",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Cancel",
+          "ratio": 10.3,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 496,
+      "scopeRight": 944,
+      "scopeTop": 239,
+      "scopeBottom": 761,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 446,
+      "clientWidth": 446
+    },
+    {
+      "name": "tunnels-light-mobile",
+      "url": "https://app.mockforge.dev/tunnels",
+      "failures": [],
+      "controls": [
+        {
+          "text": "e.g., Payment Service Dev",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "e.g., payments-dev",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "e.g., api.example.com",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Cancel",
+          "ratio": 10.3,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 161,
+      "scopeBottom": 683,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "api-tokens-light-desktop",
+      "url": "https://app.mockforge.dev/api-tokens",
+      "failures": [],
+      "controls": [
+        {
+          "text": "e.g., CLI Development",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Leave empty for no expiration",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Cancel",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create Token",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 464,
+      "scopeRight": 976,
+      "scopeTop": 180,
+      "scopeBottom": 820,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 510,
+      "clientWidth": 510
+    },
+    {
+      "name": "api-tokens-light-mobile",
+      "url": "https://app.mockforge.dev/api-tokens",
+      "failures": [],
+      "controls": [
+        {
+          "text": "e.g., CLI Development",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Leave empty for no expiration",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Cancel",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create Token",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 92,
+      "scopeBottom": 752,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "hosted-mocks-light-desktop",
+      "url": "https://app.mockforge.dev/hosted-mocks",
+      "failures": [],
+      "controls": [
+        {
+          "text": "My Mock Service",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "my-mock-service",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Description of the mock service",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "https://example.com/openapi.json",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "https://api.production.example.com",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "{}",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Cancel",
+          "ratio": 5.42,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Deploy",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 270,
+      "scopeRight": 1170,
+      "scopeTop": 50,
+      "scopeBottom": 950,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 898,
+      "clientWidth": 898
+    },
+    {
+      "name": "hosted-mocks-light-mobile",
+      "url": "https://app.mockforge.dev/hosted-mocks",
+      "failures": [],
+      "controls": [
+        {
+          "text": "My Mock Service",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "my-mock-service",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Description of the mock service",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "https://example.com/openapi.json",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "https://api.production.example.com",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "{}",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Cancel",
+          "ratio": 5.42,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Deploy",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 42.203125,
+      "scopeBottom": 801.796875,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "cloud-recorder-light-desktop",
+      "url": "https://app.mockforge.dev/cloud-recorder",
+      "failures": [],
+      "controls": [
+        {
+          "text": "Session name",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Description (optional)",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Cancel",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 496,
+      "scopeRight": 944,
+      "scopeTop": 314.5,
+      "scopeBottom": 685.5,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 446,
+      "clientWidth": 446
+    },
+    {
+      "name": "cloud-recorder-light-mobile",
+      "url": "https://app.mockforge.dev/cloud-recorder",
+      "failures": [],
+      "controls": [
+        {
+          "text": "Session name",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Description (optional)",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Cancel",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 236.5,
+      "scopeBottom": 607.5,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "cloud-showcase-admin-light-desktop",
+      "url": "https://app.mockforge.dev/cloud-showcase-admin",
+      "failures": [],
+      "controls": [
+        {
+          "text": "kebab-case-slug",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "e.g., chaos, observability, recipe",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Cancel",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Submit",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 384,
+      "scopeRight": 1056,
+      "scopeTop": 120,
+      "scopeBottom": 880,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 670,
+      "clientWidth": 670
+    },
+    {
+      "name": "cloud-showcase-admin-light-mobile",
+      "url": "https://app.mockforge.dev/cloud-showcase-admin",
+      "failures": [],
+      "controls": [
+        {
+          "text": "kebab-case-slug",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "e.g., chaos, observability, recipe",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Cancel",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Submit",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 63.296875,
+      "scopeBottom": 780.6875,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "federation-light-desktop",
+      "url": "https://app.mockforge.dev/federation",
+      "failures": [],
+      "controls": [
+        {
+          "text": "Back to federations",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Edit",
+          "ratio": 15.58,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Activate Scenario",
+          "ratio": 5.42,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "/auth/login",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Test Route",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Show headers & body (forward-compat with route handler)",
+          "ratio": 5.42,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 240,
+      "scopeRight": 1440,
+      "scopeTop": 56,
+      "scopeBottom": 1082,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 1200,
+      "clientWidth": 1200
+    },
+    {
+      "name": "federation-light-mobile",
+      "url": "https://app.mockforge.dev/federation",
+      "failures": [],
+      "controls": [
+        {
+          "text": "Back to federations",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Edit",
+          "ratio": 15.58,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Activate Scenario",
+          "ratio": 5.42,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "/auth/login",
+          "ratio": 16.28,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 5.61
+        },
+        {
+          "text": "Test Route",
+          "ratio": 5.05,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Show headers & body (forward-compat with route handler)",
+          "ratio": 5.42,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 0,
+      "scopeRight": 390,
+      "scopeTop": 56,
+      "scopeBottom": 1627,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 390,
+      "clientWidth": 390
+    },
+    {
+      "name": "service-dark-desktop",
+      "url": "https://app.mockforge.dev/services",
+      "failures": [],
+      "controls": [
+        {
+          "text": "User Service",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "Handles user authentication and profile management",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "https://api.example.com",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "Cancel",
+          "ratio": 16.62,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create Service",
+          "ratio": 6.5,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 464,
+      "scopeRight": 976,
+      "scopeTop": 242,
+      "scopeBottom": 758,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 510,
+      "clientWidth": 510
+    },
+    {
+      "name": "service-dark-mobile",
+      "url": "https://app.mockforge.dev/services",
+      "failures": [],
+      "controls": [
+        {
+          "text": "User Service",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "Handles user authentication and profile management",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "https://api.example.com",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "Cancel",
+          "ratio": 16.62,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create Service",
+          "ratio": 6.5,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 164,
+      "scopeBottom": 680,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "flow-dark-desktop",
+      "url": "https://app.mockforge.dev/cloud-flows",
+      "failures": [],
+      "controls": [
+        {
+          "text": "flow-name",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "flow-description",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Cancel",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create",
+          "ratio": 6.5,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 496,
+      "scopeRight": 944,
+      "scopeTop": 265.5,
+      "scopeBottom": 734.5,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 446,
+      "clientWidth": 446
+    },
+    {
+      "name": "flow-dark-mobile",
+      "url": "https://app.mockforge.dev/cloud-flows",
+      "failures": [],
+      "controls": [
+        {
+          "text": "flow-name",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "flow-description",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Cancel",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create",
+          "ratio": 6.5,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 187.5,
+      "scopeBottom": 656.5,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "fixtures-dark-desktop",
+      "url": "https://app.mockforge.dev/fixtures",
+      "failures": [],
+      "controls": [
+        {
+          "text": "Close dialog",
+          "ratio": 16.62,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "e.g., Get Users Response",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "e.g., /api/users",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "e.g., /api/users/{id} \u2014 canonical path with placeholders",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "Optional description",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "comma-separated, e.g. auth, users, billing",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "{\n  \"users\": []\n}",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "Cancel",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create Fixture",
+          "ratio": 6.5,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 384,
+      "scopeRight": 1056,
+      "scopeTop": 112,
+      "scopeBottom": 888,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 670,
+      "clientWidth": 670
+    },
+    {
+      "name": "fixtures-dark-mobile",
+      "url": "https://app.mockforge.dev/fixtures",
+      "failures": [],
+      "controls": [
+        {
+          "text": "Close dialog",
+          "ratio": 16.62,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "e.g., Get Users Response",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "e.g., /api/users",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "e.g., /api/users/{id} \u2014 canonical path with placeholders",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "Optional description",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "comma-separated, e.g. auth, users, billing",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "{\n  \"users\": []\n}",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "Cancel",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create Fixture",
+          "ratio": 6.5,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 70.796875,
+      "scopeBottom": 773.1875,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "fitness-functions-dark-desktop",
+      "url": "https://app.mockforge.dev/fitness-functions",
+      "failures": [],
+      "controls": [
+        {
+          "text": "e.g., API Latency Budget",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "Describe what this fitness function checks...",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "cloud-fitness-latency",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "cloud-fitness-window",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Cancel",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create Fitness Function",
+          "ratio": 6.5,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 384,
+      "scopeRight": 1056,
+      "scopeTop": 119,
+      "scopeBottom": 881,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 670,
+      "clientWidth": 670
+    },
+    {
+      "name": "fitness-functions-dark-mobile",
+      "url": "https://app.mockforge.dev/fitness-functions",
+      "failures": [],
+      "controls": [
+        {
+          "text": "e.g., API Latency Budget",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "Describe what this fitness function checks...",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "cloud-fitness-latency",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "cloud-fitness-window",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Cancel",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create Fitness Function",
+          "ratio": 6.5,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 42.203125,
+      "scopeBottom": 801.796875,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "cloud-snapshots-dark-desktop",
+      "url": "https://app.mockforge.dev/cloud-snapshots",
+      "failures": [],
+      "controls": [
+        {
+          "text": "e.g., Pre-chaos baseline",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.25
+        },
+        {
+          "text": "What's the snapshot for?",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.25
+        },
+        {
+          "text": "Cancel",
+          "ratio": 13.33,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Capture",
+          "ratio": 5.25,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 496,
+      "scopeRight": 944,
+      "scopeTop": 268.5,
+      "scopeBottom": 731.5,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 446,
+      "clientWidth": 446
+    },
+    {
+      "name": "cloud-snapshots-dark-mobile",
+      "url": "https://app.mockforge.dev/cloud-snapshots",
+      "failures": [],
+      "controls": [
+        {
+          "text": "e.g., Pre-chaos baseline",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.25
+        },
+        {
+          "text": "What's the snapshot for?",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.25
+        },
+        {
+          "text": "Cancel",
+          "ratio": 13.33,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Capture",
+          "ratio": 5.25,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 190.5,
+      "scopeBottom": 653.5,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "tunnels-dark-desktop",
+      "url": "https://app.mockforge.dev/tunnels",
+      "failures": [],
+      "controls": [
+        {
+          "text": "e.g., Payment Service Dev",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.25
+        },
+        {
+          "text": "e.g., payments-dev",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.25
+        },
+        {
+          "text": "e.g., api.example.com",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.25
+        },
+        {
+          "text": "Cancel",
+          "ratio": 5.99,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create",
+          "ratio": 6.5,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 496,
+      "scopeRight": 944,
+      "scopeTop": 239,
+      "scopeBottom": 761,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 446,
+      "clientWidth": 446
+    },
+    {
+      "name": "tunnels-dark-mobile",
+      "url": "https://app.mockforge.dev/tunnels",
+      "failures": [],
+      "controls": [
+        {
+          "text": "e.g., Payment Service Dev",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.25
+        },
+        {
+          "text": "e.g., payments-dev",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.25
+        },
+        {
+          "text": "e.g., api.example.com",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.25
+        },
+        {
+          "text": "Cancel",
+          "ratio": 5.99,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create",
+          "ratio": 6.5,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 161,
+      "scopeBottom": 683,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "api-tokens-dark-desktop",
+      "url": "https://app.mockforge.dev/api-tokens",
+      "failures": [],
+      "controls": [
+        {
+          "text": "e.g., CLI Development",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "",
+          "ratio": 16.62,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.62,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.62,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.62,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.62,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.62,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Leave empty for no expiration",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "Cancel",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create Token",
+          "ratio": 6.5,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 464,
+      "scopeRight": 976,
+      "scopeTop": 180,
+      "scopeBottom": 820,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 510,
+      "clientWidth": 510
+    },
+    {
+      "name": "api-tokens-dark-mobile",
+      "url": "https://app.mockforge.dev/api-tokens",
+      "failures": [],
+      "controls": [
+        {
+          "text": "e.g., CLI Development",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "",
+          "ratio": 16.62,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.62,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.62,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.62,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.62,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.62,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Leave empty for no expiration",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "Cancel",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create Token",
+          "ratio": 6.5,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 92,
+      "scopeBottom": 752,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "hosted-mocks-dark-desktop",
+      "url": "https://app.mockforge.dev/hosted-mocks",
+      "failures": [],
+      "controls": [
+        {
+          "text": "My Mock Service",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "my-mock-service",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "Description of the mock service",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "https://example.com/openapi.json",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "https://api.production.example.com",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "{}",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "Cancel",
+          "ratio": 7.12,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Deploy",
+          "ratio": 6.5,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 270,
+      "scopeRight": 1170,
+      "scopeTop": 50,
+      "scopeBottom": 950,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 898,
+      "clientWidth": 898
+    },
+    {
+      "name": "hosted-mocks-dark-mobile",
+      "url": "https://app.mockforge.dev/hosted-mocks",
+      "failures": [],
+      "controls": [
+        {
+          "text": "My Mock Service",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "my-mock-service",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "Description of the mock service",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "https://example.com/openapi.json",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "https://api.production.example.com",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "{}",
+          "ratio": 17.54,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.88
+        },
+        {
+          "text": "Cancel",
+          "ratio": 7.12,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Deploy",
+          "ratio": 6.5,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 42.203125,
+      "scopeBottom": 801.796875,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "cloud-recorder-dark-desktop",
+      "url": "https://app.mockforge.dev/cloud-recorder",
+      "failures": [],
+      "controls": [
+        {
+          "text": "Session name",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.25
+        },
+        {
+          "text": "Description (optional)",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.25
+        },
+        {
+          "text": "Cancel",
+          "ratio": 13.33,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create",
+          "ratio": 6.5,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 496,
+      "scopeRight": 944,
+      "scopeTop": 314.5,
+      "scopeBottom": 685.5,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 446,
+      "clientWidth": 446
+    },
+    {
+      "name": "cloud-recorder-dark-mobile",
+      "url": "https://app.mockforge.dev/cloud-recorder",
+      "failures": [],
+      "controls": [
+        {
+          "text": "Session name",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.25
+        },
+        {
+          "text": "Description (optional)",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.25
+        },
+        {
+          "text": "Cancel",
+          "ratio": 13.33,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Create",
+          "ratio": 6.5,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 236.5,
+      "scopeBottom": 607.5,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    },
+    {
+      "name": "cloud-showcase-admin-dark-desktop",
+      "url": "https://app.mockforge.dev/cloud-showcase-admin",
+      "failures": [],
+      "controls": [
+        {
+          "text": "kebab-case-slug",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.25
+        },
+        {
+          "text": "",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "e.g., chaos, observability, recipe",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.25
+        },
+        {
+          "text": "Cancel",
+          "ratio": 13.33,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Submit",
+          "ratio": 6.5,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 384,
+      "scopeRight": 1056,
+      "scopeTop": 120,
+      "scopeBottom": 880,
+      "viewport": 1440,
+      "viewportHeight": 1000,
+      "scrollWidth": 670,
+      "clientWidth": 670
+    },
+    {
+      "name": "cloud-showcase-admin-dark-mobile",
+      "url": "https://app.mockforge.dev/cloud-showcase-admin",
+      "failures": [],
+      "controls": [
+        {
+          "text": "kebab-case-slug",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.25
+        },
+        {
+          "text": "",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "e.g., chaos, observability, recipe",
+          "ratio": 16.13,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": 7.25
+        },
+        {
+          "text": "Cancel",
+          "ratio": 13.33,
+          "disabled": false,
+          "opacity": "1",
+          "placeholderRatio": null
+        },
+        {
+          "text": "Submit",
+          "ratio": 6.5,
+          "disabled": true,
+          "opacity": "1",
+          "placeholderRatio": null
+        }
+      ],
+      "overlaps": [],
+      "scopeLeft": 16,
+      "scopeRight": 374,
+      "scopeTop": 63.296875,
+      "scopeBottom": 780.6875,
+      "viewport": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 356,
+      "clientWidth": 356
+    }
+  ],
+  "browserErrors": [],
+  "expectedPreLoginHttpFailures": [
+    {
+      "status": 401,
+      "url": "https://app.mockforge.dev/api/v1/auth/me"
+    },
+    {
+      "status": 400,
+      "url": "https://app.mockforge.dev/api/v1/auth/token/refresh"
+    }
+  ],
+  "unremovedTestFlows": [],
+  "localUiTests": 976,
+  "localUiTestFiles": 93
+}

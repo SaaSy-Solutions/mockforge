@@ -159,7 +159,7 @@ const CloudView: React.FC = () => {
                     </button>
                     <button
                         onClick={() => setShowCreate(true)}
-                        className="flex items-center px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg font-medium"
+                        className="flex items-center px-4 py-2 bg-cyan-700 hover:bg-cyan-800 text-white rounded-lg font-medium"
                     >
                         <Plus className="w-4 h-4 mr-2" />
                         New Capture Session
@@ -424,7 +424,7 @@ const CreateSessionModal: React.FC<{
                 <button
                     onClick={onSubmit}
                     disabled={!state.name || submitting}
-                    className="px-4 py-2 bg-cyan-600 hover:bg-cyan-700 text-white rounded-lg disabled:opacity-50"
+                    className="px-4 py-2 bg-cyan-700 hover:bg-cyan-800 text-white rounded-lg disabled:opacity-50"
                 >
                     {submitting ? 'Creating…' : 'Create'}
                 </button>

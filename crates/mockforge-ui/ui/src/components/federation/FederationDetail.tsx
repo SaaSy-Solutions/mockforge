@@ -7,6 +7,7 @@
 import React, { useState } from 'react';
 import { useFederation, useRouteRequest, type Federation } from '../../hooks/useFederation';
 import { Card } from '../ui/Card';
+import { Button } from '../ui/button';
 import { ActiveScenarioPanel } from './ActiveScenarioPanel';
 import { ArrowLeft, Edit, Network, Play, CheckCircle } from 'lucide-react';
 
@@ -107,16 +108,13 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-4 min-w-0">
           {onBack && (
-            <button
-              aria-label="Back to federations"
-              onClick={onBack}
-              className="p-2 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
+            <Button variant="outline" onClick={onBack} className="gap-2 shrink-0">
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              Back to federations
+            </Button>
           )}
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
@@ -255,7 +253,7 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
         </h3>
         <div className="space-y-4">
           {routeRequest.error && <p role="alert" className="text-danger-600">{routeRequest.error.message}</p>}
-          <div className="flex gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-[auto_minmax(0,1fr)_auto] gap-2">
             <select
               value={testMethod}
               onChange={(e) => setTestMethod(e.target.value as HttpMethod)}
@@ -272,7 +270,7 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
               onChange={(e) => setTestPath(e.target.value)}
               aria-label="Request path"
               placeholder="/auth/login"
-              className="flex-1 px-3 py-2 border border-border rounded-lg bg-card text-foreground"
+              className="min-w-0 w-full px-3 py-2 border border-border rounded-lg bg-card text-foreground"
             />
             <button
               onClick={handleTestRoute}
@@ -285,7 +283,7 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
           <button
             type="button"
             onClick={() => setShowAdvanced((v) => !v)}
-            className="text-xs text-info-600 dark:text-info-400 hover:underline"
+            className="text-xs text-primary hover:underline"
           >
             {showAdvanced ? 'Hide' : 'Show'} headers & body (forward-compat with route handler)
           </button>
