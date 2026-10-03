@@ -309,10 +309,10 @@ const CreateModal: React.FC<{
     error: string | null;
 }> = ({ state, setState, onClose, onSubmit, submitting, error }) => (
     <Dialog open onOpenChange={(open) => { if (!open && !submitting) onClose(); }}>
-        <DialogContent>
+        <DialogContent aria-labelledby="new-flow-title">
             <form onSubmit={(event) => { event.preventDefault(); if (state.name.trim() && !submitting) onSubmit(); }}>
                 <DialogHeader className="flex-col items-start">
-                    <DialogTitle>New Flow</DialogTitle>
+                    <DialogTitle id="new-flow-title">New Flow</DialogTitle>
                     <DialogDescription>
                         Start with a two-node configuration, then edit your flow after creation.
                     </DialogDescription>
@@ -395,10 +395,10 @@ const FlowEditorModal: React.FC<{ flow: Flow; onClose: () => void }> = ({ flow, 
 
     return (
         <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
-            <DialogContent className="max-w-3xl">
+            <DialogContent className="max-w-3xl" aria-labelledby="flow-editor-title">
                 <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-background text-foreground flex flex-wrap items-start justify-between gap-3">
                     <div>
-                        <h2 className="text-xl font-semibold break-all">{flow.name}</h2>
+                        <h2 id="flow-editor-title" className="text-xl font-semibold break-all">{flow.name}</h2>
                         <p className="text-xs text-gray-500 mt-1">
                             <span className="font-mono">{flow.kind}</span> · current version{' '}
                             {currentVersionId?.slice(0, 8) ?? '(none)'}

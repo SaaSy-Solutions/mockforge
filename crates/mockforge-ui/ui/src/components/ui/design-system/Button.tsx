@@ -24,7 +24,7 @@ export function Button({
     danger:
       'bg-destructive text-destructive-foreground hover:bg-destructive/90',
     success:
-      'bg-success text-text-inverse hover:bg-success-600',
+      'bg-green-700 text-white hover:bg-green-800',
     outline:
       'border border-input bg-background shadow-sm hover:bg-muted text-foreground',
     ghost:

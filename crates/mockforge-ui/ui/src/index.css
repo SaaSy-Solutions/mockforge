@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* The portal toggle owns dark mode, independently of the OS preference. */
+@custom-variant dark (&:where(.dark, .dark *));
+
 /* Map CSS variables defined in :root / .dark below into Tailwind v4 utilities.
    `inline` keeps the var() reference so `.dark` class swaps work automatically. */
 @theme inline {
@@ -460,7 +463,7 @@
 
 /* Legacy neutral text shares the portal's readable theme tokens. Keep surfaces and
    status colors independent; these rules cover custom dialogs as well as pages. */
-html :is(.text-gray-400, .text-gray-500, .text-gray-600, .text-slate-400, .text-slate-500) {
+html :is(.text-gray-400, .text-gray-500, .text-gray-600, .text-slate-400, .text-slate-500, .text-text-tertiary) {
   color: hsl(var(--muted-foreground));
 }
 html.dark :is(.dark\:text-gray-300, .dark\:text-gray-400, .dark\:text-gray-500, .dark\:text-slate-400) {

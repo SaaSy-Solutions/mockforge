@@ -1,0 +1,23 @@
+name: Install pinned mdBook
+description: Install mdBook 0.4.40 with archive verification and a fresh release download URL.
+runs:
+  using: composite
+  steps:
+    - name: Download and verify mdBook
+      shell: bash
+      run: |
+        set -euo pipefail
+        test "$(uname -s)" = Linux
+        test "$(uname -m)" = x86_64
+        task_mdbook_dir=$(mktemp -d "${RUNNER_TEMP}/mdbook.XXXXXXXX")
+        # Cached release redirects can expire and return 503. The query changes
+        # the download URL per attempt without changing the pinned artifact.
+        curl --fail --location --proto '=https' --tlsv1.2 --retry 3 --retry-delay 2 \
+          --output "$task_mdbook_dir/mdbook.tar.gz" \
+          "https://github.com/rust-lang/mdBook/releases/download/v0.4.40/mdbook-v0.4.40-x86_64-unknown-linux-gnu.tar.gz?run=${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+        printf '%s  %s\n' \
+          '9ef07fd288ba58ff3b99d1c94e6d414d431c9a61fdb20348e5beb74b823d546b' \
+          "$task_mdbook_dir/mdbook.tar.gz" | sha256sum --check --status
+        tar -xzf "$task_mdbook_dir/mdbook.tar.gz" -C "$task_mdbook_dir" mdbook
+        test "$("$task_mdbook_dir/mdbook" --version)" = 'mdbook v0.4.40'
+        printf '%s\n' "$task_mdbook_dir" >> "$GITHUB_PATH"

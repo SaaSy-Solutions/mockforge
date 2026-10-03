@@ -10,7 +10,7 @@ interface DialogProps {
   children: React.ReactNode;
 }
 
-interface DialogContentProps {
+interface DialogContentProps extends React.HTMLAttributes<HTMLDivElement> {
   children: React.ReactNode;
   className?: string;
 }
@@ -55,7 +55,7 @@ const useDialogContext = () => {
   return context;
 };
 
-export function DialogContent({ children, className }: DialogContentProps) {
+export function DialogContent({ children, className, ...props }: DialogContentProps) {
   const { open, onOpenChange } = useDialogContext();
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedElement = useRef<HTMLElement | null>(null);
@@ -132,6 +132,7 @@ export function DialogContent({ children, className }: DialogContentProps) {
 
       {/* Dialog */}
       <div
+        {...props}
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
