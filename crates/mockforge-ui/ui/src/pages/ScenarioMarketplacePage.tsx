@@ -540,7 +540,7 @@ export const ScenarioMarketplacePage: React.FC = () => {
       {/* Results Summary */}
       <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Typography variant="body2" color="text.secondary">
-          {filteredScenarios.length} scenario{filteredScenarios.length !== 1 ? 's' : ''} found
+          {`${filteredScenarios.length} scenario${filteredScenarios.length !== 1 ? 's' : ''} found`}
         </Typography>
         <Box sx={{ display: 'flex', gap: 1 }}>
           <Button
@@ -611,7 +611,7 @@ export const ScenarioMarketplacePage: React.FC = () => {
                   </Box>
 
                   <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
-                    by {scenario.author} • v{scenario.version}
+                    {`by ${scenario.author} • v${scenario.version}`}
                   </Typography>
                 </CardContent>
 
@@ -683,7 +683,7 @@ export const ScenarioMarketplacePage: React.FC = () => {
                 <Box>
                   <Typography variant="h5">{selectedScenario.name}</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    by {selectedScenario.author} • v{selectedScenario.version}
+                    {`by ${selectedScenario.author} • v${selectedScenario.version}`}
                   </Typography>
                 </Box>
                 <Chip label={selectedScenario.category} color="primary" />

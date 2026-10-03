@@ -95,7 +95,7 @@ async function fetchTokens(): Promise<ApiToken[]> {
   const token = getAuthToken();
   const response = await fetch(`${API_BASE}/tokens`, {
     headers: {
-      'Authorization': `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       'Content-Type': 'application/json',
     },
   });
@@ -110,7 +110,7 @@ async function createToken(request: CreateTokenRequest): Promise<CreateTokenResp
   const response = await fetch(`${API_BASE}/tokens`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(request),
@@ -127,7 +127,7 @@ async function deleteToken(tokenId: string): Promise<void> {
   const response = await fetch(`${API_BASE}/tokens/${tokenId}`, {
     method: 'DELETE',
     headers: {
-      'Authorization': `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       'Content-Type': 'application/json',
     },
   });
@@ -140,7 +140,7 @@ async function fetchRotationStatus(): Promise<TokenRotationStatusResponse> {
   const token = getAuthToken();
   const response = await fetch(`${API_BASE}/tokens/rotation-status`, {
     headers: {
-      'Authorization': `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       'Content-Type': 'application/json',
     },
   });
@@ -154,7 +154,7 @@ async function fetchScopes(): Promise<TokenScopeInfo[]> {
   const token = getAuthToken();
   const response = await fetch(`${API_BASE}/tokens/scopes`, {
     headers: {
-      'Authorization': `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       'Content-Type': 'application/json',
     },
   });
@@ -169,7 +169,7 @@ async function rotateToken(tokenId: string, newName?: string, deleteOld?: boolea
   const response = await fetch(`${API_BASE}/tokens/${tokenId}/rotate`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${token}`,
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({ new_name: newName || undefined, delete_old: deleteOld }),
@@ -205,7 +205,7 @@ export function ApiTokensPage() {
   const [rotateDeleteOld, setRotateDeleteOld] = useState(false);
 
   // Fetch tokens
-  const { data: tokens, isLoading } = useQuery({
+  const { data: tokens, isLoading, error: tokensError, refetch: refetchTokens } = useQuery({
     queryKey: ['api-tokens'],
     queryFn: fetchTokens,
   });
@@ -552,7 +552,7 @@ export function ApiTokensPage() {
       </Dialog>
 
       {/* Tokens List */}
-      {isLoading ? (
+      {tokensError ? <div role="alert" className="py-6 text-danger-600">{tokensError.message} <Button onClick={() => refetchTokens()}>Retry</Button></div> : isLoading ? (
         <div className="text-center py-12">Loading tokens...</div>
       ) : tokens && tokens.length > 0 ? (
         <div className="space-y-4">

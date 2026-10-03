@@ -1,3 +1,4 @@
+import { useAuthStore } from '../../stores/useAuthStore';
 import { useMemo, useState } from 'react';
 import { Clock, FileText, Globe, User } from 'lucide-react';
 import { Card } from '../ui/Card';
@@ -35,6 +36,7 @@ const Title = () => (
 
 export function CloudActivityFeed() {
   const [search, setSearch] = useState('');
+  const currentUser = useAuthStore((state) => state.user);
   const { data, isLoading } = useCloudDashboardActivity();
 
   const rows = useMemo(() => {
@@ -89,7 +91,7 @@ export function CloudActivityFeed() {
       render: (value: unknown) => (
         <div className="flex items-center gap-1">
           <User className="h-3 w-3 text-gray-600 dark:text-gray-400" />
-          <span className="font-mono text-xs">{value ? String(value).slice(0, 8) : '—'}</span>
+          <span className="font-mono text-xs">{value === currentUser?.id ? currentUser?.username || currentUser?.email : value ? String(value) : 'System'}</span>
         </div>
       ),
       width: '110px',

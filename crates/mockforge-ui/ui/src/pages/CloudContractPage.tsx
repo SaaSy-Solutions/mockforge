@@ -209,7 +209,7 @@ const CloudView: React.FC = () => {
             )}
 
             <h2 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                Fitness Functions <span className="text-xs text-gray-500 ml-2">(read-only)</span>
+                Fitness Functions <span className="text-xs text-gray-500 ml-2">(manage in Fitness Functions)</span>
             </h2>
             {fitness.length === 0 ? (
                 <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6 text-sm text-gray-500 dark:text-gray-400 italic">

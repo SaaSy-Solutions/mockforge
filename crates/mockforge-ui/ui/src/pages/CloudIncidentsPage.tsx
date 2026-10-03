@@ -163,7 +163,7 @@ const CloudView: React.FC = () => {
                         Nothing to see here
                     </h3>
                     <p className="text-gray-500 dark:text-gray-400">
-                        No {statusFilter === 'all' ? '' : statusFilter} incidents match your filters.
+                        {`No ${statusFilter === 'all' ? '' : `${statusFilter} `}incidents match your filters.`}
                     </p>
                 </div>
             ) : (

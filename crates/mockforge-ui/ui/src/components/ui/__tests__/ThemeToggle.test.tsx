@@ -14,6 +14,7 @@ describe('ThemeToggle', () => {
     vi.clearAllMocks();
     vi.mocked(useThemePaletteStore).mockReturnValue({
       theme: 'system',
+      resolvedMode: 'light',
       setTheme: vi.fn(),
     } as any);
   });
@@ -29,6 +30,7 @@ describe('ThemeToggle', () => {
   it('highlights current theme', () => {
     vi.mocked(useThemePaletteStore).mockReturnValue({
       theme: 'light',
+      resolvedMode: 'light',
       setTheme: vi.fn(),
     } as any);
 
@@ -42,6 +44,7 @@ describe('ThemeToggle', () => {
     const setThemeMock = vi.fn();
     vi.mocked(useThemePaletteStore).mockReturnValue({
       theme: 'dark',
+      resolvedMode: 'dark',
       setTheme: setThemeMock,
     } as any);
 
@@ -55,6 +58,7 @@ describe('ThemeToggle', () => {
     const setThemeMock = vi.fn();
     vi.mocked(useThemePaletteStore).mockReturnValue({
       theme: 'light',
+      resolvedMode: 'light',
       setTheme: setThemeMock,
     } as any);
 
@@ -68,6 +72,7 @@ describe('ThemeToggle', () => {
     const setThemeMock = vi.fn();
     vi.mocked(useThemePaletteStore).mockReturnValue({
       theme: 'light',
+      resolvedMode: 'light',
       setTheme: setThemeMock,
     } as any);
 
@@ -97,6 +102,7 @@ describe('SimpleThemeToggle', () => {
   it('renders moon icon in light mode', () => {
     vi.mocked(useThemePaletteStore).mockReturnValue({
       theme: 'light',
+      resolvedMode: 'light',
       setTheme: vi.fn(),
     } as any);
 
@@ -107,6 +113,7 @@ describe('SimpleThemeToggle', () => {
   it('renders sun icon in dark mode', () => {
     vi.mocked(useThemePaletteStore).mockReturnValue({
       theme: 'dark',
+      resolvedMode: 'dark',
       setTheme: vi.fn(),
     } as any);
 
@@ -118,6 +125,7 @@ describe('SimpleThemeToggle', () => {
     const setThemeMock = vi.fn();
     vi.mocked(useThemePaletteStore).mockReturnValue({
       theme: 'light',
+      resolvedMode: 'light',
       setTheme: setThemeMock,
     } as any);
 
@@ -133,6 +141,7 @@ describe('SimpleThemeToggle', () => {
     const setThemeMock = vi.fn();
     vi.mocked(useThemePaletteStore).mockReturnValue({
       theme: 'dark',
+      resolvedMode: 'dark',
       setTheme: setThemeMock,
     } as any);
 

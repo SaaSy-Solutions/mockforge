@@ -1,0 +1,323 @@
+{
+  "account": "admin@mockforge.dev",
+  "pages": [
+    {
+      "label": "Dashboard",
+      "path": "/dashboard",
+      "passed": true
+    },
+    {
+      "label": "Workspaces",
+      "path": "/workspaces",
+      "passed": true
+    },
+    {
+      "label": "Federation",
+      "path": "/federation",
+      "passed": true
+    },
+    {
+      "label": "Services",
+      "path": "/services",
+      "passed": true
+    },
+    {
+      "label": "Virtual Backends",
+      "path": "/virtual-backends",
+      "passed": true
+    },
+    {
+      "label": "Fixtures",
+      "path": "/fixtures",
+      "passed": true
+    },
+    {
+      "label": "Hosted Mocks",
+      "path": "/hosted-mocks",
+      "passed": true
+    },
+    {
+      "label": "Snapshots",
+      "path": "/cloud-snapshots",
+      "passed": true
+    },
+    {
+      "label": "Tunnels",
+      "path": "/tunnels",
+      "passed": true
+    },
+    {
+      "label": "Chains",
+      "path": "/chains",
+      "passed": true
+    },
+    {
+      "label": "Graph",
+      "path": "/graph",
+      "passed": true
+    },
+    {
+      "label": "State Machines",
+      "path": "/state-machine-editor",
+      "passed": true
+    },
+    {
+      "label": "Scenario Studio",
+      "path": "/scenario-studio",
+      "passed": true
+    },
+    {
+      "label": "Orchestration Builder",
+      "path": "/orchestration-builder",
+      "passed": true
+    },
+    {
+      "label": "Orchestration Execution",
+      "path": "/orchestration-execution",
+      "passed": true
+    },
+    {
+      "label": "Cloud Flows",
+      "path": "/cloud-flows",
+      "passed": true
+    },
+    {
+      "label": "Observability",
+      "path": "/observability",
+      "passed": true
+    },
+    {
+      "label": "World State",
+      "path": "/world-state",
+      "passed": true
+    },
+    {
+      "label": "System Status",
+      "path": "/status",
+      "passed": true
+    },
+    {
+      "label": "Cloud Incidents",
+      "path": "/cloud-incidents",
+      "passed": true
+    },
+    {
+      "label": "Logs",
+      "path": "/logs",
+      "passed": true
+    },
+    {
+      "label": "Cloud Traces",
+      "path": "/cloud-traces",
+      "passed": true
+    },
+    {
+      "label": "Analytics",
+      "path": "/pillar-analytics",
+      "passed": true
+    },
+    {
+      "label": "Fitness Functions",
+      "path": "/fitness-functions",
+      "passed": true
+    },
+    {
+      "label": "Verification",
+      "path": "/verification",
+      "passed": true
+    },
+    {
+      "label": "Cloud Contract",
+      "path": "/cloud-contract",
+      "passed": true
+    },
+    {
+      "label": "Testing",
+      "path": "/testing",
+      "passed": true
+    },
+    {
+      "label": "Test Generator",
+      "path": "/test-generator",
+      "passed": true
+    },
+    {
+      "label": "Cloud Test Runs",
+      "path": "/cloud-test-runs",
+      "passed": true
+    },
+    {
+      "label": "Integration Tests",
+      "path": "/integration-test-builder",
+      "passed": true
+    },
+    {
+      "label": "Conformance",
+      "path": "/conformance",
+      "passed": true
+    },
+    {
+      "label": "Time Travel",
+      "path": "/time-travel",
+      "passed": true
+    },
+    {
+      "label": "Cloud Chaos",
+      "path": "/cloud-chaos",
+      "passed": true
+    },
+    {
+      "label": "Resilience",
+      "path": "/resilience",
+      "passed": true
+    },
+    {
+      "label": "Cloud Recorder",
+      "path": "/cloud-recorder",
+      "passed": true
+    },
+    {
+      "label": "Cloud Behavioral Cloning",
+      "path": "/cloud-behavioral-cloning",
+      "passed": true
+    },
+    {
+      "label": "Import",
+      "path": "/import",
+      "passed": true
+    },
+    {
+      "label": "Template Marketplace",
+      "path": "/template-marketplace",
+      "passed": true
+    },
+    {
+      "label": "Scenario Marketplace",
+      "path": "/scenario-marketplace",
+      "passed": true
+    },
+    {
+      "label": "AI Studio",
+      "path": "/ai-studio",
+      "passed": true
+    },
+    {
+      "label": "MockAI",
+      "path": "/mockai",
+      "passed": true
+    },
+    {
+      "label": "MockAI OpenAPI Generator",
+      "path": "/mockai-openapi-generator",
+      "passed": true
+    },
+    {
+      "label": "MockAI Rules",
+      "path": "/mockai-rules",
+      "passed": true
+    },
+    {
+      "label": "Voice + LLM",
+      "path": "/voice",
+      "passed": true
+    },
+    {
+      "label": "Showcase",
+      "path": "/showcase",
+      "passed": true
+    },
+    {
+      "label": "Showcase Admin",
+      "path": "/cloud-showcase-admin",
+      "passed": true
+    },
+    {
+      "label": "Learning Hub",
+      "path": "/learning-hub",
+      "passed": true
+    },
+    {
+      "label": "Cloud Plugins",
+      "path": "/cloud-plugins",
+      "passed": true
+    },
+    {
+      "label": "Plugin Registry",
+      "path": "/plugin-registry",
+      "passed": true
+    },
+    {
+      "label": "Config",
+      "path": "/config",
+      "passed": true
+    },
+    {
+      "label": "Organization",
+      "path": "/organization",
+      "passed": true
+    },
+    {
+      "label": "Billing",
+      "path": "/billing",
+      "passed": true
+    },
+    {
+      "label": "API Tokens",
+      "path": "/api-tokens",
+      "passed": true
+    },
+    {
+      "label": "Publisher Keys",
+      "path": "/publisher-keys",
+      "passed": true
+    },
+    {
+      "label": "BYOK Keys",
+      "path": "/byok",
+      "passed": true
+    },
+    {
+      "label": "Plan & Usage",
+      "path": "/usage",
+      "passed": true
+    },
+    {
+      "label": "Notification Channels",
+      "path": "/notification-channels",
+      "passed": true
+    },
+    {
+      "label": "FAQ",
+      "path": "/faq",
+      "passed": true
+    },
+    {
+      "label": "Support",
+      "path": "/support",
+      "passed": true
+    }
+  ],
+  "javascript_errors": [],
+  "local_only_features": [
+    {
+      "text": "Proxy InspectorLocal",
+      "title": "Requires a local MockForge instance"
+    },
+    {
+      "text": "SMTP MailboxLocal",
+      "title": "Requires a local MockForge instance"
+    },
+    {
+      "text": "MQTT BrokerLocal",
+      "title": "Requires a local MockForge instance"
+    },
+    {
+      "text": "Kafka BrokerLocal",
+      "title": "Requires a local MockForge instance"
+    },
+    {
+      "text": "AMQP BrokerLocal",
+      "title": "Requires a local MockForge instance"
+    }
+  ]
+}

@@ -163,7 +163,7 @@ export function ProxyInspector() {
 
   // Handle delete rule
   const handleDeleteRule = async (id: number) => {
-    if (!confirmDelete('Are you sure you want to delete this proxy replacement rule?')) {
+    if (!await confirmDelete('Are you sure you want to delete this proxy replacement rule?')) {
       return;
     }
 

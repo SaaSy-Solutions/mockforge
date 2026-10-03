@@ -55,8 +55,8 @@ export function FixturesPanel() {
     setShowDiff(null);
   };
 
-  const handleDeleteFixture = (fixtureId: string) => {
-    if (confirmDelete('Are you sure you want to delete this fixture?')) {
+  const handleDeleteFixture = async (fixtureId: string) => {
+    if (await confirmDelete('Are you sure you want to delete this fixture?')) {
       deleteFixture(fixtureId);
     }
   };

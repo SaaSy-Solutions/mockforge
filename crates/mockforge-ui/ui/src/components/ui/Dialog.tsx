@@ -68,7 +68,8 @@ export function DialogContent({ children, className }: DialogContentProps) {
 
     // Focus the dialog
     if (dialogRef.current) {
-      dialogRef.current.focus();
+      const initialFocus = dialogRef.current.querySelector<HTMLElement>('[autofocus], input, button');
+      (initialFocus ?? dialogRef.current).focus();
     }
 
     // Prevent body scroll

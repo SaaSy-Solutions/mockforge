@@ -255,7 +255,7 @@ export const CloudTestGeneratorView: React.FC = () => {
           <div className="flex items-center justify-between">
             <p className="text-xs text-muted-foreground">
               Job will queue under workspace{' '}
-              <span className="font-mono">{workspaceId.slice(0, 8)}</span>.
+              <span title={workspaceId}>{activeWorkspace?.name}</span>.
             </p>
             <Button onClick={handleCreate} disabled={creating}>
               <Play className="h-4 w-4 mr-2" />

@@ -1,3 +1,5 @@
+import type { User } from '../types';
+
 /**
  * Centralized access-token storage.
  *
@@ -11,9 +13,6 @@
  * longer exfiltrate a long-lived credential. Session restore after a reload
  * happens via `/api/v1/auth/me` in `useAuthStore.checkAuth()`.
  *
- * `clearAuthToken()` also POSTs `/api/v1/auth/logout`, which expires both
- * cookies server-side and revokes the refresh token's JTI, so "log out"
- * cannot leave a live browser session behind.
  */
 
 let memoryToken: string | null = null;
@@ -28,21 +27,38 @@ export function setAuthToken(token: string): void {
   memoryToken = token;
 }
 
-/**
- * Drop the in-memory token and tell the server to expire the auth cookies
- * and revoke the refresh token. Fire-and-forget: logout must succeed even if
- * the network call fails.
- */
+/** Clear the page's token. Server logout belongs to the explicit logout action. */
 export function clearAuthToken(): void {
   memoryToken = null;
-  try {
-    void fetch('/api/v1/auth/logout', {
-      credentials: 'include',
-      method: 'POST',
-    }).catch(() => {
-      /* best-effort — cookies expire on their own Max-Age anyway */
-    });
-  } catch {
-    /* ignore */
-  }
 }
+
+// Parse JWT token to extract user info (client-side validation only)
+export const parseToken = (token: string): { user: User | null; expiresAt: number | null } => {
+  try {
+    const parts = token.split('.');
+    if (parts.length !== 3) return { user: null, expiresAt: null };
+
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))); // JWT payload is base64url encoded
+
+    // Check expiration
+    if (typeof payload.sub !== 'string' || !Number.isFinite(payload.exp)) {
+      return { user: null, expiresAt: null };
+    }
+    const expiresAt = payload.exp * 1000; // Convert to milliseconds
+    if (expiresAt < Date.now()) {
+      return { user: null, expiresAt: null };
+    }
+
+    // Extract what we can from the token (registry JWT may only have sub)
+    const user: User = {
+      id: payload.sub,
+      username: payload.username || '',
+      email: payload.email || '',
+      role: payload.role || 'user',
+    };
+
+    return { user, expiresAt };
+  } catch {
+    return { user: null, expiresAt: null };
+  }
+};

@@ -1,5 +1,6 @@
 import { useEffect, Suspense, lazy } from 'react';
-import { Routes, Route, Navigate, useNavigate, useParams } from 'react-router-dom';
+import { ConfirmationDialog } from './components/ui/ConfirmationDialog';
+import { Routes, Route, Navigate, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { AppShell } from './components/layout/AppShell';
 import { AuthGuard } from './components/auth/AuthGuard';
 import { ErrorBoundary } from './components/error/ErrorBoundary';
@@ -57,6 +58,7 @@ function LegalRoute() {
 }
 
 function App() {
+  const location = useLocation();
   const { t } = useI18n();
   const navigate = useNavigate();
   const loadWorkspaces = useWorkspaceStore(state => state.loadWorkspaces);
@@ -164,9 +166,9 @@ function App() {
   const guardedApp = (
     <AuthGuard>
       <AppShell onRefresh={handleRefresh}>
-        <ErrorBoundary>
+        <ErrorBoundary resetKey={location.pathname}>
           <Suspense fallback={loadingFallback}>
-            <Routes>
+            <Routes key={location.pathname}>
               {/* Redirect root to the user's preferred default page (falls back to /dashboard). */}
               <Route path="/" element={<Navigate to={rootRedirect} replace />} />
 
@@ -192,8 +194,9 @@ function App() {
   );
 
   return (
-    <ErrorBoundary>
+    <ErrorBoundary resetKey={location.pathname}>
       <ToastProvider>
+        <ConfirmationDialog />
         <Routes>
           {/* Public legal documents: outside AuthGuard and AppShell so anonymous
               visitors (and links from mockforge.dev) can read them. */}

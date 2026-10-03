@@ -83,7 +83,7 @@ export function EnvironmentManager({ workspaceId, onEnvironmentSelect }: Environ
       return;
     }
 
-    if (!confirmDelete(`Are you sure you want to delete "${environment.name}"? This action cannot be undone.`)) {
+    if (!await confirmDelete(`Are you sure you want to delete "${environment.name}"? This action cannot be undone.`)) {
       return;
     }
 

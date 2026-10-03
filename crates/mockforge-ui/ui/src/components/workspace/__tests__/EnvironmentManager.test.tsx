@@ -7,6 +7,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { EnvironmentManager } from '../EnvironmentManager';
+import { confirmAction } from '../../ui/ConfirmationDialog';
 import {
   useEnvironments,
   useCreateEnvironment,
@@ -50,6 +51,7 @@ const mockVariables = {
 
 vi.mock('../../../hooks/useApi');
 vi.mock('../../ui/Toast');
+vi.mock('../../ui/ConfirmationDialog', () => ({ confirmAction: vi.fn(() => Promise.resolve(true)) }));
 
 // Mock Dialog components to render children properly in tests
 vi.mock('../../ui/Dialog', () => {
@@ -331,7 +333,7 @@ describe('EnvironmentManager', () => {
   });
 
   it('deletes environment with confirmation', async () => {
-    window.confirm = vi.fn(() => true);
+    vi.mocked(confirmAction).mockResolvedValue(true);
     const deleteMock = vi.fn().mockResolvedValue({});
     vi.mocked(useDeleteEnvironment).mockReturnValue({ mutateAsync: deleteMock, isPending: false } as any);
 
@@ -342,7 +344,7 @@ describe('EnvironmentManager', () => {
     fireEvent.click(screen.getByText('Delete Environment'));
 
     await waitFor(() => {
-      expect(window.confirm).toHaveBeenCalled();
+      expect(confirmAction).toHaveBeenCalled();
       expect(deleteMock).toHaveBeenCalledWith('env-1');
     });
   });

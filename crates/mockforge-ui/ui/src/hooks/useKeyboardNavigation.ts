@@ -254,6 +254,7 @@ export function useAppShortcuts(options: {
       handler: options.onSearch,
       description: 'Search',
     });
+    shortcuts.push({ key: 'k', meta: true, handler: options.onSearch, description: 'Search' });
   }
 
   if (options.onHelp) {

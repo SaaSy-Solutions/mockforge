@@ -1,3 +1,4 @@
+import { CloudFitnessFunctionForm } from '../components/forms/CloudFitnessFunctionForm';
 import { logger } from '@/utils/logger';
 import React, { useState, useMemo } from 'react';
 import {
@@ -42,6 +43,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Switch } from '../components/ui/switch';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/Dialog';
 
+type FitnessSaveRequest = CreateFitnessFunctionRequest | CloudCreateFitnessFunctionRequest;
+
 // Scope badge component
 function ScopeBadge({ scope }: { scope: FitnessFunction['scope'] }) {
   const icons = {
@@ -78,6 +81,9 @@ function ScopeBadge({ scope }: { scope: FitnessFunction['scope'] }) {
 // Function type badge
 function FunctionTypeBadge({ type }: { type: FitnessFunction['function_type'] }) {
   const labels: Record<string, string> = {
+    latency_threshold: 'Latency Threshold',
+    error_rate: 'Error Rate',
+    contract_stability: 'Contract Stability',
     response_size: 'Response Size',
     required_field: 'Required Field',
     field_count: 'Field Count',
@@ -138,8 +144,8 @@ function FitnessFunctionRow({
             </p>
 
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
-              <span>Created: {formatDate(func.created_at)}</span>
-              <span>Updated: {formatDate(func.updated_at)}</span>
+              <span>{`Created: ${formatDate(func.created_at)}`}</span>
+              <span>{`Updated: ${formatDate(func.updated_at)}`}</span>
             </div>
           </div>
 
@@ -166,6 +172,7 @@ function FitnessFunctionRow({
               <Button
                 variant="outline"
                 size="sm"
+                aria-label={`Delete fitness function ${func.name}`}
                 onClick={() => onDelete(func.id)}
                 className="text-danger-600 hover:text-danger-700 hover:bg-danger-50"
               >
@@ -184,10 +191,12 @@ function FitnessFunctionForm({
   function: func,
   onSave,
   onCancel,
+  saving = false,
 }: {
   function: FitnessFunction | null;
   onSave: (request: CreateFitnessFunctionRequest) => void;
   onCancel: () => void;
+  saving?: boolean;
 }) {
   const [name, setName] = useState(func?.name || '');
   const [description, setDescription] = useState(func?.description || '');
@@ -465,8 +474,8 @@ function FitnessFunctionForm({
         <Button type="button" variant="outline" onClick={onCancel}>
           Cancel
         </Button>
-        <Button type="submit">
-          {func ? 'Update' : 'Create'} Fitness Function
+        <Button type="submit" disabled={saving}>
+          {saving ? 'Saving…' : `${func ? 'Update' : 'Create'} Fitness Function`}
         </Button>
       </div>
     </form>
@@ -735,13 +744,13 @@ function adaptCloudFitnessFunction(cf: CloudFitnessFunction): FitnessFunction {
   return {
     id: cf.id,
     name: cf.name,
-    description: cf.description ?? '',
+    description: cf.description ?? String(cfg.description ?? ''),
     function_type:
       fnType ??
       ({ type: cf.kind as FitnessFunctionType['type'] } as FitnessFunctionType),
     config: cfg,
     scope: scope ?? { type: 'workspace', workspace_id: cf.workspace_id },
-    enabled: cf.enabled,
+    enabled: cf.enabled ?? cfg.enabled !== false,
     created_at: toEpoch(cf.created_at),
     updated_at: toEpoch(cf.updated_at),
   };
@@ -761,7 +770,7 @@ export function FitnessFunctionsPage() {
   // Fetch fitness functions. In cloud mode we hit cloudContractApi
   // (read-only) and adapt rows into the local shape; mutations are
   // disabled until the registry exposes write endpoints.
-  const { data, isLoading, refetch } = useQuery({
+  const { data, isLoading, refetch, error: functionsError } = useQuery({
     queryKey: cloudMode
       ? ['fitness-functions', 'cloud', activeWorkspace?.id ?? '']
       : ['fitness-functions'],
@@ -793,18 +802,18 @@ export function FitnessFunctionsPage() {
   // backend route; without it we surface a clear error before queueing
   // a request that would fail on the server.
   const createMutation = useMutation({
-    mutationFn: async (request: CreateFitnessFunctionRequest): Promise<void> => {
+    mutationFn: async (request: FitnessSaveRequest): Promise<void> => {
       if (cloudMode) {
         if (!activeWorkspace?.id) {
           throw new Error('Pick a workspace before creating a fitness function.');
         }
         await cloudContractApi.createFitnessFunction(
           activeWorkspace.id,
-          localToCloudFitnessFunction(request),
+          'kind' in request ? request : localToCloudFitnessFunction(request),
         );
         return;
       }
-      await driftApi.createFitnessFunction(request);
+      await driftApi.createFitnessFunction(request as CreateFitnessFunctionRequest);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: fitnessFunctionsQueryKey });
@@ -813,21 +822,21 @@ export function FitnessFunctionsPage() {
     },
     onError: (error: Error) => {
       logger.error('Failed to create fitness function', error);
-      alert(`Failed to create fitness function: ${error.message}`);
+      // The mutation error is displayed inside the form dialog.
     },
   });
 
   // Update mutation
   const updateMutation = useMutation({
-    mutationFn: async ({ id, request }: { id: string; request: CreateFitnessFunctionRequest }): Promise<void> => {
+    mutationFn: async ({ id, request }: { id: string; request: FitnessSaveRequest }): Promise<void> => {
       if (cloudMode) {
         await cloudContractApi.updateFitnessFunction(
           id,
-          localToCloudFitnessFunction(request),
+          'kind' in request ? request : localToCloudFitnessFunction(request),
         );
         return;
       }
-      await driftApi.updateFitnessFunction(id, request);
+      await driftApi.updateFitnessFunction(id, request as CreateFitnessFunctionRequest);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: fitnessFunctionsQueryKey });
@@ -836,7 +845,7 @@ export function FitnessFunctionsPage() {
     },
     onError: (error: Error) => {
       logger.error('Failed to update fitness function', error);
-      alert(`Failed to update fitness function: ${error.message}`);
+      // The mutation error is displayed inside the form dialog.
     },
   });
 
@@ -871,7 +880,7 @@ export function FitnessFunctionsPage() {
     },
   });
 
-  const handleSave = (request: CreateFitnessFunctionRequest) => {
+  const handleSave = (request: FitnessSaveRequest) => {
     if (editingFunction) {
       updateMutation.mutate({ id: editingFunction.id, request });
     } else {
@@ -906,21 +915,20 @@ export function FitnessFunctionsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Fitness Functions"
-        subtitle="Register custom tests that run against each new contract version to enforce constraints"
+        subtitle="Register tests to enforce latency, error-rate, and contract constraints"
       />
 
       {cloudMode && (
         <Alert variant="info">
           Cloud fitness functions support create, edit, and delete via the
-          registry. The <strong>Test</strong> button is currently
-          local-only — until the cloud-side evaluator lands, evaluation
-          happens on a schedule via the test-runner.
+          registry. Evaluation runs on the cloud test-runner schedule.
+          On-demand testing requires a local MockForge instance.
         </Alert>
       )}
 
       <div className="flex justify-between items-center">
         <div className="text-sm text-muted-foreground">
-          {functions.length} fitness function{functions.length !== 1 ? 's' : ''} registered
+          {`${functions.length} fitness function${functions.length !== 1 ? 's' : ''} registered`}
         </div>
         <div className="flex gap-2">
           <Button variant="outline" onClick={() => setShowSummary(!showSummary)}>
@@ -928,6 +936,8 @@ export function FitnessFunctionsPage() {
           </Button>
           <Button
             onClick={() => {
+              createMutation.reset();
+              updateMutation.reset();
               setEditingFunction(null);
               setShowForm(true);
             }}
@@ -951,6 +961,8 @@ export function FitnessFunctionsPage() {
         </Section>
       )}
 
+      {functionsError && <p role="alert" className="text-danger-600">{functionsError.message}</p>}
+      {(deleteMutation.error || testMutation.error) && <p role="alert" className="text-danger-600">{(deleteMutation.error || testMutation.error)?.message}</p>}
       {/* Fitness Functions List */}
       <Section title="Registered Fitness Functions">
         {isLoading ? (
@@ -997,14 +1009,18 @@ export function FitnessFunctionsPage() {
                 : 'Register a new fitness function to test contract changes'}
             </DialogDescription>
           </DialogHeader>
+          {(createMutation.error || updateMutation.error) && <div role="alert" className="my-4 text-danger-600">{(createMutation.error || updateMutation.error)?.message}</div>}
+          {cloudMode ? <CloudFitnessFunctionForm initial={editingFunction} workspaceId={activeWorkspace?.id ?? ''} saving={createMutation.isPending || updateMutation.isPending} onSave={handleSave} onCancel={() => { setShowForm(false); setEditingFunction(null); }} /> : (
           <FitnessFunctionForm
             function={editingFunction}
+            saving={createMutation.isPending || updateMutation.isPending}
             onSave={handleSave}
             onCancel={() => {
               setShowForm(false);
               setEditingFunction(null);
             }}
           />
+          )}
         </DialogContent>
       </Dialog>
 

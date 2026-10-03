@@ -12,6 +12,7 @@ interface FallbackProps {
 
 interface Props {
   children: ReactNode;
+  resetKey?: string;
   fallback?: ReactNode | ((props: FallbackProps) => ReactNode);
 }
 
@@ -32,7 +33,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    logger.error('ErrorBoundary caught an error', error,errorInfo);
+    logger.error('ErrorBoundary caught an error', error, { componentStack: errorInfo.componentStack });
     this.setState({
       error,
       errorInfo,
@@ -44,6 +45,12 @@ export class ErrorBoundary extends Component<Props, State> {
     } catch (e) {
       // Error reporting failed - log but don't crash
       logger.error('Failed to report error',e);
+    }
+  }
+
+  componentDidUpdate(previous: Props) {
+    if (previous.resetKey !== this.props.resetKey && this.state.hasError) {
+      this.handleRetry();
     }
   }
 

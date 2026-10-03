@@ -1,3 +1,4 @@
+import { confirmAction } from '../components/ui/ConfirmationDialog';
 /**
  * Hosted Mocks Deployment Page
  *
@@ -182,6 +183,7 @@ export const HostedMocksPage: React.FC = () => {
   const [deployments, setDeployments] = useState<Deployment[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [slugEdited, setSlugEdited] = useState(false);
   const [createModalOpen, setCreateModalOpen] = useState(false);
   const [selectedDeployment, setSelectedDeployment] = useState<Deployment | null>(null);
   const [detailsOpen, setDetailsOpen] = useState(false);
@@ -663,7 +665,7 @@ export const HostedMocksPage: React.FC = () => {
   };
 
   const handleDeleteDeployment = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this deployment?')) {
+    if (!await confirmAction('Are you sure you want to delete this deployment?')) {
       return;
     }
 
@@ -738,7 +740,7 @@ export const HostedMocksPage: React.FC = () => {
       action === 'stop'
         ? 'Stop this mock service? Requests will be refused until it is started again.'
         : 'Start this mock service?';
-    if (!confirm(confirmMsg)) return;
+    if (!await confirmAction(confirmMsg)) return;
 
     setLifecycleId(id);
     setError(null);
@@ -775,7 +777,7 @@ export const HostedMocksPage: React.FC = () => {
   };
 
   const handleRedeployDeployment = async (id: string) => {
-    if (!confirm('Redeploy this mock service? Active traffic may be briefly interrupted.')) {
+    if (!await confirmAction('Redeploy this mock service? Active traffic may be briefly interrupted.')) {
       return;
     }
     setRedeployingId(id);
@@ -858,7 +860,7 @@ export const HostedMocksPage: React.FC = () => {
 
   const handleRemoveDomain = async () => {
     if (!selectedDeployment) return;
-    if (!confirm(`Remove custom domain "${activeCustomDomain}" and revert to the default deployment URL?`)) {
+    if (!await confirmAction(`Remove custom domain "${activeCustomDomain}" and revert to the default deployment URL?`)) {
       return;
     }
     setRemovingDomain(true);
@@ -1012,7 +1014,7 @@ export const HostedMocksPage: React.FC = () => {
             <Button
               variant="contained"
               startIcon={<AddIcon />}
-              onClick={() => setCreateModalOpen(true)}
+              onClick={() => { setSlugEdited(false); setCreateModalOpen(true); }}
             >
               Deploy Mock
             </Button>
@@ -1114,6 +1116,7 @@ export const HostedMocksPage: React.FC = () => {
                       <Tooltip title="View Details">
                         <IconButton
                           size="small"
+                          aria-label={`View details for ${deployment.name}`}
                           onClick={() => handleViewDetails(deployment)}
                         >
                           <ViewIcon />
@@ -1124,6 +1127,7 @@ export const HostedMocksPage: React.FC = () => {
                           <span>
                             <IconButton
                               size="small"
+                              aria-label={`Redeploy ${deployment.name}`}
                               onClick={() => handleRedeployDeployment(deployment.id)}
                               disabled={redeployingId === deployment.id}
                             >
@@ -1141,6 +1145,7 @@ export const HostedMocksPage: React.FC = () => {
                           <span>
                             <IconButton
                               size="small"
+                              aria-label={`Stop deployment ${deployment.name}`}
                               onClick={() => handleLifecycleAction(deployment.id, 'stop')}
                               disabled={lifecycleId === deployment.id}
                             >
@@ -1159,6 +1164,7 @@ export const HostedMocksPage: React.FC = () => {
                             <IconButton
                               size="small"
                               color="success"
+                              aria-label={`Start deployment ${deployment.name}`}
                               onClick={() => handleLifecycleAction(deployment.id, 'start')}
                               disabled={lifecycleId === deployment.id}
                             >
@@ -1175,6 +1181,7 @@ export const HostedMocksPage: React.FC = () => {
                         <IconButton
                           size="small"
                           color="error"
+                          aria-label={`Delete deployment ${deployment.name}`}
                           onClick={() => handleDeleteDeployment(deployment.id)}
                         >
                           <DeleteIcon />
@@ -1209,7 +1216,7 @@ export const HostedMocksPage: React.FC = () => {
               onChange={(e) => {
                 setFormData({ ...formData, name: e.target.value });
                 // Auto-generate slug
-                if (!formData.slug) {
+                if (!slugEdited) {
                   const slug = e.target.value
                     .toLowerCase()
                     .replace(/[^a-z0-9]+/g, '-')
@@ -1224,7 +1231,7 @@ export const HostedMocksPage: React.FC = () => {
               label="Slug"
               fullWidth
               value={formData.slug}
-              onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+              onChange={(e) => { setSlugEdited(true); setFormData({ ...formData, slug: e.target.value }); }}
               placeholder="my-mock-service"
               helperText="URL-friendly identifier (auto-generated from name)"
             />
@@ -2076,7 +2083,7 @@ export const HostedMocksPage: React.FC = () => {
                       disabled={!selectedDeployment || recorderCaptures.length === 0}
                       onClick={async () => {
                         if (!selectedDeployment) return;
-                        if (!confirm('Clear all captures on this deployment?')) return;
+                        if (!await confirmAction('Clear all captures on this deployment?')) return;
                         await toggleRecorder(selectedDeployment.id, 'clear');
                         refetchCaptures();
                       }}

@@ -28,7 +28,7 @@ export function useSaveFileContent() {
  */
 export function useFixtures() {
   return useQuery({
-    queryKey: ['fixtures-v2'],
+    queryKey: queryKeys.fixtures,
     queryFn: async () => {
       try {
         const fixtures = await fixturesApi.getFixtures();

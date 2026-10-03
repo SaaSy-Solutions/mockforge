@@ -70,6 +70,7 @@ export const VirtualBackendsPage: React.FC = () => {
     } = useQuery({
         queryKey: ['virtual-backend', 'snapshots'],
         queryFn: () => snapshotsApi.listSnapshots(),
+        enabled: !cloudMode,
     });
 
     // Save snapshot mutation

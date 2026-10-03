@@ -18,7 +18,7 @@ const SELECTED_ORG_KEY = 'federation:selected-org-id';
 async function fetchOrganizations(): Promise<Organization[]> {
   const token = getAuthToken();
   const response = await fetch('/api/v1/organizations', { credentials: 'include', headers: {
-    'Authorization': `Bearer ${token}`,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     'Content-Type': 'application/json',
   }, });
   if (!response.ok) {

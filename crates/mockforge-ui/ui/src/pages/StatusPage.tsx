@@ -139,7 +139,7 @@ export function StatusPage() {
             <StatusBadge status={status.status} />
           </div>
           <CardDescription>
-            Last updated: {new Date(status.timestamp).toLocaleString()}
+            {`Last updated: ${new Date(status.timestamp).toLocaleString()}`}
           </CardDescription>
         </CardHeader>
       </Card>

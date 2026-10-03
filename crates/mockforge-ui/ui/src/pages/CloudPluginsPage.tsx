@@ -172,8 +172,7 @@ const DeploymentRow: React.FC<{ deployment: DeploymentSummary }> = ({
           </p>
         </div>
         <span className="text-xs text-muted-foreground">
-          {attachmentsQuery.data?.length ?? 0} plugin
-          {(attachmentsQuery.data?.length ?? 0) === 1 ? '' : 's'}
+          {`${attachmentsQuery.data?.length ?? 0} plugin${(attachmentsQuery.data?.length ?? 0) === 1 ? '' : 's'}`}
         </span>
       </header>
 

@@ -5,7 +5,7 @@
  */
 import type { FixtureInfo } from '../../types';
 import { FixturesResponseSchema } from '../../schemas/api';
-import { fetchJson, fetchJsonWithValidation, authenticatedFetch } from './client';
+import { fetchJsonWithErrorBody, fetchJson, fetchJsonWithValidation, authenticatedFetch } from './client';
 import { isCloudMode } from '../../utils/cloudMode';
 
 const isCloud = isCloudMode();
@@ -72,7 +72,7 @@ class FixturesApiService {
   }
 
   async createFixture(payload: FixtureCreatePayload): Promise<FixtureInfo> {
-    return fetchJson(FIXTURE_API_BASE, {
+    return fetchJsonWithErrorBody(FIXTURE_API_BASE, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -88,7 +88,7 @@ class FixturesApiService {
         'Editing fixture content is only supported on the hosted backend; use rename/move locally.'
       );
     }
-    return fetchJson(`${FIXTURE_API_BASE}/${fixtureId}`, {
+    return fetchJsonWithErrorBody(`${FIXTURE_API_BASE}/${fixtureId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),

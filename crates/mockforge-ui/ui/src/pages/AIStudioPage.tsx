@@ -1409,7 +1409,7 @@ export function AIStudioPage() {
                     />
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
-                    {usageStats.tokens_used.toLocaleString()} / {usageStats.budget_limit.toLocaleString()} tokens
+                    {`${usageStats.tokens_used.toLocaleString()} / ${usageStats.budget_limit.toLocaleString()} tokens`}
                   </p>
                 </div>
 

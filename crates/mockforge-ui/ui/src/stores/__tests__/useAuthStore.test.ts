@@ -4,6 +4,7 @@
 
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+import { logger } from '@/utils/logger';
 import { useAuthStore } from '../useAuthStore';
 import { authApi } from '../../services/authApi';
 import type { User } from '../../types';
@@ -33,6 +34,8 @@ const createToken = (user: User, expiresInSeconds = 3600) => {
 describe('useAuthStore', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(authApi.isCloud).mockReturnValue(false);
+    useAuthStore.getState().stopTokenRefresh();
 
     // Reset store state
     useAuthStore.setState({
@@ -71,15 +74,16 @@ describe('useAuthStore', () => {
       throw new Error('Invalid username or password');
     });
     vi.mocked(authApi.logout).mockResolvedValue(undefined);
-    vi.mocked(authApi.refreshToken).mockImplementation(async (refreshToken: string) => ({
+    vi.mocked(authApi.refreshToken).mockImplementation(async (refreshToken?: string) => ({
       token: createToken(adminUser),
-      refresh_token: refreshToken,
+      refresh_token: refreshToken ?? 'cookie-refresh',
       user: adminUser,
       expires_in: 3600,
     }));
   });
 
   afterEach(() => {
+    useAuthStore.getState().stopTokenRefresh();
     vi.restoreAllMocks();
   });
 
@@ -370,4 +374,128 @@ describe('useAuthStore', () => {
     const parts = token?.split('.');
     expect(parts?.length).toBe(3);
   });
+  it('does not send server logout when tokenless state changes', () => {
+    useAuthStore.setState({ isLoading: true });
+    useAuthStore.setState({ isLoading: false });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(authApi.logout).not.toHaveBeenCalled();
+  });
+
+  it('restores a cookie session and admin role without logging out', async () => {
+    vi.mocked(authApi.isCloud).mockReturnValue(true);
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(JSON.stringify({
+      user_id: 'cookie-user', username: 'root', email: 'root@example.com', is_admin: true,
+    })));
+    const user: User = { id: 'cookie-user', username: 'root', email: 'root@example.com', role: 'admin' };
+    vi.mocked(authApi.refreshToken).mockResolvedValueOnce({ token: createToken(user), refresh_token: 'cookie-refresh', expires_in: 3600 });
+    await useAuthStore.getState().checkAuth();
+    expect(useAuthStore.getState()).toMatchObject({
+      isAuthenticated: true, user: { id: 'cookie-user', role: 'admin' },
+    });
+    expect(authApi.logout).not.toHaveBeenCalled();
+    expect(authApi.refreshToken).toHaveBeenCalledWith(undefined);
+    expect(useAuthStore.getState().token).toBeTruthy();
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('restores an expired access cookie using the HttpOnly refresh cookie', async () => {
+    vi.mocked(authApi.isCloud).mockReturnValue(true);
+    vi.mocked(fetch).mockResolvedValueOnce(new Response('{}', { status: 401 }));
+    const user: User = { id: 'cookie-user', username: 'root', email: 'root@example.com', role: 'admin' };
+    vi.mocked(authApi.refreshToken).mockResolvedValueOnce({
+      token: createToken(user), refresh_token: 'rotated', expires_in: 3600,
+    });
+    vi.mocked(authApi.getMe).mockResolvedValueOnce({
+      user_id: user.id, username: user.username, email: user.email, is_admin: true,
+    } as Awaited<ReturnType<typeof authApi.getMe>>);
+    await useAuthStore.getState().checkAuth();
+    expect(authApi.refreshToken).toHaveBeenCalledWith(undefined);
+    expect(useAuthStore.getState()).toMatchObject({
+      isAuthenticated: true, isLoading: false, refreshToken: 'rotated', user: { id: user.id, role: 'admin' },
+    });
+    expect(authApi.logout).not.toHaveBeenCalled();
+  });
+
+  it('shares concurrent refresh requests and preserves the current user', async () => {
+    await useAuthStore.getState().login('admin', 'admin123');
+    const user = useAuthStore.getState().user;
+    let resolve!: (value: Awaited<ReturnType<typeof authApi.refreshToken>>) => void;
+    vi.mocked(authApi.refreshToken).mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    const first = useAuthStore.getState().refreshTokenAction();
+    const second = useAuthStore.getState().refreshTokenAction();
+    expect(authApi.refreshToken).toHaveBeenCalledTimes(1);
+    resolve({ token: createToken(user!), refresh_token: 'rotated', expires_in: 3600 });
+    await Promise.all([first, second]);
+    expect(useAuthStore.getState().user).toEqual(user);
+    expect(useAuthStore.getState().refreshToken).toBe('rotated');
+  });
+
+  it('marks an expired-token session authenticated after refresh', async () => {
+    const user: User = { id: '1', username: 'test', email: 'test@example.com', role: 'user' };
+    useAuthStore.setState({ token: createToken(user, -60), refreshToken: 'old', isLoading: false });
+    await useAuthStore.getState().checkAuth();
+    expect(useAuthStore.getState()).toMatchObject({ isAuthenticated: true, isLoading: false });
+  });
+
+  it('does not clear a new login when an old refresh fails', async () => {
+    await useAuthStore.getState().login('admin', 'admin123');
+    let reject!: (reason: Error) => void;
+    vi.mocked(authApi.refreshToken).mockReturnValueOnce(new Promise((_, fail) => { reject = fail; }));
+    const refresh = useAuthStore.getState().refreshTokenAction();
+    await useAuthStore.getState().login('viewer', 'viewer123');
+    reject(new Error('Refresh token has been revoked'));
+    await refresh;
+    expect(useAuthStore.getState()).toMatchObject({ isAuthenticated: true, user: { username: 'viewer' } });
+    expect(authApi.logout).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite a new login when an old refresh succeeds', async () => {
+    await useAuthStore.getState().login('admin', 'admin123');
+    let resolve!: (value: Awaited<ReturnType<typeof authApi.refreshToken>>) => void;
+    vi.mocked(authApi.refreshToken).mockReturnValueOnce(new Promise(done => { resolve = done; }));
+    const refresh = useAuthStore.getState().refreshTokenAction();
+    await useAuthStore.getState().login('viewer', 'viewer123');
+    const token = useAuthStore.getState().token;
+    resolve({ token: 'old-session', refresh_token: 'old-refresh', expires_in: 3600 });
+    await refresh;
+    expect(useAuthStore.getState().token).toBe(token);
+    expect(useAuthStore.getState().user?.username).toBe('viewer');
+  });
+
+  it('logs out once when concurrent refresh callers receive a revoked token', async () => {
+    await useAuthStore.getState().login('admin', 'admin123');
+    vi.mocked(authApi.refreshToken).mockRejectedValueOnce(new Error('Refresh token has been revoked'));
+    const results = await Promise.allSettled([
+      useAuthStore.getState().refreshTokenAction(), useAuthStore.getState().refreshTokenAction(),
+    ]);
+    expect(results.every(result => result.status === 'rejected')).toBe(true);
+    expect(authApi.logout).toHaveBeenCalledTimes(1);
+    expect(useAuthStore.getState()).toMatchObject({ token: null, refreshToken: null, isAuthenticated: false });
+  });
+
+  it('migrates legacy cloud tokens out of localStorage', async () => {
+    vi.mocked(authApi.isCloud).mockReturnValue(true);
+    localStorage.setItem('mockforge-auth', JSON.stringify({
+      state: { token: 'stale-access', refreshToken: 'revoked-refresh', user: null }, version: 0,
+    }));
+    await useAuthStore.persist.rehydrate();
+    expect(useAuthStore.getState()).toMatchObject({ token: null, refreshToken: null });
+    const persisted = JSON.parse(localStorage.getItem('mockforge-auth')!);
+    expect(persisted.state).not.toHaveProperty('token');
+    expect(persisted.state).not.toHaveProperty('refreshToken');
+  });
+
+  it('treats a missing refresh cookie as a normal signed-out browser', async () => {
+    vi.mocked(authApi.isCloud).mockReturnValue(true);
+    vi.mocked(fetch).mockResolvedValueOnce(new Response('{}', { status: 401 }));
+    vi.mocked(authApi.refreshToken).mockRejectedValueOnce(new Error('Missing refresh token'));
+    const logError = vi.spyOn(logger, 'error');
+    await useAuthStore.getState().checkAuth();
+    expect(useAuthStore.getState()).toMatchObject({
+      token: null, refreshToken: null, user: null, isAuthenticated: false, isLoading: false,
+    });
+    expect(logError).not.toHaveBeenCalled();
+    expect(authApi.logout).not.toHaveBeenCalled();
+  });
+
 });
