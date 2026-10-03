@@ -154,16 +154,7 @@ impl Executor for TestExecutor {
         // executed as a real HTTP request with assertions + extracts;
         // see integration.rs (#356).
         if self.kind == "integration" {
-            let workflow_config = job
-                .payload
-                .get("config")
-                .filter(|c| {
-                    c.get("steps")
-                        .and_then(|v| v.as_array())
-                        .map(|a| !a.is_empty())
-                        .unwrap_or(false)
-                })
-                .cloned();
+            let workflow_config = integration_workflow(&job.payload).cloned();
             if let Some(config) = workflow_config {
                 return crate::executors::integration::run_integration(
                     job, callbacks, started, &config,
@@ -410,6 +401,22 @@ async fn finish_cloud_error(
 
 /// Finish a k6-backed run that this runner will not start (no egress
 /// proxy configured). Errored, not failed: the target was never contacted.
+/// The integration workflow carried by a job payload, if it has steps.
+///
+/// The registry enqueues a suite's config as the payload itself
+/// (`{"setup": .., "steps": [..]}`); older callers nested it under
+/// `config`. Accept both, so a suite-triggered run executes its real steps
+/// instead of falling through to the synthetic executor.
+fn integration_workflow(payload: &serde_json::Value) -> Option<&serde_json::Value> {
+    let has_steps = |c: &serde_json::Value| {
+        c.get("steps").and_then(|v| v.as_array()).is_some_and(|a| !a.is_empty())
+    };
+    payload
+        .get("config")
+        .filter(|c| has_steps(c))
+        .or_else(|| Some(payload).filter(|p| has_steps(p)))
+}
+
 async fn refuse_k6_run(
     job: RunJob,
     callbacks: &RegistryCallbacks,
@@ -1387,6 +1394,16 @@ async fn run_real_owasp_scan(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn integration_workflow_accepts_suite_config_as_payload() {
+        let wf = serde_json::json!({"setup": {"base_url": "https://x"}, "steps": [{"request": {"method": "GET", "path": "/"}}]});
+        assert_eq!(integration_workflow(&wf), Some(&wf), "registry sends the suite config itself");
+        let nested = serde_json::json!({"config": wf.clone()});
+        assert_eq!(integration_workflow(&nested), Some(&wf), "legacy nested form still works");
+        assert_eq!(integration_workflow(&serde_json::json!({"steps": []})), None);
+        assert_eq!(integration_workflow(&serde_json::json!({"target_url": "https://x"})), None);
+    }
     use super::*;
     use serde_json::json;
 

@@ -123,7 +123,7 @@ pub async fn validate_target_url(url: &str, policy: Policy) -> Result<(), SsrfEr
     // "DNS rebinding" / "0.0.0.0 day"), so we MUST inspect resolved IPs,
     // not just the literal-IP form.
     let lookup_target = format!("{}:{}", host, port);
-    let addrs: Vec<std::net::SocketAddr> = tokio::net::lookup_host(&lookup_target)
+    let addrs: Vec<SocketAddr> = tokio::net::lookup_host(&lookup_target)
         .await
         .map_err(|source| SsrfError::DnsResolutionFailed {
             host: host.clone(),

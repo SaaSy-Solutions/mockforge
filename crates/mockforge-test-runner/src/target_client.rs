@@ -30,7 +30,7 @@ pub fn ssrf_policy() -> Policy {
 /// and the k6 egress proxy. Without a proxy, bench refuses to start k6 at
 /// all while the guard is installed. Called once from `Dispatcher::new`.
 pub fn install_process_guards(k6_egress_proxy: Option<String>) {
-    mockforge_bench::ssrf::install_process_guard(ssrf_policy());
+    ssrf::install_process_guard(ssrf_policy());
     if let Some(proxy) = k6_egress_proxy {
         mockforge_bench::executor::install_k6_egress_proxy(proxy);
     }
