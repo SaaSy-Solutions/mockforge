@@ -457,3 +457,23 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Legacy neutral text shares the portal's readable theme tokens. Keep surfaces and
+   status colors independent; these rules cover custom dialogs as well as pages. */
+html :is(.text-gray-400, .text-gray-500, .text-gray-600, .text-slate-400, .text-slate-500) {
+  color: hsl(var(--muted-foreground));
+}
+html.dark :is(.dark\:text-gray-300, .dark\:text-gray-400, .dark\:text-gray-500, .dark\:text-slate-400) {
+  color: hsl(var(--muted-foreground));
+}
+html :is(input, textarea)::placeholder {
+  color: hsl(var(--muted-foreground));
+  opacity: 1;
+}
+/* A disabled control remains distinct without fading its text into its surface. */
+html button:disabled {
+  background-color: hsl(var(--muted));
+  color: hsl(var(--muted-foreground));
+  opacity: 1;
+  box-shadow: none;
+}

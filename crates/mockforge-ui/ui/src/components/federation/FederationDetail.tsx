@@ -7,6 +7,7 @@
 import React, { useState } from 'react';
 import { useFederation, useRouteRequest, type Federation } from '../../hooks/useFederation';
 import { Card } from '../ui/Card';
+import { Button } from '../ui/button';
 import { ActiveScenarioPanel } from './ActiveScenarioPanel';
 import { ArrowLeft, Edit, Network, Play, CheckCircle } from 'lucide-react';
 
@@ -107,16 +108,13 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div className="flex flex-wrap items-center gap-4 min-w-0">
           {onBack && (
-            <button
-              aria-label="Back to federations"
-              onClick={onBack}
-              className="p-2 text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
+            <Button variant="outline" onClick={onBack} className="gap-2 shrink-0">
+              <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+              Back to federations
+            </Button>
           )}
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">

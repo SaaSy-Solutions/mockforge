@@ -27,6 +27,9 @@ import {
     type FlowVersion,
 } from '../services/api/cloudFlows';
 import RunLiveTail from '../components/RunLiveTail';
+import { Button } from '../components/ui/button';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../components/ui/Dialog';
+import { Input } from '../components/ui/input';
 
 const KIND_OPTIONS: FlowKind[] = ['scenario', 'orchestration', 'state_machine', 'chain'];
 
@@ -79,9 +82,9 @@ const CloudView: React.FC = () => {
         mutationFn: () =>
             cloudFlowsApi.create(workspaceId!, {
                 kind: draft.kind,
-                name: draft.name,
+                name: draft.name.trim(),
                 description: draft.description || undefined,
-                initial_config: STARTER_CONFIG[draft.kind],
+                config: STARTER_CONFIG[draft.kind],
             }),
         onSuccess: () => {
             setShowCreate(false);
@@ -305,81 +308,55 @@ const CreateModal: React.FC<{
     submitting: boolean;
     error: string | null;
 }> = ({ state, setState, onClose, onSubmit, submitting, error }) => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full border border-gray-200 dark:border-gray-700">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-                <h2 className="text-xl font-semibold">New Flow</h2>
-                <p className="text-xs text-gray-500 mt-1">
-                    Initial config seeded with a 2-node skeleton. Edit immediately or after creation.
-                </p>
-            </div>
-            <div className="p-6 space-y-4">
-                {error && (
-                    <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-3 rounded text-sm">
-                        {error}
+    <Dialog open onOpenChange={(open) => { if (!open && !submitting) onClose(); }}>
+        <DialogContent>
+            <form onSubmit={(event) => { event.preventDefault(); if (state.name.trim() && !submitting) onSubmit(); }}>
+                <DialogHeader className="flex-col items-start">
+                    <DialogTitle>New Flow</DialogTitle>
+                    <DialogDescription>
+                        Start with a two-node configuration, then edit your flow after creation.
+                    </DialogDescription>
+                </DialogHeader>
+                <div className="py-6 space-y-4">
+                    {error && <div role="alert" className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 p-3 rounded text-sm">{error}</div>}
+                    <div className="space-y-2">
+                        <label htmlFor="flow-kind" className="block text-sm font-medium">Kind</label>
+                        <select id="flow-kind" value={state.kind}
+                            onChange={(e) => setState({ ...state, kind: e.target.value as FlowKind })}
+                            className="w-full px-3 py-2 bg-background text-foreground border border-input rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                            {KIND_OPTIONS.map((kind) => <option key={kind} value={kind}>{kind.replace('_', ' ')}</option>)}
+                        </select>
                     </div>
-                )}
-                <div className="space-y-2">
-                    <label className="block text-sm font-medium">Kind</label>
-                    <select
-                        value={state.kind}
-                        onChange={(e) => setState({ ...state, kind: e.target.value as FlowKind })}
-                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-purple-500"
-                    >
-                        {KIND_OPTIONS.map((k) => (
-                            <option key={k} value={k}>
-                                {k.replace('_', ' ')}
-                            </option>
-                        ))}
-                    </select>
+                    <div className="space-y-2">
+                        <label htmlFor="flow-name" className="block text-sm font-medium">Name</label>
+                        <Input id="flow-name" value={state.name} onChange={(e) => setState({ ...state, name: e.target.value })} />
+                    </div>
+                    <div className="space-y-2">
+                        <label htmlFor="flow-description" className="block text-sm font-medium">Description (optional)</label>
+                        <Input id="flow-description" value={state.description} onChange={(e) => setState({ ...state, description: e.target.value })} />
+                    </div>
                 </div>
-                <div className="space-y-2">
-                    <label className="block text-sm font-medium">Name</label>
-                    <input
-                        type="text"
-                        value={state.name}
-                        onChange={(e) => setState({ ...state, name: e.target.value })}
-                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                </div>
-                <div className="space-y-2">
-                    <label className="block text-sm font-medium">Description (optional)</label>
-                    <input
-                        type="text"
-                        value={state.description}
-                        onChange={(e) => setState({ ...state, description: e.target.value })}
-                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-purple-500"
-                    />
-                </div>
-            </div>
-            <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
-                <button onClick={onClose} className="px-4 py-2">
-                    Cancel
-                </button>
-                <button
-                    onClick={onSubmit}
-                    disabled={!state.name || submitting}
-                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50"
-                >
-                    {submitting ? 'Creating…' : 'Create'}
-                </button>
-            </div>
-        </div>
-    </div>
+                <DialogFooter>
+                    <Button type="button" variant="outline" onClick={onClose} disabled={submitting}>Cancel</Button>
+                    <Button type="submit" disabled={!state.name.trim() || submitting}>{submitting ? 'Creating…' : 'Create'}</Button>
+                </DialogFooter>
+            </form>
+        </DialogContent>
+    </Dialog>
 );
 
 const FlowEditorModal: React.FC<{ flow: Flow; onClose: () => void }> = ({ flow, onClose }) => {
     const queryClient = useQueryClient();
     const [config, setConfig] = useState('');
-    const [changelog, setChangelog] = useState('');
+    const [currentVersionId, setCurrentVersionId] = useState(flow.current_version_id);
     const [parseError, setParseError] = useState<string | null>(null);
     const [showVersions, setShowVersions] = useState(false);
 
     const versionQuery = useQuery({
-        queryKey: ['cloud', 'flows', 'version', flow.id, flow.current_version_id],
+        queryKey: ['cloud', 'flows', 'version', flow.id, currentVersionId],
         queryFn: () =>
-            flow.current_version_id
-                ? cloudFlowsApi.getVersion(flow.id, flow.current_version_id)
+            currentVersionId
+                ? cloudFlowsApi.getVersion(currentVersionId)
                 : Promise.resolve(null),
     });
 
@@ -407,59 +384,48 @@ const FlowEditorModal: React.FC<{ flow: Flow; onClose: () => void }> = ({ flow, 
             }
             return cloudFlowsApi.saveVersion(flow.id, {
                 config: parsed,
-                changelog: changelog || undefined,
-                set_current: true,
             });
         },
-        onSuccess: () => {
+        onSuccess: (version) => {
+            queryClient.setQueryData(['cloud', 'flows', 'version', flow.id, version.id], version);
+            setCurrentVersionId(version.id);
             queryClient.invalidateQueries({ queryKey: ['cloud', 'flows'] });
-            setChangelog('');
         },
     });
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-3xl w-full max-h-[85vh] overflow-y-auto border border-gray-200 dark:border-gray-700">
-                <div className="p-6 border-b border-gray-200 dark:border-gray-700 sticky top-0 bg-white dark:bg-gray-800 flex items-start justify-between">
+        <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+            <DialogContent className="max-w-3xl">
+                <div className="p-6 border-b border-gray-200 dark:border-gray-700 bg-background text-foreground flex flex-wrap items-start justify-between gap-3">
                     <div>
-                        <h2 className="text-xl font-semibold">{flow.name}</h2>
+                        <h2 className="text-xl font-semibold break-all">{flow.name}</h2>
                         <p className="text-xs text-gray-500 mt-1">
                             <span className="font-mono">{flow.kind}</span> · current version{' '}
-                            {flow.current_version_id?.slice(0, 8) ?? '(none)'}
+                            {currentVersionId?.slice(0, 8) ?? '(none)'}
                         </p>
                     </div>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-                        ✕
-                    </button>
+                    <Button variant="outline" onClick={onClose}>Back to flows</Button>
                 </div>
                 <div className="p-6 space-y-4">
-                    {parseError && (
-                        <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-3 rounded text-sm">
-                            {parseError}
+                    {(parseError || versionQuery.error || saveMutation.error) && (
+                        <div role="alert" className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 p-3 rounded text-sm">
+                            {parseError || (versionQuery.error as Error | null)?.message || (saveMutation.error as Error | null)?.message}
                         </div>
                     )}
+                    {versionQuery.isLoading && <p className="text-sm text-muted-foreground">Loading configuration…</p>}
                     <div className="space-y-2">
-                        <label className="block text-sm font-medium">
+                        <label htmlFor="flow-config" className="block text-sm font-medium">
                             Config (JSON — saving creates a new version)
                         </label>
                         <textarea
+                            id="flow-config"
                             value={config}
                             onChange={(e) => setConfig(e.target.value)}
                             rows={16}
-                            className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-purple-500 font-mono text-xs"
+                            className="w-full px-3 py-2 bg-background text-foreground border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-purple-500 font-mono text-xs"
                         />
                     </div>
-                    <div className="space-y-2">
-                        <label className="block text-sm font-medium">Changelog (optional)</label>
-                        <input
-                            type="text"
-                            value={changelog}
-                            onChange={(e) => setChangelog(e.target.value)}
-                            placeholder="What changed in this version?"
-                            className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-purple-500"
-                        />
-                    </div>
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
                         <button
                             onClick={() => setShowVersions(!showVersions)}
                             className="text-sm text-blue-600 dark:text-blue-400 hover:underline inline-flex items-center"
@@ -467,26 +433,23 @@ const FlowEditorModal: React.FC<{ flow: Flow; onClose: () => void }> = ({ flow, 
                             <HistoryIcon className="w-4 h-4 mr-1" />
                             {showVersions ? 'Hide' : 'Show'} version history
                         </button>
-                        <button
+                        <Button
                             onClick={() => saveMutation.mutate()}
-                            disabled={saveMutation.isPending}
-                            className="flex items-center px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg font-medium disabled:opacity-50"
+                            disabled={saveMutation.isPending || versionQuery.isLoading || !!versionQuery.error || !config.trim()}
+                            className="gap-2"
                         >
                             <Save className="w-4 h-4 mr-2" />
                             Save Version
-                        </button>
+                        </Button>
                     </div>
                     {showVersions && (
                         <div className="space-y-2 pt-3 border-t border-gray-200 dark:border-gray-700">
                             {(versionsQuery.data ?? []).map((v: FlowVersion) => (
                                 <div
                                     key={v.id}
-                                    className="bg-gray-50 dark:bg-gray-900/50 rounded p-2 text-xs flex justify-between"
+                                    className="bg-gray-50 dark:bg-gray-900/50 rounded p-2 text-xs flex flex-wrap justify-between gap-2"
                                 >
                                     <span className="font-mono">v{v.version_number}</span>
-                                    <span className="text-gray-600 dark:text-gray-400">
-                                        {v.changelog ?? <span className="italic">no changelog</span>}
-                                    </span>
                                     <span className="text-gray-500">
                                         {new Date(v.created_at).toLocaleString()}
                                     </span>
@@ -495,7 +458,7 @@ const FlowEditorModal: React.FC<{ flow: Flow; onClose: () => void }> = ({ flow, 
                         </div>
                     )}
                 </div>
-            </div>
-        </div>
+            </DialogContent>
+        </Dialog>
     );
 };

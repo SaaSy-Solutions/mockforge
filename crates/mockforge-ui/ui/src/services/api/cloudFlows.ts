@@ -35,7 +35,6 @@ export interface FlowVersion {
   flow_id: string;
   version_number: number;
   config: Record<string, unknown>;
-  changelog: string | null;
   created_by: string | null;
   created_at: string;
 }
@@ -44,14 +43,12 @@ export interface CreateFlowRequest {
   kind: FlowKind;
   name: string;
   description?: string;
-  initial_config: Record<string, unknown>;
+  config: Record<string, unknown>;
 }
 
 export interface SaveFlowVersionRequest {
   config: Record<string, unknown>;
-  changelog?: string;
-  /** Default true — sets the new version as flow.current_version_id. */
-  set_current?: boolean;
+  // The registry always makes the newly saved version current.
 }
 
 class CloudFlowsApi {
@@ -109,10 +106,10 @@ class CloudFlowsApi {
     ) as Promise<FlowVersion[]>;
   }
 
-  async getVersion(id: string, versionId: string): Promise<FlowVersion> {
+  async getVersion(versionId: string): Promise<FlowVersion> {
     this.guard('getVersion');
     return fetchJsonWithErrorBody(
-      `/api/v1/flows/${id}/versions/${versionId}`,
+      `/api/v1/flow-versions/${versionId}`,
     ) as Promise<FlowVersion>;
   }
 

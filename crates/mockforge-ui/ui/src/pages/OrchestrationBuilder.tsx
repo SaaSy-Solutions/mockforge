@@ -322,7 +322,6 @@ export const OrchestrationBuilder: React.FC = () => {
       if (selectedCloudFlowId) {
         await cloudFlowsApi.saveVersion(selectedCloudFlowId, {
           config: orchestration as unknown as Record<string, unknown>,
-          set_current: true,
         });
         return;
       }
@@ -330,7 +329,7 @@ export const OrchestrationBuilder: React.FC = () => {
         kind: 'orchestration',
         name: orchestration.name || 'Untitled orchestration',
         description: orchestration.description || undefined,
-        initial_config: orchestration as unknown as Record<string, unknown>,
+        config: orchestration as unknown as Record<string, unknown>,
       });
       setCloudFlows((prev) => [...prev, flow]);
       setSelectedCloudFlowId(flow.id);

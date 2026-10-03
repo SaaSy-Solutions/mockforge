@@ -88,7 +88,7 @@ export function ServiceToggleCard({
             <div>
               <h3 className="font-semibold">{service.name}</h3>
               <p className="text-sm text-muted-foreground">
-                {enabledRoutes}/{totalRoutes} routes enabled
+                {`${enabledRoutes}/${totalRoutes} routes enabled`}
               </p>
             </div>
           </div>

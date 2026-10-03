@@ -46,7 +46,7 @@ const COLOR_KEYWORDS: Record<string, string> = {
   'success.main': 'hsl(var(--success))',
   'text.primary': 'hsl(var(--foreground))',
   'text.secondary': 'hsl(var(--muted-foreground))',
-  'text.disabled': 'hsl(var(--muted-foreground) / 0.6)',
+  'text.disabled': 'hsl(var(--muted-foreground))',
   'background.paper': 'hsl(var(--card))',
   'background.default': 'hsl(var(--background))',
   'divider': 'hsl(var(--border))',
@@ -418,7 +418,7 @@ export function Typography({
     color === 'success' || color === 'success.main' ? 'text-success' :
     color === 'text.primary' ? 'text-foreground' :
     color === 'text.secondary' ? 'text-muted-foreground' :
-    color === 'text.disabled' ? 'text-muted-foreground/60' :
+    color === 'text.disabled' ? 'text-muted-foreground' :
     color === 'textSecondary' ? 'text-muted-foreground' :
     color === 'textPrimary' ? 'text-foreground' : '';
   const inlineColor = !colorClass && color ? colorVal(color) : undefined;
@@ -520,7 +520,7 @@ export const Button = React.forwardRef<HTMLButtonElement, MuiButtonProps>(functi
       ref={ref}
       disabled={disabled}
       className={cn(
-        'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:opacity-50 disabled:pointer-events-none [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
+        'inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/60 focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:opacity-100 disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none disabled:pointer-events-none [&_svg]:h-4 [&_svg]:w-4 [&_svg]:shrink-0',
         buttonColorClasses(variant, color),
         sizes[size],
         fullWidth && 'w-full',
@@ -565,7 +565,7 @@ export const IconButton = React.forwardRef<HTMLButtonElement, IconButtonProps>(f
     <button
       ref={ref}
       className={cn(
-        'inline-flex shrink-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50 disabled:pointer-events-none',
+        'inline-flex shrink-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-100 disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none disabled:pointer-events-none',
         sizes[size],
         colors[color],
         className
@@ -817,7 +817,7 @@ export function DialogContentText({ className, children, sx, style, ...rest }: B
 
 export function DialogActions({ className, children, sx, style, ...rest }: BoxProps) {
   return (
-    <div className={cn('flex items-center justify-end gap-2 px-6 py-4', className)} style={{ ...sxToStyle(sx), ...style }} {...rest}>
+    <div className={cn('flex flex-wrap items-center justify-end gap-2 px-6 py-4', className)} style={{ ...sxToStyle(sx), ...style }} {...rest}>
       {children}
     </div>
   );
@@ -874,7 +874,7 @@ export function Drawer({ open, onClose, anchor = 'left', variant = 'temporary', 
 const inputBase =
   'w-full rounded-lg border border-input bg-background text-foreground shadow-xs placeholder:text-muted-foreground ' +
   'focus:border-ring focus:outline-none focus:ring-2 focus:ring-ring/30 ' +
-  'transition-colors disabled:opacity-50 disabled:cursor-not-allowed';
+  'transition-colors disabled:opacity-100 disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none disabled:cursor-not-allowed';
 
 interface TextFieldProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, 'size' | 'color'> {
   label?: React.ReactNode;
@@ -1603,8 +1603,8 @@ export function TablePagination(props: any) {
   return (
     <div className="flex items-center justify-end gap-3 px-4 py-2 text-sm text-muted-foreground" style={sxToStyle(sx)} {...rest}>
       <span>{page * rowsPerPage + 1}-{Math.min((page + 1) * rowsPerPage, count)} of {count}</span>
-      <button type="button" disabled={page === 0} onClick={(e) => onPageChange?.(e, page - 1)} className="px-2 disabled:opacity-50">‹</button>
-      <button type="button" disabled={(page + 1) * rowsPerPage >= count} onClick={(e) => onPageChange?.(e, page + 1)} className="px-2 disabled:opacity-50">›</button>
+      <button type="button" disabled={page === 0} onClick={(e) => onPageChange?.(e, page - 1)} className="px-2 disabled:opacity-100 disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none">‹</button>
+      <button type="button" disabled={(page + 1) * rowsPerPage >= count} onClick={(e) => onPageChange?.(e, page + 1)} className="px-2 disabled:opacity-100 disabled:bg-muted disabled:text-muted-foreground disabled:shadow-none">›</button>
       {rowsPerPageOptions && onRowsPerPageChange && (
         <select className={cn(inputBase, 'px-2 py-0.5 text-xs')} value={rowsPerPage} onChange={onRowsPerPageChange}>
           {(rowsPerPageOptions as number[]).map((n) => <option key={n} value={n}>{n} / page</option>)}
