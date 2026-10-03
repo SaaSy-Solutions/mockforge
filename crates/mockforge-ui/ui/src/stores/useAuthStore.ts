@@ -51,11 +51,8 @@ export const useAuthStore = create<AuthStore>()(
           // Cloud login response and JWT lack role/is_verified/email; hydrate
           // them from /users/me so admins resolve to role='admin'.
           const hydrated = await hydrateUserFromServer(response.user);
-          if (generation === authGeneration && hydrated !== response.user) {
-            set({ user: hydrated });
-          }
-
           if (generation !== authGeneration) return;
+          set({ user: hydrated });
           // Start automatic token refresh
           get().startTokenRefresh();
         } catch (error) {
@@ -179,11 +176,8 @@ export const useAuthStore = create<AuthStore>()(
             // user state is stale across role changes (admin promotions, email
             // verification) since the JWT carries no role claim.
             const hydrated = await hydrateUserFromServer(user);
-            if (generation === authGeneration && hydrated !== user) {
-              set({ user: hydrated });
-            }
-
             if (generation !== authGeneration) return;
+            set({ user: hydrated });
             // Start token refresh if not already started
             get().startTokenRefresh();
           } else if (refreshToken) {
