@@ -9,6 +9,8 @@
 
 ### Fixed
 
+- **[DevX]** Registry audit email hashing compiles under strict unused-qualification lints in both PostgreSQL and SQLite builds. Hashing behavior is unchanged.
+
 - **[Cloud]** Flow creation sends the registry-required configuration across all five editors. Federation details have a labeled Back button; portal dialogs, placeholders and disabled controls use readable theme colors and wrapping action rows, and service route counters retain their spacing.
 
 - **[Cloud]** Authenticated portal workflows recover from deleted workspace selections and page errors; resilience and snapshot comparisons load, deletion dialogs work, fixture lists refresh after writes, and fitness authoring sends supported evaluator settings. Cookie reloads restore tokens before loading protected pages. Theme toggles, deployment slugs, actor labels and action accessibility are corrected. (#1144)
