@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User, AuthState, AuthActions } from '../types';
 import { authApi } from '../services/authApi';
+import { saveUserProfile } from '../services/userProfile';
 import { hydrateUserFromServer, readCookieUser } from '../services/authUser';
 import { isMissingRefreshCookie, resolveRefreshedUser } from '../services/authSession';
 import { parseToken, setAuthToken, clearAuthToken } from '../services/tokenStorage';
@@ -191,24 +192,7 @@ export const useAuthStore = create<AuthStore>()(
         set({ isLoading: true });
 
         try {
-          const current = get().user;
-          const patch: { username?: string; email?: string } = {};
-          if (current?.username !== userData.username) patch.username = userData.username;
-          if (current?.email !== userData.email) patch.email = userData.email;
-
-          let updatedUser = userData;
-
-          // Cloud mode persists to the registry; local mode keeps client-side state
-          // since the OSS admin doesn't back users with a mutable profile store.
-          if (authApi.isCloud() && Object.keys(patch).length > 0) {
-            const profile = await authApi.updateProfile(patch);
-            updatedUser = {
-              ...userData,
-              id: profile.user_id,
-              username: profile.username,
-              email: profile.email,
-            };
-          }
+          const updatedUser = await saveUserProfile(get().user, userData);
 
           set({
             user: updatedUser,
