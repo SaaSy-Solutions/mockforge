@@ -197,7 +197,7 @@ function App() {
     <ErrorBoundary resetKey={location.pathname}>
       <ToastProvider>
         <ConfirmationDialog />
-        <Routes key={location.pathname}>
+        <Routes>
           {/* Public legal documents: outside AuthGuard and AppShell so anonymous
               visitors (and links from mockforge.dev) can read them. */}
           <Route

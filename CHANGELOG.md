@@ -9,6 +9,8 @@
 
 ### Fixed
 
+- **[Cloud]** Authenticated portal workflows recover from deleted workspace selections and page errors; resilience and snapshot comparisons load, deletion dialogs work, fixture lists refresh after writes, and fitness authoring sends supported evaluator settings. Cookie reloads restore tokens before loading protected pages. Theme toggles, deployment slugs, actor labels and action accessibility are corrected. (#1144)
+
 - **[DevX]** `cargo install --locked mockforge-cli` no longer warns about yanked dependencies (`chacha20` 0.10.0 and `spin` 0.9.8/0.10.0 bumped to their patched releases).
 - **[DevX]** GDPR erase on the SQLite backend did nothing (`delete_user_data_cascade` returned 0). It now matches the Postgres store. (#1087)
 

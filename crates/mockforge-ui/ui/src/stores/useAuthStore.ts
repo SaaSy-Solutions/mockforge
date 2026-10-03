@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User, AuthState, AuthActions } from '../types';
 import { authApi } from '../services/authApi';
+import { parseToken, hydrateUserFromServer } from '../services/authUser';
 import { setAuthToken, clearAuthToken } from '../services/tokenStorage';
 
 interface AuthStore extends AuthState, AuthActions {
@@ -12,67 +13,11 @@ interface AuthStore extends AuthState, AuthActions {
   stopTokenRefresh: () => void;
 }
 
-// Parse JWT token to extract user info (client-side validation only)
-const parseToken = (token: string): { user: User | null; expiresAt: number | null } => {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return { user: null, expiresAt: null };
-
-    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))); // JWT payload is base64url encoded
-
-    // Check expiration
-    if (typeof payload.sub !== 'string' || !Number.isFinite(payload.exp)) {
-      return { user: null, expiresAt: null };
-    }
-    const expiresAt = payload.exp * 1000; // Convert to milliseconds
-    if (expiresAt < Date.now()) {
-      return { user: null, expiresAt: null };
-    }
-
-    // Extract what we can from the token (registry JWT may only have sub)
-    const user: User = {
-      id: payload.sub,
-      username: payload.username || '',
-      email: payload.email || '',
-      role: payload.role || 'user',
-    };
-
-    return { user, expiresAt };
-  } catch {
-    return { user: null, expiresAt: null };
-  }
-};
-
 // Token refresh interval management
 let authGeneration = 0;
 let pendingRefresh: { generation: number; promise: Promise<void> } | null = null;
 
 let tokenRefreshInterval: ReturnType<typeof setInterval> | null = null;
-
-/**
- * Hydrate cloud-mode-only fields (role, is_verified, email, created_at) from
- * `/api/v1/users/me`. The login response and JWT only carry user_id+username,
- * so without this admin users would be misclassified as `role: 'user'` and
- * RoleGuard would deny them admin features.
- */
-async function hydrateUserFromServer(base: User): Promise<User> {
-  if (!authApi.isCloud()) return base;
-  try {
-    const profile = await authApi.getMe();
-    return {
-      ...base,
-      id: profile.user_id,
-      username: profile.username,
-      email: profile.email || base.email,
-      role: profile.is_admin ? 'admin' : (base.role === 'viewer' ? 'viewer' : 'user'),
-      is_verified: profile.is_verified,
-      created_at: profile.created_at,
-    };
-  } catch (error) {
-    logger.warn('Failed to hydrate user profile from server', error);
-    return base;
-  }
-}
 
 export const useAuthStore = create<AuthStore>()(
   persist(
