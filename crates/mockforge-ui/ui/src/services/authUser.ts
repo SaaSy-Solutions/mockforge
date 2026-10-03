@@ -26,3 +26,22 @@ export async function hydrateUserFromServer(base: User): Promise<User> {
     return base;
   }
 }
+
+/** Restore the cookie identity; rejected or unavailable cookies are a normal signed-out result. */
+export async function readCookieUser(existingUser: User | null): Promise<User | null> {
+  try {
+    const response = await fetch('/api/v1/auth/me', { credentials: 'include' });
+    if (!response.ok) return null;
+    const me = await response.json();
+    return {
+      ...existingUser,
+      id: me.user_id,
+      username: me.username,
+      email: me.email,
+      is_verified: me.is_verified,
+      role: me.is_admin ? 'admin' : 'user',
+    };
+  } catch {
+    return null;
+  }
+}

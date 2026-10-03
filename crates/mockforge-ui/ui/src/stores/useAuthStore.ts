@@ -3,7 +3,7 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User, AuthState, AuthActions } from '../types';
 import { authApi } from '../services/authApi';
-import { hydrateUserFromServer } from '../services/authUser';
+import { hydrateUserFromServer, readCookieUser } from '../services/authUser';
 import { isMissingRefreshCookie, resolveRefreshedUser } from '../services/authSession';
 import { parseToken, setAuthToken, clearAuthToken } from '../services/tokenStorage';
 
@@ -140,36 +140,13 @@ export const useAuthStore = create<AuthStore>()(
         const generation = authGeneration;
         const { token, refreshToken, user: existingUser } = get();
         if (!token && authApi.isCloud()) {
-          // No in-memory token (page reload with memory-only token storage):
-          // try to restore the session from the HttpOnly auth cookies. The
-          // registry accepts the session cookie on /auth/me, so a valid cookie
-          // means the user is still logged in even without a JS-held JWT.
-          try {
-            const res = await fetch('/api/v1/auth/me', { credentials: 'include' });
-            if (res.ok) {
-              const me = await res.json();
-              if (generation !== authGeneration) return;
-              set({
-                user: {
-                  ...(existingUser ?? {}),
-                  id: me.user_id,
-                  username: me.username,
-                  email: me.email,
-                  is_verified: me.is_verified,
-                  role: me.is_admin ? 'admin' : 'user',
-                } as User,
-                isAuthenticated: true,
-                isLoading: true,
-              });
-              // Legacy API consumers require an access token as well as cookies.
-              // Finish restoration before mounting authenticated pages.
-              await get().refreshTokenAction();
-              return;
-            }
-          } catch {
-            /* fall through to logged-out */
-          }
+          const cookieUser = await readCookieUser(existingUser);
           if (generation !== authGeneration) return;
+          if (cookieUser) {
+            set({ user: cookieUser, isAuthenticated: true, isLoading: true });
+          }
+          // Cookie authentication and legacy bearer consumers both need restoration
+          // to finish before protected pages mount. Refresh once in either case.
           try {
             await get().refreshTokenAction();
           } catch {
