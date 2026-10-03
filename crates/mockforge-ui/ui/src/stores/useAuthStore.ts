@@ -118,19 +118,9 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       checkTokenExpiry: () => {
-        const { token } = get();
-        if (!token) return false;
-
-        try {
-          const { expiresAt } = parseToken(token);
-          if (!expiresAt) return false;
-
-          // Check if token expires in less than 5 minutes
-          const timeUntilExpiry = expiresAt - Date.now();
-          return timeUntilExpiry > 5 * 60 * 1000; // 5 minutes in milliseconds
-        } catch {
-          return false;
-        }
+        // parseToken already rejects missing, malformed, and expired JWTs.
+        const { expiresAt } = parseToken(get().token ?? '');
+        return Number(expiresAt) - Date.now() > 5 * 60 * 1000;
       },
 
       checkAuth: async () => {
