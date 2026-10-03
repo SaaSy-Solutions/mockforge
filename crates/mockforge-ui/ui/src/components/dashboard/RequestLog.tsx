@@ -220,7 +220,7 @@ export function RequestLog() {
       className={cn(
         'px-3 h-7 text-xs font-medium transition-all duration-150',
         active
-          ? 'bg-brand-500 text-white shadow-sm hover:bg-brand-600'
+          ? 'bg-primary text-primary-foreground shadow-sm hover:bg-primary/90'
           : 'text-muted-foreground hover:text-foreground hover:bg-bg-tertiary'
       )}
       onClick={onClick}

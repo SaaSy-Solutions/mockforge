@@ -227,7 +227,7 @@ export function TimeTravelPage() {
               <Button
                 onClick={handleEnable}
                 disabled={enableMutation.isPending}
-                className="w-full bg-brand-600 hover:bg-brand-700 text-white"
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
               >
                 <Play className="h-4 w-4 mr-2" />
                 Enable Time Travel
@@ -251,7 +251,7 @@ export function TimeTravelPage() {
                     <Button
                       onClick={handleAdvance}
                       disabled={advanceMutation.isPending || !advanceDuration}
-                      className="bg-brand-600 hover:bg-brand-700 text-white"
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground"
                     >
                       <FastForward className="h-4 w-4 mr-2" />
                       Advance
@@ -275,7 +275,7 @@ export function TimeTravelPage() {
                     <Button
                       onClick={handleSetScale}
                       disabled={scaleMutation.isPending || !timeScale}
-                      className="bg-brand-600 hover:bg-brand-700 text-white"
+                      className="bg-primary hover:bg-primary/90 text-primary-foreground"
                     >
                       <Zap className="h-4 w-4 mr-2" />
                       Set Scale

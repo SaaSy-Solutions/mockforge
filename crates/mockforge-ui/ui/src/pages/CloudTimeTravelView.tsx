@@ -449,7 +449,7 @@ export const CloudTimeTravelView: React.FC = () => {
                 </div>
                 <Button
                   onClick={handleEnable}
-                  className="w-full bg-brand-600 hover:bg-brand-700 text-white"
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
                 >
                   <Play className="h-4 w-4 mr-2" />
                   Enable Time Travel
