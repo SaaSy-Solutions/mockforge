@@ -693,8 +693,9 @@ fn normalize_client_ip(ip: Option<&str>) -> Option<String> {
 /// correlation across a rotation is lost; that is acceptable for this use.
 pub fn audit_email_pseudonym(email: &str, secret: &str) -> String {
     use hmac::{Hmac, Mac};
-    let mut mac = Hmac::<sha2::Sha256>::new_from_slice(secret.as_bytes())
-        .expect("HMAC accepts keys of any length");
+    use sha2::Sha256;
+    let mut mac =
+        Hmac::<Sha256>::new_from_slice(secret.as_bytes()).expect("HMAC accepts keys of any length");
     mac.update(b"mockforge-audit-email-v1:");
     mac.update(email.trim().to_lowercase().as_bytes());
     hex::encode(mac.finalize().into_bytes())
