@@ -3,8 +3,9 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { User, AuthState, AuthActions } from '../types';
 import { authApi } from '../services/authApi';
-import { parseToken, hydrateUserFromServer } from '../services/authUser';
-import { setAuthToken, clearAuthToken } from '../services/tokenStorage';
+import { hydrateUserFromServer } from '../services/authUser';
+import { isMissingRefreshCookie } from '../services/authSession';
+import { parseToken, setAuthToken, clearAuthToken } from '../services/tokenStorage';
 
 interface AuthStore extends AuthState, AuthActions {
   checkAuth: () => Promise<void>;
@@ -99,8 +100,7 @@ export const useAuthStore = create<AuthStore>()(
           } catch (error) {
             if (generation !== authGeneration) return;
             const current = get();
-            if (!current.token && !current.refreshToken && !current.isAuthenticated
-              && error instanceof Error && error.message === 'Missing refresh token') {
+            if (isMissingRefreshCookie(current, error)) {
               // A fresh browser has no refresh cookie. This is a normal signed-out
               // state, and must not emit an error or send a server logout request.
               get().stopTokenRefresh();
