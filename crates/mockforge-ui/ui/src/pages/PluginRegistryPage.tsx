@@ -803,8 +803,7 @@ export const PluginRegistryPage: React.FC = () => {
       {filteredPlugins.length > 0 && (
         <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Typography variant="body2" color="text.secondary">
-            Showing {filteredPlugins.length} of {totalPlugins || plugins.length} plugin
-            {(totalPlugins || plugins.length) === 1 ? '' : 's'}
+            {`Showing ${filteredPlugins.length} of ${totalPlugins || plugins.length} plugin${(totalPlugins || plugins.length) === 1 ? '' : 's'}`}
             {filteredPlugins.length !== plugins.length && ' (filtered)'}
           </Typography>
           {pageLoading && (
@@ -949,7 +948,7 @@ export const PluginRegistryPage: React.FC = () => {
                   {plugin.repository && (
                     <IconButton
                       size="small"
-                      aria-label="Open repository"
+                      aria-label={`Open repository for ${plugin.name}`}
                       onClick={() => window.open(plugin.repository, '_blank', 'noopener,noreferrer')}
                     >
                       <GitHubIcon />

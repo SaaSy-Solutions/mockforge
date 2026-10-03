@@ -94,7 +94,7 @@ const API_BASE = '/api/v1';
 function authHeaders(): Record<string, string> {
   const token = getAuthToken();
   return {
-    Authorization: `Bearer ${token}`,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     'Content-Type': 'application/json',
   };
 }
@@ -294,7 +294,7 @@ function ConfigurationTab() {
   });
 
   // Fetch config with key masked
-  const { data: savedConfig, isLoading } = useQuery({
+  const { data: savedConfig, isLoading, error: configError, refetch: refetchConfig } = useQuery({
     queryKey: ['byok-config', showApiKey],
     queryFn: () => fetchBYOKConfig(showApiKey),
   });
@@ -373,6 +373,7 @@ function ConfigurationTab() {
 
   const selectedProvider = PROVIDERS.find((p) => p.value === config.provider);
 
+  if (configError) return <div role="alert" className="py-6 text-danger-600">{configError.message} <Button onClick={() => refetchConfig()}>Retry</Button></div>;
   if (isLoading) {
     return <div className="text-center py-12">Loading configuration...</div>;
   }
@@ -656,7 +657,7 @@ function AiFeaturesTab({ orgId }: { orgId: string }) {
   const queryClient = useQueryClient();
   const [settings, setSettings] = useState<OrgAiSettings | null>(null);
 
-  const { data: fetchedSettings, isLoading } = useQuery({
+  const { data: fetchedSettings, isLoading, error: settingsError } = useQuery({
     queryKey: ['org-ai-settings', orgId],
     queryFn: () => fetchOrgAiSettings(orgId),
     enabled: !!orgId,
@@ -679,6 +680,7 @@ function AiFeaturesTab({ orgId }: { orgId: string }) {
     },
   });
 
+  if (settingsError) return <div role="alert" className="py-6 text-danger-600">{settingsError.message}</div>;
   if (isLoading || !settings) {
     return <div className="text-center py-12">Loading AI settings...</div>;
   }

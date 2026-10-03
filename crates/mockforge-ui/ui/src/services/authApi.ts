@@ -136,15 +136,13 @@ class AuthApiService {
     };
   }
 
-  async refreshToken(refreshToken: string): Promise<LoginResponse> {
+  async refreshToken(refreshToken?: string): Promise<Omit<LoginResponse, 'user'> & { user?: User }> {
     if (this.cloud) {
       const raw = await this.fetchJson<{
         access_token: string;
         refresh_token: string;
         access_token_expires_at: number;
         refresh_token_expires_at: number;
-        user_id: string;
-        username: string;
       }>('/api/v1/auth/token/refresh', {
         method: 'POST',
         body: JSON.stringify({ refresh_token: refreshToken }),
@@ -153,12 +151,6 @@ class AuthApiService {
       return {
         token: raw.access_token,
         refresh_token: raw.refresh_token,
-        user: {
-          id: raw.user_id,
-          username: raw.username,
-          email: '',
-          role: 'user',
-        },
         expires_in: raw.access_token_expires_at - Math.floor(Date.now() / 1000),
       };
     } else {
@@ -171,12 +163,10 @@ class AuthApiService {
 
   async logout(): Promise<void> {
     try {
-      if (!this.cloud) {
-        await this.fetchJson<{ message: string }>('/__mockforge/auth/logout', {
-          method: 'POST',
-        });
-      }
-      // Cloud mode: just clear local state (no server-side logout endpoint needed)
+      await this.fetchJson<{ message: string }>(
+        this.cloud ? '/api/v1/auth/logout' : '/__mockforge/auth/logout',
+        { method: 'POST' },
+      );
     } catch (error) {
       console.warn('Logout request failed:', error);
     }

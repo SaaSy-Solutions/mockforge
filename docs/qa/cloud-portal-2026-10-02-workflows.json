@@ -1,0 +1,156 @@
+{
+  "deployment": "qa-fix-20261003T014215Z",
+  "results": [
+    {
+      "name": "Live bundle matches tested source build",
+      "pass": true,
+      "http": []
+    },
+    {
+      "name": "Resilience loads and navigation recovers",
+      "pass": true,
+      "http": []
+    },
+    {
+      "name": "Snapshot diff reaches API and displays comparison",
+      "pass": true,
+      "http": []
+    },
+    {
+      "name": "organization loads after cookie reload",
+      "pass": true,
+      "http": []
+    },
+    {
+      "name": "api-tokens loads after cookie reload",
+      "pass": true,
+      "http": []
+    },
+    {
+      "name": "byok loads after cookie reload",
+      "pass": true,
+      "http": []
+    },
+    {
+      "name": "Theme round trip and reload",
+      "pass": true,
+      "http": []
+    },
+    {
+      "name": "Ctrl K and Enter search navigate",
+      "pass": true,
+      "http": []
+    },
+    {
+      "name": "Sidebar groups fold and restore",
+      "pass": true,
+      "http": []
+    },
+    {
+      "name": "Deleted persisted workspace reconciles on reload",
+      "pass": true,
+      "http": []
+    },
+    {
+      "name": "Federation route remains clickable and reports result",
+      "pass": true,
+      "http": [
+        {
+          "status": 400,
+          "url": "https://app.mockforge.dev/api/v1/federation/b3267395-db09-49c0-9567-d0e7664c1398/route"
+        },
+        {
+          "status": 400,
+          "url": "https://app.mockforge.dev/api/v1/federation/b3267395-db09-49c0-9567-d0e7664c1398/route"
+        },
+        {
+          "status": 400,
+          "url": "https://app.mockforge.dev/api/v1/federation/b3267395-db09-49c0-9567-d0e7664c1398/route"
+        }
+      ]
+    },
+    {
+      "name": "Hosted deployment slug follows the complete name",
+      "pass": true,
+      "http": []
+    },
+    {
+      "name": "Snapshot capture diff and delete round trip",
+      "pass": true,
+      "http": []
+    },
+    {
+      "name": "Fixture creation and cleanup",
+      "pass": true,
+      "http": []
+    },
+    {
+      "name": "Fitness function creation and cleanup",
+      "pass": true,
+      "http": [
+        {
+          "status": 429,
+          "url": "https://app.mockforge.dev/api/v1/workspaces/42e2e785-5191-4c96-b441-1127caeabb42/fitness-functions"
+        },
+        {
+          "status": 429,
+          "url": "https://app.mockforge.dev/api/v1/workspaces/42e2e785-5191-4c96-b441-1127caeabb42/monitored-services"
+        },
+        {
+          "status": 429,
+          "url": "https://app.mockforge.dev/api/v1/workspaces/42e2e785-5191-4c96-b441-1127caeabb42/fitness-functions"
+        },
+        {
+          "status": 429,
+          "url": "https://app.mockforge.dev/api/v1/workspaces/42e2e785-5191-4c96-b441-1127caeabb42/fitness-functions"
+        }
+      ]
+    },
+    {
+      "name": "Cleanup QA-TEST Service",
+      "pass": true,
+      "http": [
+        {
+          "status": 429,
+          "url": "https://app.mockforge.dev/api/v1/services"
+        }
+      ]
+    },
+    {
+      "name": "Cleanup QA-TEST Mock",
+      "pass": true,
+      "http": []
+    },
+    {
+      "name": "Cleanup QA-TEST Snapshot",
+      "pass": true,
+      "http": []
+    },
+    {
+      "name": "Cleanup QA-TEST Reservation",
+      "pass": true,
+      "http": []
+    },
+    {
+      "name": "Cleanup temporary fixtures from regression checks",
+      "pass": true,
+      "http": []
+    },
+    {
+      "name": "Federation test routes a matching service",
+      "pass": true,
+      "http": []
+    },
+    {
+      "name": "Virtual Backends uses cloud workspace APIs",
+      "pass": true,
+      "http": []
+    }
+  ],
+  "javascript_errors": [],
+  "notes": [
+    "Federation positive route test was rerun after correcting a test navigation locator.",
+    "The existing snapshot comparison test had no rows after cleanup; the new snapshot capture/diff/delete round trip verified the actual comparison.",
+    "Fresh unauthenticated auth probes and the empty federation no-match request intentionally return errors."
+  ]
+}

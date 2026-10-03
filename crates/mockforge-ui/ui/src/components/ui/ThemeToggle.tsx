@@ -63,7 +63,7 @@ export function ThemeToggle({ className, size = 'md' }: ThemeToggleProps) {
 
 // Simple toggle version for minimal UI
 export function SimpleThemeToggle({ className, size = 'md' }: ThemeToggleProps) {
-  const { theme: resolvedTheme, setTheme } = useThemePaletteStore();
+  const { resolvedMode: resolvedTheme, setTheme } = useThemePaletteStore();
 
   const toggleTheme = () => {
     setTheme(resolvedTheme === 'dark' ? 'light' : 'dark');

@@ -32,6 +32,14 @@ describe('ErrorBoundary', () => {
     vi.restoreAllMocks();
   });
 
+  it('recovers on route navigation without requiring a reload', () => {
+    const { rerender } = render(<ErrorBoundary resetKey="/resilience"><ThrowError shouldThrow /></ErrorBoundary>);
+    expect(screen.getByTestId('error-boundary-fallback')).toBeInTheDocument();
+    rerender(<ErrorBoundary resetKey="/cloud-recorder"><ThrowError /></ErrorBoundary>);
+    expect(screen.getByTestId('working-component')).toBeInTheDocument();
+    expect(screen.queryByTestId('error-boundary-fallback')).not.toBeInTheDocument();
+  });
+
   it('renders children when there are no errors', () => {
     render(
       <ErrorBoundary>

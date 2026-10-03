@@ -382,7 +382,7 @@ export function ResponsiveTable<T>({
       {/* Results summary */}
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
-          Showing {filteredData.length} of {data.length} {data.length === 1 ? 'item' : 'items'}
+          {`Showing ${filteredData.length} of ${data.length} ${data.length === 1 ? 'item' : 'items'}`}
         </span>
 
         {searchQuery && (

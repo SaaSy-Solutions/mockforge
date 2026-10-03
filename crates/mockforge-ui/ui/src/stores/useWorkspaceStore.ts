@@ -18,6 +18,15 @@ interface WorkspaceActions {
   refreshWorkspaces: () => Promise<void>;
 }
 
+export function reconcileWorkspace(workspaces: WorkspaceSummary[], selected: WorkspaceSummary | null) {
+  return workspaces.find((workspace) => workspace.is_active)
+    ?? workspaces.find((workspace) => workspace.id === selected?.id)
+    ?? workspaces[0]
+    ?? null;
+}
+
+let requestVersion = 0;
+
 export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>()(
   persist(
     (set, get) => ({
@@ -31,44 +40,43 @@ export const useWorkspaceStore = create<WorkspaceState & WorkspaceActions>()(
       },
 
       setWorkspaces: (workspaces) => {
-        set({ workspaces });
+        set({ workspaces, activeWorkspace: reconcileWorkspace(workspaces, get().activeWorkspace) });
       },
 
       loadWorkspaces: async () => {
-        set({ loading: true, error: null });
+        const version = ++requestVersion;
+        const selected = get().activeWorkspace;
+        // Persisted selections are untrusted until the server lists them.
+        set({ loading: true, error: null, activeWorkspace: get().workspaces.find((workspace) => workspace.id === selected?.id) ?? null });
         try {
           const workspaces = await apiService.listWorkspaces();
-          set({ workspaces, loading: false });
-
-          // Set the first active workspace as the default active workspace
-          const activeWorkspace = workspaces.find((w: WorkspaceSummary) => w.is_active);
-          if (activeWorkspace) {
-            set({ activeWorkspace });
-          }
+          if (version !== requestVersion) return;
+          set({ workspaces, loading: false, activeWorkspace: reconcileWorkspace(workspaces, selected) });
         } catch (error) {
+          if (version !== requestVersion) return;
           set({
             error: error instanceof Error ? error.message : 'Failed to load workspaces',
             loading: false,
-            workspaces: []
           });
         }
       },
 
       setActiveWorkspaceById: async (workspaceId) => {
+        const version = ++requestVersion;
         set({ loading: true, error: null });
         try {
           await apiService.setActiveWorkspace(workspaceId);
           const workspaces = await apiService.listWorkspaces();
-          set({ workspaces, loading: false });
-
-          const activeWorkspace = workspaces.find((w: WorkspaceSummary) => w.is_active);
-          set({ activeWorkspace });
+          if (version !== requestVersion) return;
+          const activeWorkspace = workspaces.find((workspace) => workspace.id === workspaceId);
+          if (!activeWorkspace) throw new Error('Workspace no longer exists');
+          set({ workspaces, loading: false, activeWorkspace });
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : 'Failed to set active workspace',
             loading: false,
-            workspaces: []
           });
+          throw error;
         }
       },
 

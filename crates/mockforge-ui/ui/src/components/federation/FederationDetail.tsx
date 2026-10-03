@@ -77,7 +77,7 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
       });
       setRoutingResult(result);
     } catch (err) {
-      alert(`Failed to route request: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      setRoutingResult(null);
     }
   };
 
@@ -111,6 +111,7 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
         <div className="flex items-center gap-4">
           {onBack && (
             <button
+              aria-label="Back to federations"
               onClick={onBack}
               className="p-2 text-muted-foreground hover:text-foreground transition-colors"
             >
@@ -155,13 +156,13 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
               <span className="ml-2 font-mono text-foreground">{currentFederation.org_id}</span>
             </div>
             <div>
-              <span className="text-muted-foreground">Created:</span>
+              <span className="text-muted-foreground">Created:</span>{' '}
               <span className="ml-2 text-foreground">
                 {new Date(currentFederation.created_at).toLocaleString()}
               </span>
             </div>
             <div>
-              <span className="text-muted-foreground">Updated:</span>
+              <span className="text-muted-foreground">Updated:</span>{' '}
               <span className="ml-2 text-foreground">
                 {new Date(currentFederation.updated_at).toLocaleString()}
               </span>
@@ -176,10 +177,11 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
           </h3>
           <div className="space-y-2 text-sm">
             <div>
-              <strong>Total Services:</strong> {currentFederation.services.length}
+              {`Total Services: ${currentFederation.services.length}`}
             </div>
             <div>
               <strong>Reality Levels:</strong>
+              {currentFederation.services.length === 0 && <span> None configured</span>}
               <div className="flex flex-wrap gap-2 mt-2">
                 {['real', 'mock_v3', 'blended', 'chaos_driven'].map((level) => {
                   const count = currentFederation.services.filter(s => s.reality_level === level).length;
@@ -252,6 +254,7 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
           Test Routing
         </h3>
         <div className="space-y-4">
+          {routeRequest.error && <p role="alert" className="text-danger-600">{routeRequest.error.message}</p>}
           <div className="flex gap-2">
             <select
               value={testMethod}
@@ -267,12 +270,13 @@ export const FederationDetail: React.FC<FederationDetailProps> = ({
               type="text"
               value={testPath}
               onChange={(e) => setTestPath(e.target.value)}
+              aria-label="Request path"
               placeholder="/auth/login"
               className="flex-1 px-3 py-2 border border-border rounded-lg bg-card text-foreground"
             />
             <button
               onClick={handleTestRoute}
-              disabled={!testPath || routeRequest.isPending}
+              disabled={!testPath.trim() || routeRequest.isPending}
               className="px-4 py-2 bg-primary text-primary-foreground rounded-lg hover:bg-primary/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Test Route

@@ -49,7 +49,7 @@ export const FederationList: React.FC<FederationListProps> = ({
   }
 
   const handleDelete = async (id: string, name: string) => {
-    if (confirmDelete(`Are you sure you want to delete federation "${name}"?`)) {
+    if (await confirmDelete(`Are you sure you want to delete federation "${name}"?`)) {
       try {
         await deleteFederation.mutateAsync(id);
       } catch (err) {
@@ -156,7 +156,7 @@ export const FederationList: React.FC<FederationListProps> = ({
                     </div>
 
                     <div className="text-xs text-muted-foreground mt-2">
-                      Updated {new Date(federation.updated_at).toLocaleDateString()}
+                      {`Updated ${new Date(federation.updated_at).toLocaleDateString()}`}
                     </div>
                   </div>
                 </div>

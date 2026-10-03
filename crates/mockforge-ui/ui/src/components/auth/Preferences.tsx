@@ -20,7 +20,7 @@ import {
   TabsContent,
 } from '../ui/Tabs';
 import { usePreferencesStore } from '../../stores/usePreferencesStore';
-import { useThemeStore } from '../../stores/useThemeStore';
+import { useThemePaletteStore as useThemeStore } from '../../stores/useThemePaletteStore';
 import {
   Palette,
   FileText,

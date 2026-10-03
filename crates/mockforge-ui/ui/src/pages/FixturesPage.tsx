@@ -123,6 +123,8 @@ function formFromFixture(fixture: FixtureInfo): FixtureFormState {
 }
 
 export function FixturesPage() {
+  const [createRequestError, setCreateRequestError] = useState<string | null>(null);
+  const [editRequestError, setEditRequestError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedMethod, setSelectedMethod] = useState<string>('all');
   const [selectedTag, setSelectedTag] = useState<string>('all');
@@ -195,6 +197,7 @@ export function FixturesPage() {
       return;
     }
     setCreateContentError(null);
+    setCreateRequestError(null);
 
     try {
       await createFixtureMutation.mutateAsync({
@@ -215,7 +218,7 @@ export function FixturesPage() {
       setCreateForm(EMPTY_FORM);
     } catch (err) {
       logger.error('Error creating fixture', err);
-      toast.error(err instanceof Error ? err.message : 'Failed to create fixture');
+      setCreateRequestError(err instanceof Error ? err.message : 'Failed to create fixture');
     }
   };
 
@@ -227,6 +230,7 @@ export function FixturesPage() {
       return;
     }
     setEditContentError(null);
+    setEditRequestError(null);
 
     try {
       await updateFixtureMutation.mutateAsync({
@@ -247,7 +251,7 @@ export function FixturesPage() {
       setFixtureToEdit(null);
     } catch (err) {
       logger.error('Error updating fixture', err);
-      toast.error(err instanceof Error ? err.message : 'Failed to update fixture');
+      setEditRequestError(err instanceof Error ? err.message : 'Failed to update fixture');
     }
   };
 
@@ -304,6 +308,7 @@ export function FixturesPage() {
     setFixtureToEdit(fixture);
     setEditForm(formFromFixture(fixture));
     setEditContentError(null);
+    setEditRequestError(null);
     setIsEditDialogOpen(true);
   };
 
@@ -424,6 +429,7 @@ export function FixturesPage() {
               size="sm"
               onClick={() => {
                 setCreateForm(EMPTY_FORM);
+                setCreateRequestError(null);
                 setCreateContentError(null);
                 setIsCreateDialogOpen(true);
               }}
@@ -671,6 +677,7 @@ export function FixturesPage() {
                         <Button
                           variant="outline"
                           size="sm"
+                          aria-label={`View fixture ${fixtureDisplayName(fixture)}`}
                           onClick={() => handleViewFixture(fixture)}
                         >
                           <Eye className="h-4 w-4" />
@@ -679,6 +686,7 @@ export function FixturesPage() {
                         <Button
                           variant="outline"
                           size="sm"
+                          aria-label={`Download fixture ${fixtureDisplayName(fixture)}`}
                           onClick={() => handleDownloadFixture(fixture)}
                         >
                           <Download className="h-4 w-4" />
@@ -687,6 +695,7 @@ export function FixturesPage() {
                         <Button
                           variant="outline"
                           size="sm"
+                          aria-label={`Delete fixture ${fixtureDisplayName(fixture)}`}
                           onClick={() => {
                             setFixtureToDelete(fixture);
                             setIsDeleteDialogOpen(true);
@@ -715,6 +724,7 @@ export function FixturesPage() {
           <DialogDescription>
             Create a new mock response fixture for your API endpoints.
           </DialogDescription>
+          {createRequestError && <p role="alert" className="my-3 text-danger-600">{createRequestError}</p>}
 
           <div className="py-4 space-y-4 overflow-y-auto max-h-[60vh]">
             <div className="grid grid-cols-2 gap-4">
@@ -872,6 +882,7 @@ export function FixturesPage() {
           <DialogDescription>
             Update fixture metadata, tags, and response content.
           </DialogDescription>
+          {editRequestError && <p role="alert" className="my-3 text-danger-600">{editRequestError}</p>}
 
           <div className="py-4 space-y-4 overflow-y-auto max-h-[60vh]">
             <div className="grid grid-cols-2 gap-4">

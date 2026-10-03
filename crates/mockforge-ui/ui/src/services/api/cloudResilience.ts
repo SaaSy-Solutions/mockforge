@@ -12,7 +12,7 @@
  *   deployed, connection refused, timeout, etc.); `data` is empty. Show
  *   an empty state with a "deployment not reachable" hint.
  */
-import { fetchJsonWithErrorBody } from './client';
+import { fetchJsonEnvelope } from './client';
 import { isCloudMode } from '../../utils/cloudMode';
 
 export type RuntimeState = 'live' | 'unreachable';
@@ -72,21 +72,21 @@ class CloudResilienceApi {
     deploymentId: string,
   ): Promise<ResilienceEnvelope<CloudCircuitBreakerState>> {
     this.guard('listCircuitBreakers');
-    return fetchJsonWithErrorBody(
+    return fetchJsonEnvelope(
       `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/resilience/circuit-breakers`,
     ) as Promise<ResilienceEnvelope<CloudCircuitBreakerState>>;
   }
 
   async listBulkheads(deploymentId: string): Promise<ResilienceEnvelope<CloudBulkheadState>> {
     this.guard('listBulkheads');
-    return fetchJsonWithErrorBody(
+    return fetchJsonEnvelope(
       `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/resilience/bulkheads`,
     ) as Promise<ResilienceEnvelope<CloudBulkheadState>>;
   }
 
   async getSummary(deploymentId: string): Promise<CloudResilienceSummary> {
     this.guard('getSummary');
-    return fetchJsonWithErrorBody(
+    return fetchJsonEnvelope(
       `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/resilience/summary`,
     ) as Promise<CloudResilienceSummary>;
   }
@@ -96,7 +96,7 @@ class CloudResilienceApi {
     endpoint: string,
   ): Promise<CloudResilienceResetResult> {
     this.guard('resetCircuitBreaker');
-    return fetchJsonWithErrorBody(
+    return fetchJsonEnvelope(
       `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/resilience/circuit-breakers/${encodeURIComponent(endpoint)}/reset`,
       { method: 'POST' },
     ) as Promise<CloudResilienceResetResult>;
@@ -107,7 +107,7 @@ class CloudResilienceApi {
     service: string,
   ): Promise<CloudResilienceResetResult> {
     this.guard('resetBulkhead');
-    return fetchJsonWithErrorBody(
+    return fetchJsonEnvelope(
       `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/resilience/bulkheads/${encodeURIComponent(service)}/reset`,
       { method: 'POST' },
     ) as Promise<CloudResilienceResetResult>;

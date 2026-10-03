@@ -18,9 +18,12 @@ const parseToken = (token: string): { user: User | null; expiresAt: number | nul
     const parts = token.split('.');
     if (parts.length !== 3) return { user: null, expiresAt: null };
 
-    const payload = JSON.parse(atob(parts[1])); // JWT payload is base64url encoded
+    const payload = JSON.parse(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/'))); // JWT payload is base64url encoded
 
     // Check expiration
+    if (typeof payload.sub !== 'string' || !Number.isFinite(payload.exp)) {
+      return { user: null, expiresAt: null };
+    }
     const expiresAt = payload.exp * 1000; // Convert to milliseconds
     if (expiresAt < Date.now()) {
       return { user: null, expiresAt: null };
@@ -41,6 +44,9 @@ const parseToken = (token: string): { user: User | null; expiresAt: number | nul
 };
 
 // Token refresh interval management
+let authGeneration = 0;
+let pendingRefresh: { generation: number; promise: Promise<void> } | null = null;
+
 let tokenRefreshInterval: ReturnType<typeof setInterval> | null = null;
 
 /**
@@ -78,11 +84,14 @@ export const useAuthStore = create<AuthStore>()(
       isLoading: false,
 
       login: async (username: string, password: string) => {
+        const generation = ++authGeneration;
         set({ isLoading: true });
 
         try {
           // Call real authentication API
           const response = await authApi.login(username, password);
+
+          if (generation !== authGeneration) return;
 
           // Persist tokens immediately so the hydrate call carries Authorization.
           set({
@@ -96,13 +105,15 @@ export const useAuthStore = create<AuthStore>()(
           // Cloud login response and JWT lack role/is_verified/email; hydrate
           // them from /users/me so admins resolve to role='admin'.
           const hydrated = await hydrateUserFromServer(response.user);
-          if (hydrated !== response.user) {
+          if (generation === authGeneration && hydrated !== response.user) {
             set({ user: hydrated });
           }
 
+          if (generation !== authGeneration) return;
           // Start automatic token refresh
           get().startTokenRefresh();
         } catch (error) {
+          if (generation !== authGeneration) return;
           set({ isLoading: false });
           const errorMessage = error instanceof Error ? error.message : 'Login failed';
           logger.error('Login failed', errorMessage);
@@ -111,44 +122,56 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       logout: async () => {
-        // Stop token refresh
+        ++authGeneration;
         get().stopTokenRefresh();
-
-        // Call logout API (fire and forget)
-        try {
-          await authApi.logout();
-        } catch (error) {
-          logger.warn('Logout API call failed', error);
-        }
-
-        // Clear local state
-        set({
-          user: null,
-          token: null,
-          refreshToken: null,
-          isAuthenticated: false,
-          isLoading: false,
-        });
+        // Clear immediately; a delayed logout response must not clear a new login.
+        set({ user: null, token: null, refreshToken: null,
+          isAuthenticated: false, isLoading: false });
+        await authApi.logout();
       },
 
       refreshTokenAction: async () => {
+        const generation = authGeneration;
+        if (pendingRefresh?.generation === generation) return pendingRefresh.promise;
         const { refreshToken } = get();
-        if (!refreshToken) throw new Error('No refresh token available');
+        if (!refreshToken && !authApi.isCloud()) throw new Error('No refresh token available');
 
+        const promise = (async () => {
+          try {
+            // Cloud can restore from the HttpOnly refresh cookie after a reload.
+            const response = await authApi.refreshToken(refreshToken ?? undefined);
+            if (generation !== authGeneration) return;
+            const parsedUser = parseToken(response.token).user;
+            const currentUser = get().user;
+            const user = response.user ?? (currentUser?.id === parsedUser?.id ? currentUser : parsedUser);
+            if (!user) throw new Error('Invalid refreshed session');
+            set({ token: response.token, refreshToken: response.refresh_token,
+              user, isAuthenticated: true, isLoading: false });
+            const hydrated = await hydrateUserFromServer(user);
+            if (generation !== authGeneration) return;
+            set({ user: hydrated });
+            get().startTokenRefresh();
+          } catch (error) {
+            if (generation !== authGeneration) return;
+            const current = get();
+            if (!current.token && !current.refreshToken && !current.isAuthenticated
+              && error instanceof Error && error.message === 'Missing refresh token') {
+              // A fresh browser has no refresh cookie. This is a normal signed-out
+              // state, and must not emit an error or send a server logout request.
+              get().stopTokenRefresh();
+              set({ user: null, isAuthenticated: false, isLoading: false });
+              return;
+            }
+            logger.error('Token refresh failed', error);
+            await get().logout();
+            throw error;
+          }
+        })();
+        pendingRefresh = { generation, promise };
         try {
-          // Call real refresh token API
-          const response = await authApi.refreshToken(refreshToken);
-
-          set({
-            token: response.token,
-            refreshToken: response.refresh_token,
-            user: response.user, // Update user info in case it changed
-          });
-        } catch (error) {
-          // If refresh fails, logout
-          logger.error('Token refresh failed', error);
-          get().logout();
-          throw error;
+          await promise;
+        } finally {
+          if (pendingRefresh?.promise === promise) pendingRefresh = null;
         }
       },
 
@@ -169,8 +192,9 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       checkAuth: async () => {
+        const generation = authGeneration;
         const { token, refreshToken, user: existingUser } = get();
-        if (!token) {
+        if (!token && authApi.isCloud()) {
           // No in-memory token (page reload with memory-only token storage):
           // try to restore the session from the HttpOnly auth cookies. The
           // registry accepts the session cookie on /auth/me, so a valid cookie
@@ -179,6 +203,7 @@ export const useAuthStore = create<AuthStore>()(
             const res = await fetch('/api/v1/auth/me', { credentials: 'include' });
             if (res.ok) {
               const me = await res.json();
+              if (generation !== authGeneration) return;
               set({
                 user: {
                   ...(existingUser ?? {}),
@@ -186,20 +211,32 @@ export const useAuthStore = create<AuthStore>()(
                   username: me.username,
                   email: me.email,
                   is_verified: me.is_verified,
-                  is_admin: me.is_admin,
+                  role: me.is_admin ? 'admin' : 'user',
                 } as User,
                 isAuthenticated: true,
-                isLoading: false,
+                isLoading: true,
               });
+              // Legacy API consumers require an access token as well as cookies.
+              // Finish restoration before mounting authenticated pages.
+              await get().refreshTokenAction();
               return;
             }
           } catch {
             /* fall through to logged-out */
           }
-          set({ isAuthenticated: false, isLoading: false });
+          if (generation !== authGeneration) return;
+          try {
+            await get().refreshTokenAction();
+          } catch {
+            // refreshTokenAction clears the rejected session.
+          }
           return;
         }
 
+        if (!token) {
+          set({ isAuthenticated: false, isLoading: false });
+          return;
+        }
         set({ isLoading: true });
 
         try {
@@ -220,10 +257,11 @@ export const useAuthStore = create<AuthStore>()(
             // user state is stale across role changes (admin promotions, email
             // verification) since the JWT carries no role claim.
             const hydrated = await hydrateUserFromServer(user);
-            if (hydrated !== user) {
+            if (generation === authGeneration && hydrated !== user) {
               set({ user: hydrated });
             }
 
+            if (generation !== authGeneration) return;
             // Start token refresh if not already started
             get().startTokenRefresh();
           } else if (refreshToken) {
@@ -231,8 +269,7 @@ export const useAuthStore = create<AuthStore>()(
             try {
               await get().refreshTokenAction();
             } catch {
-              // Refresh failed, logout
-              get().logout();
+              // refreshTokenAction already clears the rejected session.
             }
           } else {
             // No refresh token, logout
@@ -280,6 +317,7 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       setAuthenticated: (user: User, token: string, refreshToken?: string) => {
+        ++authGeneration;
         set({
           user,
           token,
@@ -303,16 +341,16 @@ export const useAuthStore = create<AuthStore>()(
 
           if (isAuthenticated && token && refresh) {
             try {
-              const payload = JSON.parse(atob(token.split('.')[1]));
-              const timeUntilExpiry = payload.exp - Math.floor(Date.now() / 1000);
+              const { expiresAt } = parseToken(token);
+              const timeUntilExpiry = expiresAt ? (expiresAt - Date.now()) / 1000 : 0;
 
               // Refresh if token expires in less than 5 minutes
               if (timeUntilExpiry < 300) {
                 await get().refreshTokenAction();
               }
             } catch {
-              // If we can't parse the token, logout
-              get().logout();
+              // A rejected refresh already clears the session.
+              if (get().token === token && get().isAuthenticated) void get().logout();
             }
           }
         }, 60000); // Check every minute
@@ -327,9 +365,13 @@ export const useAuthStore = create<AuthStore>()(
     }),
     {
       name: 'mockforge-auth',
+      version: 1,
+      migrate: (persisted) => {
+        const state = persisted as Partial<AuthState>;
+        return authApi.isCloud() ? { user: state.user ?? null } : { token: state.token ?? null, refreshToken: state.refreshToken ?? null, user: state.user ?? null };
+      },
       partialize: (state) => ({
-        token: state.token,
-        refreshToken: state.refreshToken,
+        ...(authApi.isCloud() ? {} : { token: state.token, refreshToken: state.refreshToken }),
         user: state.user,
         // Do NOT persist isAuthenticated — derive it from token via checkAuth()
         // to prevent stale auth state from showing the dashboard before validation

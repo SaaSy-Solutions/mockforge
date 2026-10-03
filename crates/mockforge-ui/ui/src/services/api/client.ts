@@ -29,7 +29,7 @@ export async function fetchJson(url: string, options?: RequestInit): Promise<unk
 /**
  * fetchJson variant that also parses error body for a richer error message.
  */
-export async function fetchJsonWithErrorBody(url: string, options?: RequestInit): Promise<unknown> {
+export async function fetchJsonWithErrorBody(url: string, options?: RequestInit, unwrap = true): Promise<unknown> {
   const response = await authenticatedFetch(url, options);
   if (!response.ok) {
     if (response.status === 401) {
@@ -39,10 +39,10 @@ export async function fetchJsonWithErrorBody(url: string, options?: RequestInit)
       throw new Error('Access denied');
     }
     const error = await response.json().catch(() => ({ error: `HTTP ${response.status}` }));
-    throw new Error(error.error || `HTTP error! status: ${response.status}`);
+    throw new Error(apiErrorMessage(response, error, `HTTP error! status: ${response.status}`));
   }
   const json = await response.json();
-  return json.data || json;
+  return unwrap ? (json.data ?? json) : json;
 }
 
 /**
@@ -130,3 +130,7 @@ export async function fetchJsonWithErrorMessage(url: string, options?: RequestIn
   const json = await response.json();
   return json.data || json;
 }
+
+/** Preserve response metadata alongside data, e.g. runtime_state. */
+export const fetchJsonEnvelope = (url: string, options?: RequestInit) =>
+  fetchJsonWithErrorBody(url, options, false);

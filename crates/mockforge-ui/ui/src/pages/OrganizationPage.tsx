@@ -163,7 +163,7 @@ const API_BASE = '/api/v1';
 function authHeaders(): Record<string, string> {
   const token = getAuthToken();
   return {
-    Authorization: `Bearer ${token}`,
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
     'Content-Type': 'application/json',
   };
 }
@@ -1970,7 +1970,7 @@ export function OrganizationPage() {
     setSearchParams(params, { replace: true });
   };
 
-  const { data: organizations, isLoading: orgsLoading } = useQuery({
+  const { data: organizations, isLoading: orgsLoading, error: orgsError, refetch: refetchOrgs } = useQuery({
     queryKey: ['organizations'],
     queryFn: fetchOrganizations,
   });
@@ -1998,6 +1998,8 @@ export function OrganizationPage() {
         .replace(/^-|-$/g, '')
     );
   };
+
+  if (orgsError) return <div role="alert" className="p-6 text-danger-600">{orgsError.message} <Button onClick={() => refetchOrgs()}>Retry</Button></div>;
 
   if (orgsLoading) {
     return (

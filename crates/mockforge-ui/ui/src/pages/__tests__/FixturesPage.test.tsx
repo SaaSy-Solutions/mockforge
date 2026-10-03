@@ -201,6 +201,16 @@ describe('FixturesPage', () => {
     expect(screen.getByText(/No fixtures match your current search criteria/)).toBeInTheDocument();
   });
 
+  it('keeps creation failures visible inside the dialog', async () => {
+    createFixtureMutate.mockRejectedValueOnce(new Error('Workspace not found'));
+    render(<FixturesPage />, { wrapper: createWrapper() });
+    fireEvent.click(screen.getByRole('button', { name: 'New Fixture' }));
+    fireEvent.change(screen.getByPlaceholderText('e.g., Get Users Response'), { target: { value: 'QA fixture' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create Fixture' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Workspace not found');
+    expect(screen.getByRole('button', { name: 'Create Fixture' })).toBeInTheDocument();
+  });
+
   it('handles error state', () => {
     mockUseFixtures.mockReturnValue({
       data: null,

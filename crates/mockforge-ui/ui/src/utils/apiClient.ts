@@ -70,7 +70,6 @@ const LOCAL_ONLY_API_PREFIXES = [
   '/api/v1/consistency/',
   '/api/v1/drift/',
   '/api/v1/scenario-studio/',
-  '/api/v1/snapshots',
   '/api/v2/analytics/',
 ];
 
@@ -146,23 +145,24 @@ export function createAuthenticatedFetch() {
     let response = await originalFetch(input, newInit);
 
     // Handle 401 Unauthorized - token might be expired
-    if (response.status === 401 && token) {
+    const requestPath = new URL(url, window.location.origin).pathname;
+    if (response.status === 401 && (token || (isCloud && state.isAuthenticated)) && !requestPath.startsWith('/api/v1/auth/')
+      && !requestPath.startsWith('/__mockforge/auth/')) {
       try {
         // Try to refresh the token
-        await state.refreshTokenAction();
+        // A concurrent request may already have rotated this token.
+        if (useAuthStore.getState().token === token) {
+          await state.refreshTokenAction();
+        }
 
         // Retry the request with new token
         const newToken = useAuthStore.getState().token;
         if (newToken) {
           headers.set('Authorization', `Bearer ${newToken}`);
           response = await originalFetch(input, { ...newInit, headers });
-        } else {
-          // Refresh failed, logout
-          state.logout();
         }
-      } catch (error) {
-        // Refresh failed, logout
-        state.logout();
+      } catch {
+        // The store clears a rejected refresh session; preserve newer logins.
       }
     }
 

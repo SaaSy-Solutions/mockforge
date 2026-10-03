@@ -1,3 +1,4 @@
+import { confirmAction } from '../components/ui/ConfirmationDialog';
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -80,6 +81,7 @@ const CloudTunnelsView: React.FC = () => {
     if (!orgId) {
         return (
             <div className="p-6 max-w-7xl mx-auto">
+            {deleteMutation.error && <p role="alert" className="mb-4 text-red-600">{deleteMutation.error.message}</p>}
                 <div className="bg-yellow-50 dark:bg-yellow-900/20 text-yellow-800 dark:text-yellow-300 p-4 rounded-lg">
                     Loading organization context…
                 </div>
@@ -88,10 +90,12 @@ const CloudTunnelsView: React.FC = () => {
     }
 
     const tunnels = tunnelsQuery.data ?? [];
+    const actionError = deleteMutation.error || verifyMutation.error;
     const copyToClipboard = (text: string) => navigator.clipboard.writeText(text);
 
     return (
         <div className="p-6 max-w-7xl mx-auto">
+            {actionError && <p role="alert" className="mb-4 text-red-600">{actionError.message}</p>}
             <div className="flex justify-between items-start mb-8">
                 <div>
                     <h1 className="text-2xl font-semibold tracking-tight text-foreground">Tunnels</h1>
@@ -151,8 +155,8 @@ const CloudTunnelsView: React.FC = () => {
                                         tunnel={t}
                                         onCopy={copyToClipboard}
                                         onVerify={() => verifyMutation.mutate(t.id)}
-                                        onDelete={() => {
-                                            if (confirm(`Delete tunnel "${t.name}"?`)) deleteMutation.mutate(t.id);
+                                        onDelete={async () => {
+                                            if (await confirmAction(`Delete tunnel "${t.name}"?`)) deleteMutation.mutate(t.id);
                                         }}
                                         verifying={verifyMutation.isPending}
                                     />

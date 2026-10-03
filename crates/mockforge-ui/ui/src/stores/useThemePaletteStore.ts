@@ -38,9 +38,7 @@ export const useThemePaletteStore = create<ThemePaletteState>()(
       resolvedMode: 'light',
 
       // Aliases for compatibility
-      get theme() {
-        return get().mode;
-      },
+      theme: 'system',
       setTheme: (mode: ThemeMode) => {
         get().setMode(mode);
       },
@@ -58,7 +56,7 @@ export const useThemePaletteStore = create<ThemePaletteState>()(
           ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
           : mode;
 
-        set({ mode, resolvedMode });
+        set({ mode, theme: mode, resolvedMode });
         get().applyTheme();
       },
 

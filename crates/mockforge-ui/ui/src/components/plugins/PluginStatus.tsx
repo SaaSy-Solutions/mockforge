@@ -240,7 +240,7 @@ export function PluginStatus() {
 
           {status.last_updated && (
             <div className="mt-4 text-xs text-muted-foreground text-center">
-              Last updated: {formatDateTime(status.last_updated)}
+              {`Last updated: ${formatDateTime(status.last_updated)}`}
             </div>
           )}
         </div>

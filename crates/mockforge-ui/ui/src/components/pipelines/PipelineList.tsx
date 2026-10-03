@@ -46,7 +46,7 @@ export const PipelineList: React.FC<PipelineListProps> = ({
   }
 
   const handleDelete = async (id: string, name: string) => {
-    if (confirmDelete(`Are you sure you want to delete pipeline "${name}"?`)) {
+    if (await confirmDelete(`Are you sure you want to delete pipeline "${name}"?`)) {
       try {
         await deletePipeline.mutateAsync(id);
       } catch (err) {
@@ -134,7 +134,7 @@ export const PipelineList: React.FC<PipelineListProps> = ({
                     <div className="flex items-center gap-2 text-xs">
                       <Clock className="h-3 w-3" />
                       <span>
-                        Updated {new Date(pipeline.updated_at).toLocaleDateString()}
+                        {`Updated ${new Date(pipeline.updated_at).toLocaleDateString()}`}
                       </span>
                     </div>
                   </div>

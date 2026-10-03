@@ -201,8 +201,7 @@ const CloudView: React.FC = () => {
         <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
         <div className="text-sm">
           <strong>Preview:</strong> The registry's clone training and replay
-          executors emit <em>synthetic</em> per-capture events until the real
-          workers ship. Status transitions, runner seconds, and event streams
+          executors currently emit simulated per-capture events. Status transitions, runner seconds, and event streams
           are simulated — useful for wiring UI and webhooks today, not for
           recording production behavior.
         </div>

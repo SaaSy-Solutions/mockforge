@@ -56,6 +56,7 @@ export const ResiliencePage: React.FC = () => {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [selectedTab, setSelectedTab] = useState<'circuit-breakers' | 'bulkheads'>('circuit-breakers');
   const [autoRefresh, setAutoRefresh] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   // `runtime_state: 'pending'` from the cloud scaffold (#468) means the
   // runtime hasn't wired up middleware yet; we want to swap the auto-refresh
   // banner for an honest "pending" notice rather than showing zeros that
@@ -77,7 +78,7 @@ export const ResiliencePage: React.FC = () => {
       try {
         const token = getAuthToken();
         const response = await fetch('/api/v1/hosted-mocks', { credentials: 'include', headers: token ? { Authorization: `Bearer ${token}` } : {}, });
-        if (!response.ok) return;
+        if (!response.ok) throw new Error(`Failed to load deployments (HTTP ${response.status})`);
         const list = (await response.json()) as DeploymentSummary[];
         if (cancelled) return;
         const items = Array.isArray(list) ? list : [];
@@ -89,7 +90,7 @@ export const ResiliencePage: React.FC = () => {
           if (active) setSelectedDeploymentId(active.id);
         }
       } catch (err) {
-        console.error('Failed to load deployments:', err);
+        setLoadError(err instanceof Error ? err.message : 'Failed to load deployments');
       }
     })();
     return () => {
@@ -107,6 +108,7 @@ export const ResiliencePage: React.FC = () => {
           return;
         }
         const env = await cloudResilienceApi.listCircuitBreakers(selectedDeploymentId);
+        if (!Array.isArray(env.data)) throw new Error('Invalid circuit breaker response');
         setCircuitBreakers(env.data);
         setRuntimeState(env.runtime_state);
         return;
@@ -115,7 +117,7 @@ export const ResiliencePage: React.FC = () => {
       const data = await response.json();
       setCircuitBreakers(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error('Failed to fetch circuit breakers:', error);
+      setLoadError(error instanceof Error ? error.message : 'Failed to load circuit breakers');
     }
   };
 
@@ -127,6 +129,7 @@ export const ResiliencePage: React.FC = () => {
           return;
         }
         const env = await cloudResilienceApi.listBulkheads(selectedDeploymentId);
+        if (!Array.isArray(env.data)) throw new Error('Invalid bulkhead response');
         setBulkheads(env.data);
         setRuntimeState(env.runtime_state);
         return;
@@ -135,7 +138,7 @@ export const ResiliencePage: React.FC = () => {
       const data = await response.json();
       setBulkheads(Array.isArray(data) ? data : []);
     } catch (error) {
-      console.error('Failed to fetch bulkheads:', error);
+      setLoadError(error instanceof Error ? error.message : 'Failed to load bulkheads');
     }
   };
 
@@ -158,7 +161,7 @@ export const ResiliencePage: React.FC = () => {
       const data = await response.json();
       setSummary(data && typeof data === 'object' && !Array.isArray(data) ? data : null);
     } catch (error) {
-      console.error('Failed to fetch summary:', error);
+      setLoadError(error instanceof Error ? error.message : 'Failed to load summary');
     }
   };
 
@@ -239,6 +242,7 @@ export const ResiliencePage: React.FC = () => {
 
   return (
     <div className="space-y-6">
+      {loadError && <p role="alert" className="text-danger-600">{loadError}</p>}
       {/* Deployment unreachable banner. The registry proxies live state from
           the hosted-mock's admin port; when that proxy fails (deployment
           stopped, not yet started, transient network), the page renders zeros
@@ -298,6 +302,7 @@ export const ResiliencePage: React.FC = () => {
           </label>
           <button
             onClick={() => {
+              setLoadError(null);
               fetchCircuitBreakers();
               fetchBulkheads();
               fetchSummary();

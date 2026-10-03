@@ -420,7 +420,7 @@ export const TemplateMarketplacePage: React.FC = () => {
       {/* Results Summary */}
       <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
         <Typography variant="body2" color="text.secondary">
-          {filteredTemplates.length} template{filteredTemplates.length !== 1 ? 's' : ''} found
+          {`${filteredTemplates.length} template${filteredTemplates.length !== 1 ? 's' : ''} found`}
         </Typography>
         {loading && <CircularProgress size={16} />}
       </Box>
@@ -480,7 +480,7 @@ export const TemplateMarketplacePage: React.FC = () => {
                   </Box>
 
                   <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
-                    by {template.author} • v{template.version}
+                    {`by ${template.author} • v${template.version}`}
                   </Typography>
                 </CardContent>
 
@@ -544,7 +544,7 @@ export const TemplateMarketplacePage: React.FC = () => {
                 <Box>
                   <Typography variant="h5">{selectedTemplate.name}</Typography>
                   <Typography variant="body2" color="text.secondary">
-                    by {selectedTemplate.author} • v{selectedTemplate.version}
+                    {`by ${selectedTemplate.author} • v${selectedTemplate.version}`}
                   </Typography>
                 </Box>
                 <Chip label={selectedTemplate.category} color="primary" />

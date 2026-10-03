@@ -228,7 +228,7 @@ export function MockAIRulesPage() {
         {/* Stats */}
         <div className="mt-4 pt-4 border-t border-border flex items-center gap-4 text-sm text-muted-foreground">
           <span>
-            {filteredExplanations.length} of {explanations.length} rules
+            {`${filteredExplanations.length} of ${explanations.length} rules`}
           </span>
           {explanations.length > 0 && (
             <span>

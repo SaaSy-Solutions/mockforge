@@ -1,3 +1,4 @@
+import { confirmAction } from '../components/ui/ConfirmationDialog';
 /**
  * Cloud Snapshots — Time Travel for the active workspace (#10).
  *
@@ -102,9 +103,11 @@ const CloudView: React.FC = () => {
     }
 
     const snapshots = snapshotsQuery.data ?? [];
+    const actionError = deleteMutation.error || diffMutation.error || restoreMutation.error;
 
     return (
         <div className="p-6 max-w-7xl mx-auto">
+            {actionError && <p role="alert" className="mb-4 text-red-600">{actionError.message}</p>}
             <div className="flex justify-between items-start mb-8">
                 <div>
                     <h1 className="text-2xl font-semibold tracking-tight text-foreground">
@@ -180,16 +183,16 @@ const CloudView: React.FC = () => {
                                     key={s.id}
                                     snapshot={s}
                                     onDiff={() => diffMutation.mutate(s.id)}
-                                    onRestore={() => {
+                                    onRestore={async () => {
                                         if (
-                                            confirm(
+                                            await confirmAction(
                                                 `Restore from "${s.name ?? s.id.slice(0, 8)}"?\n\nThis re-creates environments + chaos campaigns from the snapshot. Existing rows with the same name are skipped.`,
                                             )
                                         )
                                             restoreMutation.mutate(s.id);
                                     }}
-                                    onDelete={() => {
-                                        if (confirm('Delete this snapshot?')) deleteMutation.mutate(s.id);
+                                    onDelete={async () => {
+                                        if (await confirmAction('Delete this snapshot?')) deleteMutation.mutate(s.id);
                                     }}
                                 />
                             ))}
@@ -372,6 +375,7 @@ const DiffModal: React.FC<{ diff: SnapshotDiff; onClose: () => void }> = ({ diff
                 </div>
                 <div className="p-6 space-y-4">
                     {sections.map(({ key, diff }) => {
+                        if (!diff) return <p key={key} role="status">{key}: comparison unavailable</p>;
                         const total = diff.added.length + diff.removed.length + diff.changed.length;
                         if (total === 0) {
                             return (
