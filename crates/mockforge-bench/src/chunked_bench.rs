@@ -28,6 +28,7 @@
 //!     skip_tls_verify: false,
 //!     rps: None,
 //!     no_keep_alive: false,
+//!     body: None,
 //! }).await?;
 //! println!("{} req/s", result.req_per_sec);
 //! # Ok(()) }
@@ -74,6 +75,57 @@ pub struct ChunkedBenchConfig {
     /// Open a fresh TCP/TLS connection for every request (no pooling), so the
     /// connections-per-second rate equals the request rate.
     pub no_keep_alive: bool,
+    /// Pre-built request body to stream instead of `X` filler (e.g. a JSON
+    /// document from [`build_json_body`]). When set, its length replaces
+    /// `total_size_bytes` as the per-request body size.
+    pub body: Option<Arc<Vec<u8>>>,
+}
+
+impl ChunkedBenchConfig {
+    /// Bytes each request actually sends.
+    fn body_len(&self) -> usize {
+        self.body.as_ref().map_or(self.total_size_bytes, |b| b.len())
+    }
+}
+
+/// Field name used to pad JSON bodies up to the requested size.
+pub const JSON_PADDING_FIELD: &str = "_padding";
+
+/// True when a `Content-Type` header (any casing) names a JSON media type:
+/// `application/json` or any `+json` suffix type.
+pub fn is_json_content_type(headers: &HashMap<String, String>) -> bool {
+    headers.iter().any(|(k, v)| {
+        if !k.eq_ignore_ascii_case("content-type") {
+            return false;
+        }
+        let media = v.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
+        media == "application/json" || media.ends_with("+json")
+    })
+}
+
+/// Build a valid JSON document of exactly `total` bytes.
+///
+/// `seed` (typically the spec-generated request body) supplies the fields; a
+/// string field named [`JSON_PADDING_FIELD`] is added and filled with `X`s so
+/// the serialized size lands on `total`. A non-object seed is wrapped as
+/// `{"data": seed}`. If `total` is smaller than the smallest valid document,
+/// that smallest document is returned (and is longer than `total`).
+pub fn build_json_body(seed: Option<&serde_json::Value>, total: usize) -> Vec<u8> {
+    let mut obj = match seed {
+        Some(serde_json::Value::Object(m)) => m.clone(),
+        Some(other) => {
+            let mut m = serde_json::Map::new();
+            m.insert("data".to_string(), other.clone());
+            m
+        }
+        None => serde_json::Map::new(),
+    };
+    obj.insert(JSON_PADDING_FIELD.to_string(), serde_json::Value::String(String::new()));
+    let base = serde_json::to_vec(&obj).unwrap_or_default().len();
+    // `X` serializes as one byte, so the padding length maps 1:1 to output size.
+    let pad = total.saturating_sub(base);
+    obj.insert(JSON_PADDING_FIELD.to_string(), serde_json::Value::String("X".repeat(pad)));
+    serde_json::to_vec(&obj).unwrap_or_default()
 }
 
 /// Hands out evenly spaced request start times across all workers.
@@ -199,7 +251,7 @@ pub async fn run(cfg: ChunkedBenchConfig) -> anyhow::Result<ChunkedBenchResult> 
                 match send_one_chunked_request(&client, &cfg).await {
                     Ok(SendResult { status, sample }) => {
                         successful.fetch_add(1, Ordering::Relaxed);
-                        bytes_sent.fetch_add(cfg.total_size_bytes as u64, Ordering::Relaxed);
+                        bytes_sent.fetch_add(cfg.body_len() as u64, Ordering::Relaxed);
                         let elapsed_ms = req_started.elapsed().as_millis() as u64;
                         latencies.lock().await.push(elapsed_ms);
                         *status_counts.lock().await.entry(status).or_insert(0) += 1;
@@ -285,22 +337,27 @@ async fn send_one_chunked_request(
     cfg: &ChunkedBenchConfig,
 ) -> anyhow::Result<SendResult> {
     let chunk_size = cfg.chunk_size_bytes;
-    let total = cfg.total_size_bytes;
+    let total = cfg.body_len();
     let interval_ms = cfg.chunk_interval_ms;
+    let prebuilt = cfg.body.clone();
 
     // Build a stream that yields fixed-size chunks until `total` bytes are
-    // emitted. No Content-Length is set on the request, so hyper transports
+    // emitted, slicing the pre-built body when there is one and `X` filler
+    // otherwise. No Content-Length is set on the request, so hyper transports
     // the body as Transfer-Encoding: chunked.
     let body_stream = stream! {
         let mut sent: usize = 0;
-        let payload = vec![b'X'; chunk_size];
+        let filler = vec![b'X'; chunk_size];
         while sent < total {
             // Wait *between* chunks: the first chunk goes out immediately.
             if interval_ms > 0 && sent > 0 {
                 tokio::time::sleep(Duration::from_millis(interval_ms)).await;
             }
             let next = std::cmp::min(chunk_size, total - sent);
-            let chunk = payload[..next].to_vec();
+            let chunk = match &prebuilt {
+                Some(b) => b[sent..sent + next].to_vec(),
+                None => filler[..next].to_vec(),
+            };
             sent += next;
             yield Ok::<_, std::io::Error>(chunk);
         }
@@ -372,6 +429,7 @@ mod tests {
             skip_tls_verify: false,
             rps: None,
             no_keep_alive: false,
+            body: None,
         };
         assert!(run(cfg).await.is_err());
     }
@@ -390,6 +448,7 @@ mod tests {
             skip_tls_verify: false,
             rps: None,
             no_keep_alive: false,
+            body: None,
         };
         assert!(run(cfg).await.is_err());
     }
@@ -425,6 +484,7 @@ mod tests {
             skip_tls_verify: false,
             rps: Some(5),
             no_keep_alive: true,
+            body: None,
         };
         let r = run(cfg).await.unwrap();
         // 1s at 5 rps = slots at 0, 200, 400, 600, 800ms. Unpaced, 8 workers
@@ -447,7 +507,82 @@ mod tests {
             skip_tls_verify: false,
             rps: Some(0),
             no_keep_alive: false,
+            body: None,
         };
         assert!(run(cfg).await.is_err());
+    }
+
+    #[test]
+    fn json_body_is_valid_and_exact_size() {
+        let seed = serde_json::json!({"name": "widget", "count": 3});
+        for total in [64usize, 4096, 1_048_576] {
+            let body = build_json_body(Some(&seed), total);
+            assert_eq!(body.len(), total);
+            let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+            assert_eq!(v["name"], "widget");
+            assert_eq!(v["count"], 3);
+        }
+    }
+
+    #[test]
+    fn json_body_without_seed_or_non_object_seed() {
+        let body = build_json_body(None, 100);
+        assert_eq!(body.len(), 100);
+        assert!(serde_json::from_slice::<serde_json::Value>(&body).unwrap().is_object());
+
+        let body = build_json_body(Some(&serde_json::json!([1, 2])), 100);
+        assert_eq!(body.len(), 100);
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(v["data"], serde_json::json!([1, 2]));
+    }
+
+    #[test]
+    fn json_body_smaller_than_minimum_stays_valid() {
+        let body = build_json_body(None, 1);
+        assert_eq!(body, br#"{"_padding":""}"#);
+    }
+
+    #[test]
+    fn detects_json_content_types() {
+        let h = |v: &str| HashMap::from([("content-type".to_string(), v.to_string())]);
+        assert!(is_json_content_type(&h("application/json")));
+        assert!(is_json_content_type(&h("Application/JSON; charset=utf-8")));
+        assert!(is_json_content_type(&h("application/vnd.api+json")));
+        assert!(!is_json_content_type(&h("application/octet-stream")));
+        assert!(!is_json_content_type(&HashMap::new()));
+        let upper = HashMap::from([("Content-Type".to_string(), "application/json".to_string())]);
+        assert!(is_json_content_type(&upper));
+    }
+
+    #[tokio::test]
+    async fn streams_prebuilt_json_body_intact() {
+        let mut server = mockito::Server::new_async().await;
+        let m = server
+            .mock("POST", "/items")
+            .match_body(mockito::Matcher::PartialJson(serde_json::json!({"name": "widget"})))
+            .with_status(201)
+            .expect_at_least(1)
+            .create_async()
+            .await;
+        let body = build_json_body(Some(&serde_json::json!({"name": "widget"})), 10_000);
+        let cfg = ChunkedBenchConfig {
+            target_url: format!("{}/items", server.url()),
+            method: reqwest::Method::POST,
+            concurrency: 1,
+            duration: Duration::from_millis(300),
+            chunk_size_bytes: 777,
+            total_size_bytes: 10_000,
+            chunk_interval_ms: 0,
+            headers: HashMap::from([("Content-Type".into(), "application/json".into())]),
+            skip_tls_verify: false,
+            rps: None,
+            no_keep_alive: false,
+            body: Some(Arc::new(body)),
+        };
+        let r = run(cfg).await.unwrap();
+        assert_eq!(r.failed, 0);
+        assert!(r.status_counts.contains_key(&201), "statuses: {:?}", r.status_counts);
+        assert_eq!(r.bytes_sent, r.successful * 10_000);
+        m.assert_async().await;
     }
 }
