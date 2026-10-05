@@ -1,5 +1,5 @@
 /**
- * Cloud Flows — unified scenario / orchestration / state-machine /
+ * Saved Flows (cloud) — unified scenario / orchestration / state-machine /
  * chain editor backed by the flows table (#9 + #14).
  *
  * Workspace-scoped. Each flow has a kind discriminator + versioned
@@ -126,7 +126,7 @@ const CloudView: React.FC = () => {
                 <div>
                     <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
                         <GitBranch className="w-6 h-6 text-purple-500" />
-                        Cloud Flows
+                        Saved Flows
                     </h1>
                     <p className="text-gray-600 dark:text-gray-400">
                         Versioned scenario / orchestration / state-machine / chain definitions.
