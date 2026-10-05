@@ -19,7 +19,9 @@
 //! `<output>/campaign.jsonl` + `<output>/round-summaries/`, and
 //! `--keep-rounds` prunes old `round_*` dirs, matching `mockforge bench`.
 
-use crate::chunked_bench::{run, ChunkedBenchConfig, ChunkedBenchResult};
+use crate::chunked_bench::{
+    build_json_body, is_json_content_type, run, ChunkedBenchConfig, ChunkedBenchResult,
+};
 use crate::parallel_executor::ParallelExecutor;
 use crate::request_gen::RequestGenerator;
 use crate::spec_parser::SpecParser;
@@ -28,6 +30,7 @@ use anyhow::{bail, Context};
 use futures::StreamExt;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 /// Options shared by every `bench-chunked` mode.
@@ -305,7 +308,21 @@ impl ChunkedCommand {
         url: String,
         method: reqwest::Method,
         headers: &HashMap<String, String>,
+        json_seed: Option<&serde_json::Value>,
     ) -> ChunkedBenchConfig {
+        // A JSON Content-Type gets a real JSON document padded to
+        // --total-size-bytes; WAFs reject `X` filler as malformed JSON (#79).
+        let body = is_json_content_type(headers)
+            .then(|| Arc::new(build_json_body(json_seed, self.total_size_bytes)));
+        if let Some(b) = &body {
+            if b.len() > self.total_size_bytes {
+                eprintln!(
+                    "Note: --total-size-bytes {} is below the smallest valid JSON body; sending {} bytes",
+                    self.total_size_bytes,
+                    b.len()
+                );
+            }
+        }
         ChunkedBenchConfig {
             target_url: url,
             method,
@@ -318,6 +335,7 @@ impl ChunkedCommand {
             skip_tls_verify: self.insecure,
             rps: self.rps,
             no_keep_alive: self.cps,
+            body,
         }
     }
 
@@ -350,7 +368,7 @@ impl ChunkedCommand {
         if !p.is_empty() {
             println!("{p}→ {} {}", self.method.to_uppercase(), t.url);
         }
-        let r = run(self.bench_config(t.url.clone(), method, &t.headers))
+        let r = run(self.bench_config(t.url.clone(), method, &t.headers, None))
             .await
             .context("chunked bench failed")?;
         print_result(
@@ -404,8 +422,9 @@ impl ChunkedCommand {
         // Pre-flight validation. Any failure here aborts before touching
         // the network so the bench doesn't half-run.
         let mut violations: Vec<serde_json::Value> = Vec::new();
-        // (label, method, url, op.path)
-        let mut planned: Vec<(String, String, String, String)> = Vec::with_capacity(ops.len());
+        // (label, method, url, op.path, generated request body)
+        let mut planned: Vec<(String, String, String, String, Option<serde_json::Value>)> =
+            Vec::with_capacity(ops.len());
         for op in &ops {
             let label = op.display_name();
             match RequestGenerator::generate_template(op) {
@@ -426,7 +445,13 @@ impl ChunkedCommand {
                             "detail": format!("`{}` is not a valid HTTP method", op.method),
                         }));
                     } else {
-                        planned.push((label, op.method.to_uppercase(), url, op.path.clone()));
+                        planned.push((
+                            label,
+                            op.method.to_uppercase(),
+                            url,
+                            op.path.clone(),
+                            template.body.clone(),
+                        ));
                     }
                 }
                 Err(e) => {
@@ -477,7 +502,7 @@ impl ChunkedCommand {
 
         let mut outcome = TargetOutcome::default();
         let mut export_records: Vec<serde_json::Value> = Vec::new();
-        for (label, method_str, url, op_path) in &planned {
+        for (label, method_str, url, op_path, json_seed) in &planned {
             let method = match reqwest::Method::from_bytes(method_str.as_bytes()) {
                 Ok(m) => m,
                 Err(_) => {
@@ -488,7 +513,8 @@ impl ChunkedCommand {
             };
             println!();
             println!("{p}→ {} {}  ({})", method_str, op_path, url);
-            match run(self.bench_config(url.clone(), method, &t.headers)).await {
+            let cfg = self.bench_config(url.clone(), method, &t.headers, json_seed.as_ref());
+            match run(cfg).await {
                 Ok(r) => {
                     print_result(p, label, &r);
                     outcome.absorb(&r);

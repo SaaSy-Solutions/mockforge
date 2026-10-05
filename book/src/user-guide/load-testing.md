@@ -127,6 +127,13 @@ mockforge bench-chunked \
 | `--header` | Extra `Name: Value` header; may be repeated |
 | `--insecure` | Skip TLS certificate verification |
 
+**Request body.** With a JSON `Content-Type` (`application/json` or any
+`+json` type, from `--header` or a targets-file `headers` entry), each request
+body is a valid JSON document of exactly `--total-size-bytes`: the
+spec-generated request body for the operation (with `--spec`) plus a
+`"_padding"` string field that fills it to size. Any other content type gets
+`X` filler bytes, which suits `application/octet-stream` uploads.
+
 ### Common patterns
 
 **Slow upload simulation** — high `--chunk-interval-ms` keeps the connection
