@@ -97,6 +97,9 @@ temp/
 # Python
 __pycache__/
 
+# Claude Code per-developer settings (permission allowlists, MCP toggles)
+.claude/settings.local.json
+
 # Claude Code hookify personal rules (ad-hoc per-developer rules stay local)
 .claude/hookify.*.local.md
 # ...except these curated team rules, which are shared/version-controlled.
