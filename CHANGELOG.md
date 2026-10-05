@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.3.230] - 2026-10-04
+
 ### Changed
 
 - **[Cloud]** Audit logs no longer record email addresses, usernames or SAML NameIDs. Member, invitation, SSO login and password-reset events identify people by user id or invitation id; failed logins store a keyed hash of the attempted email instead of the address. (#1087)
@@ -9,6 +11,7 @@
 
 ### Fixed
 
+- **[Reality]** `bench-chunked` sends a valid JSON body when the request's Content-Type is JSON (`application/json` or any `+json` type, from `--header` or a targets-file `headers` entry). The body is the spec-generated request body plus a `_padding` string field, sized to exactly `--total-size-bytes` and streamed in the same chunks. Previously every body was `X` filler, so WAFs flagged each request as malformed JSON. Other content types still get filler. (#79)
 - **[DevX]** Registry audit email hashing compiles under strict unused-qualification lints in both PostgreSQL and SQLite builds. Hashing behavior is unchanged.
 
 - **[Cloud]** Flow creation sends the registry-required configuration across all five editors. Federation details have a labeled Back button; portal dialogs, placeholders and disabled controls use readable theme colors and wrapping action rows, and service route counters retain their spacing.
