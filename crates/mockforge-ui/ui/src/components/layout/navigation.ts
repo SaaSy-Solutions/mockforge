@@ -370,7 +370,7 @@ const cloudLabelOverrides: Record<string, string> = {
   'cloud-traces': 'tab.traces',
   'cloud-contract': 'tab.contracts',
   'cloud-test-runs': 'tab.testRuns',
-  'cloud-flows': 'tab.flowLibrary',
+  'cloud-flows': 'tab.savedFlows',
   'cloud-plugins': 'tab.plugins',
 };
 
