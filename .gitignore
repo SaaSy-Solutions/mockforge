@@ -4,6 +4,7 @@
 .cargo/credentials.toml
 
 # Claude Code session state
+.claude/settings.local.json
 .claude/scheduled_tasks.lock
 
 # Playwright MCP cache
