@@ -18,7 +18,7 @@ This guide provides comprehensive instructions for developing MockForge plugins,
 
 ### Prerequisites
 
-- Rust 1.70+ with WebAssembly target
+- Rust 1.96.0+ with WebAssembly target
 - MockForge Plugin SDK
 - Basic understanding of Rust and WebAssembly
 

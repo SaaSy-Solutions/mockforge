@@ -1,4 +1,5 @@
 [package]
+rust-version.workspace = true
 name = "mockforge-import"
 description = "Import and code generation utilities for MockForge — OpenAPI, Postman, cURL, HAR, Insomnia"
 version.workspace = true

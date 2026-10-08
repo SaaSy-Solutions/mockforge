@@ -22,7 +22,7 @@ This project follows our [Code of Conduct](CODE_OF_CONDUCT.md). By participating
 
 ### Prerequisites
 
-- Rust 1.70 or later
+- Rust 1.96.0 or later (upgrade older toolchains before building)
 - Git
 - Make (optional, for convenience commands)
 

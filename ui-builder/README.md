@@ -72,7 +72,7 @@ Located in `/ui-builder/frontend/`
 ### Prerequisites
 
 - Node.js 18+ (for frontend)
-- Rust 1.70+ (for backend)
+- Rust 1.96.0+ (for backend)
 - MockForge server running
 
 ### Installation
@@ -265,7 +265,7 @@ A Dockerfile will be provided to bundle the UI Builder with MockForge:
 
 ```dockerfile
 # Coming soon
-FROM rust:1.70 AS builder
+FROM rust:1.96 AS builder
 # Build MockForge with UI Builder included
 ```
 

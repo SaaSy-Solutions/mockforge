@@ -7,8 +7,9 @@
 #   - .github/actions/rust-toolchain/action.yml (default input)
 #   - .github/workflows/ci.yml (RUSTUP_TOOLCHAIN, matrix.rust, `== '1.96.0'` guards)
 #   - .github/workflows/registry-e2e.yml (RUSTUP_TOOLCHAIN, `rustup default`)
-# Bump deliberately. The MSRV (1.91) is enforced separately by the dedicated
-# CI job and is intentionally NOT changed by this pin.
+# The minimum supported Rust version is 1.96.0, declared in Cargo.toml and
+# enforced by the dedicated CI job. Bump the build pin and MSRV deliberately;
+# keep package metadata, CI assertions, and compatibility docs in sync.
 [toolchain]
 channel = "1.96.0"
 components = ["clippy", "rustfmt"]

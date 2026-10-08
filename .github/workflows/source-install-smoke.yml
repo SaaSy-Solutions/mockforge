@@ -1,0 +1,89 @@
+name: Source install and package smoke
+
+on:
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - '**/Cargo.toml'
+      - 'Cargo.toml'
+      - 'Cargo.lock'
+      - 'rust-toolchain.toml'
+      - 'scripts/smoke-test-install.sh'
+      - 'scripts/tests/test_msrv_toolchain.py'
+      - '.github/workflows/source-install-smoke.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: source-install-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Install and Package Smoke (Rust 1.96)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      RUSTUP_TOOLCHAIN: "1.96.0"
+      CARGO_BUILD_JOBS: "2"
+      CARGO_INCREMENTAL: "0"
+      CARGO_PROFILE_RELEASE_DEBUG: "0"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Free runner disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+      - uses: ./.github/actions/rust-toolchain
+        with:
+          toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
+      - uses: Swatinem/rust-cache@v2
+        with:
+          env-vars: "CARGO_HOME"
+          shared-key: source-install
+      - name: Verify all Cargo-resolved workspace minimums
+        run: |
+          cargo metadata --locked --no-deps --format-version 1 > "$RUNNER_TEMP/msrv-metadata.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          metadata = json.loads((Path(os.environ["RUNNER_TEMP"]) / "msrv-metadata.json").read_text())
+          members = set(metadata["workspace_members"])
+          packages = [p for p in metadata["packages"] if p["id"] in members]
+          assert packages
+          for package in packages:
+              assert package["rust_version"] == "1.96.0", package["name"]
+          # Leaf packages can be packaged without rewriting local path dependencies.
+          leaves = [
+              p["name"] for p in packages
+              if p["publish"] != [] and p["name"].startswith("mockforge-")
+              and not any(d.get("path") for d in p["dependencies"])
+          ]
+          assert leaves
+          (Path(os.environ["RUNNER_TEMP"]) / "msrv-leaf-packages").write_text("\n".join(leaves) + "\n")
+          print(f"Verified minimum for {len(packages)} workspace members, including private packages")
+          PY
+      - name: Package publishable leaf crates without upload
+        run: |
+          while IFS= read -r package; do
+            cargo package --locked --no-verify -p "$package"
+          done < "$RUNNER_TEMP/msrv-leaf-packages"
+          python3 - <<'PY'
+          from pathlib import Path
+          import tarfile, tomllib
+          archives = list(Path("target/package").glob("*.crate"))
+          assert archives, "No package archives were produced"
+          for archive in archives:
+              with tarfile.open(archive) as package:
+                  manifest = next(m for m in package.getmembers() if m.name.endswith("/Cargo.toml"))
+                  data = tomllib.loads(package.extractfile(manifest).read().decode())
+                  assert data["package"]["rust-version"] == "1.96.0", str(archive)
+          print(f"Verified normalized minimum in {len(archives)} package archives")
+          PY
+      - name: Verify default-feature source build and fresh install
+        run: scripts/smoke-test-install.sh

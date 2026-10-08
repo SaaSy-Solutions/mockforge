@@ -1,4 +1,5 @@
 [package]
+rust-version.workspace = true
 name = "mockforge-runtime-daemon"
 version.workspace = true
 edition = "2021"

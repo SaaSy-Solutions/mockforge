@@ -163,10 +163,16 @@ Only bug fixes and security patches:
 
 ### Minimum Requirements
 
-- **Rust**: 1.70+ (stable)
+- **Rust**: 1.96.0+ (stable), for source builds and `cargo install`
+
 - **Linux**: glibc 2.17+ or musl 1.1.20+
 - **macOS**: 10.13+
 - **Windows**: Windows 10+
+
+The minimum supported Rust version (MSRV) is declared in workspace package
+metadata and checked using the actual compiler and Cargo versions in CI. Users
+on older Rust versions must upgrade before building. This requirement does not
+add a local Rust dependency for prebuilt binaries or container images.
 
 ### Platform Support Guarantees
 

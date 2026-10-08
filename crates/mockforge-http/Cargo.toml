@@ -1,4 +1,5 @@
 [package]
+rust-version.workspace = true
 name = "mockforge-http"
 version.workspace = true
 edition.workspace = true

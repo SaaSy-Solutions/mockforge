@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Changed
+
+- **[DevX] Breaking build requirement:** The minimum supported Rust version is now 1.96.0, matching the pinned build toolchain. Workspace packages declare this minimum and CI verifies the actual compiler and Cargo versions. Users building from source or using `cargo install` on older Rust versions must upgrade first. Prebuilt binaries and container images do not require a local Rust toolchain.
+
 ## [0.3.230] - 2026-10-04
 
 ### Changed

@@ -14,7 +14,7 @@ Native desktop application for MockForge built with Tauri.
 
 ## Prerequisites
 
-- Rust 1.70+
+- Rust 1.96.0+
 - Node.js 18+ and pnpm
 - Tauri CLI: `cargo install tauri-cli` or `npm install -g @tauri-apps/cli`
 

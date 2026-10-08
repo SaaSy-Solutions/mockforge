@@ -1,4 +1,5 @@
 [package]
+rust-version.workspace = true
 name = "mockforge-openapi"
 description = "OpenAPI 3.x / Swagger 2.0 spec loading, parsing, schema validation, and response selection for MockForge"
 version.workspace = true
