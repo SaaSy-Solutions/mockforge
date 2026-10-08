@@ -1,0 +1,94 @@
+name: PR 1154 paired performance diagnostic
+
+on:
+  push:
+    branches: [review/1154-paired-performance]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: review-1154-paired-performance
+  cancel-in-progress: false
+
+env:
+  # Immutable base and candidate; candidate differs only in Cargo.lock.
+  BASE_SHA: 8376126a62c0c237f3afb5c8d6717391564a9272
+  CANDIDATE_SHA: bb25756481e9963399af51e8a871ca61baffd006
+  RUSTUP_TOOLCHAIN: "1.96.0"
+  CARGO_BUILD_JOBS: "2"
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: never
+
+jobs:
+  paired:
+    name: Paired core benchmarks (Rust 1.96, Linux)
+    # One initial branch push, one attempt. No workflow_dispatch or PR trigger.
+    # Publish the final diagnostic commit as the branch's creation push.
+    if: github.event.created && github.run_attempt == 1
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Stage diagnostic and initialize incomplete report outside checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          result="$RUNNER_TEMP/1154-paired-results"
+          mkdir -p "$result/diagnostic"
+          cp scripts/paired_benchmarks.py "$result/diagnostic/"
+          cp scripts/tests/test_paired_benchmarks.py "$result/diagnostic/"
+          cp .github/workflows/1154-paired-performance.yml "$result/diagnostic/"
+          printf 'INCOMPLETE: paired diagnostic has not finished. Do not infer performance results.\n' > "$result/report.txt"
+          echo "PAIRED_RESULTS=$result" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_DIR=$RUNNER_TEMP/1154-paired-target" >> "$GITHUB_ENV"
+          echo "CRITERION_HOME=$RUNNER_TEMP/1154-paired-criterion" >> "$GITHUB_ENV"
+
+      - name: Test paired report validation and classification
+        run: python3 "$PAIRED_RESULTS/diagnostic/test_paired_benchmarks.py"
+
+      - name: Free runner disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+
+      - name: Install fixed Rust toolchain
+        uses: ./.github/actions/rust-toolchain
+        with:
+          toolchain: "1.96.0"
+
+      - name: Install native build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
+
+      # Deliberately no restored/saved build cache and no compiler/profile changes
+      # between variants. Both use this checkout and one shared Cargo target dir.
+      - name: Warm both variants and run three alternating pairs
+        timeout-minutes: 38
+        run: python3 "$PAIRED_RESULTS/diagnostic/paired_benchmarks.py" run --root "$PAIRED_RESULTS" --source "$GITHUB_WORKSPACE"
+
+      - name: Validate all raw results and write paired report
+        if: always()
+        run: python3 "$PAIRED_RESULTS/diagnostic/paired_benchmarks.py" report --root "$PAIRED_RESULTS"
+
+      - name: Add plain report to job summary
+        if: always()
+        shell: bash
+        run: |
+          if [ -f "$RUNNER_TEMP/1154-paired-results/report.txt" ]; then
+            cat "$RUNNER_TEMP/1154-paired-results/report.txt" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "INCOMPLETE: diagnostic setup failed; inspect job logs." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Preserve all raw runs, metadata, logs, and report
+        if: always()
+        uses: actions/upload-artifact@v7.0.1
+        with:
+          name: pr-1154-paired-performance-${{ github.run_id }}-attempt-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/1154-paired-results/
+          retention-days: 30
+          if-no-files-found: error
