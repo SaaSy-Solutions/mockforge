@@ -410,6 +410,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
+      # Override the workflow-wide stable pin for every command in this job.
+      RUSTUP_TOOLCHAIN: "1.91"
       CARGO_INCREMENTAL: "0"
       CARGO_BUILD_JOBS: "2"
     steps:
@@ -419,7 +421,19 @@ jobs:
     - name: Install Rust toolchain (MSRV)
       uses: ./.github/actions/rust-toolchain
       with:
-        toolchain: "1.91"  # MSRV - matches highest requirement from dependencies (aws-sdk, async-graphql, time)
+        toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
+
+    - name: Test MSRV toolchain guard
+      run: python3 scripts/tests/test_msrv_toolchain.py
+
+    - name: Verify active MSRV toolchain
+      shell: bash
+      run: |
+        rustc_version="$(rustc --version)"
+        cargo_version="$(cargo --version)"
+        printf '%s\n%s\n' "$rustc_version" "$cargo_version"
+        [[ "$rustc_version" == "rustc ${RUSTUP_TOOLCHAIN}."* ]]
+        [[ "$cargo_version" == "cargo ${RUSTUP_TOOLCHAIN}."* ]]
 
     - name: Install native build dependencies
       run: |

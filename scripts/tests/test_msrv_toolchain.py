@@ -1,0 +1,63 @@
+"""Verify the MSRV lane selects and checks the intended Rust toolchain."""
+
+from pathlib import Path
+import os
+import subprocess
+import tempfile
+import unittest
+
+ROOT = Path(__file__).resolve().parents[2]
+WORKFLOW = ROOT / ".github/workflows/ci.yml"
+
+
+def msrv_job():
+    workflow = WORKFLOW.read_text()
+    return workflow.split("\n  msrv:\n", 1)[1].split("\n  typos:\n", 1)[0]
+
+
+class MsrvToolchainTest(unittest.TestCase):
+    def test_job_overrides_global_toolchain_and_installs_same_version(self):
+        workflow = WORKFLOW.read_text()
+        self.assertIn('RUSTUP_TOOLCHAIN: "1.96.0"', workflow.split("\njobs:\n", 1)[0])
+        job = msrv_job()
+        self.assertIn('RUSTUP_TOOLCHAIN: "1.91"', job)
+        self.assertIn('toolchain: ${{ env.RUSTUP_TOOLCHAIN }}', job)
+        self.assertIn("cargo check --workspace", job)
+        self.assertIn("python3 scripts/tests/test_msrv_toolchain.py", job)
+
+    def verify_versions(self, rustc_version, cargo_version):
+        step = msrv_job().split("- name: Verify active MSRV toolchain\n", 1)[1]
+        step = step.split("\n    - name:", 1)[0]
+        script = step.split("      run: |\n", 1)[1]
+        script = "\n".join(line.removeprefix("        ") for line in script.splitlines())
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for tool, version in (("rustc", rustc_version), ("cargo", cargo_version)):
+                executable = root / tool
+                executable.write_text(f"#!/bin/sh\nprintf '%s\\n' '{tool} {version} (test)'\n")
+                executable.chmod(0o755)
+            return subprocess.run(
+                ["bash", "--noprofile", "--norc", "-e", "-o", "pipefail", "-c", script],
+                env={**os.environ, "PATH": f"{root}:{os.environ['PATH']}", "RUSTUP_TOOLCHAIN": "1.91"},
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+
+    def test_intended_versions_pass_and_are_printed(self):
+        result = self.verify_versions("1.91.1", "1.91.0")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("rustc 1.91.1", result.stdout)
+        self.assertIn("cargo 1.91.0", result.stdout)
+
+    def test_overridden_compiler_fails(self):
+        result = self.verify_versions("1.96.0", "1.91.0")
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_overridden_cargo_fails(self):
+        result = self.verify_versions("1.91.1", "1.96.0")
+        self.assertNotEqual(result.returncode, 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
