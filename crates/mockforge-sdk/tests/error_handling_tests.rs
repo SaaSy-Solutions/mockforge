@@ -14,22 +14,41 @@ async fn test_server_builder_creation() {
 
 #[tokio::test]
 async fn test_port_in_use_error() {
-    let server1 = Box::pin(MockServer::new().port(33000).start())
+    let server1 = Box::pin(MockServer::new().host("127.0.0.1").port(0).start())
         .await
         .expect("Failed to start first server");
 
-    // Try to start second server on same port
-    let result = Box::pin(MockServer::new().port(33000).start()).await;
+    let port = server1.port();
+    let address = std::net::SocketAddr::from(([127, 0, 0, 1], port));
 
-    // Should fail because port is already in use
-    // Note: This might succeed if port binding isn't exclusive, so we just check the result
-    if let Err(err) = result {
-        let err_msg = format!("{err:?}");
-        // The error message should be helpful
-        assert!(!err_msg.is_empty());
+    // Capture the platform's native bind error while server1 owns the port.
+    // Calling err() drops any unexpectedly successful control listener.
+    let native_error = tokio::net::TcpListener::bind(address).await.err();
+
+    let result = Box::pin(MockServer::new().host("127.0.0.1").port(port).start()).await;
+
+    // Clean up both servers even if the second bind unexpectedly succeeds.
+    let (second_error, second_stop_result) = match result {
+        Ok(server2) => (None, Box::pin(server2.stop()).await),
+        Err(error) => (Some(error), Ok(())),
+    };
+    let first_stop_result = Box::pin(server1.stop()).await;
+
+    second_stop_result.expect("Failed to stop second server");
+    first_stop_result.expect("Failed to stop first server");
+
+    assert_ne!(port, 0, "First server should report its assigned port");
+
+    let native_error = native_error.expect("Control bind should fail on the occupied port");
+    assert_eq!(native_error.kind(), std::io::ErrorKind::AddrInUse);
+
+    let error = second_error.expect("Second server should not bind to the occupied port");
+    match error {
+        Error::General(message) => {
+            assert_eq!(message, format!("Failed to bind to {address}: {native_error}"));
+        }
+        other => panic!("Expected a bind failure, got: {other:?}"),
     }
-
-    Box::pin(server1.stop()).await.expect("Failed to stop server");
 }
 
 #[tokio::test]
