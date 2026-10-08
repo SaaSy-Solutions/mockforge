@@ -1,4 +1,5 @@
 [package]
+rust-version.workspace = true
 name = "mockforge-chaos-ml"
 # Wired into the workspace (#796) but not yet consumed by any published
 # crate, so it does not ship to crates.io. Flip to true + add to

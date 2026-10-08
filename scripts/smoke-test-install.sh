@@ -68,8 +68,8 @@ fi
 TMP=$(mktemp -d)
 trap 'rm -rf "$TMP"' EXIT
 
-blue "==> [2/2] cargo install --locked --path crates/mockforge-cli --root $TMP --force"
-if ! cargo install --locked --path crates/mockforge-cli --root "$TMP" --force; then
+blue "==> [2/2] cargo install --locked --path crates/mockforge-cli --root $TMP --target-dir $TMP/target --force"
+if ! cargo install --locked --path crates/mockforge-cli --root "$TMP" --target-dir "$TMP/target" --force; then
   red "FAIL: cargo install --locked --path failed."
   red "      Users running 'cargo install mockforge-cli' would hit the same error."
   exit 1

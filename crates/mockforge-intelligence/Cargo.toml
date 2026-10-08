@@ -1,4 +1,5 @@
 [package]
+rust-version.workspace = true
 name = "mockforge-intelligence"
 description = "AI-powered behavior, response generation, and behavioral cloning for MockForge"
 version.workspace = true

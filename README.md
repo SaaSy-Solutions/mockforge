@@ -248,6 +248,10 @@ See the [VS Code Extension README](vscode-extension/README.md) for detailed feat
 
 ### Installation
 
+Building from source or using `cargo install` requires Rust 1.96.0 or later.
+If you use an older Rust toolchain, upgrade it before building; prebuilt binaries
+and container users do not need a local Rust installation.
+
 ```bash
 # Install from crates.io
 cargo install mockforge-cli
@@ -1434,7 +1438,7 @@ export MOCKFORGE_LOG_LEVEL=debug
 
 ### Prerequisites
 
-- Rust 1.70 or later
+- Rust 1.96.0 or later
 - Make
 - Python 3 (for some tooling)
 

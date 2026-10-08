@@ -1,4 +1,5 @@
 [package]
+rust-version.workspace = true
 name = "mockforge-graphql"
 version.workspace = true
 edition.workspace = true
