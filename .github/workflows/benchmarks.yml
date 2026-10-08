@@ -14,6 +14,8 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/benchmarks.yml'
+      - '.github/scripts/compare-benchmarks.js'
+      - 'scripts/tests/test_benchmark_gate.py'
   push:
     branches:
       - main
@@ -55,6 +57,9 @@ jobs:
 
       - name: Install Rust toolchain
         uses: ./.github/actions/rust-toolchain
+
+      - name: Test benchmark comparison gate
+        run: python3 scripts/tests/test_benchmark_gate.py
 
       - name: Cache cargo registry
         uses: actions/cache@v6
@@ -102,9 +107,7 @@ jobs:
         if: github.event_name == 'pull_request'
         id: compare
         continue-on-error: true
-        run: |
-          node .github/scripts/compare-benchmarks.js compare
-          echo "comparison_status=$?" >> $GITHUB_OUTPUT
+        run: node .github/scripts/compare-benchmarks.js compare
 
       - name: Save new baseline (main branch only)
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -203,7 +206,9 @@ jobs:
             }
 
       - name: Check for performance regression
-        if: github.event_name == 'pull_request' && steps.compare.outputs.comparison_status == '1'
+        # outcome preserves the failure before continue-on-error changes the
+        # conclusion. An output after a failed command is never set by bash -e.
+        if: github.event_name == 'pull_request' && steps.compare.outcome == 'failure'
         run: |
-          echo "::error::Performance regression detected! Review the benchmark report for details."
+          echo "::error::Benchmark comparison failed. Review the report and comparison logs."
           exit 1
