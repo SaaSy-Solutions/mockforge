@@ -633,6 +633,7 @@
       "--method": 1,
       "--operation-id": 1,
       "--output": 1,
+      "--raw-body": 0,
       "--repeat-until": 1,
       "--rounds": 1,
       "--rps": 1,
@@ -5760,7 +5761,7 @@
    },
    "variadic": false
   },
-  "version": "mockforge 0.3.229"
+  "version": "mockforge 0.3.231"
  },
  "mockforge-plugin": {
   "root": {

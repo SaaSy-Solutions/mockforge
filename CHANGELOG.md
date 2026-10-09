@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.3.231] - 2026-10-09
+
 ### Added
 
 - **[Reality]** `bench-chunked --raw-body` sends the original raw filler while preserving any declared Content-Type, for negative WAF testing. Chunked reports distinguish per-round elapsed time, configured rate limits, and measured per-target request throughput. (#79)

@@ -103,13 +103,15 @@ class MsrvToolchainTest(unittest.TestCase):
         script = (ROOT / "scripts/smoke-test-install.sh").read_text()
         self.assertIn('--root "$TMP" --target-dir "$TMP/target" --force', script)
 
-    def test_unreleased_changelog_entry_is_mirrored(self):
+    def test_changelogs_mirror_unreleased_and_document_msrv(self):
         sections = []
         for filename in ("CHANGELOG.md", "book/src/reference/changelog.md"):
-            text = (ROOT / filename).read_text().split("## [Unreleased]", 1)[1]
+            changelog = (ROOT / filename).read_text()
+            # The notice moves into a versioned section when a release is cut.
+            self.assertIn("minimum supported Rust version is now 1.96.0", changelog)
+            text = changelog.split("## [Unreleased]", 1)[1]
             sections.append(re.split(r"^## \[\d", text, maxsplit=1, flags=re.MULTILINE)[0])
         self.assertEqual(*sections)
-        self.assertIn("minimum supported Rust version is now 1.96.0", sections[0])
 
 
 if __name__ == "__main__":
