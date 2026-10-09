@@ -7,13 +7,13 @@ import { cloudTestRunsApi } from '../services/api/cloudTestRuns';
  * Streams `/api/v1/test-runs/{id}/events` via the shared SSE endpoint
  * (works for every run kind: contract tests, chaos campaigns, flows,
  * clone training). Closes itself when the terminal `done` event arrives;
- * reconnect handling is delegated to the browser's EventSource +
- * Last-Event-ID replay on the server.
+ * Failed streams close rather than reconnect indefinitely. Users can retry
+ * explicitly; retained events and pending render work are bounded.
  */
 
 interface StreamEvent {
     type: string;
-    data: unknown;
+    text: string;
     received_at: string;
 }
 
@@ -57,29 +57,62 @@ export const RunLiveTail: React.FC<RunLiveTailProps> = ({
 }) => {
     const [events, setEvents] = useState<StreamEvent[]>([]);
     const [streaming, setStreaming] = useState(false);
-    const sourceRef = useRef<EventSource | null>(null);
+    const [error, setError] = useState<string | null>(null);
+    const [retry, setRetry] = useState(0);
+    const onDoneRef = useRef(onDone);
+    onDoneRef.current = onDone;
+    const lineLimit = Number.isFinite(maxLines) ? Math.min(500, Math.max(1, Math.floor(maxLines))) : 500;
 
     useEffect(() => {
+        setEvents([]);
+        setError(null);
+        setStreaming(false);
         if (!inflight || !runId) return;
 
         const es = cloudTestRunsApi.streamRunEvents(runId);
-        sourceRef.current = es;
-        setStreaming(true);
+        let closed = false;
+        let pending: StreamEvent[] = [];
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const flush = () => {
+            timer = undefined;
+            if (pending.length === 0) return;
+            const batch = pending;
+            pending = [];
+            setEvents((prev) => [...prev, ...batch].slice(-lineLimit));
+        };
+        const close = () => {
+            closed = true;
+            es.close();
+            setStreaming(false);
+            clearTimeout(timer);
+            flush();
+        };
+        es.onopen = () => { if (!closed) setStreaming(true); };
 
         const onMessage = (ev: MessageEvent) => {
+            if (closed || ev.type === 'ping') return;
+            if (ev.data.length > 65536) {
+                close();
+                setError('Live stream stopped because an event was too large.');
+                return;
+            }
             try {
                 const data = JSON.parse(ev.data);
-                setEvents((prev) => [
-                    ...prev.slice(-(maxLines - 1)),
-                    { type: ev.type || 'message', data, received_at: new Date().toISOString() },
-                ]);
+                pending.push({ type: ev.type || 'message', text: JSON.stringify(data).slice(0, 2000), received_at: new Date().toISOString() });
+                if (pending.length > lineLimit) pending.splice(0, pending.length - lineLimit);
+                if (timer === undefined) timer = setTimeout(flush, 100);
                 if (ev.type === 'done') {
-                    setStreaming(false);
-                    es.close();
-                    onDone?.(data);
+                    close();
+                    onDoneRef.current?.(data);
+                } else if (ev.type === 'stream_error') {
+                    close();
+                    setError('The live stream failed. Retry to reconnect.');
                 }
             } catch {
-                /* ignore non-JSON ping payloads */
+                if (ev.type === 'done' || ev.type === 'stream_error') {
+                    close();
+                    setError('The live stream ended with an invalid response.');
+                }
             }
         };
 
@@ -87,14 +120,19 @@ export const RunLiveTail: React.FC<RunLiveTailProps> = ({
             es.addEventListener(t, onMessage);
         }
         es.addEventListener('message', onMessage);
-        es.onerror = () => setStreaming(false);
+        es.onerror = () => {
+            if (closed) return;
+            close();
+            setError('Live connection interrupted. Retry to reconnect.');
+        };
 
         return () => {
+            closed = true;
+            clearTimeout(timer);
+            pending = [];
             es.close();
-            sourceRef.current = null;
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [runId, inflight]);
+    }, [runId, inflight, lineLimit, retry]);
 
     if (!inflight && events.length === 0) return null;
 
@@ -112,6 +150,14 @@ export const RunLiveTail: React.FC<RunLiveTailProps> = ({
                     </span>
                 )}
             </div>
+            {error && (
+                <div role="alert" className="mb-2 flex items-center gap-2 text-sm text-red-700 dark:text-red-400">
+                    <span>{error}</span>
+                    <button type="button" className="underline" onClick={() => setRetry((value) => value + 1)}>
+                        Retry live stream
+                    </button>
+                </div>
+            )}
             <div className="bg-black/90 text-green-300 dark:text-green-300 rounded p-3 font-mono text-xs max-h-72 overflow-y-auto">
                 {events.length === 0 ? (
                     <div className="text-gray-500 italic">Waiting for events…</div>
@@ -123,7 +169,7 @@ export const RunLiveTail: React.FC<RunLiveTailProps> = ({
                                 <span className="text-gray-500">
                                     [{new Date(e.received_at).toLocaleTimeString()}]
                                 </span>{' '}
-                                <span className="text-cyan-400">{e.type}</span> {JSON.stringify(e.data)}
+                                <span className="text-cyan-400">{e.type}</span> {e.text}
                             </div>
                         ))
                 )}
