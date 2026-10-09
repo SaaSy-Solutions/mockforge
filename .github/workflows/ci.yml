@@ -300,6 +300,9 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v7
 
+    - name: Test plugin publication request boundary
+      run: python3 scripts/tests/test_plugin_publish_request.py
+
     - name: Install Rust toolchain
       uses: ./.github/actions/rust-toolchain
 

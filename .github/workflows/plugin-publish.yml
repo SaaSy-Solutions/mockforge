@@ -3,7 +3,7 @@ name: Publish Plugin to Registry
 on:
   push:
     tags:
-      - 'v*.*.*'
+      # Crate releases belong to release.yml, never the plugin publisher.
       - 'plugin-*'
   workflow_dispatch:
     inputs:
@@ -27,9 +27,33 @@ env:
   MOCKFORGE_REGISTRY_TOKEN: ${{ secrets.MOCKFORGE_REGISTRY_TOKEN }}
 
 jobs:
+  request:
+    name: Classify plugin request
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    env:
+      MOCKFORGE_REGISTRY_TOKEN: ''
+    outputs:
+      requested: ${{ steps.request.outputs.requested }}
+      plugin_path: ${{ steps.request.outputs.plugin_path }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Validate plugin request and path
+        id: request
+        env:
+          INPUT_PLUGIN_PATH: ${{ inputs.plugin_path }}
+        run: python3 scripts/plugin_publish_request.py
+
   validate:
     name: Validate Plugin
+    needs: request
+    if: needs.request.outputs.requested == 'true'
     runs-on: ubuntu-latest
+    env:
+      PLUGIN_PATH: ${{ needs.request.outputs.plugin_path }}
     outputs:
       plugin_name: ${{ steps.manifest.outputs.name }}
       plugin_version: ${{ steps.manifest.outputs.version }}
@@ -37,6 +61,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+
+      - name: Read plugin manifest
+        id: manifest
+        run: |
+          PLUGIN_NAME=$(yq eval '.name' "./$PLUGIN_PATH/plugin.yaml")
+          PLUGIN_VERSION=$(yq eval '.version' "./$PLUGIN_PATH/plugin.yaml")
+          echo "name=$PLUGIN_NAME" >> $GITHUB_OUTPUT
+          echo "version=$PLUGIN_VERSION" >> $GITHUB_OUTPUT
+          echo "Plugin: $PLUGIN_NAME v$PLUGIN_VERSION"
 
       - name: Setup Rust
         uses: ./.github/actions/rust-toolchain
@@ -47,27 +80,21 @@ jobs:
         run: |
           cargo build --release --package mockforge-cli --features all-protocols
 
-      - name: Read plugin manifest
-        id: manifest
-        run: |
-          PLUGIN_NAME=$(yq eval '.name' plugin.yaml)
-          PLUGIN_VERSION=$(yq eval '.version' plugin.yaml)
-          echo "name=$PLUGIN_NAME" >> $GITHUB_OUTPUT
-          echo "version=$PLUGIN_VERSION" >> $GITHUB_OUTPUT
-          echo "Plugin: $PLUGIN_NAME v$PLUGIN_VERSION"
-
       - name: Validate manifest
         run: |
-          ./target/release/mockforge plugin validate
+          ./target/release/mockforge plugin validate "$GITHUB_WORKSPACE/$PLUGIN_PATH"
 
       - name: Run tests
         run: |
-          cargo test --release
+          cargo test --release --manifest-path "./$PLUGIN_PATH/Cargo.toml"
 
   security-scan:
     name: Security Scan
-    needs: validate
+    needs: [request, validate]
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ needs.request.outputs.plugin_path }}
 
     steps:
       - name: Checkout code
@@ -88,12 +115,14 @@ jobs:
         uses: rustsec/audit-check@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          working-directory: ${{ needs.request.outputs.plugin_path }}
 
       - name: Run cargo-deny
         uses: EmbarkStudios/cargo-deny-action@v2
         with:
           log-level: warn
           command: check licenses sources
+          manifest-path: ./${{ needs.request.outputs.plugin_path }}/Cargo.toml
 
       - name: Security scan summary
         run: |
@@ -101,7 +130,13 @@ jobs:
 
   build:
     name: Build Plugin
-    needs: [validate, security-scan]
+    needs: [request, validate, security-scan]
+    env:
+      PLUGIN_PATH: ${{ needs.request.outputs.plugin_path }}
+      CARGO_TARGET_DIR: ${{ github.workspace }}/target
+    defaults:
+      run:
+        shell: bash
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -130,15 +165,15 @@ jobs:
           override: true
 
       - name: Build plugin
-        run: cargo build --release --target ${{ matrix.target }}
+        run: cargo build --release --manifest-path "./$PLUGIN_PATH/Cargo.toml" --target ${{ matrix.target }}
 
       - name: Package plugin
         run: |
           mkdir -p artifacts
           cp target/${{ matrix.target }}/release/*.${{ matrix.ext }} artifacts/ || true
-          cp plugin.yaml artifacts/
-          cp README.md artifacts/ || true
-          cp LICENSE artifacts/ || true
+          cp "./$PLUGIN_PATH/plugin.yaml" artifacts/
+          cp "./$PLUGIN_PATH/README.md" artifacts/ || true
+          cp "./$PLUGIN_PATH/LICENSE" artifacts/ || true
 
       - name: Calculate checksums
         run: |
@@ -153,7 +188,9 @@ jobs:
 
   publish:
     name: Publish to Registry
-    needs: [validate, build]
+    needs: [request, validate, build]
+    env:
+      PLUGIN_PATH: ${{ needs.request.outputs.plugin_path }}
     runs-on: ubuntu-latest
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)
 
@@ -181,7 +218,8 @@ jobs:
 
       - name: Publish plugin
         run: |
-          ./target/release/mockforge plugin registry publish
+          cd -- "$PLUGIN_PATH"
+          "$GITHUB_WORKSPACE/target/release/mockforge" plugin registry publish
         env:
           MOCKFORGE_REGISTRY_TOKEN: ${{ secrets.MOCKFORGE_REGISTRY_TOKEN }}
 
@@ -207,7 +245,9 @@ jobs:
 
   dry-run:
     name: Dry Run (Validation Only)
-    needs: [validate, security-scan, build]
+    needs: [request, validate, security-scan, build]
+    env:
+      PLUGIN_PATH: ${{ needs.request.outputs.plugin_path }}
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch' && inputs.dry_run
 
@@ -226,7 +266,8 @@ jobs:
 
       - name: Dry run publish
         run: |
-          ./target/release/mockforge plugin registry publish --dry-run
+          cd -- "$PLUGIN_PATH"
+          "$GITHUB_WORKSPACE/target/release/mockforge" plugin registry publish --dry-run
 
       - name: Summary
         run: |
