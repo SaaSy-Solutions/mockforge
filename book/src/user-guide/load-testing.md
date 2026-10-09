@@ -119,6 +119,7 @@ mockforge bench-chunked \
 | `--duration` | Run length (`30s`, `15m`, ...); **per operation** with `--spec` |
 | `--chunk-size-bytes` | Bytes per chunk emitted into the body stream |
 | `--total-size-bytes` | Total body size per request |
+| `--raw-body` | Send raw `X` filler for any declared Content-Type (negative testing); preserves request headers |
 | `--chunk-interval-ms` | Pause between chunks (0 = back-to-back); the first chunk goes out with the headers |
 | `--rps` | Cap on request starts per second, per target (shared by its workers) |
 | `--cps` | New TCP/TLS connection per request, so connections/s = requests/s |
@@ -133,6 +134,21 @@ body is a valid JSON document of exactly `--total-size-bytes`: the
 spec-generated request body for the operation (with `--spec`) plus a
 `"_padding"` string field that fills it to size. Any other content type gets
 `X` filler bytes, which suits `application/octet-stream` uploads.
+
+**Negative content-type testing.** Add `--raw-body` to send the original
+`X` filler even when the targets file or `--header` declares
+`application/json` (or any other type). The Content-Type header stays exactly
+as configured; only body generation changes. This intentionally produces
+invalid JSON for testing WAF rejection. It works with single targets,
+`--targets-file`, `--spec`, and campaigns. Omit it to keep automatic JSON
+body generation.
+
+```bash
+mockforge bench-chunked --targets-file vs_list1.json --spec oas.json \
+  --max-concurrency 2 --concurrency 10 --duration 30s \
+  --chunk-size-bytes 4096 --total-size-bytes 1048576 --chunk-interval-ms 50 \
+  --insecure --raw-body --repeat-until 24h --keep-rounds 2
+```
 
 ### Common patterns
 
@@ -198,6 +214,42 @@ mockforge bench-chunked --targets-file targets.txt --spec api.yaml \
 `--rps` is a ceiling: with 128 s uploads and `--concurrency 10`, a target can
 only start about 10 / 128 ≈ 0.08 requests per second, so raise
 `--concurrency` to reach higher rates.
+
+### Reading chunked reports
+
+- `campaign_elapsed_seconds` is cumulative wall-clock time since the campaign
+  started, recorded after each round. In round 1, 33517 seconds means that
+  first pass ended after about 9 hours 19 minutes. In later rounds it includes
+  previous rounds; it is not the current round's duration.
+- `round_elapsed_seconds` measures just that round, including planning and
+  any wait for targets. `--duration` is per operation, not per round. Every
+  target runs every POST/PUT/PATCH operation sequentially; active targets run
+  in parallel. In-flight uploads may finish after an operation's duration.
+  Slow responses, failed connections, and timeouts can extend the pass.
+- `rps_per_target` is the configured request-start limit from `--rps`.
+  `null` means no limit was supplied, not zero throughput or a rate rounded
+  down. `rate_limit_enabled` states whether the limit is active.
+- Each target's `measured_rps` is completed request attempts (including
+  transport failures and non-2xx responses) divided by `elapsed_seconds`,
+  the sum of its operation runtimes. It is numeric even when no limit was
+  configured. This average includes time spent finishing in-flight requests;
+  it is not the configured start rate or a successful-response rate.
+  With `--export-requests`, each operation also has `result.req_per_sec`.
+- `new_connection_per_request` is true only with `--cps`. Without it,
+  connections can be reused. With `--cps --rps 1`, each target starts at most
+  one request per second, each on a fresh connection. Failed connection
+  attempts can mean fewer established connections than request starts;
+  these reports do not measure established connections per second.
+- `raw_body` records whether the raw filler override was selected.
+  Existing report fields are retained; these explanatory fields are additive.
+
+For 1 MiB uploads in 4 KiB chunks with 50 ms between chunks, the minimum
+upload time is `(256 - 1) × 0.05 = 12.75` seconds. Ten workers can sustain
+roughly `10 / 12.75 ≈ 0.78` requests/s per target before response latency.
+`--rps 1` is still a ceiling; increase `--concurrency` (at least 13 workers
+before allowing for response latency) to approach one request/s. Use
+`--operation-id ID` to test rate controls on one operation before running the
+whole spec.
 
 **Chunked + chaos matching** — pair with `chunked_only: true` in
 `fault_injection.request_matcher` (see

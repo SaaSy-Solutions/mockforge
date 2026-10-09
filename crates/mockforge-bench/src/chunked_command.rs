@@ -50,6 +50,8 @@ pub struct ChunkedCommand {
     pub duration: Duration,
     pub chunk_size_bytes: usize,
     pub total_size_bytes: usize,
+    /// Send raw `X` filler regardless of the declared Content-Type.
+    pub raw_body: bool,
     pub chunk_interval_ms: u64,
     pub headers: HashMap<String, String>,
     pub insecure: bool,
@@ -86,6 +88,7 @@ struct TargetOutcome {
     successful: u64,
     failed: u64,
     bytes_sent: u64,
+    elapsed: Duration,
     status_counts: HashMap<u16, u64>,
     /// An operation errored out entirely (vs. individual requests failing).
     run_failed: bool,
@@ -97,6 +100,7 @@ impl TargetOutcome {
         self.successful += r.successful;
         self.failed += r.failed;
         self.bytes_sent += r.bytes_sent;
+        self.elapsed += r.elapsed;
         for (code, n) in &r.status_counts {
             *self.status_counts.entry(*code).or_insert(0) += n;
         }
@@ -114,6 +118,23 @@ impl ChunkedCommand {
         }
         if self.rounds == Some(0) {
             bail!("--rounds must be >= 1 (or omit it for a single pass / --repeat-until)");
+        }
+        println!(
+            "Request-start limit per target: {}",
+            self.rps
+                .map(|n| format!("{n} req/s"))
+                .unwrap_or_else(|| "none (--rps not set)".into())
+        );
+        println!(
+            "Connections: {}",
+            if self.cps {
+                "new TCP/TLS connection per request (--cps)"
+            } else {
+                "pooled (--cps not set)"
+            }
+        );
+        if self.raw_body {
+            println!("Request bodies: raw X filler; declared Content-Type preserved (--raw-body)");
         }
         let max_rounds = self.rounds.unwrap_or(if self.repeat_until.is_some() {
             u32::MAX
@@ -161,9 +182,17 @@ impl ChunkedCommand {
                 campaign_start.elapsed().as_secs(),
                 round_output.display()
             );
+            let round_start = std::time::Instant::now();
             let (ok, summary) = self.execute_pass(&round_output).await?;
             all_ok &= ok;
-            write_round_record(&self.output, round, campaign_start.elapsed(), ok, summary)?;
+            write_round_record(
+                &self.output,
+                round,
+                campaign_start.elapsed(),
+                round_start.elapsed(),
+                ok,
+                summary,
+            )?;
             if let Some(keep) = self.keep_rounds {
                 ParallelExecutor::prune_old_rounds(&self.output, keep);
             }
@@ -192,6 +221,12 @@ impl ChunkedCommand {
                     "bytes_sent": o.bytes_sent,
                     "status_counts": o.status_counts,
                     "run_failed": o.run_failed,
+                    "elapsed_seconds": o.elapsed.as_secs_f64(),
+                    "measured_rps": measured_rps(o.total_requests, o.elapsed),
+                    "rps_per_target": self.rps,
+                    "rate_limit_enabled": self.rps.is_some(),
+                    "new_connection_per_request": self.cps,
+                    "raw_body": self.raw_body,
                 });
                 Ok((!o.run_failed, summary))
             }
@@ -268,6 +303,8 @@ impl ChunkedCommand {
                         "bytes_sent": o.bytes_sent,
                         "status_counts": o.status_counts,
                         "run_failed": o.run_failed,
+                        "elapsed_seconds": o.elapsed.as_secs_f64(),
+                        "measured_rps": measured_rps(o.total_requests, o.elapsed),
                     }));
                 }
                 Err(e) => {
@@ -294,7 +331,9 @@ impl ChunkedCommand {
             "total_size_bytes": self.total_size_bytes,
             "chunk_interval_ms": self.chunk_interval_ms,
             "rps_per_target": self.rps,
+            "rate_limit_enabled": self.rps.is_some(),
             "new_connection_per_request": self.cps,
+            "raw_body": self.raw_body,
             "targets": rows,
         });
         std::fs::write(&path, serde_json::to_string_pretty(&payload)?)
@@ -312,7 +351,7 @@ impl ChunkedCommand {
     ) -> ChunkedBenchConfig {
         // A JSON Content-Type gets a real JSON document padded to
         // --total-size-bytes; WAFs reject `X` filler as malformed JSON (#79).
-        let body = is_json_content_type(headers)
+        let body = (!self.raw_body && is_json_content_type(headers))
             .then(|| Arc::new(build_json_body(json_seed, self.total_size_bytes)));
         if let Some(b) = &body {
             if b.len() > self.total_size_bytes {
@@ -594,6 +633,7 @@ fn write_round_record(
     output: &Path,
     round: u32,
     campaign_elapsed: Duration,
+    round_elapsed: Duration,
     ok: bool,
     pass: serde_json::Value,
 ) -> anyhow::Result<()> {
@@ -601,6 +641,7 @@ fn write_round_record(
     let record = serde_json::json!({
         "round": round,
         "campaign_elapsed_seconds": campaign_elapsed.as_secs(),
+        "round_elapsed_seconds": round_elapsed.as_secs_f64(),
         "all_runs_completed": ok,
         "pass": pass,
     });
@@ -642,7 +683,9 @@ fn export_record(
         "chunk_interval_ms": cmd.chunk_interval_ms,
         "concurrency": cmd.concurrency,
         "rps": cmd.rps,
+        "rate_limit_enabled": cmd.rps.is_some(),
         "new_connection_per_request": cmd.cps,
+        "raw_body": cmd.raw_body,
         "duration_secs": cmd.duration.as_secs(),
         "result": {
             "total_requests": r.total_requests,
@@ -663,6 +706,15 @@ fn export_record(
             })).collect::<Vec<_>>(),
         },
     })
+}
+
+/// Completed request attempts per second across a target's sequential operations.
+fn measured_rps(requests: u64, elapsed: Duration) -> f64 {
+    if elapsed.is_zero() {
+        0.0
+    } else {
+        requests as f64 / elapsed.as_secs_f64()
+    }
 }
 
 /// Print one result block. The block is built first and printed with one
@@ -767,6 +819,7 @@ mod tests {
             duration: Duration::from_millis(10),
             chunk_size_bytes: 1024,
             total_size_bytes: 4096,
+            raw_body: false,
             chunk_interval_ms: 0,
             headers: HashMap::new(),
             insecure: false,
@@ -852,6 +905,142 @@ mod tests {
         let n = std::fs::read_to_string(dir.join("campaign.jsonl")).unwrap().lines().count();
         assert!((2..=11).contains(&n), "expected 2-11 rounds of 50ms in 500ms, got {n}");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[tokio::test]
+    async fn raw_body_preserves_json_headers_in_spec_campaign_and_exports() {
+        let mut server = mockito::Server::new_async().await;
+        let m = server
+            .mock("POST", "/upload")
+            .match_header("content-type", "application/json")
+            .match_header("transfer-encoding", "chunked")
+            .match_body(mockito::Matcher::Exact("X".repeat(4096)))
+            .with_status(400)
+            .expect_at_least(2)
+            .create_async()
+            .await;
+        let dir = tempfile::tempdir().unwrap();
+        let spec = dir.path().join("api.json");
+        std::fs::write(
+            &spec,
+            serde_json::json!({
+                "openapi": "3.0.3", "info": {"title": "test", "version": "1"},
+                "paths": {"/upload": {"post": {
+                    "operationId": "upload",
+                    "requestBody": {"content": {"application/json": {"schema": {
+                        "type": "object", "properties": {"name": {"type": "string"}}
+                    }}}},
+                    "responses": {"200": {"description": "ok"}}
+                }}}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let targets = dir.path().join("targets.json");
+        std::fs::write(
+            &targets,
+            serde_json::json!([
+                {"url": server.url(), "headers": {"Content-Type": "application/json"}}
+            ])
+            .to_string(),
+        )
+        .unwrap();
+        let mut c = cmd(None, Some(targets));
+        c.spec = Some(spec);
+        c.raw_body = true;
+        c.output = dir.path().join("out");
+        c.rounds = Some(2);
+        c.rps = Some(10);
+        c.cps = true;
+        c.export_requests = true;
+        assert!(c.execute().await.unwrap());
+        m.assert_async().await;
+        let record: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(c.output.join("round-summaries/round_2.json")).unwrap(),
+        )
+        .unwrap();
+        assert!(record["round_elapsed_seconds"].as_f64().unwrap() > 0.0);
+        let pass = &record["pass"];
+        assert_eq!(pass["raw_body"], true);
+        assert_eq!(pass["rps_per_target"], 10);
+        assert_eq!(pass["rate_limit_enabled"], true);
+        assert_eq!(pass["new_connection_per_request"], true);
+        let row = &pass["targets"][0];
+        let requests = row["total_requests"].as_u64().unwrap();
+        let elapsed = row["elapsed_seconds"].as_f64().unwrap();
+        assert!(requests > 0);
+        assert_eq!(row["measured_rps"].as_f64().unwrap(), requests as f64 / elapsed);
+        assert_eq!(row["status_counts"]["400"], requests);
+        let exported: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(c.output.join("round_2/target_1/chunked-requests.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(exported["operations"][0]["raw_body"], true);
+        assert_eq!(exported["operations"][0]["headers"]["Content-Type"], "application/json");
+    }
+
+    #[tokio::test]
+    async fn automatic_json_and_raw_body_work_without_spec() {
+        let mut server = mockito::Server::new_async().await;
+        let json = server
+            .mock("POST", "/json")
+            .match_header("content-type", "application/vnd.test+json")
+            .match_header("transfer-encoding", "chunked")
+            .match_body(mockito::Matcher::PartialJson(
+                serde_json::json!({"_padding": "X".repeat(4081)}),
+            ))
+            .with_status(200)
+            .expect_at_least(1)
+            .create_async()
+            .await;
+        let raw = server
+            .mock("POST", "/raw")
+            .match_header("content-type", "application/vnd.test+json")
+            .match_header("transfer-encoding", "chunked")
+            .match_body(mockito::Matcher::Exact("X".repeat(4096)))
+            .with_status(400)
+            .expect_at_least(1)
+            .create_async()
+            .await;
+        let mut c = cmd(Some(&format!("{}/json", server.url())), None);
+        c.headers.insert("Content-Type".into(), "application/vnd.test+json".into());
+        let (_, summary) = c.execute_pass(Path::new("unused")).await.unwrap();
+        assert!(summary["total_requests"].as_u64().unwrap() > 0);
+        assert_eq!(summary["rps_per_target"], serde_json::Value::Null);
+        assert_eq!(summary["rate_limit_enabled"], false);
+        assert_eq!(summary["new_connection_per_request"], false);
+        assert!(summary["measured_rps"].as_f64().unwrap() > 0.0);
+        json.assert_async().await;
+        c.target = Some(format!("{}/raw", server.url()));
+        c.raw_body = true;
+        let (_, summary) = c.execute_pass(Path::new("unused")).await.unwrap();
+        assert!(summary["status_counts"]["400"].as_u64().unwrap() > 0);
+        raw.assert_async().await;
+    }
+
+    #[test]
+    fn round_records_distinguish_round_time_from_campaign_time() {
+        let dir = tempfile::tempdir().unwrap();
+        write_round_record(
+            dir.path(),
+            2,
+            Duration::from_secs(30),
+            Duration::from_millis(12500),
+            true,
+            serde_json::json!({}),
+        )
+        .unwrap();
+        let record: serde_json::Value = serde_json::from_slice(
+            &std::fs::read(dir.path().join("round-summaries/round_2.json")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(record["campaign_elapsed_seconds"], 30);
+        assert_eq!(record["round_elapsed_seconds"], 12.5);
+        let jsonl: serde_json::Value = serde_json::from_str(
+            &std::fs::read_to_string(dir.path().join("campaign.jsonl")).unwrap(),
+        )
+        .unwrap();
+        assert_eq!(jsonl, record);
     }
 
     #[tokio::test]
