@@ -2587,6 +2587,12 @@ enum Commands {
         #[arg(long, default_value = "1048576")]
         total_size_bytes: usize,
 
+        /// Send raw `X` filler regardless of Content-Type, for negative WAF
+        /// testing. Preserves headers from --header and --targets-file.
+        /// Without this flag, JSON Content-Types get valid JSON bodies.
+        #[arg(long)]
+        raw_body: bool,
+
         /// Sleep between chunks (ms). 0 = back-to-back. With non-zero
         /// values, each request takes at least `(total_size_bytes /
         /// chunk_size_bytes) * chunk_interval_ms` milliseconds.
@@ -3733,6 +3739,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             duration,
             chunk_size_bytes,
             total_size_bytes,
+            raw_body,
             chunk_interval_ms,
             header,
             insecure,
@@ -3794,6 +3801,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 duration: std::time::Duration::from_secs(duration_secs),
                 chunk_size_bytes,
                 total_size_bytes,
+                raw_body,
                 chunk_interval_ms,
                 headers,
                 insecure,
@@ -4017,6 +4025,54 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 #[allow(clippy::items_after_test_module)]
 mod cli_tests {
     use super::*;
+
+    #[cfg(feature = "bench")]
+    #[test]
+    fn parses_chunked_raw_body_with_rate_controls() {
+        std::thread::Builder::new()
+            .stack_size(8 * 1024 * 1024)
+            .spawn(|| {
+                for raw in [false, true] {
+                    let mut args = vec![
+                        "mockforge",
+                        "bench-chunked",
+                        "--targets-file",
+                        "targets.json",
+                        "--rps",
+                        "2",
+                        "--cps",
+                        "--repeat-until",
+                        "86400",
+                        "--keep-rounds",
+                        "2",
+                    ];
+                    if raw {
+                        args.push("--raw-body");
+                    }
+                    let cli = Cli::try_parse_from(args).unwrap();
+                    match cli.command {
+                        Commands::BenchChunked {
+                            raw_body,
+                            rps,
+                            cps,
+                            repeat_until,
+                            keep_rounds,
+                            ..
+                        } => {
+                            assert_eq!(raw_body, raw);
+                            assert_eq!(rps, Some(2));
+                            assert!(cps);
+                            assert_eq!(repeat_until.as_deref(), Some("86400"));
+                            assert_eq!(keep_rounds, Some(2));
+                        }
+                        _ => panic!("expected bench-chunked command"),
+                    }
+                }
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
 
     #[test]
     fn parses_admin_port_override() {
