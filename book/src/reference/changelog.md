@@ -2,6 +2,12 @@
 
 ## [Unreleased]
 
+## [0.3.231] - 2026-10-09
+
+### Added
+
+- **[Reality]** `bench-chunked --raw-body` sends the original raw filler while preserving any declared Content-Type, for negative WAF testing. Chunked reports distinguish per-round elapsed time, configured rate limits, and measured per-target request throughput. (#79)
+
 ### Changed
 
 - **[DevX] Breaking build requirement:** The minimum supported Rust version is now 1.96.0, matching the pinned build toolchain. Workspace packages declare this minimum and CI verifies the actual compiler and Cargo versions. Users building from source or using `cargo install` on older Rust versions must upgrade first. Prebuilt binaries and container images do not require a local Rust toolchain.
