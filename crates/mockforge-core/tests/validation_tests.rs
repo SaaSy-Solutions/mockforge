@@ -16,6 +16,31 @@ mod validation_tests {
     use super::*;
 
     #[test]
+    fn invalid_schema_inputs_preserve_all_diagnostics() {
+        let schema = json!({
+            "type": "object",
+            "properties": {"name": {"type": "string"}, "age": {"type": "integer", "minimum": 0}},
+            "required": ["name", "age", "email"]
+        });
+        let data = json!({"name": 42, "age": -1});
+        for validator in [
+            Validator::from_json_schema(&schema).unwrap(),
+            Validator::from_openapi31_schema(&schema).unwrap(),
+        ] {
+            let compiled = match &validator {
+                Validator::JsonSchema(compiled) | Validator::OpenApi31Schema(compiled, _) => {
+                    compiled
+                }
+                _ => unreachable!(),
+            };
+            let diagnostics: Vec<_> = compiled.iter_errors(&data).map(|e| e.to_string()).collect();
+            assert_eq!(diagnostics.len(), 3);
+            let actual = validator.validate(&data).unwrap_err().to_string();
+            assert!(actual.contains(&format!("Validation failed: {}", diagnostics.join(", "))));
+        }
+    }
+
+    #[test]
     fn test_validate_openapi_basic() {
         // Valid OpenAPI spec
         let spec = json!({
