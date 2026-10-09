@@ -1,9 +1,10 @@
 //! MockForge server management for tests
 
 use crate::config::{ServerConfig, ServerConfigBuilder};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::health::{HealthCheck, HealthStatus};
-use crate::process::{find_available_port, ManagedProcess};
+use crate::port_reservation::PortReservation;
+use crate::process::ManagedProcess;
 use crate::scenario::ScenarioManager;
 use parking_lot::Mutex;
 use serde_json::Value;
@@ -37,12 +38,20 @@ impl MockForgeServer {
         // any test that hardcoded a port (e.g. 9080) would silently talk to a
         // *different* mockforge process if one happened to be running.
         let mut resolved_config = config.clone();
+        let mut reservations = Vec::new();
+        let mut reserve_port = || -> Result<u16> {
+            let reservation = PortReservation::new()
+                .map_err(|e| Error::ConfigError(format!("Port reservation failed: {e}")))?;
+            let port = reservation.port();
+            reservations.push(reservation);
+            Ok(port)
+        };
         if resolved_config.http_port == 0 {
-            resolved_config.http_port = find_available_port(30000)?;
+            resolved_config.http_port = reserve_port()?;
             info!("Auto-assigned HTTP port: {}", resolved_config.http_port);
         }
         if resolved_config.admin_port == Some(0) {
-            let port = find_available_port(31000)?;
+            let port = reserve_port()?;
             resolved_config.admin_port = Some(port);
             info!("Auto-assigned admin port: {}", port);
         }
@@ -53,7 +62,7 @@ impl MockForgeServer {
         // exits before HTTP health ever goes ready. Auto-assign whenever
         // the caller didn't pin a port, so parallel tests never collide.
         if resolved_config.metrics_port.is_none() || resolved_config.metrics_port == Some(0) {
-            let port = find_available_port(32000)?;
+            let port = reserve_port()?;
             resolved_config.metrics_port = Some(port);
             info!("Auto-assigned metrics port: {}", port);
         }
@@ -63,18 +72,18 @@ impl MockForgeServer {
         // those default ports — and lose. Auto-assign whenever the caller
         // didn't pin them, so each test gets its own private ports.
         if resolved_config.ws_port.is_none() || resolved_config.ws_port == Some(0) {
-            let port = find_available_port(33000)?;
+            let port = reserve_port()?;
             resolved_config.ws_port = Some(port);
             info!("Auto-assigned WebSocket port: {}", port);
         }
         if resolved_config.grpc_port.is_none() || resolved_config.grpc_port == Some(0) {
-            let port = find_available_port(34000)?;
+            let port = reserve_port()?;
             resolved_config.grpc_port = Some(port);
             info!("Auto-assigned gRPC port: {}", port);
         }
 
         // Spawn the process
-        let process = ManagedProcess::spawn(&resolved_config)?;
+        let process = ManagedProcess::spawn_reserved(&resolved_config, reservations)?;
         let http_port = process.http_port();
 
         info!("MockForge server started on port {}", http_port);

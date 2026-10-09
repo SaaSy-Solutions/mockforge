@@ -2,6 +2,7 @@
 
 use crate::config::ServerConfig;
 use crate::error::{Error, Result};
+use crate::port_reservation::PortReservation;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use tracing::{debug, info, warn};
@@ -11,11 +12,19 @@ pub struct ManagedProcess {
     child: Child,
     http_port: u16,
     pid: u32,
+    port_reservations: Vec<PortReservation>,
 }
 
 impl ManagedProcess {
     /// Spawn a new MockForge server process
     pub fn spawn(config: &ServerConfig) -> Result<Self> {
+        Self::spawn_reserved(config, Vec::new())
+    }
+
+    pub(crate) fn spawn_reserved(
+        config: &ServerConfig,
+        mut port_reservations: Vec<PortReservation>,
+    ) -> Result<Self> {
         let binary_path = find_mockforge_binary(config)?;
         debug!("Using MockForge binary at: {:?}", binary_path);
 
@@ -87,6 +96,11 @@ impl ManagedProcess {
 
         debug!("Spawning MockForge process: {:?}", cmd);
 
+        // The CLI binds its own sockets. Release the temporary listeners just
+        // before spawn, retaining process-local claims until the child is reaped.
+        for reservation in &mut port_reservations {
+            reservation.handoff();
+        }
         let child = cmd
             .spawn()
             .map_err(|e| Error::ServerStartFailed(format!("Failed to spawn process: {}", e)))?;
@@ -98,6 +112,7 @@ impl ManagedProcess {
             child,
             http_port: config.http_port,
             pid,
+            port_reservations,
         })
     }
 
@@ -118,18 +133,23 @@ impl ManagedProcess {
 
     /// Kill the process
     pub fn kill(&mut self) -> Result<()> {
-        if self.is_running() {
+        let status = self.child.try_wait().map_err(|e| {
+            Error::ProcessError(format!("Failed to inspect process {}: {e}", self.pid))
+        })?;
+        if status.is_none() {
             debug!("Killing MockForge process (PID: {})", self.pid);
             self.child
                 .kill()
-                .map_err(|e| Error::ProcessError(format!("Failed to kill process: {}", e)))?;
-
-            // Wait for the process to exit
-            let _ = self.child.wait();
+                .map_err(|e| Error::ProcessError(format!("Failed to kill process: {e}")))?;
+            self.child
+                .wait()
+                .map_err(|e| Error::ProcessError(format!("Failed to reap process: {e}")))?;
             info!("MockForge process (PID: {}) terminated", self.pid);
         } else {
             debug!("Process (PID: {}) already exited", self.pid);
         }
+        // Never make a port available to a sibling until its owner is reaped.
+        self.port_reservations.clear();
         Ok(())
     }
 }
@@ -137,6 +157,11 @@ impl ManagedProcess {
 impl Drop for ManagedProcess {
     fn drop(&mut self) {
         if let Err(e) = self.kill() {
+            // If cleanup cannot prove exit, conservatively keep the claims for
+            // the rest of this test process. Do not hand them to another child.
+            for reservation in &mut self.port_reservations {
+                reservation.retain_claim();
+            }
             warn!("Failed to kill process on drop: {}", e);
         }
     }
@@ -272,6 +297,105 @@ pub fn find_available_port(_start_port: u16) -> Result<u16> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn failed_binary_lookup_releases_reservations() {
+        let _guard = crate::port_reservation::test_guard();
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let config = ServerConfig::builder()
+            .binary_path(directory.path().join("missing-mockforge"))
+            .build();
+        let reservation = PortReservation::new().expect("reserve port");
+        let port = reservation.port();
+        assert!(ManagedProcess::spawn_reserved(&config, vec![reservation]).is_err());
+        assert!(!crate::port_reservation::is_claimed(port));
+        assert!(std::net::TcpListener::bind(("0.0.0.0", port)).is_ok());
+    }
+
+    #[test]
+    fn failed_spawn_releases_handed_off_reservations() {
+        let _guard = crate::port_reservation::test_guard();
+        let directory = tempfile::tempdir().expect("temporary directory");
+        // A directory exists but cannot be executed as the mockforge binary.
+        let config = ServerConfig::builder().binary_path(directory.path()).build();
+        let reservation = PortReservation::new().expect("reserve port");
+        let port = reservation.port();
+        assert!(ManagedProcess::spawn_reserved(&config, vec![reservation]).is_err());
+        assert!(!crate::port_reservation::is_claimed(port));
+        assert!(std::net::TcpListener::bind(("0.0.0.0", port)).is_ok());
+    }
+
+    // An owned child fixture for kill/drop ordering. Only the parent tests
+    // invoke this ignored test, with an isolated temporary ready-file path.
+    #[test]
+    #[ignore = "owned subprocess fixture, invoked by lifecycle tests"]
+    fn owned_port_child_fixture() {
+        let port: u16 = std::env::var("MOCKFORGE_LEASE_FIXTURE_PORT")
+            .expect("fixture port")
+            .parse()
+            .expect("numeric port");
+        let _listener = std::net::TcpListener::bind(("0.0.0.0", port)).expect("child binds");
+        std::fs::write(
+            std::env::var_os("MOCKFORGE_LEASE_FIXTURE_READY").expect("ready path"),
+            b"ready",
+        )
+        .expect("write ready file");
+        loop {
+            std::thread::park();
+        }
+    }
+
+    fn owned_port_child() -> (ManagedProcess, u16, tempfile::TempDir) {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let ready = directory.path().join("ready");
+        let mut reservation = PortReservation::new().expect("reserve port");
+        let port = reservation.port();
+        reservation.handoff();
+        let child = Command::new(std::env::current_exe().expect("current test binary"))
+            .args([
+                "--exact",
+                "process::tests::owned_port_child_fixture",
+                "--ignored",
+            ])
+            .env("MOCKFORGE_LEASE_FIXTURE_PORT", port.to_string())
+            .env("MOCKFORGE_LEASE_FIXTURE_READY", &ready)
+            .spawn()
+            .expect("spawn owned child");
+        let pid = child.id();
+        let process = ManagedProcess {
+            child,
+            pid,
+            http_port: port,
+            port_reservations: vec![reservation],
+        };
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !ready.exists() && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        assert!(ready.exists(), "owned child must confirm its listener");
+        assert!(crate::port_reservation::is_claimed(port));
+        assert!(std::net::TcpListener::bind(("0.0.0.0", port)).is_err());
+        (process, port, directory)
+    }
+
+    #[test]
+    fn kill_reaps_owned_child_before_releasing_claim() {
+        let _guard = crate::port_reservation::test_guard();
+        let (mut process, port, _directory) = owned_port_child();
+        process.kill().expect("kill and reap child");
+        assert!(process.child.try_wait().expect("child status").is_some());
+        assert!(!crate::port_reservation::is_claimed(port));
+        assert!(std::net::TcpListener::bind(("0.0.0.0", port)).is_ok());
+    }
+
+    #[test]
+    fn drop_releases_claim_only_after_owned_child_cleanup() {
+        let _guard = crate::port_reservation::test_guard();
+        let (process, port, _directory) = owned_port_child();
+        drop(process);
+        assert!(!crate::port_reservation::is_claimed(port));
+        assert!(std::net::TcpListener::bind(("0.0.0.0", port)).is_ok());
+    }
 
     #[test]
     fn test_is_port_available() {
