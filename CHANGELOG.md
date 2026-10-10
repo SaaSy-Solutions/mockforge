@@ -1,5 +1,16 @@
 ## [Unreleased]
 
+## [0.3.232] - 2026-10-10
+
+### Fixed
+
+- **[Contracts]** Successful JSON Schema and OpenAPI 3.1 validation uses the compiled fast path while invalid requests retain every validation diagnostic. OpenAPI extension checks remain enforced. Simple validation benchmarks improved by about 75% locally and the CI regression gate passes. (#1165)
+- **[Cloud]** Flow row actions use responsive confirmations and bounded live event streams; State Machines history no longer traps sidebar navigation in a render loop. Terminal test runs have authorized deletion in the API and portal. (#1164)
+- **[Cloud]** Password recovery screens, visible failed-login and invalid-email feedback, correct sign-out navigation, and page refresh and heading cleanup improve portal account workflows. (#1164)
+- **[Cloud]** PostgreSQL password reset requests bind the expiry parameter correctly, restoring one-hour recovery links for existing accounts.
+
+- **[DevX]** Crate publication identifies its crates.io API requests so index checks avoid rejected requests and unnecessary per-crate waits.
+
 ## [0.3.231] - 2026-10-09
 
 ### Added
