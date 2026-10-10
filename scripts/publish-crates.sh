@@ -127,7 +127,9 @@ red()   { printf '\033[0;31m%s\033[0m\n' "$*"; }
 # Prints `NONE` when the crate doesn't exist, `QUERYFAIL` on network errors.
 crate_latest_version() {
   local crate=$1
-  curl -sS -m 10 "https://crates.io/api/v1/crates/$crate" 2>/dev/null | \
+  curl -sS -m 10 \
+    --user-agent "mockforge-release/$VERSION (+https://github.com/SaaSy-Solutions/mockforge)" \
+    "https://crates.io/api/v1/crates/$crate" 2>/dev/null | \
     python3 -c "import sys,json
 try:
   d=json.load(sys.stdin)
