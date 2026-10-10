@@ -289,7 +289,11 @@ summary() {
   done
   echo
   green "  $ok/${#CRATES[@]} at $VERSION"
-  [ "$stale" -gt 0 ] && yellow "  $stale remain stale; re-run after fixing"
+  if [ "$stale" -gt 0 ]; then
+    yellow "  $stale remain stale; re-run after fixing"
+    [ "$DRY_RUN" = true ] || return 1
+  fi
+  return 0
 }
 
 cd "$(dirname "$0")/.."

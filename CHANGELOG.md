@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Fixed
+
+- **[DevX]** Crate publication returns success after every package is available and fails when any package remains unpublished or its registry lookup fails.
+
 ## [0.3.232] - 2026-10-10
 
 ### Fixed
