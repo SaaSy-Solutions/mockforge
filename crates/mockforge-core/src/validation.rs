@@ -79,6 +79,10 @@ impl Validator {
     pub fn validate(&self, data: &Value) -> Result<()> {
         match self {
             Self::JsonSchema(schema) => {
+                // Valid requests need no diagnostic iterator or error allocation.
+                if schema.is_valid(data) {
+                    return Ok(());
+                }
                 let mut errors = Vec::new();
                 for error in schema.iter_errors(data) {
                     errors.push(error.to_string());
@@ -91,7 +95,11 @@ impl Validator {
                 }
             }
             Self::OpenApi31Schema(schema, original_schema) => {
-                // First validate with standard JSON Schema
+                // Keep the fast valid path while still enforcing OpenAPI extensions.
+                if schema.is_valid(data) {
+                    return self.validate_openapi31_schema(data, original_schema);
+                }
+                // Invalid inputs retain the complete diagnostic list.
                 let mut errors = Vec::new();
                 for error in schema.iter_errors(data) {
                     errors.push(error.to_string());

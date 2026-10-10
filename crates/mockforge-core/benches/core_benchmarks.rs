@@ -76,6 +76,11 @@ fn bench_json_validation(c: &mut Criterion) {
         });
     });
 
+    let invalid_simple_data = json!({"name": 42});
+    group.bench_function("simple_invalid", |b| {
+        b.iter(|| black_box(simple_validator.validate(black_box(&invalid_simple_data))));
+    });
+
     // Complex schema with nested objects - pre-compile validator
     let complex_schema = json!({
         "type": "object",
@@ -101,6 +106,11 @@ fn bench_json_validation(c: &mut Criterion) {
     });
     // Pre-compile validator once to measure actual validation performance
     let complex_validator = Validator::from_json_schema(&complex_schema).unwrap();
+
+    let invalid_complex_data = json!({"user": {"age": 200}});
+    group.bench_function("complex_invalid", |b| {
+        b.iter(|| black_box(complex_validator.validate(black_box(&invalid_complex_data))));
+    });
 
     group.bench_function("complex", |b| {
         b.iter(|| {
