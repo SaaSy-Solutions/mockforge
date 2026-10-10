@@ -27,6 +27,7 @@ import {
     type FlowVersion,
 } from '../services/api/cloudFlows';
 import RunLiveTail from '../components/RunLiveTail';
+import { confirmAction } from '../components/ui/ConfirmationDialog';
 import { Button } from '../components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../components/ui/Dialog';
 import { Input } from '../components/ui/input';
@@ -221,14 +222,24 @@ const CloudView: React.FC = () => {
                                     flow={f}
                                     onEdit={() => setEditing(f)}
                                     onTrigger={() => triggerMutation.mutate(f.id)}
-                                    onDelete={() => {
-                                        if (confirm(`Delete flow "${f.name}"?`)) deleteMutation.mutate(f.id);
+                                    busy={deleteMutation.isPending || triggerMutation.isPending}
+                                    onDelete={async () => {
+                                        deleteMutation.reset();
+                                        if (await confirmAction(`Delete flow "${f.name}"? All versions will be deleted.`)) {
+                                            deleteMutation.mutate(f.id);
+                                        }
                                     }}
                                 />
                             ))}
                         </tbody>
                     </table>
                 </div>
+            )}
+
+            {deleteMutation.isError && (
+                <p role="alert" className="mt-3 text-sm text-red-700 dark:text-red-400">
+                    Delete failed: {deleteMutation.error.message}. Try deleting the flow again.
+                </p>
             )}
 
             {showCreate && (
@@ -260,7 +271,8 @@ const FlowRow: React.FC<{
     onEdit: () => void;
     onTrigger: () => void;
     onDelete: () => void;
-}> = ({ flow, onEdit, onTrigger, onDelete }) => (
+    busy: boolean;
+}> = ({ flow, onEdit, onTrigger, onDelete, busy }) => (
     <tr
         className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer"
         onClick={onEdit}
@@ -282,14 +294,18 @@ const FlowRow: React.FC<{
         <td className="px-6 py-4 text-right space-x-1" onClick={(e) => e.stopPropagation()}>
             <button
                 onClick={onTrigger}
-                className="p-2 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg"
+                disabled={busy}
+                aria-label={`Trigger run for ${flow.name}`}
+                className="p-2 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Trigger run"
             >
                 <Play className="w-4 h-4" />
             </button>
             <button
                 onClick={onDelete}
-                className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
+                disabled={busy}
+                aria-label={`Delete ${flow.name}`}
+                className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed"
                 title="Delete"
             >
                 <Trash2 className="w-4 h-4" />

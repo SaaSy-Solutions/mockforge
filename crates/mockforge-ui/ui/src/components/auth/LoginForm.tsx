@@ -42,6 +42,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [emailInvalid, setEmailInvalid] = useState(false);
 
   // Pick up sso_error forwarded from the callback page (set on the root URL
   // when the IdP round-trip fails). We read it once on mount and clear it so
@@ -142,9 +143,9 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             <Logo variant="full" size="xl" />
           </div>
           <div>
-            <h2 className="text-3xl font-bold">
+            <h1 className="text-3xl font-bold">
               {isCloud ? 'MockForge Cloud' : 'Admin Dashboard'}
-            </h2>
+            </h1>
             <p className="mt-2 text-muted-foreground">
               {isCloud
                 ? mode === 'register'
@@ -183,11 +184,17 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
                   id="email"
                   type="email"
                   value={credentials.email}
-                  onChange={(e) => setCredentials(prev => ({ ...prev, email: e.target.value }))}
+                  onChange={(e) => {
+                    setCredentials(prev => ({ ...prev, email: e.target.value }));
+                    setEmailInvalid(e.target.value.length > 0 && !e.target.validity.valid);
+                  }}
+                  aria-invalid={emailInvalid}
+                  aria-describedby={emailInvalid ? 'email-error' : undefined}
                   placeholder="Enter your email"
                   required
                   autoComplete="email"
                 />
+                {emailInvalid && <p id="email-error" role="alert" className="text-sm text-destructive">Enter a valid email address.</p>}
               </div>
             ) : (
               <div className="space-y-2">
@@ -222,7 +229,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             </div>
 
             {error && (
-              <div className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded p-3">
+              <div role="alert" className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded p-3">
                 {error}
               </div>
             )}
@@ -230,12 +237,15 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             <Button
               type="submit"
               className="w-full"
-              disabled={isLoading || (isCloud ? !credentials.email : !credentials.username) || !credentials.password || (mode === 'register' && !credentials.username)}
+              disabled={isLoading || (isCloud && emailInvalid) || (isCloud ? !credentials.email : !credentials.username) || !credentials.password || (mode === 'register' && !credentials.username)}
             >
               {isLoading
                 ? mode === 'register' ? 'Creating account...' : 'Signing in...'
                 : mode === 'register' ? 'Create Account' : 'Sign In'}
             </Button>
+            {isCloud && mode === 'login' && (
+              <Link to="/forgot-password" className="block text-center text-sm text-primary hover:underline">Forgot password?</Link>
+            )}
             {isCloud && mode === 'register' && (
               <p className="text-xs text-muted-foreground text-center">
                 By creating an account you agree to the{' '}

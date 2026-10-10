@@ -20,13 +20,15 @@ export function useHistory<T>(
   capacity: number = 50
 ): UseHistoryReturn<T> {
   const [currentState, setCurrentState] = useState<T>(initialState);
+  const currentRef = useRef<T>(initialState);
   const pastRef = useRef<T[]>([]);
   const futureRef = useRef<T[]>([]);
 
   const push = useCallback(
     (state: T) => {
-      // Add current state to past
-      pastRef.current.push(currentState);
+      if (Object.is(currentRef.current, state)) return;
+      // Read the latest snapshot even for several actions in one React batch.
+      pastRef.current.push(currentRef.current);
 
       // Limit past history size
       if (pastRef.current.length > capacity) {
@@ -36,9 +38,10 @@ export function useHistory<T>(
       // Clear future when new state is pushed
       futureRef.current = [];
 
+      currentRef.current = state;
       setCurrentState(state);
     },
-    [currentState, capacity]
+    [capacity]
   );
 
   const undo = useCallback(() => {
@@ -47,14 +50,15 @@ export function useHistory<T>(
     }
 
     // Move current state to future
-    futureRef.current.push(currentState);
+    futureRef.current.push(currentRef.current);
 
     // Get previous state from past
     const previousState = pastRef.current.pop()!;
+    currentRef.current = previousState;
     setCurrentState(previousState);
 
     return previousState;
-  }, [currentState]);
+  }, []);
 
   const redo = useCallback(() => {
     if (futureRef.current.length === 0) {
@@ -62,18 +66,20 @@ export function useHistory<T>(
     }
 
     // Move current state to past
-    pastRef.current.push(currentState);
+    pastRef.current.push(currentRef.current);
 
     // Get next state from future
     const nextState = futureRef.current.pop()!;
+    currentRef.current = nextState;
     setCurrentState(nextState);
 
     return nextState;
-  }, [currentState]);
+  }, []);
 
   const clear = useCallback(() => {
     pastRef.current = [];
     futureRef.current = [];
+    currentRef.current = initialState;
     setCurrentState(initialState);
   }, [initialState]);
 

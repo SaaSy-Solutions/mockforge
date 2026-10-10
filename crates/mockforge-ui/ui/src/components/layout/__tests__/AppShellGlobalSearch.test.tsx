@@ -13,11 +13,11 @@ function LocationProbe() {
   return <div data-testid="location">{useLocation().pathname}</div>;
 }
 
-function renderShell(path = '/dashboard') {
+function renderShell(path = '/dashboard', onRefresh?: () => void) {
   render(
     <I18nProvider>
       <MemoryRouter initialEntries={[path]}>
-        <AppShell onRefresh={() => {}}>
+        <AppShell onRefresh={onRefresh}>
           <div />
         </AppShell>
         <LocationProbe />
@@ -88,6 +88,15 @@ describe('AppShell command palette', () => {
 
 describe('AppShell sidebar', () => {
   beforeEach(() => localStorage.clear());
+
+  it('does not duplicate page headings or expose a refresh button without a callback', () => {
+    renderShell('/cloud-traces');
+    expect(screen.queryByRole('heading')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Refresh' })).not.toBeInTheDocument();
+    const input = openPalette();
+    fireEvent.change(input, { target: { value: 'refresh' } });
+    expect(screen.queryByRole('option', { name: /Refresh current view/ })).not.toBeInTheDocument();
+  });
 
   it('highlights the current page and shows it in the breadcrumb', () => {
     renderShell('/logs');

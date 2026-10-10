@@ -265,6 +265,22 @@ async fn test_suites_schedules_runs_round_trip_and_cross_tenant() {
     let run_id = str_field("trigger run", &run, "id");
     assert_contains("list suite runs", &list_ids(&owner, "list runs", &runs_path).await, &run_id);
 
+    let run_path = format!("/api/v1/test-runs/{run_id}");
+    client_err("active run cannot be deleted", owner.delete(&run_path).await);
+    client_err("cross-tenant run delete", other.delete(&run_path).await);
+    ok("run still present after rejected deletes", owner.get(&run_path).await);
+    ok("cancel run", owner.post(&format!("{run_path}/cancel"), json!({})).await);
+    client_err("cross-tenant terminal run delete", other.delete(&run_path).await);
+    let deleted = ok("delete terminal run", owner.delete(&run_path).await);
+    assert_eq!(deleted["deleted"], json!(true));
+    client_err("deleted run is absent", owner.get(&run_path).await);
+    client_err("delete run twice", owner.delete(&run_path).await);
+    assert_absent(
+        "history after delete",
+        &list_ids(&owner, "runs after delete", &runs_path).await,
+        &run_id,
+    );
+
     // Cross-tenant: nothing visible or mutable.
     client_err("x-tenant list suites", other.get(&suites_path).await);
     client_err("x-tenant get suite", other.get(&suite_path).await);
@@ -316,6 +332,70 @@ async fn test_suites_schedules_runs_round_trip_and_cross_tenant() {
         &suite_id,
     );
     client_err("get deleted suite", owner.get(&suite_path).await);
+}
+
+/// Terminal history deletion cascades to its events and artifact metadata.
+/// Fixture writes use the test owner pool; every request still uses NOBYPASSRLS.
+#[tokio::test]
+#[ignore]
+async fn test_run_deletion_statuses_and_cascade() {
+    let pool =
+        sqlx::PgPool::connect(&std::env::var("DATABASE_URL").expect("test database required"))
+            .await
+            .expect("test database connection");
+    let owner = setup_team_org("rlsdelete").await;
+    let other = setup_team_org("rlsdeletex").await;
+    let ws = create_workspace(&owner, &format!("delete-{}", unique())).await;
+    let suite = ok(
+        "create deletion fixture suite",
+        owner
+            .post(
+                &format!("/api/v1/workspaces/{ws}/test-suites"),
+                json!({"name": "delete fixture", "kind": "unit", "config": {}}),
+            )
+            .await,
+    );
+    let suite_id = str_field("fixture suite", &suite, "id");
+    for status in ["running", "passed", "failed", "errored"] {
+        let run = ok(
+            "trigger fixture run",
+            owner.post(&format!("/api/v1/test-suites/{suite_id}/runs"), json!({})).await,
+        );
+        let id = str_field("fixture run", &run, "id");
+        let uuid = uuid::Uuid::parse_str(&id).unwrap();
+        sqlx::query("UPDATE test_runs SET status = $2 WHERE id = $1")
+            .bind(uuid)
+            .bind(status)
+            .execute(&pool)
+            .await
+            .unwrap();
+        sqlx::query("INSERT INTO test_run_events (run_id, seq, event_type, payload) VALUES ($1, 1, 'log', '{}')")
+            .bind(uuid).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO test_run_artifacts (run_id, name, content_type, storage_url, size_bytes) VALUES ($1, 'fixture', 'text/plain', 'fixture://metadata-only', 0)")
+            .bind(uuid).execute(&pool).await.unwrap();
+        let path = format!("/api/v1/test-runs/{id}");
+        client_err("cross-tenant fixture delete", other.delete(&path).await);
+        if status == "running" {
+            client_err("running fixture delete blocked", owner.delete(&path).await);
+            ok("cancel running fixture", owner.post(&format!("{path}/cancel"), json!({})).await);
+        }
+        ok("terminal fixture delete", owner.delete(&path).await);
+        client_err("deleted fixture absent", owner.get(&path).await);
+        for table in ["test_run_events", "test_run_artifacts"] {
+            let count: i64 =
+                sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table} WHERE run_id = $1"))
+                    .bind(uuid)
+                    .fetch_one(&pool)
+                    .await
+                    .unwrap();
+            assert_eq!(count, 0, "{table} must cascade for {status}");
+        }
+    }
+    ok(
+        "delete fixture suite",
+        owner.delete(&format!("/api/v1/test-suites/{suite_id}")).await,
+    );
+    pool.close().await;
 }
 
 /// Publish a minimal marketplace scenario in `e`'s org and return its id.

@@ -110,7 +110,7 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
   const [edges, setEdges, onEdgesChange] = useEdgesState<TransitionFlowEdge>([]);
 
   // History for undo/redo
-  const { push, undo, redo, canUndo, canRedo } = useHistory<{
+  const { history, push, undo, redo, canUndo, canRedo } = useHistory<{
     nodes: StateFlowNode[];
     edges: TransitionFlowEdge[];
   }>({ nodes: [], edges: [] }, 50);
@@ -300,8 +300,10 @@ export const ScenarioStateMachineEditor: React.FC<StateMachineEditorProps> = ({
 
   // Save current state to history when nodes or edges change
   useEffect(() => {
-    push({ nodes, edges });
-  }, [nodes, edges, push]);
+    // An undo/redo restores the same snapshot. Recording it again would erase
+    // redo history; callback identity changes must not create editor updates.
+    if (history.nodes !== nodes || history.edges !== edges) push({ nodes, edges });
+  }, [nodes, edges, push, history]);
 
   // Initialize a new empty state machine
   const initializeNewStateMachine = useCallback(() => {

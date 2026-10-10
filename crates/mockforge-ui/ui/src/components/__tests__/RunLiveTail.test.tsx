@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { RunLiveTail } from '../RunLiveTail';
 
 // Minimal EventSource stub: captures listeners so tests can dispatch
@@ -9,6 +9,7 @@ class MockEventSource {
     url: string;
     readyState = 1;
     onerror: (() => void) | null = null;
+    onopen: (() => void) | null = null;
     private listeners = new Map<string, ((ev: { type: string; data: string }) => void)[]>();
 
     constructor(url: string) {
@@ -40,6 +41,7 @@ describe('RunLiveTail', () => {
     afterEach(() => {
         MockEventSource.instances = [];
         vi.restoreAllMocks();
+        vi.unstubAllGlobals();
     });
 
     it('renders nothing for a non-inflight run with no events', () => {
@@ -47,11 +49,24 @@ describe('RunLiveTail', () => {
         expect(container).toBeEmptyDOMElement();
     });
 
+    it('keeps completed events visible when the parent marks the run terminal', async () => {
+        vi.stubGlobal('EventSource', MockEventSource);
+        const view = render(<RunLiveTail runId="completed" inflight />);
+        await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
+        const source = MockEventSource.instances[0];
+        act(() => { source.emit('log', { message: 'Completed transcript' }); source.emit('done', { status: 'passed' }); });
+        expect(await screen.findByText(/Completed transcript/)).toBeVisible();
+        view.rerender(<RunLiveTail runId="completed" inflight={false} />);
+        expect(screen.getByText(/Completed transcript/)).toBeVisible();
+        expect(source.readyState).toBe(3);
+    });
+
     it('opens the stream for an in-flight run and shows the live badge', async () => {
         vi.stubGlobal('EventSource', MockEventSource);
         render(<RunLiveTail runId="run-123" inflight />);
         await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
         expect(MockEventSource.instances[0].url).toContain('/api/v1/test-runs/run-123/stream');
+        act(() => MockEventSource.instances[0].onopen?.());
         expect(screen.getByText('live')).toBeInTheDocument();
     });
 
@@ -83,9 +98,71 @@ describe('RunLiveTail', () => {
         vi.stubGlobal('EventSource', MockEventSource);
         render(<RunLiveTail runId="run-ping" inflight />);
         const es = MockEventSource.instances.at(-1)!;
-        es.emit('ping', {});
+        act(() => es.emit('ping', {}));
         await waitFor(() =>
             expect(screen.queryByText(/Waiting for events/)).toBeInTheDocument(),
         );
+    });
+
+    it('closes on a transport error and reconnects only after an explicit retry', async () => {
+        vi.stubGlobal('EventSource', MockEventSource);
+        render(<RunLiveTail runId="error-run" />);
+        const source = MockEventSource.instances[0];
+        act(() => source.onerror?.());
+        expect(source.readyState).toBe(3);
+        expect(screen.getByRole('alert')).toHaveTextContent('interrupted');
+        expect(MockEventSource.instances).toHaveLength(1);
+        fireEvent.click(screen.getByRole('button', { name: 'Retry live stream' }));
+        expect(MockEventSource.instances).toHaveLength(2);
+    });
+
+    it('closes on stream_error and ignores events after closing', async () => {
+        vi.stubGlobal('EventSource', MockEventSource);
+        render(<RunLiveTail runId="server-error" />);
+        const source = MockEventSource.instances[0];
+        act(() => {
+            source.emit('stream_error', { error: 'failed' });
+            source.emit('log', { message: 'late-event' });
+        });
+        expect(source.readyState).toBe(3);
+        expect(screen.getByRole('alert')).toHaveTextContent('failed');
+        expect(screen.queryByText(/late-event/)).not.toBeInTheDocument();
+    });
+
+    it('bounds bursts even with maxLines=1 and discards heartbeat traffic', async () => {
+        vi.stubGlobal('EventSource', MockEventSource);
+        render(<RunLiveTail runId="burst" maxLines={1} />);
+        const source = MockEventSource.instances[0];
+        act(() => {
+            for (let i = 0; i < 1000; i++) {
+                source.emit('log', { message: `line-${i}` });
+                source.emit('ping', {});
+            }
+            source.emit('done', { status: 'passed' });
+        });
+        expect(screen.getByText(/passed/)).toBeInTheDocument();
+        expect(screen.queryByText(/line-/)).not.toBeInTheDocument();
+        expect(source.readyState).toBe(3);
+    });
+
+    it('cancels pending renders and closes the old stream when switching runs', async () => {
+        vi.stubGlobal('EventSource', MockEventSource);
+        const view = render(<RunLiveTail runId="old" />);
+        const old = MockEventSource.instances[0];
+        act(() => old.emit('log', { message: 'old-message' }));
+        view.rerender(<RunLiveTail runId="new" />);
+        expect(old.readyState).toBe(3);
+        expect(screen.queryByText(/old-message/)).not.toBeInTheDocument();
+        view.unmount();
+        expect(MockEventSource.instances[1].readyState).toBe(3);
+    });
+
+    it('stops oversized events before parsing or retaining them', async () => {
+        vi.stubGlobal('EventSource', MockEventSource);
+        render(<RunLiveTail runId="oversized" />);
+        const source = MockEventSource.instances[0];
+        act(() => source.emit('log', { message: 'x'.repeat(65536) }));
+        expect(source.readyState).toBe(3);
+        expect(screen.getByRole('alert')).toHaveTextContent('too large');
     });
 });

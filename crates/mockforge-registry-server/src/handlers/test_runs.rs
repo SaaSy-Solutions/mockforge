@@ -10,6 +10,7 @@
 //!   GET    /api/v1/test-suites/{id}/runs        (history for one suite)
 //!   GET    /api/v1/organizations/{org_id}/test-runs   (cross-suite list)
 //!   GET    /api/v1/test-runs/{id}
+//!   DELETE /api/v1/test-runs/{id} (terminal runs only)
 //!   POST   /api/v1/test-runs/{id}/cancel
 
 use axum::{
@@ -237,6 +238,41 @@ pub async fn get_run(
 ) -> ApiResult<Json<TestRun>> {
     let run = load_authorized_run(&state, user_id, &headers, id).await?;
     Ok(Json(run))
+}
+
+/// `DELETE /api/v1/test-runs/{id}`
+///
+/// Only terminal history can be removed. The status predicate is in the DELETE
+/// itself so worker transitions cannot race a separate status check. Events
+/// and artifact metadata are removed by the existing cascading foreign keys.
+pub async fn delete_run(
+    State(state): State<AppState>,
+    AuthUser(user_id): AuthUser,
+    Path(id): Path<Uuid>,
+    headers: HeaderMap,
+) -> ApiResult<Json<serde_json::Value>> {
+    let run = load_authorized_run(&state, user_id, &headers, id).await?;
+    let org_id = run.org_id;
+    let deleted = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            let result = sqlx::query(
+                "DELETE FROM test_runs WHERE id = $1 AND org_id = $2 \
+                 AND status IN ('passed', 'failed', 'cancelled', 'errored')",
+            )
+            .bind(id)
+            .bind(org_id)
+            .execute(&mut **tx)
+            .await?;
+            Ok(result.rows_affected() == 1)
+        })
+    })
+    .await?;
+    if !deleted {
+        return Err(ApiError::InvalidRequest(
+            "Only completed test runs can be deleted; cancel an active run first".into(),
+        ));
+    }
+    Ok(Json(serde_json::json!({ "deleted": true })))
 }
 
 /// `GET /api/v1/test-runs/{id}/stream`

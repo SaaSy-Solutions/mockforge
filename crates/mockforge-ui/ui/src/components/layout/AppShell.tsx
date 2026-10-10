@@ -36,7 +36,7 @@ import {
 
 interface AppShellProps {
   children: React.ReactNode;
-  onRefresh: () => void;
+  onRefresh?: () => void;
 }
 
 const OPEN_SECTIONS_KEY = 'mockforge-nav-open-sections';
@@ -483,7 +483,7 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
             >
               <Search className="h-4 w-4" />
             </button>
-            <button
+            {onRefresh && <button
               type="button"
               className={iconButton}
               onClick={onRefresh}
@@ -491,7 +491,7 @@ export function AppShell({ children, onRefresh }: AppShellProps) {
               title={t('app.refresh')}
             >
               <RefreshCw className="h-4 w-4" />
-            </button>
+            </button>}
             <SimpleThemeToggle className={iconButton} />
             <button
               type="button"
