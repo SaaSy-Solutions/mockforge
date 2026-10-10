@@ -131,6 +131,8 @@ class PairedBenchmarkTest(unittest.TestCase):
         self.assertIn("CRITERION_DIR: paired-benchmarks/criterion", workflow)
         self.assertNotIn("- name: Fetch baseline", workflow)
         self.assertIn("REGRESSION_THRESHOLD: 5.0", workflow)
+        self.assertIn("runs-on: ubuntu-latest", workflow)
+        self.assertNotIn("runs-on: [self-hosted", workflow)
 
 
 if __name__ == "__main__":

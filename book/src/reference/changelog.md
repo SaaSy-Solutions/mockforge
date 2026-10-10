@@ -13,7 +13,7 @@
 
 - **[DevX]** Crate publication identifies its crates.io API requests so index checks avoid rejected requests and unnecessary per-crate waits.
 
-- **[DevX]** Pull-request benchmarks compare the immutable base and candidate in adjacent, order-balanced measurements on the same host. The 5% regression limit stays enforced without relying on a moving post-merge baseline.
+- **[DevX]** Pull-request benchmarks compare the immutable base and candidate in adjacent, order-balanced measurements on an isolated runner. The 5% regression limit stays enforced without relying on a moving post-merge baseline.
 
 ## [0.3.231] - 2026-10-09
 

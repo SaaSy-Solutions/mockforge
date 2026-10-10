@@ -39,20 +39,14 @@ env:
 jobs:
   benchmark:
     name: Run Benchmarks
-    runs-on: [self-hosted, linux, x64, rust]
+    # A dedicated VM keeps other repository builds out of timing samples.
+    runs-on: ubuntu-latest
     timeout-minutes: 45
     permissions:
       contents: write
       pull-requests: write
 
     steps:
-      - name: Set per-runner CARGO_HOME
-        # `runner.name` is unavailable in workflow- or job-level `env:` blocks
-        # (GH Actions context: `runner.*` is step-scoped). Writing to
-        # `$GITHUB_ENV` here exports it to every subsequent step in this job,
-        # including the rust-toolchain composite action and rust-cache.
-        run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
-
       - name: Checkout code
         uses: actions/checkout@v7
         with:
@@ -82,13 +76,13 @@ jobs:
         uses: actions/cache@v6
         with:
           path: target
-          key: ${{ runner.os }}-target-bench-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-target-bench-isolated-1.96.0-${{ hashFiles('**/Cargo.lock') }}
 
       # main is a protected branch, so main-push runs publish the baseline to
       # the unprotected `bench-baseline` branch instead of committing it.
       # The copy committed on main is only a fallback for the first run.
       # Compare the immutable PR base with the candidate on this host in
-      # adjacent ABBA pairs. A moving main baseline can otherwise compare a
+      # adjacent ABBA pairs on an isolated VM. A moving main baseline can compare a
       # merged PR to itself, and shared-host load is not comparable over time.
       - name: Run paired base and candidate benchmarks
         if: github.event_name == 'pull_request'
