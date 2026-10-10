@@ -796,7 +796,8 @@ impl RegistryStore for PgRegistryStore {
         hours: i64,
     ) -> StoreResult<()> {
         sqlx::query(
-            "UPDATE verification_tokens SET expires_at = NOW() + make_interval(hours => $1) WHERE id = $2",
+            // RegistryStore uses i64; PostgreSQL make_interval expects an int4 hours argument.
+            "UPDATE verification_tokens SET expires_at = NOW() + make_interval(hours => $1::bigint::integer) WHERE id = $2",
         )
         .bind(hours)
         .bind(token_id)
