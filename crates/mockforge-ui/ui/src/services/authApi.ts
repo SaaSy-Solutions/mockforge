@@ -269,6 +269,18 @@ class AuthApiService {
     );
   }
 
+  async requestPasswordReset(email: string): Promise<{ success: boolean; message: string }> {
+    return this.fetchJson('/api/v1/auth/password/reset-request', {
+      method: 'POST', body: JSON.stringify({ email }),
+    });
+  }
+
+  async resetPassword(token: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    return this.fetchJson('/api/v1/auth/password/reset', {
+      method: 'POST', body: JSON.stringify({ token, new_password: newPassword }),
+    });
+  }
+
   isCloud(): boolean {
     return this.cloud;
   }

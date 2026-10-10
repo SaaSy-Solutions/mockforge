@@ -63,6 +63,7 @@ DELETE /api/v1/workspaces/{workspace_id}/test-suites/{id}
 POST   /api/v1/test-suites/{id}/runs                    # trigger run
 GET    /api/v1/test-suites/{id}/runs                    # list run history
 GET    /api/v1/test-runs/{run_id}
+DELETE /api/v1/test-runs/{run_id}                    # terminal history only
 GET    /api/v1/test-runs/{run_id}/events/stream         # SSE for live tail
 GET    /api/v1/test-runs/{run_id}/artifacts/{name}      # download HTML report, k6 summary, etc.
 POST   /api/v1/test-runs/{run_id}/cancel
@@ -72,6 +73,14 @@ DELETE /api/v1/test-suites/{id}/schedules/{schedule_id}
 
 POST   /api/v1/test-suites/{id}/generate                # AI-driven test generation (delegates to ai-studio cloud)
 ```
+
+Completed run history can be removed from the Cloud Test Runs page or with
+`DELETE /api/v1/test-runs/{run_id}`. The caller must belong to the owning
+organization. Only `passed`, `failed`, `cancelled`, and `errored` runs can be
+deleted; cancel an active run first. Deletion removes the run, its events, and
+artifact metadata, while retaining usage accounting. The API returns
+`{"deleted": true}` on success.
+
 
 ### Suite kinds
 

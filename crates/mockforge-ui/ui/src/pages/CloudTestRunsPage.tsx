@@ -7,9 +7,11 @@
  * reaches terminal status the stream's final 'done' event triggers a
  * summary refresh.
  */
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { RefreshCw, Square, Play, ChevronRight, Activity } from 'lucide-react';
+import { RefreshCw, Square, Play, ChevronRight, Activity, Trash2 } from 'lucide-react';
+import RunLiveTail from '../components/RunLiveTail';
+import { confirmAction } from '../components/ui/ConfirmationDialog';
 import { isCloudMode } from '../utils/cloudMode';
 import { useCloudOrgId } from '../hooks/useCloudOrgId';
 import {
@@ -71,6 +73,20 @@ const CloudView: React.FC = () => {
             queryClient.invalidateQueries({ queryKey: ['cloud', 'test-runs'] }),
     });
 
+    const deleteMutation = useMutation({
+        mutationFn: (id: string) => cloudTestRunsApi.deleteRun(id),
+        onSuccess: (_result, id) => {
+            setSelected(current => current?.id === id ? null : current);
+            void queryClient.invalidateQueries({ queryKey: ['cloud', 'test-runs'] });
+        },
+    });
+
+    async function deleteRun(run: TestRun) {
+        if (await confirmAction(`Delete run ${run.id.slice(0, 8)} and its event history? This cannot be undone.`)) {
+            deleteMutation.mutate(run.id);
+        }
+    }
+
     if (!orgId) {
         return (
             <div className="p-6 max-w-7xl mx-auto">
@@ -101,6 +117,8 @@ const CloudView: React.FC = () => {
                     Refresh
                 </button>
             </div>
+
+            {(deleteMutation.isError || cancelMutation.isError) && <p role="alert" className="mb-4 text-sm text-destructive">{(deleteMutation.error ?? cancelMutation.error)?.message}</p>}
 
             <div className="mb-4 flex gap-2 flex-wrap">
                 {(['all', 'queued', 'running', 'passed', 'failed', 'cancelled', 'errored'] as const).map(
@@ -156,8 +174,10 @@ const CloudView: React.FC = () => {
                                     key={r.id}
                                     run={r}
                                     onView={() => setSelected(r)}
-                                    onCancel={() => {
-                                        if (confirm('Cancel this run?')) cancelMutation.mutate(r.id);
+                                    pending={(deleteMutation.isPending && deleteMutation.variables === r.id) || (cancelMutation.isPending && cancelMutation.variables === r.id)}
+                                    onDelete={() => void deleteRun(r)}
+                                    onCancel={async () => {
+                                        if (await confirmAction('Stop this queued or running test?')) cancelMutation.mutate(r.id);
                                     }}
                                 />
                             ))}
@@ -166,7 +186,7 @@ const CloudView: React.FC = () => {
                 </div>
             )}
 
-            {selected && <RunDetailPanel run={selected} onClose={() => setSelected(null)} />}
+            {selected && <RunDetailPanel run={runs.find(run => run.id === selected.id) ?? selected} onClose={() => setSelected(null)} />}
         </div>
     );
 };
@@ -175,7 +195,9 @@ const RunRow: React.FC<{
     run: TestRun;
     onView: () => void;
     onCancel: () => void;
-}> = ({ run, onView, onCancel }) => {
+    onDelete: () => void;
+    pending: boolean;
+}> = ({ run, onView, onCancel, onDelete, pending }) => {
     const inflight = run.status === 'queued' || run.status === 'running';
     return (
         <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/50 cursor-pointer" onClick={onView}>
@@ -203,21 +225,20 @@ const RunRow: React.FC<{
                         onClick={onCancel}
                         className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
                         title="Cancel"
+                        aria-label={`Cancel run ${run.id.slice(0, 8)}`}
+                        disabled={pending}
                     >
                         <Square className="w-4 h-4" />
                     </button>
                 )}
-                <ChevronRight className="w-4 h-4 inline text-gray-400" />
+                {!inflight && <button onClick={onDelete} disabled={pending} aria-label={`Delete run ${run.id.slice(0, 8)}`} title="Delete" className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg">
+                    <Trash2 className="w-4 h-4" />
+                </button>}
+                <button onClick={onView} aria-label={`View run ${run.id.slice(0, 8)}`} className="p-2 rounded-lg"><ChevronRight className="w-4 h-4 inline text-gray-400" /></button>
             </td>
         </tr>
     );
 };
-
-interface StreamEvent {
-    type: string;
-    data: unknown;
-    received_at: string;
-}
 
 /// Renders the run summary in a structured view when the executor_phase
 /// + kind combination has a known shape (real_bench, real_owasp_scan,
@@ -527,66 +548,8 @@ const ReplaySummary: React.FC<{ summary: Record<string, unknown> }> = ({ summary
 };
 
 const RunDetailPanel: React.FC<{ run: TestRun; onClose: () => void }> = ({ run, onClose }) => {
-    const [events, setEvents] = useState<StreamEvent[]>([]);
-    const [streaming, setStreaming] = useState(false);
-    const [finalSummary, setFinalSummary] = useState<unknown | null>(null);
-    const sourceRef = useRef<EventSource | null>(null);
-
-    useEffect(() => {
-        const inflight = run.status === 'queued' || run.status === 'running';
-        if (!inflight) return;
-
-        const es = cloudTestRunsApi.streamRunEvents(run.id);
-        sourceRef.current = es;
-        setStreaming(true);
-
-        const onMessage = (ev: MessageEvent) => {
-            try {
-                const data = JSON.parse(ev.data);
-                setEvents((prev) => [
-                    ...prev.slice(-499),
-                    { type: ev.type || 'message', data, received_at: new Date().toISOString() },
-                ]);
-                if (ev.type === 'done') {
-                    setFinalSummary(data);
-                    setStreaming(false);
-                    es.close();
-                }
-            } catch {
-                /* ignore non-JSON ping payloads */
-            }
-        };
-
-        // Listen for all known event types we emit + the catch-all 'message'.
-        for (const t of [
-            'log',
-            'step_start',
-            'step_pass',
-            'step_fail',
-            'metric',
-            'fault_injected',
-            'fault_recovered',
-            'node_visited',
-            'diff_finding',
-            'training_epoch',
-            'request_replayed',
-            'component_dumped',
-            'component_restored',
-            'ping',
-            'done',
-            'stream_error',
-        ]) {
-            es.addEventListener(t, onMessage);
-        }
-        es.addEventListener('message', onMessage);
-        es.onerror = () => {
-            setStreaming(false);
-        };
-        return () => {
-            es.close();
-            sourceRef.current = null;
-        };
-    }, [run.id, run.status]);
+    const queryClient = useQueryClient();
+    const inflight = run.status === 'queued' || run.status === 'running';
 
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
@@ -606,56 +569,18 @@ const RunDetailPanel: React.FC<{ run: TestRun; onClose: () => void }> = ({ run, 
                                 </span>
                                 <span className="text-gray-500">{run.kind}</span>
                                 <span className="text-gray-500">via {run.triggered_by}</span>
-                                {streaming && (
-                                    <span className="text-blue-600 dark:text-blue-400 inline-flex items-center gap-1">
-                                        <span className="relative flex h-2 w-2">
-                                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75" />
-                                            <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-500" />
-                                        </span>
-                                        live
-                                    </span>
-                                )}
                             </div>
                         </div>
-                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
+                        <button onClick={onClose} aria-label="Close run details" className="text-gray-400 hover:text-gray-600">
                             ✕
                         </button>
                     </div>
                 </div>
                 <div className="p-6 space-y-4">
                     {run.summary && <SummaryPanel run={run} />}
-                    <div>
-                        <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                            Event stream {streaming ? '(live)' : '(closed)'}
-                        </h3>
-                        <div className="bg-black/90 text-green-300 dark:text-green-300 rounded p-3 font-mono text-xs max-h-96 overflow-y-auto">
-                            {events.length === 0 ? (
-                                <div className="text-gray-500 italic">
-                                    {streaming
-                                        ? 'Waiting for events…'
-                                        : 'No events recorded for this run.'}
-                                </div>
-                            ) : (
-                                events
-                                    .filter((e) => e.type !== 'ping')
-                                    .map((e, idx) => (
-                                        <div key={idx} className="mb-1">
-                                            <span className="text-gray-500">
-                                                {new Date(e.received_at).toLocaleTimeString()}
-                                            </span>{' '}
-                                            <span className="text-blue-300">{e.type}</span>{' '}
-                                            <span>{JSON.stringify(e.data)}</span>
-                                        </div>
-                                    ))
-                            )}
-                        </div>
-                    </div>
-                    {finalSummary != null && (
-                        <div className="bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-400 p-3 rounded text-xs">
-                            <div className="font-medium mb-1">Run complete</div>
-                            <pre>{JSON.stringify(finalSummary, null, 2)}</pre>
-                        </div>
-                    )}
+                    <RunLiveTail runId={run.id} inflight={inflight} onDone={() => {
+                        void queryClient.invalidateQueries({ queryKey: ['cloud', 'test-runs'] });
+                    }} />
                 </div>
             </div>
         </div>

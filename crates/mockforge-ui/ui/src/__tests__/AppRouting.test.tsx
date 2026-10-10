@@ -1,7 +1,14 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter, useLocation } from 'react-router-dom';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { render, screen, fireEvent, act } from '@testing-library/react';
+import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom';
+import { beforeAll, beforeEach, afterEach, describe, expect, it, vi } from 'vitest';
+
+const lazyGates = vi.hoisted(() => new Map<string, { ready: boolean; promise: Promise<void>; resolve: () => void }>());
+function DelayedPage({ name }: { name: string }) {
+  const gate = lazyGates.get(name);
+  if (gate && !gate.ready) throw gate.promise;
+  return <h1>{name}</h1>;
+}
 
 // --- Hermetic stand-ins for everything App wires up around its routes ---
 
@@ -42,14 +49,18 @@ vi.mock('../routes', () => ({
   routes: [
     { path: '/dashboard', element: <div>dashboard page</div> },
     { path: '/billing', element: <div>billing page</div> },
+    { path: '/state-machines', element: <h1>State Machines</h1> },
+    ...['orchestration-builder', 'graph', 'observability'].map(name => ({ path: `/${name}`, element: <DelayedPage name={name} /> })),
   ],
 }));
 
 import App from '../App';
+import { authApi } from '../services/authApi';
 
 function LocationProbe() {
   const location = useLocation();
-  return <div data-testid="location">{location.pathname + location.search}</div>;
+  const navigate = useNavigate();
+  return <><button onClick={() => React.startTransition(() => navigate('/orchestration-builder'))}>Open orchestration</button><button onClick={() => React.startTransition(() => navigate('/graph'))}>Open graph</button><button onClick={() => React.startTransition(() => navigate('/observability'))}>Open observability</button> <div data-testid="location">{location.pathname + location.search}</div></>;
 }
 
 function renderAt(url: string) {
@@ -67,10 +78,44 @@ function signIn() {
 }
 
 describe('App routing', () => {
+  afterEach(() => { if (vi.isMockFunction(authApi.resetPassword)) vi.mocked(authApi.resetPassword).mockRestore(); });
   beforeEach(() => {
     authState.isAuthenticated = false;
     authState.user = null;
     authState.checkAuth.mockClear();
+  });
+
+  it('replaces the previous editor during delayed sidebar route loading', async () => {
+    signIn();
+    for (const name of ['orchestration-builder', 'graph', 'observability']) {
+      let resolve!: () => void;
+      const promise = new Promise<void>(r => { resolve = r; });
+      lazyGates.set(name, { ready: false, promise, resolve });
+    }
+    renderAt('/state-machines');
+    expect(await screen.findByRole('heading', { name: 'State Machines' })).toBeVisible();
+    for (const [name, button] of [['orchestration-builder', 'Open orchestration'], ['graph', 'Open graph'], ['observability', 'Open observability']]) {
+      fireEvent.click(screen.getByRole('button', { name: button }));
+      expect(await screen.findByText('app.loading')).toBeVisible();
+      expect(screen.queryByRole('heading', { name: 'State Machines' })).not.toBeInTheDocument();
+      expect(screen.getByTestId('location')).toHaveTextContent(`/${name}`);
+      await act(async () => { const gate = lazyGates.get(name)!; gate.ready = true; gate.resolve(); await gate.promise; });
+      expect(await screen.findByRole('heading', { name })).toBeVisible();
+    }
+    lazyGates.clear();
+  });
+
+  it('opens recovery publicly and clears expired reset feedback when requesting a new link', async () => {
+    vi.spyOn(authApi, 'resetPassword').mockRejectedValue(new Error('Expired reset link'));
+    renderAt('/reset-password?token=expired-fixture');
+    fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'Fixture-password' } });
+    fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'Fixture-password' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Reset password' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Expired reset link');
+    fireEvent.click(screen.getByRole('link', { name: 'Request a new reset link' }));
+    expect(await screen.findByLabelText('Email')).toBeVisible();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(authState.checkAuth).not.toHaveBeenCalled();
   });
 
   describe('auth entry paths', () => {

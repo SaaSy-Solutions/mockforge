@@ -449,7 +449,7 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         )
         .route(
             "/api/v1/test-runs/{id}",
-            get(handlers::test_runs::get_run),
+            get(handlers::test_runs::get_run).delete(handlers::test_runs::delete_run),
         )
         .route(
             "/api/v1/test-runs/{id}/cancel",

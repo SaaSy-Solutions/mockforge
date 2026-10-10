@@ -115,6 +115,31 @@ describe('useHistory', () => {
     expect(result.current.canUndo).toBe(false);
   });
 
+  it('keeps history actions stable so a graph-recording effect settles', () => {
+    const { result } = renderHook(() => useHistory(0));
+    const { push, undo, redo } = result.current;
+    act(() => result.current.push(1));
+    expect(result.current.push).toBe(push);
+    expect(result.current.undo).toBe(undo);
+    expect(result.current.redo).toBe(redo);
+  });
+
+  it('retains intermediate snapshots when several actions share a React batch', () => {
+    const { result } = renderHook(() => useHistory(0));
+    act(() => { result.current.push(1); result.current.push(2); });
+    act(() => { expect(result.current.undo()).toBe(1); });
+    act(() => { expect(result.current.undo()).toBe(0); });
+    act(() => { expect(result.current.redo()).toBe(1); });
+  });
+
+  it('does not create undo history when recording the current snapshot', () => {
+    const snapshot = { nodes: [], edges: [] };
+    const { result } = renderHook(() => useHistory(snapshot));
+    act(() => result.current.push(snapshot));
+    expect(result.current.canUndo).toBe(false);
+    act(() => { expect(result.current.undo()).toBeNull(); });
+  });
+
   it('should clear history', () => {
     const initialState: GraphState = { nodes: [], edges: [] };
     const { result } = renderHook(() => useHistory(initialState));

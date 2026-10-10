@@ -1,4 +1,5 @@
 import { useEffect, Suspense, lazy } from 'react';
+import { PasswordRecoveryPage } from './pages/PasswordRecoveryPage';
 import { ConfirmationDialog } from './components/ui/ConfirmationDialog';
 import { Routes, Route, Navigate, useNavigate, useParams, useLocation } from 'react-router-dom';
 import { AppShell } from './components/layout/AppShell';
@@ -150,10 +151,6 @@ function App() {
     });
   }, []);
 
-  const handleRefresh = () => {
-    // Refresh data for the current page
-  };
-
   const loadingFallback = (
     <div className="flex items-center justify-center h-64">
       <div className="text-center">
@@ -165,10 +162,10 @@ function App() {
 
   const guardedApp = (
     <AuthGuard>
-      <AppShell onRefresh={handleRefresh}>
+      <AppShell>
         <ErrorBoundary resetKey={location.pathname}>
-          <Suspense fallback={loadingFallback}>
-            <Routes key={location.pathname}>
+          <Suspense key={location.pathname} fallback={loadingFallback}>
+            <Routes>
               {/* Redirect root to the user's preferred default page (falls back to /dashboard). */}
               <Route path="/" element={<Navigate to={rootRedirect} replace />} />
 
@@ -198,6 +195,8 @@ function App() {
       <ToastProvider>
         <ConfirmationDialog />
         <Routes>
+          <Route path="/forgot-password" element={<PasswordRecoveryPage key="request" />} />
+          <Route path="/reset-password" element={<PasswordRecoveryPage key="reset" reset />} />
           {/* Public legal documents: outside AuthGuard and AppShell so anonymous
               visitors (and links from mockforge.dev) can read them. */}
           <Route

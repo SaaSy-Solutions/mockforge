@@ -42,7 +42,7 @@ interface PaletteItem {
 interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onRefresh: () => void;
+  onRefresh?: () => void;
   onToggleSidebar: () => void;
   onOpenHelp: () => void;
 }
@@ -183,16 +183,6 @@ export function CommandPalette({
         },
       },
       {
-        key: 'action:refresh',
-        group: 'actions',
-        label: t('shell.action.refresh'),
-        icon: RefreshCw,
-        onSelect: () => {
-          onRefresh();
-          close();
-        },
-      },
-      {
         key: 'action:sidebar',
         group: 'actions',
         label: t('shell.action.toggleSidebar'),
@@ -213,6 +203,10 @@ export function CommandPalette({
         },
       },
     ];
+    if (onRefresh) {
+      shellActions.push({ key: 'action:refresh', group: 'actions', label: t('shell.action.refresh'), icon: RefreshCw,
+        onSelect: () => { onRefresh(); close(); } });
+    }
     actions.push(
       ...shellActions.filter((a) => !q || a.label.toLowerCase().includes(q.toLowerCase())),
     );

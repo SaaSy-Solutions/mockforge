@@ -66,8 +66,9 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
     return <>{children}</>;
   }
 
-  // Show loading spinner until initial auth check completes
-  if (!hasCheckedAuth || isLoading) {
+  // Keep the login form mounted during its own submission so failure feedback
+  // and entered values survive the store loading state.
+  if (!hasCheckedAuth || (isAuthenticated && isLoading)) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="text-center space-y-4">

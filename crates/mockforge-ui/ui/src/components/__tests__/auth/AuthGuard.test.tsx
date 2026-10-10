@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
 import { AuthGuard } from '../../auth/AuthGuard';
@@ -82,6 +82,28 @@ describe('AuthGuard', () => {
       // "Sign in to access the admin dashboard" (local) depending on VITE_API_BASE_URL
       expect(screen.getByText(/sign in to/i)).toBeInTheDocument();
     });
+  });
+
+  it('keeps entered values and login failure feedback when the store enters a loading state', async () => {
+    const checkAuth = vi.fn().mockResolvedValue(undefined);
+    let rejectLogin!: (error: Error) => void;
+    const state = {
+      isAuthenticated: false, user: null, isLoading: false, checkAuth,
+      login: vi.fn(() => new Promise<void>((_resolve, reject) => { rejectLogin = reject; })),
+      setAuthenticated: vi.fn(),
+    };
+    mockUseAuthStore.mockReturnValue(state as unknown as ReturnType<typeof useAuthStore>);
+    const ui = <MemoryRouter><AuthGuard><div>Protected</div></AuthGuard></MemoryRouter>;
+    const view = render(ui);
+    const identifier = await screen.findByLabelText(/^(Email|Username)$/);
+    fireEvent.change(identifier, { target: { value: 'fixture@example.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'Fixture-password' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign In' }));
+    state.isLoading = true;
+    view.rerender(<MemoryRouter><AuthGuard><div>Protected</div></AuthGuard></MemoryRouter>);
+    expect(screen.getByLabelText(/^(Email|Username)$/)).toHaveValue('fixture@example.com');
+    rejectLogin(new Error('Invalid credentials'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid credentials');
   });
 
   it('renders loading state while authentication is being checked', () => {

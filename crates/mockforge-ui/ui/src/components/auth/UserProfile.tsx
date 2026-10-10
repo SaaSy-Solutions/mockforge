@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
@@ -39,6 +40,7 @@ interface UserProfileProps {
 }
 
 export function UserProfile({ collapsed = false }: UserProfileProps) {
+  const navigate = useNavigate();
   const { user, logout } = useAuthStore();
   const openHelp = useHelpStore((state) => state.open);
   const { t, locale, supportedLocales, setLocale } = useI18n();
@@ -147,7 +149,7 @@ export function UserProfile({ collapsed = false }: UserProfileProps) {
             <DropdownMenu.Separator className="my-1 h-px bg-border" />
             <DropdownMenu.Item
               className={cn(menuItemClass, 'text-danger-600 data-[highlighted]:bg-danger-50 dark:text-danger-400 dark:data-[highlighted]:bg-danger-900/20')}
-              onSelect={() => void logout()}
+              onSelect={() => { void logout(); navigate('/login', { replace: true }); }}
             >
               <LogOut className="h-4 w-4" aria-hidden />
               {t('user.signOut')}

@@ -134,6 +134,11 @@ class CloudTestRunsApi {
     ) as Promise<TestRun>;
   }
 
+  async deleteRun(id: string): Promise<{ deleted: boolean }> {
+    this.guard('deleteRun');
+    return fetchJsonWithErrorBody(`/api/v1/test-runs/${id}`, { method: 'DELETE' }) as Promise<{ deleted: boolean }>;
+  }
+
   async cancelRun(id: string): Promise<TestRun> {
     this.guard('cancelRun');
     return fetchJsonWithErrorBody(`/api/v1/test-runs/${id}/cancel`, {

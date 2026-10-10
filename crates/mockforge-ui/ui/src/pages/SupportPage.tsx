@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import React, { useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/button';
@@ -17,7 +17,6 @@ interface SupportRequest {
 }
 
 export function SupportPage() {
-  const navigate = useNavigate();
   const [formData, setFormData] = useState<SupportRequest>({
     subject: '',
     category: 'technical',
@@ -132,15 +131,9 @@ export function SupportPage() {
               >
                 Documentation →
               </a>
-              <button
-                onClick={() => {
-                  // Navigate to FAQ (if implemented)
-                  navigate('/faq');
-                }}
-                className="text-primary hover:underline text-sm text-left"
-              >
+              <Link to="/faq" className="text-primary hover:underline text-sm">
                 FAQ →
-              </button>
+              </Link>
               <a
                 href="https://discord.gg/vk22xwxug3"
                 target="_blank"
