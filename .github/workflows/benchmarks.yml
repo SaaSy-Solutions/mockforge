@@ -16,6 +16,8 @@ on:
       - '.github/workflows/benchmarks.yml'
       - '.github/scripts/compare-benchmarks.js'
       - 'scripts/tests/test_benchmark_gate.py'
+      - 'scripts/tests/test_paired_benchmarks.py'
+      - 'scripts/ci/paired_benchmarks.py'
   push:
     branches:
       - main
@@ -30,8 +32,8 @@ concurrency:
 env:
   CARGO_TERM_COLOR: always
   REGRESSION_THRESHOLD: 5.0
-  CARGO_BUILD_JOBS: "4"
-  RUSTUP_TOOLCHAIN: stable
+  CARGO_BUILD_JOBS: "2"
+  RUSTUP_TOOLCHAIN: "1.96.0"
 
 jobs:
   benchmark:
@@ -59,7 +61,9 @@ jobs:
         uses: ./.github/actions/rust-toolchain
 
       - name: Test benchmark comparison gate
-        run: python3 scripts/tests/test_benchmark_gate.py
+        run: |
+          python3 scripts/tests/test_benchmark_gate.py
+          python3 scripts/tests/test_paired_benchmarks.py
 
       - name: Cache cargo registry
         uses: actions/cache@v6
@@ -82,20 +86,17 @@ jobs:
       # main is a protected branch, so main-push runs publish the baseline to
       # the unprotected `bench-baseline` branch instead of committing it.
       # The copy committed on main is only a fallback for the first run.
-      - name: Fetch baseline
+      # Compare the immutable PR base with the candidate on this host in
+      # adjacent ABBA pairs. A moving main baseline can otherwise compare a
+      # merged PR to itself, and shared-host load is not comparable over time.
+      - name: Run paired base and candidate benchmarks
         if: github.event_name == 'pull_request'
-        run: |
-          if git fetch --no-tags --depth=1 origin bench-baseline 2>/dev/null \
-            && git show FETCH_HEAD:baseline.json > .github/benchmarks/baseline.json.tmp 2>/dev/null; then
-            echo "Using baseline from the bench-baseline branch"
-          else
-            git fetch origin main:main || true
-            git show main:.github/benchmarks/baseline.json > .github/benchmarks/baseline.json.tmp 2>/dev/null || echo "{}" > .github/benchmarks/baseline.json.tmp
-            echo "bench-baseline branch missing; using main's committed baseline"
-          fi
-          mv .github/benchmarks/baseline.json.tmp .github/benchmarks/baseline.json
+        env:
+          BENCHMARK_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python3 scripts/ci/paired_benchmarks.py --base-sha "$BENCHMARK_BASE_SHA"
 
       - name: Run benchmarks
+        if: github.event_name != 'pull_request'
         run: |
           cd crates/mockforge-core
           cargo bench --bench core_benchmarks -- --save-baseline current
@@ -107,6 +108,9 @@ jobs:
         if: github.event_name == 'pull_request'
         id: compare
         continue-on-error: true
+        env:
+          BASELINE_DIR: paired-benchmarks
+          CRITERION_DIR: paired-benchmarks/criterion
         run: node .github/scripts/compare-benchmarks.js compare
 
       - name: Save new baseline (main branch only)
@@ -138,9 +142,13 @@ jobs:
           path: |
             target/criterion/
             benchmark-report.md
+            paired-benchmarks/
           retention-days: 30
 
       - name: Generate performance dashboard
+        env:
+          BASELINE_DIR: ${{ github.event_name == 'pull_request' && 'paired-benchmarks' || '.github/benchmarks' }}
+          CRITERION_DIR: ${{ github.event_name == 'pull_request' && 'paired-benchmarks/criterion' || 'target/criterion' }}
         run: |
           node .github/scripts/generate-dashboard.js
 
