@@ -632,3 +632,43 @@ async fn promote_other_orgs_published_scenario() {
         a.post(&promote_path, body(&uuid::Uuid::new_v4().to_string())).await,
     );
 }
+
+/// Password recovery is public and must work on the real PostgreSQL adapter.
+/// The previous i64 bind to make_interval's int4 parameter returned HTTP 500.
+#[tokio::test]
+#[ignore]
+async fn password_reset_request_sets_one_hour_postgres_expiry() {
+    let (owner, email) = register_user("rlsreset").await;
+    let client = Client::new();
+    let path = format!("{}/api/v1/auth/password/reset-request", owner.base_url);
+    let known = ok(
+        "password reset request",
+        send(client.post(&path).json(&json!({ "email": email }))).await,
+    );
+    let unknown = ok(
+        "unknown account reset request",
+        send(
+            client
+                .post(&path)
+                .json(&json!({ "email": format!("missing-{}@e2e-test.local", unique()) })),
+        )
+        .await,
+    );
+    assert_eq!(known, unknown, "Account existence must not change the confirmation");
+
+    let pool = sqlx::postgres::PgPoolOptions::new()
+        .max_connections(1)
+        .connect(&std::env::var("DATABASE_URL").expect("E2E owner database configured"))
+        .await
+        .expect("connect E2E owner database");
+    let seconds: i64 = sqlx::query_scalar("SELECT EXTRACT(EPOCH FROM (expires_at - NOW()))::bigint FROM verification_tokens WHERE user_id = $1 ORDER BY created_at DESC LIMIT 1")
+        .bind(uuid::Uuid::parse_str(&owner.user_id).expect("registered user id is UUID"))
+        .fetch_one(&pool)
+        .await
+        .expect("read reset expiry without exposing its token");
+    assert!(
+        (3500..=3600).contains(&seconds),
+        "Expected one-hour expiry, got {seconds} seconds"
+    );
+    pool.close().await;
+}
