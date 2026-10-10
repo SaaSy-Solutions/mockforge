@@ -5,11 +5,13 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts/ci"))
 SPEC = importlib.util.spec_from_file_location(
     "paired", ROOT / "scripts/ci/paired_benchmarks.py"
 )

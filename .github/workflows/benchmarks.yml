@@ -17,7 +17,8 @@ on:
       - '.github/scripts/compare-benchmarks.js'
       - 'scripts/tests/test_benchmark_gate.py'
       - 'scripts/tests/test_paired_benchmarks.py'
-      - 'scripts/ci/paired_benchmarks.py'
+      - 'scripts/ci/*benchmarks*.py'
+      - 'scripts/ci/benchmark_measurements.py'
   push:
     branches:
       - main
