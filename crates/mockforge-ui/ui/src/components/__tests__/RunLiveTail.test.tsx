@@ -49,6 +49,18 @@ describe('RunLiveTail', () => {
         expect(container).toBeEmptyDOMElement();
     });
 
+    it('keeps completed events visible when the parent marks the run terminal', async () => {
+        vi.stubGlobal('EventSource', MockEventSource);
+        const view = render(<RunLiveTail runId="completed" inflight />);
+        await waitFor(() => expect(MockEventSource.instances).toHaveLength(1));
+        const source = MockEventSource.instances[0];
+        act(() => { source.emit('log', { message: 'Completed transcript' }); source.emit('done', { status: 'passed' }); });
+        expect(await screen.findByText(/Completed transcript/)).toBeVisible();
+        view.rerender(<RunLiveTail runId="completed" inflight={false} />);
+        expect(screen.getByText(/Completed transcript/)).toBeVisible();
+        expect(source.readyState).toBe(3);
+    });
+
     it('opens the stream for an in-flight run and shows the live badge', async () => {
         vi.stubGlobal('EventSource', MockEventSource);
         render(<RunLiveTail runId="run-123" inflight />);
