@@ -3,10 +3,6 @@
 //! Provides scenario management, scheduling, distributed coordination,
 //! and experiment management for `MockForge` chaos engineering.
 
-// Public API surface is still stabilizing (merged in #1005); per-item doc
-// coverage is a tracked follow-up rather than a merge gate.
-#![allow(missing_docs)]
-
 pub mod config;
 
 pub mod ab_testing;
@@ -20,6 +16,7 @@ pub mod distributed_coordinator;
 pub mod failure_designer;
 pub mod gitops;
 pub mod incident_replay;
+/// Notification, dashboard, and incident integrations for chaos experiments.
 pub mod integrations;
 pub mod multi_cluster;
 pub mod scenario_orchestrator;

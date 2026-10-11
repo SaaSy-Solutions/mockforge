@@ -34,18 +34,23 @@ where
 #[derive(Error, Debug)]
 pub enum OrchestrationError {
     #[error("Assertion failed: {0}")]
+    /// An expected orchestration outcome was not satisfied.
     AssertionFailed(String),
 
     #[error("Hook execution failed: {0}")]
+    /// A hook could not be prepared or executed.
     HookFailed(String),
 
     #[error("Variable not found: {0}")]
+    /// An execution-context variable was absent.
     VariableNotFound(String),
 
     #[error("Condition evaluation failed: {0}")]
+    /// A condition could not be evaluated with the supplied context.
     ConditionFailed(String),
 
     #[error("Serialization error: {0}")]
+    /// Orchestration data could not be serialized or decoded.
     SerializationError(String),
 }
 
@@ -54,33 +59,78 @@ pub enum OrchestrationError {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Condition {
     /// Variable equals value
-    Equals { variable: String, value: JsonValue },
+    Equals {
+        /// Name of an execution-context variable.
+        variable: String,
+        /// Value against which the variable is compared.
+        value: JsonValue,
+    },
     /// Variable not equals value
-    NotEquals { variable: String, value: JsonValue },
+    NotEquals {
+        /// Name of an execution-context variable.
+        variable: String,
+        /// Value against which the variable is compared.
+        value: JsonValue,
+    },
     /// Variable greater than value
-    GreaterThan { variable: String, value: f64 },
+    GreaterThan {
+        /// Name of an execution-context variable.
+        variable: String,
+        /// Value against which the variable is compared.
+        value: f64,
+    },
     /// Variable less than value
-    LessThan { variable: String, value: f64 },
+    LessThan {
+        /// Name of an execution-context variable.
+        variable: String,
+        /// Value against which the variable is compared.
+        value: f64,
+    },
     /// Variable greater than or equal to value
-    GreaterThanOrEqual { variable: String, value: f64 },
+    GreaterThanOrEqual {
+        /// Name of an execution-context variable.
+        variable: String,
+        /// Value against which the variable is compared.
+        value: f64,
+    },
     /// Variable less than or equal to value
-    LessThanOrEqual { variable: String, value: f64 },
+    LessThanOrEqual {
+        /// Name of an execution-context variable.
+        variable: String,
+        /// Value against which the variable is compared.
+        value: f64,
+    },
     /// Variable exists
-    Exists { variable: String },
+    Exists {
+        /// Variable name whose presence is checked, regardless of its value.
+        variable: String,
+    },
     /// AND condition
-    And { conditions: Vec<Self> },
+    And {
+        /// Conditions evaluated until one is false; an empty list is true.
+        conditions: Vec<Self>,
+    },
     /// OR condition
-    Or { conditions: Vec<Self> },
+    Or {
+        /// Conditions evaluated until one is true; an empty list is false.
+        conditions: Vec<Self>,
+    },
     /// NOT condition
-    Not { condition: Box<Self> },
+    Not {
+        /// Condition whose result is inverted.
+        condition: Box<Self>,
+    },
     /// Previous step succeeded
     PreviousStepSucceeded,
     /// Previous step failed
     PreviousStepFailed,
     /// Metric threshold
     MetricThreshold {
+        /// Name of a metric stored in the execution context.
         metric_name: String,
+        /// Comparison applied between the metric and threshold.
         operator: ComparisonOperator,
+        /// Threshold expressed in the selected metric's units.
         threshold: f64,
     },
 }
@@ -89,11 +139,17 @@ pub enum Condition {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ComparisonOperator {
+    /// Equal within the evaluator's floating-point tolerance.
     Equals,
+    /// Different beyond the evaluator's floating-point tolerance.
     NotEquals,
+    /// Strictly greater than the threshold.
     GreaterThan,
+    /// Strictly less than the threshold.
     LessThan,
+    /// Greater than or equal to the threshold.
     GreaterThanOrEqual,
+    /// Less than or equal to the threshold.
     LessThanOrEqual,
 }
 
@@ -230,32 +286,59 @@ pub enum HookType {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum HookAction {
     /// Set variable
-    SetVariable { name: String, value: JsonValue },
+    SetVariable {
+        /// Execution-context variable to create or replace.
+        name: String,
+        /// JSON value stored under the variable name.
+        value: JsonValue,
+    },
     /// Log message
-    Log { message: String, level: LogLevel },
+    Log {
+        /// Text emitted through the tracing subscriber.
+        message: String,
+        /// Severity assigned to the message.
+        level: LogLevel,
+    },
     /// HTTP request (webhook)
     HttpRequest {
+        /// Webhook destination URL.
         url: String,
+        /// HTTP method parsed by the webhook client.
         method: String,
         /// Request body as JSON string (can include templates like {{variables.xyz}})
         /// If a JSON object is provided in YAML, it will be serialized to a string
         #[serde(default, deserialize_with = "deserialize_body_string")]
         body: Option<String>,
     },
-    /// Execute command
-    Command { command: String, args: Vec<String> },
+    /// Describe a command for logging; this executor does not launch processes.
+    Command {
+        /// Command label recorded in the log; the current executor does not run it.
+        command: String,
+        /// Arguments recorded alongside the command label.
+        args: Vec<String>,
+    },
     /// Record metric
-    RecordMetric { name: String, value: f64 },
+    RecordMetric {
+        /// Metric name to create or replace in the execution context.
+        name: String,
+        /// Numeric value stored for the metric.
+        value: f64,
+    },
 }
 
 /// Log level
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LogLevel {
+    /// Most detailed diagnostic output.
     Trace,
+    /// Diagnostic output used during development.
     Debug,
+    /// Normal operational information.
     Info,
+    /// An unexpected condition that does not stop execution.
     Warn,
+    /// A failure reported by the hook.
     Error,
 }
 
@@ -396,17 +479,35 @@ impl Hook {
 pub enum Assertion {
     /// Variable equals value
     VariableEquals {
+        /// Execution-context variable being checked.
         variable: String,
+        /// JSON value required for the assertion to pass.
         expected: JsonValue,
     },
     /// Metric within range
-    MetricInRange { metric: String, min: f64, max: f64 },
+    MetricInRange {
+        /// Execution-context metric being checked.
+        metric: String,
+        /// Inclusive lower bound in the metric's units.
+        min: f64,
+        /// Inclusive upper bound in the metric's units.
+        max: f64,
+    },
     /// Step completed successfully
-    StepSucceeded { step_name: String },
+    StepSucceeded {
+        /// Name of the step whose recorded result must be successful.
+        step_name: String,
+    },
     /// Step failed
-    StepFailed { step_name: String },
+    StepFailed {
+        /// Name of the step whose recorded result must be unsuccessful.
+        step_name: String,
+    },
     /// Custom condition
-    Condition { condition: Condition },
+    Condition {
+        /// Condition required to evaluate to true.
+        condition: Condition,
+    },
 }
 
 impl Assertion {

@@ -173,6 +173,7 @@ impl MetricsBucket {
 pub struct ChaosImpact {
     /// Analysis period
     pub start_time: DateTime<Utc>,
+    /// End of the period represented by this impact analysis.
     pub end_time: DateTime<Utc>,
 
     /// Total chaos events
@@ -193,6 +194,7 @@ pub struct ChaosImpact {
 
     /// Peak chaos time
     pub peak_chaos_time: Option<DateTime<Utc>>,
+    /// Event count in the busiest metrics bucket of the analysis period.
     pub peak_chaos_events: usize,
 }
 

@@ -14,41 +14,62 @@ use std::path::Path;
 /// Version control commit
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Commit {
+    /// Unique identifier generated for this commit.
     pub id: String,
+    /// Previous commit identifier, or none for the initial commit.
     pub parent_id: Option<String>,
+    /// Name supplied by the commit author.
     pub author: String,
+    /// Email address supplied by the commit author.
     pub email: String,
+    /// Description of the configuration change.
     pub message: String,
+    /// UTC time at which the commit was created.
     pub timestamp: DateTime<Utc>,
+    /// SHA-256 hash of serialized configuration content; empty for the initial commit.
     pub content_hash: String,
+    /// Additional application-defined commit attributes.
     pub metadata: HashMap<String, String>,
 }
 
 /// Version control branch
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Branch {
+    /// Branch name within the repository.
     pub name: String,
+    /// Identifier of the most recent commit on this branch.
     pub head_commit_id: String,
+    /// UTC time at which the branch was created.
     pub created_at: DateTime<Utc>,
+    /// Recorded creator of the branch.
     pub created_by: String,
+    /// Configured branch protection flag; this repository does not enforce deletion policy.
     pub protected: bool,
 }
 
 /// Diff between two versions
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Diff {
+    /// Identifier of the baseline commit.
     pub from_commit: String,
+    /// Identifier of the commit compared with the baseline.
     pub to_commit: String,
+    /// Individual configuration changes between the commits.
     pub changes: Vec<DiffChange>,
+    /// Counts of additions, deletions, and modifications.
     pub stats: DiffStats,
 }
 
 /// Individual change in a diff
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiffChange {
+    /// Location of the changed value within the configuration.
     pub path: String,
+    /// Whether the value was added, modified, or deleted.
     pub change_type: DiffChangeType,
+    /// Value in the baseline, when present.
     pub old_value: Option<serde_json::Value>,
+    /// Value in the compared commit, when present.
     pub new_value: Option<serde_json::Value>,
 }
 
@@ -56,16 +77,22 @@ pub struct DiffChange {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum DiffChangeType {
+    /// A value was introduced.
     Added,
+    /// An existing value changed.
     Modified,
+    /// A value was removed.
     Deleted,
 }
 
 /// Diff statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DiffStats {
+    /// Number of added configuration values.
     pub additions: usize,
+    /// Number of deleted configuration values.
     pub deletions: usize,
+    /// Number of modified configuration values.
     pub modifications: usize,
 }
 
