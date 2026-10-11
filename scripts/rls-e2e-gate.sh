@@ -76,7 +76,15 @@ fi
 # Compose project names allow only [a-z0-9_-]; hosted runners are named
 # like "GitHub Actions 1000072017".
 runner_slug="$(printf '%s' "${RUNNER_NAME:-local}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '-')"
-export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-rlsgate-$$-${runner_slug}}"
+# A PID can be reused after a killed job leaves Docker resources behind.
+# Keep a durable run/attempt identity plus randomness; later local subcommands
+# reuse the exact project read from STATE_FILE above.
+if [ -z "${COMPOSE_PROJECT_NAME:-}" ]; then
+  project_uuid="$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
+  [[ "$project_uuid" =~ ^[a-f0-9]{32}$ ]] || { echo "error: invalid project UUID" >&2; exit 1; }
+  COMPOSE_PROJECT_NAME="rlsgate-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-${project_uuid}-${runner_slug}"
+fi
+export COMPOSE_PROJECT_NAME
 
 # Docker allocates service ports atomically when the requested host port is 0.
 # Explicit ports still win for local use. The native server gets a free-port
@@ -192,6 +200,23 @@ MINIO_CONSOLE_PORT="$MINIO_CONSOLE_PORT"
 REGISTRY_PORT="$REGISTRY_PORT"
 EOF
   mv -- "$destination" "$STATE_FILE"
+}
+
+require_fresh_project() {
+  [[ "$COMPOSE_PROJECT_NAME" =~ ^[a-z0-9][a-z0-9_-]{1,180}$ ]] || die "invalid Compose project identity"
+  local kind format existing
+  # Refuse residual resources before claiming this invocation's state. Never
+  # adopt or tear down a prior run's containers, networks, or volumes.
+  for kind in container network volume; do
+    format='{{.ID}}'
+    [ "$kind" != volume ] || format='{{.Name}}'
+    local args=("$kind" ls)
+    [ "$kind" != container ] || args+=(--all)
+    existing="$(timeout --signal=KILL 20s docker "${args[@]}" \
+      --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME" --format "$format")" \
+      || die "cannot establish fresh Compose project ownership"
+    [ -z "$existing" ] || die "Compose project already exists; refusing to adopt it"
+  done
 }
 
 compose_up() {
@@ -401,8 +426,9 @@ SQL
 }
 
 cmd_up() {
-  write_state new
   require_tools
+  require_fresh_project
+  write_state new
   compose_up
   build_server
 

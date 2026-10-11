@@ -197,6 +197,53 @@ elif 'port' in args: print('127.0.0.1:'+{'5432':'42000','9000':'42001','9001':'4
             self.assertEqual(sum("down" in call["args"] for call in calls), 1)
             self.assertEqual(sum("up" in call["args"] for call in calls), 1)
 
+    def test_rls_stale_project_refusal_never_claims_state_or_cleans_residuals(self):
+        for kind in ['container','network','volume','read_failure']:
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
+                directory=Path(tmp);calls=directory/'calls.jsonl';state=directory/'state'
+                docker=directory/'docker'
+                docker.write_text("#!/usr/bin/env python3\nimport json,os,sys\nfrom pathlib import Path\na=sys.argv[1:]\nwith Path(os.environ['CALLS']).open('a') as f:f.write(json.dumps(a)+'\\n')\nif a[0]==os.environ['RESIDUAL']:print('prior-run-resource')\nif os.environ['RESIDUAL']=='read_failure':sys.exit(23)\n")
+                docker.chmod(0o755)
+                for tool in ['cargo','curl','psql']:
+                    path=directory/tool;path.write_text('#!/bin/sh\nexit 0\n');path.chmod(0o755)
+                env={**os.environ,'PATH':tmp+os.pathsep+os.environ['PATH'],'STATE_FILE':str(state),
+                     'COMPOSE_PROJECT_NAME':'rlsgate-prior-job','CALLS':str(calls),'RESIDUAL':kind}
+                result=subprocess.run(['bash',str(ROOT/'scripts/rls-e2e-gate.sh'),'all'],env=env,text=True,capture_output=True)
+                self.assertEqual(result.returncode,1,result.stdout+result.stderr)
+                self.assertFalse(state.exists())
+                operations=[json.loads(line) for line in calls.read_text().splitlines()]
+                self.assertTrue(operations)
+                self.assertFalse(any('up' in args or 'down' in args for args in operations))
+                for args in operations:
+                    self.assertIn('label=com.docker.compose.project=rlsgate-prior-job',args)
+                    self.assertIn(args[0],['container','network','volume'])
+
+    def test_rls_uuid_generator_failure_never_claims_state_or_calls_docker(self):
+        for program, code in [('#!/bin/sh\nexit 29\n',29),('#!/bin/sh\nprintf invalid\n',1)]:
+            with self.subTest(code=code), tempfile.TemporaryDirectory() as tmp:
+                directory=Path(tmp);state=directory/'state';called=directory/'docker-called'
+                python=directory/'python3';python.write_text(program);python.chmod(0o755)
+                docker=directory/'docker';docker.write_text('#!/bin/sh\ntouch '+str(called)+'\n');docker.chmod(0o755)
+                env={**os.environ,'PATH':tmp+os.pathsep+os.environ['PATH'],'STATE_FILE':str(state)}
+                env.pop('COMPOSE_PROJECT_NAME',None)
+                result=subprocess.run(['bash',str(ROOT/'scripts/rls-e2e-gate.sh'),'all'],env=env,capture_output=True,text=True)
+                self.assertEqual(result.returncode,code,result.stdout+result.stderr)
+                self.assertFalse(state.exists());self.assertFalse(called.exists())
+
+    def test_rls_default_project_remains_unique_for_same_run_and_attempt(self):
+        # Force the same CI run/attempt and runner identity twice. UUID, rather
+        # than process-ID uniqueness, must distinguish the generated projects.
+        prefix=RLS.split('# Docker allocates service ports',1)[0]
+        with tempfile.TemporaryDirectory() as tmp:
+            env={**os.environ,'STATE_FILE':str(Path(tmp)/'state'),'GITHUB_RUN_ID':'101',
+                 'GITHUB_RUN_ATTEMPT':'2','RUNNER_NAME':'same-runner'}
+            env.pop('COMPOSE_PROJECT_NAME',None)
+            script=prefix+'\nprintf "%s\\n" "$COMPOSE_PROJECT_NAME"\n'
+            path=Path(tmp)/'identity.sh';path.write_text(script)
+            results=[subprocess.check_output(['bash',str(path),'up'],env=env,text=True).strip() for _ in range(2)]
+            self.assertNotEqual(results[0],results[1])
+            for project in results:self.assertRegex(project,r'^rlsgate-101-2-[a-f0-9]{32}-same-runner$')
+
     def test_repeated_local_up_refuses_existing_state_without_side_effects(self):
         with tempfile.TemporaryDirectory() as tmp:
             state = Path(tmp) / "state"
