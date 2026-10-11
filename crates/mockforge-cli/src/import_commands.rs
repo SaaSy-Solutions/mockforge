@@ -13,7 +13,7 @@ use std::path::{Path, PathBuf};
 
 #[derive(Subcommand)]
 pub enum ImportCommands {
-    /// Import OpenAPI 3.x specification and generate mock endpoints
+    /// Import OpenAPI 2.0 (Swagger) or 3.x and generate mock endpoints
     ///
     /// Examples:
     ///   mockforge import openapi ./specs/api.yaml
@@ -21,7 +21,7 @@ pub enum ImportCommands {
     ///   mockforge import openapi https://api.example.com/openapi.json
     #[command(verbatim_doc_comment)]
     Openapi {
-        /// Path or URL to OpenAPI specification file (JSON or YAML)
+        /// Path or URL to an OpenAPI or Swagger specification (JSON or YAML)
         spec_path: String,
 
         /// Base URL for the API (overrides servers in spec)
