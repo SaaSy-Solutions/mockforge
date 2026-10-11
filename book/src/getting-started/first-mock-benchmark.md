@@ -26,7 +26,7 @@ On October 11, 2026, the first verified `/users` response arrived **9.195 second
 
 The target is less than 60 seconds from the image pull to the first valid response. The check used a fresh Linux Docker daemon with an empty data root, a new container, and no prior MockForge configuration. Host Docker installation and the preparation of that daemon were outside the timed interval. Download speed and host hardware affect the result.
 
-The tested public image reported `mockforge 0.3.227`; its immutable reference was:
+The tested public image reported version **0.3.227**; its immutable reference was:
 
 ```text
 ghcr.io/saasy-solutions/mockforge@sha256:c0e9a7d90ddb41b89340750bb6c54375c01a77d81f04bf22779f2a0def5ef7fd

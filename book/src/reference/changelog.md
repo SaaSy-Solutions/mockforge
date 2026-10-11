@@ -6,6 +6,7 @@
 
 - **[DevX]** Explicit mock health routes coexist with built-in health probes instead of crashing server startup; this restores the generated `init` project's OpenAPI example. (#851)
 - **[DevX]** The README opens with a working Docker example and a reproducible cold-start measurement. New `init` projects print their startup command and test request; installation guidance no longer promises a 30-second source build. (#851)
+- **[DevX]** Chaos ML and orchestration crates document their public API and enforce missing-documentation warnings through workspace lints, including explicit limits of simulated cluster execution and local manifest synchronization. (#799)
 - **[DevX]** Crate publication returns success after every package is available and fails when any package remains unpublished or its registry lookup fails.
 - **[Reality]** HTTP pipelining benchmarks stop at the configured load deadline, retain partial wire-byte counts, and drain large responses while sending subsequent requests. Response framing handles interim replies, chunked bodies, HEAD, and connection-close bodies. Multipart synthetic files accept `--multipart-content-type`. (#937)
 

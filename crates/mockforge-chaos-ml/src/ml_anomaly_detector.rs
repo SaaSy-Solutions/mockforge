@@ -10,29 +10,48 @@ use std::collections::HashMap;
 /// Metric baseline for anomaly detection
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetricBaseline {
+    /// Name of the metric represented by this baseline or anomaly.
     pub metric_name: String,
+    /// Arithmetic mean of the baseline samples.
     pub mean: f64,
+    /// Population standard deviation of the baseline samples.
     pub std_dev: f64,
+    /// Smallest observed baseline value.
     pub min: f64,
+    /// Largest observed baseline value.
     pub max: f64,
+    /// Middle sorted sample; uses the upper middle sample for even sample counts.
     pub median: f64,
+    /// Observed value at the baseline 95th-percentile index.
     pub p95: f64,
+    /// Observed value at the baseline 99th-percentile index.
     pub p99: f64,
+    /// Number of samples used to construct the baseline.
     pub sample_count: usize,
+    /// UTC time at which the baseline was calculated.
     pub last_updated: DateTime<Utc>,
 }
 
 /// Detected anomaly
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Anomaly {
+    /// Unique identifier generated for the anomaly.
     pub id: String,
+    /// Name of the metric represented by this baseline or anomaly.
     pub metric_name: String,
+    /// Metric value identified as anomalous.
     pub observed_value: f64,
+    /// Lower and upper bounds derived from the baseline mean and configured standard deviation threshold.
     pub expected_range: (f64, f64),
+    /// Deviation score produced by the detection method, such as an absolute z-score.
     pub deviation_score: f64,
+    /// Severity assigned to the detected anomaly.
     pub severity: AnomalySeverity,
+    /// Detection category assigned to the anomaly.
     pub anomaly_type: AnomalyType,
+    /// UTC time of the observation or detection.
     pub timestamp: DateTime<Utc>,
+    /// Additional context supplied for the anomalous observation.
     pub context: HashMap<String, String>,
 }
 
@@ -40,9 +59,13 @@ pub struct Anomaly {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
 pub enum AnomalySeverity {
+    /// Lowest detected anomaly severity.
     Low,
+    /// Moderate anomaly severity.
     Medium,
+    /// High anomaly severity.
     High,
+    /// Highest anomaly severity.
     Critical,
 }
 
@@ -50,18 +73,26 @@ pub enum AnomalySeverity {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum AnomalyType {
+    /// Value outside baseline statistical bounds.
     StatisticalOutlier, // Value outside normal statistical bounds
-    TrendAnomaly,       // Unexpected trend change
-    SeasonalAnomaly,    // Deviation from seasonal pattern
-    ContextualAnomaly,  // Unusual given context
-    CollectiveAnomaly,  // Pattern across multiple metrics
+    /// Unexpected change in the metric trend.
+    TrendAnomaly, // Unexpected trend change
+    /// Deviation from a seasonal pattern.
+    SeasonalAnomaly, // Deviation from seasonal pattern
+    /// Observation that is unusual in its supplied context.
+    ContextualAnomaly, // Unusual given context
+    /// Anomalous pattern across multiple observations or metrics.
+    CollectiveAnomaly, // Pattern across multiple metrics
 }
 
 /// Time-series data point
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TimeSeriesPoint {
+    /// UTC time of the observation or detection.
     pub timestamp: DateTime<Utc>,
+    /// Numeric value observed for the metric.
     pub value: f64,
+    /// Application-defined attributes accompanying the observation.
     pub metadata: HashMap<String, String>,
 }
 
