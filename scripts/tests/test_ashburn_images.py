@@ -83,13 +83,14 @@ class AshburnImagesTest(unittest.TestCase):
         self.assertIn("image_digest: ${{ steps.build-and-push.outputs.digest }}", core_workflow)
         self.assertIn("@${{ needs.build-and-push.outputs.image_digest }}", core_workflow)
 
-    def test_no_write_planner_and_summary_use_hosted_runners(self) -> None:
+    def test_no_write_planner_and_summary_use_hetzner_runners(self) -> None:
         workflow = (ROOT / ".github/workflows/ashburn-images.yml").read_text()
         plan = workflow.split("\n  plan:\n", 1)[1].split("\n  build:\n", 1)[0]
         build = workflow.split("\n  build:\n", 1)[1].split("\n  images-built:\n", 1)[0]
         summary = workflow.split("\n  images-built:\n", 1)[1]
         for no_write_job in (plan, summary):
-            self.assertIn("runs-on: ubuntu-latest", no_write_job)
+            self.assertIn("runs-on: [self-hosted, linux, x64, rust]", no_write_job)
+            self.assertIn("timeout-minutes: 15", no_write_job)
             self.assertNotIn("packages: write", no_write_job)
             self.assertNotIn("docker/login-action", no_write_job)
         self.assertIn("runs-on: [self-hosted, linux, x64, rust]", build)
