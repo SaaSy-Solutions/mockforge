@@ -10,22 +10,39 @@ use std::collections::HashMap;
 /// Orchestration template
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrchestrationTemplate {
+    /// Unique identifier of the template or review.
     pub id: String,
+    /// Display name of the orchestration template.
     pub name: String,
+    /// Human-readable summary of the template.
     pub description: String,
+    /// Template author name.
     pub author: String,
+    /// Email address supplied by the template author.
     pub author_email: String,
+    /// Version label for the published template.
     pub version: String,
+    /// Template category used for filtering.
     pub category: TemplateCategory,
+    /// Discovery tags attached to the template.
     pub tags: Vec<String>,
+    /// Orchestration configuration represented by the template.
     pub content: serde_json::Value,
+    /// Usage documentation supplied with the template.
     pub readme: String,
+    /// Optional example showing how to use the template.
     pub example_usage: Option<String>,
+    /// Prerequisites declared by the template author.
     pub requirements: Vec<String>,
+    /// Declared version, feature, and protocol compatibility.
     pub compatibility: CompatibilityInfo,
+    /// Download, star, fork, and rating statistics.
     pub stats: TemplateStats,
+    /// UTC time at which the template or review was created.
     pub created_at: DateTime<Utc>,
+    /// UTC time at which the template was last updated.
     pub updated_at: DateTime<Utc>,
+    /// Whether the template appears in marketplace search results.
     pub published: bool,
 }
 
@@ -33,58 +50,91 @@ pub struct OrchestrationTemplate {
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "kebab-case")]
 pub enum TemplateCategory {
+    /// Network disruption scenarios.
     NetworkChaos,
+    /// Service unavailability scenarios.
     ServiceFailure,
+    /// Load generation scenarios.
     LoadTesting,
+    /// Recovery and resilience scenarios.
     ResilienceTesting,
+    /// Security-oriented scenarios.
     SecurityTesting,
+    /// Data integrity disruption scenarios.
     DataCorruption,
+    /// Scenarios spanning multiple protocols.
     MultiProtocol,
+    /// Application-specific scenarios.
     CustomScenario,
 }
 
 /// Compatibility information
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompatibilityInfo {
+    /// Minimum declared compatible `MockForge` version.
     pub min_version: String,
+    /// Maximum declared compatible version, when bounded.
     pub max_version: Option<String>,
+    /// `MockForge` features required by the template.
     pub required_features: Vec<String>,
+    /// Protocols declared compatible with the template.
     pub protocols: Vec<String>,
 }
 
 /// Template statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateStats {
+    /// Number of recorded template downloads.
     pub downloads: u64,
+    /// Number of recorded template stars.
     pub stars: u64,
+    /// Number of recorded template forks.
     pub forks: u64,
+    /// Mean review rating, or zero when no reviews exist.
     pub rating: f64,
+    /// Number of reviews contributing to the mean rating.
     pub rating_count: u64,
 }
 
 /// Template review/rating
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateReview {
+    /// Unique identifier of the template or review.
     pub id: String,
+    /// Identifier of the reviewed template.
     pub template_id: String,
+    /// Identifier of the reviewing user.
     pub user_id: String,
+    /// Display name of the reviewing user.
     pub user_name: String,
+    /// Review score; the current validator accepts values from zero through five.
     pub rating: u8,
+    /// Review text supplied by the user.
     pub comment: String,
+    /// UTC time at which the template or review was created.
     pub created_at: DateTime<Utc>,
+    /// Number of helpfulness votes recorded for the review.
     pub helpful_count: u64,
 }
 
 /// Search filters
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct TemplateSearchFilters {
+    /// Optional exact category filter.
     pub category: Option<TemplateCategory>,
+    /// Match templates containing at least one of these tags; empty disables tag filtering.
     pub tags: Vec<String>,
+    /// Minimum mean rating required for a search match.
     pub min_rating: Option<f64>,
+    /// Optional case-insensitive substring filter for author names.
     pub author: Option<String>,
+    /// Case-insensitive substring matched against template names and descriptions.
     pub query: Option<String>,
+    /// Ordering applied before pagination.
     pub sort_by: TemplateSortBy,
+    /// Maximum number of templates returned; zero returns no results.
     pub limit: usize,
+    /// Number of sorted matches skipped before returning results.
     pub offset: usize,
 }
 
@@ -93,10 +143,15 @@ pub struct TemplateSearchFilters {
 #[serde(rename_all = "snake_case")]
 pub enum TemplateSortBy {
     #[default]
+    /// Descending popularity score: downloads plus twice the star count.
     Popular,
+    /// Most recently created templates first.
     Newest,
+    /// Highest mean review rating first.
     TopRated,
+    /// Highest download count first.
     MostDownloaded,
+    /// Most recently updated templates first.
     RecentlyUpdated,
 }
 

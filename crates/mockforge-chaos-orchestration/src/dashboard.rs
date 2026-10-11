@@ -19,32 +19,57 @@ use tracing::{debug, info};
 pub enum DashboardUpdate {
     /// Metrics update
     Metrics {
+        /// UTC time at which the metrics update was generated.
         timestamp: DateTime<Utc>,
+        /// Aggregated chaos metrics for one time bucket.
         bucket: MetricsBucket,
     },
     /// Alert fired
-    AlertFired { alert: Alert },
+    AlertFired {
+        /// Newly fired alert, including its identifier and severity.
+        alert: Alert,
+    },
     /// Alert resolved
-    AlertResolved { alert_id: String },
+    AlertResolved {
+        /// Identifier of the alert that was resolved.
+        alert_id: String,
+    },
     /// Scenario status change
     ScenarioStatus {
+        /// Name of the scenario whose state changed.
         scenario_name: String,
+        /// Application-provided scenario status text.
         status: String,
+        /// Application-provided progress value, when available.
         progress: Option<f64>,
     },
     /// Orchestration status
-    OrchestrationStatus { status: Option<OrchestrationStatus> },
+    OrchestrationStatus {
+        /// Current orchestration state, or none when no state is available.
+        status: Option<OrchestrationStatus>,
+    },
     /// Replay status
-    ReplayStatus { status: Option<ReplayStatus> },
+    ReplayStatus {
+        /// Current replay state, or none when no state is available.
+        status: Option<ReplayStatus>,
+    },
     /// Impact analysis update
-    ImpactUpdate { impact: ChaosImpact },
+    ImpactUpdate {
+        /// Updated analysis of chaos impact over the analysis period.
+        impact: ChaosImpact,
+    },
     /// Schedule update
     ScheduleUpdate {
+        /// Identifier of the schedule that changed.
         schedule_id: String,
+        /// Next planned execution time in UTC, when scheduled.
         next_execution: Option<DateTime<Utc>>,
     },
     /// Health check / keepalive
-    Ping { timestamp: DateTime<Utc> },
+    Ping {
+        /// UTC time at which the keepalive was generated.
+        timestamp: DateTime<Utc>,
+    },
 }
 
 /// Dashboard statistics summary

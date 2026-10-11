@@ -15,12 +15,19 @@ use tracing::{debug, info, warn};
 /// Node in the distributed system
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct Node {
+    /// Unique identifier of the coordinator node.
     pub id: String,
+    /// Address advertised for the node.
     pub address: String,
+    /// Deployment region, when supplied.
     pub region: Option<String>,
+    /// Deployment zone, when supplied.
     pub zone: Option<String>,
+    /// Application-defined execution capabilities advertised by the node.
     pub capabilities: Vec<String>,
+    /// UTC time of the most recently recorded heartbeat.
     pub last_heartbeat: DateTime<Utc>,
+    /// Current availability state of the node.
     pub status: NodeStatus,
 }
 
@@ -28,30 +35,45 @@ pub struct Node {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum NodeStatus {
+    /// Node is available for coordination.
     Active,
+    /// Node is not currently active.
     Inactive,
+    /// Node reports reduced operating capability.
     Degraded,
+    /// Node has failed or exceeded the heartbeat timeout.
     Failed,
 }
 
 /// Leader election state
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LeaderState {
+    /// Elected leader identifier, or none before election.
     pub leader_id: Option<String>,
+    /// Election term incremented whenever a leader is elected.
     pub term: u64,
+    /// UTC time at which the current leader was elected.
     pub elected_at: Option<DateTime<Utc>>,
 }
 
 /// Distributed orchestration task
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DistributedTask {
+    /// Unique identifier of the distributed task.
     pub id: String,
+    /// Scenario orchestration assigned to the task.
     pub orchestration: OrchestratedScenario,
+    /// Identifiers of nodes targeted by the task.
     pub target_nodes: Vec<String>,
+    /// Requested coordination strategy for the target nodes.
     pub coordination_mode: CoordinationMode,
+    /// UTC time at which the task was created.
     pub created_at: DateTime<Utc>,
+    /// UTC time at which execution started, when available.
     pub started_at: Option<DateTime<Utc>>,
+    /// UTC time at which execution finished, when available.
     pub completed_at: Option<DateTime<Utc>>,
+    /// Current task execution state.
     pub status: TaskStatus,
 }
 
@@ -73,33 +95,51 @@ pub enum CoordinationMode {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum TaskStatus {
+    /// Task is waiting to start.
     Pending,
+    /// Task execution is in progress.
     Running,
+    /// Task execution finished successfully.
     Completed,
+    /// Task execution failed.
     Failed,
+    /// Task execution was cancelled.
     Cancelled,
 }
 
 /// Node execution state
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NodeExecutionState {
+    /// Identifier of the executing node.
     pub node_id: String,
+    /// Identifier of the task being executed.
     pub task_id: String,
+    /// Execution state reported for this node and task.
     pub status: TaskStatus,
+    /// Progress value reported by the executing node.
     pub progress: f64,
+    /// UTC time at which node execution started, when available.
     pub started_at: Option<DateTime<Utc>>,
+    /// UTC time at which node execution finished, when available.
     pub completed_at: Option<DateTime<Utc>>,
+    /// Execution failure details, when available.
     pub error: Option<String>,
+    /// Counters and latency reported for node execution.
     pub metrics: ExecutionMetrics,
 }
 
 /// Execution metrics for a node
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ExecutionMetrics {
+    /// Number of orchestration steps completed on the node.
     pub steps_completed: usize,
+    /// Total number of orchestration steps assigned to the node.
     pub steps_total: usize,
+    /// Number of chaos events generated during execution.
     pub events_generated: usize,
+    /// Number of execution errors recorded.
     pub errors: usize,
+    /// Mean execution latency in milliseconds.
     pub avg_latency_ms: f64,
 }
 

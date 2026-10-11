@@ -9,22 +9,34 @@ use std::collections::HashMap;
 /// Multi-cluster orchestration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MultiClusterOrchestration {
+    /// Name of the orchestration or target cluster.
     pub name: String,
+    /// Optional human-readable orchestration description.
     pub description: Option<String>,
+    /// Clusters eligible for execution.
     pub clusters: Vec<ClusterTarget>,
+    /// Requested ordering strategy for cluster execution.
     pub synchronization: SyncMode,
+    /// Orchestration configuration supplied to the cluster executor.
     pub orchestration: serde_json::Value,
+    /// Policy for handling cluster execution failures.
     pub failover_policy: FailoverPolicy,
 }
 
 /// Target cluster configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClusterTarget {
+    /// Name of the orchestration or target cluster.
     pub name: String,
+    /// Kubernetes context identifying the target cluster.
     pub context: String,
+    /// Kubernetes namespace intended for orchestration execution.
     pub namespace: String,
+    /// Deployment region, when supplied.
     pub region: Option<String>,
+    /// Ordering priority; rolling uses ascending order and canary chooses the highest value.
     pub priority: u32,
+    /// Whether this cluster is included in execution.
     pub enabled: bool,
 }
 
@@ -32,30 +44,45 @@ pub struct ClusterTarget {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum SyncMode {
-    Parallel,   // Execute on all clusters simultaneously
+    /// Request execution across all enabled clusters; the current executor visits clusters sequentially.
+    Parallel, // Execute on all clusters simultaneously
+    /// Execute one enabled cluster at a time.
     Sequential, // Execute one cluster at a time
-    Rolling,    // Rolling execution with configurable window
-    Canary,     // Execute on canary cluster first, then others
+    /// Execute in windows of two clusters, with a delay between windows.
+    Rolling, // Rolling execution with configurable window
+    /// Execute the highest-priority cluster first, then the remaining clusters.
+    Canary, // Execute on canary cluster first, then others
 }
 
 /// Failover policy
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FailoverPolicy {
+    /// Configured failover switch; currently not enforced by the executor.
     pub enabled: bool,
+    /// Configured failure allowance; currently not enforced by the executor.
     pub max_failures: usize,
+    /// Whether execution continues after an individual cluster fails.
     pub continue_on_cluster_failure: bool,
 }
 
 /// Multi-cluster execution status
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MultiClusterStatus {
+    /// Name of the orchestration associated with this status.
     pub orchestration_name: String,
+    /// UTC time at which execution started, when available.
     pub start_time: DateTime<Utc>,
+    /// UTC time at which execution finished, when available.
     pub end_time: Option<DateTime<Utc>>,
+    /// Combined execution outcome across the target clusters.
     pub overall_status: ExecutionStatus,
+    /// Execution statuses keyed by cluster name.
     pub cluster_statuses: HashMap<String, ClusterExecutionStatus>,
+    /// Number of enabled target clusters.
     pub total_clusters: usize,
+    /// Number of clusters whose execution succeeded.
     pub successful_clusters: usize,
+    /// Number of clusters whose execution failed.
     pub failed_clusters: usize,
 }
 
@@ -63,36 +90,55 @@ pub struct MultiClusterStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ExecutionStatus {
+    /// Execution is waiting to start.
     Pending,
+    /// Execution is in progress.
     Running,
+    /// Execution completed without cluster failures.
     Completed,
+    /// Execution failed.
     Failed,
+    /// Some clusters succeeded and others failed.
     PartialSuccess,
 }
 
 /// Status for individual cluster
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ClusterExecutionStatus {
+    /// Name of the cluster associated with this status.
     pub cluster_name: String,
+    /// Current execution state for the cluster.
     pub status: ExecutionStatus,
+    /// UTC time at which execution started, when available.
     pub start_time: Option<DateTime<Utc>>,
+    /// UTC time at which execution finished, when available.
     pub end_time: Option<DateTime<Utc>>,
+    /// Reported execution progress, with one representing completion.
     pub progress: f64,
+    /// Execution failure details, when available.
     pub error: Option<String>,
+    /// Execution counters and latency for the cluster.
     pub metrics: ClusterMetrics,
 }
 
 /// Metrics for cluster execution
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct ClusterMetrics {
+    /// Number of completed orchestration steps.
     pub steps_completed: usize,
+    /// Total number of orchestration steps.
     pub steps_total: usize,
+    /// Number of recorded execution failures.
     pub failures: usize,
+    /// Mean execution latency in milliseconds.
     pub avg_latency_ms: f64,
+    /// Reported fraction of execution errors.
     pub error_rate: f64,
 }
 
-/// Multi-cluster orchestrator
+/// Multi-cluster orchestrator.
+///
+/// The current cluster executor simulates results; it does not contact Kubernetes.
 pub struct MultiClusterOrchestrator {
     orchestrations: HashMap<String, MultiClusterOrchestration>,
     statuses: HashMap<String, MultiClusterStatus>,

@@ -8,30 +8,42 @@ use crate::reinforcement_learning::{RemediationAction, SystemState};
 /// Time series data point
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataPoint {
+    /// UTC time of the metric observation.
     pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// Numeric value observed for the metric.
     pub value: f64,
 }
 
 /// Metric type for prediction
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub enum MetricType {
+    /// Fraction or percentage of failed operations, as supplied by the caller.
     ErrorRate,
+    /// Observed request or execution latency.
     Latency,
+    /// Observed CPU utilization.
     CpuUsage,
+    /// Observed memory utilization.
     MemoryUsage,
+    /// Observed request arrival rate.
     RequestRate,
+    /// Observed number of failures.
     FailureCount,
 }
 
 /// Time series for a metric
 #[derive(Debug, Clone)]
 pub struct TimeSeries {
+    /// Metric represented by this time series or prediction.
     pub metric: MetricType,
+    /// Retained observations in insertion order.
     pub data: VecDeque<DataPoint>,
+    /// Configured maximum retained observation count.
     pub max_size: usize,
 }
 
 impl TimeSeries {
+    /// Create an empty metric series with the configured retention limit.
     pub fn new(metric: MetricType, max_size: usize) -> Self {
         Self {
             metric,
@@ -40,6 +52,7 @@ impl TimeSeries {
         }
     }
 
+    /// Append an observation, evicting the oldest one when the configured limit is reached.
     pub fn add(&mut self, point: DataPoint) {
         if self.data.len() >= self.max_size {
             self.data.pop_front();
@@ -47,6 +60,7 @@ impl TimeSeries {
         self.data.push_back(point);
     }
 
+    /// Return metric values in retained observation order.
     pub fn values(&self) -> Vec<f64> {
         self.data.iter().map(|p| p.value).collect()
     }
@@ -135,6 +149,7 @@ pub struct AnomalyDetector {
 }
 
 impl AnomalyDetector {
+    /// Create a detector using the supplied z-score threshold multiplier.
     pub fn new(threshold_multiplier: f64) -> Self {
         Self {
             threshold_multiplier,
@@ -202,12 +217,19 @@ impl AnomalyDetector {
 /// Failure prediction
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct FailurePrediction {
+    /// Metric represented by this time series or prediction.
     pub metric: MetricType,
+    /// Most recent observed metric value.
     pub current_value: f64,
+    /// Metric value projected at the prediction horizon.
     pub predicted_value: f64,
+    /// Estimated time until the metric crosses its failure threshold, when a crossing is predicted.
     pub time_to_failure: Option<std::time::Duration>,
+    /// Confidence score assigned to the prediction or trend.
     pub confidence: f64,
+    /// Metric threshold used to identify predicted failure.
     pub threshold: f64,
+    /// Suggested remediation actions for the predicted failure.
     pub recommended_actions: Vec<RemediationAction>,
 }
 
@@ -220,6 +242,7 @@ pub struct PredictiveRemediationEngine {
 }
 
 impl PredictiveRemediationEngine {
+    /// Create an engine with default metric thresholds and the supplied prediction horizon.
     pub fn new(prediction_horizon: usize) -> Self {
         let mut thresholds = HashMap::new();
         thresholds.insert(MetricType::ErrorRate, 50.0);
@@ -442,6 +465,7 @@ pub struct TrendAnalyzer {
 }
 
 impl TrendAnalyzer {
+    /// Create a trend analyzer for the supplied prediction engine.
     pub fn new(engine: Arc<PredictiveRemediationEngine>) -> Self {
         Self { engine }
     }
@@ -477,21 +501,31 @@ impl TrendAnalyzer {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Trend summaries generated for recorded metric series.
 pub struct TrendReport {
+    /// Trend summaries keyed by metric type.
     pub trends: HashMap<MetricType, MetricTrend>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Fitted direction, slope, and confidence for one metric.
 pub struct MetricTrend {
+    /// Direction inferred from the fitted slope.
     pub direction: TrendDirection,
+    /// Fitted change in metric value per observation index.
     pub slope: f64,
+    /// Confidence score assigned to the prediction or trend.
     pub confidence: f64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Direction of a fitted metric trend.
 pub enum TrendDirection {
+    /// Metric trend has a slope greater than 0.1 per observation.
     Increasing,
+    /// Metric trend has a slope less than -0.1 per observation.
     Decreasing,
+    /// Metric trend has a slope between -0.1 and 0.1 inclusive.
     Stable,
 }
 

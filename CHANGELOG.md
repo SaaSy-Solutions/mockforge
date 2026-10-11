@@ -4,6 +4,7 @@
 
 - **[DevX]** Intelligence handler state construction tolerates Cargo database feature unification, restoring HTTP builds when Core enables database support independently. Explicit HTTP database connections are preserved. (#632)
 
+- **[DevX]** Chaos ML and orchestration crates document their public API and enforce missing-documentation warnings through workspace lints, including explicit limits of simulated cluster execution and local manifest synchronization. (#799)
 - **[DevX]** Crate publication returns success after every package is available and fails when any package remains unpublished or its registry lookup fails.
 - **[Reality]** HTTP pipelining benchmarks stop at the configured load deadline, retain partial wire-byte counts, and drain large responses while sending subsequent requests. Response framing handles interim replies, chunked bodies, HEAD, and connection-close bodies. Multipart synthetic files accept `--multipart-content-type`. (#937)
 
