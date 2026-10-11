@@ -325,23 +325,32 @@ impl UserStore {
             ];
 
             let store_clone = store.clone();
-            tokio::spawn(async move {
-                let mut users = store_clone.users.write().await;
-                for (username, password, role, email) in default_users {
-                    if let Ok(password_hash) = hash(password, DEFAULT_COST) {
-                        let user = User {
-                            id: format!("{}-001", username),
-                            username: username.to_string(),
-                            password_hash,
-                            role,
-                            email: Some(email.to_string()),
-                        };
-                        users.insert(username.to_string(), user);
-                    } else {
-                        tracing::error!("Failed to hash password for user: {}", username);
+            // These in-memory development seeds perform CPU-bound hashing.
+            // Keep it off Tokio's workers: runtime shutdown otherwise waits for
+            // an uninterruptible async task even after SIGTERM has been handled.
+            // The detached thread exits after this one-time initialization.
+            if let Err(error) = std::thread::Builder::new()
+                .name("mockforge-dev-auth-seed".to_string())
+                .spawn(move || {
+                    let mut users = store_clone.users.blocking_write();
+                    for (username, password, role, email) in default_users {
+                        if let Ok(password_hash) = hash(password, DEFAULT_COST) {
+                            let user = User {
+                                id: format!("{}-001", username),
+                                username: username.to_string(),
+                                password_hash,
+                                role,
+                                email: Some(email.to_string()),
+                            };
+                            users.insert(username.to_string(), user);
+                        } else {
+                            tracing::error!("Failed to hash password for user: {}", username);
+                        }
                     }
-                }
-            });
+                })
+            {
+                tracing::error!(%error, "Failed to start development user initialization");
+            }
         }
 
         store

@@ -723,6 +723,9 @@ pub(crate) fn initialize_opentelemetry_tracing(
 pub async fn handle_serve(
     serve_args: ServeArgs,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    // Install Unix handlers before exposing listeners so an immediate
+    // container stop cannot race signal registration.
+    let shutdown = shutdown_signal()?;
     // CLI flags that influence library behavior via env vars must be applied
     // before the HTTP router is constructed. `--no-rate-limit` only adds to
     // (never overrides) what the operator already set in the environment, so
@@ -2459,7 +2462,7 @@ pub async fn handle_serve(
     let mut http_tls_config = config.http.tls.clone();
 
     // Override with CLI flags if provided
-    if serve_args.tls_enabled {
+    if serve_args.tls_enabled || serve_args.https_port.is_some() {
         http_tls_config = Some(mockforge_core::config::HttpTlsConfig {
             enabled: true,
             cert_file: serve_args
@@ -2552,47 +2555,40 @@ pub async fn handle_serve(
     // are both cheap to clone.
     let http_app_clone_for_dual = http_app.clone();
     let chaos_listener_cfg_for_dual = chaos_listener_cfg.clone();
-    let http_handle = tokio::spawn(async move {
-        tokio::select! {
-            result = mockforge_http::serve_router_with_tls_notify_chaos(http_port, http_app, plain_http_tls_config, Some(http_bound_tx), chaos_listener_cfg) => {
-                result.map_err(|e| format!("HTTP server error: {}", e))
-            }
-            _ = http_shutdown.cancelled() => {
-                Ok(())
-            }
-        }
+    let mut http_handle = tokio::spawn(async move {
+        mockforge_http::serve_router_with_tls_notify_chaos_shutdown(
+            http_port,
+            http_app,
+            plain_http_tls_config,
+            Some(http_bound_tx),
+            chaos_listener_cfg,
+            http_shutdown.cancelled_owned(),
+        )
+        .await
+        .map_err(|e| format!("HTTP server error: {}", e))
     });
 
     // Spawn the parallel HTTPS listener on --https-port if requested.
     // Reuses the same router (cloned) and the TLS config built above.
-    let https_handle = if let Some(https_port) = dual_https_port {
-        // Build the HTTPS TLS config from the CLI/file-derived config.
-        // serve_args is moved into handle_serve so we re-derive from
-        // http_tls_config_final, which already incorporates CLI overrides.
-        // If the user passed --https-port without --tls-enabled but with
-        // cert+key, fabricate an enabled TLS config so the second listener
-        // serves HTTPS even when the first is plain.
-        let mut https_tls = http_tls_config_final.clone();
-        if https_tls.as_ref().map(|t| !t.enabled).unwrap_or(true) {
-            // Promote to enabled if cert+key are present; the CLI validates
-            // that this is the case when --https-port is set.
-            if let Some(t) = https_tls.as_mut() {
-                t.enabled = true;
-            }
-        }
+    let mut https_handle = if let Some(https_port) = dual_https_port {
+        // --https-port also constructs the enabled certificate configuration
+        // above, while the primary listener stays plain HTTP in dual mode.
+        let https_tls = http_tls_config_final.clone();
         let https_app = http_app_clone_for_dual.clone();
         let https_shutdown = shutdown_token.clone();
         let chaos_listener_cfg_https = chaos_listener_cfg_for_dual.clone();
         Some(tokio::spawn(async move {
             println!("🔒 HTTPS server listening on https://localhost:{}", https_port);
-            tokio::select! {
-                result = mockforge_http::serve_router_with_tls_notify_chaos(https_port, https_app, https_tls, None, chaos_listener_cfg_https) => {
-                    result.map_err(|e| format!("HTTPS server error: {}", e))
-                }
-                _ = https_shutdown.cancelled() => {
-                    Ok(())
-                }
-            }
+            mockforge_http::serve_router_with_tls_notify_chaos_shutdown(
+                https_port,
+                https_app,
+                https_tls,
+                None,
+                chaos_listener_cfg_https,
+                https_shutdown.cancelled_owned(),
+            )
+            .await
+            .map_err(|e| format!("HTTPS server error: {}", e))
         }))
     } else {
         None
@@ -3241,7 +3237,7 @@ pub async fn handle_serve(
 
     // Wait for all servers or shutdown signal, handling errors properly
     let result = tokio::select! {
-        result = http_handle => {
+        result = &mut http_handle => {
             match result {
                 Ok(Ok(())) => {
                     println!("📡 HTTP server stopped gracefully");
@@ -3261,7 +3257,7 @@ pub async fn handle_serve(
         result = async {
             // Pend forever when --https-port wasn't passed; otherwise this
             // arm watches the second TLS listener for shutdown / errors.
-            if let Some(handle) = https_handle {
+            if let Some(handle) = https_handle.as_mut() {
                 Some(handle.await)
             } else {
                 std::future::pending::<Option<Result<Result<(), String>, tokio::task::JoinError>>>().await
@@ -3366,11 +3362,15 @@ pub async fn handle_serve(
                 None => None
             }
         }
-        _ = tokio::signal::ctrl_c() => {
-            println!("🛑 Received shutdown signal");
-            // Trigger health manager shutdown
-            health_manager.trigger_shutdown().await;
-            None
+        signal = shutdown => {
+            match signal {
+                Ok(()) => {
+                    println!("🛑 Received shutdown signal");
+                    health_manager.trigger_shutdown().await;
+                    None
+                }
+                Err(error) => Some(format!("Failed to listen for shutdown signals: {}", error)),
+            }
         }
     };
 
@@ -3378,14 +3378,49 @@ pub async fn handle_serve(
     println!("👋 Shutting down remaining servers...");
     shutdown_token.cancel();
 
-    // Give tasks a moment to shut down gracefully
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    // Stop accepting HTTP requests and allow active HTTP/HTTPS responses to
+    // finish. Bound the total wait below Docker's default ten-second grace.
+    let drained = tokio::time::timeout(Duration::from_secs(6), async {
+        if !http_handle.is_finished() {
+            let _ = (&mut http_handle).await;
+        }
+        if let Some(handle) = https_handle {
+            if !handle.is_finished() {
+                let _ = handle.await;
+            }
+        }
+    })
+    .await;
+    if drained.is_err() {
+        tracing::warn!("HTTP shutdown drain timed out after six seconds");
+    }
 
     // Return error if any server failed
     if let Some(error) = result {
         Err(error.into())
     } else {
         Ok(())
+    }
+}
+
+/// Receive Ctrl+C on every platform, or SIGTERM on Unix/container hosts.
+fn shutdown_signal() -> std::io::Result<impl std::future::Future<Output = std::io::Result<()>>> {
+    #[cfg(unix)]
+    {
+        let mut terminate =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
+        let mut interrupt =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
+        Ok(async move {
+            tokio::select! {
+                _ = interrupt.recv() => Ok(()),
+                _ = terminate.recv() => Ok(()),
+            }
+        })
+    }
+    #[cfg(not(unix))]
+    {
+        Ok(tokio::signal::ctrl_c())
     }
 }
 

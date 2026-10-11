@@ -1492,6 +1492,29 @@ pub async fn serve_router_with_tls_notify_chaos(
     bound_port_tx: Option<tokio::sync::oneshot::Sender<u16>>,
     chaos_config: Option<Arc<RwLock<mockforge_chaos::ChaosConfig>>>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    serve_router_with_tls_notify_chaos_shutdown(
+        port,
+        app,
+        tls_config,
+        bound_port_tx,
+        chaos_config,
+        std::future::pending(),
+    )
+    .await
+}
+
+/// Serve HTTP or HTTPS until shutdown, then drain requests already in flight.
+///
+/// Plain and chaos listeners use axum's graceful shutdown. TLS listeners allow
+/// five seconds for active connections before closing them.
+pub async fn serve_router_with_tls_notify_chaos_shutdown(
+    port: u16,
+    app: Router,
+    tls_config: Option<mockforge_core::config::HttpTlsConfig>,
+    bound_port_tx: Option<tokio::sync::oneshot::Sender<u16>>,
+    chaos_config: Option<Arc<RwLock<mockforge_chaos::ChaosConfig>>>,
+    shutdown: impl std::future::Future<Output = ()> + Send + 'static,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use std::net::SocketAddr;
 
     let addr = mockforge_core::wildcard_socket_addr(port);
@@ -1502,7 +1525,7 @@ pub async fn serve_router_with_tls_notify_chaos(
             if let Some(tx) = bound_port_tx {
                 let _ = tx.send(port);
             }
-            return serve_with_tls(addr, app, tls).await;
+            return serve_with_tls(addr, app, tls, shutdown).await;
         }
     }
 
@@ -1539,7 +1562,7 @@ pub async fn serve_router_with_tls_notify_chaos(
         >(app_with_addr_compat);
         // Bump the accept counter on each connection that gets through chaos.
         let counted = counting_listener::CountingMakeService::new(make_svc);
-        axum::serve(chaos_listener, counted).await?;
+        axum::serve(chaos_listener, counted).with_graceful_shutdown(shutdown).await?;
     } else {
         let make_svc = axum::ServiceExt::<Request<Body>>::into_make_service_with_connect_info::<
             SocketAddr,
@@ -1547,7 +1570,7 @@ pub async fn serve_router_with_tls_notify_chaos(
         // Bump the accept counter once per accepted connection so the
         // dashboard sampler can derive CPS.
         let counted = counting_listener::CountingMakeService::new(make_svc);
-        axum::serve(listener, counted).await?;
+        axum::serve(listener, counted).with_graceful_shutdown(shutdown).await?;
     }
     Ok(())
 }
@@ -1577,6 +1600,7 @@ async fn serve_with_tls(
     addr: std::net::SocketAddr,
     app: Router,
     tls_config: &mockforge_core::config::HttpTlsConfig,
+    shutdown: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     use axum_server::tls_rustls::RustlsConfig;
     use std::net::SocketAddr;
@@ -1609,10 +1633,19 @@ async fn serve_with_tls(
     let counted = counting_listener::CountingMakeService::new(make_svc);
 
     // Serve with TLS using axum-server
-    axum_server::bind_rustls(addr, rustls_config)
-        .serve(counted)
-        .await
-        .map_err(|e| format!("HTTPS server error: {}", e).into())
+    let handle = axum_server::Handle::new();
+    let server = axum_server::bind_rustls(addr, rustls_config)
+        .handle(handle.clone())
+        .serve(counted);
+    tokio::pin!(server);
+    tokio::select! {
+        result = &mut server => result,
+        _ = shutdown => {
+            handle.graceful_shutdown(Some(std::time::Duration::from_secs(5)));
+            server.await
+        }
+    }
+    .map_err(|e| format!("HTTPS server error: {}", e).into())
 }
 
 /// Backwards-compatible start that builds + serves the base router.
