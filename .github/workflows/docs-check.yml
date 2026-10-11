@@ -25,7 +25,8 @@ permissions:
 jobs:
   docs:
     name: Verify mdBook Docs
-    runs-on: [self-hosted, linux, x64, rust]
+    # These checks build Markdown and inspect source; they do not compile Rust.
+    runs-on: ubuntu-latest
     timeout-minutes: 20
 
     steps:
@@ -34,25 +35,6 @@ jobs:
 
       - name: Setup mdBook
         uses: ./.github/actions/setup-mdbook
-
-      - name: Install Rust toolchain
-        uses: ./.github/actions/rust-toolchain
-
-      - name: Cache mdBook plugins
-        uses: actions/cache@v6
-        with:
-          path: ~/.cargo/bin
-          key: docs-mdbook-plugins-${{ runner.os }}
-          restore-keys: docs-mdbook-plugins-${{ runner.os }}
-
-      - name: Install mdBook plugins
-        run: |
-          if [ ! -f ~/.cargo/bin/mdbook-toc ]; then
-            cargo install mdbook-toc
-          fi
-          if [ ! -f ~/.cargo/bin/mdbook-mermaid ]; then
-            cargo install mdbook-mermaid
-          fi
 
       - name: Run docs verification script
         run: bash scripts/automated-tests/test-docs.sh
