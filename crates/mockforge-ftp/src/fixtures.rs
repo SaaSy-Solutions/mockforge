@@ -1,3 +1,4 @@
+use anyhow::Context;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -12,6 +13,19 @@ pub struct FtpFixture {
     pub description: Option<String>,
     pub virtual_files: Vec<VirtualFileConfig>,
     pub upload_rules: Vec<UploadRule>,
+}
+
+impl FtpFixture {
+    /// Load a YAML fixture before attaching it with `FtpServer::new_with_fixtures`.
+    ///
+    /// Returns an error identifying the file when opening or parsing fails.
+    pub fn from_yaml_file(path: impl AsRef<std::path::Path>) -> anyhow::Result<Self> {
+        let path = path.as_ref();
+        let file = std::fs::File::open(path)
+            .with_context(|| format!("Failed to open FTP fixture {}", path.display()))?;
+        serde_yaml::from_reader(file)
+            .with_context(|| format!("Failed to parse FTP fixture {}", path.display()))
+    }
 }
 
 /// Configuration for virtual files

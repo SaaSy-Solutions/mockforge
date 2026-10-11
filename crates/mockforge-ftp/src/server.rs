@@ -376,4 +376,36 @@ mod tests {
         let file = server.vfs().get_file(std::path::Path::new("/pub/hello.txt"));
         assert!(file.is_some(), "virtual file from fixture should be in VFS");
     }
+
+    #[tokio::test]
+    async fn test_readme_yaml_fixture_loads_into_server_inside_async_runtime() {
+        let readme = include_str!("../README.md");
+        let yaml = readme.split("```yaml\n").nth(1).unwrap().split("```").next().unwrap();
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("ftp-fixture.yaml");
+        std::fs::write(&path, yaml).unwrap();
+        let fixture = crate::FtpFixture::from_yaml_file(&path).unwrap();
+        let server = FtpServer::new_with_fixtures(FtpConfig::default(), vec![fixture]).unwrap();
+        assert_eq!(server.spec_registry().fixtures.len(), 1);
+        let file = server
+            .vfs()
+            .get_file_async(std::path::Path::new("/welcome.txt"))
+            .await
+            .expect("documented fixture should populate the actual server VFS");
+        assert!(
+            matches!(file.content, crate::FileContent::Static(bytes) if bytes == b"Welcome to MockForge FTP!")
+        );
+        assert!(server.vfs().get_file_async(std::path::Path::new("/data.bin")).await.is_some());
+    }
+
+    #[test]
+    fn test_fixture_file_reports_missing_and_invalid_yaml() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("fixture.yaml");
+        let error = crate::FtpFixture::from_yaml_file(&path).unwrap_err();
+        assert!(error.to_string().contains("Failed to open FTP fixture"));
+        std::fs::write(&path, "virtual_files: [").unwrap();
+        let error = crate::FtpFixture::from_yaml_file(&path).unwrap_err();
+        assert!(error.to_string().contains("Failed to parse FTP fixture"));
+    }
 }
