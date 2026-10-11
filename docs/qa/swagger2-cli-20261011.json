@@ -1,0 +1,11 @@
+{
+  "scope": "Locally rebuilt CLI from Swagger fix worktree; publication remains pending.",
+  "version": "mockforge 0.3.232",
+  "binary_sha256": "a497c54e0d8a67159bce559c951995c479f696538688ee21db7dce53d00b8a5b",
+  "spec_sha256": "dc23b93ba8b53683bb90c170a93672eaced394fef07532f371053f9f325230e3",
+  "native_import_valid_routes": true,
+  "native_import_keeps_status_and_examples": true,
+  "native_serve_http_200_and_exact_example": true,
+  "native_serve_rejects_invalid_inherited_path_parameter": true,
+  "own_fixture_container_removed": true
+}

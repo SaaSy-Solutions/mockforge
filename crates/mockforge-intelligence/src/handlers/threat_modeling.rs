@@ -107,6 +107,30 @@ pub struct ThreatModelingState {
     pub database: Option<Database>,
 }
 
+impl ThreatModelingState {
+    /// Create handler state without a persistence connection.
+    ///
+    /// This constructor works when dependency feature unification enables database support.
+    pub fn new(
+        analyzer: Arc<ThreatAnalyzer>,
+        webhook_configs: Vec<crate::incidents::integrations::WebhookConfig>,
+    ) -> Self {
+        Self {
+            analyzer,
+            webhook_configs,
+            #[cfg(feature = "database")]
+            database: None,
+        }
+    }
+
+    /// Attach the optional persistence connection used by these handlers.
+    #[cfg(feature = "database")]
+    pub fn with_database(mut self, database: Option<Database>) -> Self {
+        self.database = database;
+        self
+    }
+}
+
 /// Get workspace-level threat assessment
 ///
 /// GET /api/v1/threats/workspace/{workspace_id}

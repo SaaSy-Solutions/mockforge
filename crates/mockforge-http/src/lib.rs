@@ -2669,19 +2669,15 @@ pub async fn build_router_with_chains_and_multi_tenant(
         // Initialize forecasting
         let forecasting_config = ForecastingConfig::default();
         let forecaster = Arc::new(Forecaster::new(forecasting_config));
-        let forecasting_state = ForecastingState {
-            forecaster,
-            #[cfg(feature = "database")]
-            database: database.clone(),
-        };
+        let forecasting_state = ForecastingState::new(forecaster);
+        #[cfg(feature = "database")]
+        let forecasting_state = forecasting_state.with_database(database.clone());
 
         // Initialize semantic drift manager
         let semantic_manager = Arc::new(SemanticIncidentManager::new());
-        let semantic_state = SemanticDriftState {
-            manager: semantic_manager,
-            #[cfg(feature = "database")]
-            database: database.clone(),
-        };
+        let semantic_state = SemanticDriftState::new(semantic_manager);
+        #[cfg(feature = "database")]
+        let semantic_state = semantic_state.with_database(database.clone());
 
         // Initialize threat analyzer
         let threat_config = ThreatModelingConfig::default();
@@ -2724,12 +2720,9 @@ pub async fn build_router_with_chains_and_multi_tenant(
             debug!("No webhook configs found in config files, using empty list");
         }
 
-        let threat_state = ThreatModelingState {
-            analyzer: threat_analyzer,
-            webhook_configs,
-            #[cfg(feature = "database")]
-            database: database.clone(),
-        };
+        let threat_state = ThreatModelingState::new(threat_analyzer, webhook_configs);
+        #[cfg(feature = "database")]
+        let threat_state = threat_state.with_database(database.clone());
 
         // Initialize contract health state
         let contract_health_state = ContractHealthState {
