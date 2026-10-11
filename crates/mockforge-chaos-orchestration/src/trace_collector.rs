@@ -9,15 +9,19 @@ use thiserror::Error;
 /// Trace collector errors
 #[derive(Error, Debug)]
 pub enum TraceCollectorError {
+    /// Transport or response-body error from the trace backend request.
     #[error("HTTP request failed: {0}")]
     HttpError(#[from] reqwest::Error),
 
+    /// Backend trace data could not be decoded as JSON.
     #[error("JSON parsing failed: {0}")]
     JsonError(#[from] serde_json::Error),
 
+    /// Required backend configuration is missing or invalid.
     #[error("Invalid configuration: {0}")]
     ConfigError(String),
 
+    /// The backend rejected the query or does not support trace retrieval.
     #[error("Trace backend unavailable: {0}")]
     BackendUnavailable(String),
 }
@@ -55,13 +59,21 @@ impl Default for TraceCollectorConfig {
 /// Collected trace data
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollectedTrace {
+    /// Identifier shared by spans in the same distributed trace.
     pub trace_id: String,
+    /// Identifier of this span within the trace.
     pub span_id: String,
+    /// Parent span identifier, absent for a root span.
     pub parent_span_id: Option<String>,
+    /// Operation name reported by the backend.
     pub name: String,
+    /// Backend-derived start timestamp rendered as text.
     pub start_time: String,
+    /// Backend-derived end timestamp rendered as text.
     pub end_time: String,
+    /// Elapsed span duration in milliseconds.
     pub duration_ms: u64,
+    /// Backend span tags represented as JSON values.
     pub attributes: std::collections::HashMap<String, serde_json::Value>,
 }
 
