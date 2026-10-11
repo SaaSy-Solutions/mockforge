@@ -208,6 +208,43 @@ fn select_price_id<'a>(
     }
 }
 
+/// Session metadata is not inherited by the Subscription. Include ownership on
+/// both objects so subscription webhooks can resolve the organization even when
+/// trials are disabled.
+fn subscription_checkout_params<'a>(
+    org_id: &'a str,
+    plan: &str,
+    interval: BillingInterval,
+    price_id: String,
+    success_url: &'a str,
+    cancel_url: &'a str,
+    trial_period_days: u32,
+) -> CreateCheckoutSession<'a> {
+    let metadata = std::collections::HashMap::from([
+        ("org_id".to_string(), org_id.to_string()),
+        ("plan".to_string(), plan.to_string()),
+        ("billing_interval".to_string(), interval.as_str().to_string()),
+    ]);
+    let mut params = CreateCheckoutSession::new();
+    params.success_url = Some(success_url);
+    params.cancel_url = Some(cancel_url);
+    params.mode = Some(CheckoutSessionMode::Subscription);
+    params.client_reference_id = Some(org_id);
+    params.metadata = Some(metadata.clone());
+    params.line_items = Some(vec![CreateCheckoutSessionLineItems {
+        price: Some(price_id),
+        quantity: Some(1),
+        ..Default::default()
+    }]);
+    params.subscription_data = Some(CreateCheckoutSessionSubscriptionData {
+        metadata: Some(metadata),
+        // Stripe requires a positive trial length; omit the field for zero.
+        trial_period_days: (trial_period_days > 0).then_some(trial_period_days),
+        ..Default::default()
+    });
+    params
+}
+
 /// Create Stripe checkout session
 /// This would typically redirect to Stripe Checkout
 #[derive(Debug, Deserialize)]
@@ -307,37 +344,15 @@ pub async fn create_checkout(
     let org_id_str = org_ctx.org_id.to_string();
     let plan_str = plan.to_string();
 
-    let mut checkout_params = CreateCheckoutSession::new();
-    checkout_params.success_url = Some(&success_url);
-    checkout_params.cancel_url = Some(&cancel_url);
-    checkout_params.mode = Some(CheckoutSessionMode::Subscription);
-    checkout_params.client_reference_id = Some(&org_id_str);
-
-    // Add metadata for org_id (as backup)
-    checkout_params.metadata = Some(std::collections::HashMap::from([
-        ("org_id".to_string(), org_id_str.clone()),
-        ("plan".to_string(), plan_str.clone()),
-        ("billing_interval".to_string(), interval.as_str().to_string()),
-    ]));
-
-    // Add line item with price
-    checkout_params.line_items = Some(vec![CreateCheckoutSessionLineItems {
-        price: Some(price_id.clone()),
-        quantity: Some(1),
-        ..Default::default()
-    }]);
-
-    // Apply a free trial when one is configured. Default is 14 days (set in
-    // Config::from_env); STRIPE_TRIAL_PERIOD_DAYS=0 disables it entirely.
-    // The marketing pricing page ("Start Pro/Team Trial") promises this;
-    // without it the CTA copy is a bait-and-switch — checkout would charge
-    // immediately. Standard B2B dev-tool convention at this price point.
-    if state.config.stripe_trial_period_days > 0 {
-        checkout_params.subscription_data = Some(CreateCheckoutSessionSubscriptionData {
-            trial_period_days: Some(state.config.stripe_trial_period_days),
-            ..Default::default()
-        });
-    }
+    let checkout_params = subscription_checkout_params(
+        &org_id_str,
+        &plan_str,
+        interval,
+        price_id,
+        &success_url,
+        &cancel_url,
+        state.config.stripe_trial_period_days,
+    );
 
     // Create the checkout session
     let session = CheckoutSession::create(&client, checkout_params)
@@ -710,17 +725,11 @@ async fn handle_subscription_event(
         .canceled_at
         .and_then(|ts| chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0));
 
-    // Get org_id from metadata or find by customer_id
+    // Subscription ownership is carried by subscription_data.metadata at checkout.
     let org_id = subscription
         .metadata
         .get("org_id")
         .and_then(|s| Uuid::parse_str(s).ok())
-        .or({
-            // Fallback: find org by stripe_customer_id
-            // This requires async, so we'll need to handle it differently
-            // For now, require metadata
-            None
-        })
         .ok_or_else(|| {
             ApiError::InvalidRequest("Missing org_id in subscription metadata".to_string())
         })?;
@@ -1095,6 +1104,44 @@ fn interval_label_from_price_id(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn checkout_serializes_subscription_ownership_with_and_without_trial() {
+        let org_id = "04caad30-8aae-4506-a73c-3f306c0bbc0e";
+        for trial_days in [0, 14] {
+            for (plan, interval, price) in [
+                ("pro", BillingInterval::Monthly, "price_pro_month"),
+                ("team", BillingInterval::Annual, "price_team_year"),
+            ] {
+                let params = subscription_checkout_params(
+                    org_id,
+                    plan,
+                    interval,
+                    price.to_string(),
+                    "https://app.example.test/billing/success",
+                    "https://app.example.test/billing/cancel",
+                    trial_days,
+                );
+                let body = serde_json::to_value(params).unwrap();
+                assert_eq!(body["mode"], "subscription");
+                assert_eq!(body["client_reference_id"], org_id);
+                assert_eq!(body["metadata"]["org_id"], org_id);
+                assert_eq!(body["subscription_data"]["metadata"]["org_id"], org_id);
+                assert_eq!(body["subscription_data"]["metadata"]["plan"], plan);
+                assert_eq!(
+                    body["subscription_data"]["metadata"]["billing_interval"],
+                    interval.as_str()
+                );
+                assert_eq!(body["line_items"][0]["price"], price);
+                assert_eq!(body["line_items"][0]["quantity"], 1);
+                if trial_days == 0 {
+                    assert!(body["subscription_data"].get("trial_period_days").is_none());
+                } else {
+                    assert_eq!(body["subscription_data"]["trial_period_days"], trial_days);
+                }
+            }
+        }
+    }
 
     #[test]
     fn billing_interval_parses_aliases_and_defaults_to_monthly() {
