@@ -10,43 +10,66 @@ use std::collections::HashMap;
 /// Historical orchestration run
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrchestrationRun {
+    /// Identifier of the historical run.
     pub id: String,
+    /// Identifier of the orchestration executed by the run.
     pub orchestration_id: String,
+    /// Chaos parameter values used for the run.
     pub parameters: HashMap<String, f64>,
+    /// UTC time associated with the run.
     pub timestamp: DateTime<Utc>,
+    /// Run duration in milliseconds.
     pub duration_ms: u64,
+    /// Whether the run completed successfully.
     pub success: bool,
+    /// Effectiveness, stability, and recovery measurements for the run.
     pub metrics: RunMetrics,
 }
 
 /// Run metrics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunMetrics {
+    /// Reported effectiveness of induced chaos on a zero-to-one scale.
     pub chaos_effectiveness: f64, // How much chaos was actually induced (0-1)
-    pub system_stability: f64,    // How stable the system remained (0-1)
+    /// Reported system stability on a zero-to-one scale.
+    pub system_stability: f64, // How stable the system remained (0-1)
+    /// Reported fraction of errors during the run.
     pub error_rate: f64,
+    /// Recovery duration in milliseconds.
     pub recovery_time_ms: u64,
+    /// Number of failures identified during the run.
     pub failures_detected: u32,
+    /// Number of detections classified as false positives.
     pub false_positives: u32,
 }
 
 /// Parameter optimization recommendation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OptimizationRecommendation {
+    /// Name of the parameter to adjust.
     pub parameter: String,
+    /// Mean historical parameter value, when available.
     pub current_value: Option<f64>,
+    /// Parameter value proposed by the optimizer.
     pub recommended_value: f64,
+    /// Confidence score for the proposed parameter value.
     pub confidence: f64,
+    /// Explanation of the proposed adjustment.
     pub reasoning: String,
+    /// Estimated changes in effectiveness, stability, and overall objective score.
     pub expected_impact: ExpectedImpact,
+    /// Number of historical runs supporting the recommendation.
     pub based_on_runs: usize,
 }
 
 /// Expected impact of parameter change
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExpectedImpact {
+    /// Estimated change in chaos effectiveness.
     pub chaos_effectiveness_delta: f64,
+    /// Estimated change in system stability.
     pub system_stability_delta: f64,
+    /// Estimated change in the combined objective score.
     pub overall_score_delta: f64,
 }
 
@@ -54,38 +77,56 @@ pub struct ExpectedImpact {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum OptimizationObjective {
-    MaxChaos,      // Maximize chaos (for stress testing)
-    Balanced,      // Balance chaos and stability
-    SafeTesting,   // Minimize risk while still effective
+    /// Favor maximum chaos effectiveness.
+    MaxChaos, // Maximize chaos (for stress testing)
+    /// Balance chaos effectiveness and system stability.
+    Balanced, // Balance chaos and stability
+    /// Favor stable execution while retaining useful chaos coverage.
+    SafeTesting, // Minimize risk while still effective
+    /// Favor fast recovery after disruption.
     QuickRecovery, // Optimize for fast recovery
-    MaxDetection,  // Maximize failure detection
+    /// Favor detection of system failures.
+    MaxDetection, // Maximize failure detection
 }
 
 /// Parameter bounds
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ParameterBounds {
+    /// Lower bound for the parameter search.
     pub min: f64,
+    /// Upper bound for the parameter search.
     pub max: f64,
+    /// Optional interval between candidate parameter values.
     pub step: Option<f64>,
 }
 
 /// Optimizer configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OptimizerConfig {
+    /// Optimization objective used to score historical runs.
     pub objective: OptimizationObjective,
+    /// Minimum historical run count required before optimization.
     pub min_runs: usize,
+    /// Minimum confidence required to emit a recommendation.
     pub confidence_threshold: f64,
+    /// Configured factor controlling exploration of candidate values.
     pub exploration_factor: f64,
+    /// Search bounds keyed by chaos parameter name.
     pub parameter_bounds: HashMap<String, ParameterBounds>,
+    /// Weights for the components of the optimization score.
     pub weights: ObjectiveWeights,
 }
 
 /// Weights for multi-objective optimization
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ObjectiveWeights {
+    /// Weight assigned to chaos effectiveness in the objective.
     pub chaos_effectiveness: f64,
+    /// Weight assigned to system stability in the objective.
     pub system_stability: f64,
+    /// Weight assigned to recovery speed in the objective.
     pub recovery_time: f64,
+    /// Weight assigned to failure detection in the objective.
     pub detection_rate: f64,
 }
 

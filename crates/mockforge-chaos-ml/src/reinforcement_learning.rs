@@ -7,36 +7,56 @@ use tokio::sync::RwLock;
 /// State representation for RL agent
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub struct SystemState {
-    pub error_rate: u8,         // 0-100
-    pub latency_level: u8,      // 0-100
-    pub cpu_usage: u8,          // 0-100
-    pub memory_usage: u8,       // 0-100
-    pub active_failures: u8,    // Number of active failures
+    /// Error percentage represented on a zero-to-100 scale.
+    pub error_rate: u8, // 0-100
+    /// Normalized latency level on a zero-to-100 scale.
+    pub latency_level: u8, // 0-100
+    /// CPU usage percentage on a zero-to-100 scale.
+    pub cpu_usage: u8, // 0-100
+    /// Memory usage percentage on a zero-to-100 scale.
+    pub memory_usage: u8, // 0-100
+    /// Number of active failures represented by the state.
+    pub active_failures: u8, // Number of active failures
+    /// Service health label, typically healthy, degraded, or critical.
     pub service_health: String, // "healthy", "degraded", "critical"
 }
 
 /// Remediation action
 #[derive(Debug, Clone, Serialize, Deserialize, Hash, Eq, PartialEq)]
 pub enum RemediationAction {
+    /// Recommend restarting the service.
     RestartService,
+    /// Recommend increasing service capacity by the supplied scaling amount.
     ScaleUp(u32),
+    /// Recommend decreasing service capacity by the supplied scaling amount.
     ScaleDown(u32),
+    /// Recommend clearing cached state.
     ClearCache,
+    /// Recommend restoring the prior deployment.
     RollbackDeployment,
+    /// Recommend enabling a circuit breaker.
     EnableCircuitBreaker,
+    /// Recommend disabling rate limiting.
     DisableRateLimiting,
+    /// Recommend restricting incoming traffic.
     RestrictTraffic,
+    /// Recommend leaving the current system state unchanged.
     NoAction,
 }
 
 /// Q-Learning parameters
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QLearningConfig {
-    pub learning_rate: f64,     // Alpha: 0.0 - 1.0
-    pub discount_factor: f64,   // Gamma: 0.0 - 1.0
-    pub exploration_rate: f64,  // Epsilon: 0.0 - 1.0
+    /// Learning rate used to update Q-values.
+    pub learning_rate: f64, // Alpha: 0.0 - 1.0
+    /// Weight assigned to future rewards in Q-value updates.
+    pub discount_factor: f64, // Gamma: 0.0 - 1.0
+    /// Initial probability of choosing a random action.
+    pub exploration_rate: f64, // Epsilon: 0.0 - 1.0
+    /// Multiplier applied to the exploration probability after an update.
     pub exploration_decay: f64, // Epsilon decay rate
-    pub min_exploration: f64,   // Minimum epsilon
+    /// Lower bound for the exploration probability.
+    pub min_exploration: f64, // Minimum epsilon
 }
 
 impl Default for QLearningConfig {
@@ -54,7 +74,9 @@ impl Default for QLearningConfig {
 /// Q-Table entry
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct QValue {
+    /// Learned expected reward for a state and action pair.
     pub value: f64,
+    /// Number of updates recorded for a state and action pair.
     pub visit_count: u64,
 }
 
@@ -66,6 +88,7 @@ pub struct RLAgent {
 }
 
 impl RLAgent {
+    /// Create a learning agent with an empty Q-table and the supplied configuration.
     pub fn new(config: QLearningConfig) -> Self {
         Self {
             q_table: Arc::new(RwLock::new(HashMap::new())),
@@ -273,15 +296,22 @@ pub struct AdaptiveRiskAssessor {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Risk score, confidence, and recommended actions for an observed system state.
 pub struct RiskAssessment {
+    /// UTC time at which the risk assessment was generated.
     pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// System state used for the risk assessment.
     pub state: SystemState,
+    /// Assessed risk score capped at one.
     pub risk_level: f64, // 0.0 - 1.0
+    /// Actions selected from the learned policy.
     pub recommended_actions: Vec<RemediationAction>,
+    /// Confidence derived from the selected state-action visit count.
     pub confidence: f64, // 0.0 - 1.0
 }
 
 impl AdaptiveRiskAssessor {
+    /// Create a risk assessor backed by the supplied learning agent.
     pub fn new(rl_agent: Arc<RwLock<RLAgent>>) -> Self {
         Self {
             risk_history: Arc::new(RwLock::new(Vec::new())),

@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- **[DevX]** Chaos ML and orchestration crates document their public API and enforce missing-documentation warnings through workspace lints, including explicit limits of simulated cluster execution and local manifest synchronization. (#799)
 - **[DevX]** Crate publication returns success after every package is available and fails when any package remains unpublished or its registry lookup fails.
 
 ## [0.3.232] - 2026-10-10

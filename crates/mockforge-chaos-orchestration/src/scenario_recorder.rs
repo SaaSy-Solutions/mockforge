@@ -27,30 +27,46 @@ pub struct ChaosEvent {
 pub enum ChaosEventType {
     /// Latency injection event
     LatencyInjection {
+        /// Injected latency in milliseconds.
         delay_ms: u64,
+        /// Affected endpoint, when available.
         endpoint: Option<String>,
     },
     /// Fault injection event
     FaultInjection {
+        /// Identifier or description of the injected fault.
         fault_type: String,
+        /// Affected endpoint, when available.
         endpoint: Option<String>,
     },
     /// Rate limit event
     RateLimitExceeded {
+        /// Client address associated with the rate-limit violation, when available.
         client_ip: Option<String>,
+        /// Affected endpoint, when available.
         endpoint: Option<String>,
     },
     /// Traffic shaping event
-    TrafficShaping { action: String, bytes: usize },
+    TrafficShaping {
+        /// Traffic shaping operation that was recorded.
+        action: String,
+        /// Number of bytes affected by the operation.
+        bytes: usize,
+    },
     /// Protocol-specific event
     ProtocolEvent {
+        /// Protocol in which the event occurred.
         protocol: String,
+        /// Protocol-specific event name.
         event: String,
+        /// Additional protocol-specific event attributes.
         details: HashMap<String, String>,
     },
     /// Scenario transition
     ScenarioTransition {
+        /// Previous scenario, or none when there was no active scenario.
         from_scenario: Option<String>,
+        /// Scenario activated by the transition.
         to_scenario: String,
     },
 }

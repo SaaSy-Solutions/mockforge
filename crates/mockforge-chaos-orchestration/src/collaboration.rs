@@ -10,31 +10,47 @@ use tokio::sync::broadcast;
 /// User in a collaboration session
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollaborationUser {
+    /// Unique identifier of the user or recorded change.
     pub id: String,
+    /// Display name of the collaborating user.
     pub name: String,
+    /// Email address associated with the collaborating user.
     pub email: String,
+    /// Display color used to distinguish this user in the editor.
     pub color: String,
+    /// Most recently reported cursor position, when available.
     pub cursor: Option<CursorPosition>,
+    /// Editor field currently selected by the user, when available.
     pub active_field: Option<String>,
+    /// UTC time at which the user joined.
     pub joined_at: DateTime<Utc>,
 }
 
 /// Cursor position
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CursorPosition {
+    /// Horizontal coordinate in the editor-provided coordinate system.
     pub x: i32,
+    /// Vertical coordinate in the editor-provided coordinate system.
     pub y: i32,
 }
 
 /// Collaboration change
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollaborationChange {
+    /// Unique identifier of the user or recorded change.
     pub id: String,
+    /// Identifier of the user associated with the change or presence update.
     pub user_id: String,
+    /// UTC time at which the change occurred.
     pub timestamp: DateTime<Utc>,
+    /// Operation represented by the change.
     pub change_type: ChangeType,
+    /// Configuration location targeted by the change.
     pub path: String,
+    /// New configuration value supplied by the change.
     pub value: serde_json::Value,
+    /// Previous configuration value, when available.
     pub previous_value: Option<serde_json::Value>,
 }
 
@@ -42,18 +58,26 @@ pub struct CollaborationChange {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ChangeType {
+    /// Insert a configuration value.
     Insert,
+    /// Change an existing configuration value.
     Update,
+    /// Remove a configuration value.
     Delete,
 }
 
 /// Collaboration session
 #[derive(Debug)]
 pub struct CollaborationSession {
+    /// Identifier of the orchestration being collaboratively edited.
     pub orchestration_id: String,
+    /// Active session users keyed by user identifier.
     pub users: Arc<RwLock<HashMap<String, CollaborationUser>>>,
+    /// Recorded change history shared by the session.
     pub changes: Arc<RwLock<Vec<CollaborationChange>>>,
+    /// Broadcast channel for session messages.
     pub broadcast_tx: broadcast::Sender<CollaborationMessage>,
+    /// UTC time at which the session was created.
     pub created_at: DateTime<Utc>,
 }
 
@@ -62,57 +86,103 @@ pub struct CollaborationSession {
 #[serde(tag = "type")]
 pub enum CollaborationMessage {
     #[serde(rename = "user_joined")]
-    UserJoined { data: UserJoinedData },
+    /// A user joined the session.
+    UserJoined {
+        /// Message payload.
+        data: UserJoinedData,
+    },
     #[serde(rename = "user_left")]
-    UserLeft { data: UserLeftData },
+    /// A user left the session.
+    UserLeft {
+        /// Message payload.
+        data: UserLeftData,
+    },
     #[serde(rename = "user_presence")]
-    UserPresence { data: UserPresenceData },
+    /// A user updated their cursor or active field.
+    UserPresence {
+        /// Message payload.
+        data: UserPresenceData,
+    },
     #[serde(rename = "change")]
-    Change { data: ChangeData },
+    /// A configuration change was recorded.
+    Change {
+        /// Message payload.
+        data: ChangeData,
+    },
     #[serde(rename = "sync")]
-    Sync { data: SyncData },
+    /// A complete configuration snapshot was supplied.
+    Sync {
+        /// Message payload.
+        data: SyncData,
+    },
     #[serde(rename = "conflict")]
-    Conflict { data: ConflictData },
+    /// Changes from different users target the same recent path.
+    Conflict {
+        /// Message payload.
+        data: ConflictData,
+    },
     #[serde(rename = "users_list")]
-    UsersList { data: UsersListData },
+    /// The current list of session users was supplied.
+    UsersList {
+        /// Message payload.
+        data: UsersListData,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Payload announcing a newly joined user.
 pub struct UserJoinedData {
+    /// User who joined the collaboration session.
     pub user: CollaborationUser,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Payload announcing a departed user.
 pub struct UserLeftData {
+    /// Identifier of the user associated with the change or presence update.
     pub user_id: String,
+    /// Display name of the user who left.
     pub user_name: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Payload containing a user presence update.
 pub struct UserPresenceData {
+    /// Identifier of the user associated with the change or presence update.
     pub user_id: String,
+    /// Most recently reported cursor position, when available.
     pub cursor: Option<CursorPosition>,
+    /// Editor field currently selected by the user, when available.
     pub active_field: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Payload containing a recorded configuration change.
 pub struct ChangeData {
+    /// Configuration change reported to subscribers.
     pub change: CollaborationChange,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Payload containing a full configuration snapshot.
 pub struct SyncData {
+    /// Full configuration snapshot to synchronize.
     pub value: serde_json::Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Payload describing conflicting recent configuration changes.
 pub struct ConflictData {
+    /// Description of the detected conflict.
     pub message: String,
+    /// Identifiers of prior changes that conflict with the incoming change.
     pub conflicting_changes: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Payload listing the current collaboration users.
 pub struct UsersListData {
+    /// Current collaboration session users.
     pub users: Vec<CollaborationUser>,
 }
 

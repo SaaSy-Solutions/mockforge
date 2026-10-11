@@ -11,8 +11,11 @@ use tracing::{debug, info, warn};
 /// Alert severity level
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 pub enum AlertSeverity {
+    /// Informational event that does not indicate a failure.
     Info,
+    /// Potential degradation requiring attention.
     Warning,
+    /// Severe chaos impact requiring urgent attention.
     Critical,
 }
 
@@ -22,35 +25,53 @@ pub enum AlertSeverity {
 pub enum AlertType {
     /// High event rate detected
     HighEventRate {
+        /// Mean event count per supplied metrics bucket, interpreted as a minute.
         events_per_minute: usize,
+        /// Mean event count per metrics bucket above which the alert fires.
         threshold: usize,
     },
     /// High latency detected
     HighLatency {
+        /// Mean latency across the supplied metrics buckets, in milliseconds.
         avg_latency_ms: f64,
+        /// Mean latency in milliseconds above which the alert fires.
         threshold_ms: u64,
     },
     /// High fault rate detected
     HighFaultRate {
+        /// Mean injected fault count per supplied metrics bucket, interpreted as a minute.
         faults_per_minute: usize,
+        /// Mean fault count per metrics bucket above which the alert fires.
         threshold: usize,
     },
     /// Rate limit violations
     RateLimitViolations {
+        /// Mean rate-limit violation count per supplied metrics bucket, interpreted as a minute.
         violations_per_minute: usize,
+        /// Mean rate-limit violation count per metrics bucket above which the alert fires.
         threshold: usize,
     },
     /// Endpoint under stress
     EndpointStress {
+        /// Endpoint whose chaos events are counted.
         endpoint: String,
+        /// Mean event count per supplied metrics bucket, interpreted as a minute.
         events_per_minute: usize,
+        /// Mean endpoint event count per metrics bucket above which the alert fires.
         threshold: usize,
     },
     /// Chaos impact high
-    HighImpact { severity_score: f64, threshold: f64 },
+    HighImpact {
+        /// Composite score calculated from faults, latency, and rate-limit violations.
+        severity_score: f64,
+        /// Score above which the alert fires.
+        threshold: f64,
+    },
     /// Custom alert
     Custom {
+        /// Human-readable description of the custom alert.
         message: String,
+        /// Additional application-defined alert details.
         metadata: HashMap<String, String>,
     },
 }
@@ -116,32 +137,48 @@ pub struct AlertRule {
 pub enum AlertRuleType {
     /// Alert on event rate threshold
     EventRateThreshold {
+        /// Mean event count per metrics bucket above which the alert fires.
         threshold: usize,
+        /// Configured lookback period in minutes; this rule evaluates all supplied buckets.
         window_minutes: i64,
     },
     /// Alert on latency threshold
     LatencyThreshold {
+        /// Mean latency in milliseconds above which the alert fires.
         threshold_ms: u64,
+        /// Configured lookback period in minutes; this rule evaluates all supplied buckets.
         window_minutes: i64,
     },
     /// Alert on fault rate threshold
     FaultRateThreshold {
+        /// Mean fault count per metrics bucket above which the alert fires.
         threshold: usize,
+        /// Configured lookback period in minutes; this rule evaluates all supplied buckets.
         window_minutes: i64,
     },
     /// Alert on rate limit violations
     RateLimitThreshold {
+        /// Mean rate-limit violation count per metrics bucket above which the alert fires.
         threshold: usize,
+        /// Configured lookback period in minutes; this rule evaluates all supplied buckets.
         window_minutes: i64,
     },
     /// Alert on endpoint stress
     EndpointThreshold {
+        /// Endpoint whose chaos events are counted.
         endpoint: String,
+        /// Mean endpoint event count per metrics bucket above which the alert fires.
         threshold: usize,
+        /// Configured lookback period in minutes; this rule evaluates all supplied buckets.
         window_minutes: i64,
     },
     /// Alert on chaos impact score
-    ImpactThreshold { threshold: f64, window_minutes: i64 },
+    ImpactThreshold {
+        /// Composite impact score above which the alert fires.
+        threshold: f64,
+        /// Lookback period in minutes, applied to metric timestamps during evaluation.
+        window_minutes: i64,
+    },
 }
 
 impl AlertRule {
