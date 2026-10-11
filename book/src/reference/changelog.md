@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- **[DevX]** Retire the outdated shared-runner cleanup copy and its systemd units in favor of the infrastructure-owned script, preventing accidental replacement of newer host protections. (#706)
+
 - **[DevX]** Crate publication returns success after every package is available and fails when any package remains unpublished or its registry lookup fails.
 - **[Reality]** HTTP pipelining benchmarks stop at the configured load deadline, retain partial wire-byte counts, and drain large responses while sending subsequent requests. Response framing handles interim replies, chunked bodies, HEAD, and connection-close bodies. Multipart synthetic files accept `--multipart-content-type`. (#937)
 
