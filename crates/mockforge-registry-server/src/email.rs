@@ -1496,6 +1496,9 @@ Privacy: https://mockforge.dev/privacy
 #[cfg(test)]
 mod tests {
     use super::*;
+    // These three tests change the same process-global URL. Running them in
+    // parallel otherwise mixes the default and custom URL assertions.
+    static APP_BASE_URL_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     #[test]
     fn email_message_default_is_empty() {
@@ -1914,6 +1917,7 @@ mod tests {
 
     #[test]
     fn test_generate_verification_email() {
+        let _guard = APP_BASE_URL_TEST_LOCK.lock().unwrap();
         std::env::set_var("APP_BASE_URL", "https://test.mockforge.dev");
 
         let email = EmailService::generate_verification_email(
@@ -1939,6 +1943,7 @@ mod tests {
 
     #[test]
     fn test_generate_verification_email_default_url() {
+        let _guard = APP_BASE_URL_TEST_LOCK.lock().unwrap();
         std::env::remove_var("APP_BASE_URL");
 
         let email = EmailService::generate_verification_email(
@@ -1975,6 +1980,7 @@ mod tests {
 
     #[test]
     fn test_generate_password_reset_email() {
+        let _guard = APP_BASE_URL_TEST_LOCK.lock().unwrap();
         std::env::set_var("APP_BASE_URL", "https://test.mockforge.dev");
 
         let email = EmailService::generate_password_reset_email(

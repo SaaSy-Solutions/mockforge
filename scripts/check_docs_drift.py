@@ -59,6 +59,8 @@ ENV_ALLOWLIST: dict[str, str] = {
     # --- Test-only / dev-only ---
     "MOCKFORGE_TEST_FIXTURE_DIR": "test-only fixture path; not user surface",
     "MOCKFORGE_TEST_BINARY": "test-harness binary path; not user surface",
+    "MOCKFORGE_LEASE_FIXTURE_PORT": "process.rs unit-test child listener port; not user surface",
+    "MOCKFORGE_LEASE_FIXTURE_READY": "process.rs unit-test child readiness marker; not user surface",
     "MOCKFORGE_DEV_JWT_SECRET": "dev-only JWT secret for local-mode auth; not for prod users",
     "MOCKFORGE_OAUTH_ACCESS_TOKEN": "test/runtime-only OAuth fixture; not user-set",
     # --- Hosted-mocks orchestrator-injected ---

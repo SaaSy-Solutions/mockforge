@@ -6,6 +6,7 @@ on:
       - 'book/**'
       - 'scripts/automated-tests/test-docs.sh'
       - 'scripts/check_docs_cli.py'
+      - 'scripts/check_docs_drift.py'
       - 'scripts/docs-cli-surface.json'
       - 'crates/mockforge-cli/src/main.rs'
       - '.github/workflows/docs-check.yml'
