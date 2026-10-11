@@ -475,7 +475,7 @@ Run with `--verbose` to see detailed warnings.
 ## Limitations
 
 - **Reference Resolution**: Complex `$ref` chains may not fully resolve (coming soon)
-- **Swagger 2.0**: Currently only OpenAPI 3.x is supported (Swagger support planned)
+- **Swagger 2.0**: JSON and YAML are converted automatically to OpenAPI 3.0, including local reusable parameters/responses and nested schema references. See `examples/swagger2-legacy.json` for a runnable contract.
 - **AI Enhancement**: Integration with AI mock data generation (planned)
 - **Custom Templates**: User-defined mock data templates (planned)
 

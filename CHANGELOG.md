@@ -4,6 +4,8 @@
 
 - **[DevX]** `ftp serve --config` reads standalone FTP settings or a server YAML `ftp` section, loads configuration-relative fixture directories, and honors explicit CLI overrides. FTP listeners apply the configured passive port range and idle timeout. (#794)
 
+- **[Contracts]** Swagger 2.0 imports use automatic conversion instead of rejecting the format. Reusable parameters/responses, inherited request bodies, nested schema references, and media-specific response examples survive loading and mock generation. (#838)
+
 - **[DevX]** Intelligence handler state construction tolerates Cargo database feature unification, restoring HTTP builds when Core enables database support independently. Explicit HTTP database connections are preserved. (#632)
 
 - **[DevX]** Documentation checks run on hosted runners and require only enabled mdBook preprocessors, freeing the dedicated Rust runners for tests and publication.

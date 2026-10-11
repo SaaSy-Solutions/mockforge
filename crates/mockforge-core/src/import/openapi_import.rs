@@ -90,27 +90,9 @@ pub fn import_openapi_spec(
 
     // Validate using enhanced validator for better error messages
     match format {
-        crate::spec_parser::SpecFormat::OpenApi20 => {
-            let validation = crate::spec_parser::OpenApiValidator::validate(&json_value, format);
-            if !validation.is_valid {
-                // Format errors on separate lines for better readability
-                let error_msg = validation
-                    .errors
-                    .iter()
-                    .map(|e| format!("  - {}", e))
-                    .collect::<Vec<_>>()
-                    .join("\n");
-                return Err(format!("Invalid OpenAPI 2.0 (Swagger) specification:\n{}", error_msg));
-            }
-
-            // Note: OpenAPI 2.0 support is currently limited to validation.
-            // Full parsing requires conversion to OpenAPI 3.x format.
-            // For now, return a helpful error suggesting conversion.
-            return Err("OpenAPI 2.0 (Swagger) specifications are detected but not yet fully supported for parsing. \
-                Please convert your Swagger 2.0 spec to OpenAPI 3.x format. \
-                You can use tools like 'swagger2openapi' or the online converter at https://editor.swagger.io/ to convert your spec.".to_string());
-        }
-        crate::spec_parser::SpecFormat::OpenApi30 | crate::spec_parser::SpecFormat::OpenApi31 => {
+        crate::spec_parser::SpecFormat::OpenApi20
+        | crate::spec_parser::SpecFormat::OpenApi30
+        | crate::spec_parser::SpecFormat::OpenApi31 => {
             let validation = crate::spec_parser::OpenApiValidator::validate(&json_value, format);
             if !validation.is_valid {
                 // Format errors on separate lines for better readability
@@ -126,7 +108,7 @@ pub fn import_openapi_spec(
         }
         _ => {
             return Err(format!(
-                "Unsupported specification format: {}. Only OpenAPI 3.x is currently supported for parsing.",
+                "Unsupported specification format: {}. Only OpenAPI 2.0 (Swagger), 3.0, and 3.1 are supported for parsing.",
                 format.display_name()
             ));
         }
