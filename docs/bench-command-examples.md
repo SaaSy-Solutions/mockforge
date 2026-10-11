@@ -11,6 +11,7 @@ This document provides practical examples of using the `mockforge bench` command
 5. [Script Generation](#script-generation)
 6. [CI/CD Integration](#cicd-integration)
 7. [Advanced Configurations](#advanced-configurations)
+8. [HTTP Pipelining with Synthetic Bodies](#http-pipelining-with-synthetic-bodies)
 
 ## Basic Usage
 
@@ -504,3 +505,33 @@ Common use cases:
 - [OpenAPI Specification](https://spec.openapis.org/oas/latest.html)
 - [Chaos Engineering Guide](./CHAOS_ENGINEERING.md) — pair load tests with
   fault injection (latency, HTTP errors, TCP RST/FIN, partial responses)
+## HTTP Pipelining with Synthetic Bodies
+
+`bench-pipeline` sends requests back-to-back on each HTTP/1.1 connection while
+draining responses in order. Use a plain HTTP target; place TLS termination at a
+proxy if needed.
+
+```bash
+mockforge bench-pipeline --target http://localhost:3000/upload \
+  --content-type multipart --multipart-content-type image/png \
+  --body-size 10MB --pipeline-depth 4 --connections 2 --duration 10s
+
+mockforge bench-pipeline --target http://localhost:3000/api \
+  --content-type json --body-size 900GB --pipeline-depth 2 \
+  --connections 1 --duration 10s
+```
+
+Supported bodies are `json`, `xml`, `urlencoded`, and `multipart` (their full
+MIME names also work). Bodies stream in bounded chunks rather than allocating
+the requested size. Multipart uses one synthetic file part; its MIME type
+defaults to `application/octet-stream`. The filler is synthetic patterned data,
+so choosing `image/png` labels the part without generating a valid PNG image.
+`--body-size` includes the body's framing, including multipart boundaries.
+
+The duration bounds socket connection, writes, reads, and retries after DNS
+resolution. A stalled target ends at that deadline. Byte totals include partial
+requests and responses; request counts include only completely written
+requests, and response counts include only completed final responses. A target
+that closes a connection or responds early can produce unequal counts. The
+report exposes those differences and connection errors. Test pipeline support
+on the target before choosing a large depth or body size.
