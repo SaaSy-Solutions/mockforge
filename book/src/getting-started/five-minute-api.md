@@ -2,13 +2,19 @@
 
 **Scenario**: Your frontend team needs a `/users` API to continue development, but the backend isn't ready. Let's create a working mock in 5 minutes.
 
-## Step 1: Install MockForge (30 seconds)
+## Step 1: Install MockForge
+
+For the fastest first response, start the bundled OpenAPI example with Docker:
 
 ```bash
-cargo install mockforge-cli
+docker run --rm -p 3000:3000 ghcr.io/saasy-solutions/mockforge:latest serve --spec examples/openapi-demo.json --http-port 3000
 ```
 
-Or use the pre-built binary from the [releases page](https://github.com/SaaSy-Solutions/mockforge/releases).
+In another terminal, run `curl http://localhost:3000/users`. No configuration file is needed. The [measured cold-start check](first-mock-benchmark.md) returned its first response in 9.2 seconds, including the image download.
+
+For the native CLI, `cargo install mockforge-cli` requires Rust 1.96.0 or later and compiles from source. Its duration depends on your machine and is not included in that Docker measurement. Windows also has a prebuilt executable on the [releases page](https://github.com/SaaSy-Solutions/mockforge/releases).
+
+Stop the Docker example before continuing on port 3000 with a native server.
 
 ## Step 2: Create a Simple Config (1 minute)
 

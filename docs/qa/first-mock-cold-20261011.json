@@ -1,0 +1,14 @@
+{
+  "environment": "Fresh nested Docker daemon and container; no prior images, Rust, or MockForge configuration. Host Docker and daemon preparation excluded.",
+  "image": "ghcr.io/saasy-solutions/mockforge@sha256:c0e9a7d90ddb41b89340750bb6c54375c01a77d81f04bf22779f2a0def5ef7fd",
+  "version": "mockforge 0.3.227",
+  "image_cache_initially_empty": true,
+  "cold_image_pull_seconds": 8.392,
+  "container_start_to_verified_response_seconds": 0.803,
+  "cold_pull_to_verified_first_mock_seconds": 9.195,
+  "target_seconds": 60,
+  "under_target": true,
+  "endpoint": "/users",
+  "verified_users_array": true,
+  "user_count": 1
+}

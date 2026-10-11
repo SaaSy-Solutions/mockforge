@@ -1016,7 +1016,8 @@ pub(crate) async fn handle_init(
 
     // Create config file
     let config_path = project_dir.join("mockforge.yaml");
-    if config_path.exists() {
+    let config_existed = config_path.exists();
+    if config_existed {
         println!("\u{26a0}\u{fe0f}  Configuration file already exists: {}", config_path.display());
     } else {
         // Conditionally include openapi_spec line only if examples are being created
@@ -1200,11 +1201,17 @@ logging:
     println!("\n\u{1f389} MockForge project initialized successfully!");
     println!("\nNext steps:");
     println!("  1. cd {}", if name == "." { "." } else { &name });
-    println!("  2. Edit mockforge.yaml to configure your mock servers");
-    if !no_examples {
-        println!("  3. Review examples/openapi.json for API specifications");
+    if !no_examples && !config_existed {
+        println!("  2. Start the example: mockforge serve --config mockforge.yaml");
+        println!("  3. In another terminal: curl http://localhost:3000/users");
+        println!("\nThe example is ready to run. Customize examples/openapi.json when you need your own API.");
+    } else {
+        println!("  2. Review mockforge.yaml to configure your mock servers");
+        if !no_examples {
+            println!("  3. Review examples/openapi.json for API specifications");
+        }
+        println!("  4. Run: mockforge serve --config mockforge.yaml");
     }
-    println!("  4. Run: mockforge serve --config mockforge.yaml");
     println!("\nNote: CLI arguments override config file settings");
 
     Ok(())
