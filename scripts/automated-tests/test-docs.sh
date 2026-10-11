@@ -1,6 +1,7 @@
 #!/bin/bash
 
 set -euo pipefail
+unset CDPATH
 
 BLUE='\033[0;34m'
 YELLOW='\033[1;33m'
@@ -95,7 +96,7 @@ build_book() {
 
   (
     cd "$BOOK_DIR"
-    PATH="$HOME/.cargo/bin:$PATH" mdbook build
+    mdbook build
   )
 
   log_success "mdBook build completed successfully"
@@ -114,15 +115,31 @@ main() {
     exit 1
   fi
 
-  require_command "python3" "Install Python 3 so path validation can resolve mdBook links."
+  require_command "python3" "Install Python 3.11 or later for TOML parsing and mdBook link validation."
   require_command "mdbook" "Install mdBook with 'cargo install mdbook'."
-  require_command "mdbook-toc" "Install the required preprocessor with 'cargo install mdbook-toc'."
+  # Only explicitly enabled external preprocessors require extra executables.
+  # Parsing TOML avoids treating commented configuration as an enabled plugin.
+  local plugin_commands
+  plugin_commands=$(python3 - "$BOOK_DIR/book.toml" <<'PYCONFIG'
+import shlex
+import sys
+import tomllib
+from pathlib import Path
 
-  if grep -q 'command = "mdbook-mermaid"' "$BOOK_DIR/book.toml"; then
-    require_command "mdbook-mermaid" "Install the optional preprocessor with 'cargo install mdbook-mermaid'."
-  else
-    log_warn "mdbook-mermaid is not enabled in book.toml; skipping mermaid preprocessor check"
-  fi
+configuration = tomllib.loads(Path(sys.argv[1]).read_text())
+for name, settings in configuration.get("preprocessor", {}).items():
+    command = settings.get("command")
+    if command is None and name in {"index", "links"}:
+        continue
+    executable = shlex.split(command or "mdbook-" + name)[0]
+    print(executable)
+PYCONFIG
+)
+  while IFS= read -r plugin; do
+    if [[ -n "$plugin" ]]; then
+      require_command "$plugin" "Install the enabled mdBook preprocessor: $plugin"
+    fi
+  done <<< "$plugin_commands"
 
   check_summary_targets
   build_book
