@@ -73,6 +73,25 @@ class EvidenceTests(unittest.TestCase):
         self.assertTrue(all(call[0] in {'info','container','inspect','image'} for call in self.calls))
         self.assertFalse(any(call[0] == 'ps' for call in self.calls))
 
+    def test_verified_log_export_allows_only_nonsecret_receipt_fields(self):
+        self.sample('started')
+        self.sample('healthy')
+        with patch.object(evidence,'docker',side_effect=self.docker): evidence.cleaned(self.args)
+        data=evidence.verify(self.args.output,self.args.project)
+        # Accidental future fields must not cross into ordinary job logs.
+        for item in data:
+            item['environment']={'DATABASE_URL':'must-not-be-logged'}
+            for service in item.get('services',{}).values(): service['secret']='must-not-be-logged'
+        with contextlib.redirect_stdout(io.StringIO()) as output: evidence.emit_verified(data)
+        lines=output.getvalue().splitlines()
+        self.assertEqual(len(lines),3)
+        self.assertTrue(all(line.startswith('FIXTURE_EVIDENCE ') for line in lines))
+        self.assertNotIn('must-not-be-logged',output.getvalue())
+        self.assertEqual(json.loads(lines[0].split(' ',1)[1])['ports']['registry'],'127.0.0.1:43210')
+        # A failed validation cannot reach the export at the CLI call site.
+        source=(ROOT/'scripts/ci-fixture-evidence.py').read_text()
+        self.assertIn('emit_verified(verify(args.output, args.project))',source)
+
     def test_foreign_project_rejected_before_image_read(self):
         original = self.docker
         def foreign(*args):

@@ -202,6 +202,19 @@ def verify(path, project):
     return data
 
 
+def emit_verified(data):
+    """Also preserve validated, allowlisted evidence in ordinary job logs."""
+    for item in data:
+        safe = {key: item[key] for key in ("at", "phase", "run_id", "project", "compose", "daemon")}
+        if item["phase"] in {"started", "healthy"}:
+            safe["services"] = {name: {key: item["services"][name][key]
+                for key in ("container", "image_id", "repo_digests")} for name in ("db", "minio")}
+            safe["ports"] = {name: item["ports"][name]
+                for name in ("postgres", "minio", "minio_console", "registry")}
+            safe["registry_healthy"] = item["registry_healthy"]
+        print("FIXTURE_EVIDENCE " + json.dumps(safe, sort_keys=True))
+
+
 def compare(paths):
     data = []
     projects = set()
@@ -260,7 +273,7 @@ def main():
     if args.command == "sample": sample(args, "started")
     elif args.command == "monitor": monitor(args)
     elif args.command == "cleaned": cleaned(args)
-    elif args.command == "verify": verify(args.output, args.project)
+    elif args.command == "verify": emit_verified(verify(args.output, args.project))
     else: compare(args.paths)
 
 
