@@ -26,11 +26,13 @@ use serde::Serialize;
 
 mod body;
 mod response;
+mod target;
 #[cfg(test)]
 mod tests;
 mod transport;
 
 use body::StreamBody;
+use target::parse_http_target;
 use transport::{connection_loop, Counters};
 
 /// Synthetic body flavour (#937).
@@ -141,30 +143,6 @@ pub struct PipelineBenchResult {
     pub reconnects: u64,
 }
 
-/// Split `http://host:port/path` into its parts (plain http only — TLS
-/// termination belongs to the target or a proxy, same as bench-qos).
-fn parse_http_target(url: &str) -> Result<(String, u16, String), String> {
-    let parsed = reqwest::Url::parse(url).map_err(|_| "invalid target URL".to_owned())?;
-    if parsed.scheme() != "http" {
-        return Err("bench-pipeline needs a plain http:// target".into());
-    }
-    if !parsed.username().is_empty() || parsed.password().is_some() {
-        return Err("target URLs must not contain credentials".into());
-    }
-    let host = parsed
-        .host_str()
-        .ok_or_else(|| "target has no host".to_owned())?
-        .trim_start_matches('[')
-        .trim_end_matches(']')
-        .to_owned();
-    let mut path = parsed.path().to_owned();
-    if let Some(query) = parsed.query() {
-        path.push('?');
-        path.push_str(query);
-    }
-    Ok((host, parsed.port_or_known_default().unwrap_or(80), path))
-}
-
 /// Run the pipelining bench.
 pub async fn run(cfg: PipelineBenchConfig) -> anyhow::Result<PipelineBenchResult> {
     run_with_multipart_content_type(cfg, "application/octet-stream").await
@@ -181,7 +159,7 @@ pub async fn run_with_multipart_content_type(
         !part.is_empty()
             && part
                 .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || b"!#$&^_.+-".contains(&byte))
+                .all(|byte| byte.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&byte))
     };
     if file_content_type.len() > 128
         || !file_content_type

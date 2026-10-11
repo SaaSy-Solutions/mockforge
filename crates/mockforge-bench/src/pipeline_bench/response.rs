@@ -18,27 +18,7 @@ pub(super) async fn read_response(
     if head_request || status == 204 || status == 304 {
         return Ok((status, bytes_received.load(Ordering::Relaxed) - before));
     }
-    let mut length = None;
-    let mut transfer = Vec::new();
-    for line in head.lines().skip(1) {
-        let (name, value) = line
-            .split_once(':')
-            .ok_or_else(|| invalid_response("malformed response header"))?;
-        if name.eq_ignore_ascii_case("content-length") {
-            for value in value.split(',') {
-                let parsed = value
-                    .trim()
-                    .parse::<u64>()
-                    .map_err(|_| invalid_response("invalid content length"))?;
-                if length.is_some_and(|previous| previous != parsed) {
-                    return Err(invalid_response("conflicting content lengths"));
-                }
-                length = Some(parsed);
-            }
-        } else if name.eq_ignore_ascii_case("transfer-encoding") {
-            transfer.extend(value.split(',').map(|value| value.trim().to_ascii_lowercase()));
-        }
-    }
+    let (length, transfer) = head::parse_framing_headers(&head)?;
     if transfer.last().is_some_and(|coding| coding == "chunked") {
         chunks::read_chunked(stream, buf, bytes_received).await?;
     } else if transfer.is_empty() && length.is_some() {

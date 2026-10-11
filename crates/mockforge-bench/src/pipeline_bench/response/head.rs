@@ -22,9 +22,9 @@ pub(super) async fn read_final_head(
             }
             read_more(stream, buf, bytes_received).await?;
         };
-        let head = std::str::from_utf8(&buf[..end])
-            .map_err(|_| invalid_response("invalid response head"))?
-            .to_owned();
+        // Field values can contain opaque non-UTF-8 octets (RFC 9110 §5.5).
+        // Only the ASCII status and framing headers are interpreted here.
+        let head = String::from_utf8_lossy(&buf[..end]).into_owned();
         buf.drain(..end + 4);
         let status = head
             .lines()
@@ -48,4 +48,29 @@ pub(super) async fn read_final_head(
 /// first byte.
 fn find_head_end(buf: &[u8]) -> Option<usize> {
     buf.windows(4).position(|w| w == b"\r\n\r\n")
+}
+
+pub(super) fn parse_framing_headers(head: &str) -> std::io::Result<(Option<u64>, Vec<String>)> {
+    let mut length = None;
+    let mut transfer = Vec::new();
+    for line in head.lines().skip(1) {
+        let (name, value) = line
+            .split_once(':')
+            .ok_or_else(|| invalid_response("malformed response header"))?;
+        if name.eq_ignore_ascii_case("content-length") {
+            for value in value.split(',') {
+                let parsed = value
+                    .trim()
+                    .parse::<u64>()
+                    .map_err(|_| invalid_response("invalid content length"))?;
+                if length.is_some_and(|previous| previous != parsed) {
+                    return Err(invalid_response("conflicting content lengths"));
+                }
+                length = Some(parsed);
+            }
+        } else if name.eq_ignore_ascii_case("transfer-encoding") {
+            transfer.extend(value.split(',').map(|value| value.trim().to_ascii_lowercase()));
+        }
+    }
+    Ok((length, transfer))
 }

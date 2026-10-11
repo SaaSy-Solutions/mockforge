@@ -2,6 +2,18 @@
 
 use super::super::response::read_response;
 use super::*;
+
+#[tokio::test]
+async fn opaque_header_values_do_not_reject_valid_response_framing() {
+    let wire = b"HTTP/1.1 200 OK\r\nX-Label: \xff\r\nContent-Length: 1\r\n\r\nx";
+    let mut reader = &wire[..];
+    let counter = AtomicU64::new(0);
+    assert_eq!(
+        read_response(&mut reader, &mut Vec::new(), &counter, false).await.unwrap().0,
+        200
+    );
+    assert_eq!(counter.load(Ordering::Relaxed), wire.len() as u64);
+}
 use std::sync::atomic::AtomicU64;
 
 #[tokio::test]
