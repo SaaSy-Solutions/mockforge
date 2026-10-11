@@ -2,9 +2,14 @@
 
 Step-by-step guide to deploy the MockForge registry server, admin UI, and supporting infrastructure.
 
-**Architecture:** Fly.io (compute + hosted mocks) + Neon (Postgres) + Cloudflare Pages (admin UI) + Cloudflare R2 (blob storage)
+**Current public deployment:** the registry API and application UI run on Ashburn;
+the marketing site can remain on Pages. See [Ashburn UI releases](../docs/ASHBURN_UI_RELEASE.md)
+and [Ashburn image supply](../docs/ASHBURN_IMAGE_SUPPLY.md) for the supported release paths.
+The Fly.io/Neon provisioning sections below describe an alternative deployment,
+not the current production registry. Hosted customer mocks may still use Fly.io.
 
-**Estimated monthly cost at launch:** ~$8-10/mo
+The historical Fly.io/Neon cost estimate was ~$8–10/month; it does not describe
+the current Ashburn deployment's costs.
 
 ## Prerequisites
 
@@ -227,13 +232,40 @@ stripe webhook_endpoints create \
   --enabled-events checkout.session.completed,customer.subscription.updated,customer.subscription.deleted,invoice.payment_succeeded,invoice.payment_failed
 ```
 
-Set the webhook secret and price IDs:
+Set the webhook secret and price IDs in the registry's protected configuration.
+For Ashburn this is `/opt/saasy/env.d/mockforge-registry.env`, maintained through
+the platform's secret-management and deployment procedure. Keep the file owned
+by root with mode `0600`; do not put secret values in Git or paste them into logs.
+Restart only the registry service through the supported deployment procedure
+after updating and backing up its configuration.
+
+These are the names read by `Config::load`:
+
+| Variable | Meaning |
+| --- | --- |
+| `STRIPE_WEBHOOK_SECRET` | Signature secret for this deployment's webhook endpoint |
+| `STRIPE_PRICE_ID_PRO` | Pro monthly recurring price ($29/month) |
+| `STRIPE_PRICE_ID_TEAM` | Team monthly recurring price ($99/month) |
+| `STRIPE_PRICE_ID_PRO_ANNUAL` | Pro annual recurring price ($290/year) |
+| `STRIPE_PRICE_ID_TEAM_ANNUAL` | Team annual recurring price ($990/year) |
+| `STRIPE_TRIAL_PERIOD_DAYS` | Free trial length; defaults to 14, set to 0 to disable |
+
+Monthly and annual prices are separate Stripe objects. Verify their currency,
+amount, recurring interval, and Stripe account/mode against the pricing page
+before enabling checkout. An absent annual price disables that plan's annual
+checkout; it never falls back to monthly billing. Configure both annual prices
+before advertising annual billing for both plans.
+
+For the alternative Fly.io deployment, set the same names:
 
 ```bash
 fly secrets set -a mockforge-registry \
   STRIPE_WEBHOOK_SECRET="whsec_..." \
-  STRIPE_PRO_PRICE_ID="price_..." \
-  STRIPE_TEAM_PRICE_ID="price_..."
+  STRIPE_PRICE_ID_PRO="price_pro_monthly_..." \
+  STRIPE_PRICE_ID_TEAM="price_team_monthly_..." \
+  STRIPE_PRICE_ID_PRO_ANNUAL="price_pro_annual_..." \
+  STRIPE_PRICE_ID_TEAM_ANNUAL="price_team_annual_..." \
+  STRIPE_TRIAL_PERIOD_DAYS=14
 ```
 
 ### Test checkout flow
