@@ -8,13 +8,18 @@ Before contributing to MockForge, ensure you have the following installed:
 
 ### Required Tools
 
-- **Rust**: Version 1.70.0 or later
+- **Rust**: Version 1.96.0 or later; this checkout pins 1.96.0 in `rust-toolchain.toml`
 - **Cargo**: Included with Rust
 - **Git**: For version control
-- **C/C++ Compiler**: For native dependencies
+- **C/C++ Compiler and CMake**: A C compiler and C++17 support for native dependencies
 - **Docker**: For containerized development and testing
 
 ### Recommended Tools
+
+Benchmarking with `--use-k6` requires k6 1.0.0 or later. Protocol Buffer builds
+use bundled `protoc`; a separate system installation is not required. See
+[benchmark tooling requirements](../reference/bench-capacity-sizing.md#tooling-requirements)
+for native build packages and memory guidance.
 
 - **Visual Studio Code** or **IntelliJ/CLion** with Rust plugins
 - **cargo-watch** for automatic rebuilds
@@ -33,9 +38,12 @@ curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 # Add Cargo to PATH
 source $HOME/.cargo/env
 
+# Install the repository's tested toolchain
+rustup toolchain install 1.96.0 --component rustfmt --component clippy
+
 # Verify installation
-rustc --version
-cargo --version
+rustc +1.96.0 --version
+cargo +1.96.0 --version
 ```
 
 ### 2. Clone the Repository
