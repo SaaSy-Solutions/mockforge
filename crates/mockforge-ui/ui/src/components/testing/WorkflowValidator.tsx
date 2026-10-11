@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button } from '../ui/button';
 import { useServiceStore } from '../../stores/useServiceStore';
 import { useFixtureStore } from '../../stores/useFixtureStore';
@@ -19,6 +19,12 @@ interface TestResult {
 export function WorkflowValidator() {
   const [testResults, setTestResults] = useState<TestResult[]>([]);
   const [isRunning, setIsRunning] = useState(false);
+  const activeRun = useRef<AbortController | null>(null);
+
+  useEffect(() => () => {
+    activeRun.current?.abort();
+    activeRun.current = null;
+  }, []);
 
   const serviceStore = useServiceStore();
   const fixtureStore = useFixtureStore();
@@ -433,25 +439,46 @@ export function WorkflowValidator() {
   };
 
   const runAllTests = async () => {
+    if (activeRun.current) return;
+    const controller = new AbortController();
+    activeRun.current = controller;
+    const { signal } = controller;
     setIsRunning(true);
     setTestResults(workflows.map(w => ({ ...w, status: 'pending' })));
 
-    for (const workflow of workflows) {
-      setTestResults(prev => prev.map(r =>
-        r.id === workflow.id ? { ...r, status: 'running' } : r
-      ));
+    try {
+      for (const workflow of workflows) {
+        if (signal.aborted) return;
+        setTestResults(prev => prev.map(r =>
+          r.id === workflow.id ? { ...r, status: 'running' } : r
+        ));
 
-      const result = await runTest(workflow);
+        const result = await runTest(workflow);
+        if (signal.aborted) return;
 
-      setTestResults(prev => prev.map(r =>
-        r.id === workflow.id ? result : r
-      ));
+        setTestResults(prev => prev.map(r =>
+          r.id === workflow.id ? result : r
+        ));
 
-      // Small delay between tests
-      await new Promise(resolve => setTimeout(resolve, 200));
+        // Small delay between tests
+        await new Promise<void>(resolve => {
+          if (signal.aborted) {
+            resolve();
+            return;
+          }
+          const finish = () => {
+            clearTimeout(timer);
+            signal.removeEventListener('abort', finish);
+            resolve();
+          };
+          const timer = setTimeout(finish, 200);
+          signal.addEventListener('abort', finish, { once: true });
+        });
+      }
+    } finally {
+      if (!signal.aborted) setIsRunning(false);
+      if (activeRun.current === controller) activeRun.current = null;
     }
-
-    setIsRunning(false);
   };
 
   const getStatusIcon = (status: TestResult['status']) => {
