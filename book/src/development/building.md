@@ -8,10 +8,16 @@ Before building MockForge, ensure you have the required development tools instal
 
 ### System Requirements
 
-- **Rust**: Version 1.70.0 or later
+- **Rust**: Version 1.96.0 or later; builds in this checkout use the pinned 1.96.0 toolchain
 - **Cargo**: Included with Rust
 - **Git**: For cloning the repository
-- **C/C++ Compiler**: For native dependencies
+- **C/C++ Compiler and CMake**: A C compiler and C++17 support for native dependencies
+
+`cargo install mockforge-cli --locked` also requires Rust 1.96.0 or later.
+Prebuilt release binaries and container images do not require a local Rust
+toolchain. `protoc` is bundled by the gRPC build, so it does not need to be
+installed separately. For k6 and build-memory requirements, see
+[benchmark tooling requirements](../reference/bench-capacity-sizing.md#tooling-requirements).
 
 ### Platform-Specific Requirements
 
@@ -20,11 +26,12 @@ Before building MockForge, ensure you have the required development tools instal
 ```bash
 # Install build essentials
 sudo apt update
-sudo apt install build-essential pkg-config libssl-dev
+sudo apt install build-essential cmake pkg-config libssl-dev
 
 # Install Rust (if not already installed)
 curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
 source $HOME/.cargo/env
+rustup toolchain install 1.96.0 --component rustfmt --component clippy
 ```
 
 #### macOS
