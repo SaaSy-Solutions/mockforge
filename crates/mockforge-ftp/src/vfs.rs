@@ -59,11 +59,8 @@ impl VirtualFileSystem {
 
     pub fn list_files(&self, path: &Path) -> Vec<VirtualFile> {
         let files = self.files.blocking_read();
-        files
-            .iter()
-            .filter(|(file_path, _)| file_path.starts_with(path))
-            .map(|(_, file)| file.clone())
-            .collect()
+        let fixtures = self.fixtures.blocking_read();
+        collect_visible_files(path, &files, &fixtures)
     }
 
     pub fn clear(&self) -> Result<()> {
@@ -79,8 +76,16 @@ impl VirtualFileSystem {
     }
 
     pub fn load_fixtures(&self, fixtures: Vec<FileFixture>) -> Result<()> {
+        if fixtures.is_empty() {
+            return Ok(());
+        }
+        // Construction also runs inside async applications. blocking_write()
+        // panics there; take the uncontended initialization lock without blocking.
+        let mut stored = self.fixtures.try_write().map_err(|_| {
+            anyhow::anyhow!("Cannot load FTP fixtures while the fixture registry is in use")
+        })?;
         for fixture in fixtures {
-            self.add_fixture(fixture)?;
+            stored.insert(fixture.path.clone(), fixture);
         }
         Ok(())
     }
@@ -134,11 +139,8 @@ impl VirtualFileSystem {
     /// Async version of list_files — use from async contexts.
     pub async fn list_files_async(&self, path: &Path) -> Vec<VirtualFile> {
         let files = self.files.read().await;
-        files
-            .iter()
-            .filter(|(file_path, _)| file_path.starts_with(path))
-            .map(|(_, file)| file.clone())
-            .collect()
+        let fixtures = self.fixtures.read().await;
+        collect_visible_files(path, &files, &fixtures)
     }
 
     /// Async version of remove_file — use from async contexts.
@@ -200,6 +202,28 @@ impl VirtualFileSystem {
 
         None
     }
+}
+
+// Keep listing consistent with get_file: runtime files override fixtures at
+// the same path, and untouched fixture files are visible to FTP LIST as well.
+fn collect_visible_files(
+    path: &Path,
+    files: &HashMap<PathBuf, VirtualFile>,
+    fixtures: &HashMap<PathBuf, FileFixture>,
+) -> Vec<VirtualFile> {
+    files
+        .iter()
+        .filter(|(file_path, _)| file_path.starts_with(path))
+        .map(|(_, file)| file.clone())
+        .chain(
+            fixtures
+                .iter()
+                .filter(|(fixture_path, _)| {
+                    fixture_path.starts_with(path) && !files.contains_key(*fixture_path)
+                })
+                .map(|(_, fixture)| fixture.clone().to_virtual_file()),
+        )
+        .collect()
 }
 
 /// Virtual file representation
@@ -659,6 +683,20 @@ mod tests {
         // Just verify it can be cloned
     }
 
+    #[tokio::test]
+    async fn fixture_load_reports_contention_without_blocking_async_runtime() {
+        let vfs = VirtualFileSystem::new(PathBuf::from("/"));
+        let held = vfs.fixtures.write().await;
+        let result = vfs.load_fixtures(vec![FileFixture {
+            path: PathBuf::from("/new.txt"),
+            content: FileContent::Static(b"new".to_vec()),
+            metadata: FileMetadata::default(),
+        }]);
+        assert!(result.is_err());
+        assert!(held.is_empty(), "failed loads must not partially install fixtures");
+        assert!(vfs.load_fixtures(Vec::new()).is_ok(), "empty load remains a no-op");
+    }
+
     #[test]
     fn test_vfs_debug() {
         let vfs = VirtualFileSystem::new(PathBuf::from("/"));
@@ -760,6 +798,47 @@ mod tests {
         let retrieved = vfs.get_file(&PathBuf::from("/test.txt")).unwrap();
         let content = retrieved.render_content().unwrap();
         assert_eq!(content, b"file");
+        let listed = vfs.list_files(Path::new("/"));
+        assert_eq!(listed.len(), 1, "an override must not duplicate its fixture in LIST");
+        assert_eq!(listed[0].render_content().unwrap(), b"file");
+    }
+
+    #[tokio::test]
+    async fn async_listing_includes_fixtures_with_runtime_file_precedence() {
+        let vfs = VirtualFileSystem::new(PathBuf::from("/"));
+        vfs.load_fixtures(
+            ["/pub/shared.txt", "/pub/fixture.txt", "/other/hidden.txt"]
+                .into_iter()
+                .map(|path| FileFixture {
+                    path: path.into(),
+                    content: FileContent::Static(b"fixture".to_vec()),
+                    metadata: FileMetadata::default(),
+                })
+                .collect(),
+        )
+        .unwrap();
+        vfs.add_file_async(
+            "/pub/shared.txt".into(),
+            VirtualFile::new(
+                "/pub/shared.txt".into(),
+                FileContent::Static(b"runtime".to_vec()),
+                FileMetadata::default(),
+            ),
+        )
+        .await
+        .unwrap();
+        let listed = vfs.list_files_async(Path::new("/pub")).await;
+        assert_eq!(listed.len(), 2);
+        let shared = listed
+            .iter()
+            .find(|file| file.path.as_path() == Path::new("/pub/shared.txt"))
+            .unwrap();
+        assert_eq!(shared.render_content().unwrap(), b"runtime");
+        let fixture = listed
+            .iter()
+            .find(|file| file.path.as_path() == Path::new("/pub/fixture.txt"))
+            .unwrap();
+        assert_eq!(fixture.render_content().unwrap(), b"fixture");
     }
 
     #[test]

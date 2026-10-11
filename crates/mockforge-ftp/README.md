@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = FtpConfig::default();
 
     // Initialize FTP server
-    let server = FtpServer::new(config).await?;
+    let server = FtpServer::new(config);
 
     // Start the server
     server.start().await?;
@@ -42,15 +42,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 use mockforge_core::config::FtpConfig;
 use mockforge_ftp::FtpServer;
 
-let config = FtpConfig {
-    host: "127.0.0.1".to_string(),
-    port: 2121,
-    virtual_root: "/ftp".to_string(),
-    ..Default::default()
-};
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    let config = FtpConfig {
+        host: "127.0.0.1".to_string(),
+        port: 2121,
+        virtual_root: "/ftp".into(),
+        ..Default::default()
+    };
 
-let server = FtpServer::new(config).await?;
-server.start().await?;
+    let server = FtpServer::new(config);
+    server.start().await?;
+    Ok(())
+}
 ```
 
 ## Virtual File System
@@ -60,27 +64,30 @@ MockForge FTP includes a powerful virtual file system for creating realistic fil
 ### Static Files
 
 ```rust,no_run
-use mockforge_ftp::vfs::{VirtualFileSystem, FileContent, FileMetadata};
+use mockforge_ftp::vfs::{VirtualFileSystem, VirtualFile, FileContent, FileMetadata};
 use std::path::PathBuf;
 
-let mut vfs = VirtualFileSystem::new("/ftp".to_string());
+fn main() -> anyhow::Result<()> {
+    let vfs = VirtualFileSystem::new(PathBuf::from("/ftp"));
 
-// Add a static file
-let content = FileContent::Static(b"Hello, FTP!".to_vec());
-let metadata = FileMetadata {
-    size: 11,
-    permissions: "644".to_string(),
-    owner: "user".to_string(),
-    group: "users".to_string(),
-};
+    // Add a static file
+    let content = FileContent::Static(b"Hello, FTP!".to_vec());
+    let metadata = FileMetadata {
+        size: 11,
+        permissions: "644".to_string(),
+        owner: "user".to_string(),
+        group: "users".to_string(),
+    };
 
-let file = VirtualFile::new(
-    PathBuf::from("/ftp/hello.txt"),
-    content,
-    metadata
-);
+    let file = VirtualFile::new(
+        PathBuf::from("/ftp/hello.txt"),
+        content,
+        metadata
+    );
 
-vfs.add_file(PathBuf::from("/ftp/hello.txt"), file)?;
+    vfs.add_file(PathBuf::from("/ftp/hello.txt"), file)?;
+    Ok(())
+}
 ```
 
 ### Generated Files
@@ -134,7 +141,7 @@ virtual_files:
     content:
       type: "generated"
       size: 1048576  # 1MB
-      pattern: "random"
+      pattern: "Random"
     permissions: "644"
     owner: "ftp"
     group: "ftp"
@@ -157,39 +164,63 @@ upload_rules:
 
 ### Loading Fixtures
 
+Load a YAML file before constructing the server:
+
+```rust,no_run
+use mockforge_core::config::FtpConfig;
+use mockforge_ftp::{FtpFixture, FtpServer};
+
+fn main() -> anyhow::Result<()> {
+    let fixture = FtpFixture::from_yaml_file("ftp-fixture.yaml")?;
+    let server = FtpServer::new_with_fixtures(FtpConfig::default(), vec![fixture])?;
+    assert_eq!(server.spec_registry().fixtures.len(), 1);
+    Ok(())
+}
+```
+
+For programmatic fixtures in an async application:
+
 ```rust,no_run
 use mockforge_ftp::{FtpServer, FtpFixture, VirtualFileConfig};
 use mockforge_ftp::fixtures::FileContentConfig;
 use mockforge_core::config::FtpConfig;
 
-// Fixtures are attached at construction time via the registry builder.
-let fixture = FtpFixture {
-    identifier: "programmatic".to_string(),
-    name: "Programmatic Fixture".to_string(),
-    description: Some("Created in code".to_string()),
-    virtual_files: vec![VirtualFileConfig {
-        path: "/pub/hello.txt".into(),
-        content: FileContentConfig::Static {
-            content: "hello world".to_string(),
-        },
-        permissions: "644".to_string(),
-        owner: "mockforge".to_string(),
-        group: "mockforge".to_string(),
-    }],
-    upload_rules: vec![],
-};
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    // Fixtures are attached at construction time via the registry builder.
+    let fixture = FtpFixture {
+        identifier: "programmatic".to_string(),
+        name: "Programmatic Fixture".to_string(),
+        description: Some("Created in code".to_string()),
+        virtual_files: vec![VirtualFileConfig {
+            path: "/pub/hello.txt".into(),
+            content: FileContentConfig::Static {
+                content: "hello world".to_string(),
+            },
+            permissions: "644".to_string(),
+            owner: "mockforge".to_string(),
+            group: "mockforge".to_string(),
+        }],
+        upload_rules: vec![],
+    };
 
-let config = FtpConfig::default();
-let server = FtpServer::new_with_fixtures(config, vec![fixture])?;
+    let config = FtpConfig::default();
+    let server = FtpServer::new_with_fixtures(config, vec![fixture])?;
 
-// Virtual files from the fixture are served by the server's VFS:
-let file = server.vfs().get_file(std::path::Path::new("/pub/hello.txt"));
-assert!(file.is_some());
+    // Virtual files from the fixture are served by the server's VFS:
+    let file = server.vfs().get_file_async(std::path::Path::new("/pub/hello.txt")).await;
+    assert!(file.is_some());
+    Ok(())
+}
 ```
 
 `FtpServer::new(config)` starts with an empty registry — `FtpSpecRegistry`
 fixtures are bound at construction and cannot be mutated afterwards
-(`spec_registry()` hands out a shared immutable handle).
+(`spec_registry()` hands out a shared immutable handle). `FtpServer::new` is a
+synchronous constructor; only `start()` is async. The registry's
+`with_fixtures` builder consumes and returns a registry; it cannot be called on
+the immutable handle returned by an already-created server. Use the server
+constructor above instead. Use the VFS's async accessors inside async tasks.
 
 ## Upload Handling
 
@@ -236,7 +267,7 @@ Use MockForge FTP to test FTP client applications:
 
 ```rust,no_run
 use suppaftp::FtpStream; // FTP client library
-use mockforge_ftp::FtpServer;
+use mockforge_ftp::{FtpServer, VirtualFile, FileContent, FileMetadata};
 use mockforge_core::config::FtpConfig;
 use tokio::task;
 
@@ -246,10 +277,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = FtpConfig {
         host: "127.0.0.1".to_string(),
         port: 2121,
+        virtual_root: "/".into(),
         ..Default::default()
     };
 
-    let server = FtpServer::new(config.clone()).await?;
+    let server = FtpServer::new(config.clone());
+    let welcome = VirtualFile::new(
+        "/welcome.txt".into(),
+        FileContent::Static(b"Welcome to MockForge FTP!".to_vec()),
+        FileMetadata::default(),
+    );
+    server.vfs().add_file_async("/welcome.txt".into(), welcome).await?;
     task::spawn(async move {
         server.start().await.unwrap();
     });
@@ -266,7 +304,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Files: {:?}", files);
 
     // Download a file
-    let mut reader = ftp_stream.get("welcome.txt")?;
+    let mut reader = ftp_stream.retr_as_buffer("welcome.txt")?;
     // ... process file content ...
 
     ftp_stream.quit()?;
@@ -285,8 +323,7 @@ use mockforge_core::config::FtpConfig;
 let config = FtpConfig {
     host: "0.0.0.0".to_string(),     // Bind address
     port: 21,                        // FTP port
-    virtual_root: "/".to_string(),    // Virtual filesystem root
-    greeting: "MockForge FTP".to_string(), // Server greeting
+    virtual_root: "/".into(),         // Virtual filesystem root
     max_connections: 100,            // Connection limit
     ..Default::default()
 };

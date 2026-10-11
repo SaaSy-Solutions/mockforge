@@ -69,3 +69,8 @@ pub use fixtures::{FileValidation, FtpFixture, UploadRule, UploadStorage, Virtua
 pub use server::FtpServer;
 pub use spec_registry::FtpSpecRegistry;
 pub use vfs::{FileContent, FileMetadata, GenerationPattern, VirtualFile, VirtualFileSystem};
+
+// Compile the README examples as doctests so documented APIs cannot drift.
+#[cfg(doctest)]
+#[doc = include_str!("../README.md")]
+mod readme_examples {}

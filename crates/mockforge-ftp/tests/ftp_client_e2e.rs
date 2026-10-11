@@ -7,7 +7,7 @@
 //! would ship silently. This locks in the on-the-wire contract.
 
 use mockforge_core::config::FtpConfig;
-use mockforge_ftp::{FileContent, FileMetadata, FtpServer, VirtualFile};
+use mockforge_ftp::{FtpFixture, FtpServer};
 use std::io::Cursor;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -37,7 +37,7 @@ async fn wait_for_port(port: u16, max: Duration) {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn ftp_anonymous_list_and_retrieve() {
+async fn ftp_readme_fixture_file_lists_and_retrieves_over_the_wire() {
     let port = free_port();
     let config = FtpConfig {
         port,
@@ -47,19 +47,14 @@ async fn ftp_anonymous_list_and_retrieve() {
         ..FtpConfig::default()
     };
 
-    let server = FtpServer::new(config);
-
-    // Pre-seed a virtual file before starting the server.
-    let payload = b"mockforge ftp e2e content".to_vec();
-    let file = VirtualFile::new(
-        PathBuf::from("/hello.txt"),
-        FileContent::Static(payload.clone()),
-        FileMetadata {
-            size: payload.len() as u64,
-            ..Default::default()
-        },
-    );
-    server.vfs().add_file_async(PathBuf::from("/hello.txt"), file).await.unwrap();
+    // Exercise the README's actual YAML and public file-loading constructor.
+    let readme = include_str!("../README.md");
+    let yaml = readme.split("```yaml\n").nth(1).unwrap().split("```").next().unwrap();
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("ftp-fixture.yaml");
+    std::fs::write(&path, yaml).unwrap();
+    let fixture = FtpFixture::from_yaml_file(path).unwrap();
+    let server = FtpServer::new_with_fixtures(config, vec![fixture]).unwrap();
 
     let server_handle = tokio::spawn(async move {
         server.start().await.unwrap();
@@ -79,10 +74,10 @@ async fn ftp_anonymous_list_and_retrieve() {
         // LIST the root — we should see our pre-seeded file.
         let entries = ftp.list(None).expect("LIST root");
         let joined = entries.join("\n");
-        assert!(joined.contains("hello.txt"), "LIST must show pre-seeded file, got:\n{joined}");
+        assert!(joined.contains("welcome.txt"), "LIST must show fixture file, got:\n{joined}");
 
         // RETR the file and read its full contents.
-        let mut reader = ftp.retr_as_buffer("hello.txt").expect("RETR hello.txt");
+        let mut reader = ftp.retr_as_buffer("welcome.txt").expect("RETR welcome.txt");
         let mut buf = Vec::new();
         std::io::copy(&mut reader, &mut Cursor::new(&mut buf)).expect("read RETR payload");
         ftp.quit().ok();
@@ -91,7 +86,8 @@ async fn ftp_anonymous_list_and_retrieve() {
     .await
     .expect("blocking FTP task did not panic");
 
-    assert_eq!(retrieved, b"mockforge ftp e2e content");
+    assert_eq!(retrieved, b"Welcome to MockForge FTP!");
 
     server_handle.abort();
+    let _ = server_handle.await;
 }
