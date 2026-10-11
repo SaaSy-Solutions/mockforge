@@ -13,35 +13,50 @@ use thiserror::Error;
 #[derive(Error, Debug)]
 pub enum ChaosMeshError {
     #[error("Kubernetes API error: {0}")]
+    /// Kubernetes API returned an error.
     KubernetesError(String),
 
     #[error("Experiment not found: {0}")]
+    /// The requested experiment could not be found.
     ExperimentNotFound(String),
 
     #[error("Invalid experiment configuration: {0}")]
+    /// The experiment configuration is invalid.
     InvalidConfig(String),
 
     #[error("HTTP request error: {0}")]
+    /// HTTP transport or request processing failed.
     RequestError(#[from] reqwest::Error),
 
     #[error("Serialization error: {0}")]
+    /// An experiment could not be encoded or decoded as JSON.
     SerializationError(#[from] serde_json::Error),
 }
 
+/// Result returned by Chaos Mesh integration operations.
 pub type Result<T> = std::result::Result<T, ChaosMeshError>;
 
 /// Chaos Mesh experiment types
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ExperimentType {
+    /// Pod or container lifecycle disruption.
     PodChaos,
+    /// Network packet or bandwidth disruption.
     NetworkChaos,
+    /// CPU or memory pressure.
     StressChaos,
+    /// Filesystem I/O disruption.
     IOChaos,
+    /// Clock offset injection.
     TimeChaos,
+    /// Kernel fault injection.
     KernelChaos,
+    /// DNS response disruption.
     DNSChaos,
+    /// HTTP request or response disruption.
     HTTPChaos,
+    /// Java virtual machine fault injection.
     JVMChaos,
 }
 
@@ -49,8 +64,11 @@ pub enum ExperimentType {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum PodChaosAction {
+    /// Terminate selected pods.
     PodKill,
+    /// Make selected pods unavailable.
     PodFailure,
+    /// Terminate selected containers.
     ContainerKill,
 }
 
@@ -58,43 +76,59 @@ pub enum PodChaosAction {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum NetworkChaosAction {
+    /// Delay network packets.
     Delay,
+    /// Drop network packets.
     Loss,
+    /// Duplicate network packets.
     Duplicate,
+    /// Corrupt network packets.
     Corrupt,
+    /// Partition network communication.
     Partition,
+    /// Limit network bandwidth.
     Bandwidth,
 }
 
 /// Selector for targeting pods
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PodSelector {
+    /// Kubernetes namespaces containing eligible pods.
     pub namespaces: Vec<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Pod labels that must match, when specified.
     pub label_selectors: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Pod annotations that must match, when specified.
     pub annotation_selectors: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Kubernetes field selectors for eligible pods.
     pub field_selectors: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Eligible pod lifecycle phases, when specified.
     pub pod_phase_selectors: Option<Vec<String>>,
 }
 
 /// Network delay configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkDelay {
+    /// Injected delay as a duration string, such as `100ms`.
     pub latency: String, // e.g., "100ms", "1s"
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Correlation percentage as a string from `0` to `100`.
     pub correlation: Option<String>, // "0" to "100"
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Variation in delay as a duration string, such as `10ms`.
     pub jitter: Option<String>, // e.g., "10ms"
 }
 
 /// Network loss configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct NetworkLoss {
+    /// Packet loss percentage as a string from `0` to `100`.
     pub loss: String, // "0" to "100" (percentage)
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Correlation percentage as a string from `0` to `100`.
     pub correlation: Option<String>, // "0" to "100"
 }
 
@@ -102,12 +136,16 @@ pub struct NetworkLoss {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StressConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Number of CPU stress workers, when enabled.
     pub cpu_workers: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// CPU load percentage requested from each worker.
     pub cpu_load: Option<u32>, // Percentage
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Number of memory stress workers, when enabled.
     pub memory_workers: Option<u32>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Memory allocation size, such as `256MB`.
     pub memory_size: Option<String>, // e.g., "256MB", "1GB"
 }
 
@@ -115,29 +153,39 @@ pub struct StressConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Duration {
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Experiment duration as a string, such as `30s` or `5m`.
     pub duration: Option<String>, // e.g., "30s", "5m"
 }
 
 /// Chaos experiment specification
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExperimentSpec {
+    /// Pod selection criteria for the experiment.
     pub selector: PodSelector,
+    /// Target selection mode: one, all, fixed, fixed-percent, or random-max-percent.
     pub mode: String, // "one", "all", "fixed", "fixed-percent", "random-max-percent"
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Target count or percentage for modes that require a value.
     pub value: Option<String>, // For "fixed" or "fixed-percent" mode
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Experiment duration as a string, such as `30s` or `5m`.
     pub duration: Option<String>,
 
     // Action-specific configurations
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Pod or container disruption action, when applicable.
     pub pod_action: Option<PodChaosAction>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Network disruption action, when applicable.
     pub network_action: Option<NetworkChaosAction>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Network delay settings, when applicable.
     pub delay: Option<NetworkDelay>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Network packet loss settings, when applicable.
     pub loss: Option<NetworkLoss>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// CPU and memory stress settings, when applicable.
     pub stressors: Option<StressConfig>,
 }
 
@@ -145,32 +193,44 @@ pub struct ExperimentSpec {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChaosMeshExperiment {
     #[serde(rename = "apiVersion")]
+    /// Kubernetes API group and version for the chaos resource.
     pub api_version: String,
+    /// Kubernetes resource kind, such as `PodChaos`.
     pub kind: String,
+    /// Resource identity and Kubernetes metadata.
     pub metadata: ExperimentMetadata,
+    /// Experiment targeting and disruption configuration.
     pub spec: ExperimentSpec,
 }
 
 /// Experiment metadata
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExperimentMetadata {
+    /// Kubernetes resource name of the experiment.
     pub name: String,
+    /// Kubernetes namespace containing the experiment resource.
     pub namespace: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional Kubernetes labels on the experiment resource.
     pub labels: Option<HashMap<String, String>>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Optional Kubernetes annotations on the experiment resource.
     pub annotations: Option<HashMap<String, String>>,
 }
 
 /// Experiment status
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExperimentStatus {
+    /// Current experiment phase, such as Running, Finished, Paused, or Failed.
     pub phase: String, // "Running", "Finished", "Paused", "Failed"
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Experiment start time as reported by the API.
     pub start_time: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Experiment end time as reported by the API.
     pub end_time: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Detailed status conditions reported by the API.
     pub conditions: Option<Vec<StatusCondition>>,
 }
 
@@ -178,11 +238,15 @@ pub struct ExperimentStatus {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct StatusCondition {
     #[serde(rename = "type")]
+    /// Name of the Kubernetes status condition.
     pub condition_type: String,
+    /// Status value reported for this condition.
     pub status: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Machine-readable reason for the condition status, when supplied.
     pub reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
+    /// Human-readable explanation of the condition status, when supplied.
     pub message: Option<String>,
 }
 
