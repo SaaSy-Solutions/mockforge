@@ -75,6 +75,7 @@ pub struct TrendAnalysis {
     pub metric: String,
     /// Analysis period
     pub start_time: DateTime<Utc>,
+    /// End of the trend analysis period in UTC.
     pub end_time: DateTime<Utc>,
     /// Trend direction
     pub trend: TrendDirection,
@@ -90,16 +91,22 @@ pub struct TrendAnalysis {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum TrendDirection {
+    /// Metric values trend upward over the analysis period.
     Increasing,
+    /// Metric values trend downward over the analysis period.
     Decreasing,
+    /// Metric values show little directional change.
     Stable,
+    /// Metric values vary substantially over the analysis period.
     Volatile,
 }
 
 /// Data point for trend analysis
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct DataPoint {
+    /// UTC time of the observed metric value.
     pub timestamp: DateTime<Utc>,
+    /// Numeric metric value at the observation time.
     pub value: f64,
 }
 
@@ -134,8 +141,11 @@ pub struct HealthScore {
 /// Factor affecting health score
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct HealthFactor {
+    /// Name of the factor affecting the health score.
     pub name: String,
-    pub impact: f64, // Positive or negative impact on score
+    /// Positive or negative contribution to the health score.
+    pub impact: f64,
+    /// Explanation of the factor and its effect.
     pub description: String,
 }
 

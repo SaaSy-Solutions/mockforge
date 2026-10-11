@@ -65,14 +65,23 @@ pub struct SuccessCriteria {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum MetricType {
+    /// Fraction of samples classified as errors; lower values are preferred.
     ErrorRate,
+    /// Median latency; lower values are preferred.
     LatencyP50,
+    /// Ninety-fifth percentile latency; lower values are preferred.
     LatencyP95,
+    /// Ninety-ninth percentile latency; lower values are preferred.
     LatencyP99,
+    /// Fraction of successful samples; higher values are preferred.
     SuccessRate,
+    /// Time to recover from injected failures; lower values are preferred.
     RecoveryTime,
+    /// Resilience score supplied for the variant; higher values are preferred.
     ResilienceScore,
+    /// Effectiveness score supplied for the chaos strategy.
     ChaosEffectiveness,
+    /// Fraction of injected faults detected by the system under test.
     FaultDetectionRate,
 }
 
@@ -80,10 +89,15 @@ pub enum MetricType {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum ABTestStatus {
+    /// Configuration exists but execution has not started.
     Draft,
+    /// The engine is recording results for both variants.
     Running,
+    /// Execution has been paused.
     Paused,
+    /// Execution ended and results can be compared.
     Completed,
+    /// The test was stopped without normal completion.
     Cancelled,
 }
 
@@ -130,15 +144,25 @@ pub struct VariantResults {
 /// Metrics for a variant
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct VariantMetrics {
+    /// Fraction of samples classified as errors.
     pub error_rate: f64,
+    /// Median latency value for the variant.
     pub latency_p50: f64,
+    /// Ninety-fifth percentile latency value for the variant.
     pub latency_p95: f64,
+    /// Ninety-ninth percentile latency value for the variant.
     pub latency_p99: f64,
+    /// Mean latency value for the variant.
     pub avg_latency: f64,
+    /// Fraction of samples classified as successful.
     pub success_rate: f64,
+    /// Recovery duration in milliseconds.
     pub recovery_time_ms: f64,
+    /// Resilience score used when comparing variants.
     pub resilience_score: f64,
+    /// Effectiveness score used when comparing chaos strategies.
     pub chaos_effectiveness: f64,
+    /// Fraction of injected faults detected by the system under test.
     pub fault_detection_rate: f64,
 }
 
@@ -173,12 +197,19 @@ pub struct MetricComparison {
 /// Single metric comparison
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SingleMetricComparison {
+    /// Metric selected for this comparison.
     pub metric: MetricType,
+    /// Control variant's metric value.
     pub variant_a_value: f64,
+    /// Treatment variant's metric value.
     pub variant_b_value: f64,
+    /// Treatment value minus the control value.
     pub difference: f64,
+    /// Difference relative to the control, in percent; zero for nonpositive controls.
     pub difference_pct: f64,
+    /// Preferred variant label, `A` or `B`; ties favor `A`.
     pub winner: String,
+    /// Whether the absolute percentage difference exceeds the five-percent heuristic.
     pub significant: bool,
 }
 
@@ -649,11 +680,17 @@ impl Default for ABTestingEngine {
 /// A/B test statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ABTestStats {
+    /// Number of tests currently retained by the engine, in all statuses.
     pub total_tests: usize,
+    /// Number of retained tests with running status.
     pub running_tests: usize,
+    /// Number of retained tests with completed status.
     pub completed_tests: usize,
+    /// Number of retained tests with cancelled status.
     pub cancelled_tests: usize,
+    /// Completed tests whose conclusion marks the comparison as significant.
     pub successful_tests: usize,
+    /// Mean improvement percentage from completed conclusions; zero if none exist.
     pub avg_improvement: f64,
 }
 

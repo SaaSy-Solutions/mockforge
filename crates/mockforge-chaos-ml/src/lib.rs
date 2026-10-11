@@ -3,18 +3,20 @@
 //! Provides anomaly detection, reinforcement learning, predictive remediation,
 //! multi-armed bandit, and intelligent recommendations for chaos experiments.
 
-// Public API surface is still stabilizing (merged in #1005); per-item doc
-// coverage is a tracked follow-up rather than a merge gate.
-#![allow(missing_docs)]
-
 pub mod advanced_analytics;
 pub mod auto_remediation;
+/// Statistical anomaly detection and metric baselines.
 pub mod ml_anomaly_detector;
+/// Assertions generated from historical execution measurements.
 pub mod ml_assertion_generator;
+/// Chaos parameter recommendations derived from historical runs.
 pub mod ml_parameter_optimizer;
+/// Adaptive selection and traffic allocation across experiment variants.
 pub mod multi_armed_bandit;
+/// Time-series analysis and recommendations for predicted failures.
 pub mod predictive_remediation;
 pub mod recommendations;
+/// Q-learning policies and adaptive risk assessments.
 pub mod reinforcement_learning;
 
 pub use advanced_analytics::{

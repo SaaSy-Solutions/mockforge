@@ -10,39 +10,63 @@ use std::collections::HashMap;
 /// Historical execution data point
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ExecutionDataPoint {
+    /// UTC time of the historical execution observation.
     pub timestamp: DateTime<Utc>,
+    /// Identifier of the orchestration that produced this observation.
     pub orchestration_id: String,
+    /// Identifier of the orchestration step.
     pub step_id: String,
+    /// Observed metric values keyed by metric name.
     pub metrics: HashMap<String, f64>,
+    /// Whether the historical step execution succeeded.
     pub success: bool,
+    /// Step execution duration in milliseconds.
     pub duration_ms: u64,
+    /// Failure details from the execution, when available.
     pub error_message: Option<String>,
 }
 
 /// Statistical summary of metric
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MetricStats {
+    /// Arithmetic mean of the metric samples.
     pub mean: f64,
+    /// Middle sorted sample; uses the upper middle sample for even sample counts.
     pub median: f64,
+    /// Population standard deviation of the metric samples.
     pub std_dev: f64,
+    /// Smallest observed metric value.
     pub min: f64,
+    /// Largest observed metric value.
     pub max: f64,
+    /// Observed value at the 95th-percentile index.
     pub p95: f64,
+    /// Observed value at the 99th-percentile index.
     pub p99: f64,
+    /// Number of samples summarized.
     pub sample_count: usize,
 }
 
 /// Generated assertion
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GeneratedAssertion {
+    /// Identifier generated for the assertion.
     pub id: String,
+    /// Kind of execution property constrained by the assertion.
     pub assertion_type: AssertionType,
+    /// Generated metric path containing the orchestration and step identifiers.
     pub path: String,
+    /// Comparison to apply to the observed property.
     pub operator: AssertionOperator,
+    /// Numeric threshold proposed for the assertion.
     pub value: f64,
+    /// Confidence score assigned by the generator.
     pub confidence: f64,
+    /// Explanation of the historical evidence used to generate the assertion.
     pub rationale: String,
+    /// Number of historical samples supporting the assertion.
     pub based_on_samples: usize,
+    /// UTC time at which the assertion was generated.
     pub created_at: DateTime<Utc>,
 }
 
@@ -50,10 +74,15 @@ pub struct GeneratedAssertion {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum AssertionType {
+    /// Constrain an observed metric value.
     MetricThreshold,
+    /// Constrain the fraction of successful executions.
     SuccessRate,
+    /// Constrain execution duration.
     Duration,
+    /// Constrain the fraction of failed executions.
     ErrorRate,
+    /// Represent an application-specific assertion.
     Custom,
 }
 
@@ -61,11 +90,17 @@ pub enum AssertionType {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "snake_case")]
 pub enum AssertionOperator {
+    /// Observed value must be strictly below the threshold.
     LessThan,
+    /// Observed value must not exceed the threshold.
     LessThanOrEqual,
+    /// Observed value must be strictly above the threshold.
     GreaterThan,
+    /// Observed value must be at least the threshold.
     GreaterThanOrEqual,
+    /// Represent a value within a configured range.
     InRange,
+    /// Represent a value outside a configured range.
     NotInRange,
 }
 

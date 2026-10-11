@@ -40,20 +40,39 @@ pub struct GitOpsConfig {
 #[serde(tag = "type")]
 pub enum GitOpsAuth {
     #[serde(rename = "ssh")]
-    SSH { private_key_path: PathBuf },
+    /// SSH authentication configuration.
+    SSH {
+        /// Filesystem path to the SSH private key.
+        private_key_path: PathBuf,
+    },
     #[serde(rename = "token")]
-    Token { token: String },
+    /// Token authentication configuration.
+    Token {
+        /// Access token intended for the Git repository.
+        token: String,
+    },
     #[serde(rename = "basic")]
-    Basic { username: String, password: String },
+    /// Username and password authentication configuration.
+    Basic {
+        /// Repository login name.
+        username: String,
+        /// Repository login password.
+        password: String,
+    },
 }
 
 /// `GitOps` sync status
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SyncStatus {
+    /// UTC start time of the most recent synchronization.
     pub last_sync: DateTime<Utc>,
+    /// SHA-256 digest of discovered manifest paths and hashes, rather than a Git commit identifier.
     pub commit_hash: String,
+    /// Outcome of the synchronization attempt.
     pub status: SyncState,
+    /// Number of newly discovered or changed manifests applied during synchronization.
     pub orchestrations_synced: usize,
+    /// Failures encountered while applying or pruning manifests.
     pub errors: Vec<String>,
 }
 
@@ -61,22 +80,33 @@ pub struct SyncStatus {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum SyncState {
+    /// Manifest discovery and application succeeded.
     Synced,
+    /// Desired and observed manifest state differ.
     OutOfSync,
+    /// Synchronization is in progress.
     Syncing,
+    /// Synchronization encountered an error.
     Failed,
 }
 
 /// Orchestration manifest in `GitOps` repository
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OrchestrationManifest {
+    /// Filesystem path to the orchestration manifest.
     pub file_path: PathBuf,
+    /// Parsed manifest configuration.
     pub content: serde_json::Value,
+    /// SHA-256 hash of the raw manifest file contents.
     pub hash: String,
+    /// File modification time in UTC, falling back to the discovery time when unavailable.
     pub last_modified: DateTime<Utc>,
 }
 
-/// `GitOps` manager
+/// `GitOps` manager.
+///
+/// Reads manifests from the configured local path. Repository URL and authentication
+/// settings are retained as configuration; this manager does not fetch remote Git content.
 pub struct GitOpsManager {
     config: GitOpsConfig,
     manifests: HashMap<String, OrchestrationManifest>,
@@ -308,30 +338,45 @@ pub mod flux {
     /// Flux Kustomization configuration
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct FluxKustomization {
+        /// Kubernetes API group and version for the resource.
         pub api_version: String,
+        /// Kubernetes resource kind.
         pub kind: String,
+        /// Resource name and namespace.
         pub metadata: FluxMetadata,
+        /// Controller-specific desired state.
         pub spec: FluxSpec,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
+    /// Kubernetes metadata for a Flux Kustomization.
     pub struct FluxMetadata {
+        /// Kubernetes resource name.
         pub name: String,
+        /// Kubernetes namespace for the resource or deployment.
         pub namespace: String,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
+    /// Desired reconciliation state for a Flux Kustomization.
     pub struct FluxSpec {
+        /// Reconciliation interval as a duration string, such as `5m`.
         pub interval: String,
+        /// Manifest directory within the source repository.
         pub path: String,
+        /// Whether resources removed from the source should be deleted.
         pub prune: bool,
+        /// Reference to the Flux source resource.
         pub source_ref: SourceRef,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
+    /// Reference to a Flux source resource.
     pub struct SourceRef {
+        /// Kubernetes resource kind.
         pub kind: String,
+        /// Kubernetes resource name.
         pub name: String,
     }
 
@@ -373,51 +418,76 @@ pub mod argocd {
     /// `ArgoCD` Application configuration
     #[derive(Debug, Clone, Serialize, Deserialize)]
     pub struct ArgoApplication {
+        /// Kubernetes API group and version for the resource.
         pub api_version: String,
+        /// Kubernetes resource kind.
         pub kind: String,
+        /// Resource name and namespace.
         pub metadata: ArgoMetadata,
+        /// Controller-specific desired state.
         pub spec: ArgoSpec,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
+    /// Kubernetes metadata for an Argo CD Application.
     pub struct ArgoMetadata {
+        /// Kubernetes resource name.
         pub name: String,
+        /// Kubernetes namespace for the resource or deployment.
         pub namespace: String,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
+    /// Desired state for an Argo CD Application.
     pub struct ArgoSpec {
+        /// Argo CD project that owns the application.
         pub project: String,
+        /// Repository and manifest location used by the application.
         pub source: ArgoSource,
+        /// Kubernetes cluster and namespace receiving the application.
         pub destination: ArgoDestination,
+        /// Optional automatic synchronization settings.
         pub sync_policy: Option<SyncPolicy>,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
+    /// Git repository source for an Argo CD Application.
     pub struct ArgoSource {
+        /// URL of the Git repository containing manifests.
         pub repo_url: String,
+        /// Git revision to reconcile, such as `HEAD`.
         pub target_revision: String,
+        /// Manifest directory within the source repository.
         pub path: String,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
+    /// Target Kubernetes cluster and namespace for an Argo CD Application.
     pub struct ArgoDestination {
+        /// Kubernetes API server address.
         pub server: String,
+        /// Kubernetes namespace for the resource or deployment.
         pub namespace: String,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
     #[serde(rename_all = "camelCase")]
+    /// Argo CD synchronization policy and options.
     pub struct SyncPolicy {
+        /// Optional automatic synchronization policy.
         pub automated: Option<AutomatedSync>,
+        /// Additional Argo CD synchronization options.
         pub sync_options: Vec<String>,
     }
 
     #[derive(Debug, Clone, Serialize, Deserialize)]
+    /// Automatic pruning and drift correction settings for Argo CD.
     pub struct AutomatedSync {
+        /// Whether resources removed from the source should be deleted.
         pub prune: bool,
         #[serde(rename = "selfHeal")]
+        /// Whether Argo CD automatically corrects drift from the desired state.
         pub self_heal: bool,
     }
 
