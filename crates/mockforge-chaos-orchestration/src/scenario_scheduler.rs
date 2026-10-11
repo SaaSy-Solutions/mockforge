@@ -15,11 +15,18 @@ use tracing::{debug, info, warn};
 #[serde(tag = "type")]
 pub enum ScheduleType {
     /// Run once at a specific time
-    Once { at: DateTime<Utc> },
+    Once {
+        /// UTC time at which the one-time execution becomes eligible.
+        at: DateTime<Utc>,
+    },
     /// Run after a delay
-    Delayed { delay_seconds: u64 },
+    Delayed {
+        /// Delay applied when calculating the first execution time, in seconds.
+        delay_seconds: u64,
+    },
     /// Run periodically with interval
     Periodic {
+        /// Time between successive executions, in seconds.
         interval_seconds: u64,
         /// Maximum executions (0 = infinite)
         max_executions: usize,

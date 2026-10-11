@@ -5,75 +5,110 @@ use std::collections::HashMap;
 /// Integration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct IntegrationConfig {
+    /// Optional Slack notification configuration.
     pub slack: Option<SlackConfig>,
+    /// Optional Microsoft Teams notification configuration.
     pub teams: Option<TeamsConfig>,
+    /// Optional Jira issue creation configuration.
     pub jira: Option<JiraConfig>,
+    /// Optional `PagerDuty` incident configuration.
     pub pagerduty: Option<PagerDutyConfig>,
+    /// Optional Grafana annotation and dashboard configuration.
     pub grafana: Option<GrafanaConfig>,
 }
 
 /// Slack integration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SlackConfig {
+    /// Webhook endpoint receiving notification payloads.
     pub webhook_url: String,
+    /// Slack channel included in the notification payload.
     pub channel: String,
+    /// Optional Slack display name; defaults to `MockForge`.
     pub username: Option<String>,
+    /// Optional Slack icon emoji; defaults to the robot face.
     pub icon_emoji: Option<String>,
+    /// User identifiers or names appended as mentions in the notification.
     pub mention_users: Vec<String>,
 }
 
 /// Microsoft Teams integration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TeamsConfig {
+    /// Webhook endpoint receiving notification payloads.
     pub webhook_url: String,
+    /// User identifiers or names appended as mentions in the notification.
     pub mention_users: Vec<String>,
 }
 
 /// Jira integration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct JiraConfig {
+    /// Base URL of the service API.
     pub url: String,
+    /// Jira login name used with HTTP basic authentication.
     pub username: String,
+    /// Jira API token used with HTTP basic authentication.
     pub api_token: String,
+    /// Jira project receiving newly created issues.
     pub project_key: String,
+    /// Jira issue type name for new issues.
     pub issue_type: String,
+    /// Optional Jira priority override; otherwise derived from notification severity.
     pub priority: Option<String>,
+    /// Optional Jira assignee login name.
     pub assignee: Option<String>,
 }
 
 /// `PagerDuty` integration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PagerDutyConfig {
+    /// `PagerDuty` Events API integration routing key.
     pub routing_key: String,
+    /// Optional `PagerDuty` severity override; otherwise derived from notification severity.
     pub severity: Option<String>,
+    /// Prefix for incident deduplication keys; defaults to mockforge.
     pub dedup_key_prefix: Option<String>,
 }
 
 /// Grafana integration configuration
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GrafanaConfig {
+    /// Base URL of the service API.
     pub url: String,
+    /// Grafana API credential used for bearer authentication.
     pub api_key: String,
+    /// Optional dashboard identifier attached to annotations.
     pub dashboard_uid: Option<String>,
+    /// Optional Grafana folder identifier for newly created dashboards.
     pub folder_uid: Option<String>,
 }
 
 /// Notification severity
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub enum NotificationSeverity {
+    /// Informational event.
     Info,
+    /// Potential degradation requiring attention.
     Warning,
+    /// Failure requiring investigation.
     Error,
+    /// Severe failure requiring urgent attention.
     Critical,
 }
 
 /// Notification message
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Notification {
+    /// Human-readable notification summary.
     pub title: String,
+    /// Notification details displayed in the destination service.
     pub message: String,
+    /// Severity used to choose formatting and incident routing.
     pub severity: NotificationSeverity,
+    /// UTC time associated with the notification.
     pub timestamp: chrono::DateTime<chrono::Utc>,
+    /// Additional attributes included in service-specific notification payloads.
     pub metadata: HashMap<String, serde_json::Value>,
 }
 
@@ -84,6 +119,7 @@ pub struct SlackNotifier {
 }
 
 impl SlackNotifier {
+    /// Create the integration with the supplied configuration and a new HTTP client.
     pub fn new(config: SlackConfig) -> Self {
         Self {
             config,
@@ -91,6 +127,7 @@ impl SlackNotifier {
         }
     }
 
+    /// Post the notification to the configured webhook.
     pub async fn send(&self, notification: &Notification) -> Result<()> {
         let color = match notification.severity {
             NotificationSeverity::Info => "#36a64f",
@@ -150,6 +187,7 @@ pub struct TeamsNotifier {
 }
 
 impl TeamsNotifier {
+    /// Create the integration with the supplied configuration and a new HTTP client.
     pub fn new(config: TeamsConfig) -> Self {
         Self {
             config,
@@ -157,6 +195,7 @@ impl TeamsNotifier {
         }
     }
 
+    /// Post the notification to the configured webhook.
     pub async fn send(&self, notification: &Notification) -> Result<()> {
         let theme_color = match notification.severity {
             NotificationSeverity::Info => "0078D4",
@@ -221,6 +260,7 @@ pub struct JiraIntegration {
 }
 
 impl JiraIntegration {
+    /// Create the integration with the supplied configuration and a new HTTP client.
     pub fn new(config: JiraConfig) -> Self {
         Self {
             config,
@@ -228,6 +268,7 @@ impl JiraIntegration {
         }
     }
 
+    /// Create a Jira issue for the notification and return its issue key.
     pub async fn create_ticket(&self, notification: &Notification) -> Result<String> {
         let description = format!(
             "{}\n\n*Metadata:*\n{}",
@@ -290,6 +331,7 @@ impl JiraIntegration {
         Ok(ticket_key)
     }
 
+    /// Append a comment to the specified Jira issue.
     pub async fn update_ticket(&self, ticket_key: &str, comment: &str) -> Result<()> {
         let payload = serde_json::json!({
             "body": comment
@@ -316,6 +358,7 @@ pub struct PagerDutyIntegration {
 }
 
 impl PagerDutyIntegration {
+    /// Create the integration with the supplied configuration and a new HTTP client.
     pub fn new(config: PagerDutyConfig) -> Self {
         Self {
             config,
@@ -323,6 +366,7 @@ impl PagerDutyIntegration {
         }
     }
 
+    /// Send a `PagerDuty` trigger event and return its deduplication key.
     pub async fn trigger_incident(&self, notification: &Notification) -> Result<String> {
         let severity = self.config.severity.as_deref().or({
             Some(match notification.severity {
@@ -364,6 +408,7 @@ impl PagerDutyIntegration {
         Ok(dedup_key)
     }
 
+    /// Send a `PagerDuty` resolve event for the supplied deduplication key.
     pub async fn resolve_incident(&self, dedup_key: &str) -> Result<()> {
         let payload = serde_json::json!({
             "routing_key": self.config.routing_key,
@@ -389,6 +434,7 @@ pub struct GrafanaIntegration {
 }
 
 impl GrafanaIntegration {
+    /// Create the integration with the supplied configuration and a new HTTP client.
     pub fn new(config: GrafanaConfig) -> Self {
         Self {
             config,
@@ -396,6 +442,7 @@ impl GrafanaIntegration {
         }
     }
 
+    /// Post a Grafana annotation with the notification time, details, and severity.
     pub async fn create_annotation(&self, notification: &Notification) -> Result<()> {
         let tags = vec![
             format!("severity:{:?}", notification.severity).to_lowercase(),
@@ -422,6 +469,7 @@ impl GrafanaIntegration {
         Ok(())
     }
 
+    /// Create a Grafana dashboard and return its identifier.
     pub async fn create_dashboard(&self, dashboard_json: serde_json::Value) -> Result<String> {
         let payload = serde_json::json!({
             "dashboard": dashboard_json,
@@ -457,6 +505,7 @@ pub struct IntegrationManager {
 }
 
 impl IntegrationManager {
+    /// Construct all integrations enabled by the supplied configuration.
     pub fn new(config: IntegrationConfig) -> Self {
         Self {
             slack: config.slack.map(SlackNotifier::new),
@@ -527,12 +576,19 @@ impl IntegrationManager {
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
+/// Outcomes and errors collected while notifying configured integrations.
 pub struct NotificationResults {
+    /// Whether the Slack request completed without a reported transport error.
     pub slack_sent: bool,
+    /// Whether the Teams request completed without a reported transport error.
     pub teams_sent: bool,
+    /// Issue key returned by Jira, when issue creation succeeded.
     pub jira_ticket: Option<String>,
+    /// Incident deduplication key returned by the `PagerDuty` integration, when available.
     pub pagerduty_incident: Option<String>,
+    /// Whether the Grafana annotation request completed without a reported transport error.
     pub grafana_annotated: bool,
+    /// Integration errors collected while notifying the configured channels.
     pub errors: Vec<String>,
 }
 
