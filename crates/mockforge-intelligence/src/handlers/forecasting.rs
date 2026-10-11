@@ -79,6 +79,26 @@ pub struct ForecastingState {
     pub database: Option<Database>,
 }
 
+impl ForecastingState {
+    /// Create handler state without a persistence connection.
+    ///
+    /// This constructor works when dependency feature unification enables database support.
+    pub fn new(forecaster: Arc<Forecaster>) -> Self {
+        Self {
+            forecaster,
+            #[cfg(feature = "database")]
+            database: None,
+        }
+    }
+
+    /// Attach the optional persistence connection used by these handlers.
+    #[cfg(feature = "database")]
+    pub fn with_database(mut self, database: Option<Database>) -> Self {
+        self.database = database;
+        self
+    }
+}
+
 /// Query parameters for listing forecasts
 #[derive(Debug, Deserialize)]
 pub struct ListForecastsQuery {
