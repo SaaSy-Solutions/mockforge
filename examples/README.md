@@ -4,6 +4,18 @@ This directory contains complete example applications demonstrating MockForge's 
 
 ## Examples Overview
 
+### Swagger 2.0 legacy contract (`swagger2-legacy.json`)
+
+A runnable legacy contract with shared path and body parameters, reusable responses, nested definitions, and response examples. Both direct serving and `mockforge import openapi` use automatic OpenAPI 3.0 conversion:
+
+```bash
+mockforge serve --spec examples/swagger2-legacy.json --http-port 3000
+# In another terminal
+curl http://localhost:3000/pets/42
+```
+
+The JSON and YAML loaders, mock route generation, normalized serialization, and import output are covered by integration tests.
+
 ### React Demo (`react-demo/`)
 A complete React application showcasing:
 - Generated React hooks for API calls

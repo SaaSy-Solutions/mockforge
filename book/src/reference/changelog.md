@@ -6,6 +6,8 @@
 
 - **[Cloud]** Stripe trials allow checkout without a payment method and cancel when the trial ends without one; zero-trial paid checkout still collects a card. Actual SDK request tests cover both paid plans and billing intervals. (#837, #714)
 
+- **[Contracts]** Swagger 2.0 imports use automatic conversion instead of rejecting the format. Reusable parameters/responses, inherited request bodies, nested schema references, and media-specific response examples survive loading and mock generation. (#838)
+
 - **[DevX]** Intelligence handler state construction tolerates Cargo database feature unification, restoring HTTP builds when Core enables database support independently. Explicit HTTP database connections are preserved. (#632)
 
 - **[DevX]** Documentation checks run on hosted runners and require only enabled mdBook preprocessors, freeing the dedicated Rust runners for tests and publication.
