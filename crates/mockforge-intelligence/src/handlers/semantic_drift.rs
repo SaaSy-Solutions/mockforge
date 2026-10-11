@@ -124,6 +124,26 @@ pub struct SemanticDriftState {
     pub database: Option<Database>,
 }
 
+impl SemanticDriftState {
+    /// Create handler state without a persistence connection.
+    ///
+    /// This constructor works when dependency feature unification enables database support.
+    pub fn new(manager: Arc<SemanticIncidentManager>) -> Self {
+        Self {
+            manager,
+            #[cfg(feature = "database")]
+            database: None,
+        }
+    }
+
+    /// Attach the optional persistence connection used by these handlers.
+    #[cfg(feature = "database")]
+    pub fn with_database(mut self, database: Option<Database>) -> Self {
+        self.database = database;
+        self
+    }
+}
+
 /// Query parameters for listing semantic incidents
 #[derive(Debug, Deserialize)]
 pub struct ListSemanticIncidentsQuery {

@@ -322,7 +322,7 @@ MockForge supports multiple API specification formats for generating mocks and c
 ### Supported Formats
 
 - **OpenAPI 3.0.x and 3.1.x**: Full support with comprehensive validation
-- **OpenAPI 2.0 (Swagger)**: Format detection and validation (parsing via conversion to 3.x recommended)
+- **OpenAPI 2.0 (Swagger)**: Automatic conversion to OpenAPI 3.x for specification loading, route generation, and import
 - **GraphQL Schema**: Schema Definition Language (SDL) parsing and validation
 - **Protocol Buffers**: gRPC service definitions from `.proto` files
 
@@ -504,25 +504,27 @@ Fix the validation errors above and try again
 - ✅ Support for both JSON and YAML formats
 - ✅ Warnings for incomplete or suboptimal specifications
 
-### Converting Swagger 2.0 to OpenAPI 3.x
+### Importing Swagger 2.0
 
-While MockForge can detect and validate Swagger 2.0 specifications, full parsing requires OpenAPI 3.x format. Use conversion tools:
+MockForge automatically converts Swagger 2.0 JSON and YAML documents to OpenAPI 3.0 before loading or importing them. Reusable parameters and responses, nested schema references, and response examples are preserved; an external conversion step is unnecessary.
 
 ```bash
-# Using swagger2openapi (Node.js)
-npx swagger2openapi swagger.json -o openapi.json
+# Import a representative legacy contract into mock routes
+mockforge import openapi examples/swagger2-legacy.json --output mocks.json
 
-# Or use online converter
-# https://editor.swagger.io/
+# Serve the same contract directly
+mockforge serve --spec examples/swagger2-legacy.json --http-port 3000
+# In another terminal
+curl http://localhost:3000/pets/42
 ```
+
+The example returns a pet with its owner. Swagger `host`, `basePath`, and `schemes` become server metadata; the local mock serves the contract's operation paths (`/pets/{petId}` and `/pets`).
 
 See `examples/README.md` for detailed documentation on the example files.
 
 ### Docker (Alternative Installation)
 
-Prebuilt images are published to GitHub Container Registry on every push
-to `main` and on every semver tag (currently `linux/amd64` only; arm64
-builds are on the roadmap). No authentication is needed to pull.
+Prebuilt `linux/amd64` images are published to GitHub Container Registry through the protected-main Docker publication workflow. No authentication is needed to pull.
 
 #### Pull and run from GHCR
 

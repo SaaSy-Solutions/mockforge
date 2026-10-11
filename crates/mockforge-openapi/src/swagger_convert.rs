@@ -6,6 +6,9 @@
 
 use serde_json::{json, Map, Value};
 
+mod paths;
+mod references;
+
 /// Convert a Swagger 2.0 specification to OpenAPI 3.0 format
 ///
 /// This performs the following conversions:
@@ -21,10 +24,14 @@ pub fn convert_swagger_to_openapi3(swagger: &Value) -> Result<Value, String> {
         return Err("Not a Swagger 2.0 specification".to_string());
     }
 
+    let expanded = paths::expand(swagger)?;
+    let swagger = &expanded;
     let mut openapi = Map::new();
 
     // Set OpenAPI version
     openapi.insert("openapi".to_string(), json!("3.0.3"));
+
+    copy_extensions(swagger.as_object().expect("Swagger version requires an object"), &mut openapi);
 
     // Copy info section (mostly compatible)
     if let Some(info) = swagger.get("info") {
@@ -58,7 +65,16 @@ pub fn convert_swagger_to_openapi3(swagger: &Value) -> Result<Value, String> {
 
     // Convert definitions to components/schemas
     if let Some(definitions) = swagger.get("definitions") {
-        components.insert("schemas".to_string(), definitions.clone());
+        let schemas = definitions.as_object().map(|definitions| {
+            definitions
+                .iter()
+                .map(|(name, schema)| (name.clone(), convert_schema_refs(schema)))
+                .collect::<Map<_, _>>()
+        });
+        components.insert(
+            "schemas".to_string(),
+            schemas.map(Value::Object).unwrap_or_else(|| definitions.clone()),
+        );
     }
 
     // Convert securityDefinitions to components/securitySchemes
@@ -108,7 +124,7 @@ fn convert_servers(swagger: &Value) -> Vec<Value> {
     } else {
         // No host specified, use relative URL
         vec![json!({
-            "url": base_path
+            "url": if base_path.is_empty() { "/" } else { base_path }
         })]
     }
 }
@@ -238,16 +254,8 @@ fn convert_operation(
         let mut has_file = false;
         for param in &form_data_params {
             if let Some(name) = param.get("name").and_then(|v| v.as_str()) {
-                let mut prop = Map::new();
-                if let Some(typ) = param.get("type").and_then(|v| v.as_str()) {
-                    if typ == "file" {
-                        prop.insert("type".to_string(), json!("string"));
-                        prop.insert("format".to_string(), json!("binary"));
-                        has_file = true;
-                    } else {
-                        prop.insert("type".to_string(), json!(typ));
-                    }
-                }
+                let mut prop = param.as_object().map(schema_fields).unwrap_or_default();
+                has_file |= param.get("type").and_then(Value::as_str) == Some("file");
                 if let Some(desc) = param.get("description") {
                     prop.insert("description".to_string(), desc.clone());
                 }
@@ -257,6 +265,7 @@ fn convert_operation(
                 }
             }
         }
+        let body_required = !required.is_empty();
         let content_type = if has_file {
             "multipart/form-data"
         } else {
@@ -271,6 +280,7 @@ fn convert_operation(
         converted.insert(
             "requestBody".to_string(),
             json!({
+                "required": body_required,
                 "content": {
                     content_type: {
                         "schema": schema
@@ -307,6 +317,9 @@ fn convert_parameter(param: &Value) -> Value {
         return param.clone();
     };
 
+    if param_obj.contains_key("$ref") {
+        return param.clone();
+    }
     let mut converted = Map::new();
 
     // Copy basic fields
@@ -324,37 +337,11 @@ fn convert_parameter(param: &Value) -> Value {
         return param.clone();
     }
 
-    // Build schema from type/format/items/enum/default
-    let mut schema = Map::new();
-
-    if let Some(param_type) = param_obj.get("type") {
-        schema.insert("type".to_string(), param_type.clone());
-    }
-    if let Some(format) = param_obj.get("format") {
-        schema.insert("format".to_string(), format.clone());
-    }
-    if let Some(items) = param_obj.get("items") {
-        schema.insert("items".to_string(), items.clone());
-    }
-    if let Some(enum_values) = param_obj.get("enum") {
-        schema.insert("enum".to_string(), enum_values.clone());
-    }
-    if let Some(default) = param_obj.get("default") {
-        schema.insert("default".to_string(), default.clone());
-    }
-    if let Some(minimum) = param_obj.get("minimum") {
-        schema.insert("minimum".to_string(), minimum.clone());
-    }
-    if let Some(maximum) = param_obj.get("maximum") {
-        schema.insert("maximum".to_string(), maximum.clone());
-    }
-    if let Some(pattern) = param_obj.get("pattern") {
-        schema.insert("pattern".to_string(), pattern.clone());
-    }
-
+    let schema = schema_fields(param_obj);
     if !schema.is_empty() {
         converted.insert("schema".to_string(), Value::Object(schema));
     }
+    copy_extensions(param_obj, &mut converted);
 
     Value::Object(converted)
 }
@@ -409,6 +396,9 @@ fn convert_responses(responses: &Value, produces: &[String]) -> Value {
 
 /// Convert a single response
 fn convert_response(response: &Map<String, Value>, produces: &[String]) -> Map<String, Value> {
+    if response.contains_key("$ref") {
+        return response.clone();
+    }
     let mut converted = Map::new();
 
     // Copy description (required in OpenAPI 3.0)
@@ -418,18 +408,24 @@ fn convert_response(response: &Map<String, Value>, produces: &[String]) -> Map<S
         converted.insert("description".to_string(), json!("Response"));
     }
 
-    // Convert schema to content
-    if let Some(schema) = response.get("schema") {
-        let mut content = Map::new();
-        for media_type in produces {
-            content.insert(
-                media_type.clone(),
-                json!({
-                    "schema": convert_schema_refs(schema)
-                }),
-            );
+    // Examples belong to individual media types in OpenAPI 3.
+    let mut content = Map::new();
+    for media_type in produces {
+        let mut media = Map::new();
+        if let Some(schema) = response.get("schema") {
+            media.insert("schema".into(), convert_schema_refs(schema));
         }
-        converted.insert("content".to_string(), Value::Object(content));
+        if let Some(example) =
+            response.get("examples").and_then(|examples| examples.get(media_type))
+        {
+            media.insert("example".into(), example.clone());
+        }
+        if !media.is_empty() {
+            content.insert(media_type.clone(), Value::Object(media));
+        }
+    }
+    if !content.is_empty() {
+        converted.insert("content".into(), Value::Object(content));
     }
 
     // Convert headers
@@ -443,9 +439,8 @@ fn convert_response(response: &Map<String, Value>, produces: &[String]) -> Map<S
         }
     }
 
-    // Copy examples (if any)
-    if let Some(examples) = response.get("examples") {
-        converted.insert("examples".to_string(), examples.clone());
+    for (name, value) in response.iter().filter(|(name, _)| name.starts_with("x-")) {
+        converted.insert(name.clone(), value.clone());
     }
 
     converted
@@ -463,18 +458,11 @@ fn convert_header(header: &Value) -> Value {
         converted.insert("description".to_string(), desc.clone());
     }
 
-    // Build schema from type/format
-    let mut schema = Map::new();
-    if let Some(header_type) = header_obj.get("type") {
-        schema.insert("type".to_string(), header_type.clone());
-    }
-    if let Some(format) = header_obj.get("format") {
-        schema.insert("format".to_string(), format.clone());
-    }
-
+    let schema = schema_fields(header_obj);
     if !schema.is_empty() {
         converted.insert("schema".to_string(), Value::Object(schema));
     }
+    copy_extensions(header_obj, &mut converted);
 
     Value::Object(converted)
 }
@@ -563,7 +551,52 @@ fn convert_security_definition(def: &Map<String, Value>) -> Map<String, Value> {
         converted.insert("description".to_string(), desc.clone());
     }
 
+    if let Some(description) = def.get("description") {
+        converted.insert("description".into(), description.clone());
+    }
+    copy_extensions(def, &mut converted);
+
     converted
+}
+
+fn copy_extensions(source: &Map<String, Value>, destination: &mut Map<String, Value>) {
+    destination.extend(
+        source
+            .iter()
+            .filter(|(name, _)| name.starts_with("x-"))
+            .map(|(name, value)| (name.clone(), value.clone())),
+    );
+}
+
+fn schema_fields(parameter: &Map<String, Value>) -> Map<String, Value> {
+    let mut schema = Map::new();
+    for name in [
+        "type",
+        "format",
+        "items",
+        "enum",
+        "default",
+        "minimum",
+        "maximum",
+        "exclusiveMinimum",
+        "exclusiveMaximum",
+        "minLength",
+        "maxLength",
+        "minItems",
+        "maxItems",
+        "uniqueItems",
+        "multipleOf",
+        "pattern",
+    ] {
+        if let Some(value) = parameter.get(name) {
+            schema.insert(name.into(), value.clone());
+        }
+    }
+    copy_extensions(parameter, &mut schema);
+    convert_schema_refs(&Value::Object(schema))
+        .as_object()
+        .cloned()
+        .unwrap_or_default()
 }
 
 /// Convert $ref paths from Swagger 2.0 to OpenAPI 3.0 format
@@ -576,27 +609,45 @@ fn convert_ref(ref_str: &str) -> String {
     }
 }
 
-/// Recursively convert $ref in schema objects
+/// Convert schema references while preserving literal examples and defaults.
 fn convert_schema_refs(schema: &Value) -> Value {
-    match schema {
-        Value::Object(obj) => {
-            let mut converted = Map::new();
-            for (key, value) in obj {
-                if key == "$ref" {
-                    if let Some(ref_str) = value.as_str() {
-                        converted.insert(key.clone(), json!(convert_ref(ref_str)));
-                    } else {
-                        converted.insert(key.clone(), value.clone());
-                    }
-                } else {
-                    converted.insert(key.clone(), convert_schema_refs(value));
-                }
+    let Some(object) = schema.as_object() else {
+        return schema.clone();
+    };
+    let mut converted = object.clone();
+    for (key, value) in object {
+        let value = match key.as_str() {
+            "$ref" => value
+                .as_str()
+                .map(|reference| json!(convert_ref(reference)))
+                .unwrap_or_else(|| value.clone()),
+            "properties" | "definitions" | "patternProperties" => value
+                .as_object()
+                .map(|properties| {
+                    Value::Object(
+                        properties
+                            .iter()
+                            .map(|(name, schema)| (name.clone(), convert_schema_refs(schema)))
+                            .collect(),
+                    )
+                })
+                .unwrap_or_else(|| value.clone()),
+            "items" | "additionalProperties" | "additionalItems" | "not" => {
+                convert_schema_refs(value)
             }
-            Value::Object(converted)
-        }
-        Value::Array(arr) => Value::Array(arr.iter().map(convert_schema_refs).collect()),
-        _ => schema.clone(),
+            "allOf" | "anyOf" | "oneOf" => value
+                .as_array()
+                .map(|schemas| Value::Array(schemas.iter().map(convert_schema_refs).collect()))
+                .unwrap_or_else(|| value.clone()),
+            _ => value.clone(),
+        };
+        converted.insert(key.clone(), value);
     }
+    if converted.get("type").and_then(Value::as_str) == Some("file") {
+        converted.insert("type".into(), json!("string"));
+        converted.insert("format".into(), json!("binary"));
+    }
+    Value::Object(converted)
 }
 
 /// Check if a JSON value is a Swagger 2.0 specification
