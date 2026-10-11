@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- **[DevX]** Intelligence handler state construction tolerates Cargo database feature unification, restoring HTTP builds when Core enables database support independently. Explicit HTTP database connections are preserved. (#632)
+
 - **[DevX]** Documentation checks run on hosted runners and require only enabled mdBook preprocessors, freeing the dedicated Rust runners for tests and publication.
 
 - **[DevX]** Chaos ML and orchestration crates document their public API and enforce missing-documentation warnings through workspace lints, including explicit limits of simulated cluster execution and local manifest synchronization. (#799)
