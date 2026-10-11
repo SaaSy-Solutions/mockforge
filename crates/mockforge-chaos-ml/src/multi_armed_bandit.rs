@@ -6,16 +6,24 @@ use tokio::sync::RwLock;
 /// Arm (variant) in multi-armed bandit
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Arm {
+    /// Unique identifier of the arm.
     pub id: String,
+    /// Display name of the arm.
     pub name: String,
+    /// Human-readable description of the arm.
     pub description: String,
+    /// Configuration associated with the arm.
     pub config: serde_json::Value,
+    /// Number of recorded selections with an observed reward.
     pub pulls: u64,
+    /// Sum of rewards recorded for the arm.
     pub total_reward: f64,
+    /// Arithmetic mean of the recorded rewards, or zero before any observations.
     pub mean_reward: f64,
 }
 
 impl Arm {
+    /// Create an arm with its configuration and zero reward observations.
     pub fn new(id: String, name: String, config: serde_json::Value) -> Self {
         Self {
             id,
@@ -28,6 +36,7 @@ impl Arm {
         }
     }
 
+    /// Record a reward and recompute the mean reward.
     pub fn update(&mut self, reward: f64) {
         self.pulls += 1;
         self.total_reward += reward;
@@ -38,16 +47,21 @@ impl Arm {
 /// Thompson Sampling strategy
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ThompsonSampling {
+    /// Beta distributions keyed by arm identifier.
     pub arms: HashMap<String, BetaDistribution>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Beta distribution pseudo-counts used by Thompson sampling.
 pub struct BetaDistribution {
+    /// Success pseudo-count for the beta distribution, initialized to one.
     pub alpha: f64, // Successes
-    pub beta: f64,  // Failures
+    /// Failure pseudo-count for the beta distribution, initialized to one.
+    pub beta: f64, // Failures
 }
 
 impl ThompsonSampling {
+    /// Initialize each supplied arm with a uniform beta prior.
     pub fn new(arm_ids: &[String]) -> Self {
         let mut arms = HashMap::new();
         for id in arm_ids {
@@ -62,6 +76,7 @@ impl ThompsonSampling {
         Self { arms }
     }
 
+    /// Select the arm with the greatest sampled reward; return an empty identifier when no arms exist.
     pub fn select_arm(&self) -> String {
         let mut best_arm = String::new();
         let mut best_sample = f64::NEG_INFINITY;
@@ -77,6 +92,7 @@ impl ThompsonSampling {
         best_arm
     }
 
+    /// Record a success for rewards above 0.5, or a failure otherwise, for a known arm.
     pub fn update(&mut self, arm_id: &str, reward: f64) {
         if let Some(dist) = self.arms.get_mut(arm_id) {
             if reward > 0.5 {
@@ -130,18 +146,25 @@ impl ThompsonSampling {
 /// UCB1 (Upper Confidence Bound) strategy
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UCB1 {
+    /// Reward counters keyed by arm identifier.
     pub arms: HashMap<String, ArmStats>,
+    /// Total number of recorded arm selections.
     pub total_pulls: u64,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Reward counters used by the upper confidence bound strategy.
 pub struct ArmStats {
+    /// Number of recorded selections with an observed reward.
     pub pulls: u64,
+    /// Sum of rewards recorded for the arm.
     pub total_reward: f64,
+    /// Arithmetic mean of the recorded rewards, or zero before any observations.
     pub mean_reward: f64,
 }
 
 impl UCB1 {
+    /// Initialize zero reward counters for the supplied arms.
     pub fn new(arm_ids: &[String]) -> Self {
         let mut arms = HashMap::new();
         for id in arm_ids {
@@ -160,6 +183,7 @@ impl UCB1 {
         }
     }
 
+    /// Select an untried arm or the arm with the greatest upper confidence bound.
     pub fn select_arm(&self) -> String {
         // First pull all arms at least once
         for (arm_id, stats) in &self.arms {
@@ -185,6 +209,7 @@ impl UCB1 {
         best_arm
     }
 
+    /// Record a reward for the supplied arm and update selection counters.
     pub fn update(&mut self, arm_id: &str, reward: f64) {
         self.total_pulls += 1;
 
@@ -199,9 +224,15 @@ impl UCB1 {
 /// Strategy for selecting arms
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum BanditStrategy {
+    /// Select arms by sampling their learned beta distributions.
     ThompsonSampling,
+    /// Select arms using an upper confidence bound on the observed mean reward.
     UCB1,
-    EpsilonGreedy { epsilon: f64 },
+    /// Explore random arms with a fixed probability, otherwise select the best known arm.
+    EpsilonGreedy {
+        /// Probability of selecting a random arm.
+        epsilon: f64,
+    },
 }
 
 /// Multi-Armed Bandit for A/B/C/D/... testing
@@ -214,6 +245,7 @@ pub struct MultiArmedBandit {
 }
 
 impl MultiArmedBandit {
+    /// Create a bandit with the supplied arms and selection strategy.
     pub fn new(arms: Vec<Arm>, strategy: BanditStrategy) -> Self {
         let arm_ids: Vec<String> = arms.iter().map(|a| a.id.clone()).collect();
 
@@ -372,20 +404,32 @@ impl MultiArmedBandit {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Snapshot of arm performance and the configured selection strategy.
 pub struct BanditReport {
+    /// Total number of recorded arm selections.
     pub total_pulls: u64,
+    /// Arm reports sorted by descending mean reward.
     pub arms: Vec<ArmReport>,
+    /// Identifier of the arm with the highest mean reward, when an arm exists.
     pub best_arm: Option<String>,
+    /// Debug-formatted name of the configured selection strategy.
     pub strategy: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+/// Performance statistics and an approximate reward interval for one arm.
 pub struct ArmReport {
+    /// Unique identifier of the arm.
     pub id: String,
+    /// Display name of the arm.
     pub name: String,
+    /// Number of recorded selections with an observed reward.
     pub pulls: u64,
+    /// Arithmetic mean of the recorded rewards, or zero before any observations.
     pub mean_reward: f64,
+    /// Sum of rewards recorded for the arm.
     pub total_reward: f64,
+    /// Approximate 95-percent interval for a reward in the zero-to-one range; defaults to (0, 1) before two observations.
     pub confidence_interval: (f64, f64),
 }
 
@@ -397,6 +441,7 @@ pub struct TrafficAllocator {
 }
 
 impl TrafficAllocator {
+    /// Create an allocator with a 100-observation exploration phase and the supplied update interval.
     pub fn new(bandit: Arc<MultiArmedBandit>, update_interval: std::time::Duration) -> Self {
         Self {
             bandit,

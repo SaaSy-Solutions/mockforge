@@ -54,14 +54,23 @@ impl Default for RemediationConfig {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum RemediationStatus {
+    /// Action has been created but has not started.
     Pending,
+    /// Action is waiting for manual approval.
     AwaitingApproval,
+    /// Manual approval was granted.
     Approved,
+    /// Manual approval was refused.
     Rejected,
+    /// Configuration changes are being applied.
     Applying,
+    /// Configuration changes were applied.
     Applied,
+    /// Remediation failed.
     Failed,
+    /// A previously applied action was rolled back.
     RolledBack,
+    /// Action was cancelled.
     Cancelled,
 }
 
@@ -101,25 +110,35 @@ pub struct RemediationAction {
 /// Rollback data to restore previous state
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RollbackData {
+    /// Configuration values captured before remediation.
     pub previous_config: HashMap<String, String>,
+    /// Restoration commands recorded for rollback.
     pub restore_commands: Vec<String>,
+    /// UTC time at which the rollback or approval data was created.
     pub created_at: DateTime<Utc>,
 }
 
 /// Remediation result
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemediationResult {
+    /// Identifier of the associated remediation action.
     pub action_id: String,
+    /// Whether the remediation completed successfully.
     pub success: bool,
+    /// Human-readable description of the outcome or safety check.
     pub message: String,
+    /// Descriptions of configuration changes applied by the action.
     pub applied_changes: Vec<String>,
+    /// Time spent applying remediation, in milliseconds.
     pub duration_ms: u64,
 }
 
 /// Remediation effectiveness metrics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct EffectivenessMetrics {
+    /// Identifier of the recommendation that prompted remediation.
     pub recommendation_id: String,
+    /// Identifier of the associated remediation action.
     pub action_id: String,
     /// Metrics before remediation
     pub before_metrics: SystemMetrics,
@@ -129,39 +148,58 @@ pub struct EffectivenessMetrics {
     pub improvement_score: f64,
     /// Measurement period
     pub measurement_period_hours: i64,
+    /// UTC time at which effectiveness was measured.
     pub measured_at: DateTime<Utc>,
 }
 
 /// System metrics for effectiveness comparison
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SystemMetrics {
+    /// Fraction of observed operations that failed.
     pub error_rate: f64,
+    /// Mean observed latency in milliseconds.
     pub avg_latency_ms: f64,
+    /// Observed 95th-percentile latency in milliseconds.
     pub p95_latency_ms: f64,
+    /// Observed 99th-percentile latency in milliseconds.
     pub p99_latency_ms: f64,
+    /// Fraction of observed operations that succeeded.
     pub success_rate: f64,
+    /// Reported chaos impact score.
     pub chaos_impact: f64,
+    /// Reported resilience score.
     pub resilience_score: f64,
 }
 
 /// Approval request
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ApprovalRequest {
+    /// Identifier of the associated remediation action.
     pub action_id: String,
+    /// Recommendation submitted for approval.
     pub recommendation: Recommendation,
+    /// Configuration changes proposed for approval.
     pub proposed_changes: HashMap<String, String>,
+    /// Risk and safety assessment associated with the request.
     pub risk_assessment: RiskAssessment,
+    /// UTC time at which the rollback or approval data was created.
     pub created_at: DateTime<Utc>,
+    /// UTC time after which the approval request expires.
     pub expires_at: DateTime<Utc>,
 }
 
 /// Risk assessment for remediation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RiskAssessment {
+    /// Assessed severity of remediation risk.
     pub risk_level: RiskLevel,
+    /// Components expected to be affected by remediation.
     pub impact_scope: Vec<String>,
+    /// Whether the assessed action can be reversed.
     pub reversible: bool,
+    /// Estimated interruption duration in milliseconds.
     pub estimated_downtime_ms: u64,
+    /// Safety checks recorded during risk assessment.
     pub safety_checks: Vec<SafetyCheck>,
 }
 
@@ -169,18 +207,26 @@ pub struct RiskAssessment {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord)]
 #[serde(rename_all = "lowercase")]
 pub enum RiskLevel {
+    /// Lowest assessed remediation risk.
     Minimal,
+    /// Low remediation risk.
     Low,
+    /// Moderate remediation risk.
     Medium,
+    /// High remediation risk.
     High,
+    /// Highest remediation risk.
     Critical,
 }
 
 /// Safety check
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SafetyCheck {
+    /// Name of the safety check.
     pub name: String,
+    /// Whether the safety check passed.
     pub passed: bool,
+    /// Human-readable description of the outcome or safety check.
     pub message: String,
 }
 
@@ -761,12 +807,19 @@ impl Default for RemediationEngine {
 /// Remediation statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RemediationStats {
+    /// Number of tracked remediation actions.
     pub total_actions: usize,
+    /// Number of actions marked successful.
     pub successful_actions: usize,
+    /// Number of actions in the failed state.
     pub failed_actions: usize,
+    /// Number of actions awaiting approval.
     pub pending_approval: usize,
+    /// Number of actions in the rolled-back state.
     pub rolled_back: usize,
+    /// Mean improvement score across recorded effectiveness measurements, or zero when none exist.
     pub avg_improvement_score: f64,
+    /// Number of recorded effectiveness measurements.
     pub total_effectiveness_measurements: usize,
 }
 
