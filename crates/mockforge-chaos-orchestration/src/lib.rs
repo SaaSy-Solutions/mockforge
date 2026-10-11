@@ -94,3 +94,6 @@ pub use config::{
     BulkheadConfig, ChaosConfig, CircuitBreakerConfig, CorruptionType, ErrorPattern,
     FaultInjectionConfig, LatencyConfig, NetworkProfile, RateLimitConfig, TrafficShapingConfig,
 };
+
+#[cfg(test)]
+mod http_hook_unicode_tests;

@@ -2,6 +2,8 @@
 
 ### Fixed
 
+- **[Cloud]** HTTP hook response previews truncate at a valid UTF-8 boundary, preventing logging from panicking on multibyte response bodies in both orchestration implementations.
+
 - **[DevX]** Crate publication returns success after every package is available and fails when any package remains unpublished or its registry lookup fails.
 - **[Reality]** HTTP pipelining benchmarks stop at the configured load deadline, retain partial wire-byte counts, and drain large responses while sending subsequent requests. Response framing handles interim replies, chunked bodies, HEAD, and connection-close bodies. Multipart synthetic files accept `--multipart-content-type`. (#937)
 
