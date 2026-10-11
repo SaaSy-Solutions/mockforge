@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- **[Contracts]** Swagger 2.0 imports use automatic conversion instead of rejecting the format. Reusable parameters/responses, inherited request bodies, nested schema references, and media-specific response examples survive loading and mock generation. (#838)
+
 - **[DevX]** Intelligence handler state construction tolerates Cargo database feature unification, restoring HTTP builds when Core enables database support independently. Explicit HTTP database connections are preserved. (#632)
 
 - **[DevX]** Crate publication returns success after every package is available and fails when any package remains unpublished or its registry lookup fails.
