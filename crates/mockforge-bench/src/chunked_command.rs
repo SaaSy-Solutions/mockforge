@@ -969,7 +969,10 @@ mod tests {
         let requests = row["total_requests"].as_u64().unwrap();
         let elapsed = row["elapsed_seconds"].as_f64().unwrap();
         assert!(requests > 0);
-        assert_eq!(row["measured_rps"].as_f64().unwrap(), requests as f64 / elapsed);
+        // JSON serialization can round elapsed and throughput independently.
+        let measured = row["measured_rps"].as_f64().unwrap();
+        let expected = requests as f64 / elapsed;
+        assert!((measured - expected).abs() <= expected.abs() * 1e-12);
         assert_eq!(row["status_counts"]["400"], requests);
         let exported: serde_json::Value = serde_json::from_slice(
             &std::fs::read(c.output.join("round_2/target_1/chunked-requests.json")).unwrap(),

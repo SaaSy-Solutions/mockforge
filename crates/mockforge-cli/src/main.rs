@@ -2717,7 +2717,7 @@ enum Commands {
     /// True HTTP/1.1 pipelining bench with synthetic streaming bodies (#937)
     ///
     /// Writes `--pipeline-depth` requests back-to-back on each connection
-    /// BEFORE reading any response, then reads responses in order. Bodies
+    /// while draining responses in order concurrently. Bodies
     /// stream from a generator (never fully materialised), so GB sizes work.
     /// Many servers/proxies do not support request pipelining — the report
     /// surfaces early closes and unanswered requests instead of hiding them.
@@ -2744,11 +2744,15 @@ enum Commands {
         #[arg(long, default_value = "json")]
         content_type: String,
 
+        /// MIME type of the synthetic file part when --content-type multipart.
+        #[arg(long, default_value = "application/octet-stream")]
+        multipart_content_type: String,
+
         /// Exact body size per request: bare bytes or KB/MB/GB / KiB/MiB/GiB.
         #[arg(long, default_value = "1KB")]
         body_size: String,
 
-        /// Requests in flight per connection before reading any response.
+        /// Requests sent back-to-back per connection with concurrent response draining.
         #[arg(long, default_value = "16")]
         pipeline_depth: usize,
 
@@ -3891,13 +3895,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             method,
             content_type,
             body_size,
+            multipart_content_type,
             pipeline_depth,
             connections,
             duration,
         } => {
             use mockforge_bench::command::BenchCommand;
             use mockforge_bench::pipeline_bench::{
-                parse_body_kind, parse_body_size, render_report, run, PipelineBenchConfig,
+                parse_body_kind, parse_body_size, render_report, run_with_multipart_content_type,
+                PipelineBenchConfig,
             };
 
             let duration_secs = match BenchCommand::parse_duration(&duration) {
@@ -3930,7 +3936,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 connections,
                 duration: std::time::Duration::from_secs(duration_secs),
             };
-            match run(cfg).await {
+            match run_with_multipart_content_type(cfg, &multipart_content_type).await {
                 Ok(r) => print!("{}", render_report(&r)),
                 Err(e) => {
                     eprintln!("bench-pipeline failed: {e}");
