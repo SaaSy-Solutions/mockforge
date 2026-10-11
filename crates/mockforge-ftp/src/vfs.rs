@@ -798,7 +798,7 @@ mod tests {
         let retrieved = vfs.get_file(&PathBuf::from("/test.txt")).unwrap();
         let content = retrieved.render_content().unwrap();
         assert_eq!(content, b"file");
-        let listed = vfs.list_files(std::path::Path::new("/"));
+        let listed = vfs.list_files(Path::new("/"));
         assert_eq!(listed.len(), 1, "an override must not duplicate its fixture in LIST");
         assert_eq!(listed[0].render_content().unwrap(), b"file");
     }
@@ -827,7 +827,7 @@ mod tests {
         )
         .await
         .unwrap();
-        let listed = vfs.list_files_async(std::path::Path::new("/pub")).await;
+        let listed = vfs.list_files_async(Path::new("/pub")).await;
         assert_eq!(listed.len(), 2);
         let shared = listed
             .iter()
