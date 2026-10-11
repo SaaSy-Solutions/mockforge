@@ -2,6 +2,8 @@
 
 ### Fixed
 
+- **[DevX]** `ftp serve --config` reads standalone FTP settings or a server YAML `ftp` section, loads configuration-relative fixture directories, and honors explicit CLI overrides. FTP listeners apply the configured passive port range and idle timeout. (#794)
+
 - **[DevX]** Intelligence handler state construction tolerates Cargo database feature unification, restoring HTTP builds when Core enables database support independently. Explicit HTTP database connections are preserved. (#632)
 
 - **[DevX]** Chaos ML and orchestration crates document their public API and enforce missing-documentation warnings through workspace lints, including explicit limits of simulated cluster execution and local manifest synchronization. (#799)
