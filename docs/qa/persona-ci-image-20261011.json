@@ -1,0 +1,8 @@
+{
+  "image": "ghcr.io/saasy-solutions/mockforge@sha256:9b823588db4aeda9334c7e2bf02c878cc8370e52770daa987e2510ee7afc9476",
+  "version": "mockforge 0.3.227",
+  "scope": "Existing cached immutable public image; does not prove newly queued publication.",
+  "actual_http_200_and_exact_mock_response": true,
+  "actual_sqlite_persona_and_run_and_hit_count": true,
+  "own_fixture_container_removed": true
+}
