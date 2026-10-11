@@ -6,6 +6,8 @@
 
 - **[Reality]** Verify persona CI-hit recording from actual HTTP headers through SQLite persistence, including optional run IDs and ignored blank/invalid labels, and document analytics setup and tenant-context limits. (#716)
 
+- **[Contracts]** Swagger 2.0 imports use automatic conversion instead of rejecting the format. Reusable parameters/responses, inherited request bodies, nested schema references, and media-specific response examples survive loading and mock generation. (#838)
+
 - **[DevX]** Intelligence handler state construction tolerates Cargo database feature unification, restoring HTTP builds when Core enables database support independently. Explicit HTTP database connections are preserved. (#632)
 
 - **[DevX]** Documentation checks run on hosted runners and require only enabled mdBook preprocessors, freeing the dedicated Rust runners for tests and publication.

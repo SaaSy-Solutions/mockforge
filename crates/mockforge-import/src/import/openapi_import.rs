@@ -127,7 +127,7 @@ pub fn import_openapi_spec(
         }
         _ => {
             return Err(format!(
-                "Unsupported specification format: {}. Only OpenAPI 3.x is currently supported for parsing.",
+                "Unsupported specification format: {}. Only OpenAPI 2.0 (Swagger), 3.0, and 3.1 are supported for parsing.",
                 format.display_name()
             ));
         }

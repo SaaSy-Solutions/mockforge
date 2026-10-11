@@ -1,0 +1,129 @@
+{
+  "swagger": "2.0",
+  "info": {
+    "title": "Legacy pets API",
+    "version": "1.0.0"
+  },
+  "host": "legacy.example.test",
+  "basePath": "/v1",
+  "schemes": [
+    "https"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
+  ],
+  "parameters": {
+    "petId": {
+      "name": "petId",
+      "in": "path",
+      "required": true,
+      "type": "integer",
+      "format": "int64"
+    },
+    "petBody": {
+      "name": "pet",
+      "in": "body",
+      "required": true,
+      "schema": {
+        "$ref": "#/definitions/Pet"
+      }
+    }
+  },
+  "responses": {
+    "PetResponse": {
+      "description": "A pet",
+      "schema": {
+        "$ref": "#/definitions/Pet"
+      },
+      "examples": {
+        "application/json": {
+          "id": 42,
+          "name": "Fido",
+          "owner": {
+            "name": "Sam"
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/pets/{petId}": {
+      "parameters": [
+        {
+          "$ref": "#/parameters/petId"
+        }
+      ],
+      "get": {
+        "operationId": "getPet",
+        "responses": {
+          "200": {
+            "$ref": "#/responses/PetResponse"
+          }
+        }
+      }
+    },
+    "/pets": {
+      "post": {
+        "operationId": "createPet",
+        "parameters": [
+          {
+            "$ref": "#/parameters/petBody"
+          }
+        ],
+        "responses": {
+          "201": {
+            "$ref": "#/responses/PetResponse"
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "Pet": {
+      "type": "object",
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "integer",
+          "format": "int64"
+        },
+        "name": {
+          "type": "string"
+        },
+        "owner": {
+          "$ref": "#/definitions/Owner"
+        },
+        "metadata": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "example": {
+            "$ref": "#/definitions/literal-data"
+          }
+        }
+      }
+    },
+    "Owner": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string"
+        }
+      }
+    }
+  },
+  "securityDefinitions": {
+    "headerKey": {
+      "type": "apiKey",
+      "in": "header",
+      "name": "X-Example-Key"
+    }
+  }
+}
