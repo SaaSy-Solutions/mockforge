@@ -3,6 +3,9 @@
 from pathlib import Path
 import json
 import re
+import subprocess
+import tempfile
+import textwrap
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -41,6 +44,50 @@ def select_runner(expression, event_name, head_repository, repository):
         raise ValueError('unrecognized routing expression')
     trusted = event_name != match['event'] or head_repository == repository
     return json.loads(match['labels']) if trusted else match['fallback']
+
+
+
+# The supported run grammar is pinned to rust-lang/rustup
+# 61271d00a979e8fcc13a366d9515f4bf69b88ac2 (Cargo.toml 1.30.0):
+# src/cli/rustup_mode.rs:234-245,1237-1246; src/config.rs:478-488.
+# This strict fixture implements only the four read-only probes below. It
+# rejects every option in the toolchain slot, including the real --install
+# option, because preflights must never request installation.
+RUSTUP_CLI_STUB = r'''#!/bin/sh
+[ "$#" -ge 4 ] && [ "$1" = run ] || exit 77
+case "$2" in ''|-*) exit 77 ;; esac
+toolchain=$2
+shift 2
+case "$*" in
+  'rustc --version'|'cargo --version'|'rustfmt --version')
+    [ "$#" -eq 2 ] || exit 77
+    probe=$1 ;;
+  'cargo clippy --version')
+    [ "$#" -eq 3 ] || exit 77
+    probe=clippy ;;
+  *) exit 77 ;;
+esac
+[ "${RUSTUP_AUTO_INSTALL-unset}" = 0 ] || exit 78
+if [ -n "${FIXTURE_TRACE-}" ]; then
+  printf '%s %s %s\n' "$toolchain" "$probe" "$RUSTUP_AUTO_INSTALL" >> "$FIXTURE_TRACE"
+fi
+[ "${FIXTURE_FAILURE-}" != missing_toolchain ] || exit 1
+[ "${FIXTURE_FAILURE-}" != "missing_$probe" ] || exit 1
+version=$toolchain
+[ "${FIXTURE_FAILURE-}" != "wrong_$probe" ] || version=1.95.0
+printf '%s %s (fixture)\n' "$probe" "$version"
+'''
+
+
+def rust_preflights():
+    for filename, ids in TARGETS.items():
+        for job_id in ids:
+            block = jobs(filename)[job_id]
+            marker = 'name: Verify provisioned Rust toolchain on Hetzner'
+            if marker not in block:
+                continue
+            step = block.split(marker, 1)[1].split('- name:', 1)[0]
+            yield filename, job_id, textwrap.dedent(step.split('run: |\n', 1)[1]).strip()
 
 
 class HetznerRoutingTest(unittest.TestCase):
@@ -157,9 +204,74 @@ class HetznerRoutingTest(unittest.TestCase):
                         self.assertIn("if: runner.environment == 'github-hosted'", step)
                 preflight = block.split('name: Verify provisioned Rust toolchain on Hetzner', 1)[1].split('- name:', 1)[0]
                 self.assertIn("if: runner.environment == 'self-hosted'", preflight)
-                self.assertIn('rustup run --no-auto-install', preflight)
+                self.assertNotIn('--no-auto-install', preflight)
+                self.assertNotIn('--install', preflight)
+                self.assertNotIn('export RUSTUP_AUTO_INSTALL', preflight)
+                calls = re.findall(r'([^\n]*rustup run[^\n]*)', preflight)
+                self.assertGreater(len(calls), 0)
+                for call in calls:
+                    self.assertIn('RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" ', call)
                 self.assertNotIn('rustup default', preflight)
                 self.assertNotIn('toolchain install', preflight)
+
+    def test_rustup_cli_fixture_rejects_unknown_flags_and_auto_install(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            stub = Path(tmp) / 'rustup'
+            stub.write_text(RUSTUP_CLI_STUB)
+            stub.chmod(0o755)
+            for flag in ('--no-auto-install', '--install', '--unknown'):
+                result = subprocess.run([str(stub), 'run', flag, '1.96.0', 'rustc', '--version'],
+                                        env={'RUSTUP_AUTO_INSTALL': '0'}, capture_output=True)
+                self.assertEqual(result.returncode, 77, flag)
+            for value in (None, '1'):
+                env = {} if value is None else {'RUSTUP_AUTO_INSTALL': value}
+                result = subprocess.run([str(stub), 'run', '1.96.0', 'rustc', '--version'],
+                                        env=env, capture_output=True)
+                self.assertEqual(result.returncode, 78, value)
+            result = subprocess.run([str(stub), 'run', '1.96.0', 'rustc', '--unsupported'],
+                                    env={'RUSTUP_AUTO_INSTALL': '0'}, capture_output=True)
+            self.assertEqual(result.returncode, 77)
+
+    def test_rust_preflights_use_supported_command_scoped_cli(self):
+        count = 0
+        for filename, job_id, script in rust_preflights():
+            count += 1
+            probes = ['rustc', 'cargo']
+            if 'rustfmt --version' in script:
+                probes += ['rustfmt', 'clippy']
+            with self.subTest(workflow=filename, job=job_id), tempfile.TemporaryDirectory() as tmp:
+                stub = Path(tmp) / 'rustup'
+                stub.write_text(RUSTUP_CLI_STUB)
+                stub.chmod(0o755)
+                trace = Path(tmp) / 'calls'
+                for inherited in (None, '1'):
+                    trace.unlink(missing_ok=True)
+                    env = {'PATH': tmp, 'EXPECTED_TOOLCHAIN': '1.96.0', 'FIXTURE_TRACE': str(trace)}
+                    if inherited is not None:
+                        env['RUSTUP_AUTO_INSTALL'] = inherited
+                    original = 'unset' if inherited is None else inherited
+                    result = subprocess.run(['/bin/bash', '-e', '-o', 'pipefail', '-c',
+                                             script + '\n[ "${RUSTUP_AUTO_INSTALL-unset}" = "' + original + '" ]'],
+                                            env=env, text=True, capture_output=True)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(trace.read_text().splitlines(),
+                                     [f'1.96.0 {probe} 0' for probe in probes])
+        self.assertGreater(count, 0)
+
+    def test_missing_toolchains_components_and_wrong_versions_fail_closed(self):
+        for filename, job_id, script in rust_preflights():
+            failures = ['missing_toolchain', 'wrong_rustc', 'wrong_cargo']
+            if 'rustfmt --version' in script:
+                failures += ['missing_rustfmt', 'missing_clippy']
+            for failure in failures:
+                with self.subTest(workflow=filename, job=job_id, failure=failure), tempfile.TemporaryDirectory() as tmp:
+                    stub = Path(tmp) / 'rustup'
+                    stub.write_text(RUSTUP_CLI_STUB)
+                    stub.chmod(0o755)
+                    result = subprocess.run(['/bin/bash', '-e', '-o', 'pipefail', '-c', script],
+                                            env={'PATH': tmp, 'EXPECTED_TOOLCHAIN': '1.96.0',
+                                                 'FIXTURE_FAILURE': failure}, text=True, capture_output=True)
+                    self.assertNotEqual(result.returncode, 0, result.stdout)
 
     def test_security_installer_cannot_provision_shared_host_packages(self):
         block = jobs('ci.yml')['security-audit']

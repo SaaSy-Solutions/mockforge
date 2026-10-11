@@ -151,8 +151,8 @@ jobs:
           EXPECTED_TOOLCHAIN: ${{ env.RUSTUP_TOOLCHAIN }}
         run: |
           command -v rustup >/dev/null || { echo "::error::Hetzner runner lacks rustup; operator provisioning is required."; exit 1; }
-          rustc_version="$(rustup run --no-auto-install "$EXPECTED_TOOLCHAIN" rustc --version)"
-          cargo_version="$(rustup run --no-auto-install "$EXPECTED_TOOLCHAIN" cargo --version)"
+          rustc_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" rustc --version)"
+          cargo_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" cargo --version)"
           [[ "$rustc_version" == "rustc $EXPECTED_TOOLCHAIN "* ]]
           [[ "$cargo_version" == "cargo $EXPECTED_TOOLCHAIN "* ]]
           printf '%s\n' "$rustc_version" "$cargo_version"
@@ -476,8 +476,8 @@ jobs:
           EXPECTED_TOOLCHAIN: ${{ env.RUSTUP_TOOLCHAIN }}
         run: |
           command -v rustup >/dev/null || { echo "::error::Hetzner runner lacks rustup; operator provisioning is required."; exit 1; }
-          rustc_version="$(rustup run --no-auto-install "$EXPECTED_TOOLCHAIN" rustc --version)"
-          cargo_version="$(rustup run --no-auto-install "$EXPECTED_TOOLCHAIN" cargo --version)"
+          rustc_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" rustc --version)"
+          cargo_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" cargo --version)"
           [[ "$rustc_version" == "rustc $EXPECTED_TOOLCHAIN "* ]]
           [[ "$cargo_version" == "cargo $EXPECTED_TOOLCHAIN "* ]]
           printf '%s\n' "$rustc_version" "$cargo_version"
