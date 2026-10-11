@@ -3,12 +3,13 @@
  */
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { WorkflowValidator } from '../WorkflowValidator';
 import { useServiceStore } from '../../../stores/useServiceStore';
 import { useAuthStore } from '../../../stores/useAuthStore';
 
 const mockState = vi.hoisted(() => ({
+  login: vi.fn().mockResolvedValue(undefined),
   services: [
     { id: 'service-1', name: 'Test Service', enabled: true, routes: [{ method: 'GET', path: '/test', enabled: true }] },
     { id: 'service-2', name: 'Aux Service', enabled: false, routes: [{ method: 'POST', path: '/aux', enabled: true }] },
@@ -84,12 +85,55 @@ vi.mock('../../../stores/useAuthStore', () => ({
   useAuthStore: vi.fn(() => ({
     user: { username: 'admin', role: 'admin' },
     isAuthenticated: true,
-    login: vi.fn().mockResolvedValue(undefined),
+    login: mockState.login,
     logout: vi.fn(),
   })),
 }));
 
 describe('WorkflowValidator', () => {
+  it('does not continue validation after a pending workflow finishes on an unmounted page', async () => {
+    vi.useFakeTimers();
+    let finishLogin!: () => void;
+    mockState.login.mockImplementationOnce(() => new Promise<void>(resolve => {
+      finishLogin = resolve;
+    }));
+    const view = render(<WorkflowValidator />);
+    try {
+      fireEvent.click(screen.getByText('Run All Tests'));
+      expect(mockState.login).toHaveBeenCalledTimes(1);
+      view.unmount();
+      await act(async () => {
+        finishLogin();
+        await vi.runAllTimersAsync();
+      });
+      expect(mockState.login).toHaveBeenCalledTimes(1);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it('clears the pending workflow delay when unmounted', async () => {
+    vi.useFakeTimers();
+    const view = render(<WorkflowValidator />);
+    try {
+      fireEvent.click(screen.getByText('Run All Tests'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(vi.getTimerCount()).toBeGreaterThan(0);
+      view.unmount();
+      expect(vi.getTimerCount()).toBe(0);
+      await act(async () => {
+        await vi.runAllTimersAsync();
+      });
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockState.services = [
