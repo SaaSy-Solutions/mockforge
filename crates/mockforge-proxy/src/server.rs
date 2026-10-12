@@ -5,7 +5,8 @@
 
 use crate::{body_transform::BodyTransformationMiddleware, config::ProxyConfig};
 use axum::{
-    extract::Request, http::StatusCode, middleware::Next, response::Response, routing::get, Router,
+    body::Body, extract::Request, http::StatusCode, middleware::Next, response::Response,
+    routing::get, Router,
 };
 use serde::Serialize;
 use std::net::SocketAddr;
@@ -97,6 +98,17 @@ impl ProxyServer {
         } else {
             None
         };
+        Self::with_conformance(config, log_requests, log_responses, conformance_tap)
+    }
+
+    /// Create a proxy with an explicitly configured conformance tap.
+    /// CLI callers can validate their settings without mutating process environment.
+    pub fn with_conformance(
+        config: ProxyConfig,
+        log_requests: bool,
+        log_responses: bool,
+        conformance_tap: Option<crate::conformance::ConformanceTap>,
+    ) -> Self {
         Self {
             config: Arc::new(RwLock::new(config)),
             log_requests,
@@ -125,12 +137,12 @@ impl ProxyServer {
 }
 
 /// Health check endpoint for the proxy
-async fn health_check() -> Result<Response<String>, StatusCode> {
+async fn health_check() -> Result<Response<Body>, StatusCode> {
     // Response builder should never fail with known-good values, but handle errors gracefully
     Response::builder()
         .status(StatusCode::OK)
         .header("Content-Type", "application/json")
-        .body(r#"{"status":"healthy","service":"mockforge-proxy"}"#.to_string())
+        .body(Body::from(r#"{"status":"healthy","service":"mockforge-proxy"}"#))
         .map_err(|e| {
             tracing::error!("Failed to build health check response: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
@@ -141,7 +153,7 @@ async fn health_check() -> Result<Response<String>, StatusCode> {
 async fn proxy_handler(
     axum::extract::State(state): axum::extract::State<Arc<ProxyServer>>,
     request: http::Request<axum::body::Body>,
-) -> Result<Response<String>, StatusCode> {
+) -> Result<Response<Body>, StatusCode> {
     // Extract client address from request extensions (set by ConnectInfo middleware)
     let client_addr = request
         .extensions()
@@ -199,8 +211,8 @@ async fn proxy_handler(
                 .to_string();
         return Ok(Response::builder()
             .status(StatusCode::FORBIDDEN)
-            .body(body)
-            .unwrap_or_else(|_| Response::new(String::new())));
+            .body(Body::from(body))
+            .unwrap_or_else(|_| Response::new(Body::empty())));
     }
 
     let full_upstream_url = if is_absolute_upstream {
@@ -213,8 +225,8 @@ async fn proxy_handler(
                 let body = format!("Forbidden: upstream blocked by egress guard ({})", reason);
                 return Ok(Response::builder()
                     .status(StatusCode::FORBIDDEN)
-                    .body(body)
-                    .unwrap_or_else(|_| Response::new(String::new())));
+                    .body(Body::from(body))
+                    .unwrap_or_else(|_| Response::new(Body::empty())));
             }
         }
     } else {
@@ -257,7 +269,8 @@ async fn proxy_handler(
 
     // Use ProxyClient directly with the full upstream URL to bypass ProxyHandler's URL construction
     use crate::client::ProxyClient;
-    let proxy_client = ProxyClient::new();
+    let proxy_client = ProxyClient::with_options(config.timeout_seconds, config.follow_redirects)
+        .map_err(|_| StatusCode::BAD_GATEWAY)?;
 
     // Convert method to reqwest method
     let reqwest_method = match method.as_str() {
@@ -312,7 +325,7 @@ async fn proxy_handler(
             warn!(status = status, path = %uri.path(), "strict conformance rejection");
             return Response::builder()
                 .status(status)
-                .body(payload.to_string())
+                .body(Body::from(payload.to_string()))
                 .map_err(|_| StatusCode::BAD_GATEWAY);
         }
     }
@@ -347,7 +360,7 @@ async fn proxy_handler(
                     http::HeaderName::try_from(name.as_str()),
                     http::HeaderValue::try_from(value.as_bytes()),
                 ) {
-                    response_headers.insert(header_name, header_value);
+                    response_headers.append(header_name, header_value);
                 }
             }
 
@@ -382,16 +395,27 @@ async fn proxy_handler(
 
             // #864 — observational response validation against the spec.
             if let Some(tap) = &state.conformance_tap {
-                tap.validate_response(
-                    method.as_str(),
-                    uri.path(),
-                    status.as_u16(),
-                    Some(final_body_bytes.as_slice()),
-                )
-                .await;
+                let valid = tap
+                    .check_encoded_response(
+                        method.as_str(),
+                        uri.path(),
+                        status.as_u16(),
+                        Some(final_body_bytes.as_slice()),
+                        response_headers
+                            .get(http::header::CONTENT_ENCODING)
+                            .and_then(|v| v.to_str().ok()),
+                    )
+                    .await;
+                if tap.is_strict() && !valid {
+                    return Response::builder()
+                        .status(StatusCode::BAD_GATEWAY)
+                        .header("Content-Type", "application/json")
+                        .body(Body::from(
+                            r#"{"error":"Upstream response violates the declared contract"}"#,
+                        ))
+                        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR);
+                }
             }
-
-            let body_string = String::from_utf8_lossy(&final_body_bytes).to_string();
 
             // Build Axum response
             let mut response_builder = Response::builder().status(status);
@@ -400,7 +424,7 @@ async fn proxy_handler(
             }
 
             response_builder
-                .body(body_string)
+                .body(Body::from(final_body_bytes))
                 .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)
         }
         Err(e) => {
@@ -560,7 +584,8 @@ mod tests {
         let response = proxy_handler(axum::extract::State(server), request).await.unwrap();
 
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
-        assert!(response.into_body().contains("egress guard"));
+        let body = axum::body::to_bytes(response.into_body(), 4096).await.unwrap();
+        assert!(std::str::from_utf8(&body).unwrap().contains("egress guard"));
     }
 
     #[tokio::test]
@@ -604,8 +629,8 @@ mod tests {
         let response = health_check().await.unwrap();
         assert_eq!(response.status(), StatusCode::OK);
 
-        // Response body is already a String
-        let body = response.into_body();
+        let bytes = axum::body::to_bytes(response.into_body(), 4096).await.unwrap();
+        let body = std::str::from_utf8(&bytes).unwrap();
 
         assert!(body.contains("healthy"));
         assert!(body.contains("mockforge-proxy"));

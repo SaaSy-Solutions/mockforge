@@ -17,7 +17,7 @@ use axum::http::HeaderMap;
 use serde_json::Map as JsonMap;
 use serde_json::Value;
 
-use mockforge_openapi::openapi_routes::OpenApiRouteRegistry;
+use mockforge_openapi::openapi_routes::{OpenApiRouteRegistry, ValidationMode, ValidationOptions};
 use mockforge_openapi::schema_ref_resolver::merge_components_into;
 use mockforge_openapi::spec::OpenApiSpec;
 
@@ -34,8 +34,24 @@ impl ConformanceTap {
     /// parsed to a Value).
     pub fn from_spec_value(spec: Value, strict: bool) -> Result<Self, String> {
         let openapi = OpenApiSpec::from_json(spec).map_err(|e| format!("invalid spec: {e}"))?;
+        let routes = OpenApiRouteRegistry::new(openapi.clone());
+        // Always detect violations here; this tap decides whether they reject
+        // traffic. Generic mock-server environment overrides must not disable it.
+        let options = ValidationOptions {
+            overrides: routes
+                .routes()
+                .iter()
+                .map(|route| {
+                    (
+                        format!("{} {}", route.method.to_uppercase(), route.path),
+                        ValidationMode::Enforce,
+                    )
+                })
+                .collect(),
+            ..Default::default()
+        };
         Ok(Self {
-            registry: OpenApiRouteRegistry::new(openapi),
+            registry: OpenApiRouteRegistry::new_with_options(openapi, options),
             strict,
         })
     }
@@ -135,7 +151,83 @@ impl ConformanceTap {
         let path_param_map: JsonMap<String, Value> =
             path_params.iter().map(|(k, v)| (k.clone(), Value::String(v.clone()))).collect();
 
+        let decoded;
+        let body = if let Some(encoding) = headers.get(axum::http::header::CONTENT_ENCODING) {
+            let result = match encoding.to_str() {
+                Ok(encoding) => decode_body(body.unwrap_or_default(), Some(encoding)).await,
+                Err(_) => Err("request content-encoding is invalid".to_string()),
+            };
+            match result {
+                Ok(bytes) => {
+                    decoded = bytes;
+                    Some(decoded.as_slice())
+                }
+                Err(error) => {
+                    let reason = format!("request body cannot be validated: {error}");
+                    mockforge_foundation::conformance_violations::record(
+                        mockforge_foundation::conformance_violations::ServerConformanceViolation {
+                            timestamp: chrono::Utc::now(),
+                            method: method.to_string(),
+                            path: concrete_path.to_string(),
+                            client_ip: "unknown".to_string(),
+                            status: 400,
+                            reason: reason.clone(),
+                            category: "request-body".to_string(),
+                            occurrences: 1,
+                            client_mockforge_version: None,
+                            client_sent_at: None,
+                            summary: String::new(),
+                            categories: vec!["request-body".to_string()],
+                        },
+                    );
+                    return self.strict.then(|| (400, serde_json::json!({"error": reason})));
+                }
+            }
+        } else {
+            body
+        };
         let (body_json, body_present) = parse_body(body);
+        let json_content_type = headers
+            .get(axum::http::header::CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .and_then(|value| value.split(';').next())
+            .map(|value| value.trim().to_ascii_lowercase())
+            .is_some_and(|value| value == "application/json" || value.ends_with("+json"));
+        if body_present && body_json.is_none() && json_content_type {
+            let reason = "request body is not valid JSON";
+            mockforge_foundation::conformance_violations::record(
+                mockforge_foundation::conformance_violations::ServerConformanceViolation {
+                    timestamp: chrono::Utc::now(),
+                    method: method.to_string(),
+                    path: concrete_path.to_string(),
+                    client_ip: "unknown".to_string(),
+                    status: 400,
+                    reason: reason.to_string(),
+                    category: "request-body".to_string(),
+                    occurrences: 1,
+                    client_mockforge_version: None,
+                    client_sent_at: None,
+                    summary: String::new(),
+                    categories: vec!["request-body".to_string()],
+                },
+            );
+            return self.strict.then(|| (400, serde_json::json!({"error": reason})));
+        }
+
+        let mut cookies = JsonMap::new();
+        for header in headers.get_all(axum::http::header::COOKIE) {
+            if let Ok(header) = header.to_str() {
+                for pair in header.split(';') {
+                    if let Some((name, value)) = pair.trim().split_once('=') {
+                        let value = value
+                            .strip_prefix('"')
+                            .and_then(|v| v.strip_suffix('"'))
+                            .unwrap_or(value);
+                        cookies.insert(name.trim().to_string(), Value::String(value.to_string()));
+                    }
+                }
+            }
+        }
 
         match self.registry.run_validation_with_recording_ex(
             &template,
@@ -143,7 +235,7 @@ impl ConformanceTap {
             &path_param_map,
             &query_map,
             &header_values,
-            &JsonMap::new(), // cookies
+            &cookies,
             body_json.as_ref(),
             body_present,
         ) {
@@ -166,18 +258,43 @@ impl ConformanceTap {
         status: u16,
         body: Option<&[u8]>,
     ) {
+        self.check_response(method, concrete_path, status, body).await;
+    }
+
+    /// Record response violations and return whether the declared contract holds.
+    /// This permits the caller to enforce an explicitly requested strict policy.
+    pub async fn check_response(
+        &self,
+        method: &str,
+        concrete_path: &str,
+        status: u16,
+        body: Option<&[u8]>,
+    ) -> bool {
+        self.check_encoded_response(method, concrete_path, status, body, None).await
+    }
+
+    /// Validate a decoded copy while leaving the encoded upstream bytes untouched.
+    /// Decoded JSON is bounded to 16 MiB and at most four encoding layers.
+    pub async fn check_encoded_response(
+        &self,
+        method: &str,
+        concrete_path: &str,
+        status: u16,
+        body: Option<&[u8]>,
+        content_encoding: Option<&str>,
+    ) -> bool {
         let Some((template, _)) = self.match_template(method, concrete_path) else {
-            return;
+            return true;
         };
         let Some(route) = self.registry.get_route(&template, method) else {
-            return;
+            return true;
         };
 
         // 1. Is this status even declared?
         let responses = &route.operation.responses;
         let status_declared = responses.responses.keys().any(|code| match code {
             openapiv3::StatusCode::Code(c) => *c == status,
-            openapiv3::StatusCode::Range(start) => status >= *start && status < *start + 100,
+            openapiv3::StatusCode::Range(class) => status / 100 == *class,
         });
         let has_default = responses.default.is_some();
         if !status_declared && !has_default {
@@ -187,16 +304,30 @@ impl ConformanceTap {
                 status,
                 &format!("response status {status} is not declared for {method} {template}"),
             );
-            return;
+            return false;
         }
 
         // 2. Declared + JSON body → schema check.
-        let Some(schema_value) = declared_json_schema(responses, status) else {
-            return;
+        let Some(schema_value) =
+            declared_json_schema(responses, status, &self.registry.spec().spec)
+        else {
+            return true;
         };
-        let Some(bytes) = body else { return };
-        let Ok(body_json) = serde_json::from_slice::<Value>(bytes) else {
-            return; // non-JSON bodies have no schema contract here
+        let decoded = match decode_body(body.unwrap_or_default(), content_encoding).await {
+            Ok(decoded) => decoded,
+            Err(error) => {
+                record_response_shape(method, concrete_path, status, &error);
+                return false;
+            }
+        };
+        let Ok(body_json) = serde_json::from_slice::<Value>(&decoded) else {
+            record_response_shape(
+                method,
+                concrete_path,
+                status,
+                "response body is not valid JSON for the declared JSON schema",
+            );
+            return false;
         };
 
         let merged = merge_components_into(schema_value.clone(), &self.registry.spec().spec);
@@ -211,8 +342,55 @@ impl ConformanceTap {
                 status,
                 &format!("response body violates {method} {template} {status} schema: {detail}"),
             );
+            return false;
         }
+        true
     }
+}
+
+const MAX_DECODED_JSON_BYTES: usize = 16 * 1024 * 1024;
+
+async fn decode_body(body: &[u8], encoding: Option<&str>) -> Result<Vec<u8>, String> {
+    use async_compression::tokio::bufread::{BrotliDecoder, GzipDecoder, ZlibDecoder, ZstdDecoder};
+    use tokio::io::{AsyncRead, AsyncReadExt};
+
+    let encodings: Vec<_> = encoding
+        .unwrap_or("")
+        .split(',')
+        .map(str::trim)
+        .filter(|value| !value.is_empty() && !value.eq_ignore_ascii_case("identity"))
+        .collect();
+    if encodings.len() > 4 {
+        return Err("body has more than four content-encoding layers".to_string());
+    }
+    if body.len() > MAX_DECODED_JSON_BYTES {
+        return Err("body exceeds the 16 MiB JSON validation limit".to_string());
+    }
+    let mut bytes = body.to_vec();
+    for encoding in encodings.into_iter().rev() {
+        let reader: Box<dyn AsyncRead + Unpin + Send + '_> =
+            match encoding.to_ascii_lowercase().as_str() {
+                "gzip" | "x-gzip" => Box::new(GzipDecoder::new(bytes.as_slice())),
+                "deflate" => Box::new(ZlibDecoder::new(bytes.as_slice())),
+                "br" => Box::new(BrotliDecoder::new(bytes.as_slice())),
+                "zstd" => Box::new(ZstdDecoder::new(bytes.as_slice())),
+                _ => return Err(format!("unsupported body content-encoding: {encoding}")),
+            };
+        let mut decoded = Vec::new();
+        reader
+            .take((MAX_DECODED_JSON_BYTES + 1) as u64)
+            .read_to_end(&mut decoded)
+            .await
+            .map_err(|_| "body content-encoding cannot be decoded".to_string())?;
+        if decoded.len() > MAX_DECODED_JSON_BYTES {
+            return Err("decoded body exceeds the 16 MiB JSON validation limit".to_string());
+        }
+        bytes = decoded;
+    }
+    if bytes.len() > MAX_DECODED_JSON_BYTES {
+        return Err("body exceeds the 16 MiB JSON validation limit".to_string());
+    }
+    Ok(bytes)
 }
 
 fn record_response_shape(method: &str, path: &str, status: u16, reason: &str) {
@@ -233,18 +411,37 @@ fn record_response_shape(method: &str, path: &str, status: u16, reason: &str) {
     });
 }
 
-fn declared_json_schema(responses: &openapiv3::Responses, status: u16) -> Option<Value> {
+fn declared_json_schema(
+    responses: &openapiv3::Responses,
+    status: u16,
+    spec: &openapiv3::OpenAPI,
+) -> Option<Value> {
     use openapiv3::{ReferenceOr, Response, StatusCode};
-    let response_ref: Option<&ReferenceOr<Response>> =
-        responses.responses.iter().find_map(|(code, r)| match code {
-            StatusCode::Code(c) if *c == status => Some(r),
-            StatusCode::Range(start) if status >= *start && status < *start + 100 => Some(r),
-            _ => None,
-        });
-    let response = match response_ref? {
-        ReferenceOr::Item(r) => r,
-        ReferenceOr::Reference { .. } => return None, // external ref: skip
-    };
+    // Exact status overrides a range, which overrides the default response.
+    let response_ref: Option<&ReferenceOr<Response>> = responses
+        .responses
+        .get(&StatusCode::Code(status))
+        .or_else(|| responses.responses.get(&StatusCode::Range(status / 100)))
+        .or(responses.default.as_ref());
+    let mut selected = response_ref?.clone();
+    let mut resolved = None;
+    // Resolve only local response references, bounded against cycles.
+    for _ in 0..32 {
+        match selected {
+            ReferenceOr::Item(response) => {
+                resolved = Some(response);
+                break;
+            }
+            ReferenceOr::Reference { reference } => {
+                let name = reference
+                    .strip_prefix("#/components/responses/")?
+                    .replace("~1", "/")
+                    .replace("~0", "~");
+                selected = spec.components.as_ref()?.responses.get(&name)?.clone();
+            }
+        }
+    }
+    let response = resolved?;
     let media = response.content.get("application/json")?;
     match &media.schema {
         Some(ReferenceOr::Item(schema)) => Some(serde_json::to_value(schema).ok()?),
@@ -292,6 +489,34 @@ fn parse_body(body: Option<&[u8]>) -> (Option<Value>, bool) {
 mod tests {
     use super::*;
     use mockforge_foundation::conformance_violations;
+
+    #[tokio::test]
+    async fn compressed_validation_decodes_all_supported_codecs_and_bounds_expansion() {
+        use async_compression::tokio::bufread::{
+            BrotliEncoder, GzipEncoder, ZlibEncoder, ZstdEncoder,
+        };
+        use tokio::io::{AsyncRead, AsyncReadExt};
+        let input = br#"{"created":true}"#;
+        let cases: Vec<(&str, Box<dyn AsyncRead + Unpin + Send>)> = vec![
+            ("gzip", Box::new(GzipEncoder::new(input.as_slice()))),
+            ("deflate", Box::new(ZlibEncoder::new(input.as_slice()))),
+            ("br", Box::new(BrotliEncoder::new(input.as_slice()))),
+            ("zstd", Box::new(ZstdEncoder::new(input.as_slice()))),
+        ];
+        for (encoding, mut encoder) in cases {
+            let mut wire = Vec::new();
+            encoder.read_to_end(&mut wire).await.unwrap();
+            assert_eq!(decode_body(&wire, Some(encoding)).await.unwrap(), input);
+        }
+        assert!(decode_body(b"not gzip", Some("gzip")).await.is_err());
+        assert!(decode_body(input, Some("unsupported")).await.is_err());
+        assert!(decode_body(input, Some("gzip,gzip,gzip,gzip,gzip")).await.is_err());
+        let expanded = vec![b' '; MAX_DECODED_JSON_BYTES + 1];
+        let mut encoder = GzipEncoder::new(expanded.as_slice());
+        let mut wire = Vec::new();
+        encoder.read_to_end(&mut wire).await.unwrap();
+        assert!(decode_body(&wire, Some("gzip")).await.unwrap_err().contains("16 MiB"));
+    }
 
     fn demo_spec() -> Value {
         serde_json::json!({

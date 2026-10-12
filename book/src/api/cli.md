@@ -16,6 +16,45 @@ mockforge-cli [OPTIONS] <COMMAND>
 
 ## Commands
 
+### `proxy` - Forward Traffic and Record Contract Violations
+
+```bash
+mockforge proxy --upstream http://127.0.0.1:8080 --port 9081 \
+  --spec api.yaml --validate-conformance
+```
+
+The proxy listens on `127.0.0.1:9081` by default. `--host` and `--port`
+override the listener; `--upstream` (alias `--target`) selects the upstream.
+The spec can be JSON or YAML. `MOCKFORGE_PROXY_SPEC` and
+`MOCKFORGE_PROXY_VALIDATE_CONFORMANCE=true` are the environment equivalents.
+Invalid or missing specs fail startup when validation is enabled.
+
+Validation is observational: invalid requests still reach the upstream, and
+upstream status codes, redirect responses, and response bytes are preserved.
+Inspect the shared conformance buffer at
+`GET /__mockforge/api/conformance/violations?limit=50` on the proxy listener;
+`DELETE` on that path clears it. These routes are enabled with validation.
+The usual `MOCKFORGE_CONFORMANCE_BUFFER_SIZE` and
+`MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE` settings govern the buffer.
+
+`--validate-conformance-strict` also enables validation and rejects invalid
+requests before forwarding them. An upstream response that violates its
+declared contract produces a `502` response. Set
+`MOCKFORGE_PROXY_VALIDATE_CONFORMANCE_STRICT=true` for the same policy.
+Ctrl-C and SIGTERM stop the listener gracefully.
+
+
+Conformance response-schema checks currently cover declared JSON schemas.
+Local response references, exact status codes, status ranges, and defaults
+are supported. Paths absent from the spec pass through without validation.
+
+Validation decodes gzip, deflate, Brotli, and Zstandard on a separate copy;
+forwarded bodies and repeated response headers remain unchanged. Encoded
+and decoded validation copies are limited to 16 MiB and four encoding layers.
+Invalid, unsupported, or oversized encoded content is reported as a violation.
+Passive mode still forwards it; strict mode rejects invalid requests or
+returns 502 for invalid responses.
+
 ### `serve` - Start Mock Servers
 
 The primary command for starting MockForge's mock servers with support for HTTP, WebSocket, and gRPC protocols.
