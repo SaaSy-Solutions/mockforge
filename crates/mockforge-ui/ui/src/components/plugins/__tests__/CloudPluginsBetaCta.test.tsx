@@ -4,7 +4,7 @@
 
 import React from 'react';
 import { render, screen, waitFor, fireEvent } from '@testing-library/react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 const cloudModeMock = vi.hoisted(() => ({ isCloudMode: vi.fn(() => true) }));
@@ -30,6 +30,8 @@ const renderWithProviders = (ui: React.ReactElement) => {
 };
 
 describe('CloudPluginsBetaCta', () => {
+  afterEach(() => vi.unstubAllEnvs());
+
   beforeEach(() => {
     // Reset (not just clear) wipes the mockResolvedValue queue so each
     // test starts from a known-empty state.
@@ -37,6 +39,21 @@ describe('CloudPluginsBetaCta', () => {
     apiMock.submitBetaInterest.mockReset();
     cloudModeMock.isCloudMode.mockReset();
     cloudModeMock.isCloudMode.mockReturnValue(true);
+    vi.stubEnv('VITE_CLOUD_PLUGIN_BETA_INTEREST_ENABLED', 'true');
+  });
+
+  it('hides the unfinished beta surface by default without calling its API', () => {
+    vi.stubEnv('VITE_CLOUD_PLUGIN_BETA_INTEREST_ENABLED', undefined);
+    const { container } = renderWithProviders(<CloudPluginsBetaCta />);
+    expect(container.firstChild).toBeNull();
+    expect(apiMock.getMyBetaInterest).not.toHaveBeenCalled();
+  });
+
+  it('requires an explicit true flag value to show the beta surface', () => {
+    vi.stubEnv('VITE_CLOUD_PLUGIN_BETA_INTEREST_ENABLED', 'false');
+    const { container } = renderWithProviders(<CloudPluginsBetaCta />);
+    expect(container.firstChild).toBeNull();
+    expect(apiMock.getMyBetaInterest).not.toHaveBeenCalled();
   });
 
   it('renders nothing in self-hosted (local) mode', () => {
