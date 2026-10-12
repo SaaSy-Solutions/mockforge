@@ -30,13 +30,13 @@ jobs:
   # (book/**, docs/**, *.md) or agent config (.claude/**). The heavy Rust + UI
   # jobs `needs: changes` and run only when `code == 'true'`. Non-PR events
   # (push to main, tags, dispatch) always set code=true, so main stays fully
-  # tested and release builds are never skipped. Runs on ubuntu-latest so this
-  # gate is not queued behind the busy self-hosted Rust runners. A skipped
+  # tested and release builds are never skipped. Trusted repository jobs use
+  # the existing Hetzner pool; fork PRs retain isolated hosted runners. A skipped
   # required check counts as success for branch protection, so docs-only PRs
   # stay mergeable without burning self-hosted runner time on a full Rust build.
   changes:
     name: Detect change scope
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
     outputs:
       code: ${{ steps.filter.outputs.code }}
@@ -79,7 +79,7 @@ jobs:
     name: Test
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
     timeout-minutes: 60
     env:
       CARGO_INCREMENTAL: "0"
@@ -99,15 +99,44 @@ jobs:
       uses: actions/checkout@v7
 
     - name: Free runner disk space
+      if: runner.environment == 'github-hosted'
       run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
 
+    - name: Set per-runner CARGO_HOME on Hetzner
+      if: runner.environment == 'self-hosted'
+      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
+    - name: Verify provisioned Rust toolchain on Hetzner
+      if: runner.environment == 'self-hosted'
+      env:
+        EXPECTED_TOOLCHAIN: ${{ matrix.rust }}
+      run: |
+        command -v rustup >/dev/null || { echo "::error::Hetzner runner lacks rustup; operator provisioning is required."; exit 1; }
+        rustc_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" rustc --version)"
+        cargo_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" cargo --version)"
+        [[ "$rustc_version" == "rustc $EXPECTED_TOOLCHAIN "* ]]
+        [[ "$cargo_version" == "cargo $EXPECTED_TOOLCHAIN "* ]]
+        printf '%s\n' "$rustc_version" "$cargo_version"
+        RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" rustfmt --version
+        RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" cargo clippy --version
+
     - name: Install Rust toolchain
+      if: runner.environment == 'github-hosted'
       uses: ./.github/actions/rust-toolchain
       with:
         toolchain: ${{ matrix.rust }}
         components: rustfmt, clippy
 
+    - name: Verify native build dependencies on Hetzner
+      if: runner.environment == 'self-hosted'
+      run: |
+        dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev >/dev/null 2>&1 || {
+          echo "::error::Hetzner runner is missing required native build packages; ask the runner operator to provision them."
+          exit 1
+        }
+
     - name: Install native build dependencies
+      if: runner.environment == 'github-hosted'
       run: |
         sudo apt-get update
         sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
@@ -181,7 +210,7 @@ jobs:
     name: UI Tests
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
     timeout-minutes: 40
 
     steps:
@@ -189,14 +218,58 @@ jobs:
         uses: actions/checkout@v7
 
       - name: Setup Node.js
+        if: runner.environment == 'github-hosted'
         uses: actions/setup-node@v7
         with:
           node-version: '20'
 
+      - name: Prepare job-owned UI tool state on Hetzner
+        if: runner.environment == 'self-hosted'
+        id: ui-state
+        run: |
+          set -euo pipefail
+          # Do not let setup-node install into the shared runner tool cache.
+          command -v node >/dev/null && command -v npm >/dev/null || { echo "::error::Hetzner UI checks require preinstalled Node 20 and npm."; exit 1; }
+          node_version="$(node --version)"
+          [[ "$node_version" == v20.* ]] || { echo "::error::Hetzner UI checks require preinstalled Node 20."; exit 1; }
+          npm --version
+          [[ "${GITHUB_RUN_ID:?}" =~ ^[0-9]+$ && "${GITHUB_RUN_ATTEMPT:?}" =~ ^[0-9]+$ ]]
+          root="$(mktemp -d "${RUNNER_TEMP:?}/mockforge-ui-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.XXXXXXXX")"
+          mkdir -p "$root"/{npm-cache,pnpm-store,cache,config,data,state}
+          printf 'pnpm_dest=%s/setup-pnpm\n' "$root" >> "$GITHUB_OUTPUT"
+          {
+            printf 'UI_TOOL_ROOT=%s\n' "$root"
+            printf 'npm_config_cache=%s/npm-cache\n' "$root"
+            printf 'npm_config_store_dir=%s/pnpm-store\n' "$root"
+            printf 'XDG_CACHE_HOME=%s/cache\n' "$root"
+            printf 'XDG_CONFIG_HOME=%s/config\n' "$root"
+            printf 'XDG_DATA_HOME=%s/data\n' "$root"
+            printf 'XDG_STATE_HOME=%s/state\n' "$root"
+          } >> "$GITHUB_ENV"
+
       - name: Install pnpm
+        if: runner.environment == 'github-hosted'
         uses: pnpm/action-setup@v6
         with:
           version: 9
+
+      - name: Install pnpm in the owned job directory
+        if: runner.environment == 'self-hosted'
+        uses: pnpm/action-setup@v6
+        with:
+          version: 9
+          dest: ${{ steps.ui-state.outputs.pnpm_dest }}
+
+      - name: Verify UI tool and store ownership on Hetzner
+        if: runner.environment == 'self-hosted'
+        run: |
+          set -euo pipefail
+          [[ "$(command -v pnpm)" == "${UI_TOOL_ROOT:?}/setup-pnpm/"* ]]
+          [[ "${PNPM_HOME:?}" == "$UI_TOOL_ROOT/setup-pnpm/"* ]]
+          [[ "$(pnpm --version)" == 9.* ]]
+          [[ "$(npm config get cache)" == "$UI_TOOL_ROOT/npm-cache" ]]
+          store="$(pnpm store path --silent)"
+          [[ "$store" == "$UI_TOOL_ROOT/pnpm-store" || "$store" == "$UI_TOOL_ROOT/pnpm-store/"* ]]
 
       - name: Install dependencies
         working-directory: crates/mockforge-ui/ui
@@ -235,7 +308,7 @@ jobs:
     name: Incremental Warning Gate
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
     timeout-minutes: 40
     env:
       CARGO_INCREMENTAL: "0"
@@ -244,10 +317,38 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v7
 
+    - name: Set per-runner CARGO_HOME on Hetzner
+      if: runner.environment == 'self-hosted'
+      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
+    - name: Verify provisioned Rust toolchain on Hetzner
+      if: runner.environment == 'self-hosted'
+      env:
+        EXPECTED_TOOLCHAIN: ${{ env.RUSTUP_TOOLCHAIN }}
+      run: |
+        command -v rustup >/dev/null || { echo "::error::Hetzner runner lacks rustup; operator provisioning is required."; exit 1; }
+        rustc_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" rustc --version)"
+        cargo_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" cargo --version)"
+        [[ "$rustc_version" == "rustc $EXPECTED_TOOLCHAIN "* ]]
+        [[ "$cargo_version" == "cargo $EXPECTED_TOOLCHAIN "* ]]
+        printf '%s\n' "$rustc_version" "$cargo_version"
+        RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" rustfmt --version
+        RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" cargo clippy --version
+
     - name: Install Rust toolchain
+      if: runner.environment == 'github-hosted'
       uses: ./.github/actions/rust-toolchain
 
+    - name: Verify native build dependencies on Hetzner
+      if: runner.environment == 'self-hosted'
+      run: |
+        dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev >/dev/null 2>&1 || {
+          echo "::error::Hetzner runner is missing required native build packages; ask the runner operator to provision them."
+          exit 1
+        }
+
     - name: Install native build dependencies
+      if: runner.environment == 'github-hosted'
       run: |
         sudo apt-get update
         sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
@@ -264,7 +365,7 @@ jobs:
     name: Warning Ratchet Preview
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
     timeout-minutes: 40
     continue-on-error: true
     env:
@@ -274,10 +375,38 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v7
 
+    - name: Set per-runner CARGO_HOME on Hetzner
+      if: runner.environment == 'self-hosted'
+      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
+    - name: Verify provisioned Rust toolchain on Hetzner
+      if: runner.environment == 'self-hosted'
+      env:
+        EXPECTED_TOOLCHAIN: ${{ env.RUSTUP_TOOLCHAIN }}
+      run: |
+        command -v rustup >/dev/null || { echo "::error::Hetzner runner lacks rustup; operator provisioning is required."; exit 1; }
+        rustc_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" rustc --version)"
+        cargo_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" cargo --version)"
+        [[ "$rustc_version" == "rustc $EXPECTED_TOOLCHAIN "* ]]
+        [[ "$cargo_version" == "cargo $EXPECTED_TOOLCHAIN "* ]]
+        printf '%s\n' "$rustc_version" "$cargo_version"
+        RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" rustfmt --version
+        RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" cargo clippy --version
+
     - name: Install Rust toolchain
+      if: runner.environment == 'github-hosted'
       uses: ./.github/actions/rust-toolchain
 
+    - name: Verify native build dependencies on Hetzner
+      if: runner.environment == 'self-hosted'
+      run: |
+        dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev >/dev/null 2>&1 || {
+          echo "::error::Hetzner runner is missing required native build packages; ask the runner operator to provision them."
+          exit 1
+        }
+
     - name: Install native build dependencies
+      if: runner.environment == 'github-hosted'
       run: |
         sudo apt-get update
         sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
@@ -294,11 +423,14 @@ jobs:
     name: Security Audit
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
     timeout-minutes: 30
     steps:
     - name: Checkout repository
       uses: actions/checkout@v7
+
+    - name: Test Hetzner runner routing
+      run: python3 scripts/tests/test_hetzner_routing.py
 
     - name: Test plugin publication request boundary
       run: python3 scripts/tests/test_plugin_publish_request.py
@@ -306,10 +438,37 @@ jobs:
     - name: Test crate publication status
       run: python3 scripts/tests/test_publish_crates_status.py
 
+    - name: Set per-runner CARGO_HOME on Hetzner
+      if: runner.environment == 'self-hosted'
+      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
+    - name: Verify provisioned Rust toolchain on Hetzner
+      if: runner.environment == 'self-hosted'
+      env:
+        EXPECTED_TOOLCHAIN: ${{ env.RUSTUP_TOOLCHAIN }}
+      run: |
+        command -v rustup >/dev/null || { echo "::error::Hetzner runner lacks rustup; operator provisioning is required."; exit 1; }
+        rustc_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" rustc --version)"
+        cargo_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" cargo --version)"
+        [[ "$rustc_version" == "rustc $EXPECTED_TOOLCHAIN "* ]]
+        [[ "$cargo_version" == "cargo $EXPECTED_TOOLCHAIN "* ]]
+        printf '%s\n' "$rustc_version" "$cargo_version"
+
     - name: Install Rust toolchain
+      if: runner.environment == 'github-hosted'
       uses: ./.github/actions/rust-toolchain
 
+    - name: Verify provisioned security audit tools on Hetzner
+      if: runner.environment == 'self-hosted'
+      run: |
+        audit_version="$(cargo-audit --version)"
+        deny_version="$(cargo-deny --version)"
+        [[ "$audit_version" == "cargo-audit 0.22.2" ]]
+        [[ "$deny_version" == "cargo-deny 0.20.2" ]]
+        printf '%s\n' "$audit_version" "$deny_version"
+
     - name: Install pinned security audit tools
+      if: runner.environment == 'github-hosted'
       uses: taiki-e/install-action@v2.87.22
       with:
         tool: cargo-audit@0.22.2,cargo-deny@0.20.2
@@ -413,7 +572,7 @@ jobs:
     name: Minimum Supported Rust Version
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
     timeout-minutes: 30
     env:
       # Override the workflow-wide stable pin for every command in this job.
@@ -421,10 +580,27 @@ jobs:
       CARGO_INCREMENTAL: "0"
       CARGO_BUILD_JOBS: "2"
     steps:
+    - name: Set per-runner CARGO_HOME on Hetzner
+      if: runner.environment == 'self-hosted'
+      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
     - name: Checkout repository
       uses: actions/checkout@v7
 
+    - name: Verify provisioned Rust toolchain on Hetzner
+      if: runner.environment == 'self-hosted'
+      env:
+        EXPECTED_TOOLCHAIN: ${{ env.RUSTUP_TOOLCHAIN }}
+      run: |
+        command -v rustup >/dev/null || { echo "::error::Hetzner runner lacks rustup; operator provisioning is required."; exit 1; }
+        rustc_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" rustc --version)"
+        cargo_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" cargo --version)"
+        [[ "$rustc_version" == "rustc $EXPECTED_TOOLCHAIN "* ]]
+        [[ "$cargo_version" == "cargo $EXPECTED_TOOLCHAIN "* ]]
+        printf '%s\n' "$rustc_version" "$cargo_version"
+
     - name: Install Rust toolchain (MSRV)
+      if: runner.environment == 'github-hosted'
       uses: ./.github/actions/rust-toolchain
       with:
         toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
@@ -441,7 +617,16 @@ jobs:
         [[ "$rustc_version" == "rustc ${RUSTUP_TOOLCHAIN} "* ]]
         [[ "$cargo_version" == "cargo ${RUSTUP_TOOLCHAIN} "* ]]
 
+    - name: Verify native build dependencies on Hetzner
+      if: runner.environment == 'self-hosted'
+      run: |
+        dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev >/dev/null 2>&1 || {
+          echo "::error::Hetzner runner is missing required native build packages; ask the runner operator to provision them."
+          exit 1
+        }
+
     - name: Install native build dependencies
+      if: runner.environment == 'github-hosted'
       run: |
         sudo apt-get update
         sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
@@ -458,10 +643,8 @@ jobs:
 
   typos:
     name: Spell Check
-    # GitHub-hosted: a pure text check needs no Rust toolchain, and the repo is
-    # public so standard runners are free. Keeps the contended self-hosted Rust
-    # slot for jobs that actually compile. (No per-runner CARGO_HOME needed.)
-    runs-on: ubuntu-latest
+    # No Rust toolchain or per-runner CARGO_HOME is needed for this text check.
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
     - name: Checkout repository
@@ -472,9 +655,8 @@ jobs:
 
   changelog-validation:
     name: Changelog Validation
-    # GitHub-hosted: a git-diff + shell check needs no Rust toolchain; public
-    # repo → free standard runner, and it frees the self-hosted Rust slot.
-    runs-on: ubuntu-latest
+    # The git-diff and shell check uses the same trusted/fork routing policy.
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
     if: github.event_name == 'pull_request'
     steps:
