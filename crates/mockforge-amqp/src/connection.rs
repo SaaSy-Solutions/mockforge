@@ -223,8 +223,6 @@ pub struct Channel {
     pub publisher_confirms: bool,
     pub transaction_mode: bool,
     pub next_delivery_tag: u64,
-    /// Publisher-confirm sequence; independent of consumer delivery tags.
-    pub next_publish_sequence: u64,
     pub next_consumer_tag: u32,
     /// Unacknowledged messages: delivery_tag -> UnackedMessage
     pub unacked_messages: HashMap<u64, UnackedMessage>,
@@ -245,7 +243,6 @@ impl Channel {
             publisher_confirms: false,
             transaction_mode: false,
             next_delivery_tag: 1,
-            next_publish_sequence: 1,
             next_consumer_tag: 1,
             unacked_messages: HashMap::new(),
             tx_pending_publishes: Vec::new(),
@@ -336,6 +333,8 @@ pub struct AmqpConnection {
     stream: AmqpStream,
     state: ConnectionState,
     channels: HashMap<u16, Channel>,
+    /// Independent publisher-confirm sequence for each channel.
+    publisher_sequences: HashMap<u16, u64>,
     exchanges: Arc<RwLock<ExchangeManager>>,
     queues: Arc<RwLock<QueueManager>>,
     metrics: Arc<AmqpMetrics>,
@@ -393,6 +392,7 @@ impl AmqpConnection {
             stream,
             state: ConnectionState::Start,
             channels,
+            publisher_sequences: HashMap::new(),
             exchanges,
             queues,
             metrics,
@@ -853,6 +853,7 @@ impl AmqpConnection {
             method_id::CHANNEL_OPEN => {
                 // Create new channel
                 self.channels.insert(channel, Channel::new(channel));
+                self.publisher_sequences.remove(&channel);
                 self.metrics.record_channel_opened();
 
                 // Send Channel.Open-Ok
@@ -866,6 +867,7 @@ impl AmqpConnection {
                 Ok(true)
             }
             method_id::CHANNEL_CLOSE => {
+                self.publisher_sequences.remove(&channel);
                 if let Some(ch) = self.channels.get_mut(&channel) {
                     ch.state = ChannelState::Closed;
                 }
@@ -880,6 +882,7 @@ impl AmqpConnection {
                 Ok(true)
             }
             method_id::CHANNEL_CLOSE_OK => {
+                self.publisher_sequences.remove(&channel);
                 if let Some(ch) = self.channels.get_mut(&channel) {
                     ch.state = ChannelState::Closed;
                 }
@@ -2164,9 +2167,10 @@ impl AmqpConnection {
                     // Send publisher confirm if enabled
                     if let Some(channel_state) = self.channels.get_mut(&ch) {
                         if channel_state.publisher_confirms {
-                            let sequence = channel_state.next_publish_sequence;
-                            channel_state.next_publish_sequence += 1;
-                            self.send_basic_ack(ch, sequence, false).await?;
+                            let sequence = self.publisher_sequences.entry(ch).or_insert(1);
+                            let tag = *sequence;
+                            *sequence += 1;
+                            self.send_basic_ack(ch, tag, false).await?;
                         }
                     }
                 }
