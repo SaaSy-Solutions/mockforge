@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- **[Cloud]** Stripe trials allow checkout without a payment method and cancel when the trial ends without one; zero-trial paid checkout still collects a card. Actual SDK request tests cover both paid plans and billing intervals. (#837, #714)
+
 - **[Reality]** Verify persona CI-hit recording from actual HTTP headers through SQLite persistence, including optional run IDs and ignored blank/invalid labels, and document analytics setup and tenant-context limits. (#716)
 
 - **[DevX]** Retire the outdated shared-runner cleanup copy and its systemd units in favor of the infrastructure-owned script, preventing accidental replacement of newer host protections. (#706)
