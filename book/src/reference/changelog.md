@@ -6,6 +6,7 @@
 
 - **[Cloud]** HTTP hook response previews truncate at a valid UTF-8 boundary, preventing logging from panicking on multibyte response bodies in both orchestration implementations.
 
+- **[DevX]** `ftp serve --config` reads standalone FTP settings or a server YAML `ftp` section, loads configuration-relative fixture directories, and honors explicit CLI overrides. FTP listeners apply the configured passive port range and idle timeout. (#794)
 - **[Cloud]** Stripe trials allow checkout without a payment method and cancel when the trial ends without one; zero-trial paid checkout still collects a card. Actual SDK request tests cover both paid plans and billing intervals. (#837, #714)
 
 - **[Reality]** Verify persona CI-hit recording from actual HTTP headers through SQLite persistence, including optional run IDs and ignored blank/invalid labels, and document analytics setup and tenant-context limits. (#716)

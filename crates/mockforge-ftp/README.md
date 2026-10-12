@@ -364,3 +364,33 @@ See the [examples directory](https://github.com/SaaSy-Solutions/mockforge/tree/m
 ## License
 
 Licensed under MIT OR Apache-2.0
+
+## Starting the CLI with configuration
+
+For a CLI built with the `ftp` feature, `mockforge ftp serve --config ftp-config.yaml`
+loads either standalone FTP settings or the `ftp` section of a full server YAML.
+For example:
+
+```yaml
+host: 127.0.0.1
+port: 2121
+virtual_root: /
+fixtures_dir: fixtures
+passive_ports: [50000, 50100]
+timeout_secs: 300
+```
+
+`fixtures_dir` is resolved relative to the configuration file, independently of
+the working directory. Each `.yaml` or `.yml` file contains one `FtpFixture`
+using the fixture schema above. Missing or invalid configuration and fixture
+files fail startup with a diagnostic.
+
+Explicit `--port`, `--host`, and `--virtual-root` flags override file values.
+Without a configuration file, the standalone CLI retains port 2121, host
+127.0.0.1, and virtual root `/`. File settings use `FtpConfig` defaults for omitted
+fields. The passive port range and idle timeout apply to actual FTP connections.
+
+Authentication policy and connection caps remain incomplete: the listener uses
+libunftp's anonymous authenticator and does not currently enforce
+`allow_anonymous: false` or `max_connections`. These fields do not provide access
+control or a concurrency limit.
