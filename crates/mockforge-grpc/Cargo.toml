@@ -38,12 +38,12 @@ tracing-subscriber = { workspace = true }
 axum = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
-mockforge-core = { version = "0.3.70", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.233", path = "../mockforge-core" }
 mockforge-foundation = { path = "../mockforge-foundation" }
 mockforge-openapi = { path = "../mockforge-openapi" }
-mockforge-data = { version = "0.3.70", path = "../mockforge-data", optional = true }
-mockforge-observability = { version = "0.3.70", path = "../mockforge-observability" }
-mockforge-tracing = { version = "0.3.70", path = "../mockforge-tracing" }
+mockforge-data = { version = "0.3.233", path = "../mockforge-data", optional = true }
+mockforge-observability = { version = "0.3.233", path = "../mockforge-observability" }
+mockforge-tracing = { version = "0.3.233", path = "../mockforge-tracing" }
 opentelemetry = { version = "0.22", features = ["trace"] }
 fake = { version = "3.0", optional = true }
 regex = "1.0"

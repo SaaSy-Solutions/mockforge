@@ -6,6 +6,10 @@
 
 - **[Cloud]** Contract-drift AI callbacks carry the persisted run identity so usage audits identify the originating user. The registry verifies the run, suite, and sampled workspace belong to the requested organization and rejects forged actor claims; scheduled and older anonymous callbacks remain anonymous. (#869)
 
+## [0.3.233] - 2026-10-12
+
+### Fixed
+
 - **[DevX]** Explicit mock health routes coexist with built-in health probes instead of crashing server startup; this restores the generated `init` project's OpenAPI example. (#851)
 - **[DevX]** The README opens with a working Docker example and a reproducible cold-start measurement. New `init` projects print their startup command and test request; installation guidance no longer promises a 30-second source build. (#851)
 - **[Cloud]** HTTP hook response previews truncate at a valid UTF-8 boundary, preventing logging from panicking on multibyte response bodies in both orchestration implementations.

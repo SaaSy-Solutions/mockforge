@@ -259,18 +259,23 @@ When enabled, AI outputs are frozen to deterministic YAML/JSON.
 ### Seeded Generation (#852)
 
 `deterministic_mode` freezes AI output *after* generation. For
-reproducibility *during* generation — same prompt in, same spec out, across
-machines and CI runs — use a sampling seed:
+repeatability *during* generation, use a sampling seed. Provider support
+and runtime changes can still affect the generated output:
 
 ```yaml
-# mockforge.yaml
-ai:
-  seed: 42          # per-deployment default
+# mockforge.yaml: merge into your existing MockAI provider configuration
+mockai:
+  intelligent_behavior:
+    behavior_model:
+      seed: 42
 ```
 
-or via the environment: `MOCKFORGE_AI_SEED=42`. A seed set on an individual
-request overrides both. Resolution order: request > config >
-`MOCKFORGE_AI_SEED`.
+For AI authoring services using `LlmClient`, set `BehaviorModelConfig.seed`
+or use `MOCKFORGE_AI_SEED=42`. A seed on the typed `LlmGenerationRequest`
+overrides the client configuration and environment. Resolution order:
+request > client config > `MOCKFORGE_AI_SEED`. An HTTP authoring endpoint
+must explicitly expose and forward a request seed to support that override;
+adding an arbitrary `seed` field does not enable it.
 
 Provider support:
 
@@ -281,12 +286,20 @@ Provider support:
 | Ollama | native (`options.seed`) |
 | Anthropic | none — pin `temperature: 0` instead; identical prompts are typically stable but not guaranteed byte-identical |
 
-**Determinism guarantee for CI:** with a fixed seed, fixed model version,
-and fixed temperature, seeded providers return identical output for
-identical input. The recommended QA workflow is still generate-once,
-bake-to-fixtures (above / `auto_freeze`): treat the LLM as an authoring
-tool and run tests against frozen mocks, so provider-side variance can
-never reach an assertion.
+**CI reproducibility:** a seed improves repeatability; MockForge does not
+guarantee byte-identical output from a live provider. For example,
+[OpenAI documents seed sampling as best effort](https://developers.openai.com/api/reference/resources/chat/subresources/completions/methods/create)
+and explicitly does not guarantee determinism. Pin the model version,
+prompt, seed, and generation settings when authoring fixtures, and review
+changes when upgrading a provider or model.
+
+For stable assertions, generate once and bake the result to YAML/JSON
+fixtures (`auto_freeze`, above). Commit those artifacts and configure CI
+to serve the committed fixtures without calling the provider or regenerating
+them. Frozen data stays unchanged until you deliberately replace it;
+response templates, timestamps, randomness, and stateful behavior must also
+be disabled or pinned if your tests require byte-identical HTTP responses.
+This workflow complements the AI generation rollout tracked in #842.
 
 ### System Coherence Validation
 
