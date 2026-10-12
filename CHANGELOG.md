@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Fixed
+
+- **[Cloud]** Hosted-mock spec upload uses a keyboard-accessible native button, and deployment table headers expose column semantics. Cloud configuration and dashboard browser tests follow their supported workspace features, while local server controls retain separate coverage. (#1051)
+
 ## [0.3.233] - 2026-10-12
 
 ### Fixed

@@ -57,7 +57,7 @@ setup('authenticate to MockForge Cloud', async ({ page }) => {
   // Fill in login form
   await page.getByPlaceholder('Enter your email').fill(E2E_EMAIL);
   await page.getByPlaceholder('Enter your password').fill(E2E_PASSWORD);
-  await page.getByRole('button', { name: 'Sign In' }).click();
+  await page.getByRole('button', { name: 'Sign In', exact: true }).click();
 
   // Wait for successful login — sidebar nav appears
   await expect(
