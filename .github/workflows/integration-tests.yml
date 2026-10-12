@@ -32,6 +32,10 @@ env:
   # consistent with rustc being killed under CPU/memory pressure
   # without triggering the OOM-killer log).
   CARGO_BUILD_JOBS: "4"
+  # This job already needs the release CLI and release E2E harness. Keep
+  # integration tests in that profile too, instead of retaining a second
+  # debug dependency graph while the release harness is linked.
+  CARGO_INCREMENTAL: "0"
   # Force rustup to use stable regardless of whatever a sibling repo
   # pinned as the user-level default. `dtolnay/rust-toolchain@stable`
   # installs stable but does not change the default; RUSTUP_TOOLCHAIN
@@ -49,10 +53,8 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: [self-hosted, linux, x64, rust]
-    # 30 min was tight even on a warm target/. After the target/ size
-    # guard wipes at >30GB, cold rebuilds take ~25 min plus test time,
-    # which overran the prior limit. 60 min leaves headroom for the
-    # occasional cold run without holding the runner hostage.
+    # Cold release builds plus test execution can exceed 30 minutes.
+    # The cache guard is read-only and never wipes target/.
     timeout-minutes: 60
 
     steps:
@@ -146,7 +148,7 @@ jobs:
       # The E2E phase later in this job runs them with --test-threads=1.
       - name: Run integration tests (non-ignored)
         run: |
-          cargo test --package mockforge-integration-tests --test '*' -- --nocapture --skip 'protocols::'
+          cargo test --package mockforge-integration-tests --release --test '*' -- --nocapture --skip 'protocols::'
 
       - name: Upload test artifacts
         if: always()
@@ -170,6 +172,10 @@ jobs:
       #
       # E2E runs only on PRs and main (the former job's `if:` gate) — skipped
       # on develop pushes and manual dispatch.
+      - name: Check disk headroom before E2E execution
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+        run: python3 scripts/ci/check_rust_cache.py --workspace "$GITHUB_WORKSPACE"
+
       - name: Run E2E tests
         if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
         # Target the `e2e` integration-test binary (tests/tests/e2e.rs) and
