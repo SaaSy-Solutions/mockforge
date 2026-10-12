@@ -1343,7 +1343,7 @@ pub trait RegistryStore: Send + Sync + 'static {
         input: HostedMockCreation<'_>,
     ) -> StoreResult<HostedMock> {
         if input.workspace_id.is_some() {
-            return Err(crate::error::StoreError::Database(sqlx::Error::Protocol(
+            return Err(StoreError::Database(sqlx::Error::Protocol(
                 "Workspace-attributed hosting is unsupported by this store".into(),
             )));
         }
