@@ -40,3 +40,21 @@ The database claim and Redis delivery are separate operations. A Redis failure
 is logged after the queued run commits; this scheduling path does not promise
 automatic queue redelivery or exactly-once executor delivery. Changes to cron
 scheduling do not add observability alert ingestion.
+
+## Scheduler regression test
+
+`MOCKFORGE_PROBE_TEST_DATABASE_URL` is a test-only connection URL for the
+ignored PostgreSQL scheduler regression. It is unset by default and is not
+read by the running registry. Use a disposable PostgreSQL fixture whose role
+has `CREATEDB` and the superuser or `BYPASSRLS` privileges required by migrations.
+The test creates a separate UUID database, applies SQLx migrations, and checks
+concurrent claims, interval compatibility, disabled services, and rollback.
+Dispose of the fixture after the test, including when an assertion fails.
+
+With that fixture URL set in the environment, run:
+
+```sh
+cargo test --locked -p mockforge-registry-server --lib \
+  workers::contract_probe::postgres_tests::due_claims_serialize_and_failed_timestamp_rolls_back_run \
+  -- --ignored --nocapture
+```
