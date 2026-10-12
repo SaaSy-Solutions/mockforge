@@ -17,8 +17,39 @@ use mockforge_vbr::{
 };
 use std::sync::Arc;
 
+// Managers register a process-wide clock; readers and writers must share
+// isolation even though each test has its own Tokio runtime.
+static GLOBAL_CLOCK_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+struct GlobalClockGuard {
+    _lock: tokio::sync::MutexGuard<'static, ()>,
+    previous: Option<Arc<VirtualClock>>,
+}
+
+impl GlobalClockGuard {
+    async fn acquire() -> Self {
+        let lock = GLOBAL_CLOCK_TEST_LOCK.lock().await;
+        let previous = mockforge_core::time_travel::get_global_clock();
+        mockforge_core::time_travel::unregister_global_clock();
+        Self {
+            _lock: lock,
+            previous,
+        }
+    }
+}
+
+impl Drop for GlobalClockGuard {
+    fn drop(&mut self) {
+        mockforge_core::time_travel::unregister_global_clock();
+        if let Some(previous) = self.previous.take() {
+            mockforge_core::time_travel::register_global_clock(previous);
+        }
+    }
+}
+
 #[tokio::test]
 async fn test_virtual_clock_basic() {
+    let _clock_guard = GlobalClockGuard::acquire().await;
     let clock = Arc::new(VirtualClock::new());
     assert!(!clock.is_enabled());
 
@@ -37,6 +68,7 @@ async fn test_virtual_clock_basic() {
 
 #[tokio::test]
 async fn test_time_travel_manager() {
+    let _clock_guard = GlobalClockGuard::acquire().await;
     let config = TimeTravelConfig {
         enabled: true,
         initial_time: Some(Utc::now()),
@@ -56,6 +88,7 @@ async fn test_time_travel_manager() {
 
 #[tokio::test]
 async fn test_cron_scheduler() {
+    let _clock_guard = GlobalClockGuard::acquire().await;
     let clock = Arc::new(VirtualClock::new());
     let test_time = Utc::now();
     clock.enable_and_set(test_time);
@@ -84,6 +117,7 @@ async fn test_cron_scheduler() {
 
 #[tokio::test]
 async fn test_mutation_rules_basic() {
+    let _clock_guard = GlobalClockGuard::acquire().await;
     let manager = MutationRuleManager::new();
 
     let rule = MutationRule::new(
@@ -108,6 +142,7 @@ async fn test_mutation_rules_basic() {
 #[ignore = "Timing-sensitive test - may be flaky in CI"]
 #[tokio::test]
 async fn test_mutation_rules_interval_trigger() {
+    let _clock_guard = GlobalClockGuard::acquire().await;
     let manager = MutationRuleManager::new();
 
     let rule = MutationRule::new(
@@ -135,6 +170,7 @@ async fn test_mutation_rules_interval_trigger() {
 
 #[tokio::test]
 async fn test_mutation_rules_at_time_trigger() {
+    let _clock_guard = GlobalClockGuard::acquire().await;
     let manager = MutationRuleManager::new();
 
     let rule = MutationRule::new(
@@ -155,6 +191,7 @@ async fn test_mutation_rules_at_time_trigger() {
 
 #[tokio::test]
 async fn test_time_advancement_formats() {
+    let _clock_guard = GlobalClockGuard::acquire().await;
     // Test that time advancement accepts various formats
     // This is tested through the actual advance functionality
     let clock = Arc::new(VirtualClock::new());
@@ -177,9 +214,11 @@ async fn test_time_advancement_formats() {
 
 #[tokio::test]
 async fn test_vbr_snapshot_with_time_travel() {
+    let _clock_guard = GlobalClockGuard::acquire().await;
     // Create VBR engine
     let config = VbrConfig::default().with_storage_backend(StorageBackend::Memory);
     let engine = VbrEngine::new(config).await.unwrap();
+    let snapshot_dir = tempfile::tempdir().unwrap();
 
     // Create a snapshot with time travel state
     let time_travel_state = mockforge_vbr::TimeTravelSnapshotState {
@@ -194,7 +233,7 @@ async fn test_vbr_snapshot_with_time_travel() {
         .create_snapshot_with_time_travel(
             "test-snapshot",
             Some("Test snapshot with time travel".to_string()),
-            "./test_snapshots",
+            snapshot_dir.path().to_str().unwrap(),
             true,
             Some(time_travel_state.clone()),
         )
@@ -209,6 +248,7 @@ async fn test_vbr_snapshot_with_time_travel() {
 
 #[tokio::test]
 async fn test_token_expiration_with_virtual_clock() {
+    let _clock_guard = GlobalClockGuard::acquire().await;
     use mockforge_vbr::auth::VbrAuthService;
 
     // Create auth service with 1 hour token expiration
@@ -238,13 +278,15 @@ async fn test_token_expiration_with_virtual_clock() {
     // Register clock globally (in real usage, this would be done by TimeTravelManager)
     mockforge_core::time_travel::register_global_clock(clock.clone());
 
-    // Token should now be expired (if auth service uses virtual clock)
-    // Note: This test assumes auth service is updated to use virtual clock
-    // The actual implementation may vary
+    assert!(
+        auth_service.validate_token(&token).is_err(),
+        "advanced virtual time must expire the token"
+    );
 }
 
 #[tokio::test]
 async fn test_cron_job_execution() {
+    let _clock_guard = GlobalClockGuard::acquire().await;
     let clock = Arc::new(VirtualClock::new());
     let test_time = Utc::now();
     clock.enable_and_set(test_time);
@@ -278,6 +320,7 @@ async fn test_cron_job_execution() {
 
 #[tokio::test]
 async fn test_mutation_rule_execution() {
+    let _clock_guard = GlobalClockGuard::acquire().await;
     // This test would require a VBR engine with entities
     // For now, we test the rule creation and scheduling
     let manager = MutationRuleManager::new();
@@ -303,6 +346,7 @@ async fn test_mutation_rule_execution() {
 
 #[tokio::test]
 async fn test_time_scale_factor() {
+    let _clock_guard = GlobalClockGuard::acquire().await;
     let clock = Arc::new(VirtualClock::new());
     clock.enable_and_set(Utc::now());
     clock.set_scale(2.0); // 2x speed
@@ -318,6 +362,7 @@ async fn test_time_scale_factor() {
 
 #[tokio::test]
 async fn test_scenario_save_and_load() {
+    let _clock_guard = GlobalClockGuard::acquire().await;
     let config = TimeTravelConfig {
         enabled: true,
         initial_time: Some(Utc::now()),

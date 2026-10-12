@@ -79,3 +79,12 @@ npm run build
 ## License
 
 This project is part of MockForge and follows the same dual MIT/Apache licensing.
+
+## Cloud beta-interest flag
+
+The unfinished cloud plugin runtime interest banner is hidden by default.
+Set `VITE_CLOUD_PLUGIN_BETA_INTEREST_ENABLED=true` when building the cloud
+UI to opt into the beta-interest form. Other values leave it hidden and
+avoid calling the interest API. This flag enables the interest form only;
+it does not enable a hosted plugin runtime. Self-hosted builds always hide
+the banner. Rebuild and deploy the frontend to change the flag.
