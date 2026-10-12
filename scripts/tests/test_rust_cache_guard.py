@@ -3,11 +3,13 @@ import importlib.util
 from pathlib import Path
 import shutil
 import tempfile
+import sys
 import unittest
 from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT / "scripts/ci"))
 SPEC = importlib.util.spec_from_file_location("guard", ROOT / "scripts/ci/check_rust_cache.py")
 GUARD = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(GUARD)

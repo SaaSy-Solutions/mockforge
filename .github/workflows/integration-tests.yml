@@ -9,6 +9,7 @@ on:
       - 'Cargo.lock'
       - '.github/workflows/integration-tests.yml'
       - 'scripts/ci/check_rust_cache.py'
+      - 'scripts/ci/rust_cache_*.py'
       - 'scripts/tests/test_rust_cache_guard.py'
   pull_request:
     branches: [main, develop]
@@ -18,6 +19,7 @@ on:
       - 'Cargo.lock'
       - '.github/workflows/integration-tests.yml'
       - 'scripts/ci/check_rust_cache.py'
+      - 'scripts/ci/rust_cache_*.py'
       - 'scripts/tests/test_rust_cache_guard.py'
   workflow_dispatch:
 
