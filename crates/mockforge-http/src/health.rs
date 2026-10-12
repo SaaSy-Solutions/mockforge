@@ -357,13 +357,36 @@ async fn health_check(
 
 /// Create health check router with all probe endpoints
 pub fn health_router(health_manager: Arc<HealthManager>) -> axum::Router {
+    health_router_with_exclusions(health_manager, &[])
+}
+
+/// Paths served by the built-in health probes.
+pub(super) const HEALTH_PATHS: [&str; 4] = [
+    "/health",
+    "/health/live",
+    "/health/ready",
+    "/health/startup",
+];
+
+/// Register only probes that do not overlap an explicit mock handler.
+pub(super) fn health_router_with_exclusions(
+    health_manager: Arc<HealthManager>,
+    excluded_paths: &[&str],
+) -> axum::Router {
     use axum::Router;
-    Router::new()
-        .route("/health", get(health_check))
-        .route("/health/live", get(liveness_probe))
-        .route("/health/ready", get(readiness_probe))
-        .route("/health/startup", get(startup_probe))
-        .with_state(health_manager)
+    let mut app = Router::new();
+    let handlers = [
+        get(health_check),
+        get(liveness_probe),
+        get(readiness_probe),
+        get(startup_probe),
+    ];
+    for (path, handler) in HEALTH_PATHS.into_iter().zip(handlers) {
+        if !excluded_paths.contains(&path) {
+            app = app.route(path, handler);
+        }
+    }
+    app.with_state(health_manager)
 }
 
 /// Create health check router with custom prefix

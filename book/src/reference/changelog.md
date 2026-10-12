@@ -4,6 +4,8 @@
 
 ### Fixed
 
+- **[DevX]** Explicit mock health routes coexist with built-in health probes instead of crashing server startup; this restores the generated `init` project's OpenAPI example. (#851)
+- **[DevX]** The README opens with a working Docker example and a reproducible cold-start measurement. New `init` projects print their startup command and test request; installation guidance no longer promises a 30-second source build. (#851)
 - **[Cloud]** HTTP hook response previews truncate at a valid UTF-8 boundary, preventing logging from panicking on multibyte response bodies in both orchestration implementations.
 
 - **[DevX]** `ftp serve --config` reads standalone FTP settings or a server YAML `ftp` section, loads configuration-relative fixture directories, and honors explicit CLI overrides. FTP listeners apply the configured passive port range and idle timeout. (#794)

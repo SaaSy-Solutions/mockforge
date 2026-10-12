@@ -1807,7 +1807,14 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Start with basic router
     let mut app = Router::new();
-    let mut include_default_health = true;
+    // Configured routes use an any-method dispatcher and reserve their entire path.
+    let mut mock_health_paths: Vec<String> = route_configs
+        .as_ref()
+        .into_iter()
+        .flatten()
+        .filter(|route| health::HEALTH_PATHS.contains(&route.path.as_str()))
+        .map(|route| route.path.clone())
+        .collect();
     let mut captured_routes: Vec<RouteInfo> = Vec::new();
 
     // If an OpenAPI spec is provided, integrate it
@@ -1857,13 +1864,16 @@ pub async fn build_router_with_chains_and_multi_tenant(
                 }
                 registry = registry.with_overrides(Arc::new(overrides.clone()));
 
-                if registry
-                    .routes()
-                    .iter()
-                    .any(|route| route.method == "GET" && route.path == "/health")
-                {
-                    include_default_health = false;
-                }
+                mock_health_paths.extend(
+                    registry
+                        .routes()
+                        .iter()
+                        .filter(|route| {
+                            route.method.eq_ignore_ascii_case("GET")
+                                && health::HEALTH_PATHS.contains(&route.path.as_str())
+                        })
+                        .map(|route| route.path.clone()),
+                );
                 // Capture route info for the /__mockforge/routes endpoint
                 captured_routes = registry
                     .routes()
@@ -2128,12 +2138,11 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Add health check endpoints
     if let Some(health) = health_manager {
-        // Use comprehensive health check router with all probe endpoints
-        app = app.merge(health::health_router(health));
-        info!(
-            "Health check endpoints enabled: /health, /health/live, /health/ready, /health/startup"
-        );
-    } else if include_default_health {
+        // Explicit mock handlers take precedence over overlapping built-in probes.
+        let excluded_paths: Vec<&str> = mock_health_paths.iter().map(String::as_str).collect();
+        app = app.merge(health::health_router_with_exclusions(health, &excluded_paths));
+        info!("Default health probes enabled on paths not supplied by mock routes");
+    } else if !mock_health_paths.iter().any(|path| path == "/health") {
         // Fallback to basic health endpoint for backwards compatibility
         app = app.route(
             "/health",
