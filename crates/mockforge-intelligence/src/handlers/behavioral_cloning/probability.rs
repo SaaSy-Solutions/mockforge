@@ -52,80 +52,17 @@ pub async fn build_probability_model<S: BehavioralCloningStateProvider>(
         ));
     }
 
-    // Extract data for model building
-    let mut status_codes = Vec::new();
-    let mut latencies_ms = Vec::new();
-    let mut error_responses = Vec::new();
-
-    for (req, resp_opt) in &exchanges {
-        // Get status code from request or response
-        let status_code = if let Some(resp) = resp_opt {
-            resp.status_code as u16
-        } else if let Some(code) = req.status_code {
-            code as u16
-        } else {
-            continue; // Skip if no status code
-        };
-
-        status_codes.push(status_code);
-
-        // Get latency
-        if let Some(duration) = req.duration_ms {
-            latencies_ms.push(duration as u64);
-        }
-
-        // Extract error response body if status >= 400
-        if status_code >= 400 {
-            if let Some(resp) = resp_opt {
-                if let Some(ref body) = resp.body {
-                    // Try to parse as JSON
-                    if let Ok(json_body) = serde_json::from_str::<Value>(body) {
-                        error_responses.push((status_code, json_body));
-                    } else {
-                        // If not JSON, create a simple error object
-                        error_responses.push((
-                            status_code,
-                            json!({
-                                "error": body.clone()
-                            }),
-                        ));
-                    }
-                }
-            }
-        }
-    }
-
-    // Extract request and response payloads
-    let mut request_payloads = Vec::new();
-    let mut response_payloads = Vec::new();
-
-    for (req, resp_opt) in &exchanges {
-        // Parse request body if available
-        if let Some(ref body) = req.body {
-            if let Ok(json) = serde_json::from_str::<Value>(body) {
-                request_payloads.push(json);
-            }
-        }
-
-        // Parse response body if available
-        if let Some(ref resp) = resp_opt {
-            if let Some(ref body) = resp.body {
-                if let Ok(json) = serde_json::from_str::<Value>(body) {
-                    response_payloads.push(json);
-                }
-            }
-        }
-    }
+    let data = super::probability_data::ModelData::from_exchanges(&exchanges);
 
     // Build probability model
     let model = ProbabilisticModel::build_probability_model_from_data(
         &request.endpoint,
         &request.method,
-        &status_codes,
-        &latencies_ms,
-        &error_responses,
-        &request_payloads,
-        &response_payloads,
+        &data.status_codes,
+        &data.latencies_ms,
+        &data.error_responses,
+        &data.request_payloads,
+        &data.response_payloads,
     );
 
     // Store model in database

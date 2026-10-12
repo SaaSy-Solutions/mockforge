@@ -5,6 +5,7 @@
 
 mod amplification;
 mod probability;
+mod probability_data;
 mod sequences;
 
 pub use amplification::{apply_amplification, get_rare_edges, ApplyAmplificationRequest};
