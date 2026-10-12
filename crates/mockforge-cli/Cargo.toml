@@ -33,6 +33,7 @@ mockforge-contracts = { path = "../mockforge-contracts" }
 mockforge-import = { path = "../mockforge-import" }
 mockforge-workspace = { path = "../mockforge-workspace" }
 mockforge-http = { version = "0.3.233", path = "../mockforge-http", optional = true }
+mockforge-proxy = { version = "0.3.233", path = "../mockforge-proxy", optional = true }
 mockforge-ws = { version = "0.3.233", path = "../mockforge-ws", optional = true }
 mockforge-grpc = { version = "0.3.233", path = "../mockforge-grpc", optional = true }
 mockforge-graphql = { version = "0.3.233", path = "../mockforge-graphql", optional = true }
@@ -143,7 +144,7 @@ stt-vosk = ["vosk", "cpal", "hound"]  # Offline STT using vosk-rs
 stt-all = ["stt-cloud", "stt-vosk"]
 # Studio packs feature (requires mockforge-scenarios with studio-packs feature)
 studio-packs = ["mockforge-scenarios/studio-packs"]
-http = ["mockforge-http", "mockforge-http/conformance"]
+http = ["mockforge-http", "mockforge-http/conformance", "dep:mockforge-proxy"]
 mqtt = ["mockforge-mqtt", "mockforge-http/mqtt", "rumqttc"]
 ws = ["mockforge-ws"]
 grpc = ["mockforge-grpc"]

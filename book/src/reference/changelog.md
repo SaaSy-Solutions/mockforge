@@ -2,9 +2,17 @@
 
 ## [Unreleased]
 
+### Added
+
+- **[Contracts]** Add the `proxy` CLI command with passive or strict OpenAPI conformance validation and the shared violation feed. Preserve binary and redirect responses, honor configured upstream timeouts, and validate response status ranges, default schemas, and malformed JSON. (#864)
+
 ### Fixed
 
 - **[DevX]** Publish Recorder before the AMQP, Kafka and MQTT crates that depend on it. The publish-list guard checks normal and build dependency order, preventing partial releases caused by missing same-version dependencies.
+
+- **[Security]** Update the locked QUIC protocol dependency to `quinn-proto` 0.11.18, fixing five RustSec packet-handling and memory-exhaustion advisories. Its required Rand 0.10 patch dependency is updated without enabling new protocol features.
+
+- **[Cloud]** Contract-drift AI callbacks carry the persisted run identity so usage audits identify the originating user. The registry verifies the run, suite, and sampled workspace belong to the requested organization and rejects forged actor claims; scheduled and older anonymous callbacks remain anonymous. (#869)
 
 ## [0.3.233] - 2026-10-12
 
