@@ -517,6 +517,7 @@ async fn observability_alert_http_and_worker_lifecycle() {
         json!({"metric":"error_count","threshold":0,"severity":"critical","window_minutes":5}),
         json!({"metric":"error_count","threshold":1,"severity":"bogus","window_minutes":5}),
         json!({"metric":"error_count","threshold":1,"severity":"critical","window_minutes":0}),
+        json!({"metric":"error_count","threshold":1,"severity":"critical","window_minutes":5,"protocol":"bogus"}),
     ] {
         let response = own
             .post(&path)
@@ -797,6 +798,42 @@ async fn observability_alert_http_and_worker_lifecycle() {
         1,
         "failed raise retries after rollback"
     );
+    // Recorder protocols use different status domains. Isolate each query
+    // by both protocol and path so another protocol cannot affect recovery.
+    for (protocol, failure, success) in [("grpc", 13, 0), ("graphql", 400, 200)] {
+        let protocol_path = format!("/protocol-{protocol}");
+        seed_capture(&own, "POST", &protocol_path, "{}", "{}", None, failure, Utc::now()).await;
+        sqlx::query("UPDATE runtime_captures SET protocol=$1,response_status_code=$2 WHERE deployment_id=$3 AND path=$4")
+            .bind(protocol).bind(failure).bind(own.deployment_id).bind(&protocol_path)
+            .execute(&pool).await.unwrap();
+        let response=own.post(&path).json(&json!({"name":format!("{protocol} recorder failure"),"kind":"metrics","filters":{"alert":{"metric":"error_count","threshold":1,"severity":"critical","window_minutes":5,"protocol":protocol,"path_contains":protocol_path}}})).send().await.unwrap();
+        assert!(response.status().is_success());
+        let query =
+            Uuid::parse_str(response.json::<Value>().await.unwrap()["id"].as_str().unwrap())
+                .unwrap();
+        tick(&pool).await;
+        assert_eq!(incident_count(&pool, org, query).await, 1, "protocol error must raise");
+        sqlx::query("UPDATE runtime_captures SET response_status_code=999,status_code=999 WHERE deployment_id=$1 AND path=$2")
+            .bind(own.deployment_id).bind(&protocol_path).execute(&pool).await.unwrap();
+        tick(&pool).await;
+        let open: i64=sqlx::query_scalar("SELECT COUNT(*) FROM incidents WHERE org_id=$1 AND dedupe_key=$2 AND resolved_at IS NULL")
+            .bind(org).bind(query.to_string()).fetch_one(&pool).await.unwrap();
+        assert_eq!(open, 1, "invalid status must not prove recovery");
+        // A different protocol at the same path must not dilute or resolve it.
+        sqlx::query("UPDATE runtime_captures SET protocol='http',response_status_code=200,status_code=200 WHERE deployment_id=$1 AND path=$2")
+            .bind(own.deployment_id).bind(&protocol_path).execute(&pool).await.unwrap();
+        tick(&pool).await;
+        let open: i64=sqlx::query_scalar("SELECT COUNT(*) FROM incidents WHERE org_id=$1 AND dedupe_key=$2 AND resolved_at IS NULL")
+            .bind(org).bind(query.to_string()).fetch_one(&pool).await.unwrap();
+        assert_eq!(open, 1, "protocol filter must exclude unrelated samples");
+        sqlx::query("UPDATE runtime_captures SET protocol=$1,response_status_code=$2,status_code=$2 WHERE deployment_id=$3 AND path=$4")
+            .bind(protocol).bind(success).bind(own.deployment_id).bind(&protocol_path)
+            .execute(&pool).await.unwrap();
+        tick(&pool).await;
+        let resolved: i64=sqlx::query_scalar("SELECT COUNT(*) FROM incidents WHERE org_id=$1 AND dedupe_key=$2 AND resolved_at IS NOT NULL")
+            .bind(org).bind(query.to_string()).fetch_one(&pool).await.unwrap();
+        assert_eq!(resolved, 1, "valid protocol success resolves the incident");
+    }
     // Remove only this test's synthetic organizations; shared CI fixture lives.
     for id in [org, foreign_org] {
         sqlx::query("DELETE FROM organizations WHERE id=$1")

@@ -28,6 +28,8 @@ pub struct ObservabilityAlert {
     pub service_name: Option<String>,
     #[serde(default)]
     pub path_contains: Option<String>,
+    #[serde(default)]
+    pub protocol: Option<String>,
 }
 
 fn default_min_samples() -> i64 {
@@ -75,6 +77,18 @@ impl ObservabilityAlert {
         }
         if workspace_id.is_some() && kind != "metrics" {
             return Err("Workspace alert scope requires metrics/captures; logs and traces have no workspace attribution".into());
+        }
+        if let Some(protocol) = &rule.protocol {
+            if kind != "metrics"
+                || !matches!(
+                    protocol.as_str(),
+                    "http" | "grpc" | "graphql" | "websocket" | "kafka" | "mqtt" | "amqp"
+                )
+            {
+                return Err(
+                    "protocol filters require metrics and a supported recorder protocol".into()
+                );
+            }
         }
         if rule.service_name.is_some() && kind != "traces" {
             return Err("service_name is supported only for trace alerts".into());

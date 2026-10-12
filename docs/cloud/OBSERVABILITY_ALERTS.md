@@ -22,6 +22,7 @@ Content-Type: application/json
       "metric": "error_count",
       "threshold": 1,
       "severity": "critical",
+      "protocol": "http",
       "window_minutes": 5,
       "min_samples": 5,
       "enabled": true
@@ -38,11 +39,11 @@ The dashboard query and alert rule each keep their own window. PATCH `/api/v1/ob
 | --- | --- | --- | --- |
 | `logs` | Structured request logs (`runtime_request_logs`) | HTTP status >= 500 | Request latency |
 | `traces` | OTLP spans (`runtime_traces`) | OTel ERROR status (2) | End minus start timestamp |
-| `metrics` | Recorded exchanges (`runtime_captures`) | Response status, falling back to request status, >= 500 | Recorded duration |
+| `metrics` | Recorded exchanges (`runtime_captures`) | HTTP/HTTP-style 5xx; gRPC nonzero completed response status; GraphQL recorded application errors (>= 400) | Recorded duration |
 
 Supported metrics are `sample_count`, `error_count`, `error_rate` (a fraction from 0 to 1), and `latency_p95_ms`. A value equal to or greater than the positive threshold breaches the rule. Windows must be 1..1440 minutes. `min_samples` defaults to 1 and must be positive. Error metrics count only observations with a known status; latency metrics count only valid, nonnegative durations. Incomplete responses and invalid durations cannot act as healthy evidence. Missing or insufficient samples, or missing latency for a latency rule, do not prove recovery and leave an existing incident open.
 
-All data is joined to an organization-owned hosted deployment. Optional `alert.deployment_id` restricts the rule to one owned deployment. `alert.service_name` is an exact trace-service filter; `alert.path_contains` is a literal substring filter for logs and captures. Unknown rule fields and incompatible filters are rejected instead of silently ignored. Deployment and workspace ownership are checked through the tenant-scoped API.
+All data is joined to an organization-owned hosted deployment. Optional `alert.deployment_id` restricts the rule to one owned deployment. `alert.service_name` is an exact trace-service filter; `alert.path_contains` is a literal substring filter for logs and captures. Capture rules also accept `alert.protocol`: `http`, `grpc`, `graphql`, `websocket`, `kafka`, `mqtt`, or `amqp`. Unknown/invalid status codes cannot prove recovery. Unknown rule fields and incompatible filters are rejected instead of silently ignored. Deployment and workspace ownership are checked through the tenant-scoped API.
 
 An optional saved-query `workspace_id` scopes **metrics/capture** rules to that workspace, whose ownership is checked again by the worker. Logs and traces do not carry workspace IDs; their rules support organization or deployment scope, and workspace-scoped log/trace rules are rejected. Hosted capture ingestion currently does not populate workspace IDs, so workspace rules see only correctly attributed captures. This existing ingestion gap is separate from alert evaluation.
 

@@ -81,14 +81,14 @@ async fn evaluate_query(
         }
     }
     let source = match query.kind.as_str() {
-        "logs" => "SELECT r.deployment_id, r.occurred_at, r.status >= 500 AS failed, CASE WHEN r.latency_ms >= 0 THEN r.latency_ms::double precision END AS latency, r.path, NULL::text AS service_name, NULL::uuid AS workspace_id FROM runtime_request_logs r",
-        "traces" => "SELECT r.deployment_id, r.occurred_at, r.status_code = 2 AS failed, CASE WHEN r.end_unix_nano >= r.start_unix_nano THEN (r.end_unix_nano::numeric-r.start_unix_nano::numeric)::double precision/1000000.0 END AS latency, NULL::text AS path, r.service_name, NULL::uuid AS workspace_id FROM runtime_traces r",
-        "metrics" => "SELECT r.deployment_id, r.occurred_at, COALESCE(r.response_status_code,r.status_code) >= 500 AS failed, CASE WHEN r.duration_ms >= 0 THEN r.duration_ms::double precision END AS latency, r.path, NULL::text AS service_name, r.workspace_id FROM runtime_captures r",
+        "logs" => "SELECT r.deployment_id, r.occurred_at, CASE WHEN r.status BETWEEN 100 AND 599 THEN r.status >= 500 END AS failed, CASE WHEN r.latency_ms >= 0 THEN r.latency_ms::double precision END AS latency, r.path, NULL::text AS service_name, NULL::uuid AS workspace_id, NULL::text AS protocol FROM runtime_request_logs r",
+        "traces" => "SELECT r.deployment_id, r.occurred_at, CASE WHEN r.status_code IN (0,1,2) THEN r.status_code = 2 END AS failed, CASE WHEN r.end_unix_nano >= r.start_unix_nano THEN (r.end_unix_nano::numeric-r.start_unix_nano::numeric)::double precision/1000000.0 END AS latency, NULL::text AS path, r.service_name, NULL::uuid AS workspace_id, NULL::text AS protocol FROM runtime_traces r",
+        "metrics" => "SELECT r.deployment_id, r.occurred_at, CASE WHEN r.protocol='grpc' AND r.response_status_code BETWEEN 0 AND 16 THEN r.response_status_code <> 0 WHEN r.protocol='graphql' AND COALESCE(r.response_status_code,r.status_code) BETWEEN 100 AND 599 THEN COALESCE(r.response_status_code,r.status_code) >= 400 WHEN r.protocol IN ('http','websocket','kafka','mqtt','amqp') AND COALESCE(r.response_status_code,r.status_code) BETWEEN 100 AND 599 THEN COALESCE(r.response_status_code,r.status_code) >= 500 END AS failed, CASE WHEN r.duration_ms >= 0 THEN r.duration_ms::double precision END AS latency, r.path, NULL::text AS service_name, r.workspace_id, r.protocol FROM runtime_captures r",
         _ => return Ok(()),
     };
     // Only the fixed source SQL above is interpolated. Every user filter is
     // bound, including literal substring matching (no LIKE wildcard expansion).
-    let statement = format!("SELECT COUNT(*) FILTER (WHERE CASE $8::text WHEN 'errors' THEN s.failed IS NOT NULL WHEN 'latency' THEN s.latency IS NOT NULL ELSE TRUE END)::bigint, COUNT(*) FILTER (WHERE s.failed)::bigint, percentile_cont(0.95) WITHIN GROUP (ORDER BY s.latency) FROM ({source}) s JOIN hosted_mocks hm ON hm.id=s.deployment_id WHERE hm.org_id=$1 AND hm.deleted_at IS NULL AND ($2::uuid IS NULL OR s.workspace_id=$2) AND ($3::uuid IS NULL OR s.deployment_id=$3) AND ($4::text IS NULL OR s.service_name=$4) AND ($5::text IS NULL OR strpos(s.path,$5)>0) AND s.occurred_at >= $6 AND s.occurred_at <= $7");
+    let statement = format!("SELECT COUNT(*) FILTER (WHERE CASE $8::text WHEN 'errors' THEN s.failed IS NOT NULL WHEN 'latency' THEN s.latency IS NOT NULL ELSE TRUE END)::bigint, COUNT(*) FILTER (WHERE s.failed)::bigint, percentile_cont(0.95) WITHIN GROUP (ORDER BY s.latency) FROM ({source}) s JOIN hosted_mocks hm ON hm.id=s.deployment_id WHERE hm.org_id=$1 AND hm.deleted_at IS NULL AND ($2::uuid IS NULL OR s.workspace_id=$2) AND ($3::uuid IS NULL OR s.deployment_id=$3) AND ($4::text IS NULL OR s.service_name=$4) AND ($5::text IS NULL OR strpos(s.path,$5)>0) AND ($9::text IS NULL OR s.protocol=$9) AND s.occurred_at >= $6 AND s.occurred_at <= $7");
     let observations = match rule.metric {
         AlertMetric::ErrorCount | AlertMetric::ErrorRate => "errors",
         AlertMetric::LatencyP95Ms => "latency",
@@ -104,6 +104,7 @@ async fn evaluate_query(
         .bind(now - chrono::Duration::minutes(i64::from(rule.window_minutes)))
         .bind(now)
         .bind(observations)
+        .bind(&rule.protocol)
         .fetch_one(&mut *connection)
         .await?;
     let dedupe = query.id.to_string();
