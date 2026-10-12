@@ -189,7 +189,7 @@ async fn trigger_scheduled_run(
 /// Returns the most recent cron fire time strictly after `lower_bound`
 /// and at or before `now`, if any. None means the cron hasn't ticked
 /// since `lower_bound` yet. Errors only on cron / tz parse failures.
-fn next_fire_in_window(
+pub(super) fn next_fire_in_window(
     cron_expr: &str,
     timezone: &str,
     lower_bound: DateTime<Utc>,

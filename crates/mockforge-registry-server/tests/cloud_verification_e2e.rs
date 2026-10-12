@@ -210,6 +210,89 @@ async fn seed_capture(
 }
 
 #[tokio::test]
+#[ignore = "requires the disposable registry E2E HTTP and PostgreSQL fixture"]
+async fn monitored_service_cron_http_validation_and_persistence() {
+    let base_url = std::env::var("REGISTRY_URL").expect("REGISTRY_URL must be set");
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let pool = PgPoolOptions::new().max_connections(2).connect(&database_url).await.unwrap();
+    let e = register_and_setup(&base_url, &pool).await;
+    let path = format!("/api/v1/workspaces/{}/monitored-services", e.workspace_id);
+    let workspace = Uuid::parse_str(&e.workspace_id).unwrap();
+    let baseline = json!({
+        "name": "cron HTTP fixture", "base_url": "https://example.test",
+        "traffic_source": "probe",
+    });
+
+    for invalid in [
+        json!({"probe_cron": "not a cron"}),
+        json!({"probe_cron": ""}),
+        json!({"probe_cron": "0 9 * * *"}),
+        json!({"probe_cron": "0 0 9 * * *", "probe_timezone": "Mars/Olympus"}),
+        json!({"probe_interval_secs": 0}),
+        json!({"traffic_source": "synthetic"}),
+    ] {
+        let mut request = baseline.clone();
+        request.as_object_mut().unwrap().extend(invalid.as_object().unwrap().clone());
+        let response = e.post(&path).json(&request).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let error: Value = response.json().await.unwrap();
+        assert!(error.to_string().contains("must be"), "validation error must be actionable");
+    }
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM monitored_services WHERE workspace_id=$1")
+            .bind(workspace)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 0, "invalid HTTP requests must not persist services");
+
+    let mut created = Vec::new();
+    for source in ["probe", "logs", "capture_session"] {
+        let mut request = baseline.clone();
+        request["traffic_source"] = json!(source);
+        request["probe_cron"] = json!("0 0 9 * * *");
+        request["probe_timezone"] = json!("America/New_York");
+        request["probe_interval_secs"] = json!(300);
+        let response = e.post(&path).json(&request).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let service: Value = response.json().await.unwrap();
+        assert_eq!(service["probe_cron"], request["probe_cron"]);
+        assert_eq!(service["probe_timezone"], request["probe_timezone"]);
+        assert_eq!(service["traffic_source"], request["traffic_source"]);
+        assert_eq!(service["probe_interval_secs"], json!(300));
+        let id = Uuid::parse_str(service["id"].as_str().unwrap()).unwrap();
+        let persisted: (Option<String>, String, Option<i32>) = sqlx::query_as(
+            "SELECT probe_cron,probe_timezone,probe_interval_secs FROM monitored_services WHERE id=$1",
+        ).bind(id).fetch_one(&pool).await.unwrap();
+        assert_eq!(persisted, (Some("0 0 9 * * *".into()), "America/New_York".into(), Some(300)));
+        created.push(id);
+    }
+    let response = e.post(&path).json(&baseline).send().await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let legacy: Value = response.json().await.unwrap();
+    assert!(legacy["probe_cron"].is_null());
+    assert_eq!(legacy["probe_timezone"], json!("UTC"));
+    assert!(legacy["probe_interval_secs"].is_null());
+    created.push(Uuid::parse_str(legacy["id"].as_str().unwrap()).unwrap());
+    let response = e.get(&path).send().await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let services: Vec<Value> = response.json().await.unwrap();
+    assert_eq!(services.len(), created.len());
+    for id in created {
+        let response = e
+            .client
+            .delete(format!("{}/api/v1/monitored-services/{id}", e.base_url))
+            .header("Authorization", e.auth())
+            .header("X-Organization-Id", &e.org_id)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+    assert_eq!(e.get(&path).send().await.unwrap().json::<Vec<Value>>().await.unwrap().len(), 0);
+}
+
+#[tokio::test]
 #[ignore]
 async fn cloud_verification_full_flow() {
     let base_url = std::env::var("REGISTRY_URL").expect("REGISTRY_URL must be set");

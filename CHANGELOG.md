@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Added
+
+- **[Cloud]** Monitored services support per-service cron schedules and IANA timezones, with legacy interval cadence preserved. Probe runs and due-state claims commit atomically so overlapping scheduler ticks do not enqueue the same occurrence twice. (#720)
+
 ### Fixed
 
 - **[Security]** Update the locked QUIC protocol dependency to `quinn-proto` 0.11.18, fixing five RustSec packet-handling and memory-exhaustion advisories. Its required Rand 0.10 patch dependency is updated without enabling new protocol features.

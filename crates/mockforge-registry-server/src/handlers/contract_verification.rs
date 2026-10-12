@@ -81,6 +81,12 @@ pub struct CreateMonitoredServiceRequest {
     /// Must be > 0 when present; omit to follow the global default.
     #[serde(default)]
     pub probe_interval_secs: Option<i32>,
+    /// Optional seconds-first cron expression; overrides interval cadence.
+    #[serde(default)]
+    pub probe_cron: Option<String>,
+    /// IANA timezone for cron evaluation. Omit for UTC.
+    #[serde(default)]
+    pub probe_timezone: Option<String>,
 }
 
 /// `POST /api/v1/workspaces/{workspace_id}/monitored-services`
@@ -110,6 +116,17 @@ pub async fn create_monitored_service(
             "probe_interval_secs must be a positive number of seconds".into(),
         ));
     }
+    let probe_timezone = request.probe_timezone.as_deref().unwrap_or("UTC");
+    probe_timezone
+        .parse::<chrono_tz::Tz>()
+        .map_err(|_| ApiError::InvalidRequest("probe_timezone must be an IANA timezone".into()))?;
+    if let Some(expression) = request.probe_cron.as_deref() {
+        expression.parse::<cron::Schedule>().map_err(|_| {
+            ApiError::InvalidRequest(
+                "probe_cron must be a valid seconds-first cron expression".into(),
+            )
+        })?;
+    }
 
     let row = with_org_context(state.db.runtime_pool(), org_id, |tx| {
         Box::pin(async move {
@@ -125,6 +142,8 @@ pub async fn create_monitored_service(
                     traffic_source: &request.traffic_source,
                     traffic_source_ref: request.traffic_source_ref.as_deref(),
                     probe_interval_secs: request.probe_interval_secs,
+                    probe_cron: request.probe_cron.as_deref(),
+                    probe_timezone: request.probe_timezone.as_deref().unwrap_or("UTC"),
                 },
             )
             .await?)
