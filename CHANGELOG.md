@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Fixed
+
+- **[Security]** Update the locked QUIC protocol dependency to `quinn-proto` 0.11.18, fixing five RustSec packet-handling and memory-exhaustion advisories. Its required Rand 0.10 patch dependency is updated without enabling new protocol features.
+
 ## [0.3.233] - 2026-10-12
 
 ### Fixed
