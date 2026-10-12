@@ -432,7 +432,10 @@ impl Hook {
                             url,
                             status,
                             if response_body.len() > 100 {
-                                format!("{}...", &response_body[..100])
+                                format!(
+                                    "{}...",
+                                    &response_body[..response_body.floor_char_boundary(100)]
+                                )
                             } else {
                                 response_body
                             }

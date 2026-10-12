@@ -277,3 +277,6 @@ pub enum ChaosError {
 }
 
 pub type Result<T> = std::result::Result<T, ChaosError>;
+
+#[cfg(test)]
+mod http_hook_unicode_tests;
