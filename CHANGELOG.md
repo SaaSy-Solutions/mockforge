@@ -4,6 +4,8 @@
 
 - **[DevX]** Explicit mock health routes coexist with built-in health probes instead of crashing server startup; this restores the generated `init` project's OpenAPI example. (#851)
 - **[DevX]** The README opens with a working Docker example and a reproducible cold-start measurement. New `init` projects print their startup command and test request; installation guidance no longer promises a 30-second source build. (#851)
+- **[Cloud]** Stripe trials allow checkout without a payment method and cancel when the trial ends without one; zero-trial paid checkout still collects a card. Actual SDK request tests cover both paid plans and billing intervals. (#837, #714)
+
 - **[Reality]** Verify persona CI-hit recording from actual HTTP headers through SQLite persistence, including optional run IDs and ignored blank/invalid labels, and document analytics setup and tenant-context limits. (#716)
 
 - **[DevX]** Retire the outdated shared-runner cleanup copy and its systemd units in favor of the infrastructure-owned script, preventing accidental replacement of newer host protections. (#706)
