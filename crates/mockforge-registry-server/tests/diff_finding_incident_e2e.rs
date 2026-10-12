@@ -241,27 +241,9 @@ async fn breaking_finding_raises_dedupes_and_dispatches() {
         "medium finding must stay an event, not an incident"
     );
 
-    // --- dispatcher drains the trigger queue -----------------------------
-    let client = reqwest::Client::new();
-    let dispatched =
-        mockforge_registry_server::workers::incident_dispatcher::run_tick(&pool, &client)
-            .await
-            .expect("dispatcher tick");
-
-    // The dispatcher records dispatch as an `incident_events` timeline row.
-    let marked: i64 = sqlx::query_scalar(
-        "SELECT COUNT(*) FROM incident_events \
-         WHERE incident_id = $1 AND event_type = 'notification_dispatched'",
-    )
-    .bind(incident.id)
-    .fetch_one(&pool)
-    .await
-    .expect("reload dispatch marker");
-    assert!(
-        marked > 0,
-        "dispatcher must mark the incident dispatched (tick dispatched {dispatched})"
-    );
-    let notification = tokio::time::timeout(Duration::from_secs(5), received.recv())
+    // Wait for the live server's worker rather than racing it with a second
+    // dispatcher. This also proves that the worker is started in the server.
+    let notification = tokio::time::timeout(Duration::from_secs(15), received.recv())
         .await
         .expect("webhook delivery deadline")
         .expect("webhook delivered");
@@ -270,6 +252,26 @@ async fn breaking_finding_raises_dedupes_and_dispatches() {
     assert_eq!(notification["incident"]["org_id"], run.org_id.to_string());
     assert_eq!(notification["incident"]["source"], "contract_drift");
     assert_eq!(notification["incident"]["severity"], "critical");
+    // The receiver sees the HTTP request before the worker can finish writing
+    // its timeline. Wait for completion before asserting the persisted result.
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let marked: i64 = sqlx::query_scalar(
+                "SELECT COUNT(*) FROM incident_events WHERE incident_id = $1 AND event_type = 'notification_dispatched'",
+            )
+            .bind(incident.id)
+            .fetch_one(&pool)
+            .await
+            .expect("reload dispatch marker");
+            if marked > 0 {
+                assert_eq!(marked, 1, "one completed trigger dispatch");
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("dispatch completion deadline");
     let sent: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM incident_events WHERE incident_id = $1 AND event_type = 'notification_sent'",
     ).bind(incident.id).fetch_one(&pool).await.expect("delivery timeline");
@@ -284,6 +286,7 @@ async fn breaking_finding_raises_dedupes_and_dispatches() {
     assert_eq!(delivery["channel_id"], channel.id.to_string());
     assert_eq!(delivery["ok"], true);
     assert_eq!(delivery["status_code"], 200);
+    let client = reqwest::Client::new();
     mockforge_registry_server::workers::incident_dispatcher::run_tick(&pool, &client)
         .await
         .expect("repeat dispatcher tick");
