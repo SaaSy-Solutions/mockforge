@@ -6,6 +6,10 @@
 
 - **[Cloud]** HTTP hook response previews truncate at a valid UTF-8 boundary, preventing logging from panicking on multibyte response bodies in both orchestration implementations.
 
+- **[Reality]** Verify persona CI-hit recording from actual HTTP headers through SQLite persistence, including optional run IDs and ignored blank/invalid labels, and document analytics setup and tenant-context limits. (#716)
+
+- **[DevX]** Retire the outdated shared-runner cleanup copy and its systemd units in favor of the infrastructure-owned script, preventing accidental replacement of newer host protections. (#706)
+
 - **[Contracts]** Swagger 2.0 imports use automatic conversion instead of rejecting the format. Reusable parameters/responses, inherited request bodies, nested schema references, and media-specific response examples survive loading and mock generation. (#838)
 
 - **[DevX]** Intelligence handler state construction tolerates Cargo database feature unification, restoring HTTP builds when Core enables database support independently. Explicit HTTP database connections are preserved. (#632)
