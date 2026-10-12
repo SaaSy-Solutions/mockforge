@@ -1,5 +1,6 @@
 """Exercise publisher exit status offline, without uploads or credentials."""
 
+import json
 import os
 from pathlib import Path
 import re
@@ -13,11 +14,22 @@ SCRIPT = ROOT / "scripts/publish-crates.sh"
 
 
 class PublishStatusTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Exercise the real ordering validator against the actual workspace graph,
+        # while keeping publication and registry queries fully stubbed below.
+        cls.metadata = json.loads(subprocess.check_output(
+            ["cargo", "metadata", "--locked", "--no-deps", "--format-version", "1"], cwd=ROOT,
+        ))
+
     def run_publisher(self, mode, dry_run=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "scripts").mkdir()
             shutil.copyfile(SCRIPT, root / "scripts/publish-crates.sh")
+            shutil.copyfile(ROOT / "scripts/check_publish_order.py", root / "scripts/check_publish_order.py")
+            metadata = root / "metadata.json"
+            metadata.write_text(json.dumps(self.metadata))
             (root / "Cargo.toml").write_text(
                 '[workspace.package]\nversion = "0.3.232"\n'
             )
@@ -40,13 +52,16 @@ class PublishStatusTests(unittest.TestCase):
             )
             cargo = tools / "cargo"
             cargo.write_text(
-                '#!/bin/sh\ncase " $* " in *" --dry-run "*) exit 0;; esac\n'
+                '#!/bin/sh\ncase " $* " in\n'
+                '  *" metadata "*) cat "$PUBLISH_TEST_METADATA"; exit $?;;\n'
+                '  *" --dry-run "*) exit 0;;\nesac\n'
                 'echo "fixture upload refused" >&2\nexit 1\n'
             )
             curl.chmod(0o700)
             cargo.chmod(0o700)
             env = dict(os.environ, PATH=f"{tools}:{os.environ['PATH']}")
             env["PUBLISH_TEST_MODE"] = mode
+            env["PUBLISH_TEST_METADATA"] = str(metadata)
             for name in ("CARGO_REGISTRY_TOKEN", "CRATES_IO_TOKEN"):
                 env.pop(name, None)
             args = ["bash", str(root / "scripts/publish-crates.sh")]
