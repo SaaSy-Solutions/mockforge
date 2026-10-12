@@ -7843,6 +7843,7 @@ dependencies = [
  "mockforge-pipelines",
  "mockforge-plugin-core",
  "mockforge-plugin-loader",
+ "mockforge-proxy",
  "mockforge-recorder",
  "mockforge-scenarios",
  "mockforge-smtp",
@@ -8815,6 +8816,7 @@ dependencies = [
 name = "mockforge-proxy"
 version = "0.3.233"
 dependencies = [
+ "async-compression",
  "axum 0.8.9",
  "chrono",
  "http 1.5.0",

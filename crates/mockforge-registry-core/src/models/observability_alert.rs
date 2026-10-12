@@ -39,6 +39,11 @@ fn default_enabled() -> bool {
     true
 }
 
+/// Apply a validation invariant without repeating error-construction branches.
+fn require(valid: bool, message: &str) -> Result<(), String> {
+    valid.then_some(()).ok_or_else(|| message.to_owned())
+}
+
 impl ObservabilityAlert {
     pub fn from_filters(
         filters: &serde_json::Value,
@@ -54,54 +59,81 @@ impl ObservabilityAlert {
         }
         let rule: Self = serde_json::from_value(value.clone())
             .map_err(|e| format!("Invalid observability alert: {e}"))?;
-        if !matches!(kind, "logs" | "traces" | "metrics") {
-            return Err("Alert kind must be logs, traces, or metrics".into());
-        }
-        if !rule.threshold.is_finite() || rule.threshold <= 0.0 {
-            return Err("Alert threshold must be finite and positive".into());
-        }
-        if matches!(rule.metric, AlertMetric::ErrorRate) && rule.threshold > 1.0 {
-            return Err(
-                "Error-rate threshold must be a fraction greater than 0 and at most 1".into()
-            );
-        }
-        if !(1..=1440).contains(&rule.window_minutes) || rule.min_samples < 1 {
-            return Err(
-                "Alert window must be 1..1440 minutes and min_samples must be positive".into()
-            );
-        }
-        if crate::incident_bus::map_alert_severity(&rule.severity).is_none() {
-            return Err(
-                "Alert severity must be critical, high, warning, medium, info, or low".into()
-            );
-        }
-        if workspace_id.is_some() && kind != "metrics" {
-            return Err("Workspace alert scope requires metrics/captures; logs and traces have no workspace attribution".into());
-        }
-        if let Some(protocol) = &rule.protocol {
-            if kind != "metrics"
-                || !matches!(
-                    protocol.as_str(),
-                    "http" | "grpc" | "graphql" | "websocket" | "kafka" | "mqtt" | "amqp"
-                )
-            {
-                return Err(
-                    "protocol filters require metrics and a supported recorder protocol".into()
-                );
-            }
-        }
-        if rule.service_name.is_some() && kind != "traces" {
-            return Err("service_name is supported only for trace alerts".into());
-        }
-        if rule.path_contains.is_some() && kind == "traces" {
-            return Err("path_contains is supported for logs and metrics alerts".into());
-        }
-        for text in [&rule.service_name, &rule.path_contains].into_iter().flatten() {
-            if text.trim().is_empty() || text.len() > 512 {
-                return Err("Alert text filters must contain 1..512 bytes".into());
-            }
-        }
+        require(
+            matches!(kind, "logs" | "traces" | "metrics"),
+            "Alert kind must be logs, traces, or metrics",
+        )?;
+        rule.validate_bounds()?;
+        rule.validate_scope(kind, workspace_id)?;
+        rule.validate_text_filters()?;
         Ok(Some(rule))
+    }
+
+    /// Validate numerical bounds and routing vocabulary independently of the
+    /// telemetry source. Keep the first failing field visible to API callers.
+    fn validate_bounds(&self) -> Result<(), String> {
+        require(
+            self.threshold.is_finite() && self.threshold > 0.0,
+            "Alert threshold must be finite and positive",
+        )?;
+        require(
+            !matches!(self.metric, AlertMetric::ErrorRate) || self.threshold <= 1.0,
+            "Error-rate threshold must be a fraction greater than 0 and at most 1",
+        )?;
+        require(
+            (1..=1440).contains(&self.window_minutes) && self.min_samples >= 1,
+            "Alert window must be 1..1440 minutes and min_samples must be positive",
+        )?;
+        require(
+            crate::incident_bus::map_alert_severity(&self.severity).is_some(),
+            "Alert severity must be critical, high, warning, medium, info, or low",
+        )
+    }
+
+    /// Reject scopes the selected telemetry schema cannot attribute. A
+    /// missing optional filter remains unrestricted within the tenant.
+    fn validate_scope(&self, kind: &str, workspace_id: Option<Uuid>) -> Result<(), String> {
+        require(
+            workspace_id.is_none() || kind == "metrics",
+            "Workspace alert scope requires metrics/captures; logs and traces have no workspace attribution",
+        )?;
+        if let Some(protocol) = &self.protocol {
+            require(
+                kind == "metrics",
+                "protocol filters require metrics and a supported recorder protocol",
+            )?;
+            require(
+                [
+                    "http",
+                    "grpc",
+                    "graphql",
+                    "websocket",
+                    "kafka",
+                    "mqtt",
+                    "amqp",
+                ]
+                .contains(&protocol.as_str()),
+                "protocol filters require metrics and a supported recorder protocol",
+            )?;
+        }
+        require(
+            self.service_name.is_none() || kind == "traces",
+            "service_name is supported only for trace alerts",
+        )?;
+        require(
+            self.path_contains.is_none() || kind != "traces",
+            "path_contains is supported for logs and metrics alerts",
+        )
+    }
+
+    fn validate_text_filters(&self) -> Result<(), String> {
+        for text in [&self.service_name, &self.path_contains].into_iter().flatten() {
+            require(
+                !text.trim().is_empty() && text.len() <= 512,
+                "Alert text filters must contain 1..512 bytes",
+            )?;
+        }
+        Ok(())
     }
 
     /// No data is not recovery: preserve the incident until a sampled window
