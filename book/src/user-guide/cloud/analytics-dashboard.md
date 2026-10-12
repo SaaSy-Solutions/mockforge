@@ -62,6 +62,32 @@ new-user                   89        2025-01-26
 churned-user               45        2025-01-25
 ```
 
+### Recording requests
+
+Enable the local analytics database before starting the mock server:
+
+```bash
+MOCKFORGE_ANALYTICS_DB=./analytics.db mockforge serve --spec api.yaml
+```
+
+Stamp requests from your CI suite with a persona label and an optional run ID:
+
+```bash
+curl http://localhost:3000/api/users \
+  -H 'X-MockForge-Persona: premium-customer' \
+  -H 'X-MockForge-CI-Run: gh-run-123'
+```
+
+Each request with a nonblank persona label records one hit asynchronously after
+its response. Surrounding whitespace is removed; blank, absent, or invalid UTF-8
+persona values are ignored. The run ID is optional. Without an analytics database,
+requests continue normally and no hits are stored. The label attributes test
+traffic; it does not select a persona or change the mock response.
+
+The local HTTP recorder currently leaves workspace and organization IDs unset.
+Per-tenant cloud analytics requires the separate tenant-context integration;
+these headers do not supply that context.
+
 ### Insights
 
 - **Coverage Gaps**: Personas not hit by CI
