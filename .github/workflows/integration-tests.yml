@@ -59,7 +59,9 @@ jobs:
         # (GH Actions context: `runner.*` is step-scoped). Writing to
         # `$GITHUB_ENV` here exports it to every subsequent step in this job,
         # including the rust-toolchain composite action and rust-cache.
-        run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+        run: |
+          echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_DIR=$GITHUB_WORKSPACE/target" >> "$GITHUB_ENV"
 
       - name: Checkout repository
         uses: actions/checkout@v7

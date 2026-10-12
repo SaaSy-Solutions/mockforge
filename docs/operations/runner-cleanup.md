@@ -54,7 +54,9 @@ The structural check examines completed library fingerprints. When Rust's
 cached dep-info declares library outputs, each declared artifact must be a
 nonempty regular file. This detects a missing `.rlib` even when its `.rmeta`
 still exists. Cached dep-info can contain another runner's absolute paths:
-only known output basenames are matched against this checkout's `target/deps`.
+only known output basenames are matched against the corresponding profile's
+`deps` directory in this checkout. The workflow pins `CARGO_TARGET_DIR` to the
+checkout's `target` so the inspected and compiled paths agree.
 Those stored paths are never opened. Cargo-check metadata and procedural-macro
 libraries are valid cache entries. Binary fingerprints are excluded because
 Rust-cache deliberately prunes profile-level executables.
