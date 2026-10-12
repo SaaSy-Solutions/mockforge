@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Fixed
+
+- **[DevX]** Publish Recorder before the AMQP, Kafka and MQTT crates that depend on it. The publish-list guard checks normal and build dependency order, preventing partial releases caused by missing same-version dependencies.
+
 ## [0.3.233] - 2026-10-12
 
 ### Fixed
