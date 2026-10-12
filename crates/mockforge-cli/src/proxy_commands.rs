@@ -96,39 +96,20 @@ pub async fn run(args: ProxyArgs) -> Result<()> {
         None
     };
     let router = build_router(&args, spec)?;
+    // Install handlers before binding so an immediate stop cannot race registration.
+    let shutdown = crate::shutdown::signal().context("Cannot install proxy shutdown handlers")?;
     let listener = tokio::net::TcpListener::bind((args.host, args.port))
         .await
         .context("Cannot bind proxy listener")?;
     println!("Proxy listening on {}", listener.local_addr()?);
-    axum::serve(listener, router).with_graceful_shutdown(shutdown()).await?;
+    axum::serve(listener, router)
+        .with_graceful_shutdown(async move {
+            if let Err(error) = shutdown.await {
+                tracing::error!(%error, "Proxy shutdown signal failed");
+            }
+        })
+        .await?;
     Ok(())
-}
-
-async fn shutdown() {
-    #[cfg(unix)]
-    {
-        let terminate = async {
-            match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
-                Ok(mut signal) => {
-                    signal.recv().await;
-                }
-                Err(error) => {
-                    tracing::error!(%error, "Cannot listen for SIGTERM");
-                    std::future::pending::<()>().await;
-                }
-            }
-        };
-        tokio::select! {
-            result = tokio::signal::ctrl_c() => {
-                if let Err(error) = result { tracing::error!(%error, "Cannot listen for Ctrl-C"); }
-            }
-            () = terminate => {}
-        }
-    }
-    #[cfg(not(unix))]
-    if let Err(error) = tokio::signal::ctrl_c().await {
-        tracing::error!(%error, "Cannot listen for Ctrl-C");
-    }
 }
 
 #[cfg(test)]

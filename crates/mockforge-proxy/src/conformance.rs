@@ -12,6 +12,9 @@
 //! spec's configured status instead of forwarding.
 
 mod encoding;
+mod parameters;
+
+use parameters::{cookie_parameters, header_parameters, query_parameters};
 mod response_schema;
 
 use response_schema::declared_json_schema;
@@ -335,71 +338,6 @@ impl ConformanceTap {
     }
 }
 
-fn query_parameters(query: Option<&str>) -> JsonMap<String, Value> {
-    let mut query_map = JsonMap::new();
-    if let Some(q) = query {
-        for pair in q.split('&') {
-            let mut kv = pair.splitn(2, '=');
-            if let (Some(k), Some(v)) = (kv.next(), kv.next()) {
-                if let (Ok(k), Ok(v)) = (urlencoding_decode(k), urlencoding_decode(v)) {
-                    query_map.insert(k, Value::String(v));
-                }
-            }
-        }
-    }
-    query_map
-}
-
-fn header_parameters(
-    headers: &HeaderMap,
-    route: Option<&mockforge_openapi::route::OpenApiRoute>,
-) -> JsonMap<String, Value> {
-    let mut header_values = JsonMap::new();
-    for (k, v) in headers {
-        if let Ok(vs) = v.to_str() {
-            header_values.insert(k.to_string(), Value::String(vs.to_string()));
-        }
-    }
-    // The validator looks up header params case-sensitively by their
-    // SPEC spelling, while axum lowercases wire names. Re-key every
-    // spec-declared header from the (case-insensitive) HeaderMap so
-    // `X-Trace` in the spec matches `x-trace` on the wire.
-    if let Some(route) = route {
-        for p in route.operation.parameters.iter() {
-            if let Some(openapiv3::Parameter::Header { parameter_data, .. }) = match p {
-                openapiv3::ReferenceOr::Item(param) => Some(param),
-                _ => None,
-            } {
-                if !header_values.contains_key(&parameter_data.name) {
-                    if let Some(v) = headers.get(&parameter_data.name) {
-                        if let Ok(vs) = v.to_str() {
-                            header_values
-                                .insert(parameter_data.name.clone(), Value::String(vs.to_string()));
-                        }
-                    }
-                }
-            }
-        }
-    }
-    header_values
-}
-
-fn cookie_parameters(headers: &HeaderMap) -> JsonMap<String, Value> {
-    let mut cookies = JsonMap::new();
-    for header in headers.get_all(http::header::COOKIE) {
-        if let Ok(header) = header.to_str() {
-            for pair in header.split(';') {
-                if let Some((name, value)) = pair.trim().split_once('=') {
-                    let value =
-                        value.strip_prefix('"').and_then(|v| v.strip_suffix('"')).unwrap_or(value);
-                    cookies.insert(name.trim().to_string(), Value::String(value.to_string()));
-                }
-            }
-        }
-    }
-    cookies
-}
-
 fn record_response_shape(method: &str, path: &str, status: u16, reason: &str) {
     use mockforge_foundation::conformance_violations::{self, ServerConformanceViolation};
     conformance_violations::record(ServerConformanceViolation {
@@ -435,10 +373,6 @@ fn match_template(concrete: &str, template: &str) -> Option<HashMap<String, Stri
         return None; // concrete path longer than template
     }
     Some(params)
-}
-
-fn urlencoding_decode(v: &str) -> Result<String, ()> {
-    urlencoding::decode(v).map(|c| c.into_owned()).map_err(|_| ())
 }
 
 fn parse_body(body: Option<&[u8]>) -> (Option<Value>, bool) {

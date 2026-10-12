@@ -55,6 +55,7 @@ mod recorder_commands;
 mod scenario_commands;
 mod schema;
 mod serve;
+mod shutdown;
 #[cfg(feature = "smtp")]
 #[allow(dead_code)]
 mod smtp_commands;
