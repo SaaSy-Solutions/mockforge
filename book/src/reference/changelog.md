@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **[Cloud]** Saved observability queries can raise tenant-scoped incidents from request logs, traces, and recorded exchange metrics. Validated alert rules share centralized severity mapping and IncidentBus dispatch; repeated breaches deduplicate, sampled recovery resolves, and missing or incomplete telemetry does not imply recovery. (#720)
+
 ### Fixed
 
 - **[Security]** Update the locked QUIC protocol dependency to `quinn-proto` 0.11.18, fixing five RustSec packet-handling and memory-exhaustion advisories. Its required Rand 0.10 patch dependency is updated without enabling new protocol features.
