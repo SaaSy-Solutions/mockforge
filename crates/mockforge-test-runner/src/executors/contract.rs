@@ -393,6 +393,7 @@ async fn run_ai_second_pass(
     endpoints: Vec<ContractDriftEndpoint>,
 ) -> u32 {
     let body = ContractDriftScoreRequest {
+        run_id: job.run_id,
         org_id: job.org_id,
         workspace_id,
         spec_excerpt: spec_text.to_string(),
@@ -579,6 +580,92 @@ async fn run_synthetic(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn ai_callback_uses_job_identity_instead_of_user_authored_payload() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let callbacks = RegistryCallbacks::new(
+            format!("http://{}", listener.local_addr().unwrap()),
+            "synthetic-internal-fixture".into(),
+        );
+        let server = tokio::spawn(async move {
+            let mut scoring = None;
+            for index in 0..2 {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let mut bytes = Vec::new();
+                let (start, length) = loop {
+                    let mut chunk = [0; 1024];
+                    let count = socket.read(&mut chunk).await.unwrap();
+                    assert!(count > 0 && bytes.len() + count <= 16384);
+                    bytes.extend_from_slice(&chunk[..count]);
+                    if let Some(end) = bytes.windows(4).position(|v| v == b"\r\n\r\n") {
+                        let headers = std::str::from_utf8(&bytes[..end]).unwrap();
+                        let length = headers
+                            .lines()
+                            .find_map(|line| {
+                                let (name, value) = line.split_once(':')?;
+                                name.eq_ignore_ascii_case("content-length")
+                                    .then(|| value.trim().parse::<usize>().unwrap())
+                            })
+                            .unwrap();
+                        break (end + 4, length);
+                    }
+                };
+                while bytes.len() < start + length {
+                    let mut chunk = [0; 1024];
+                    let count = socket.read(&mut chunk).await.unwrap();
+                    assert!(count > 0 && bytes.len() + count <= 16384);
+                    bytes.extend_from_slice(&chunk[..count]);
+                }
+                let body = if index == 0 {
+                    assert!(bytes.starts_with(b"POST /api/v1/internal/contract-diff/score "));
+                    scoring = Some(
+                        serde_json::from_slice::<serde_json::Value>(&bytes[start..start + length])
+                            .unwrap(),
+                    );
+                    r#"{"findings":[],"tokens_used":17,"provider":"platform","no_traffic":false}"#
+                } else {
+                    "{}"
+                };
+                let response = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body);
+                socket.write_all(response.as_bytes()).await.unwrap();
+            }
+            scoring.unwrap()
+        });
+        let job = RunJob {
+            run_id: uuid::Uuid::new_v4(),
+            org_id: uuid::Uuid::new_v4(),
+            source_id: uuid::Uuid::new_v4(),
+            kind: "contract_diff".into(),
+            payload: serde_json::json!({"run_id": uuid::Uuid::new_v4(), "triggered_by_user_id": uuid::Uuid::new_v4()}),
+        };
+        let workspace = uuid::Uuid::new_v4();
+        let mut seq = 1;
+        let mut findings = 0;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            run_ai_second_pass(
+                &job,
+                &callbacks,
+                &mut seq,
+                &mut findings,
+                workspace,
+                "openapi: 3.0.0",
+                Vec::new(),
+            ),
+        )
+        .await
+        .unwrap();
+        let body = tokio::time::timeout(std::time::Duration::from_secs(5), server)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(body["run_id"], job.run_id.to_string());
+        assert_eq!(body["org_id"], job.org_id.to_string());
+        assert_eq!(body["workspace_id"], workspace.to_string());
+        assert!(body.get("triggered_by_user_id").is_none());
+    }
 
     #[test]
     fn collect_endpoints_parses_basic_spec() {

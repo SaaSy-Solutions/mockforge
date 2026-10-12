@@ -278,6 +278,8 @@ pub struct ContractDriftEndpoint {
 #[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize)]
 pub struct ContractDriftScoreRequest {
+    /// Persisted run identity; the registry resolves the originating actor.
+    pub run_id: Uuid,
     pub org_id: Uuid,
     pub workspace_id: Uuid,
     pub spec_excerpt: String,
