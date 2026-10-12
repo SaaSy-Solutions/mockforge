@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.3.233] - 2026-10-12
+
 ### Fixed
 
 - **[DevX]** Explicit mock health routes coexist with built-in health probes instead of crashing server startup; this restores the generated `init` project's OpenAPI example. (#851)
