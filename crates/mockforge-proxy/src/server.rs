@@ -396,14 +396,12 @@ async fn proxy_handler(
             // #864 — observational response validation against the spec.
             if let Some(tap) = &state.conformance_tap {
                 let valid = tap
-                    .check_encoded_response(
+                    .check_response_headers(
                         method.as_str(),
                         uri.path(),
                         status.as_u16(),
                         Some(final_body_bytes.as_slice()),
-                        response_headers
-                            .get(http::header::CONTENT_ENCODING)
-                            .and_then(|v| v.to_str().ok()),
+                        &response_headers,
                     )
                     .await;
                 if tap.is_strict() && !valid {

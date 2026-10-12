@@ -11,6 +11,12 @@
 //! `--validate-conformance-strict`, request violations reject with the
 //! spec's configured status instead of forwarding.
 
+mod encoding;
+mod response_schema;
+
+use response_schema::declared_json_schema;
+
+use encoding::decode_body;
 use std::collections::HashMap;
 
 use axum::http::HeaderMap;
@@ -232,6 +238,27 @@ impl ConformanceTap {
         body: Option<&[u8]>,
         content_encoding: Option<&str>,
     ) -> bool {
+        let mut headers = HeaderMap::new();
+        headers
+            .insert(http::header::CONTENT_TYPE, http::HeaderValue::from_static("application/json"));
+        if let Some(encoding) = content_encoding {
+            let Ok(value) = http::HeaderValue::from_str(encoding) else {
+                return false;
+            };
+            headers.insert(http::header::CONTENT_ENCODING, value);
+        }
+        self.check_response_headers(method, concrete_path, status, body, &headers).await
+    }
+
+    /// Select the contract for the upstream media type and validate a body copy.
+    pub async fn check_response_headers(
+        &self,
+        method: &str,
+        concrete_path: &str,
+        status: u16,
+        body: Option<&[u8]>,
+        headers: &HeaderMap,
+    ) -> bool {
         let Some((template, _)) = self.match_template(method, concrete_path) else {
             return true;
         };
@@ -256,12 +283,23 @@ impl ConformanceTap {
             return false;
         }
 
-        // 2. Declared + JSON body → schema check.
-        let Some(schema_value) =
-            declared_json_schema(responses, status, &self.registry.spec().spec)
-        else {
+        // HEAD and bodyless HTTP statuses carry no representation to validate.
+        if method.eq_ignore_ascii_case("HEAD") || status == 204 || status == 304 {
             return true;
-        };
+        }
+        let content_type = headers.get(http::header::CONTENT_TYPE).and_then(|v| v.to_str().ok());
+        let schema_value =
+            match declared_json_schema(responses, status, &self.registry.spec().spec, content_type)
+            {
+                Ok(Some(schema)) => schema,
+                Ok(None) => return true,
+                Err(error) => {
+                    record_response_shape(method, concrete_path, status, &error);
+                    return false;
+                }
+            };
+        let content_encoding =
+            headers.get(http::header::CONTENT_ENCODING).and_then(|v| v.to_str().ok());
         let decoded = match decode_body(body.unwrap_or_default(), content_encoding).await {
             Ok(decoded) => decoded,
             Err(error) => {
@@ -295,51 +333,6 @@ impl ConformanceTap {
         }
         true
     }
-}
-
-const MAX_DECODED_JSON_BYTES: usize = 16 * 1024 * 1024;
-
-async fn decode_body(body: &[u8], encoding: Option<&str>) -> Result<Vec<u8>, String> {
-    use async_compression::tokio::bufread::{BrotliDecoder, GzipDecoder, ZlibDecoder, ZstdDecoder};
-    use tokio::io::{AsyncRead, AsyncReadExt};
-
-    let encodings: Vec<_> = encoding
-        .unwrap_or("")
-        .split(',')
-        .map(str::trim)
-        .filter(|value| !value.is_empty() && !value.eq_ignore_ascii_case("identity"))
-        .collect();
-    if encodings.len() > 4 {
-        return Err("body has more than four content-encoding layers".to_string());
-    }
-    if body.len() > MAX_DECODED_JSON_BYTES {
-        return Err("body exceeds the 16 MiB JSON validation limit".to_string());
-    }
-    let mut bytes = body.to_vec();
-    for encoding in encodings.into_iter().rev() {
-        let reader: Box<dyn AsyncRead + Unpin + Send + '_> =
-            match encoding.to_ascii_lowercase().as_str() {
-                "gzip" | "x-gzip" => Box::new(GzipDecoder::new(bytes.as_slice())),
-                "deflate" => Box::new(ZlibDecoder::new(bytes.as_slice())),
-                "br" => Box::new(BrotliDecoder::new(bytes.as_slice())),
-                "zstd" => Box::new(ZstdDecoder::new(bytes.as_slice())),
-                _ => return Err(format!("unsupported body content-encoding: {encoding}")),
-            };
-        let mut decoded = Vec::new();
-        reader
-            .take((MAX_DECODED_JSON_BYTES + 1) as u64)
-            .read_to_end(&mut decoded)
-            .await
-            .map_err(|_| "body content-encoding cannot be decoded".to_string())?;
-        if decoded.len() > MAX_DECODED_JSON_BYTES {
-            return Err("decoded body exceeds the 16 MiB JSON validation limit".to_string());
-        }
-        bytes = decoded;
-    }
-    if bytes.len() > MAX_DECODED_JSON_BYTES {
-        return Err("body exceeds the 16 MiB JSON validation limit".to_string());
-    }
-    Ok(bytes)
 }
 
 fn query_parameters(query: Option<&str>) -> JsonMap<String, Value> {
@@ -425,49 +418,6 @@ fn record_response_shape(method: &str, path: &str, status: u16, reason: &str) {
     });
 }
 
-fn declared_json_schema(
-    responses: &openapiv3::Responses,
-    status: u16,
-    spec: &openapiv3::OpenAPI,
-) -> Option<Value> {
-    use openapiv3::{ReferenceOr, Response, StatusCode};
-    // Exact status overrides a range, which overrides the default response.
-    let response_ref: Option<&ReferenceOr<Response>> = responses
-        .responses
-        .get(&StatusCode::Code(status))
-        .or_else(|| responses.responses.get(&StatusCode::Range(status / 100)))
-        .or(responses.default.as_ref());
-    let mut selected = response_ref?.clone();
-    let mut resolved = None;
-    // Resolve only local response references, bounded against cycles.
-    for _ in 0..32 {
-        match selected {
-            ReferenceOr::Item(response) => {
-                resolved = Some(response);
-                break;
-            }
-            ReferenceOr::Reference { reference } => {
-                let name = reference
-                    .strip_prefix("#/components/responses/")?
-                    .replace("~1", "/")
-                    .replace("~0", "~");
-                selected = spec.components.as_ref()?.responses.get(&name)?.clone();
-            }
-        }
-    }
-    let response = resolved?;
-    let media = response.content.get("application/json")?;
-    match &media.schema {
-        Some(ReferenceOr::Item(schema)) => Some(serde_json::to_value(schema).ok()?),
-        Some(ReferenceOr::Reference { reference }) => {
-            // Inline local refs stay as $ref objects; the caller merges
-            // components over them.
-            Some(serde_json::json!({ "$ref": reference }))
-        }
-        None => None,
-    }
-}
-
 /// Segment-wise template matcher: `/users/{id}` vs concrete paths.
 /// Returns extracted `{placeholder}` values.
 fn match_template(concrete: &str, template: &str) -> Option<HashMap<String, String>> {
@@ -505,31 +455,70 @@ mod tests {
     use mockforge_foundation::conformance_violations;
 
     #[tokio::test]
-    async fn compressed_validation_decodes_all_supported_codecs_and_bounds_expansion() {
-        use async_compression::tokio::bufread::{
-            BrotliEncoder, GzipEncoder, ZlibEncoder, ZstdEncoder,
-        };
-        use tokio::io::{AsyncRead, AsyncReadExt};
-        let input = br#"{"created":true}"#;
-        let cases: Vec<(&str, Box<dyn AsyncRead + Unpin + Send>)> = vec![
-            ("gzip", Box::new(GzipEncoder::new(input.as_slice()))),
-            ("deflate", Box::new(ZlibEncoder::new(input.as_slice()))),
-            ("br", Box::new(BrotliEncoder::new(input.as_slice()))),
-            ("zstd", Box::new(ZstdEncoder::new(input.as_slice()))),
-        ];
-        for (encoding, mut encoder) in cases {
-            let mut wire = Vec::new();
-            encoder.read_to_end(&mut wire).await.unwrap();
-            assert_eq!(decode_body(&wire, Some(encoding)).await.unwrap(), input);
+    async fn response_uses_actual_media_type_and_http_body_semantics() {
+        let spec = serde_json::json!({
+            "openapi":"3.0.0", "info":{"title":"Media", "version":"1"},
+            "paths":{"/media":{"get":{"responses":{
+                "200":{"description":"ok", "content":{
+                    "application/json":{"schema":{"type":"object", "required":["id"]}},
+                    "application/problem+json":{"schema":{"type":"object", "required":["title"]}},
+                    "application/xml":{"schema":{"type":"string"}}
+                }},
+                "204":{"description":"no content", "content":{"application/json":{"schema":{"type":"object"}}}},
+                "304":{"description":"not modified", "content":{"application/json":{"schema":{"type":"object"}}}}
+            }}, "head":{"responses":{"200":{"description":"headers", "content":{"application/json":{"schema":{"type":"object"}}}}}}}}
+        });
+        let tap = ConformanceTap::from_spec_value(spec, true).unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            http::header::CONTENT_TYPE,
+            http::HeaderValue::from_static("application/xml; charset=utf-8"),
+        );
+        assert!(
+            tap.check_response_headers("GET", "/media", 200, Some(b"<id>1</id>"), &headers)
+                .await
+        );
+        headers.insert(
+            http::header::CONTENT_TYPE,
+            http::HeaderValue::from_static("application/problem+json"),
+        );
+        assert!(
+            tap.check_response_headers(
+                "GET",
+                "/media",
+                200,
+                Some(br#"{"title":"Problem"}"#),
+                &headers
+            )
+            .await
+        );
+        assert!(
+            !tap.check_response_headers("GET", "/media", 200, Some(br#"{"id":1}"#), &headers)
+                .await
+        );
+        headers.insert(
+            http::header::CONTENT_TYPE,
+            http::HeaderValue::from_static("Application/JSON; charset=utf-8"),
+        );
+        assert!(
+            tap.check_response_headers("GET", "/media", 200, Some(br#"{"id":1}"#), &headers)
+                .await
+        );
+        headers.insert(http::header::CONTENT_TYPE, http::HeaderValue::from_static("text/plain"));
+        assert!(
+            !tap.check_response_headers("GET", "/media", 200, Some(b"unexpected"), &headers)
+                .await
+        );
+        headers.clear();
+        assert!(
+            !tap.check_response_headers("GET", "/media", 200, Some(br#"{"id":1}"#), &headers)
+                .await
+        );
+        for status in [204, 304] {
+            assert!(tap.check_response_headers("GET", "/media", status, None, &headers).await);
         }
-        assert!(decode_body(b"not gzip", Some("gzip")).await.is_err());
-        assert!(decode_body(input, Some("unsupported")).await.is_err());
-        assert!(decode_body(input, Some("gzip,gzip,gzip,gzip,gzip")).await.is_err());
-        let expanded = vec![b' '; MAX_DECODED_JSON_BYTES + 1];
-        let mut encoder = GzipEncoder::new(expanded.as_slice());
-        let mut wire = Vec::new();
-        encoder.read_to_end(&mut wire).await.unwrap();
-        assert!(decode_body(&wire, Some("gzip")).await.unwrap_err().contains("16 MiB"));
+        assert!(tap.check_response_headers("HEAD", "/media", 200, None, &headers).await);
+        assert!(!tap.check_response_headers("GET", "/media", 418, None, &headers).await);
     }
 
     fn demo_spec() -> Value {

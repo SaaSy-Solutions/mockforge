@@ -46,7 +46,12 @@ Ctrl-C and SIGTERM stop the listener gracefully.
 
 Conformance response-schema checks currently cover declared JSON schemas.
 Local response references, exact status codes, status ranges, and defaults
-are supported. Paths absent from the spec pass through without validation.
+are supported. Schema selection uses the upstream `Content-Type`, including
+JSON suffix types such as `application/problem+json` and declared media
+wildcards. Other declared formats pass through without JSON schema checks;
+missing or undeclared response media types are violations. HEAD, 204 and 304
+responses have no representation body to validate. Paths absent from the
+spec pass through without validation.
 
 Validation decodes gzip, deflate, Brotli, and Zstandard on a separate copy;
 forwarded bodies and repeated response headers remain unchanged. Encoded
