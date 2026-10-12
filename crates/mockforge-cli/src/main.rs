@@ -46,6 +46,8 @@ mod orchestrate_commands;
 mod plugin_commands;
 #[allow(dead_code)]
 mod progress;
+#[cfg(feature = "http")]
+mod proxy_commands;
 #[cfg(feature = "recorder")]
 #[allow(dead_code)]
 mod recorder_commands;
@@ -53,6 +55,7 @@ mod recorder_commands;
 mod scenario_commands;
 mod schema;
 mod serve;
+mod shutdown;
 #[cfg(feature = "smtp")]
 #[allow(dead_code)]
 mod smtp_commands;
@@ -683,6 +686,10 @@ enum Commands {
     ///   mockforge serve --traffic-shaping --bandwidth-limit 500000 --burst-size 50000
     #[command(verbatim_doc_comment)]
     Serve(Box<ServeCliArgs>),
+
+    /// Forward HTTP traffic to an upstream, optionally recording contract violations
+    #[cfg(feature = "http")]
+    Proxy(proxy_commands::ProxyArgs),
 
     /// SMTP server management and mailbox operations
     ///
@@ -3075,6 +3082,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 inject_response_violations: args.inject_response_violations,
             })
             .await?;
+        }
+        #[cfg(feature = "http")]
+        Commands::Proxy(args) => {
+            proxy_commands::run(args).await?;
         }
         #[cfg(feature = "smtp")]
         Commands::Smtp { smtp_command } => {
