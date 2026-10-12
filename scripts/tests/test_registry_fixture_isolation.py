@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import tempfile
 import sys
@@ -153,13 +154,19 @@ elif 'port' in args: print('127.0.0.1:'+str(port+(0 if 'db' in args else 1)))
     def test_rls_setup_failure_cleans_only_its_project_and_preserves_failure(self):
         self.run_cleanup_failure_case()
 
+    def test_standalone_up_failure_uses_owned_cleanup(self):
+        self.run_cleanup_failure_case(command="up")
+
+    def test_standalone_up_cleanup_failure_retains_locator_and_primary_status(self):
+        self.run_cleanup_failure_case(command="up", docker_failure=True)
+
     def test_rls_process_cleanup_failure_still_tears_down_owned_docker_project(self):
         self.run_cleanup_failure_case(bad_receipt=True)
 
     def test_rls_docker_cleanup_failure_retains_project_locator(self):
         self.run_cleanup_failure_case(docker_failure=True)
 
-    def run_cleanup_failure_case(self, bad_receipt=False, docker_failure=False):
+    def run_cleanup_failure_case(self, bad_receipt=False, docker_failure=False, command="all"):
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)
             docker = directory / "docker"
@@ -188,7 +195,7 @@ elif 'port' in args: print('127.0.0.1:'+{'5432':'42000','9000':'42001','9001':'4
                 (directory / "server.json").write_text("invalid receipt")
             if docker_failure:
                 env["FAIL_DOWN"] = "true"
-            result = subprocess.run(["bash", str(ROOT / "scripts/rls-e2e-gate.sh"), "all"], env=env, capture_output=True, text=True)
+            result = subprocess.run(["bash", str(ROOT / "scripts/rls-e2e-gate.sh"), command], env=env, capture_output=True, text=True)
             self.assertEqual(result.returncode, 19, result.stdout + result.stderr)
             self.assertEqual(state.exists(), bad_receipt or docker_failure)
             calls = [json.loads(line) for line in calls_path.read_text().splitlines()]
@@ -196,6 +203,80 @@ elif 'port' in args: print('127.0.0.1:'+{'5432':'42000','9000':'42001','9001':'4
             self.assertEqual({call["project"] for call in calls}, {"rlsgate-owned-test"})
             self.assertEqual(sum("down" in call["args"] for call in calls), 1)
             self.assertEqual(sum("up" in call["args"] for call in calls), 1)
+
+    def test_partial_second_setup_and_repeated_term_preserve_live_sibling(self):
+        # Real shell signals and an unrelated real live process; Docker is a
+        # deterministic stub. The native two-fixture test supplies real Docker.
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            first_state = directory / 'first.state'
+            first_state.write_text('COMPOSE_PROJECT_NAME="rlsgate-first"\n')
+            original_state = first_state.read_bytes()
+            second_state = directory / 'second.state'
+            calls = directory / 'calls.jsonl'
+            docker = directory / 'docker'
+            docker.write_text('''#!/usr/bin/env python3
+import json,os,sys,time
+from pathlib import Path
+root=Path(os.environ['TEST_ROOT']);args=sys.argv[1:]
+with (root/'calls.jsonl').open('a') as f:f.write(json.dumps({'project':os.environ['COMPOSE_PROJECT_NAME'],'args':args})+'\\n')
+if 'down' in args:
+ (root/'cleaning').touch()
+ deadline=time.monotonic()+3
+ while not (root/'release').exists() and time.monotonic()<deadline:time.sleep(.01)
+elif args[0]=='inspect':print('healthy')
+elif 'ps' in args:print('second-'+args[-1])
+elif 'port' in args:print('127.0.0.1:'+{'5432':'42000','9000':'42001','9001':'42002'}[args[-1]])
+''')
+            docker.chmod(0o755)
+            cargo = directory / 'cargo'
+            cargo.write_text('#!/bin/sh\ntouch "$TEST_ROOT/building"\nsleep .2\nexit 19\n')
+            cargo.chmod(0o755)
+            for tool in ['curl', 'psql']:
+                path=directory/tool;path.write_text('#!/bin/sh\nexit 0\n');path.chmod(0o755)
+            sibling=subprocess.Popen([sys.executable,'-c','import time;time.sleep(10)'])
+            env={**os.environ,'PATH':tmp+os.pathsep+os.environ['PATH'], 'TEST_ROOT':tmp,
+                 'STATE_FILE':str(second_state),'SERVER_PID_FILE':str(directory/'second.json'),
+                 'COMPOSE_PROJECT_NAME':'rlsgate-second'}
+            child=subprocess.Popen(['bash',str(ROOT/'scripts/rls-e2e-gate.sh'),'up'],env=env,
+                                   stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True)
+            def wait_marker(name):
+                deadline=time.monotonic()+4
+                while not (directory/name).exists() and time.monotonic()<deadline:
+                    self.assertIsNone(child.poll());time.sleep(.01)
+                self.assertTrue((directory/name).exists(),name)
+            try:
+                wait_marker('building')
+                child.send_signal(signal.SIGTERM)
+                wait_marker('cleaning')
+                child.send_signal(signal.SIGTERM)
+                (directory/'release').touch()
+                out,err=child.communicate(timeout=5)
+                self.assertEqual(child.returncode,143,out+err)
+                self.assertIsNone(sibling.poll())
+                self.assertEqual(first_state.read_bytes(),original_state)
+                self.assertFalse(second_state.exists())
+                operations=[json.loads(line) for line in calls.read_text().splitlines()]
+                self.assertEqual({op['project'] for op in operations},{'rlsgate-second'})
+                self.assertEqual(sum('down' in op['args'] for op in operations),1)
+            finally:
+                if child.poll() is None:child.kill();child.communicate(timeout=5)
+                sibling.terminate();sibling.wait(timeout=3)
+
+    def test_successful_standalone_up_disarms_cleanup_and_keeps_state(self):
+        # Focus on the transaction wrapper, retaining production state claiming
+        # and cleanup code; fixture bootstrap itself is covered by native CI.
+        prefix=RLS.rsplit('case "${1:-all}" in',1)[0]
+        suffix=RLS.rsplit('case "${1:-all}" in',1)[1]
+        with tempfile.TemporaryDirectory() as tmp:
+            directory=Path(tmp);state=directory/'state';calls=directory/'cleanup'
+            script=directory/'transaction.sh'
+            script.write_text(prefix+'\ncmd_up() { write_state new; }\ncmd_down() { touch "$CLEANUP_MARKER"; }\ncase "${1:-all}" in'+suffix)
+            env={**os.environ,'STATE_FILE':str(state),'COMPOSE_PROJECT_NAME':'rlsgate-success',
+                 'CLEANUP_MARKER':str(calls),'REGISTRY_PORT':'41000'}
+            result=subprocess.run(['bash',str(script),'up'],env=env,text=True,capture_output=True)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+            self.assertTrue(state.exists());self.assertFalse(calls.exists())
 
     def test_rls_stale_project_refusal_never_claims_state_or_cleans_residuals(self):
         for kind in ['container','network','volume','read_failure']:
@@ -207,10 +288,12 @@ elif 'port' in args: print('127.0.0.1:'+{'5432':'42000','9000':'42001','9001':'4
                 for tool in ['cargo','curl','psql']:
                     path=directory/tool;path.write_text('#!/bin/sh\nexit 0\n');path.chmod(0o755)
                 env={**os.environ,'PATH':tmp+os.pathsep+os.environ['PATH'],'STATE_FILE':str(state),
-                     'COMPOSE_PROJECT_NAME':'rlsgate-prior-job','CALLS':str(calls),'RESIDUAL':kind}
-                result=subprocess.run(['bash',str(ROOT/'scripts/rls-e2e-gate.sh'),'all'],env=env,text=True,capture_output=True)
-                self.assertEqual(result.returncode,1,result.stdout+result.stderr)
-                self.assertFalse(state.exists())
+                     'COMPOSE_PROJECT_NAME':'rlsgate-prior-job','CALLS':str(calls),'RESIDUAL':kind,
+                     'OWNS_GATE_STATE':'true'}
+                for command in ['all','up']:
+                    result=subprocess.run(['bash',str(ROOT/'scripts/rls-e2e-gate.sh'),command],env=env,text=True,capture_output=True)
+                    self.assertEqual(result.returncode,1,result.stdout+result.stderr)
+                    self.assertFalse(state.exists())
                 operations=[json.loads(line) for line in calls.read_text().splitlines()]
                 self.assertTrue(operations)
                 self.assertFalse(any('up' in args or 'down' in args for args in operations))

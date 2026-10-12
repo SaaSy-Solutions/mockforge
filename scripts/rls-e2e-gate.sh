@@ -64,6 +64,9 @@ COMPOSE_FILE_GATE="${COMPOSE_FILE_GATE:-docker-compose.rls-gate.yml}"
 # every other subcommand reads it.
 STATE_FILE="${STATE_FILE:-$REPO_ROOT/.rls-gate-state}"
 __SUBCMD="${1:-all}"
+# Ownership is established only by this process's exclusive state claim. An
+# inherited environment variable must never authorize cleanup after refusal.
+OWNS_GATE_STATE=false
 if { [ "$__SUBCMD" = "up" ] || [ "$__SUBCMD" = "all" ]; } && [ -e "$STATE_FILE" ]; then
   echo "error: gate state already exists at $STATE_FILE; use the recorded gate or run down first" >&2
   exit 1
@@ -596,8 +599,18 @@ cmd_all() {
   return "$rc"
 }
 
+cmd_up_transaction() {
+  # Standalone setup leaves a live reusable gate only after success. A failed
+  # or cancelled setup must use the same ownership-guarded cleanup as CI all.
+  trap cleanup_on_exit EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  cmd_up
+  trap - EXIT INT TERM
+}
+
 case "${1:-all}" in
-  up)       shift; cmd_up "$@" ;;
+  up)       shift; cmd_up_transaction "$@" ;;
   test)     shift; cmd_test "$@" ;;
   control)  shift; cmd_control "$@" ;;
   rearm)    shift; cmd_rearm "$@" ;;

@@ -17,6 +17,12 @@ on:
   pull_request:
     branches: [main, develop]
   workflow_dispatch:
+    inputs:
+      verify_fixture_isolation:
+        description: 'Also verify two owned fixtures survive one another’s cleanup in the RLS job'
+        type: boolean
+        required: false
+        default: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -529,6 +535,14 @@ jobs:
           EVIDENCE_OUTPUT: "${{ runner.temp }}/mf-rls-evidence-${{ github.run_id }}-${{ github.run_attempt }}.jsonl"
         run: scripts/rls-e2e-gate.sh all
 
+      - name: Verify same-job fixture cleanup isolation
+        if: github.event_name == 'workflow_dispatch' && inputs.verify_fixture_isolation
+        timeout-minutes: 20
+        env:
+          ISOLATION_OUTPUT: "${{ runner.temp }}/mf-same-job-isolation-${{ github.run_id }}-${{ github.run_attempt }}"
+          RUSTUP_AUTO_INSTALL: "0"
+        run: python3 scripts/ci-same-job-fixture-isolation.py --output-dir "$ISOLATION_OUTPUT"
+
       - name: Upload server log
         if: always()
         uses: actions/upload-artifact@v7.0.1
@@ -538,4 +552,8 @@ jobs:
             rls-gate-registry-server.log
             ${{ runner.temp }}/mf-rls-evidence-${{ github.run_id }}-${{ github.run_attempt }}.jsonl
             ${{ runner.temp }}/mf-rls-gate-server-${{ github.run_id }}-${{ github.run_attempt }}.json.monitor.log
+            ${{ runner.temp }}/mf-same-job-isolation-${{ github.run_id }}-${{ github.run_attempt }}/result.json
+            ${{ runner.temp }}/mf-same-job-isolation-${{ github.run_id }}-${{ github.run_attempt }}/process-receipts.json
+            ${{ runner.temp }}/mf-same-job-isolation-${{ github.run_id }}-${{ github.run_attempt }}/first/evidence.jsonl
+            ${{ runner.temp }}/mf-same-job-isolation-${{ github.run_id }}-${{ github.run_attempt }}/survivor/evidence.jsonl
           if-no-files-found: ignore
