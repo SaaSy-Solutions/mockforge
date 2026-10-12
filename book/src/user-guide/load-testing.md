@@ -251,6 +251,48 @@ before allowing for response latency) to approach one request/s. Use
 `--operation-id ID` to test rate controls on one operation before running the
 whole spec.
 
+### Diagnosing a rate below `--rps`
+
+`--rps 1` caps **request starts per target**, shared by that target's
+workers. Two targets can each start one request/s independently; the limit
+is not divided between them. It is a ceiling, not a guarantee: workers
+waiting for an upload or response cannot start another request.
+
+A short run can report substantially less throughput even when starts are
+paced correctly. `--duration` ends the window for starting requests, then
+in-flight requests finish. For example, 26 attempts started during a
+30-second window and finished after 76.28 seconds report
+`measured_rps = 26 / 76.28 = 0.34`. Dividing the same count by the start
+window gives about `26 / 30 = 0.87` attempts/s. That is a window average,
+not proof of evenly spaced starts; verify start timestamps at the receiver
+or in a packet capture. Even a healthy target with 12.75-second uploads can
+report roughly `30 / (29 + 12.75) = 0.72` requests/s on a 30-second run.
+
+To investigate:
+
+1. Run one longer operation (for example, `--duration 300s`) without campaign
+   repetition first. Compare a capped run with an uncapped run using the
+   same body, pacing, and concurrency. A longer window reduces the effect
+   of waiting for the last in-flight requests.
+2. Check `failed` and `status_counts`. `failed` counts transport errors;
+   HTTP 503 responses appear separately in `status_counts`. The existing
+   `successful` counter counts attempts that received an HTTP response,
+   including non-2xx responses; it does not mean every response was 2xx.
+   Neither low throughput nor a 503 alone identifies the failing component.
+3. Save the console output: it includes latency percentiles and sampled
+   non-2xx response headers/body excerpts. With `--spec --export-requests`,
+   those diagnostics also appear per operation in `chunked-requests.json`.
+   `--export-requests` requires a spec; it does not export no-spec runs.
+4. Check proxy/WAF/backend logs for the same interval. If uncapped traffic
+   also stays below the requested cap, investigate upload/response latency,
+   errors, and available workers before increasing the limit. The worker
+   estimate must use the **whole request time**, including response latency,
+   not just the minimum chunk-upload time.
+
+`--cps` changes connection reuse, not the request-rate ceiling. Add it only
+when testing a new connection per request; request starts are not a measure
+of successfully established TCP/TLS connections.
+
 **Chunked + chaos matching** — pair with `chunked_only: true` in
 `fault_injection.request_matcher` (see
 [Chaos Engineering](./chaos-engineering.md)) to inject faults *only* on
