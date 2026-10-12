@@ -152,7 +152,7 @@ async fn health_check() -> Result<Response<Body>, StatusCode> {
 /// Main proxy handler that intercepts and forwards requests
 async fn proxy_handler(
     axum::extract::State(state): axum::extract::State<Arc<ProxyServer>>,
-    request: http::Request<axum::body::Body>,
+    request: http::Request<Body>,
 ) -> Result<Response<Body>, StatusCode> {
     // Extract client address from request extensions (set by ConnectInfo middleware)
     let client_addr = request
@@ -559,7 +559,7 @@ mod tests {
         let request = http::Request::builder()
             .method("GET")
             .uri("/proxy/http://169.254.169.254/latest/meta-data/")
-            .body(axum::body::Body::empty())
+            .body(Body::empty())
             .unwrap();
         let response = proxy_handler(axum::extract::State(server), request).await.unwrap();
 
@@ -579,7 +579,7 @@ mod tests {
         let request = http::Request::builder()
             .method("GET")
             .uri("/proxy/http://169.254.169.254/latest/meta-data/")
-            .body(axum::body::Body::empty())
+            .body(Body::empty())
             .unwrap();
         let response = proxy_handler(axum::extract::State(server), request).await.unwrap();
 
@@ -601,7 +601,7 @@ mod tests {
         let request = http::Request::builder()
             .method("GET")
             .uri("/proxy/http://127.0.0.1:9090/admin")
-            .body(axum::body::Body::empty())
+            .body(Body::empty())
             .unwrap();
         let response = proxy_handler(axum::extract::State(server), request).await.unwrap();
 

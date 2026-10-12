@@ -105,54 +105,16 @@ impl ConformanceTap {
             return None; // not in spec — nothing to validate against
         };
 
-        let mut query_map = JsonMap::new();
-        if let Some(q) = query {
-            for pair in q.split('&') {
-                let mut kv = pair.splitn(2, '=');
-                if let (Some(k), Some(v)) = (kv.next(), kv.next()) {
-                    if let (Ok(k), Ok(v)) = (urlencoding_decode(k), urlencoding_decode(v)) {
-                        query_map.insert(k, Value::String(v));
-                    }
-                }
-            }
-        }
-
-        let mut header_values = JsonMap::new();
-        for (k, v) in headers {
-            if let Ok(vs) = v.to_str() {
-                header_values.insert(k.to_string(), Value::String(vs.to_string()));
-            }
-        }
-        // The validator looks up header params case-sensitively by their
-        // SPEC spelling, while axum lowercases wire names. Re-key every
-        // spec-declared header from the (case-insensitive) HeaderMap so
-        // `X-Trace` in the spec matches `x-trace` on the wire.
-        if let Some((_, route)) = self.matched_route(method, concrete_path) {
-            for p in route.operation.parameters.iter() {
-                if let Some(openapiv3::Parameter::Header { parameter_data, .. }) = match p {
-                    openapiv3::ReferenceOr::Item(param) => Some(param),
-                    _ => None,
-                } {
-                    if !header_values.contains_key(&parameter_data.name) {
-                        if let Some(v) = headers.get(&parameter_data.name) {
-                            if let Ok(vs) = v.to_str() {
-                                header_values.insert(
-                                    parameter_data.name.clone(),
-                                    Value::String(vs.to_string()),
-                                );
-                            }
-                        }
-                    }
-                }
-            }
-        }
+        let query_map = query_parameters(query);
+        let route = self.matched_route(method, concrete_path).map(|(_, route)| route);
+        let header_values = header_parameters(headers, route);
 
         // Path params feed the validator as their own bucket.
         let path_param_map: JsonMap<String, Value> =
             path_params.iter().map(|(k, v)| (k.clone(), Value::String(v.clone()))).collect();
 
         let decoded;
-        let body = if let Some(encoding) = headers.get(axum::http::header::CONTENT_ENCODING) {
+        let body = if let Some(encoding) = headers.get(http::header::CONTENT_ENCODING) {
             let result = match encoding.to_str() {
                 Ok(encoding) => decode_body(body.unwrap_or_default(), Some(encoding)).await,
                 Err(_) => Err("request content-encoding is invalid".to_string()),
@@ -188,7 +150,7 @@ impl ConformanceTap {
         };
         let (body_json, body_present) = parse_body(body);
         let json_content_type = headers
-            .get(axum::http::header::CONTENT_TYPE)
+            .get(http::header::CONTENT_TYPE)
             .and_then(|value| value.to_str().ok())
             .and_then(|value| value.split(';').next())
             .map(|value| value.trim().to_ascii_lowercase())
@@ -214,20 +176,7 @@ impl ConformanceTap {
             return self.strict.then(|| (400, serde_json::json!({"error": reason})));
         }
 
-        let mut cookies = JsonMap::new();
-        for header in headers.get_all(axum::http::header::COOKIE) {
-            if let Ok(header) = header.to_str() {
-                for pair in header.split(';') {
-                    if let Some((name, value)) = pair.trim().split_once('=') {
-                        let value = value
-                            .strip_prefix('"')
-                            .and_then(|v| v.strip_suffix('"'))
-                            .unwrap_or(value);
-                        cookies.insert(name.trim().to_string(), Value::String(value.to_string()));
-                    }
-                }
-            }
-        }
+        let cookies = cookie_parameters(headers);
 
         match self.registry.run_validation_with_recording_ex(
             &template,
@@ -391,6 +340,71 @@ async fn decode_body(body: &[u8], encoding: Option<&str>) -> Result<Vec<u8>, Str
         return Err("body exceeds the 16 MiB JSON validation limit".to_string());
     }
     Ok(bytes)
+}
+
+fn query_parameters(query: Option<&str>) -> JsonMap<String, Value> {
+    let mut query_map = JsonMap::new();
+    if let Some(q) = query {
+        for pair in q.split('&') {
+            let mut kv = pair.splitn(2, '=');
+            if let (Some(k), Some(v)) = (kv.next(), kv.next()) {
+                if let (Ok(k), Ok(v)) = (urlencoding_decode(k), urlencoding_decode(v)) {
+                    query_map.insert(k, Value::String(v));
+                }
+            }
+        }
+    }
+    query_map
+}
+
+fn header_parameters(
+    headers: &HeaderMap,
+    route: Option<&mockforge_openapi::route::OpenApiRoute>,
+) -> JsonMap<String, Value> {
+    let mut header_values = JsonMap::new();
+    for (k, v) in headers {
+        if let Ok(vs) = v.to_str() {
+            header_values.insert(k.to_string(), Value::String(vs.to_string()));
+        }
+    }
+    // The validator looks up header params case-sensitively by their
+    // SPEC spelling, while axum lowercases wire names. Re-key every
+    // spec-declared header from the (case-insensitive) HeaderMap so
+    // `X-Trace` in the spec matches `x-trace` on the wire.
+    if let Some(route) = route {
+        for p in route.operation.parameters.iter() {
+            if let Some(openapiv3::Parameter::Header { parameter_data, .. }) = match p {
+                openapiv3::ReferenceOr::Item(param) => Some(param),
+                _ => None,
+            } {
+                if !header_values.contains_key(&parameter_data.name) {
+                    if let Some(v) = headers.get(&parameter_data.name) {
+                        if let Ok(vs) = v.to_str() {
+                            header_values
+                                .insert(parameter_data.name.clone(), Value::String(vs.to_string()));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    header_values
+}
+
+fn cookie_parameters(headers: &HeaderMap) -> JsonMap<String, Value> {
+    let mut cookies = JsonMap::new();
+    for header in headers.get_all(http::header::COOKIE) {
+        if let Ok(header) = header.to_str() {
+            for pair in header.split(';') {
+                if let Some((name, value)) = pair.trim().split_once('=') {
+                    let value =
+                        value.strip_prefix('"').and_then(|v| v.strip_suffix('"')).unwrap_or(value);
+                    cookies.insert(name.trim().to_string(), Value::String(value.to_string()));
+                }
+            }
+        }
+    }
+    cookies
 }
 
 fn record_response_shape(method: &str, path: &str, status: u16, reason: &str) {
