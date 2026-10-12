@@ -20,6 +20,10 @@ COMPLETE_IF = "${{ always() && " + TRUSTED + " && (needs.changes.result != 'succ
 LABELS = "[self-hosted, linux, x64, rust]"
 ALL_FEATURES = "cargo test --workspace --exclude mockforge-desktop --exclude mockforge-tui --all-features --verbose"
 DOCS = "cargo doc --workspace --exclude mockforge-desktop --no-deps"
+# Actual original check name: CI run38189713874/job114633625345.
+# Run38213487657/job114723000285 demonstrated that the dynamic 'Test'
+# expression did not automatically receive the matrix suffix.
+REQUIRED_CONTEXT = "Test (1.96.0)"
 
 
 def block(job):
@@ -42,6 +46,15 @@ def trusted(event, head, repository="SaaSy-Solutions/mockforge"):
 
 def aggregate_should_run(event, head, scope_result, code):
     return trusted(event, head) and (scope_result != "success" or code != "false")
+
+
+def display_name(expression, event, head):
+    # Evaluate only our two literal branches, not GitHub's implicit naming.
+    pattern = re.escape("${{ " + TRUSTED + " && ") + r"'([^']*)' \|\| '([^']*)' \}\}"
+    match = re.fullmatch(pattern, expression)
+    if match is None:
+        raise AssertionError("unexpected job name expression")
+    return match.group(1 if trusted(event, head) else 2)
 
 
 class SequentialRustTest(unittest.TestCase):
@@ -117,10 +130,36 @@ class SequentialRustTest(unittest.TestCase):
         self.assertNotIn("uses:", gate)
 
     def test_original_context_is_aggregate_only_for_trusted_events(self):
-        self.assertEqual(field("test", "name"), "${{ " + TRUSTED + " && 'Rust default checks' || 'Test' }}")
-        self.assertEqual(field("test-complete", "name"), "${{ " + TRUSTED + " && 'Test' || 'Trusted Rust completion' }}")
+        self.assertEqual(field("test", "name"), "${{ " + TRUSTED + " && 'Rust default checks' || 'Test (1.96.0)' }}")
+        self.assertEqual(field("test-complete", "name"), "${{ " + TRUSTED + " && 'Test (1.96.0)' || 'Trusted Rust completion' }}")
         for job in ("test", "test-extended", "test-complete"):
             self.assertIn('        rust:\n          - "1.96.0"', block(job))
+
+    def test_literal_required_name_matches_native_context_on_trusted_and_fork_paths(self):
+        for event, head in (("pull_request", "SaaSy-Solutions/mockforge"), ("pull_request", "untrusted/fork"),
+                            ("push", None), ("workflow_dispatch", None)):
+            for scope_result, code in (("success", "true"), ("success", "false"), ("failure", "")):
+                with self.subTest(event=event, head=head, scope=scope_result, code=code):
+                    names = {job: display_name(field(job, "name"), event, head) for job in ("test", "test-complete")}
+                    owner = "test-complete" if trusted(event, head) else "test"
+                    self.assertEqual(names[owner], REQUIRED_CONTEXT)
+                    self.assertNotEqual(names['test' if owner == 'test-complete' else 'test-complete'], REQUIRED_CONTEXT)
+                    self.assertEqual(list(names.values()).count(REQUIRED_CONTEXT), 1)
+                    if scope_result == 'success' and code == 'false':
+                        # Docs-only preserves the existing accepted skipped context.
+                        self.assertFalse(aggregate_should_run(event, head, scope_result, code))
+                    if not trusted(event, head):
+                        self.assertFalse(aggregate_should_run(event, head, scope_result, code))
+
+    def test_native_unsuffixed_counterfactual_cannot_satisfy_original_context(self):
+        for job, event, head in (("test-complete", "pull_request", "SaaSy-Solutions/mockforge"),
+                                 ("test", "pull_request", "untrusted/fork")):
+            current = field(job, "name")
+            previous = current.replace("'Test (1.96.0)'", "'Test'")
+            self.assertNotEqual(previous, current)
+            self.assertEqual(display_name(previous, event, head), "Test")
+            self.assertNotEqual(display_name(previous, event, head), REQUIRED_CONTEXT)
+            self.assertEqual(display_name(current, event, head), REQUIRED_CONTEXT)
 
     def test_no_new_hosted_fork_jobs_or_privileged_fork_execution(self):
         self.assertEqual(field("test-extended", "if"), EXTENSION_IF)

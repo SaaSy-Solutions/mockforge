@@ -98,7 +98,7 @@ jobs:
   # add a scheduled workflow (e.g. weekly) rather than per-PR.
   test:
     # Forks retain the original full Test context; trusted work joins below.
-    name: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'Rust default checks' || 'Test' }}
+    name: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'Rust default checks' || 'Test (1.96.0)' }}
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
@@ -298,7 +298,7 @@ jobs:
   # must not turn the required context into an automatically accepted skip.
   test-complete:
     # A skipped fork aggregate must not duplicate the fork's live Test context.
-    name: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'Test' || 'Trusted Rust completion' }}
+    name: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'Test (1.96.0)' || 'Trusted Rust completion' }}
     needs: [changes, test, test-extended]
     if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (needs.changes.result != 'success' || needs.changes.outputs.code != 'false') }}
     runs-on: [self-hosted, linux, x64, rust]
@@ -595,7 +595,8 @@ jobs:
         }
         probe 'cargo-audit 0.22.2' cargo-audit --version
         probe 'cargo-deny 0.20.2' cargo-deny --version
-        probe 'cargo-audit 0.22.2' cargo audit --version
+        # cargo-audit 0.22.2's nested audit command has its own version name.
+        probe 'cargo-audit-audit 0.22.2' cargo audit --version
         probe 'cargo-deny 0.20.2' cargo deny --version
 
     - name: Install pinned security audit tools

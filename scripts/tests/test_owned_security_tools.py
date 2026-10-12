@@ -59,11 +59,32 @@ class SecurityToolOwnershipTest(unittest.TestCase):
     def tool(self, path, version):
         path.write_text('#!/bin/sh\nprintf "%s\\n" "' + version + '"\n'); path.chmod(0o755)
 
+    def plugin_payload(self, tool, direct_version, cargo_version, cargo_status=0):
+        # Match the pinned upstream CLI grammar, including Cargo's inserted
+        # subcommand argument. Never claim this fake executable is native proof.
+        subcommand = tool.removeprefix('cargo-')
+        return ('#!' + sys.executable + '\n' + textwrap.dedent('''\
+            import json, os, sys
+            direct, nested, subcommand, nested_status = SETTINGS
+            if os.environ.get('FAKE_SECURITY_ARGV_LOG'):
+                with open(os.environ['FAKE_SECURITY_ARGV_LOG'], 'a') as receipt:
+                    receipt.write(json.dumps({'path': sys.argv[0], 'args': sys.argv[1:]}) + '\\n')
+            if sys.argv[1:] == ['--version']:
+                print(direct)
+            elif sys.argv[1:] == [subcommand, '--version']:
+                print(nested)
+                sys.exit(nested_status)
+            else:
+                sys.exit(64)
+            ''').replace('SETTINGS', repr((direct_version, cargo_version, subcommand, cargo_status)))).encode()
+
     def archive(self, spec, version=None, extra=None, omit_binary=False):
         output = io.BytesIO()
         with tarfile.open(fileobj=output, mode='w:gz') as archive:
             if not omit_binary:
-                data = ('#!/bin/sh\nprintf "%s\\n" "' + spec['tool'] + ' ' + (version or spec['version']) + '"\n').encode()
+                direct = spec['tool'] + ' ' + (version or spec['version'])
+                nested = ('cargo-audit-audit' if spec['tool'] == 'cargo-audit' else spec['tool']) + ' ' + (version or spec['version'])
+                data = self.plugin_payload(spec['tool'], direct, nested)
                 member = tarfile.TarInfo(spec['top'] + '/' + spec['tool']); member.size = len(data); member.mode = 0o755
                 archive.addfile(member, io.BytesIO(data))
             if extra:
@@ -122,10 +143,46 @@ class SecurityToolOwnershipTest(unittest.TestCase):
     def test_direct_and_cargo_subcommands_use_owned_exact_tools(self):
         root, token, env = self.installed_env()
         self.assertEqual(Path(self.env['GITHUB_PATH']).read_text().splitlines(), [str(self.cargo_home / 'bin'), str(root / 'bin')])
-        result = self.verify(env)
+        argv_log = self.root / 'plugin-argv.jsonl'
+        result = self.verify({**env, 'FAKE_SECURITY_ARGV_LOG': str(argv_log)})
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual(result.stdout.count('Security version probe:'), 4)
+        calls = [json.loads(line) for line in argv_log.read_text().splitlines()]
+        self.assertEqual(calls, [
+            {'path': str(root/'bin/cargo-audit'), 'args': ['--version']},
+            {'path': str(root/'bin/cargo-deny'), 'args': ['--version']},
+            {'path': str(root/'bin/cargo-audit'), 'args': ['audit', '--version']},
+            {'path': str(root/'bin/cargo-deny'), 'args': ['deny', '--version']},
+        ])
+        self.assertIn('expected=cargo-audit-audit 0.22.2 actual=cargo-audit-audit 0.22.2 exit=0', result.stdout)
         self.assert_unmodified()
+
+    def test_old_direct_spelling_fails_for_realistic_cargo_invocation(self):
+        root, token, env = self.installed_env()
+        old = VERIFY.replace("probe 'cargo-audit-audit 0.22.2' cargo audit --version",
+                             "probe 'cargo-audit 0.22.2' cargo audit --version")
+        self.assertNotEqual(old, VERIFY)
+        result = subprocess.run(['/bin/bash', '-e', '-o', 'pipefail', '-c', old], env=env, text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('expected=cargo-audit 0.22.2 actual=cargo-audit-audit 0.22.2 exit=0', result.stdout)
+
+    def test_cargo_audit_output_and_status_are_exact(self):
+        root, token, env = self.installed_env()
+        for output, status in (('cargo-audit 0.22.2', 0), ('cargo-audit-audit 0.22.3', 0),
+                               ('cargo-audit-audit 0.22.2-extra', 0), ('cargo-audit-audit 0.22.2\nextra', 0),
+                               ('', 0), ('cargo-audit-audit 0.22.2', 1)):
+            with self.subTest(output=output, status=status):
+                (root/'bin/cargo-audit').write_bytes(self.plugin_payload('cargo-audit', 'cargo-audit 0.22.2', output, status))
+                result = self.verify(env)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('expected=cargo-audit-audit 0.22.2 actual=' + output + ' exit=' + str(status), result.stdout)
+
+    def test_cargo_deny_does_not_accept_a_nested_audit_style_name(self):
+        root, token, env = self.installed_env()
+        (root/'bin/cargo-deny').write_bytes(self.plugin_payload('cargo-deny', 'cargo-deny 0.20.2', 'cargo-deny-deny 0.20.2'))
+        result = self.verify(env)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('expected=cargo-deny 0.20.2 actual=cargo-deny-deny 0.20.2 exit=0', result.stdout)
 
     def test_wrong_or_missing_cargo_fails_before_plugin_probes(self):
         root, token, env = self.installed_env()
