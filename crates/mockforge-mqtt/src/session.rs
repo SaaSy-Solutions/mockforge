@@ -376,6 +376,13 @@ impl SessionManager {
     /// topic and — if the will's `retain` flag is set — stored as the
     /// topic's retained message so future subscribers see it too.
     async fn publish_will(&self, client_id: &str, will: crate::protocol::Will) {
+        crate::recording::record_publish(
+            client_id,
+            &will.topic,
+            will.qos as u8,
+            will.retain,
+            &will.message,
+        );
         // Persist retained first, so a subscribe that races with the
         // will publish still sees it through the retained-delivery path.
         if will.retain {
@@ -410,6 +417,13 @@ impl SessionManager {
                     if let Some(metrics) = &self.metrics {
                         metrics.record_delivery();
                     }
+                    crate::recording::record_delivery(
+                        &sub.client_id,
+                        &will.topic,
+                        delivery_qos as u8,
+                        false,
+                        &will.message,
+                    );
                 }
             }
         }
@@ -480,12 +494,19 @@ impl SessionManager {
                 // packet_id=0 wire error (same invariant as regular
                 // publishes, see handle_publish).
                 packet_id: None,
-                payload,
+                payload: payload.clone(),
             });
             if sender.send(packet).await.is_ok() {
                 if let Some(metrics) = &self.metrics {
                     metrics.record_delivery();
                 }
+                crate::recording::record_delivery(
+                    client_id,
+                    &topic,
+                    delivery_qos as u8,
+                    true,
+                    &payload,
+                );
                 debug!("Delivered retained message to {} on topic {}", client_id, topic);
             }
         }

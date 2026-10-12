@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Fixed
+
+- **[Protocols]** AMQP pull deliveries and committed transaction publishes are recorded; rolled-back publishes and empty pulls remain excluded. MQTT captures retained deliveries and last-will publishes and deliveries. Publisher confirmations use a separate sequence from consumer delivery tags, allowing publish and consume operations on the same channel. Real AMQP, MQTT and Kafka clients verify durable recording payloads and metadata. (#715)
+
 ## [0.3.233] - 2026-10-12
 
 ### Fixed

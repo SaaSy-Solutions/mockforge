@@ -223,6 +223,8 @@ pub struct Channel {
     pub publisher_confirms: bool,
     pub transaction_mode: bool,
     pub next_delivery_tag: u64,
+    /// Publisher-confirm sequence; independent of consumer delivery tags.
+    pub next_publish_sequence: u64,
     pub next_consumer_tag: u32,
     /// Unacknowledged messages: delivery_tag -> UnackedMessage
     pub unacked_messages: HashMap<u64, UnackedMessage>,
@@ -243,6 +245,7 @@ impl Channel {
             publisher_confirms: false,
             transaction_mode: false,
             next_delivery_tag: 1,
+            next_publish_sequence: 1,
             next_consumer_tag: 1,
             unacked_messages: HashMap::new(),
             tx_pending_publishes: Vec::new(),
@@ -1632,6 +1635,8 @@ impl AmqpConnection {
             // Send content header and body
             self.send_content(channel, &queued_msg.message).await?;
 
+            crate::recording::ensure_init().await;
+            crate::recording::record_deliver(&queue_name, &queued_msg.message.body);
             self.metrics.record_consume();
         } else {
             // Send Basic.Get-Empty
@@ -1874,6 +1879,7 @@ impl AmqpConnection {
 
                 // Route pending messages
                 for (exchange, routing_key, message) in pending_publishes {
+                    crate::recording::record_publish(&exchange, &routing_key, &message.body);
                     self.route_message(&exchange, &routing_key, message).await;
                 }
 
@@ -2158,8 +2164,9 @@ impl AmqpConnection {
                     // Send publisher confirm if enabled
                     if let Some(channel_state) = self.channels.get_mut(&ch) {
                         if channel_state.publisher_confirms {
-                            let delivery_tag = channel_state.next_delivery_tag();
-                            self.send_basic_ack(ch, delivery_tag, false).await?;
+                            let sequence = channel_state.next_publish_sequence;
+                            channel_state.next_publish_sequence += 1;
+                            self.send_basic_ack(ch, sequence, false).await?;
                         }
                     }
                 }
