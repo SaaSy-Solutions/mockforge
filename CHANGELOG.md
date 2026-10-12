@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Changed
+
+- **[DevX]** Behavioral-cloning HTTP handlers now live in intelligence and use shared foundation scenario types. A recorder storage adapter preserves the HTTP compatibility state and SQLite behavior without adding a reverse dependency. (#631)
+
 ## [0.3.233] - 2026-10-12
 
 ### Fixed
