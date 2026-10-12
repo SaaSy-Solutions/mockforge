@@ -4,6 +4,10 @@
 
 - **[DevX]** Explicit mock health routes coexist with built-in health probes instead of crashing server startup; this restores the generated `init` project's OpenAPI example. (#851)
 - **[DevX]** The README opens with a working Docker example and a reproducible cold-start measurement. New `init` projects print their startup command and test request; installation guidance no longer promises a 30-second source build. (#851)
+- **[Reality]** Verify persona CI-hit recording from actual HTTP headers through SQLite persistence, including optional run IDs and ignored blank/invalid labels, and document analytics setup and tenant-context limits. (#716)
+
+- **[DevX]** Retire the outdated shared-runner cleanup copy and its systemd units in favor of the infrastructure-owned script, preventing accidental replacement of newer host protections. (#706)
+
 - **[Contracts]** Swagger 2.0 imports use automatic conversion instead of rejecting the format. Reusable parameters/responses, inherited request bodies, nested schema references, and media-specific response examples survive loading and mock generation. (#838)
 
 - **[DevX]** Intelligence handler state construction tolerates Cargo database feature unification, restoring HTTP builds when Core enables database support independently. Explicit HTTP database connections are preserved. (#632)
