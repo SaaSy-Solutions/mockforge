@@ -45,6 +45,27 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - name: Verify Rust lane and required-context routing
+        shell: sh
+        run: |
+          set -eu
+          command -v python3 >/dev/null || { echo "::error::Python 3 is required for the Rust CI routing regression."; exit 1; }
+          command -v bash >/dev/null || { echo "::error::Bash is required for the Rust CI routing regression."; exit 1; }
+          python3 scripts/tests/test_rust_sequential_ci.py
+      - name: Verify owned UI tool setup and cleanup
+        shell: sh
+        run: |
+          set -eu
+          command -v python3 >/dev/null || { echo "::error::Python 3 is required for UI tool ownership regressions."; exit 1; }
+          command -v bash >/dev/null || { echo "::error::Bash is required for UI tool ownership regressions."; exit 1; }
+          python3 scripts/tests/test_hetzner_ui_ownership.py
+      - name: Verify owned security tool setup and cleanup
+        shell: sh
+        run: |
+          set -eu
+          command -v python3 >/dev/null || { echo "::error::Python 3 is required for security tool ownership regressions."; exit 1; }
+          command -v bash >/dev/null || { echo "::error::Bash is required for security tool ownership regressions."; exit 1; }
+          python3 scripts/tests/test_owned_security_tools.py
       - name: Determine whether non-docs files changed
         id: filter
         env:
@@ -76,7 +97,8 @@ jobs:
   # for a signal nobody acted on. If we ever want beta/nightly visibility again,
   # add a scheduled workflow (e.g. weekly) rather than per-PR.
   test:
-    name: Test
+    # Forks retain the original full Test context; trusted work joins below.
+    name: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'Rust default checks' || 'Test' }}
     needs: changes
     if: ${{ needs.changes.outputs.code == 'true' }}
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
@@ -199,12 +221,107 @@ jobs:
 
     - name: Run tests with all features
       run: cargo test --workspace --exclude mockforge-desktop --exclude mockforge-tui --all-features --verbose
+      if: matrix.rust == '1.96.0' && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
+      continue-on-error: true  # May fail if native libs (vosk) not installed
+
+    - name: Check documentation
+      run: cargo doc --workspace --exclude mockforge-desktop --no-deps
+      if: matrix.rust == '1.96.0' && (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository)
+
+  # Keep trusted Rust work sequential on the existing pool. No target or
+  # binary artifacts cross jobs; each lane uses its own normal job cache key.
+  test-extended:
+    name: Rust extended checks
+    needs: [changes, test]
+    if: ${{ needs.changes.outputs.code == 'true' && needs.test.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
+    runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+      CARGO_BUILD_JOBS: "2"
+      # Full debuginfo for the whole workspace plus its test binaries filled
+      # the hosted runner's disk and the linker died with "Bus error".
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
+    strategy:
+      fail-fast: false
+      matrix:
+        rust:
+          - "1.96.0"
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v7
+
+    - name: Set per-runner CARGO_HOME on Hetzner
+      if: runner.environment == 'self-hosted'
+      run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
+    - name: Verify provisioned Rust toolchain on Hetzner
+      if: runner.environment == 'self-hosted'
+      env:
+        EXPECTED_TOOLCHAIN: ${{ matrix.rust }}
+      run: |
+        command -v rustup >/dev/null || { echo "::error::Hetzner runner lacks rustup; operator provisioning is required."; exit 1; }
+        rustc_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" rustc --version)"
+        cargo_version="$(RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" cargo --version)"
+        [[ "$rustc_version" == "rustc $EXPECTED_TOOLCHAIN "* ]]
+        [[ "$cargo_version" == "cargo $EXPECTED_TOOLCHAIN "* ]]
+        printf '%s\n' "$rustc_version" "$cargo_version"
+        RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" rustfmt --version
+        RUSTUP_AUTO_INSTALL=0 rustup run "$EXPECTED_TOOLCHAIN" cargo clippy --version
+
+    - name: Verify native build dependencies on Hetzner
+      if: runner.environment == 'self-hosted'
+      run: |
+        dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev >/dev/null 2>&1 || {
+          echo "::error::Hetzner runner is missing required native build packages; ask the runner operator to provision them."
+          exit 1
+        }
+
+    - name: Cache dependencies
+      uses: Swatinem/rust-cache@v2
+      with:
+        env-vars: "CARGO_HOME"
+
+    - name: Run tests with all features
+      run: cargo test --workspace --exclude mockforge-desktop --exclude mockforge-tui --all-features --verbose
       if: matrix.rust == '1.96.0'
       continue-on-error: true  # May fail if native libs (vosk) not installed
 
     - name: Check documentation
       run: cargo doc --workspace --exclude mockforge-desktop --no-deps
       if: matrix.rust == '1.96.0'
+
+  # Preserve the original trusted Test (1.96.0) context only after both lanes
+  # finish. always() is intentional: failed/cancelled/skipped prerequisites
+  # must not turn the required context into an automatically accepted skip.
+  test-complete:
+    # A skipped fork aggregate must not duplicate the fork's live Test context.
+    name: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && 'Test' || 'Trusted Rust completion' }}
+    needs: [changes, test, test-extended]
+    if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && (needs.changes.result != 'success' || needs.changes.outputs.code != 'false') }}
+    runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        rust:
+          - "1.96.0"
+    steps:
+      - name: Require every Rust validation lane to succeed
+        env:
+          SCOPE_RESULT: ${{ needs.changes.result }}
+          CODE_SCOPE: ${{ needs.changes.outputs.code }}
+          DEFAULT_RESULT: ${{ needs.test.result }}
+          EXTENDED_RESULT: ${{ needs['test-extended'].result }}
+        run: |
+          set -euo pipefail
+          if [[ "$SCOPE_RESULT" != success || "$CODE_SCOPE" != true || "$DEFAULT_RESULT" != success || "$EXTENDED_RESULT" != success ]]; then
+            echo "::error::Rust validation is incomplete or unsuccessful; the original Test context cannot pass."
+            exit 1
+          fi
+          echo "Default, all-features, and documentation commands completed under their existing policies."
 
   ui-test:
     name: UI Tests
@@ -227,25 +344,8 @@ jobs:
         if: runner.environment == 'self-hosted'
         id: ui-state
         run: |
-          set -euo pipefail
-          # Do not let setup-node install into the shared runner tool cache.
-          command -v node >/dev/null && command -v npm >/dev/null || { echo "::error::Hetzner UI checks require preinstalled Node 20 and npm."; exit 1; }
-          node_version="$(node --version)"
-          [[ "$node_version" == v20.* ]] || { echo "::error::Hetzner UI checks require preinstalled Node 20."; exit 1; }
-          npm --version
-          [[ "${GITHUB_RUN_ID:?}" =~ ^[0-9]+$ && "${GITHUB_RUN_ATTEMPT:?}" =~ ^[0-9]+$ ]]
-          root="$(mktemp -d "${RUNNER_TEMP:?}/mockforge-ui-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}.XXXXXXXX")"
-          mkdir -p "$root"/{npm-cache,pnpm-store,cache,config,data,state}
-          printf 'pnpm_dest=%s/setup-pnpm\n' "$root" >> "$GITHUB_OUTPUT"
-          {
-            printf 'UI_TOOL_ROOT=%s\n' "$root"
-            printf 'npm_config_cache=%s/npm-cache\n' "$root"
-            printf 'npm_config_store_dir=%s/pnpm-store\n' "$root"
-            printf 'XDG_CACHE_HOME=%s/cache\n' "$root"
-            printf 'XDG_CONFIG_HOME=%s/config\n' "$root"
-            printf 'XDG_DATA_HOME=%s/data\n' "$root"
-            printf 'XDG_STATE_HOME=%s/state\n' "$root"
-          } >> "$GITHUB_ENV"
+          command -v python3 >/dev/null || { echo "::error::Python 3 is required for owned UI tools."; exit 1; }
+          python3 scripts/ci-owned-ui-tools.py prepare
 
       - name: Install pnpm
         if: runner.environment == 'github-hosted'
@@ -255,9 +355,11 @@ jobs:
 
       - name: Install pnpm in the owned job directory
         if: runner.environment == 'self-hosted'
-        uses: pnpm/action-setup@v6
+        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6; reviewed no-op post
         with:
-          version: 9
+          version: 9.15.9
+          run_install: false
+          cache: false
           dest: ${{ steps.ui-state.outputs.pnpm_dest }}
 
       - name: Verify UI tool and store ownership on Hetzner
@@ -266,7 +368,11 @@ jobs:
           set -euo pipefail
           [[ "$(command -v pnpm)" == "${UI_TOOL_ROOT:?}/setup-pnpm/"* ]]
           [[ "${PNPM_HOME:?}" == "$UI_TOOL_ROOT/setup-pnpm/"* ]]
-          [[ "$(pnpm --version)" == 9.* ]]
+          [[ "$(node --version)" == v20.20.2 ]]
+          [[ "$(command -v node)" == "$UI_TOOL_ROOT/node-v20.20.2-linux-x64/bin/node" ]]
+          [[ "$(command -v npm)" == "$UI_TOOL_ROOT/node-v20.20.2-linux-x64/bin/npm" ]]
+          [[ "$(npm --version)" == 10.8.2 ]]
+          [[ "$(pnpm --version)" == 9.15.9 ]]
           [[ "$(npm config get cache)" == "$UI_TOOL_ROOT/npm-cache" ]]
           store="$(pnpm store path --silent)"
           [[ "$store" == "$UI_TOOL_ROOT/pnpm-store" || "$store" == "$UI_TOOL_ROOT/pnpm-store/"* ]]
@@ -296,6 +402,12 @@ jobs:
         with:
           directory: crates/mockforge-ui/ui/coverage
           flags: ui-tests
+
+      # pnpm's post phase is a no-op with the explicit run_install/cache false
+      # inputs above. Keep this after coverage upload and scoped to this root.
+      - name: Clean up owned UI tools on Hetzner
+        if: always() && runner.environment == 'self-hosted' && steps.ui-state.outcome == 'success'
+        run: python3 scripts/ci-owned-ui-tools.py cleanup
 
   # Cross-Platform Tests (macos-latest + windows-latest) removed: the job had
   # been chronically red on main for weeks (see MEMORY.md:
@@ -458,14 +570,33 @@ jobs:
       if: runner.environment == 'github-hosted'
       uses: ./.github/actions/rust-toolchain
 
+    - name: Prepare job-owned security audit tools on Hetzner
+      if: runner.environment == 'self-hosted'
+      id: security-tools
+      run: |
+        command -v python3 >/dev/null || { echo "::error::Python 3 is required for owned security tools."; exit 1; }
+        python3 scripts/ci-owned-security-tools.py prepare
+
     - name: Verify provisioned security audit tools on Hetzner
       if: runner.environment == 'self-hosted'
       run: |
-        audit_version="$(cargo-audit --version)"
-        deny_version="$(cargo-deny --version)"
-        [[ "$audit_version" == "cargo-audit 0.22.2" ]]
-        [[ "$deny_version" == "cargo-deny 0.20.2" ]]
-        printf '%s\n' "$audit_version" "$deny_version"
+        cargo_status=0
+        cargo_version="$(cargo --version)" || cargo_status=$?
+        printf 'Cargo version probe: actual=%s exit=%s\n' "$cargo_version" "$cargo_status"
+        [[ "$cargo_status" == 0 && "$cargo_version" == 'cargo 1.96.0 '* ]]
+        [[ "$(command -v cargo-audit)" == "${SECURITY_TOOL_ROOT:?}/bin/cargo-audit" ]]
+        [[ "$(command -v cargo-deny)" == "$SECURITY_TOOL_ROOT/bin/cargo-deny" ]]
+        probe() {
+          expected="$1"; shift
+          status=0
+          actual="$("$@")" || status=$?
+          printf 'Security version probe: expected=%s actual=%s exit=%s\n' "$expected" "$actual" "$status"
+          [[ "$status" == 0 && "$actual" == "$expected" ]]
+        }
+        probe 'cargo-audit 0.22.2' cargo-audit --version
+        probe 'cargo-deny 0.20.2' cargo-deny --version
+        probe 'cargo-audit 0.22.2' cargo audit --version
+        probe 'cargo-deny 0.20.2' cargo deny --version
 
     - name: Install pinned security audit tools
       if: runner.environment == 'github-hosted'
@@ -500,6 +631,10 @@ jobs:
       run: |
         echo "Files containing 'unsafe' blocks:"
         find crates -name "*.rs" -type f -exec grep -l "unsafe" {} \; | sort || echo "None found"
+
+    - name: Clean up owned security tools on Hetzner
+      if: always() && runner.environment == 'self-hosted' && steps.security-tools.outcome == 'success'
+      run: python3 scripts/ci-owned-security-tools.py cleanup
 
   coverage:
     name: Code Coverage
