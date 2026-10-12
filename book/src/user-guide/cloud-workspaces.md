@@ -47,6 +47,30 @@ mockforge cloud workspace link . my-workspace
 mockforge cloud sync start --workspace my-workspace --watch
 ```
 
+## Hosted capture attribution
+
+On the **Hosted Mocks** page, choose **Workspace (optional)** when creating a
+deployment, or open an existing deployment's **Overview**, choose a workspace,
+and select **Save workspace**. Choose **No workspace** to detach it. Only
+workspaces in the deployment's organization are accepted; changing attribution
+requires permission to update the deployment.
+
+The selection applies to future recorder capture batches. Earlier captures keep
+their original workspace. Existing deployments stay unassigned until explicitly
+configured, and configuration JSON cannot override this selection. Deleting a
+workspace detaches its deployments using the existing workspace deletion rules;
+it does not move old captures into another workspace. Workspace-based
+verification and capture-source alerts can use newly attributed captures once
+their respective features are enabled.
+
+The registry API accepts an optional top-level `workspace_id` on
+`POST /api/v1/hosted-mocks` and returns the nullable field on deployment
+create/list/get responses. To update an existing deployment, use
+`PATCH /api/v1/hosted-mocks/{deployment_id}/workspace` with
+`{"workspace_id":"<workspace UUID>"}`; use `{"workspace_id":null}` to detach.
+An omitted update field is rejected. For multiple organizations, send the
+deployment's `X-Organization-Id` header.
+
 ## Core Commands
 
 ### Authentication and Identity

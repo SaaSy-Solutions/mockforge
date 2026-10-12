@@ -257,6 +257,7 @@ jobs:
             --test workspace_content_e2e \
             --test signup_flow_e2e \
             --test marketplace_e2e \
+            --test hosted_capture_workspaces_e2e \
             --test cloud_verification_e2e \
             --test cloud_ai_contract_diff_e2e \
             --test cloud_conformance_e2e \

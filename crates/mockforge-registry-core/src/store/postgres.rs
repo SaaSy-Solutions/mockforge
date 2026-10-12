@@ -1376,6 +1376,18 @@ impl RegistryStore for PgRegistryStore {
         .await
     }
 
+    async fn create_hosted_mock_scoped(
+        &self,
+        input: crate::models::hosted_mock::HostedMockCreation<'_>,
+    ) -> StoreResult<HostedMock> {
+        crate::store::with_optional_org(&self.pool, Some(input.org_id), |tx| {
+            Box::pin(async move {
+                HostedMock::create_scoped(&mut **tx, input).await.map_err(Into::into)
+            })
+        })
+        .await
+    }
+
     async fn find_hosted_mock_by_id(&self, id: Uuid) -> StoreResult<Option<HostedMock>> {
         crate::store::with_current_org(&self.pool, |tx| {
             Box::pin(async move { HostedMock::find_by_id(&mut **tx, id).await.map_err(Into::into) })

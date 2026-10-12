@@ -2,6 +2,8 @@
 
 ### Added
 
+- **[Cloud]** Hosted deployments can explicitly select or change their capture workspace in the API and portal. Recorder batches use the deployment's verified organization/workspace, preserve historical attribution, and reject cross-organization assignments; unassigned deployments stay unassigned. (#720)
+
 - **[Contracts]** Add the `proxy` CLI command with passive or strict OpenAPI conformance validation and the shared violation feed. Preserve binary and redirect responses, honor configured upstream timeouts, and validate response status ranges, default schemas, and malformed JSON. (#864)
 
 ### Fixed

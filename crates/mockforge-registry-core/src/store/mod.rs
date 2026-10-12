@@ -27,7 +27,7 @@ use crate::models::cloud_workspace::Workspace as CloudWorkspace;
 use crate::models::feature_usage::FeatureType;
 use crate::models::federation::Federation;
 use crate::models::federation_scenario_activation::FederationScenarioActivation;
-use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock};
+use crate::models::hosted_mock::{DeploymentStatus, HealthStatus, HostedMock, HostedMockCreation};
 use crate::models::org_template::OrgTemplate;
 use crate::models::organization::{OrgMember, OrgRole, Organization, Plan};
 use crate::models::osv::{OsvImportRecord, OsvMatch};
@@ -1334,6 +1334,31 @@ pub trait RegistryStore: Send + Sync + 'static {
         openapi_spec_url: Option<&str>,
         region: Option<&str>,
     ) -> StoreResult<HostedMock>;
+
+    /// Create deployment and workspace attribution in one transaction.
+    /// Existing stores retain their unassigned constructor behavior. Stores
+    /// supporting workspace attribution must override this method atomically.
+    async fn create_hosted_mock_scoped(
+        &self,
+        input: HostedMockCreation<'_>,
+    ) -> StoreResult<HostedMock> {
+        if input.workspace_id.is_some() {
+            return Err(crate::error::StoreError::Database(sqlx::Error::Protocol(
+                "Workspace-attributed hosting is unsupported by this store".into(),
+            )));
+        }
+        self.create_hosted_mock(
+            input.org_id,
+            input.project_id,
+            input.name,
+            input.slug,
+            input.description,
+            input.config_json,
+            input.openapi_spec_url,
+            input.region,
+        )
+        .await
+    }
 
     async fn find_hosted_mock_by_id(&self, id: Uuid) -> StoreResult<Option<HostedMock>>;
 
