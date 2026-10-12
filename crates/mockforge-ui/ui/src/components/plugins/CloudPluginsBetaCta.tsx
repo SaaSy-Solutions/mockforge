@@ -8,6 +8,8 @@
  * optional free-text use case. After submitting, the banner switches
  * to a thank-you state so the page doesn't keep prompting.
  *
+ * Hidden by default. A cloud build must explicitly set
+ * VITE_CLOUD_PLUGIN_BETA_INTEREST_ENABLED=true to show the interest form.
  * Hides itself entirely in self-hosted (local) mode — there is no
  * cloud runtime to attach plugins to in that build.
  */
@@ -46,7 +48,10 @@ const USE_CASE_INPUT_PROPS: React.InputHTMLAttributes<HTMLInputElement> & { 'dat
 };
 
 export const CloudPluginsBetaCta: React.FC = () => {
-  if (!isCloudMode()) return null;
+  // Unfinished cloud runtime surfaces require an explicit build-time opt-in.
+  if (!isCloudMode() || import.meta.env.VITE_CLOUD_PLUGIN_BETA_INTEREST_ENABLED !== 'true') {
+    return null;
+  }
   return <Inner />;
 };
 
