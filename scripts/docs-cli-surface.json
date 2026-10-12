@@ -3557,6 +3557,24 @@
      },
      "variadic": false
     },
+    "proxy": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--host": 1,
+      "--log-level": 1,
+      "--port": 1,
+      "--spec": 1,
+      "--upstream": 1,
+      "--validate-conformance": 0,
+      "--validate-conformance-strict": 0,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 1,
+     "subcommands": {},
+     "variadic": false
+    },
     "quick": {
      "aliases": {},
      "flags": {
@@ -5761,7 +5779,7 @@
    },
    "variadic": false
   },
-  "version": "mockforge 0.3.232"
+  "version": "mockforge 0.3.233"
  },
  "mockforge-plugin": {
   "root": {

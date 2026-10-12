@@ -725,7 +725,7 @@ pub async fn handle_serve(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // Install Unix handlers before exposing listeners so an immediate
     // container stop cannot race signal registration.
-    let shutdown = shutdown_signal()?;
+    let shutdown = crate::shutdown::signal()?;
     // CLI flags that influence library behavior via env vars must be applied
     // before the HTTP router is constructed. `--no-rate-limit` only adds to
     // (never overrides) what the operator already set in the environment, so
@@ -3400,27 +3400,6 @@ pub async fn handle_serve(
         Err(error.into())
     } else {
         Ok(())
-    }
-}
-
-/// Receive Ctrl+C on every platform, or SIGTERM on Unix/container hosts.
-fn shutdown_signal() -> std::io::Result<impl std::future::Future<Output = std::io::Result<()>>> {
-    #[cfg(unix)]
-    {
-        let mut terminate =
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
-        let mut interrupt =
-            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::interrupt())?;
-        Ok(async move {
-            tokio::select! {
-                _ = interrupt.recv() => Ok(()),
-                _ = terminate.recv() => Ok(()),
-            }
-        })
-    }
-    #[cfg(not(unix))]
-    {
-        Ok(tokio::signal::ctrl_c())
     }
 }
 
