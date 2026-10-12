@@ -3,8 +3,12 @@
 use axum::{extract::State, http::HeaderMap, Json};
 use serde::{Deserialize, Serialize};
 use stripe::{
-    BillingPortalSession, CheckoutSession, CheckoutSessionMode, Client, CreateBillingPortalSession,
+    BillingPortalSession, CheckoutSession, CheckoutSessionMode,
+    CheckoutSessionPaymentMethodCollection, Client, CreateBillingPortalSession,
     CreateCheckoutSession, CreateCheckoutSessionLineItems, CreateCheckoutSessionSubscriptionData,
+    CreateCheckoutSessionSubscriptionDataTrialSettings as CheckoutTrialSettings,
+    CreateCheckoutSessionSubscriptionDataTrialSettingsEndBehavior as CheckoutTrialEndBehavior,
+    CreateCheckoutSessionSubscriptionDataTrialSettingsEndBehaviorMissingPaymentMethod as MissingTrialPaymentMethod,
     EventObject, EventType, Invoice, ListInvoices,
 };
 use uuid::Uuid;
@@ -229,6 +233,14 @@ fn subscription_checkout_params<'a>(
     params.success_url = Some(success_url);
     params.cancel_url = Some(cancel_url);
     params.mode = Some(CheckoutSessionMode::Subscription);
+    // A positive trial starts without a card. Paid checkout without a
+    // trial still collects one; this policy is explicit in both cases.
+    let has_trial = trial_period_days > 0;
+    params.payment_method_collection = Some(if has_trial {
+        CheckoutSessionPaymentMethodCollection::IfRequired
+    } else {
+        CheckoutSessionPaymentMethodCollection::Always
+    });
     params.client_reference_id = Some(org_id);
     params.metadata = Some(metadata.clone());
     params.line_items = Some(vec![CreateCheckoutSessionLineItems {
@@ -239,7 +251,15 @@ fn subscription_checkout_params<'a>(
     params.subscription_data = Some(CreateCheckoutSessionSubscriptionData {
         metadata: Some(metadata),
         // Stripe requires a positive trial length; omit the field for zero.
-        trial_period_days: (trial_period_days > 0).then_some(trial_period_days),
+        trial_period_days: has_trial.then_some(trial_period_days),
+        // No payment method at trial end cancels the subscription instead
+        // of creating an invoice. Existing subscription-deleted handling
+        // then returns the organization to its Free entitlements.
+        trial_settings: has_trial.then_some(CheckoutTrialSettings {
+            end_behavior: CheckoutTrialEndBehavior {
+                missing_payment_method: MissingTrialPaymentMethod::Cancel,
+            },
+        }),
         ..Default::default()
     });
     params
@@ -1141,6 +1161,93 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[tokio::test]
+    async fn checkout_sdk_sends_cardless_trial_and_safe_end_policy() -> anyhow::Result<()> {
+        use anyhow::Context;
+        use axum::{http::StatusCode, routing::post, Router};
+        use std::{collections::HashMap, time::Duration};
+        use tokio::sync::mpsc;
+
+        async fn capture(
+            State(sender): State<mpsc::UnboundedSender<String>>,
+            body: String,
+        ) -> (StatusCode, Json<serde_json::Value>) {
+            let _ = sender.send(body);
+            // Only capture the actual SDK request. Never create a real
+            // subscription or pretend the fixture is a successful checkout.
+            (
+                StatusCode::BAD_REQUEST,
+                Json(serde_json::json!({
+                    "error": {"type": "invalid_request_error", "message": "local fixture"}
+                })),
+            )
+        }
+
+        let (sender, mut receiver) = mpsc::unbounded_channel();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let address = listener.local_addr()?;
+        let app = Router::new().route("/v1/checkout/sessions", post(capture)).with_state(sender);
+        let server = tokio::spawn(async move { axum::serve(listener, app).await });
+        struct ServerGuard(tokio::task::JoinHandle<std::io::Result<()>>);
+        impl Drop for ServerGuard {
+            fn drop(&mut self) {
+                self.0.abort();
+            }
+        }
+        let _server = ServerGuard(server);
+        let base = format!("http://{address}/");
+        let client = Client::from_url(base.as_str(), "local-fixture-not-a-provider-key");
+        let org_id = "04caad30-8aae-4506-a73c-3f306c0bbc0e";
+        for trial_days in [14, 0, 30] {
+            for (plan, interval, price) in [
+                ("pro", BillingInterval::Monthly, "price_pro_month"),
+                ("pro", BillingInterval::Annual, "price_pro_year"),
+                ("team", BillingInterval::Monthly, "price_team_month"),
+                ("team", BillingInterval::Annual, "price_team_year"),
+            ] {
+                let params = subscription_checkout_params(
+                    org_id,
+                    plan,
+                    interval,
+                    price.to_string(),
+                    "https://app.example.test/billing/success",
+                    "https://app.example.test/billing/cancel",
+                    trial_days,
+                );
+                assert!(CheckoutSession::create(&client, params).await.is_err());
+                let body = tokio::time::timeout(Duration::from_secs(5), receiver.recv())
+                    .await?
+                    .context("Stripe SDK must send its request to the owned fixture")?;
+                let form_url = reqwest::Url::parse(&format!("http://fixture.invalid/?{body}"))?;
+                let fields: HashMap<_, _> = form_url.query_pairs().into_owned().collect();
+                assert_eq!(fields.get("mode").map(String::as_str), Some("subscription"));
+                assert_eq!(fields.get("client_reference_id").map(String::as_str), Some(org_id));
+                assert_eq!(
+                    fields.get("subscription_data[metadata][org_id]").map(String::as_str),
+                    Some(org_id)
+                );
+                assert_eq!(fields.get("line_items[0][price]").map(String::as_str), Some(price));
+                let card_policy = fields.get("payment_method_collection").map(String::as_str);
+                let end_policy = fields
+                    .get("subscription_data[trial_settings][end_behavior][missing_payment_method]")
+                    .map(String::as_str);
+                if trial_days > 0 {
+                    assert_eq!(card_policy, Some("if_required"), "trials must allow no card");
+                    assert_eq!(end_policy, Some("cancel"), "no-card trials must not create debt");
+                    assert_eq!(
+                        fields.get("subscription_data[trial_period_days]"),
+                        Some(&trial_days.to_string())
+                    );
+                } else {
+                    assert_eq!(card_policy, Some("always"), "paid checkout still collects a card");
+                    assert_eq!(end_policy, None);
+                    assert!(!fields.contains_key("subscription_data[trial_period_days]"));
+                }
+            }
+        }
+        Ok(())
     }
 
     #[test]
