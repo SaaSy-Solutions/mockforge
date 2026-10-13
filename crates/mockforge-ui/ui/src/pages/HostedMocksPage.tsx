@@ -25,6 +25,7 @@ import {
 } from '@/hooks/useDeploymentTraces';
 import { useDeploymentStateMachines } from '@/hooks/useDeploymentStateMachines';
 import { ManagementTokenField } from '@/components/hosted/ManagementTokenField';
+import { DeploymentWorkspaceEditor, DeploymentWorkspaceSelect } from '@/components/hosted/DeploymentWorkspaceField';
 import { getAuthToken } from '@/services/tokenStorage';
 import {
   Box,
@@ -125,6 +126,7 @@ interface Deployment {
   id: string;
   org_id: string;
   project_id?: string;
+  workspace_id?: string | null;
   name: string;
   slug: string;
   description?: string;
@@ -203,6 +205,7 @@ export const HostedMocksPage: React.FC = () => {
     upstream_url: '',
     region: 'iad',
     project_id: '',
+    workspace_id: '',
   });
 
   // Optional protocols beyond HTTP. HTTP is implicit (always present);
@@ -618,6 +621,7 @@ export const HostedMocksPage: React.FC = () => {
         upstream_url: formData.upstream_url.trim() || undefined,
         region: formData.region || undefined,
         project_id: formData.project_id || undefined,
+        workspace_id: formData.workspace_id || undefined,
         enabled_protocols: enabledProtocols,
       };
 
@@ -654,6 +658,7 @@ export const HostedMocksPage: React.FC = () => {
         upstream_url: '',
         region: 'iad',
         project_id: '',
+        workspace_id: '',
       });
       setEnabledOptionalProtocols([]);
       loadDeployments();
@@ -1274,6 +1279,9 @@ export const HostedMocksPage: React.FC = () => {
               )}
             </FormControl>
 
+            <DeploymentWorkspaceSelect value={formData.workspace_id} disabled={creating}
+              onChange={workspace_id => setFormData(previous => ({ ...previous, workspace_id }))} />
+
             <FormControl fullWidth>
               <InputLabel id="hosted-mock-region-label">Region</InputLabel>
               <Select
@@ -1450,6 +1458,16 @@ export const HostedMocksPage: React.FC = () => {
 
               {detailsTab === 0 && (
                 <Box>
+                  <DeploymentWorkspaceEditor key={selectedDeployment.id}
+                    deploymentId={selectedDeployment.id} orgId={selectedDeployment.org_id}
+                    workspaceId={selectedDeployment.workspace_id}
+                    onSaved={workspace_id => {
+                      const id = selectedDeployment.id;
+                      setSelectedDeployment(previous => previous?.id === id
+                        ? { ...previous, workspace_id } : previous);
+                      setDeployments(previous => previous.map(deployment => deployment.id === id
+                        ? { ...deployment, workspace_id } : deployment));
+                    }} />
                   {selectedDeployment.description && (
                     <Typography variant="body1" paragraph>
                       {selectedDeployment.description}

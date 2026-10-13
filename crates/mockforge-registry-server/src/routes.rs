@@ -303,6 +303,7 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         .route("/api/v1/hosted-mocks", get(handlers::hosted_mocks::list_deployments))
         .route("/api/v1/hosted-mocks/{deployment_id}", get(handlers::hosted_mocks::get_deployment))
         .route("/api/v1/hosted-mocks/{deployment_id}/status", patch(handlers::hosted_mocks::update_deployment_status))
+        .route("/api/v1/hosted-mocks/{deployment_id}/workspace", patch(handlers::hosted_mocks::workspace::update))
         .route("/api/v1/hosted-mocks/{deployment_id}", delete(handlers::hosted_mocks::delete_deployment))
         .route("/api/v1/hosted-mocks/{deployment_id}/redeploy", post(handlers::hosted_mocks::redeploy_deployment))
         // Smoke test against the deployment's declared routes (#392).

@@ -7,6 +7,20 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
 
+/// Typed creation input for an optionally workspace-attributed deployment.
+/// The database enforces that the workspace and deployment share an org.
+pub struct HostedMockCreation<'a> {
+    pub org_id: Uuid,
+    pub project_id: Option<Uuid>,
+    pub workspace_id: Option<Uuid>,
+    pub name: &'a str,
+    pub slug: &'a str,
+    pub description: Option<&'a str>,
+    pub config_json: serde_json::Value,
+    pub openapi_spec_url: Option<&'a str>,
+    pub region: Option<&'a str>,
+}
+
 /// Hosted mock deployment status
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -368,25 +382,44 @@ impl HostedMock {
         openapi_spec_url: Option<&str>,
         region: Option<&str>,
     ) -> sqlx::Result<Self> {
-        let region = region.unwrap_or("iad");
-        sqlx::query_as::<_, Self>(
-            r#"
-            INSERT INTO hosted_mocks (
-                org_id, project_id, name, slug, description,
-                config_json, openapi_spec_url, region, status, health_status
-            )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'pending', 'unknown')
-            RETURNING *
-            "#,
+        Self::create_scoped(
+            executor,
+            HostedMockCreation {
+                org_id,
+                project_id,
+                workspace_id: None,
+                name,
+                slug,
+                description,
+                config_json,
+                openapi_spec_url,
+                region,
+            },
         )
-        .bind(org_id)
-        .bind(project_id)
-        .bind(name)
-        .bind(slug)
-        .bind(description)
-        .bind(config_json)
-        .bind(openapi_spec_url)
-        .bind(region)
+        .await
+    }
+
+    /// Atomically persist deployment identity and optional workspace scope.
+    /// The legacy constructor delegates here without assigning a workspace.
+    pub async fn create_scoped(
+        executor: impl sqlx::PgExecutor<'_>,
+        input: HostedMockCreation<'_>,
+    ) -> sqlx::Result<Self> {
+        sqlx::query_as::<_, Self>(
+            r#"INSERT INTO hosted_mocks (
+                org_id, project_id, name, slug, description, config_json,
+                openapi_spec_url, region, workspace_id, status, health_status
+            ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'pending','unknown') RETURNING *"#,
+        )
+        .bind(input.org_id)
+        .bind(input.project_id)
+        .bind(input.name)
+        .bind(input.slug)
+        .bind(input.description)
+        .bind(input.config_json)
+        .bind(input.openapi_spec_url)
+        .bind(input.region.unwrap_or("iad"))
+        .bind(input.workspace_id)
         .fetch_one(executor)
         .await
     }
