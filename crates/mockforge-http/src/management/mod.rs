@@ -742,6 +742,7 @@ pub struct ManagementState {
     #[cfg(any(feature = "mqtt", feature = "kafka"))]
     pub message_events: Arc<broadcast::Sender<MessageEvent>>,
     /// State machine manager for scenario state machines
+    #[cfg(feature = "scenario-engine")]
     pub state_machine_manager:
         Arc<RwLock<mockforge_scenarios::state_machine::ScenarioStateMachineManager>>,
     /// Optional WebSocket broadcast channel for real-time updates
@@ -805,6 +806,7 @@ impl ManagementState {
                 let (tx, _) = broadcast::channel(capacity);
                 Arc::new(tx)
             },
+            #[cfg(feature = "scenario-engine")]
             state_machine_manager: Arc::new(RwLock::new(
                 mockforge_scenarios::state_machine::ScenarioStateMachineManager::new(),
             )),
@@ -1048,6 +1050,7 @@ pub fn management_router(state: ManagementState) -> Router {
         .route("/network/profile/apply", post(apply_network_profile));
 
     // State machine API routes
+    #[cfg(feature = "scenario-engine")]
     let router =
         router.nest("/state-machines", crate::state_machine_api::create_state_machine_routes());
 

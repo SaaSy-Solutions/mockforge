@@ -19,6 +19,7 @@ pub mod failure_designer;
 mod governance_auth_tests;
 pub mod incident_replay;
 pub mod oauth2_server;
+#[cfg(feature = "performance-profiling")]
 pub mod performance;
 #[cfg(feature = "pipelines")]
 pub mod pipelines;
@@ -31,6 +32,7 @@ pub mod snapshot_diff;
 pub mod snapshots;
 pub mod token_lifecycle;
 pub mod webhook_test;
+#[cfg(feature = "world-state")]
 pub mod world_state;
 
 pub use ab_testing::{ab_testing_router, ABTestingState};
@@ -75,6 +77,7 @@ pub use mockforge_intelligence::handlers::threat_modeling::{
     threat_modeling_router, ThreatModelingState,
 };
 pub use mockforge_intelligence::handlers::xray::xray_router;
+#[cfg(feature = "performance-profiling")]
 pub use performance::{performance_router, PerformanceState};
 #[cfg(feature = "pipelines")]
 pub use pipelines::{pipeline_router, PipelineState};
@@ -85,4 +88,5 @@ pub use risk_assessment::{risk_assessment_router, RiskAssessmentState};
 pub use snapshots::{snapshot_router, SnapshotState};
 pub use token_lifecycle::{token_lifecycle_router, TokenLifecycleState};
 pub use webhook_test::{webhook_test_router, WebhookTestState};
+#[cfg(feature = "world-state")]
 pub use world_state::{world_state_router, WorldStateState};
