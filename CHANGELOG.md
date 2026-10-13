@@ -8,6 +8,8 @@
 
 - **[Contracts]** Move drift-budget and contract-health handlers into Intelligence through typed engine providers, retaining the existing HTTP state constructors and feature gates. Bind timeline workspace IDs as UUIDs so persisted threat and forecast rows appear instead of an empty successful response. (#632)
 
+- **[DevX]** Publish Recorder before the AMQP, Kafka and MQTT crates that depend on it. The publish-list guard checks normal and build dependency order, preventing partial releases caused by missing same-version dependencies.
+
 - **[Security]** Update the locked QUIC protocol dependency to `quinn-proto` 0.11.18, fixing five RustSec packet-handling and memory-exhaustion advisories. Its required Rand 0.10 patch dependency is updated without enabling new protocol features.
 
 - **[Cloud]** Contract-drift AI callbacks carry the persisted run identity so usage audits identify the originating user. The registry verifies the run, suite, and sampled workspace belong to the requested organization and rejects forged actor claims; scheduled and older anonymous callbacks remain anonymous. (#869)

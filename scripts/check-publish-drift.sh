@@ -26,7 +26,7 @@ fi
 
 # Publishable members (publish != false). In `cargo metadata`, publish == []
 # means publish=false; null means publishable.
-publishable=$(cargo metadata --no-deps --format-version 1 2>/dev/null | python3 -c "
+publishable=$(cargo metadata --locked --no-deps --format-version 1 2>/dev/null | python3 -c "
 import sys, json
 try:
     pkgs = json.load(sys.stdin)['packages']
@@ -38,12 +38,12 @@ for p in pkgs:
 " | sort -u)
 
 # CRATES list block in publish-crates.sh.
-listed=$(sed -n '64,120p' scripts/publish-crates.sh 2>/dev/null | grep -oE 'mockforge-[a-z0-9-]+' | sort -u)
+listed=$(sed -n '/^CRATES=(/,/^)/p' scripts/publish-crates.sh 2>/dev/null | grep -oE 'mockforge-[a-z0-9-]+' | sort -u)
 
 drift=$(comm -23 <(printf '%s\n' "$publishable") <(printf '%s\n' "$listed"))
 
 # Orphans: on-disk mockforge-* crate dirs that are not workspace members.
-members=$(cargo metadata --no-deps --format-version 1 2>/dev/null | python3 -c "
+members=$(cargo metadata --locked --no-deps --format-version 1 2>/dev/null | python3 -c "
 import sys, json
 try:
     print('\n'.join(p['name'] for p in json.load(sys.stdin)['packages']))
@@ -64,6 +64,8 @@ if [ -n "$drift" ]; then
   echo "Fix: add each to the CRATES list (in dependency order), or set publish=false if it must not ship." >&2
   exit 1
 fi
+
+python3 scripts/check_publish_order.py || exit 1
 
 echo "publish-drift: OK — every publishable member is in the publish list"
 exit 0
