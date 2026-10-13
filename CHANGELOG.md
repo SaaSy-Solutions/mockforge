@@ -2,6 +2,8 @@
 
 ### Added
 
+- **[DevX]** Export live local workspace configuration to versioned JSON/YAML with credential references and stable ordering/timestamps. Authorized imports create new workspaces without overwriting existing state; explicit activation publishes namespaced static HTTP mocks atomically while retaining unrelated mocks. Unsupported authentication activation is rejected. (#1197)
+
 - **[Cloud]** Hosted deployments can explicitly select or change their capture workspace in the API and portal. Recorder batches use the deployment's verified organization/workspace, preserve historical attribution, and reject cross-organization assignments; unassigned deployments stay unassigned. (#720)
 
 - **[Contracts]** Add the `proxy` CLI command with passive or strict OpenAPI conformance validation and the shared violation feed. Preserve binary and redirect responses, honor configured upstream timeouts, and validate response status ranges, default schemas, and malformed JSON. (#864)

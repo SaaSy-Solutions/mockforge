@@ -890,3 +890,12 @@ Failed to evaluate JS config: SyntaxError: ...
 ## Contributing
 
 Found a configuration issue or have suggestions? Please [open an issue](https://github.com/SaaSy-Solutions/mockforge/issues) or submit a PR!
+
+### Local workspace transfer credentials (unreleased)
+
+`MOCKFORGE_ADMIN_TOKEN` supplies a local admin JWT to `workspace export` and
+`workspace import`; `--token-env` selects another caller variable. Token values
+are not placed in command arguments or exported files. Generated
+`MOCKFORGE_WORKSPACE_EXPORT_VALUE_000000` reference names are resolved only when
+`workspace import --resolve-env` is explicitly requested. See
+[workspace transfer documentation](docs/dev-notes/SYNC_README.md).
