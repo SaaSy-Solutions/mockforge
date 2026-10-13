@@ -11,6 +11,8 @@
 //! - [`behavioral_cloning`]: behavioral HTTP surface (#631). A storage trait
 //!   implemented downstream in recorder avoids a reverse dependency; HTTP
 //!   retains its original recorder-backed state and re-exports these handlers.
+//! - [`risk_simulation`]: internal simulation HTTP surface (#632), using a
+//!   downstream engine port and shared foundation risk DTOs.
 //! - [`pr_generation`]: PR generation HTTP surface (#555 phase 2). The
 //!   underlying `pr_generation` module moved in #562 phase 1; the
 //!   handler followed once intelligence grew an axum dep.
@@ -33,6 +35,7 @@ pub mod drift_budget;
 pub mod fidelity;
 pub mod forecasting;
 pub mod pr_generation;
+pub mod risk_simulation;
 #[cfg(feature = "advanced")]
 pub mod scenario_studio;
 pub mod semantic_drift;

@@ -202,3 +202,24 @@ work; these two moves do not complete that issue.
 
 **Neutral:**
 - The existence of `mockforge-intelligence` and `mockforge-proxy` as partially-populated crates is intentional and called out in the intelligence crate's own docstring; this ADR formalises that they are mid-migration, not abandoned.
+
+
+### Risk simulation boundary (#632)
+
+Risk simulation calls the application's authentication engine, which still lives
+in HTTP pending the broader auth extraction (#635). Intelligence owns the six
+simulation handler implementations and their router through a typed
+`RiskSimulationEngine` interface. The existing HTTP `RiskSimulationState` keeps
+its public `Arc<RiskEngine>` field and supplies that exact shared engine;
+simulation changes remain visible to authentication consumers. The interface
+covers score and factor overrides, clearing both overrides, and assessment using
+the application's configured thresholds and rules.
+
+`RiskAssessment`, `RiskFactor`, and `RiskAction` move without behavior or wire
+changes to foundation. HTTP re-exports them at their original auth paths, so the
+engine and external users retain the same type names. Foundation gains neither
+Axum nor engine dependencies. Intelligence gains no HTTP dependency or alternate
+risk engine. Scores, factor precedence, action thresholds, route paths and JSON
+responses retain existing behavior. This is an internal API and adds no UI,
+production auth deployment, or completion claim for #635 or the other #632
+handlers.
