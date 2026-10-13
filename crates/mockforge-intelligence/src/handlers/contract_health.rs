@@ -16,7 +16,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 #[cfg(feature = "database")]
-use chrono::{DateTime, Utc};
+mod persistence;
 
 /// State supplied by downstream HTTP integrations for the contract timeline.
 pub trait ContractHealthStateProvider: Clone + Send + Sync + 'static {
@@ -217,145 +217,16 @@ pub async fn get_timeline<S: ContractHealthStateProvider>(
         }
     }
 
-    // Add threat assessments and forecasts from database
+    // Add database events through typed schema-specific row decoders.
     #[cfg(feature = "database")]
-    {
-        use sqlx::Row;
-        if let Some(pool) = state.database().and_then(|db| db.pool()) {
-            // Both schema columns are UUID. Binding a String causes PostgreSQL
-            // to reject the comparison and used to hide persisted rows behind
-            // an empty successful timeline response.
-            let workspace = params
-                .workspace_id
-                .as_deref()
-                .map(uuid::Uuid::parse_str)
-                .transpose()
-                .map_err(|_| StatusCode::BAD_REQUEST)?;
-            // Query threat assessments
-            if let Ok(ta_rows) = sqlx::query(
-            "SELECT id, workspace_id, service_id, service_name, endpoint, method, aggregation_level,
-             threat_level, threat_score, threat_categories, findings, remediation_suggestions, assessed_at
-             FROM contract_threat_assessments
-             WHERE workspace_id = $1 OR workspace_id IS NULL
-             ORDER BY assessed_at DESC LIMIT 50"
-        )
-        .bind(workspace)
-        .fetch_all(pool)
-        .await
-        {
-            use mockforge_foundation::threat_modeling_types::ThreatLevel;
-            for row in ta_rows {
-                let id: uuid::Uuid = match row.try_get("id") {
-                    Ok(id) => id,
-                    Err(_) => continue,
-                };
-                let threat_level_str: String = match row.try_get("threat_level") {
-                    Ok(s) => s,
-                    Err(_) => continue,
-                };
-                let threat_score: f64 = match row.try_get("threat_score") {
-                    Ok(s) => s,
-                    Err(_) => continue,
-                };
-                let assessed_at: DateTime<Utc> = match row.try_get("assessed_at") {
-                    Ok(dt) => dt,
-                    Err(_) => continue,
-                };
-                let endpoint: Option<String> = row.try_get("endpoint").ok();
-                let method: Option<String> = row.try_get("method").ok();
-
-                let threat_level = match threat_level_str.as_str() {
-                    "low" => ThreatLevel::Low,
-                    "medium" => ThreatLevel::Medium,
-                    "high" => ThreatLevel::High,
-                    "critical" => ThreatLevel::Critical,
-                    _ => continue,
-                };
-
-                // Count findings from the findings JSON field
-                let findings_count = row.try_get::<serde_json::Value, _>("findings")
-                    .ok()
-                    .and_then(|v| v.as_array().map(|arr| arr.len()))
-                    .unwrap_or(0);
-
-                events.push(TimelineEvent::ThreatAssessment {
-                    id: id.to_string(),
-                    endpoint,
-                    method,
-                    threat_level: format!("{:?}", threat_level),
-                    threat_score,
-                    assessed_at: assessed_at.timestamp(),
-                    findings_count,
-                });
-            }
-        }
-
-            // Query forecasts
-            if let Ok(forecast_rows) = sqlx::query(
-                "SELECT id, service_id, service_name, endpoint, method, forecast_window_days,
-             predicted_change_probability, predicted_break_probability, next_expected_change_date,
-             confidence, predicted_at
-             FROM api_change_forecasts
-             WHERE workspace_id = $1 OR workspace_id IS NULL
-             ORDER BY predicted_at DESC LIMIT 50",
-            )
-            .bind(workspace)
-            .fetch_all(pool)
-            .await
-            {
-                use sqlx::Row;
-                for row in forecast_rows {
-                    let id: uuid::Uuid = match row.try_get("id") {
-                        Ok(id) => id,
-                        Err(_) => continue,
-                    };
-                    let endpoint: String = match row.try_get("endpoint") {
-                        Ok(e) => e,
-                        Err(_) => continue,
-                    };
-                    let method: String = match row.try_get("method") {
-                        Ok(m) => m,
-                        Err(_) => continue,
-                    };
-                    let forecast_window_days: i32 = match row.try_get("forecast_window_days") {
-                        Ok(d) => d,
-                        Err(_) => continue,
-                    };
-                    let predicted_change_probability: f64 =
-                        match row.try_get("predicted_change_probability") {
-                            Ok(p) => p,
-                            Err(_) => continue,
-                        };
-                    let predicted_break_probability: f64 =
-                        match row.try_get("predicted_break_probability") {
-                            Ok(p) => p,
-                            Err(_) => continue,
-                        };
-                    let next_expected_change_date: Option<DateTime<Utc>> =
-                        row.try_get("next_expected_change_date").ok();
-                    let predicted_at: DateTime<Utc> = match row.try_get("predicted_at") {
-                        Ok(dt) => dt,
-                        Err(_) => continue,
-                    };
-                    let confidence: f64 = match row.try_get("confidence") {
-                        Ok(c) => c,
-                        Err(_) => continue,
-                    };
-
-                    events.push(TimelineEvent::Forecast {
-                        id: id.to_string(),
-                        endpoint,
-                        method,
-                        window_days: forecast_window_days as u32,
-                        change_probability: predicted_change_probability,
-                        break_probability: predicted_break_probability,
-                        next_expected_change: next_expected_change_date.map(|d| d.timestamp()),
-                        confidence,
-                        predicted_at: predicted_at.timestamp(),
-                    });
-                }
-            }
-        }
+    if let Some(pool) = state.database().and_then(|db| db.pool()) {
+        let workspace = params
+            .workspace_id
+            .as_deref()
+            .map(uuid::Uuid::parse_str)
+            .transpose()
+            .map_err(|_| StatusCode::BAD_REQUEST)?;
+        events.extend(persistence::events(pool, workspace).await);
     }
 
     // Sort by timestamp (most recent first)
