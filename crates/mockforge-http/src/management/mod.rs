@@ -13,6 +13,7 @@ mod protocols;
 mod proxy;
 mod rule_explanations;
 mod traffic_to_openapi;
+mod workspace_runtime;
 
 // `ai_gen.rs` was split into four topic files under #656; the route
 // wiring below pulls handlers from each via these glob re-exports.
@@ -155,6 +156,7 @@ pub struct MockResponse {
 
 /// Request matching criteria for advanced request matching
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
 pub struct RequestMatchCriteria {
     /// Headers that must be present and match (case-insensitive header names)
     #[serde(skip_serializing_if = "std::collections::HashMap::is_empty")]
@@ -937,6 +939,7 @@ pub fn management_router(state: ManagementState) -> Router {
         .route("/config", get(get_config))
         .route("/config/validate", post(validate_config))
         .route("/config/bulk", post(bulk_update_config))
+        .route("/workspaces/{workspace_id}/activate", post(workspace_runtime::activate_workspace_mocks))
         .route("/mocks", get(mocks::list_mocks))
         .route("/mocks", post(mocks::create_mock))
         .route("/mocks/{id}", get(mocks::get_mock))
@@ -1177,7 +1180,14 @@ pub async fn serve_dynamic_mock(state: &ManagementState, req: Request<Body>) -> 
         mock.response.body.clone()
     };
 
-    let body_bytes_out = serde_json::to_vec(&body_value).unwrap_or_default();
+    let body_bytes_out = if mock.id.starts_with(workspace_runtime::WORKSPACE_MOCK_PREFIX) {
+        body_value
+            .as_str()
+            .map(|body| body.as_bytes().to_vec())
+            .unwrap_or_else(|| serde_json::to_vec(&body_value).unwrap_or_default())
+    } else {
+        serde_json::to_vec(&body_value).unwrap_or_default()
+    };
     let mut response = Response::builder().status(status);
 
     let mut has_content_type = false;
