@@ -49,3 +49,6 @@ pub use types::{
     AmplificationScope, BehavioralSequence, EdgeAmplificationConfig, EndpointProbabilityModel,
     ErrorPattern, LatencyDistribution, PayloadVariation, SequenceStep,
 };
+
+/// Recording-store interface used by behavioral cloning HTTP handlers.
+pub mod storage;
