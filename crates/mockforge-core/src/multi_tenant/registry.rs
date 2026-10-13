@@ -115,12 +115,23 @@ impl MultiTenantWorkspaceRegistry {
             }
         }
 
+        // Build and validate routes before publishing the workspace. Invalid
+        // imported routes must not leave a partially registered workspace.
+        let mut routes = RouteRegistry::new();
+        let workspace_routes = workspace.get_routes();
+        let active_routes = workspace_routes.len();
+        for route in workspace_routes {
+            routes.add_http_route(route)?;
+        }
         let tenant_workspace = TenantWorkspace {
             workspace,
-            route_registry: Arc::new(RwLock::new(RouteRegistry::new())),
+            route_registry: Arc::new(RwLock::new(routes)),
             last_accessed: Utc::now(),
             enabled: true,
-            stats: WorkspaceStats::default(),
+            stats: WorkspaceStats {
+                active_routes,
+                ..WorkspaceStats::default()
+            },
         };
 
         self.workspaces

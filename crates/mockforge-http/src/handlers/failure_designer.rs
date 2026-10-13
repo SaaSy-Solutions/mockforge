@@ -1,12 +1,22 @@
-//! Failure Designer API handlers
-
-use axum::extract::State;
-use axum::response::Json;
-use mockforge_chaos::failure_designer::{FailureDesignRule, FailureDesigner};
-use mockforge_chaos::ChaosScenario;
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+//! Compatibility state and typed Chaos adapter for Intelligence handlers.
+use axum::{extract::State, response::Json};
+use mockforge_chaos::{
+    failure_designer::{FailureDesignRule, FailureDesigner, FailureType},
+    ChaosScenario,
+};
+use mockforge_intelligence::handlers::failure_designer::{
+    self as handlers, FailureDesignerProvider,
+};
+use serde_json::Value;
 use std::sync::Arc;
+
+pub use handlers::ValidateRuleResponse;
+/// Original rule validation request type.
+pub type ValidateRuleRequest = handlers::ValidateRuleRequest<FailureDesignRule>;
+/// Original scenario generation request type.
+pub type GenerateScenarioRequest = handlers::GenerateScenarioRequest<FailureDesignRule>;
+/// Original typed scenario generation response.
+pub type GenerateScenarioResponse = handlers::GenerateScenarioResponse<ChaosScenario>;
 
 /// Failure designer API state
 #[derive(Clone)]
@@ -30,145 +40,44 @@ impl Default for FailureDesignerState {
     }
 }
 
-/// Request to validate a failure design rule
-#[derive(Debug, Deserialize)]
-pub struct ValidateRuleRequest {
-    /// Rule to validate
-    pub rule: FailureDesignRule,
-}
-
-/// Request to generate chaos scenario from rule
-#[derive(Debug, Deserialize)]
-pub struct GenerateScenarioRequest {
-    /// Rule to convert
-    pub rule: FailureDesignRule,
-}
-
-/// Response for rule validation
-#[derive(Debug, Serialize)]
-pub struct ValidateRuleResponse {
-    /// Success flag
-    pub success: bool,
-    /// Validation errors (if any)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
-
-/// Response for scenario generation
-#[derive(Debug, Serialize)]
-pub struct GenerateScenarioResponse {
-    /// Success flag
-    pub success: bool,
-    /// Generated chaos scenario
-    pub scenario: ChaosScenario,
-    /// Route chaos configuration (JSON)
-    pub route_chaos_config: Value,
-    /// Webhook hook configuration (if applicable)
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub webhook_hook: Option<Value>,
-}
-
-/// Validate a failure design rule
-///
-/// POST /api/v1/chaos/failure-designer/validate
-pub async fn validate_rule(
-    State(state): State<FailureDesignerState>,
-    Json(request): Json<ValidateRuleRequest>,
-) -> Json<Value> {
-    let designer = &state.designer;
-    match designer.validate_rule(&request.rule) {
-        Ok(()) => Json(json!({
-            "success": true,
-        })),
-        Err(e) => Json(json!({
-            "success": false,
-            "error": e,
-        })),
+impl FailureDesignerProvider for FailureDesignerState {
+    type Rule = FailureDesignRule;
+    type Scenario = ChaosScenario;
+    fn validate_rule(&self, rule: &Self::Rule) -> Result<(), String> {
+        self.designer.validate_rule(rule)
+    }
+    fn rule_to_scenario(&self, rule: &Self::Rule) -> Result<Self::Scenario, String> {
+        self.designer.rule_to_scenario(rule)
+    }
+    fn generate_route_chaos_config(&self, rule: &Self::Rule) -> Result<Value, String> {
+        self.designer.generate_route_chaos_config(rule)
+    }
+    fn webhook_hook(&self, rule: &Self::Rule) -> Result<Option<Value>, String> {
+        if matches!(rule.failure_type, FailureType::WebhookFailure { .. }) {
+            self.designer.generate_webhook_hook(rule).map(Some)
+        } else {
+            Ok(None)
+        }
     }
 }
-
-/// Generate chaos scenario from failure design rule
-///
-/// POST /api/v1/chaos/failure-designer/generate
-pub async fn generate_scenario(
-    State(state): State<FailureDesignerState>,
-    Json(request): Json<GenerateScenarioRequest>,
-) -> Result<Json<Value>, String> {
-    let designer = &state.designer;
-
-    // Generate chaos scenario
-    let scenario = designer
-        .rule_to_scenario(&request.rule)
-        .map_err(|e| format!("Failed to generate scenario: {}", e))?;
-
-    // Generate route chaos config
-    let route_chaos_config = designer
-        .generate_route_chaos_config(&request.rule)
-        .map_err(|e| format!("Failed to generate route chaos config: {}", e))?;
-
-    // Generate webhook hook if applicable
-    let webhook_hook = if matches!(
-        request.rule.failure_type,
-        mockforge_chaos::failure_designer::FailureType::WebhookFailure { .. }
-    ) {
-        Some(
-            designer
-                .generate_webhook_hook(&request.rule)
-                .map_err(|e| format!("Failed to generate webhook hook: {}", e))?,
-        )
-    } else {
-        None
-    };
-
-    Ok(Json(json!({
-        "success": true,
-        "scenario": scenario,
-        "route_chaos_config": route_chaos_config,
-        "webhook_hook": webhook_hook,
-    })))
+/// Validate through the original state and request paths.
+pub async fn validate_rule(
+    state: State<FailureDesignerState>,
+    request: Json<ValidateRuleRequest>,
+) -> Json<Value> {
+    handlers::validate_rule(state, request).await
 }
-
-/// Preview generated configuration
-///
-/// POST /api/v1/chaos/failure-designer/preview
-pub async fn preview_config(
-    State(state): State<FailureDesignerState>,
-    Json(request): Json<GenerateScenarioRequest>,
+/// Generate through the original state and request paths.
+pub async fn generate_scenario(
+    state: State<FailureDesignerState>,
+    request: Json<GenerateScenarioRequest>,
 ) -> Result<Json<Value>, String> {
-    let designer = &state.designer;
-
-    // Validate rule first
-    designer
-        .validate_rule(&request.rule)
-        .map_err(|e| format!("Validation failed: {}", e))?;
-
-    // Generate all configurations
-    let scenario = designer
-        .rule_to_scenario(&request.rule)
-        .map_err(|e| format!("Failed to generate scenario: {}", e))?;
-
-    let route_chaos_config = designer
-        .generate_route_chaos_config(&request.rule)
-        .map_err(|e| format!("Failed to generate route chaos config: {}", e))?;
-
-    let webhook_hook = if matches!(
-        request.rule.failure_type,
-        mockforge_chaos::failure_designer::FailureType::WebhookFailure { .. }
-    ) {
-        Some(
-            designer
-                .generate_webhook_hook(&request.rule)
-                .map_err(|e| format!("Failed to generate webhook hook: {}", e))?,
-        )
-    } else {
-        None
-    };
-
-    Ok(Json(json!({
-        "success": true,
-        "rule": request.rule,
-        "scenario": scenario,
-        "route_chaos_config": route_chaos_config,
-        "webhook_hook": webhook_hook,
-    })))
+    handlers::generate_scenario(state, request).await
+}
+/// Preview through the original state and request paths.
+pub async fn preview_config(
+    state: State<FailureDesignerState>,
+    request: Json<GenerateScenarioRequest>,
+) -> Result<Json<Value>, String> {
+    handlers::preview_config(state, request).await
 }

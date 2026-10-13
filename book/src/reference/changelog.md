@@ -4,6 +4,8 @@
 
 ### Added
 
+- **[DevX]** Export live local workspace configuration to versioned JSON/YAML with credential references and stable ordering/timestamps. Authorized imports create new workspaces without overwriting existing state; explicit activation publishes namespaced static HTTP mocks atomically while retaining unrelated mocks. Unsupported authentication activation is rejected. (#1197)
+
 - **[Cloud]** Hosted deployments can explicitly select or change their capture workspace in the API and portal. Recorder batches use the deployment's verified organization/workspace, preserve historical attribution, and reject cross-organization assignments; unassigned deployments stay unassigned. (#720)
 
 - **[Contracts]** Add the `proxy` CLI command with passive or strict OpenAPI conformance validation and the shared violation feed. Preserve binary and redirect responses, honor configured upstream timeouts, and validate response status ranges, default schemas, and malformed JSON. (#864)
@@ -11,6 +13,8 @@
 - **[Cloud]** Monitored services support per-service cron schedules and IANA timezones, with legacy interval cadence preserved. Probe runs and due-state claims commit atomically so overlapping scheduler ticks do not enqueue the same occurrence twice. (#720)
 
 ### Changed
+
+- **[DevX]** Failure-designer and incident-replay HTTP handlers now live in Intelligence behind typed Chaos providers, preserving the existing HTTP states, request types, generated scenarios, import formats, and error responses. (#632)
 
 - **[DevX]** Snapshot diff routes and comparison logic now live in Intelligence behind a typed current-mock projection. HTTP retains its management state, public DTO paths and router signature. (#632)
 
@@ -21,6 +25,8 @@
 ### Fixed
 
 - **[DevX]** Preserve shared configuration types in minimal Core builds and gate optional workspace and advanced runtime integrations consistently. Voice workspace construction declares its workspace/data prerequisites, and advanced engines declare their workspace and persona-type prerequisites.
+
+- **[DevX]** gRPC startup accepts an owned listener and retains its socket through discovery and TLS setup. Real client fixtures reserve loopback port-zero listeners instead of releasing a temporary port before server startup.
 
 - **[DevX]** OIDC environment fixtures run in isolated child processes, preventing parallel tests from overwriting issuer and discovery settings while exercising the real environment-based configuration paths.
 

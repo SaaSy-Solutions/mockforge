@@ -80,6 +80,8 @@ jsonptr = "0.7.1"
 # don't drag in the Postgres sqlx backend.
 mockforge-registry-core = { path = "../mockforge-registry-core", default-features = false, features = ["sqlite"], optional = true }
 
+urlencoding = { workspace = true }
+
 [features]
 default = ["registry-admin"]
 database-auth = ["sqlx", "blake3"]
@@ -99,4 +101,3 @@ axum = { workspace = true, features = ["macros"] }
 tokio = { workspace = true, features = ["rt", "macros"] }
 # Need ServiceExt for oneshot
 tower = { version = "0.5", features = ["util"] }
-urlencoding = { workspace = true }
