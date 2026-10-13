@@ -30,8 +30,10 @@ pub mod ai_studio;
 pub mod behavioral_cloning;
 #[cfg(feature = "advanced")]
 pub mod consistency;
+pub mod failure_designer;
 pub mod fidelity;
 pub mod forecasting;
+pub mod incident_replay;
 pub mod pr_generation;
 pub mod risk_simulation;
 #[cfg(feature = "advanced")]

@@ -196,3 +196,26 @@ risk engine. Scores, factor precedence, action thresholds, route paths and JSON
 responses retain existing behavior. This is an internal API and adds no UI,
 production auth deployment, or completion claim for #635 or the other #632
 handlers.
+
+### Failure designer and incident replay boundaries (#632)
+
+Chaos depends on Core, and Core depends on Intelligence. Intelligence therefore
+accepts typed downstream providers rather than depending on Chaos. The providers
+use associated rule, timeline, and scenario types: the concrete Chaos types remain
+at the HTTP compatibility boundary, without converting the domain inputs into
+untyped JSON. Existing route-config and external incident payloads remain JSON
+because that is their original contract.
+
+Intelligence owns request decoding, validation responses, generation and preview
+assembly, format dispatch, exports, and error prefixes. HTTP retains the original
+public state fields, constructors, defaults, concrete request/response aliases,
+and thin function adapters. Its providers delegate to the same real Chaos engines
+and format adapters. No manifest or dependency changes are needed.
+
+Actual TCP controls run against both original and extracted handlers, covering
+all six failure types, webhook/null preview fields, validation and extractor
+errors, custom/PagerDuty/Datadog import dispatch, and JSON/YAML scenario exports.
+The adapters retain the existing simplified external-format interpretation and
+the existing HTTP 200 text error behavior; they add no live provider integration,
+incident fidelity guarantee, or broader authentication extraction (#635). The
+remaining #632 handler work still requires its own merge and main-branch audit.

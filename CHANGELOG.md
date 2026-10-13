@@ -10,6 +10,8 @@
 
 ### Changed
 
+- **[DevX]** Failure-designer and incident-replay HTTP handlers now live in Intelligence behind typed Chaos providers, preserving the existing HTTP states, request types, generated scenarios, import formats, and error responses. (#632)
+
 - **[DevX]** Risk-simulation HTTP handlers now live in intelligence behind a typed engine interface. Shared risk-assessment DTOs live in foundation, while HTTP retains its original state fields and public auth type paths. (#632)
 
 - **[DevX]** Behavioral-cloning HTTP handlers now live in intelligence and use shared foundation scenario types. A recorder storage adapter preserves the HTTP compatibility state and SQLite behavior without adding a reverse dependency. (#631)
