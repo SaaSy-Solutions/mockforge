@@ -84,6 +84,7 @@ CRATES=(
   mockforge-openapi
   mockforge-intelligence
   mockforge-core
+  mockforge-recorder
   mockforge-amqp
   mockforge-federation
   mockforge-ftp
@@ -103,7 +104,6 @@ CRATES=(
   mockforge-world-state
   mockforge-ws
   mockforge-pipelines
-  mockforge-recorder
   mockforge-bench
   mockforge-chaos
   mockforge-collab
@@ -297,6 +297,8 @@ summary() {
 }
 
 cd "$(dirname "$0")/.."
+
+python3 scripts/check_publish_order.py || exit 1
 
 blue "publishing MockForge workspace @ $VERSION"
 [ "$DRY_RUN" = true ] && yellow "DRY RUN — no uploads"

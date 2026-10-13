@@ -8949,6 +8949,7 @@ dependencies = [
  "mockforge-plugin-registry",
  "mockforge-registry-core",
  "mockforge-scenarios",
+ "mockforge-test-runner",
  "oauth2",
  "opentelemetry-proto 0.32.0",
  "prometheus",
