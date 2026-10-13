@@ -10,6 +10,8 @@
 
 ### Changed
 
+- **[DevX]** Failure-designer and incident-replay HTTP handlers now live in Intelligence behind typed Chaos providers, preserving the existing HTTP states, request types, generated scenarios, import formats, and error responses. (#632)
+
 - **[DevX]** Snapshot diff routes and comparison logic now live in Intelligence behind a typed current-mock projection. HTTP retains its management state, public DTO paths and router signature. (#632)
 
 - **[DevX]** Risk-simulation HTTP handlers now live in intelligence behind a typed engine interface. Shared risk-assessment DTOs live in foundation, while HTTP retains its original state fields and public auth type paths. (#632)
@@ -17,6 +19,8 @@
 - **[DevX]** Behavioral-cloning HTTP handlers now live in intelligence and use shared foundation scenario types. A recorder storage adapter preserves the HTTP compatibility state and SQLite behavior without adding a reverse dependency. (#631)
 
 ### Fixed
+
+- **[DevX]** gRPC startup accepts an owned listener and retains its socket through discovery and TLS setup. Real client fixtures reserve loopback port-zero listeners instead of releasing a temporary port before server startup.
 
 - **[DevX]** OIDC environment fixtures run in isolated child processes, preventing parallel tests from overwriting issuer and discovery settings while exercising the real environment-based configuration paths.
 

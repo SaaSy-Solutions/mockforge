@@ -254,6 +254,18 @@ pub async fn start_with_config(
     dynamic::start_dynamic_server(port, config, latency_profile).await
 }
 
+/// Start gRPC on an already-bound listener, retaining ownership during startup.
+///
+/// A loopback listener bound to port zero gives callers a collision-free local
+/// endpoint; TLS, reflection and service routing use the normal configuration.
+pub async fn start_with_listener(
+    listener: tokio::net::TcpListener,
+    latency_profile: Option<LatencyProfile>,
+    config: DynamicGrpcConfig,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    dynamic::start_dynamic_server_with_listener(listener, config, latency_profile).await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

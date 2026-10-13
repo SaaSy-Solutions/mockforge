@@ -238,9 +238,23 @@ pub async fn discover_services(
     Ok(registry)
 }
 
-/// Start a dynamic server with both gRPC and HTTP bridge support
+/// Start a dynamic gRPC server on the configured bind port
 pub async fn start_dynamic_server(
     port: u16,
+    config: DynamicGrpcConfig,
+    latency_profile: Option<mockforge_foundation::latency::LatencyProfile>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let listener =
+        tokio::net::TcpListener::bind(mockforge_core::wildcard_socket_addr(port)).await?;
+    start_dynamic_server_with_listener(listener, config, latency_profile).await
+}
+
+/// Start a dynamic server using a listener already reserved by its owner.
+///
+/// The listener remains bound throughout discovery and TLS setup. This lets
+/// embedded callers use port zero without a release-and-rebind window.
+pub async fn start_dynamic_server_with_listener(
+    listener: tokio::net::TcpListener,
     config: DynamicGrpcConfig,
     latency_profile: Option<mockforge_foundation::latency::LatencyProfile>,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
@@ -260,7 +274,7 @@ pub async fn start_dynamic_server(
     let registry_arc = Arc::new(registry);
 
     // Use shared server utilities for consistent address creation
-    let addr = mockforge_core::wildcard_socket_addr(port);
+    let addr = listener.local_addr()?;
     info!(
         "Dynamic server listening on {} with {} services",
         addr,
@@ -282,7 +296,7 @@ pub async fn start_dynamic_server(
     // Start HTTP server (bridge) if enabled
     // Currently, just start the gRPC server directly
     // HTTP bridge functionality is disabled
-    start_grpc_only_server(port, &config, registry_arc.clone(), mock_proxy).await?;
+    start_grpc_only_server(listener, &config, registry_arc.clone(), mock_proxy).await?;
 
     // HTTP bridge is disabled, no server handle to wait for
 
@@ -304,7 +318,7 @@ pub async fn start_dynamic_grpc_server(
 
 /// Start the gRPC-only server implementation
 async fn start_grpc_only_server(
-    port: u16,
+    listener: tokio::net::TcpListener,
     config: &DynamicGrpcConfig,
     registry_arc: Arc<ServiceRegistry>,
     _mock_proxy: MockReflectionProxy,
@@ -363,7 +377,7 @@ async fn start_grpc_only_server(
 
     use std::net::SocketAddr;
 
-    let grpc_addr: SocketAddr = mockforge_core::wildcard_socket_addr(port);
+    let grpc_addr: SocketAddr = listener.local_addr()?;
 
     // Log discovered services
     info!(
@@ -571,7 +585,10 @@ async fn start_grpc_only_server(
 
     // Convert back to tonic Routes and serve with the configured server
     let routes = tonic::service::Routes::from(axum_router);
-    server_builder.add_routes(routes).serve(grpc_addr).await?;
+    server_builder
+        .add_routes(routes)
+        .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
+        .await?;
 
     info!("gRPC server stopped");
     Ok(())
