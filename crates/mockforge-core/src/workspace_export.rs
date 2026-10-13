@@ -1,10 +1,21 @@
 //! Versioned live workspace snapshots with deterministic output and secret references.
 
-use crate::workspace::{Folder, MockRequest, Workspace};
+use crate::workspace::Workspace;
 use crate::{Error, Result};
 use serde::{Deserialize, Serialize};
-use serde_json::{Map, Value};
+use serde_json::Value;
 use std::collections::BTreeSet;
+
+mod classification;
+mod discovery;
+mod normalization;
+mod references;
+mod sanitization;
+
+use discovery::collect_secrets;
+use normalization::{canonicalize, normalize_folders, normalize_requests};
+use references::resolve;
+use sanitization::sanitize;
 
 const REFERENCE_PREFIX: &str = "MOCKFORGE_WORKSPACE_EXPORT_VALUE_";
 
@@ -66,266 +77,12 @@ impl WorkspaceExportDocument {
     }
 }
 
-fn normalize_requests(requests: &mut [MockRequest]) {
-    for request in requests {
-        request.created_at = chrono::DateTime::UNIX_EPOCH;
-        request.updated_at = chrono::DateTime::UNIX_EPOCH;
-        request.response_history.clear();
-    }
-}
-
-fn normalize_folders(folders: &mut [Folder]) {
-    for folder in folders {
-        folder.created_at = chrono::DateTime::UNIX_EPOCH;
-        folder.updated_at = chrono::DateTime::UNIX_EPOCH;
-        normalize_requests(&mut folder.requests);
-        normalize_folders(&mut folder.folders);
-    }
-}
-
-fn sensitive_name(name: &str) -> bool {
-    let name = name.to_ascii_lowercase().replace('-', "_");
-    if matches!(name.as_str(), "rsa_public_key" | "ecdsa_public_key" | "token_type_hint") {
-        return false;
-    }
-    if matches!(name.as_str(), "key" | "keys" | "auth")
-        || name.ends_with("_key")
-        || name.ends_with("_auth")
-    {
-        return true;
-    }
-    [
-        "password",
-        "secret",
-        "token",
-        "credential",
-        "authorization",
-        "cookie",
-        "api_key",
-        "apikey",
-        "private_key",
-        "privatekey",
-        "passphrase",
-    ]
-    .iter()
-    .any(|part| name.contains(part))
-}
-
-fn sensitive_field(parent: &str, key: &str) -> bool {
-    sensitive_name(key) || matches!(parent, "variables" | "credentials" | "keys")
-}
-
-fn collect_secrets(value: &Value, parent: &str, secrets: &mut BTreeSet<String>) {
-    match value {
-        Value::Object(map) => {
-            for (key, value) in map {
-                if parent == "credentials" && !key.is_empty() {
-                    secrets.insert(key.clone());
-                }
-                if sensitive_field(parent, key) {
-                    if key == "credentials" {
-                        if let Value::Object(credentials) = value {
-                            secrets
-                                .extend(credentials.keys().filter(|key| !key.is_empty()).cloned());
-                        }
-                    }
-                    if value.is_object() {
-                        collect_secrets(value, key, secrets);
-                    } else {
-                        collect_strings(value, secrets);
-                    }
-                } else {
-                    collect_secrets(value, key, secrets);
-                }
-            }
-        }
-        Value::Array(values) => {
-            for value in values {
-                collect_secrets(value, parent, secrets);
-            }
-        }
-        Value::String(string) => {
-            if let Ok(url) = url::Url::parse(string) {
-                for credential in [Some(url.username()), url.password()]
-                    .into_iter()
-                    .flatten()
-                    .filter(|s| !s.is_empty())
-                {
-                    secrets.insert(credential.to_owned());
-                    if let Ok(decoded) = urlencoding::decode(credential) {
-                        secrets.insert(decoded.into_owned());
-                    }
-                }
-                for (key, value) in url.query_pairs() {
-                    if sensitive_name(&key) && !value.is_empty() {
-                        secrets.insert(value.into_owned());
-                    }
-                }
-            }
-            if parent == "body" {
-                if let Ok(parsed) = serde_json::from_str::<Value>(string) {
-                    collect_secrets(&parsed, "", secrets);
-                }
-            }
-        }
-        _ => {}
-    }
-}
-
-fn collect_strings(value: &Value, secrets: &mut BTreeSet<String>) {
-    match value {
-        Value::String(string) if !string.is_empty() => {
-            secrets.insert(string.clone());
-        }
-        Value::Object(map) => {
-            for value in map.values() {
-                collect_strings(value, secrets);
-            }
-        }
-        Value::Array(values) => {
-            for value in values {
-                collect_strings(value, secrets);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn reference(references: &mut Vec<String>) -> String {
-    let name = format!("{REFERENCE_PREFIX}{:06}", references.len());
-    references.push(name.clone());
-    format!("${{{name}}}")
-}
-
-fn sanitize(
-    value: &mut Value,
-    parent: &str,
-    secrets: &BTreeSet<String>,
-    references: &mut Vec<String>,
-) {
-    match value {
-        Value::String(string) => {
-            if !string.is_empty()
-                && (matches!(parent, "variables" | "credentials" | "keys")
-                    || sensitive_name(parent)
-                    || url_has_credentials(string)
-                    || secrets.iter().any(|secret| string.contains(secret))
-                    || (parent == "body"
-                        && serde_json::from_str::<Value>(string)
-                            .is_ok_and(|body| contains_secret(&body, secrets))))
-            {
-                *string = reference(references);
-            }
-        }
-        Value::Object(map) => {
-            let old = std::mem::take(map);
-            for (key, mut value) in old {
-                sanitize(&mut value, &key, secrets, references);
-                let key = if parent == "credentials" {
-                    reference(references)
-                } else {
-                    key
-                };
-                map.insert(key, value);
-            }
-        }
-        Value::Array(values) => {
-            for value in values {
-                sanitize(value, parent, secrets, references);
-            }
-        }
-        _ => {}
-    }
-}
-
-fn url_has_credentials(string: &str) -> bool {
-    url::Url::parse(string).is_ok_and(|url| {
-        !url.username().is_empty()
-            || url.password().is_some()
-            || url.query_pairs().any(|(key, _)| sensitive_name(&key))
-    })
-}
-
-fn contains_secret(value: &Value, secrets: &BTreeSet<String>) -> bool {
-    match value {
-        Value::String(string) => secrets.iter().any(|secret| string.contains(secret)),
-        Value::Object(map) => map
-            .iter()
-            .any(|(key, value)| secrets.contains(key) || contains_secret(value, secrets)),
-        Value::Array(values) => values.iter().any(|value| contains_secret(value, secrets)),
-        _ => false,
-    }
-}
-
-fn resolve(
-    value: &mut Value,
-    names: &[String],
-    lookup: &impl Fn(&str) -> Option<String>,
-) -> Result<()> {
-    match value {
-        Value::String(string) => {
-            if let Some(name) = string.strip_prefix("${").and_then(|s| s.strip_suffix('}')) {
-                if name.starts_with(REFERENCE_PREFIX) {
-                    if !names.iter().any(|allowed| allowed == name) {
-                        return Err(Error::validation("Undeclared workspace export reference"));
-                    }
-                    *string = lookup(name).ok_or_else(|| {
-                        Error::validation("Missing workspace export environment binding")
-                    })?;
-                }
-            }
-        }
-        Value::Object(map) => {
-            let old = std::mem::take(map);
-            for (key, mut value) in old {
-                let mut resolved_key = Value::String(key);
-                resolve(&mut resolved_key, names, lookup)?;
-                resolve(&mut value, names, lookup)?;
-                let key = resolved_key
-                    .as_str()
-                    .ok_or_else(|| Error::validation("Invalid workspace export key"))?
-                    .to_owned();
-                if map.insert(key, value).is_some() {
-                    return Err(Error::validation("Duplicate resolved workspace export key"));
-                }
-            }
-        }
-        Value::Array(values) => {
-            for value in values {
-                resolve(value, names, lookup)?;
-            }
-        }
-        _ => {}
-    }
-    Ok(())
-}
-
-fn canonicalize(value: &mut Value) {
-    match value {
-        Value::Object(map) => {
-            let mut entries: Vec<_> = std::mem::take(map).into_iter().collect();
-            entries.sort_by(|a, b| a.0.cmp(&b.0));
-            let mut sorted = Map::new();
-            for (key, mut value) in entries {
-                canonicalize(&mut value);
-                sorted.insert(key, value);
-            }
-            *map = sorted;
-        }
-        Value::Array(values) => {
-            for value in values {
-                canonicalize(value);
-            }
-        }
-        _ => {}
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::{AuthConfig, BasicAuthConfig};
     use crate::routing::HttpMethod;
+    use crate::workspace::MockRequest;
     use serde_json::json;
     use std::collections::{BTreeMap, HashMap};
 

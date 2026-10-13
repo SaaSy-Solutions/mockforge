@@ -2,6 +2,15 @@
 //!
 //! This module provides REST API endpoints for managing multi-tenant workspaces.
 
+mod inheritance;
+mod projection;
+mod runtime;
+mod transfer;
+#[cfg(test)]
+use projection::workspace_runtime_mocks;
+pub use runtime::{set_active_workspace, WorkspaceHttpRuntime};
+pub use transfer::{export_live_workspace, import_live_workspace};
+
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -637,157 +646,6 @@ pub async fn update_workspace(
                 .into_response())
         }
     }
-}
-
-/// HTTP runtime address supplied by the admin server's own configuration.
-#[derive(Clone)]
-pub struct WorkspaceHttpRuntime {
-    /// Main HTTP listener; clients cannot choose a publication destination.
-    pub address: Option<std::net::SocketAddr>,
-}
-
-fn workspace_runtime_mocks(
-    workspace: &Workspace,
-    id: &str,
-) -> Result<Vec<mockforge_http::management::MockConfig>, Response> {
-    if workspace.config.auth.is_some() {
-        return Err((
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error":"Workspace authentication is not supported by static activation"})),
-        )
-            .into_response());
-    }
-    fn merge_headers(
-        base: &std::collections::HashMap<String, String>,
-        overrides: &std::collections::HashMap<String, String>,
-    ) -> std::collections::HashMap<String, String> {
-        let mut merged = std::collections::HashMap::new();
-        for (key, value) in base.iter().chain(overrides) {
-            merged.insert(key.to_ascii_lowercase(), value.clone());
-        }
-        merged
-    }
-    fn collect(
-        folder: &Folder,
-        inherited: &std::collections::HashMap<String, String>,
-        requests: &mut Vec<MockRequest>,
-    ) -> Result<(), Response> {
-        if folder.inheritance.auth.is_some() {
-            return Err(StatusCode::BAD_REQUEST.into_response());
-        }
-        let effective = merge_headers(inherited, &folder.inheritance.headers);
-        for request in &folder.requests {
-            let mut request = request.clone();
-            request.headers = merge_headers(&effective, &request.headers);
-            requests.push(request);
-        }
-        for child in &folder.folders {
-            collect(child, &effective, requests)?;
-        }
-        Ok(())
-    }
-    let mut requests = workspace.requests.clone();
-    for request in &mut requests {
-        request.headers = merge_headers(&workspace.config.default_headers, &request.headers);
-    }
-    for folder in &workspace.folders {
-        collect(folder, &workspace.config.default_headers, &mut requests)?;
-    }
-    let mut mocks = Vec::new();
-    for request in requests {
-        if request.auth.is_some() || !request.path.starts_with('/') {
-            return Err(StatusCode::BAD_REQUEST.into_response());
-        }
-        let mut headers = request.response.headers;
-        if let Some(content_type) = request.response.content_type {
-            headers.insert("content-type".into(), content_type);
-        }
-        if headers.iter().any(|(key, value)| {
-            axum::http::HeaderName::from_bytes(key.as_bytes()).is_err()
-                || axum::http::HeaderValue::from_str(value).is_err()
-        }) {
-            return Err(StatusCode::BAD_REQUEST.into_response());
-        }
-        mocks.push(mockforge_http::management::MockConfig {
-            id: format!("__workspace_live:{}:{}", urlencoding::encode(id), request.id),
-            name: request.name,
-            method: format!("{:?}", request.method),
-            path: format!("/workspace/{}{}", urlencoding::encode(id), request.path),
-            response: mockforge_http::management::MockResponse {
-                body: serde_json::Value::String(request.response.body.unwrap_or_default()),
-                headers: Some(headers),
-            },
-            enabled: true,
-            latency_ms: request.response.delay_ms,
-            status_code: Some(request.response.status_code),
-            request_match: Some(mockforge_http::management::RequestMatchCriteria {
-                headers: request.headers,
-                query_params: request.query_params,
-                body_pattern: request.body,
-                ..Default::default()
-            }),
-            priority: Some(request.priority),
-            scenario: None,
-            required_scenario_state: None,
-            new_scenario_state: None,
-        });
-    }
-    Ok(mocks)
-}
-
-/// Publish namespaced static responses to the configured HTTP runtime.
-pub async fn set_active_workspace(
-    State(state): State<WorkspaceState>,
-    Path(workspace_id): Path<String>,
-    runtime: Option<axum::Extension<WorkspaceHttpRuntime>>,
-    headers: axum::http::HeaderMap,
-) -> Result<Json<ApiResponse<serde_json::Value>>, Response> {
-    authorize_workspace_transfer(
-        &headers,
-        mockforge_collab::permissions::Permission::ManageSettings,
-    )?;
-    let address = runtime
-        .and_then(|runtime| runtime.address)
-        .ok_or_else(|| StatusCode::SERVICE_UNAVAILABLE.into_response())?;
-    let workspace = state
-        .registry
-        .read()
-        .await
-        .get_workspace(&workspace_id)
-        .map_err(|_| StatusCode::NOT_FOUND.into_response())?
-        .workspace;
-    let mocks = workspace_runtime_mocks(&workspace, &workspace_id)?;
-    let address = if address.ip().is_unspecified() {
-        std::net::SocketAddr::new(
-            if address.is_ipv4() {
-                std::net::IpAddr::V4(std::net::Ipv4Addr::LOCALHOST)
-            } else {
-                std::net::IpAddr::V6(std::net::Ipv6Addr::LOCALHOST)
-            },
-            address.port(),
-        )
-    } else {
-        address
-    };
-    let response = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(10))
-        .redirect(reqwest::redirect::Policy::none())
-        .no_proxy()
-        .build()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())?
-        .post(format!(
-            "http://{address}/__mockforge/api/workspaces/{}/activate",
-            urlencoding::encode(&workspace_id)
-        ))
-        .json(&mocks)
-        .send()
-        .await
-        .map_err(|_| StatusCode::BAD_GATEWAY.into_response())?;
-    if !response.status().is_success() {
-        return Err(StatusCode::BAD_GATEWAY.into_response());
-    }
-    let result = response.json().await.map_err(|_| StatusCode::BAD_GATEWAY.into_response())?;
-    Ok(Json(ApiResponse::success(result)))
 }
 
 /// Delete a workspace
@@ -1989,95 +1847,6 @@ pub async fn confirm_sync_changes(
         request.changes.len(),
         request.apply_all
     ))))
-}
-
-fn authorize_workspace_transfer(
-    headers: &axum::http::HeaderMap,
-    permission: mockforge_collab::permissions::Permission,
-) -> Result<(), Response> {
-    // Transfers require an explicit valid token even when other local read APIs
-    // are public or development mode supplies a default admin context.
-    let token = headers
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|value| value.to_str().ok())
-        .and_then(|value| value.strip_prefix("Bearer "))
-        .ok_or_else(|| StatusCode::UNAUTHORIZED.into_response())?;
-    let claims =
-        crate::auth::validate_token(token).map_err(|_| StatusCode::UNAUTHORIZED.into_response())?;
-    let user = crate::auth::claims_to_user_context(&claims);
-    if !mockforge_collab::permissions::RolePermissions::has_permission(user.role, permission) {
-        return Err(StatusCode::FORBIDDEN.into_response());
-    }
-    Ok(())
-}
-
-/// Export authored local workspace configuration with credential references.
-pub async fn export_live_workspace(
-    State(state): State<WorkspaceState>,
-    Path(workspace_id): Path<String>,
-    headers: axum::http::HeaderMap,
-) -> Result<Json<mockforge_core::workspace_export::WorkspaceExportDocument>, Response> {
-    authorize_workspace_transfer(
-        &headers,
-        mockforge_collab::permissions::Permission::WorkspaceRead,
-    )?;
-    let registry = state.registry.read().await;
-    let mut workspace = registry
-        .get_workspace(&workspace_id)
-        .map_err(|_| StatusCode::NOT_FOUND.into_response())?
-        .workspace;
-    workspace.id = workspace_id;
-    let snapshot =
-        mockforge_core::workspace_export::WorkspaceExportDocument::from_workspace(&workspace)
-            .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response())?;
-    Ok(Json(snapshot))
-}
-
-/// Import resolved authored configuration as a new workspace without overwriting existing state.
-pub async fn import_live_workspace(
-    State(state): State<WorkspaceState>,
-    headers: axum::http::HeaderMap,
-    Json(input): Json<serde_json::Value>,
-) -> Result<(StatusCode, Json<CreatedItemResponse>), Response> {
-    authorize_workspace_transfer(
-        &headers,
-        mockforge_collab::permissions::Permission::ManageSettings,
-    )?;
-    let id = input
-        .get("id")
-        .and_then(serde_json::Value::as_str)
-        .filter(|id| !id.is_empty() && id.len() <= 256)
-        .ok_or_else(|| StatusCode::BAD_REQUEST.into_response())?
-        .to_owned();
-    let mut workspace: Workspace = serde_json::from_value(
-        input.get("workspace").cloned().unwrap_or_default(),
-    )
-    .map_err(|_| {
-        (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"error":"Invalid workspace configuration"})),
-        )
-            .into_response()
-    })?;
-    workspace.id = id.clone();
-    // Imported metadata denotes this new local authoring instance, while exports
-    // normalize it so a subsequent unchanged export still has a clean Git diff.
-    workspace.created_at = chrono::Utc::now();
-    workspace.updated_at = workspace.created_at;
-    let mut registry = state.registry.write().await;
-    if registry.workspace_exists(&id) {
-        return Err(StatusCode::CONFLICT.into_response());
-    }
-    registry
-        .register_workspace(id.clone(), workspace)
-        .map_err(|_| StatusCode::BAD_REQUEST.into_response())?;
-    Ok((
-        StatusCode::CREATED,
-        Json(CreatedItemResponse {
-            id,
-            message: "Workspace imported".into(),
-        }),
-    ))
 }
 
 #[cfg(test)]
