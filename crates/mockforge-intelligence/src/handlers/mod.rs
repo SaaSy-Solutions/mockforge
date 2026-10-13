@@ -24,6 +24,8 @@
 pub mod ai_studio;
 #[cfg(feature = "advanced")]
 pub mod consistency;
+pub mod contract_health;
+pub mod drift_budget;
 pub mod fidelity;
 pub mod forecasting;
 pub mod pr_generation;
@@ -36,6 +38,7 @@ pub mod semantic_drift;
 /// dropped — it was never read. Dual data-faker / stub-503 contract
 /// preserved via this crate's mirror `data-faker` feature flag.
 pub mod spec_generation;
+pub mod structural_incidents;
 pub mod threat_modeling;
 #[cfg(feature = "advanced")]
 pub mod xray;

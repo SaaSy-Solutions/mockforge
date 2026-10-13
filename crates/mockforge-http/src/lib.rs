@@ -28,10 +28,13 @@
 //     `mockforge-recorder` already depends on `mockforge-intelligence`,
 //     intelligence cannot host the orchestration layer without a cycle,
 //     so this handler stays here intentionally.
-//   - `handlers::{contract_health, drift_budget, failure_designer,
-//     incident_replay, protocol_contracts}` — coupled to
-//     `mockforge_chaos`, the chaos crate would need its own #555-style
-//     bucket before these can follow.
+//   - `handlers::{contract_health, drift_budget}` are compatibility state
+//     adapters for Intelligence handlers. Typed providers retain the structural
+//     Core engines without adding a Core dependency to Intelligence; pipeline
+//     publication remains in the HTTP adapter.
+//   - `handlers::{failure_designer, incident_replay, risk_simulation,
+//     snapshot_diff}` still need downstream engine/state boundaries under #632.
+//     Protocol contracts remain part of the HTTP-native contract surface.
 
 //! # MockForge HTTP
 //!
