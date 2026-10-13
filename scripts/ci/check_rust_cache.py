@@ -1,7 +1,9 @@
 """Read-only disk and structural cache checks before an integration build.
 
 The target is restricted to the checkout's target directory. Never follow
-symlinks, delete artifacts, or infer the historical missing-rlib cause. A
+external links, delete artifacts, or infer the historical missing-rlib cause.
+Native .so aliases are accepted only for nonempty versioned siblings inside
+Cargo build outputs; symlink directories and Rust artifact links are rejected. A
 completed library fingerprint needs at least one nonempty library artifact;
 Cargo check metadata and procedural macros are valid cache contents too.
 When Rust dep-info declares outputs, every declared library output is checked,

@@ -1,7 +1,9 @@
 """Causal cache/pressure fixtures preserve caches and symlink destinations."""
 import importlib.util
+import os
 from pathlib import Path
 import shutil
+import socket
 import tempfile
 import sys
 import unittest
@@ -118,6 +120,60 @@ class CacheGuardTest(unittest.TestCase):
         (directory / "bin-example").write_text("binary pruned by rust-cache")
         (directory / "lib-example.json").write_text("{}")
         self.assertEqual(GUARD.inspect(self.root)["errors"], [])
+
+    def native_alias(self):
+        directory = self.root / "target/release/build/rdkafka-sys-aaaaaaaaaaaaaaaa/out/src"
+        directory.mkdir(parents=True)
+        library = directory / "librdkafka.so.1"
+        library.write_bytes(b"native library")
+        alias = directory / "librdkafka.so"
+        alias.symlink_to(library.name)
+        return alias, library
+
+    def test_native_versioned_sibling_alias_is_preserved_and_not_double_counted(self):
+        alias, library = self.native_alias()
+        result = GUARD.inspect(self.root)
+        self.assertEqual(result["errors"], [])
+        self.assertEqual(result["target_bytes"], library.stat().st_size)
+        self.assertEqual(os.readlink(alias), library.name)
+        self.assertEqual(library.read_bytes(), b"native library")
+
+    def test_native_alias_rejects_external_targets_chains_empty_and_missing_files(self):
+        alias, library = self.native_alias()
+        library.write_bytes(b"")
+        self.assertTrue(GUARD.inspect(self.root)["errors"])
+        library.unlink()
+        self.assertTrue(GUARD.inspect(self.root)["errors"])
+        foreign = self.root / "foreign-library"
+        foreign.write_bytes(b"foreign")
+        library.symlink_to(foreign)
+        self.assertTrue(GUARD.inspect(self.root)["errors"])
+        alias.unlink()
+        alias.symlink_to(foreign)
+        self.assertTrue(GUARD.inspect(self.root)["errors"])
+        self.assertEqual(foreign.read_bytes(), b"foreign")
+
+    def test_native_style_link_outside_build_outputs_and_fifo_are_rejected(self):
+        directory = self.root / "target/release/deps"
+        directory.mkdir(parents=True)
+        library = directory / "libexample.so.1"
+        library.write_bytes(b"artifact")
+        (directory / "libexample.so").symlink_to(library.name)
+        self.assertTrue(GUARD.inspect(self.root)["errors"])
+        (directory / "libexample.so").unlink()
+        os.mkfifo(directory / "pipe")
+        self.assertTrue(GUARD.inspect(self.root)["errors"])
+        self.assertTrue((directory / "pipe").exists())
+
+    def test_socket_is_reported_and_preserved(self):
+        directory = self.root / "target/tmp"
+        directory.mkdir(parents=True)
+        path = directory / "fixture.socket"
+        with socket.socket(socket.AF_UNIX) as listener:
+            listener.bind(str(path))
+            errors = GUARD.inspect(self.root)["errors"]
+            self.assertTrue(any("socket" in error for error in errors))
+            self.assertTrue(path.exists())
 
 
 if __name__ == "__main__":
