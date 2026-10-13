@@ -386,6 +386,29 @@ impl DriftBudgetEngine {
     }
 }
 
+impl mockforge_intelligence::handlers::drift_budget::DriftBudgetSource for DriftBudgetEngine {
+    fn config(&self) -> &DriftBudgetConfig {
+        DriftBudgetEngine::config(self)
+    }
+    fn get_budget_for_endpoint(
+        &self,
+        endpoint: &str,
+        method: &str,
+        workspace_id: Option<&str>,
+        service_name: Option<&str>,
+        tags: Option<&[String]>,
+    ) -> DriftBudget {
+        DriftBudgetEngine::get_budget_for_endpoint(
+            self,
+            endpoint,
+            method,
+            workspace_id,
+            service_name,
+            tags,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

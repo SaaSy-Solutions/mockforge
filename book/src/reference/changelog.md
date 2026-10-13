@@ -12,6 +12,8 @@
 
 ### Changed
 
+- **[DevX]** Snapshot diff routes and comparison logic now live in Intelligence behind a typed current-mock projection. HTTP retains its management state, public DTO paths and router signature. (#632)
+
 - **[DevX]** Risk-simulation HTTP handlers now live in intelligence behind a typed engine interface. Shared risk-assessment DTOs live in foundation, while HTTP retains its original state fields and public auth type paths. (#632)
 
 - **[DevX]** Behavioral-cloning HTTP handlers now live in intelligence and use shared foundation scenario types. A recorder storage adapter preserves the HTTP compatibility state and SQLite behavior without adding a reverse dependency. (#631)
@@ -19,6 +21,10 @@
 ### Fixed
 
 - **[DevX]** Preserve shared configuration types in minimal Core builds and gate optional workspace and advanced runtime integrations consistently. Voice workspace construction declares its workspace/data prerequisites, and advanced engines declare their workspace and persona-type prerequisites.
+
+- **[DevX]** OIDC environment fixtures run in isolated child processes, preventing parallel tests from overwriting issuer and discovery settings while exercising the real environment-based configuration paths.
+
+- **[Contracts]** Move drift-budget and contract-health handlers into Intelligence through typed engine providers, retaining the existing HTTP state constructors and feature gates. Bind timeline workspace IDs as UUIDs so persisted threat and forecast rows appear instead of an empty successful response. (#632)
 
 - **[DevX]** Honor optional HTTP scenario, world-state, performance and route-chaos feature gates for modules, state and route wiring, allowing minimal builds to retain basic mocks and health probes.
 
