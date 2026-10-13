@@ -102,7 +102,7 @@ jobs:
           BASE_URL="http://localhost:$MF_HTTP_PORT" k6 run --summary-export=load-test-results.json http_load.js
 
       - name: Upload load test results
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: load-test-results-standard
@@ -180,7 +180,7 @@ jobs:
           BASE_URL="http://localhost:$MF_HTTP_PORT" SUMMARY_FILE=load-test-results-extended.json k6 run http_load_high_scale.js
 
       - name: Upload load test results
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: load-test-results-extended
@@ -234,7 +234,7 @@ jobs:
           cargo bench -p mockforge-core --bench core_benchmarks -- --output-format bencher | tee benchmark-results.txt
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         if: always()
         with:
           name: benchmark-results
