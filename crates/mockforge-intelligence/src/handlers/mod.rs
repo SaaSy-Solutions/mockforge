@@ -8,6 +8,9 @@
 //! unchanged.
 //!
 //! Currently migrated:
+//! - [`behavioral_cloning`]: behavioral HTTP surface (#631). A storage trait
+//!   implemented downstream in recorder avoids a reverse dependency; HTTP
+//!   retains its original recorder-backed state and re-exports these handlers.
 //! - [`pr_generation`]: PR generation HTTP surface (#555 phase 2). The
 //!   underlying `pr_generation` module moved in #562 phase 1; the
 //!   handler followed once intelligence grew an axum dep.
@@ -22,6 +25,7 @@
 //!   `mockforge_foundation::threat_modeling_types`.
 
 pub mod ai_studio;
+pub mod behavioral_cloning;
 #[cfg(feature = "advanced")]
 pub mod consistency;
 pub mod fidelity;

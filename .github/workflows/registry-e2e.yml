@@ -249,7 +249,7 @@ jobs:
           fi
 
       - name: Run E2E tests
-        # The three E2E targets each gate on `#[ignore]`. Pass `--ignored` to unlock them.
+        # These E2E targets gate on `#[ignore]`. Pass `--ignored` to unlock them.
         # `--test-threads=1` keeps the tests serial; many of them create/delete orgs with
         # generated-but-occasionally-colliding slugs if two run at the same millisecond.
         run: |
@@ -259,6 +259,7 @@ jobs:
             --test marketplace_e2e \
             --test cloud_verification_e2e \
             --test cloud_ai_contract_diff_e2e \
+            --test diff_finding_incident_e2e \
             --test cloud_conformance_e2e \
             --test paid_flow_e2e \
             --test hosted_mock_overrides_e2e \

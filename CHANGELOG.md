@@ -4,9 +4,15 @@
 
 - **[Contracts]** Add the `proxy` CLI command with passive or strict OpenAPI conformance validation and the shared violation feed. Preserve binary and redirect responses, honor configured upstream timeouts, and validate response status ranges, default schemas, and malformed JSON. (#864)
 
+### Changed
+
+- **[DevX]** Behavioral-cloning HTTP handlers now live in intelligence and use shared foundation scenario types. A recorder storage adapter preserves the HTTP compatibility state and SQLite behavior without adding a reverse dependency. (#631)
+
 ### Fixed
 
 - **[DevX]** Integration builds check shared-disk headroom and restored Cargo library artifacts before compiling. Read-only diagnostics replace automatic target deletion and retain foreign or active build files. (#706)
+
+- **[DevX]** Publish Recorder before the AMQP, Kafka and MQTT crates that depend on it. The publish-list guard checks normal and build dependency order, preventing partial releases caused by missing same-version dependencies.
 
 - **[Security]** Update the locked QUIC protocol dependency to `quinn-proto` 0.11.18, fixing five RustSec packet-handling and memory-exhaustion advisories. Its required Rand 0.10 patch dependency is updated without enabling new protocol features.
 

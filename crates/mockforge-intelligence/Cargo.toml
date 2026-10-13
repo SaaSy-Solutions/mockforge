@@ -15,8 +15,9 @@ categories = ["development-tools::testing"]
 # `mockforge-core` can re-export modules that live here (currently
 # `pr_generation`). The only thing this crate needs from core was
 # `Result`/`Error` (now sourced from `mockforge-foundation` directly) and
-# `ScenarioDefinition` (the one method that produced one now lives in
-# `mockforge-http::handlers::behavioral_cloning`, the only caller).
+# `ScenarioDefinition` / `ScenarioStep` (now shared foundation types).
+# Recorder-backed handlers use a store trait implemented downstream; adding
+# a recorder dependency here would reintroduce a core/intelligence cycle.
 mockforge-foundation = { path = "../mockforge-foundation", default-features = false }
 # `intelligent_behavior` (#562 phase 2) needs `OpenApiSpec`, `ResponseGenerator`,
 # and `OpenApiRouteRegistry`. `mockforge-openapi` is foundation-only, so this
