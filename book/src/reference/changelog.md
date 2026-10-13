@@ -12,6 +12,8 @@
 
 ### Fixed
 
+- **[VBR]** Create SQLite foreign keys with table declarations and enforce them on every connection. Return created records using their actual keys with HTTP 201. Runtime tests use isolated databases and fail on setup errors instead of silently passing.
+
 - **[DevX]** Publish Recorder before the AMQP, Kafka and MQTT crates that depend on it. The publish-list guard checks normal and build dependency order, preventing partial releases caused by missing same-version dependencies.
 
 - **[Security]** Update the locked QUIC protocol dependency to `quinn-proto` 0.11.18, fixing five RustSec packet-handling and memory-exhaustion advisories. Its required Rand 0.10 patch dependency is updated without enabling new protocol features.

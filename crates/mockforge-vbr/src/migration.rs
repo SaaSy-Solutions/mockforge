@@ -40,13 +40,20 @@ impl MigrationManager {
             columns.push(format!("PRIMARY KEY ({})", pk_fields));
         }
 
+        // SQLite permits references to tables created later, but cannot add
+        // foreign keys with ALTER TABLE. Declare them in the original table.
+        columns.extend(self.generate_foreign_keys(entity));
+
         sql.push_str(&columns.join(",\n    "));
         sql.push_str("\n)");
 
         Ok(sql)
     }
 
-    /// Generate foreign key constraints
+    /// Generate inline SQLite foreign-key clauses for a CREATE TABLE statement.
+    ///
+    /// These are not standalone statements. `generate_create_table` includes
+    /// them automatically; SQLite does not support ALTER TABLE ADD CONSTRAINT.
     pub fn generate_foreign_keys(&self, entity: &Entity) -> Vec<String> {
         let mut fk_statements = Vec::new();
         let table_name = entity.table_name();
@@ -57,8 +64,13 @@ impl MigrationManager {
 
             let fk_name = format!("fk_{}_{}", table_name, fk.field);
             let statement = format!(
-                "ALTER TABLE {} ADD CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {}({}) ON DELETE {} ON UPDATE {}",
-                table_name, fk_name, fk.field, fk.target_entity.to_lowercase() + "s", fk.target_field, on_delete, on_update
+                "CONSTRAINT {} FOREIGN KEY ({}) REFERENCES {}({}) ON DELETE {} ON UPDATE {}",
+                fk_name,
+                fk.field,
+                fk.target_entity.to_lowercase() + "s",
+                fk.target_field,
+                on_delete,
+                on_update
             );
             fk_statements.push(statement);
         }
@@ -228,17 +240,6 @@ impl MigrationManager {
             for index_sql in self.generate_indexes(entity) {
                 database.execute(&index_sql, &[]).await?;
             }
-
-            // Note: Foreign keys are added after all tables are created
-            // This will be handled in a separate pass
-        }
-
-        // Second pass: add foreign key constraints
-        for entity in entities {
-            for fk_sql in self.generate_foreign_keys(entity) {
-                // Foreign keys might fail if tables don't exist yet, so we continue on error
-                let _ = database.execute(&fk_sql, &[]).await;
-            }
         }
 
         Ok(())
@@ -272,13 +273,6 @@ pub async fn create_table_for_entity(
     // Create indexes
     for index_sql in manager.generate_indexes(entity) {
         database.execute(&index_sql, &[]).await?;
-    }
-
-    // Create foreign keys (if target tables exist)
-    for fk_sql in manager.generate_foreign_keys(entity) {
-        // Foreign keys might fail if target tables don't exist yet
-        // This is okay - they'll be created when the target entity is processed
-        let _ = database.execute(&fk_sql, &[]).await;
     }
 
     Ok(())
