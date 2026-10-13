@@ -1,7 +1,9 @@
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
+#[cfg(feature = "http")]
 use std::net::SocketAddr;
 use std::path::PathBuf;
+#[cfg(feature = "http")]
 use tokio::net::TcpListener;
 
 mod ai_commands;
@@ -4126,6 +4128,7 @@ mod cli_tests {
     }
 }
 
+#[cfg(feature = "admin")]
 async fn handle_admin(
     port: u16,
     _config: Option<PathBuf>,
@@ -4166,6 +4169,7 @@ async fn handle_admin(
     Ok(())
 }
 
+#[cfg(feature = "http")]
 #[allow(clippy::too_many_arguments)]
 async fn handle_quick(
     file: PathBuf,
@@ -4307,4 +4311,27 @@ fn handle_completions(shell: Shell) {
     let mut cmd = Cli::command();
     let bin_name = cmd.get_name().to_string();
     generate(shell, &mut cmd, bin_name, &mut std::io::stdout());
+}
+#[cfg(not(feature = "http"))]
+#[allow(clippy::too_many_arguments)]
+async fn handle_quick(
+    file: PathBuf,
+    port: u16,
+    host: String,
+    admin: bool,
+    admin_port: u16,
+    metrics: bool,
+    metrics_port: u16,
+    logging: bool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let _ = (file, port, host, admin, admin_port, metrics, metrics_port, logging);
+    Err("Quick mock serving requires the http Cargo feature".into())
+}
+
+#[cfg(not(feature = "admin"))]
+async fn handle_admin(
+    _port: u16,
+    _config: Option<PathBuf>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    Err("The admin command requires the admin Cargo feature".into())
 }

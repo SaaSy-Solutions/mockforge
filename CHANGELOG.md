@@ -16,6 +16,8 @@
 
 ### Fixed
 
+- **[DevX]** Honor optional CLI protocol and subsystem features during shared startup, preserve standalone listeners and shutdown handling, and reject unavailable requested operations before creating runtime state. Declare HTTP and VBR prerequisites and include SMTP in its HTTP query-import gate.
+
 - **[DevX]** Honor optional HTTP scenario, world-state, performance and route-chaos feature gates for modules, state and route wiring, allowing minimal builds to retain basic mocks and health probes.
 
 - **[DevX]** Integration builds check shared-disk headroom and restored Cargo library artifacts before compiling. Read-only diagnostics replace automatic target deletion and retain foreign or active build files. (#706)
