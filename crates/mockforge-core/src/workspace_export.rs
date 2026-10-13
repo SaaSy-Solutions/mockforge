@@ -11,6 +11,7 @@ mod discovery;
 mod normalization;
 mod references;
 mod sanitization;
+mod url_credentials;
 
 use discovery::collect_secrets;
 use normalization::{canonicalize, normalize_folders, normalize_requests};

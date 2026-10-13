@@ -1,5 +1,6 @@
 //! Collect configured sensitive values so copies elsewhere are also protected.
-use super::classification::{sensitive_field, sensitive_name};
+use super::classification::sensitive_field;
+use super::url_credentials::collect_url_credentials;
 use serde_json::Value;
 use std::collections::BTreeSet;
 
@@ -33,23 +34,7 @@ pub(super) fn collect_secrets(value: &Value, parent: &str, secrets: &mut BTreeSe
             }
         }
         Value::String(string) => {
-            if let Ok(url) = url::Url::parse(string) {
-                for credential in [Some(url.username()), url.password()]
-                    .into_iter()
-                    .flatten()
-                    .filter(|s| !s.is_empty())
-                {
-                    secrets.insert(credential.to_owned());
-                    if let Ok(decoded) = urlencoding::decode(credential) {
-                        secrets.insert(decoded.into_owned());
-                    }
-                }
-                for (key, value) in url.query_pairs() {
-                    if sensitive_name(&key) && !value.is_empty() {
-                        secrets.insert(value.into_owned());
-                    }
-                }
-            }
+            collect_url_credentials(string, secrets);
             if parent == "body" {
                 if let Ok(parsed) = serde_json::from_str::<Value>(string) {
                     collect_secrets(&parsed, "", secrets);
