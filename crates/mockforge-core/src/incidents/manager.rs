@@ -235,3 +235,35 @@ impl IncidentManager {
         }
     }
 }
+
+#[async_trait::async_trait]
+impl mockforge_intelligence::handlers::structural_incidents::StructuralIncidents
+    for IncidentManager
+{
+    async fn query_incidents(&self, query: IncidentQuery) -> Vec<DriftIncident> {
+        IncidentManager::query_incidents(self, query).await
+    }
+    async fn get_incident(&self, id: &str) -> Option<DriftIncident> {
+        IncidentManager::get_incident(self, id).await
+    }
+    async fn acknowledge_incident(&self, id: &str) -> Option<DriftIncident> {
+        IncidentManager::acknowledge_incident(self, id).await
+    }
+    async fn resolve_incident(&self, id: &str) -> Option<DriftIncident> {
+        IncidentManager::resolve_incident(self, id).await
+    }
+    async fn close_incident(&self, id: &str) -> Option<DriftIncident> {
+        IncidentManager::close_incident(self, id).await
+    }
+    async fn link_external_ticket(
+        &self,
+        id: &str,
+        ticket_id: String,
+        ticket_url: Option<String>,
+    ) -> Option<DriftIncident> {
+        IncidentManager::link_external_ticket(self, id, ticket_id, ticket_url).await
+    }
+    async fn get_statistics(&self) -> HashMap<IncidentStatus, usize> {
+        IncidentManager::get_statistics(self).await
+    }
+}

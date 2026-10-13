@@ -162,6 +162,33 @@ The original issue proposed handler-first extraction. Audit findings reverse the
 
 This ADR is **Phase 1**. The implementer judged Phase 2 too risky to bundle: the AI handlers cannot be moved cleanly without first shifting their core-side implementations, which is a multi-day refactor that needs its own issue, plan, and review. A follow-up issue will track Phase A (the core-side untangle). `behavioral_cloning.rs` is the only handler whose dependencies already live in `mockforge-intelligence`; it is a candidate for a small standalone "proof of concept" PR.
 
+### Drift budget and contract health boundary
+
+The drift-budget and contract-health handler implementations now live in
+`mockforge-intelligence::handlers`. Their structural incident manager and budget
+engine deliberately remain in Core. Intelligence defines typed incident, budget,
+GitOps and state-provider interfaces; Core implements the engine interfaces, and
+HTTP supplies its existing state instances. Intelligence does not depend on Core
+or Pipelines. HTTP retains the public state fields and handler re-exports so
+existing struct literals and route constructors continue to work.
+
+The contract timeline's optional database provider defaults to no connection.
+HTTP exposes its database field only under its own database feature, even when
+another crate independently enables Intelligence's database feature. Pipeline
+publication remains in the HTTP adapter under its existing feature gate; the
+extracted handler supplies threshold metadata after successful PR generation.
+
+This extraction retains the existing budget-write behavior: returning a created
+budget does not mutate the immutable budget engine. It does not add persistence
+or change incident transitions, budget precedence, or GitOps configuration.
+Database timeline queries bind the workspace as a UUID, matching both migrated
+schema columns. The former text binding silently returned an empty successful
+timeline even when matching rows existed. A malformed workspace now returns
+400 when a database is connected; states without a connection retain their
+existing string-based incident filtering.
+The other handler extractions tracked by #632 remain separate
+work; these two moves do not complete that issue.
+
 ## Consequences
 
 **Positive:**
@@ -219,3 +246,22 @@ The adapters retain the existing simplified external-format interpretation and
 the existing HTTP 200 text error behavior; they add no live provider integration,
 incident fidelity guarantee, or broader authentication extraction (#635). The
 remaining #632 handler work still requires its own merge and main-branch audit.
+
+
+### Snapshot diff management projection (#632)
+
+Intelligence owns snapshot DTOs, HTTP storage/filtering routes and pure mock
+comparison. A typed `SnapshotStateProvider` projects the consuming application's
+current mocks into `MockSnapshotItem` values. HTTP implements that interface on
+its existing `ManagementState`, preserving the prior status-code default,
+response body/headers and serialized mock configuration. Public DTO and router
+paths remain available through HTTP re-exports; Intelligence gains no HTTP or
+Core dependency.
+
+The migration retains the existing process-global in-memory store, method/path
+comparison keys, list filters, live comparison fallbacks and five emitted
+difference kinds. `ConfigMismatch` remains a declared variant that the current
+comparison does not emit. This source move adds neither durable snapshot storage
+nor tenant isolation and does not establish deployed-account acceptance. Those
+behaviors must not be inferred from extraction or compatibility tests. The
+failure-designer and incident-replay boundaries remain separate #632 work.
