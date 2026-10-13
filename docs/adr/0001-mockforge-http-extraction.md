@@ -223,3 +223,22 @@ risk engine. Scores, factor precedence, action thresholds, route paths and JSON
 responses retain existing behavior. This is an internal API and adds no UI,
 production auth deployment, or completion claim for #635 or the other #632
 handlers.
+
+
+### Snapshot diff management projection (#632)
+
+Intelligence owns snapshot DTOs, HTTP storage/filtering routes and pure mock
+comparison. A typed `SnapshotStateProvider` projects the consuming application's
+current mocks into `MockSnapshotItem` values. HTTP implements that interface on
+its existing `ManagementState`, preserving the prior status-code default,
+response body/headers and serialized mock configuration. Public DTO and router
+paths remain available through HTTP re-exports; Intelligence gains no HTTP or
+Core dependency.
+
+The migration retains the existing process-global in-memory store, method/path
+comparison keys, list filters, live comparison fallbacks and five emitted
+difference kinds. `ConfigMismatch` remains a declared variant that the current
+comparison does not emit. This source move adds neither durable snapshot storage
+nor tenant isolation and does not establish deployed-account acceptance. Those
+behaviors must not be inferred from extraction or compatibility tests. The
+failure-designer and incident-replay boundaries remain separate #632 work.

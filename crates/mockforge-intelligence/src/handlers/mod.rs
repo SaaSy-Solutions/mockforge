@@ -39,6 +39,7 @@ pub mod risk_simulation;
 #[cfg(feature = "advanced")]
 pub mod scenario_studio;
 pub mod semantic_drift;
+pub mod snapshot_diff;
 /// AI-powered API spec generation handler. Moved from
 /// `mockforge_http::management::ai_gen` under #656 (post-#555
 /// follow-up). The original `State<ManagementState>` extractor was
