@@ -1804,6 +1804,14 @@ impl RegistryStore for SqliteRegistryStore {
         Err(StoreError::NotFound)
     }
 
+    async fn create_hosted_mock_scoped(
+        &self,
+        _input: crate::models::hosted_mock::HostedMockCreation<'_>,
+    ) -> StoreResult<HostedMock> {
+        // Hosted deployments are cloud-only, as with the legacy constructor.
+        Err(StoreError::NotFound)
+    }
+
     #[allow(unused_variables)]
     async fn find_hosted_mock_by_id(&self, id: Uuid) -> StoreResult<Option<HostedMock>> {
         Ok(None)

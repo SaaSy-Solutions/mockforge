@@ -262,6 +262,7 @@ pub mod reality_proxy;
 /// Replay listing and fixture management
 pub mod replay_listing;
 pub mod request_logging;
+#[cfg(feature = "route-chaos")]
 pub mod route_chaos_runtime;
 /// Runtime named-scenario activation API
 #[cfg(feature = "scenario-engine")]
@@ -271,6 +272,7 @@ pub mod spec_import;
 /// Server-Sent Events for streaming logs and metrics
 pub mod sse;
 /// State machine API for scenario state machines
+#[cfg(feature = "scenario-engine")]
 pub mod state_machine_api;
 /// Time-travel runtime API mirrored from the admin server onto the main HTTP port
 pub mod time_travel_api;
@@ -1943,6 +1945,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     // Register custom routes from config with advanced routing features
     // Create RouteChaosInjector for advanced fault injection and latency
     // Store as trait object to avoid circular dependency (RouteChaosInjectorTrait is in mockforge-core)
+    #[cfg(feature = "route-chaos")]
     let route_chaos_injector: Option<
         std::sync::Arc<dyn mockforge_core::priority_handler::RouteChaosInjectorTrait>,
     > = if let Some(ref route_configs) = route_configs {
@@ -1978,6 +1981,11 @@ pub async fn build_router_with_chains_and_multi_tenant(
     } else {
         None
     };
+
+    #[cfg(not(feature = "route-chaos"))]
+    let route_chaos_injector: Option<
+        std::sync::Arc<dyn mockforge_core::priority_handler::RouteChaosInjectorTrait>,
+    > = None;
 
     if let Some(route_configs) = route_configs {
         use axum::http::StatusCode;
@@ -2374,6 +2382,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     // the static per-route handlers so operators can add/remove fault and
     // latency rules without redeploying. Static rules from the YAML
     // config still apply to their routes; runtime rules are additive.
+    #[cfg(feature = "route-chaos")]
     {
         use crate::route_chaos_runtime::{
             route_chaos_api_router, runtime_route_chaos_middleware, RuntimeRouteChaosState,
@@ -3050,6 +3059,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         }
 
         // Add performance mode endpoints
+        #[cfg(feature = "performance-profiling")]
         {
             use crate::handlers::performance::{performance_router, PerformanceState};
             let performance_state = PerformanceState::new();
@@ -3058,6 +3068,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         }
 
         // Add world state endpoints
+        #[cfg(feature = "world-state")]
         {
             use crate::handlers::world_state::{world_state_router, WorldStateState};
             use mockforge_world_state::WorldStateEngine;

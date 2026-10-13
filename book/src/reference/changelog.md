@@ -4,6 +4,8 @@
 
 ### Added
 
+- **[Cloud]** Hosted deployments can explicitly select or change their capture workspace in the API and portal. Recorder batches use the deployment's verified organization/workspace, preserve historical attribution, and reject cross-organization assignments; unassigned deployments stay unassigned. (#720)
+
 - **[Contracts]** Add the `proxy` CLI command with passive or strict OpenAPI conformance validation and the shared violation feed. Preserve binary and redirect responses, honor configured upstream timeouts, and validate response status ranges, default schemas, and malformed JSON. (#864)
 
 - **[Cloud]** Monitored services support per-service cron schedules and IANA timezones, with legacy interval cadence preserved. Probe runs and due-state claims commit atomically so overlapping scheduler ticks do not enqueue the same occurrence twice. (#720)
@@ -17,6 +19,8 @@
 ### Fixed
 
 - **[VBR]** Create SQLite foreign keys with table declarations and enforce them on every connection. Return created records using their actual keys with HTTP 201. Runtime tests use isolated databases and fail on setup errors instead of silently passing.
+
+- **[DevX]** Honor optional HTTP scenario, world-state, performance and route-chaos feature gates for modules, state and route wiring, allowing minimal builds to retain basic mocks and health probes.
 
 - **[DevX]** Integration builds check shared-disk headroom and restored Cargo library artifacts before compiling. Read-only diagnostics replace automatic target deletion and retain foreign or active build files. (#706)
 
