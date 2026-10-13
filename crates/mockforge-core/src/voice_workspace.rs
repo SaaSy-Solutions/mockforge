@@ -18,13 +18,8 @@
 //! core → intelligence via `threat_modeling`). See
 //! `crates/mockforge-core/src/voice.rs` for the full diagram. Don't move it.
 
-use crate::contract_drift::{DriftBudget, DriftBudgetConfig};
 use crate::multi_tenant::MultiTenantWorkspaceRegistry;
 use crate::openapi::OpenApiSpec;
-use crate::reality_continuum::config::{
-    ContinuumConfig, ContinuumRule, MergeStrategy, TransitionMode,
-};
-use crate::scenarios::types::{ScenarioDefinition, ScenarioStep};
 use crate::voice::command_parser::{EndpointRequirement, ModelRequirement, ParsedCommand};
 use crate::voice::command_parser::{
     ParsedDriftBudget, ParsedRealityContinuum, ParsedWorkspaceCreation,
@@ -33,6 +28,11 @@ use crate::voice::spec_generator::VoiceSpecGenerator;
 use crate::Result;
 use crate::Workspace;
 use mockforge_data::{Domain, PersonaProfile};
+use mockforge_foundation::contract_drift_types::{DriftBudget, DriftBudgetConfig};
+use mockforge_foundation::reality_continuum::{
+    ContinuumConfig, ContinuumRule, MergeStrategy, TransitionMode,
+};
+use mockforge_foundation::scenario_types::{ScenarioDefinition, ScenarioStep};
 use std::collections::HashMap;
 
 /// Result of building a workspace

@@ -119,5 +119,6 @@ persona-graph = ["mockforge-intelligence/persona-graph"]
 ai = []
 contracts = []
 workspace-mgmt = []
-voice = []
-advanced = ["mockforge-intelligence/advanced"]
+voice = ["data", "workspace-mgmt"]
+# Advanced snapshots and multi-tenant routing use persisted workspaces.
+advanced = ["mockforge-intelligence/advanced", "workspace-mgmt"]

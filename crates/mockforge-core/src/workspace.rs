@@ -595,7 +595,7 @@ impl Workspace {
         name: MockEnvironmentName,
         reality_config: Option<crate::reality::RealityConfig>,
         chaos_config: Option<crate::chaos_utilities::ChaosConfig>,
-        drift_budget_config: Option<crate::contract_drift::DriftBudgetConfig>,
+        drift_budget_config: Option<mockforge_foundation::contract_drift_types::DriftBudgetConfig>,
     ) -> Result<()> {
         // Get or create the environment
         let env = if let Some(existing) = self.config.mock_environments.get_environment(name) {

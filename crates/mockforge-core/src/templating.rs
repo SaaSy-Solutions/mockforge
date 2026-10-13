@@ -9,9 +9,9 @@
 
 use crate::encryption::init_key_store;
 use crate::request_chaining::ChainTemplatingContext;
-use crate::time_travel::VirtualClock;
 use crate::Config;
 use chrono::{Duration as ChronoDuration, Utc};
+use mockforge_foundation::time_travel::VirtualClock;
 use once_cell::sync::{Lazy, OnceCell};
 use rand::{rng, Rng};
 use regex::Regex;

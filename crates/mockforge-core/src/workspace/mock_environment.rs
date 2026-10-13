@@ -5,8 +5,8 @@
 //! per environment, similar to application environments.
 
 use crate::chaos_utilities::ChaosConfig;
-use crate::contract_drift::DriftBudgetConfig;
 use crate::reality::RealityConfig;
+use mockforge_foundation::contract_drift_types::DriftBudgetConfig;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
