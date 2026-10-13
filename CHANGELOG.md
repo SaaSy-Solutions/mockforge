@@ -6,6 +6,8 @@
 
 ### Changed
 
+- **[DevX]** Risk-simulation HTTP handlers now live in intelligence behind a typed engine interface. Shared risk-assessment DTOs live in foundation, while HTTP retains its original state fields and public auth type paths. (#632)
+
 - **[DevX]** Behavioral-cloning HTTP handlers now live in intelligence and use shared foundation scenario types. A recorder storage adapter preserves the HTTP compatibility state and SQLite behavior without adding a reverse dependency. (#631)
 
 ### Fixed
