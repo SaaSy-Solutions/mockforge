@@ -62,6 +62,48 @@ pub(super) fn validate(
     .into_iter()
     .any(std::convert::identity);
     require("http", cfg!(feature = "http"), http_requested)?;
+    // HTTP, WebSocket and gRPC are enabled in the generic config defaults;
+    // defaults alone must not request a protocol omitted from this build.
+    // Preserve existing startup scripts that zero unused optional ports. A
+    // compiled listener may bind an ephemeral port; an omitted listener does
+    // not become a requested operation merely because its port is zero.
+    for (name, compiled, requested) in [
+        (
+            "ws",
+            cfg!(feature = "ws"),
+            args.ws_port.is_some_and(|port| port != 0)
+                || args.ws_replay_file.is_some()
+                || config.websocket.replay_file.is_some(),
+        ),
+        (
+            "grpc",
+            cfg!(feature = "grpc"),
+            args.grpc_port.is_some_and(|port| port != 0)
+                || config.grpc.proto_dir.is_some()
+                || config.grpc.tls.is_some()
+                || !config.grpc.overrides.is_empty(),
+        ),
+        (
+            "tcp",
+            cfg!(feature = "tcp"),
+            args.tcp_port.is_some_and(|port| port != 0) || config.tcp.enabled,
+        ),
+        (
+            "graphql",
+            cfg!(feature = "graphql"),
+            args.graphql.is_some()
+                || args.graphql_port.is_some_and(|port| port != 0)
+                || args.graphql_upstream.is_some()
+                || config.graphql.schema_path.is_some()
+                || config.graphql.upstream_url.is_some(),
+        ),
+        ("smtp", cfg!(feature = "smtp"), config.smtp.enabled),
+        ("mqtt", cfg!(feature = "mqtt"), config.mqtt.enabled),
+        ("amqp", cfg!(feature = "amqp"), config.amqp.enabled),
+        ("kafka", cfg!(feature = "kafka"), config.kafka.enabled),
+    ] {
+        require(name, compiled, requested)?;
+    }
     let chaos_requested = [
         args.chaos,
         args.circuit_breaker,

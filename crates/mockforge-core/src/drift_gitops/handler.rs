@@ -438,3 +438,13 @@ impl DriftGitOpsHandler {
         body
     }
 }
+
+#[async_trait::async_trait]
+impl mockforge_intelligence::handlers::drift_budget::DriftGitOps for DriftGitOpsHandler {
+    async fn generate_pr_from_incidents(
+        &self,
+        incidents: &[DriftIncident],
+    ) -> Result<Option<PRResult>> {
+        DriftGitOpsHandler::generate_pr_from_incidents(self, incidents).await
+    }
+}

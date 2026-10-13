@@ -1,4 +1,5 @@
 mod feature_selection;
+mod lifecycle;
 
 use std::path::PathBuf;
 
@@ -2615,7 +2616,7 @@ pub async fn handle_serve(
     }
 
     #[cfg(feature = "http")]
-    let (mut http_handle, mut https_handle) = {
+    let (http_handle, https_handle) = {
         // Start HTTP server
         let http_port = config.http.port;
 
@@ -2740,7 +2741,7 @@ pub async fn handle_serve(
         (http_handle, https_handle)
     };
     #[cfg(not(feature = "http"))]
-    let mut http_handle = {
+    let http_handle = {
         let shutdown = shutdown_token.clone();
         tokio::spawn(async move {
             shutdown.cancelled().await;
@@ -2748,7 +2749,7 @@ pub async fn handle_serve(
         })
     };
     #[cfg(not(feature = "http"))]
-    let mut https_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
+    let https_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
     #[cfg(feature = "tunnel")]
     let http_port = config.http.port;
 
@@ -3423,173 +3424,21 @@ pub async fn handle_serve(
     health_manager.set_ready().await;
     tracing::info!("Service marked as ready - all servers initialized");
 
-    // Wait for all servers or shutdown signal, handling errors properly
-    let result = tokio::select! {
-        result = &mut http_handle => {
-            match result {
-                Ok(Ok(())) => {
-                    println!("📡 HTTP server stopped gracefully");
-                    None
-                }
-                Ok(Err(e)) => {
-                    eprintln!("❌ {}", e);
-                    Some(e)
-                }
-                Err(e) => {
-                    let error = format!("HTTP server task panicked: {}", e);
-                    eprintln!("❌ {}", error);
-                    Some(error)
-                }
-            }
-        }
-        result = async {
-            // Pend forever when --https-port wasn't passed; otherwise this
-            // arm watches the second TLS listener for shutdown / errors.
-            if let Some(handle) = https_handle.as_mut() {
-                Some(handle.await)
-            } else {
-                std::future::pending::<Option<Result<Result<(), String>, tokio::task::JoinError>>>().await
-            }
-        } => {
-            match result {
-                Some(Ok(Ok(()))) => {
-                    println!("🔒 HTTPS server stopped gracefully");
-                    None
-                }
-                Some(Ok(Err(e))) => {
-                    eprintln!("❌ {}", e);
-                    Some(e)
-                }
-                Some(Err(e)) => {
-                    let error = format!("HTTPS server task panicked: {}", e);
-                    eprintln!("❌ {}", error);
-                    Some(error)
-                }
-                None => None,
-            }
-        }
-        result = ws_handle => {
-            match result {
-                Ok(Ok(())) => {
-                    println!("🔌 WebSocket server stopped gracefully");
-                    None
-                }
-                Ok(Err(e)) => {
-                    eprintln!("❌ {}", e);
-                    Some(e)
-                }
-                Err(e) => {
-                    let error = format!("WebSocket server task panicked: {}", e);
-                    eprintln!("❌ {}", error);
-                    Some(error)
-                }
-            }
-        }
-        result = grpc_handle => {
-            match result {
-                Ok(Ok(())) => {
-                    println!("⚡ gRPC server stopped gracefully");
-                    None
-                }
-                Ok(Err(e)) => {
-                    eprintln!("❌ {}", e);
-                    Some(e)
-                }
-                Err(e) => {
-                    let error = format!("gRPC server task panicked: {}", e);
-                    eprintln!("❌ {}", error);
-                    Some(error)
-                }
-            }
-        }
-        result = async {
-            if let Some(handle) = admin_handle {
-                Some(handle.await)
-            } else {
-                std::future::pending::<Option<Result<Result<(), String>, tokio::task::JoinError>>>().await
-            }
-        } => {
-            match result {
-                Some(Ok(Ok(()))) => {
-                    println!("🎛️ Admin UI stopped gracefully");
-                    None
-                }
-                Some(Ok(Err(e))) => {
-                    eprintln!("❌ {}", e);
-                    Some(e)
-                }
-                Some(Err(e)) => {
-                    let error = format!("Admin UI task panicked: {}", e);
-                    eprintln!("❌ {}", error);
-                    Some(error)
-                }
-                None => None
-            }
-        }
-        result = async {
-            if let Some(handle) = metrics_handle {
-                Some(handle.await)
-            } else {
-                std::future::pending::<Option<Result<Result<(), String>, tokio::task::JoinError>>>().await
-            }
-        } => {
-            match result {
-                Some(Ok(Ok(()))) => {
-                    println!("📊 Metrics server stopped gracefully");
-                    None
-                }
-                Some(Ok(Err(e))) => {
-                    eprintln!("❌ {}", e);
-                    Some(e)
-                }
-                Some(Err(e)) => {
-                    let error = format!("Metrics server task panicked: {}", e);
-                    eprintln!("❌ {}", error);
-                    Some(error)
-                }
-                None => None
-            }
-        }
-        signal = shutdown => {
-            match signal {
-                Ok(()) => {
-                    println!("🛑 Received shutdown signal");
-                    #[cfg(feature = "http")]
-                    health_manager.trigger_shutdown().await;
-                    None
-                }
-                Err(error) => Some(format!("Failed to listen for shutdown signals: {}", error)),
-            }
-        }
-    };
-
-    // Trigger shutdown for all remaining tasks
-    println!("👋 Shutting down remaining servers...");
-    shutdown_token.cancel();
-
-    // Stop accepting HTTP requests and allow active HTTP/HTTPS responses to
-    // finish. Bound the total wait below Docker's default ten-second grace.
-    let drained = tokio::time::timeout(Duration::from_secs(6), async {
-        if !http_handle.is_finished() {
-            let _ = (&mut http_handle).await;
-        }
-        if let Some(handle) = https_handle {
-            if !handle.is_finished() {
-                let _ = handle.await;
-            }
-        }
-    })
-    .await;
-    if drained.is_err() {
-        tracing::warn!("HTTP shutdown drain timed out after six seconds");
-    }
-
-    // Return error if any server failed
-    if let Some(error) = result {
-        Err(error.into())
-    } else {
-        Ok(())
-    }
+    lifecycle::supervise(
+        lifecycle::Listeners {
+            http: http_handle,
+            https: https_handle,
+            websocket: ws_handle,
+            grpc: grpc_handle,
+            admin: admin_handle,
+            metrics: metrics_handle,
+            #[cfg(feature = "http")]
+            health: health_manager,
+        },
+        shutdown,
+        shutdown_token,
+    )
+    .await
 }
 
 /// Convert YAML-loaded `mockforge_core::config::FaultConfig` into the chaos
