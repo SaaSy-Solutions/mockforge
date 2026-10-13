@@ -558,6 +558,51 @@ mod tests {
     use jsonwebtoken::Algorithm;
     use serde_json::json;
 
+    // Run the environment-reading code in a separate process for each fixture.
+    // Parent tests never mutate global environment shared with parallel tests.
+    fn isolated_env_test(name: &str, variables: &[(&str, &str)]) -> bool {
+        let test_name = format!("auth::oidc::tests::{name}");
+        if std::env::var("MOCKFORGE_OIDC_TEST_CHILD").as_deref() == Ok(test_name.as_str()) {
+            return true;
+        }
+        let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+        command
+            .arg("--exact")
+            .arg(&test_name)
+            .arg("--test-threads=1")
+            .arg("--color=never")
+            .env("MOCKFORGE_OIDC_TEST_CHILD", &test_name)
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped());
+        for key in [
+            "MOCKFORGE_OIDC_ISSUER",
+            "MOCKFORGE_BASE_URL",
+            "MOCKFORGE_OIDC_SECRET",
+            "MOCKFORGE_OIDC_ENABLED",
+            "MOCKFORGE_OIDC_CONFIG",
+        ] {
+            command.env_remove(key);
+        }
+        for (key, value) in variables {
+            command.env(key, value);
+        }
+        let output = command.output().unwrap();
+        let expected = format!("test {test_name} ... ok");
+        // A typo in the exact filter must fail rather than pass with zero tests.
+        assert!(
+            output.status.success() && String::from_utf8_lossy(&output.stdout).contains(&expected),
+            "isolated OIDC fixture did not pass: {name}"
+        );
+        false
+    }
+
+    #[test]
+    #[should_panic(expected = "isolated OIDC fixture did not pass")]
+    fn test_isolated_env_rejects_unknown_filter() {
+        isolated_env_test("missing_fixture", &[]);
+    }
+
     #[test]
     fn test_default_key_use() {
         assert_eq!(default_key_use(), "sig");
@@ -648,9 +693,9 @@ mod tests {
 
     #[test]
     fn test_oidc_state_default_mock() {
-        std::env::remove_var("MOCKFORGE_OIDC_ISSUER");
-        std::env::remove_var("MOCKFORGE_BASE_URL");
-        std::env::remove_var("MOCKFORGE_OIDC_SECRET");
+        if !isolated_env_test("test_oidc_state_default_mock", &[]) {
+            return;
+        }
 
         let state = OidcState::default_mock().unwrap();
         assert!(state.config.enabled);
@@ -663,22 +708,30 @@ mod tests {
 
     #[test]
     fn test_oidc_state_default_mock_with_env() {
-        std::env::set_var("MOCKFORGE_OIDC_ISSUER", "https://custom.example.com");
-        std::env::set_var("MOCKFORGE_OIDC_SECRET", "custom-secret");
+        if !isolated_env_test(
+            "test_oidc_state_default_mock_with_env",
+            &[
+                ("MOCKFORGE_OIDC_ISSUER", "https://custom.example.com"),
+                ("MOCKFORGE_OIDC_SECRET", "custom-secret"),
+            ],
+        ) {
+            return;
+        }
 
         let state = OidcState::default_mock().unwrap();
         assert_eq!(state.config.issuer, "https://custom.example.com");
-
-        std::env::remove_var("MOCKFORGE_OIDC_ISSUER");
-        std::env::remove_var("MOCKFORGE_OIDC_SECRET");
     }
 
     #[test]
     fn test_load_oidc_state_disabled() {
-        std::env::set_var("MOCKFORGE_OIDC_ENABLED", "false");
+        if !isolated_env_test(
+            "test_load_oidc_state_disabled",
+            &[("MOCKFORGE_OIDC_ENABLED", "false")],
+        ) {
+            return;
+        }
         let result = load_oidc_state();
         assert!(result.is_none());
-        std::env::remove_var("MOCKFORGE_OIDC_ENABLED");
     }
 
     #[test]
@@ -702,20 +755,29 @@ mod tests {
             }
         });
 
-        std::env::set_var("MOCKFORGE_OIDC_CONFIG", config_json.to_string());
+        let config_json = config_json.to_string();
+        if !isolated_env_test(
+            "test_load_oidc_state_from_json_config",
+            &[("MOCKFORGE_OIDC_CONFIG", &config_json)],
+        ) {
+            return;
+        }
         let state = load_oidc_state();
         assert!(state.is_some());
 
         if let Some(state) = state {
             assert_eq!(state.config.issuer, "https://json-config.example.com");
         }
-
-        std::env::remove_var("MOCKFORGE_OIDC_CONFIG");
     }
 
     #[tokio::test]
     async fn test_get_oidc_discovery() {
-        std::env::set_var("MOCKFORGE_BASE_URL", "https://test.mockforge.com");
+        if !isolated_env_test(
+            "test_get_oidc_discovery",
+            &[("MOCKFORGE_BASE_URL", "https://test.mockforge.com")],
+        ) {
+            return;
+        }
         let response = get_oidc_discovery().await;
         let discovery = response.0;
 
@@ -727,8 +789,6 @@ mod tests {
         assert!(discovery.response_types_supported.contains(&"code".to_string()));
         assert!(discovery.scopes_supported.contains(&"openid".to_string()));
         assert!(discovery.grant_types_supported.contains(&"authorization_code".to_string()));
-
-        std::env::remove_var("MOCKFORGE_BASE_URL");
     }
 
     #[tokio::test]
