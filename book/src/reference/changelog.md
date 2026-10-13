@@ -24,6 +24,8 @@
 
 ### Fixed
 
+- **[DevX]** Preserve the public HTTP handler module paths for consistency, fidelity and X-Ray after moving their implementations to Intelligence. (#632)
+
 - **[DevX]** gRPC startup accepts an owned listener and retains its socket through discovery and TLS setup. Real client fixtures reserve loopback port-zero listeners instead of releasing a temporary port before server startup.
 
 - **[DevX]** OIDC environment fixtures run in isolated child processes, preventing parallel tests from overwriting issuer and discovery settings while exercising the real environment-based configuration paths.
