@@ -1,314 +1,101 @@
-# MockForge Workspace Sync
+# Local workspace export and import
 
-This document describes how to use MockForge's workspace synchronization feature to mirror workspace data to external directories for integration with Git repositories or cloud storage services like Dropbox.
+Published 0.3.233 has no `workspace sync`, export, or import command. Earlier
+versions of this page incorrectly described a proposed sync CLI as available.
+The export/import implementation described below is unreleased and remains
+under acceptance testing for #1197, as part of #850.
 
-## Overview
+## Commands
 
-The `mockforge workspace sync` command allows you to export your workspace data to external directories with various organizational structures and sync strategies. This is perfect for:
+Use a running local MockForge admin server and a valid local admin JWT in
+`MOCKFORGE_ADMIN_TOKEN`. The JWT stays in the caller's environment, not command
+arguments or the export file. `--token-env` selects another variable name.
+Export requires workspace-read permission; import requires settings-management
+permission. Anonymous access, development identity headers, and mock tokens do
+not authorize these transfer endpoints.
 
-- **Git Integration**: Version control your API configurations
-- **Cloud Backup**: Sync to Dropbox, Google Drive, or other cloud storage
-- **Team Collaboration**: Share workspace configurations across team members
-- **Backup & Recovery**: Maintain external copies of your workspace data
-
-## Basic Usage
-
-```bash
-# Sync all workspaces to a directory
-mockforge workspace sync --target-dir /path/to/sync
-
-# Sync to current directory's git-sync folder
-mockforge workspace sync --target-dir ./git-sync
-
-# Preview what would be synced (dry run)
-mockforge workspace sync --target-dir ./preview --dry-run
+```sh
+mockforge workspace export frontend-dev --output workspace.yaml
+mockforge workspace export frontend-dev --output workspace.json --format json
+mockforge workspace import workspace.yaml --workspace-id restored-frontend
 ```
 
-## Directory Structures
+`--admin-url` defaults to `http://localhost:9080`. Transfers accept HTTP/HTTPS
+loopback addresses only, without URL credentials, query, fragment, or a path.
+Redirects and proxy environment settings are disabled for transfer requests.
 
-### Flat Structure (`--structure flat`)
-All workspaces are exported as individual YAML files in the target directory:
-```
-target-dir/
-├── workspace-1.yaml
-├── workspace-2.yaml
-└── .mockforge-meta.json
-```
+Export writes a complete temporary file in the destination directory and
+publishes it atomically. Existing files are preserved unless `--force` is
+specified. Import creates a new workspace; an existing destination workspace
+is rejected rather than overwritten. Input must use `.json`, `.yaml`, or `.yml`.
 
-### Nested Structure (`--structure nested`) - *Default*
-Each workspace gets its own directory with organized files:
-```
-target-dir/
-├── workspace-1/
-│   ├── workspace.yaml
-│   └── requests/
-│       ├── get-users.yaml
-│       ├── create-user.yaml
-│       └── update-profile.yaml
-├── workspace-2/
-│   ├── workspace.yaml
-│   └── requests/
-└── .mockforge-meta.json
-```
+## Version 1 format
 
-### Grouped Structure (`--structure grouped`)
-Workspaces and requests are organized by type:
-```
-target-dir/
-├── workspaces/
-│   ├── workspace-1.yaml
-│   └── workspace-2.yaml
-├── requests/
-│   ├── workspace-1/
-│   │   ├── get-users.yaml
-│   │   └── create-user.yaml
-│   └── workspace-2/
-└── .mockforge-meta.json
+The document contains `format_version`, `workspace`, and `secret_references`.
+It preserves the authored workspace configuration, nested folders, requests,
+response templates/status/headers/delays, priorities, and environment structure.
+Configured credential values and environment values become placeholders such
+as `${MOCKFORGE_WORKSPACE_EXPORT_VALUE_000000}`. Basic-auth usernames also become
+references. Recognized credential fields in JSON bodies and secret-bearing URLs
+are referenced; configured sensitive values copied elsewhere are referenced too.
+A body containing sensitive data is referenced as a whole, preserving its bytes
+when the caller supplies that complete body value during import.
+
+The reference's position in the workspace document identifies the value to bind.
+Set the listed variables locally, then explicitly opt in to resolving them:
+
+```sh
+mockforge workspace import workspace.yaml --workspace-id restored-frontend --resolve-env
 ```
 
-## Sync Strategies
+Missing or undeclared references fail before creating a workspace. The CLI reads
+only declared names in the generated export-reference namespace. The server
+does not resolve references from platform environment variables. Binding values
+are sent only to the authorized loopback runtime and are not written back into
+the export file or printed in command output.
 
-### Full Sync (`--strategy full`) - *Default*
-Syncs all available workspaces completely.
+Object keys are ordered deterministically; meaningful vector order is retained.
+Authoring timestamps are normalized to the UTC epoch in files. Execution history,
+fidelity measurements, host directory-sync settings, and host encryption settings
+are excluded. Imported workspace creation metadata denotes the new instance.
 
-### Incremental Sync (`--strategy incremental`)
-Only syncs workspaces that have been modified since the last sync (planned feature).
+The format is configuration, not a backup of provider sessions, deployed cloud
+resources, traffic recordings, execution history, runtime caches, or all server
+settings. Authored bodies and free text remain configuration data; the codec's
+redaction rules do not establish general-purpose content classification.
 
-### Selective Sync (`--strategy selective`)
-Only syncs specific workspaces:
-```bash
-mockforge workspace sync --target-dir ./sync \
-  --strategy selective \
-  --workspaces "workspace-1,workspace-2,user-api"
+## HTTP activation
+
+Import stores authored configuration. To publish its supported static HTTP
+responses on the runtime's main HTTP listener, activate it separately:
+
+```sh
+mockforge workspace activate restored-frontend
 ```
 
-## Configuration Options
+Requests use `/workspace/restored-frontend/<authored-path>` on the HTTP port.
+Activation replaces only mocks owned by that workspace, preserves unrelated
+mocks, and reports failure when no HTTP runtime is configured or publication
+fails. Methods, paths, priorities, response body bytes, statuses, response
+headers, delays, and request match criteria are published. Authentication rules
+that this static projection cannot enforce are rejected before publication.
+Authentication settings still round-trip as configuration references; this
+activation does not claim authentication-policy replay or arbitrary server state.
 
-### Custom Filename Patterns
-Use placeholders to customize file naming:
-```bash
-# Use workspace name
-mockforge workspace sync --target-dir ./sync --filename-pattern "{name}"
+## Existing directory sync
 
-# Include timestamp
-mockforge workspace sync --target-dir ./sync --filename-pattern "{name}_{timestamp}"
+Core also has legacy workspace persistence and directory-sync primitives. The
+admin server has separate sync status/configuration/trigger/change-review routes
+under `/__mockforge/workspaces/{workspace_id}/sync/`. Their directories are on the
+server filesystem, not the caller's computer. Existing plain sync helpers can
+retain authentication/environment values and timestamps; they are separate from
+this export format. Encrypted backups are also not reviewable plain-text Git files.
+No `workspace sync` command, automatic Git watcher, cloud-account export, or
+complete runtime-state round trip is provided by the transfer commands.
 
-# Use workspace ID
-mockforge workspace sync --target-dir ./sync --filename-pattern "{id}"
-```
-
-### Exclude Patterns
-Skip workspaces matching a regex pattern:
-```bash
-# Exclude test workspaces
-mockforge workspace sync --target-dir ./sync --exclude ".*test.*"
-
-# Exclude by ID pattern
-mockforge workspace sync --target-dir ./sync --exclude "^temp-.*"
-```
-
-### Force Overwrite
-```bash
-# Overwrite existing files
-mockforge workspace sync --target-dir ./sync --force
-```
-
-### Include Metadata
-```bash
-# Include Git-friendly metadata files
-mockforge workspace sync --target-dir ./sync --include-meta
-```
-
-## Makefile Targets
-
-The project includes convenient Makefile targets for common sync scenarios:
-
-```bash
-# Sync to a git repository directory
-make sync-git
-
-# Sync to Dropbox
-make sync-dropbox
-
-# Sync specific workspaces
-make sync-selective
-
-# Preview sync without executing
-make sync-dry-run
-```
-
-## Examples
-
-### Git Repository Integration
-
-1. Create a dedicated git repository for your API configurations:
-```bash
-mkdir api-configs
-cd api-configs
-git init
-```
-
-2. Sync your MockForge workspaces:
-```bash
-mockforge workspace sync --target-dir . --structure nested --include-meta
-```
-
-3. Commit and push:
-```bash
-git add .
-git commit -m "Sync MockForge workspaces"
-git push origin main
-```
-
-### Dropbox Backup
-
-```bash
-# Sync to Dropbox with grouped structure
-mockforge workspace sync \
-  --target-dir ~/Dropbox/MockForge-Backup \
-  --structure grouped \
-  --force \
-  --include-meta
-```
-
-### Selective Team Sharing
-
-```bash
-# Share only production workspaces
-mockforge workspace sync \
-  --target-dir ./team-share \
-  --strategy selective \
-  --workspaces "prod-api,prod-db,shared-auth" \
-  --structure nested
-```
-
-## Output Format
-
-### Workspace Export Format
-Each workspace is exported as clean YAML with Git-friendly structure:
-
-```yaml
-metadata:
-  id: "workspace-123"
-  name: "User API"
-  description: "User management endpoints"
-  exported_at: "2025-09-18T10:30:00Z"
-  request_count: 15
-  folder_count: 3
-
-config:
-  auth:
-    auth_type: "bearer"
-    params:
-      token: "${AUTH_TOKEN}"
-  base_url: "https://api.example.com"
-  variables:
-    version: "v1"
-
-requests:
-  get-users:
-    id: "req-123"
-    name: "Get Users"
-    method: "GET"
-    path: "/users"
-    folder_path: "users"
-    headers:
-      Accept: "application/json"
-    query_params: {}
-    response_status: 200
-    response_body: null
-```
-
-### Metadata File
-When `--include-meta` is used, a `.mockforge-meta.json` file is created:
-
-```json
-{
-  "workspace_id": "workspace-123",
-  "workspace_name": "User API",
-  "description": "User management endpoints",
-  "exported_at": "2025-09-18T10:30:00Z",
-  "structure": "Nested",
-  "version": "1.0",
-  "source": "mockforge"
-}
-```
-
-## Best Practices
-
-1. **Use Nested Structure for Git**: Provides better organization and diff visibility
-2. **Include Metadata**: Helps track export information and source
-3. **Use Selective Sync**: For team sharing or partial backups
-4. **Regular Sync**: Set up automated sync for important workspaces
-5. **Version Control**: Commit exported files to track configuration changes
-6. **Exclude Sensitive Data**: Use exclude patterns for test/development workspaces
-
-## Cross-Platform Usage
-
-MockForge workspace sync works seamlessly across Windows, Linux, and macOS. See [Cross-Platform Guide](docs/CROSS_PLATFORM_GUIDE.md) for detailed information.
-
-### Windows Users
-
-```powershell
-# Use forward slashes (recommended) or backslashes
-mockforge workspace sync --target-dir C:/workspace-sync
-mockforge workspace sync --target-dir "C:\Program Files\MockForge\sync"
-
-# For paths with spaces, use quotes
-mockforge workspace sync --target-dir "C:/My Documents/API Configs"
-
-# Drive letters and UNC paths are supported
-mockforge workspace sync --target-dir D:/sync
-mockforge workspace sync --target-dir \\server\share\mockforge
-```
-
-**Note**: If you encounter path length issues (>260 characters), enable long path support in Windows or use shorter paths.
-
-### Linux/macOS Users
-
-```bash
-# Use forward slashes
-mockforge workspace sync --target-dir ~/workspace-sync
-mockforge workspace sync --target-dir /var/mockforge/sync
-
-# Ensure proper permissions
-chmod 755 ~/workspace-sync
-```
-
-## Troubleshooting
-
-### Common Issues
-
-**Permission Denied**: Ensure write access to the target directory
-- Linux/macOS: Check permissions with `ls -la` and adjust with `chmod`
-- Windows: Run as Administrator or check folder permissions
-
-**Path Not Found**: The target directory will be created automatically
-- Ensure parent directories exist and are accessible
-
-**Invalid Workspace IDs**: Use `mockforge workspace list` to see available workspaces
-
-**Regex Errors**: Test your exclude patterns with a regex tester
-
-**Git Commands Fail**: Ensure Git is installed and in your PATH
-- Linux: `sudo apt-get install git` or `sudo yum install git`
-- macOS: `brew install git`
-- Windows: Download from https://git-scm.com/download/win
-
-**Path Too Long (Windows)**: Enable long path support or use shorter paths
-- See [Cross-Platform Guide](docs/CROSS_PLATFORM_GUIDE.md) for instructions
-
-### Recovery
-
-If you need to restore workspaces from synced files, you can:
-1. Use the existing import functionality
-2. Manually recreate workspaces from the YAML files
-3. Restore from Git history if using version control
-
-## Future Enhancements
-
-- **Automated Sync**: Scheduled synchronization
-- **Change Detection**: Only sync modified workspaces
-- **Conflict Resolution**: Handle merge conflicts in synced files
-- **Encryption**: Secure sensitive configuration data
-- **Webhooks**: Trigger sync on workspace changes
+An owned two-runtime fixture verified the actual candidate binary creates/edits
+live state, exports JSON/YAML without a synthetic credential, imports into a
+fresh runtime, and reproduces static status/body behavior. It also verifies
+overwrite, missing binding, unknown workspace, duplicate import, and invalid
+authorization failures. Review, merged-main and installed-release acceptance
+remain separate gates.

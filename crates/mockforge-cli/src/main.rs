@@ -75,6 +75,7 @@ mod voice_commands;
 #[allow(dead_code)]
 mod wizard;
 mod workspace_commands;
+mod workspace_transfer;
 
 #[cfg(test)]
 mod tests;
