@@ -2,6 +2,15 @@
 //!
 //! This module provides REST API endpoints for managing multi-tenant workspaces.
 
+mod inheritance;
+mod projection;
+mod runtime;
+mod transfer;
+#[cfg(test)]
+use projection::workspace_runtime_mocks;
+pub use runtime::{set_active_workspace, WorkspaceHttpRuntime};
+pub use transfer::{export_live_workspace, import_live_workspace};
+
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -636,26 +645,6 @@ pub async fn update_workspace(
             Err((StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"error": e.to_string()})))
                 .into_response())
         }
-    }
-}
-
-/// Set active workspace (currently validates workspace existence and returns activation result)
-pub async fn set_active_workspace(
-    State(state): State<WorkspaceState>,
-    Path(workspace_id): Path<String>,
-) -> Result<Json<ApiResponse<serde_json::Value>>, Response> {
-    let registry = state.registry.read().await;
-
-    match registry.get_workspace(&workspace_id) {
-        Ok(_) => Ok(Json(ApiResponse::success(json!({
-            "workspace_id": workspace_id,
-            "active": true
-        })))),
-        Err(_) => Err((
-            StatusCode::NOT_FOUND,
-            Json(json!({"error": format!("Workspace '{}' not found", workspace_id)})),
-        )
-            .into_response()),
     }
 }
 
@@ -2356,5 +2345,210 @@ mod tests {
 
         assert!(result.is_ok());
         assert!(result.unwrap().0.success);
+    }
+    struct TransferServer {
+        base: String,
+        client: reqwest::Client,
+        task: tokio::task::JoinHandle<()>,
+    }
+    impl Drop for TransferServer {
+        fn drop(&mut self) {
+            self.task.abort();
+        }
+    }
+    impl TransferServer {
+        async fn start() -> Self {
+            let registry = MultiTenantWorkspaceRegistry::new(MultiTenantConfig::default());
+            let state = WorkspaceState::new(Arc::new(tokio::sync::RwLock::new(registry)));
+            let router = axum::Router::new()
+                .route("/workspaces", axum::routing::post(create_workspace))
+                .route("/workspaces/{workspace_id}/requests", axum::routing::post(create_request))
+                .route(
+                    "/workspaces/{workspace_id}/export",
+                    axum::routing::get(export_live_workspace),
+                )
+                .route("/workspaces/import", axum::routing::post(import_live_workspace))
+                .with_state(state);
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let address = listener.local_addr().unwrap();
+            let task = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+            Self {
+                base: format!("http://{address}"),
+                client: reqwest::Client::builder()
+                    .timeout(std::time::Duration::from_secs(5))
+                    .build()
+                    .unwrap(),
+                task,
+            }
+        }
+    }
+    fn transfer_fixture_token(role: &str) -> String {
+        let now = chrono::Utc::now().timestamp();
+        let claims = crate::auth::Claims {
+            sub: "transfer-fixture".into(),
+            username: "transfer-fixture".into(),
+            role: role.into(),
+            email: None,
+            iat: now,
+            exp: now + 300,
+        };
+        jsonwebtoken::encode(
+            &jsonwebtoken::Header::default(),
+            &claims,
+            &jsonwebtoken::EncodingKey::from_secret(b"test-jwt-secret-which-is-long-enough"),
+        )
+        .unwrap()
+    }
+    #[tokio::test]
+    async fn transfer_api_rejects_anonymous_invalid_and_development_header_auth() {
+        let server = TransferServer::start().await;
+        let url = format!("{}/workspaces/unknown/export", server.base);
+        assert_eq!(
+            server.client.get(&url).send().await.unwrap().status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            server
+                .client
+                .get(&url)
+                .bearer_auth("invalid-fixture-token")
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            server
+                .client
+                .get(&url)
+                .header("x-user-id", "fixture")
+                .header("x-username", "fixture")
+                .header("x-user-role", "admin")
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            server
+                .client
+                .get(&url)
+                .bearer_auth(transfer_fixture_token("admin"))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::NOT_FOUND
+        );
+        assert_eq!(
+            server
+                .client
+                .post(format!("{}/workspaces/import", server.base))
+                .bearer_auth(transfer_fixture_token("viewer"))
+                .json(&json!({"id":"forbidden","workspace":{}}))
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::FORBIDDEN
+        );
+    }
+    #[tokio::test]
+    async fn transfer_api_exports_live_changes_and_imports_without_overwriting() {
+        let server = TransferServer::start().await;
+        let token = transfer_fixture_token("admin");
+        let created = server
+            .client
+            .post(format!("{}/workspaces", server.base))
+            .json(&json!({"id":"original","name":"Transfer fixture"}))
+            .send()
+            .await
+            .unwrap();
+        assert!(created.status().is_success());
+        let changed = server.client.post(format!("{}/workspaces/original/requests", server.base)).json(&json!({"name":"Live change","method":"GET","path":"/live-change","status_code":201,"response_body":"edited live fixture"})).send().await.unwrap();
+        assert!(changed.status().is_success());
+        let response = server
+            .client
+            .get(format!("{}/workspaces/original/export", server.base))
+            .bearer_auth(&token)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let document: mockforge_core::workspace_export::WorkspaceExportDocument =
+            response.json().await.unwrap();
+        assert_eq!(document.workspace["requests"][0]["response"]["body"], "edited live fixture");
+        let workspace = document.restore(|_| None).unwrap();
+        let input = json!({"id":"imported", "workspace":workspace});
+        assert_eq!(
+            server
+                .client
+                .post(format!("{}/workspaces/import", server.base))
+                .bearer_auth(&token)
+                .json(&input)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::CREATED
+        );
+        assert_eq!(
+            server
+                .client
+                .post(format!("{}/workspaces/import", server.base))
+                .bearer_auth(&token)
+                .json(&input)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            StatusCode::CONFLICT
+        );
+        let restored: mockforge_core::workspace_export::WorkspaceExportDocument = server
+            .client
+            .get(format!("{}/workspaces/imported/export", server.base))
+            .bearer_auth(&token)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(restored.workspace["requests"], document.workspace["requests"]);
+        assert_eq!(restored.workspace["id"], "imported");
+    }
+    #[test]
+    fn transfer_projection_preserves_case_insensitive_nested_header_precedence() {
+        let mut workspace = Workspace::new("Header fixture".into());
+        workspace
+            .config
+            .default_headers
+            .insert("X-Global".into(), "global-value".into());
+        workspace
+            .config
+            .default_headers
+            .insert("X-Choice".into(), "workspace-value".into());
+        let mut outer = Folder::new("Outer".into());
+        outer.inheritance.headers.insert("x-choice".into(), "outer-value".into());
+        outer.inheritance.headers.insert("X-Outer".into(), "outer-only".into());
+        let mut inner = Folder::new("Inner".into());
+        inner.inheritance.headers.insert("X-CHOICE".into(), "inner-value".into());
+        let mut request = MockRequest::new(HttpMethod::GET, "/nested".into(), "Nested".into());
+        request.headers.insert("x-Choice".into(), "request-value".into());
+        inner.requests.push(request);
+        outer.folders.push(inner);
+        workspace.folders.push(outer);
+        let export =
+            mockforge_core::workspace_export::WorkspaceExportDocument::from_workspace(&workspace)
+                .unwrap();
+        let restored = export.restore(|_| None).unwrap();
+        let projected = workspace_runtime_mocks(&restored, "header-fixture").unwrap();
+        let headers = &projected[0].request_match.as_ref().unwrap().headers;
+        assert_eq!(headers.len(), 3);
+        assert_eq!(headers["x-global"], "global-value");
+        assert_eq!(headers["x-outer"], "outer-only");
+        assert_eq!(headers["x-choice"], "request-value");
     }
 }

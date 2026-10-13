@@ -578,6 +578,8 @@ pub fn create_admin_router(
         let workspace_router = Router::new()
             .route("/__mockforge/workspaces", get(workspaces::list_workspaces))
             .route("/__mockforge/workspaces", post(workspaces::create_workspace))
+            .route("/__mockforge/workspaces/import", post(workspaces::import_live_workspace))
+            .route("/__mockforge/workspaces/{workspace_id}/export", get(workspaces::export_live_workspace))
             .route(
                 "/__mockforge/workspaces/order",
                 axum::routing::put(workspaces::update_workspaces_order),
@@ -678,6 +680,7 @@ pub fn create_admin_router(
                 "/__mockforge/voice/create-workspace-confirm",
                 post(voice::create_workspace_confirm),
             )
+            .layer(axum::Extension(workspaces::WorkspaceHttpRuntime { address:state.http_server_addr }))
             .with_state(workspace_state.clone());
 
         router = router.merge(workspace_router);
