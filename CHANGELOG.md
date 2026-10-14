@@ -24,6 +24,8 @@
 
 ### Fixed
 
+- **[Protocols]** AMQP pull deliveries and committed transaction publishes are recorded; rolled-back publishes and empty pulls remain excluded. MQTT captures retained deliveries and last-will publishes and deliveries. Publisher confirmations use a separate sequence from consumer delivery tags, allowing publish and consume operations on the same channel. Real AMQP, MQTT and Kafka clients verify durable recording payloads and metadata. (#715)
+
 - **[DevX]** Honor optional CLI protocol and subsystem features during shared startup, preserve standalone listeners and shutdown handling, and reject unavailable requested operations before creating runtime state. Declare HTTP and VBR prerequisites and include SMTP in its HTTP query-import gate.
 
 - **[DevX]** gRPC startup accepts an owned listener and retains its socket through discovery and TLS setup. Real client fixtures reserve loopback port-zero listeners instead of releasing a temporary port before server startup.
