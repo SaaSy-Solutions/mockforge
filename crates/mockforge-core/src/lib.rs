@@ -475,6 +475,8 @@ pub mod voice_workspace;
 // its own dedicated planning.
 pub mod workspace;
 #[cfg(feature = "workspace-mgmt")]
+pub mod workspace_export;
+#[cfg(feature = "workspace-mgmt")]
 pub mod workspace_import;
 #[cfg(feature = "workspace-mgmt")]
 pub mod workspace_persistence;

@@ -8,14 +8,9 @@
 //! its own deployment-scoped JWT flow, and exercises the matcher
 //! pipeline end-to-end.
 //!
-//! Why direct SQL seeding: today the hosted-mock log shipper does not
-//! populate `runtime_captures.workspace_id` (it inserts only the
-//! `deployment_id`). Hosted captures therefore can't be queried by
-//! workspace today — that's a pre-existing data-flow gap tracked
-//! separately. The e2e test here proves the new endpoints work
-//! correctly *given* a row with `workspace_id` set, which is the
-//! contract `source='local'` (cloud-shipped) captures already meet
-//! and the contract any future hosted-side fix will need to meet.
+//! Direct SQL seeding keeps these matcher regressions focused on request
+//! verification. The hosted_capture_workspaces_e2e target separately verifies
+//! the authenticated hosted-capture ingestion and workspace attribution path.
 //!
 //! Requires:
 //!   - PostgreSQL running (docker-compose up db)
@@ -27,144 +22,14 @@
 //!   cargo test --test cloud_verification_e2e -- --ignored --nocapture
 
 use chrono::{DateTime, Duration, Utc};
-use reqwest::{Client, StatusCode};
+use reqwest::StatusCode;
 use serde_json::{json, Value};
 use sqlx::postgres::PgPoolOptions;
-use sqlx::PgPool;
 use uuid::Uuid;
 
-struct E2e {
-    client: Client,
-    base_url: String,
-    access_token: String,
-    org_id: String,
-    workspace_id: String,
-    pool: PgPool,
-    deployment_id: Uuid,
-}
-
-impl E2e {
-    fn auth(&self) -> String {
-        format!("Bearer {}", self.access_token)
-    }
-
-    fn post(&self, path: &str) -> reqwest::RequestBuilder {
-        self.client
-            .post(format!("{}{}", self.base_url, path))
-            .header("Authorization", self.auth())
-            .header("X-Organization-Id", &self.org_id)
-    }
-
-    fn get(&self, path: &str) -> reqwest::RequestBuilder {
-        self.client
-            .get(format!("{}{}", self.base_url, path))
-            .header("Authorization", self.auth())
-            .header("X-Organization-Id", &self.org_id)
-    }
-}
-
-async fn register_and_setup(base_url: &str, pool: &PgPool) -> E2e {
-    let client = Client::new();
-    let ts = Utc::now().timestamp_micros();
-    let username = format!("ver_{}", ts);
-    let email = format!("ver_{}@e2e-test.local", ts);
-    let password = "SecureP@ssw0rd!2024";
-
-    let res = client
-        .post(format!("{}/api/v1/auth/register", base_url))
-        .json(&json!({ "username": username, "email": email, "password": password }))
-        .send()
-        .await
-        .expect("register failed");
-    let status = res.status();
-    let body: Value = res.json().await.expect("register not JSON");
-    assert!(status.is_success(), "register {}: {}", status, body);
-    let access_token = body["access_token"]
-        .as_str()
-        .or_else(|| body["token"].as_str())
-        .expect("no access token")
-        .to_string();
-
-    let org_slug = format!("ver-{}", ts);
-    let res = client
-        .post(format!("{}/api/v1/organizations", base_url))
-        .header("Authorization", format!("Bearer {}", access_token))
-        .json(&json!({ "name": format!("Verification Test Org {}", ts), "slug": org_slug }))
-        .send()
-        .await
-        .expect("create org failed");
-    let status = res.status();
-    let body: Value = res.json().await.expect("org not JSON");
-    assert!(status.is_success(), "create org {}: {}", status, body);
-    let org_id = body["id"].as_str().expect("no org id").to_string();
-
-    // Lift the free-plan max_projects=1 cap so tests can create more than
-    // one workspace under the same org (workspace_isolation needs two).
-    // Mirrors the gate in handlers::cloud_workspaces::create_workspace,
-    // which reads `org.limits_json.max_projects` and falls back to 1.
-    // -1 means unlimited.
-    let org_uuid_for_limits = Uuid::parse_str(&org_id).expect("org id not UUID");
-    sqlx::query(
-        r#"
-        UPDATE organizations
-        SET limits_json = jsonb_set(
-            COALESCE(limits_json, '{}'::jsonb),
-            '{max_projects}',
-            '-1'::jsonb,
-            true
-        )
-        WHERE id = $1
-        "#,
-    )
-    .bind(org_uuid_for_limits)
-    .execute(pool)
-    .await
-    .expect("relax org limits failed");
-
-    // Workspace
-    let res = client
-        .post(format!("{}/api/v1/workspaces", base_url))
-        .header("Authorization", format!("Bearer {}", access_token))
-        .header("X-Organization-Id", &org_id)
-        .json(&json!({ "name": "verification-e2e", "description": "e2e fixture" }))
-        .send()
-        .await
-        .expect("create workspace failed");
-    let status = res.status();
-    let body: Value = res.json().await.expect("ws not JSON");
-    assert!(status.is_success(), "create ws {}: {}", status, body);
-    let workspace_id = body["id"].as_str().expect("no ws id").to_string();
-
-    // Insert a hosted_mock row so `runtime_captures.deployment_id` FK
-    // is satisfied. We don't actually deploy anything — `status='active'`
-    // is just a label here, no Fly machine is created.
-    let org_uuid = Uuid::parse_str(&org_id).expect("org id not UUID");
-    let deployment_id = Uuid::new_v4();
-    sqlx::query(
-        r#"
-        INSERT INTO hosted_mocks (id, org_id, name, slug, config_json, status)
-        VALUES ($1, $2, $3, $4, $5::jsonb, 'active')
-        "#,
-    )
-    .bind(deployment_id)
-    .bind(org_uuid)
-    .bind("verification-fixture")
-    .bind(format!("vfix-{}", ts))
-    .bind("{}")
-    .execute(pool)
-    .await
-    .expect("insert hosted_mock failed");
-
-    E2e {
-        client,
-        base_url: base_url.to_string(),
-        access_token,
-        org_id,
-        workspace_id,
-        pool: pool.clone(),
-        deployment_id,
-    }
-}
+#[path = "support/cloud_verification_fixture.rs"]
+mod fixture;
+use fixture::{register_and_setup, E2e};
 
 /// Insert a single capture row, returning its `occurred_at` for sequencing.
 #[allow(clippy::too_many_arguments)]
@@ -207,6 +72,89 @@ async fn seed_capture(
     .execute(&e.pool)
     .await
     .expect("insert runtime_capture failed");
+}
+
+#[tokio::test]
+#[ignore = "requires the disposable registry E2E HTTP and PostgreSQL fixture"]
+async fn monitored_service_cron_http_validation_and_persistence() {
+    let base_url = std::env::var("REGISTRY_URL").expect("REGISTRY_URL must be set");
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let pool = PgPoolOptions::new().max_connections(2).connect(&database_url).await.unwrap();
+    let e = register_and_setup(&base_url, &pool).await;
+    let path = format!("/api/v1/workspaces/{}/monitored-services", e.workspace_id);
+    let workspace = Uuid::parse_str(&e.workspace_id).unwrap();
+    let baseline = json!({
+        "name": "cron HTTP fixture", "base_url": "https://example.test",
+        "traffic_source": "probe",
+    });
+
+    for invalid in [
+        json!({"probe_cron": "not a cron"}),
+        json!({"probe_cron": ""}),
+        json!({"probe_cron": "0 9 * * *"}),
+        json!({"probe_cron": "0 0 9 * * *", "probe_timezone": "Mars/Olympus"}),
+        json!({"probe_interval_secs": 0}),
+        json!({"traffic_source": "synthetic"}),
+    ] {
+        let mut request = baseline.clone();
+        request.as_object_mut().unwrap().extend(invalid.as_object().unwrap().clone());
+        let response = e.post(&path).json(&request).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+        let error: Value = response.json().await.unwrap();
+        assert!(error.to_string().contains("must be"), "validation error must be actionable");
+    }
+    let count: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM monitored_services WHERE workspace_id=$1")
+            .bind(workspace)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+    assert_eq!(count, 0, "invalid HTTP requests must not persist services");
+
+    let mut created = Vec::new();
+    for source in ["probe", "logs", "capture_session"] {
+        let mut request = baseline.clone();
+        request["traffic_source"] = json!(source);
+        request["probe_cron"] = json!("0 0 9 * * *");
+        request["probe_timezone"] = json!("America/New_York");
+        request["probe_interval_secs"] = json!(300);
+        let response = e.post(&path).json(&request).send().await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+        let service: Value = response.json().await.unwrap();
+        assert_eq!(service["probe_cron"], request["probe_cron"]);
+        assert_eq!(service["probe_timezone"], request["probe_timezone"]);
+        assert_eq!(service["traffic_source"], request["traffic_source"]);
+        assert_eq!(service["probe_interval_secs"], json!(300));
+        let id = Uuid::parse_str(service["id"].as_str().unwrap()).unwrap();
+        let persisted: (Option<String>, String, Option<i32>) = sqlx::query_as(
+            "SELECT probe_cron,probe_timezone,probe_interval_secs FROM monitored_services WHERE id=$1",
+        ).bind(id).fetch_one(&pool).await.unwrap();
+        assert_eq!(persisted, (Some("0 0 9 * * *".into()), "America/New_York".into(), Some(300)));
+        created.push(id);
+    }
+    let response = e.post(&path).json(&baseline).send().await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let legacy: Value = response.json().await.unwrap();
+    assert!(legacy["probe_cron"].is_null());
+    assert_eq!(legacy["probe_timezone"], json!("UTC"));
+    assert!(legacy["probe_interval_secs"].is_null());
+    created.push(Uuid::parse_str(legacy["id"].as_str().unwrap()).unwrap());
+    let response = e.get(&path).send().await.unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let services: Vec<Value> = response.json().await.unwrap();
+    assert_eq!(services.len(), created.len());
+    for id in created {
+        let response = e
+            .client
+            .delete(format!("{}/api/v1/monitored-services/{id}", e.base_url))
+            .header("Authorization", e.auth())
+            .header("X-Organization-Id", &e.org_id)
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+    assert_eq!(e.get(&path).send().await.unwrap().json::<Vec<Value>>().await.unwrap().len(), 0);
 }
 
 #[tokio::test]
@@ -494,6 +442,7 @@ async fn cloud_verification_workspace_isolation() {
 #[ignore = "requires fixture PostgreSQL and native registry"]
 async fn observability_alert_http_and_worker_lifecycle() {
     use mockforge_registry_server::workers::observability_alerts::run_tick;
+    use sqlx::PgPool;
     let base_url = std::env::var("REGISTRY_URL").expect("registry fixture");
     let database_url = std::env::var("DATABASE_URL").expect("database fixture");
     async fn tick(pool: &PgPool) {

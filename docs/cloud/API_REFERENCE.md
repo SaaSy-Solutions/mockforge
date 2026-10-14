@@ -721,10 +721,38 @@ GET /api/v1/tokens/rotation-status
 
 ### Hosted Mocks
 
+The canonical deployment routes use `/api/v1/hosted-mocks`. Creation accepts
+an optional top-level `workspace_id` UUID; omission or `null` leaves captures
+unassigned. Create/list/get responses expose the nullable `workspace_id`.
+
+#### Assign a Capture Workspace
+
+```http
+PATCH /api/v1/hosted-mocks/{deployment_id}/workspace
+Content-Type: application/json
+X-Organization-Id: <deployment organization UUID>
+```
+
+**Authentication:** Required; deployment update permission is required.
+
+```json
+{"workspace_id": "123e4567-e89b-12d3-a456-426614174005"}
+```
+
+Use `{"workspace_id": null}` to detach. An omitted field, invalid UUID, or a
+workspace outside the deployment's organization is rejected. The response is
+the updated deployment, including `workspace_id`.
+
+The assignment applies to future recorder batches, and each batch holds a
+consistent assignment while being ingested. Existing capture attribution is
+preserved. A client-supplied workspace in recorder payloads or configuration JSON
+cannot override it. Deleting a workspace detaches deployments; it does not
+reassign historical captures. Deleted deployments reject new capture ingestion.
+
 #### Create Deployment
 
 ```http
-POST /api/v1/deployments
+POST /api/v1/hosted-mocks
 ```
 
 **Authentication:** Required
@@ -753,7 +781,7 @@ POST /api/v1/deployments
   "slug": "user-api",
   "status": "deploying",
   "health_status": "unknown",
-  "url": "https://my-org.mockforge.dev/user-api",
+  "deployment_url": "https://my-org.mockforge.dev/user-api",
   "created_at": "2025-01-20T12:00:00Z"
 }
 ```
@@ -761,7 +789,7 @@ POST /api/v1/deployments
 #### List Deployments
 
 ```http
-GET /api/v1/deployments
+GET /api/v1/hosted-mocks
 ```
 
 **Authentication:** Required
@@ -779,7 +807,7 @@ GET /api/v1/deployments
     "slug": "user-api",
     "status": "active",
     "health_status": "healthy",
-    "url": "https://my-org.mockforge.dev/user-api",
+    "deployment_url": "https://my-org.mockforge.dev/user-api",
     "created_at": "2025-01-20T12:00:00Z"
   }
 ]
@@ -788,7 +816,7 @@ GET /api/v1/deployments
 #### Get Deployment
 
 ```http
-GET /api/v1/deployments/:deployment_id
+GET /api/v1/hosted-mocks/:deployment_id
 ```
 
 **Authentication:** Required
@@ -803,7 +831,7 @@ GET /api/v1/deployments/:deployment_id
   "description": "Mock user API for testing",
   "status": "active",
   "health_status": "healthy",
-  "url": "https://my-org.mockforge.dev/user-api",
+  "deployment_url": "https://my-org.mockforge.dev/user-api",
   "config_json": {
     "cors_enabled": true
   },
@@ -815,7 +843,7 @@ GET /api/v1/deployments/:deployment_id
 #### Update Deployment Status
 
 ```http
-PUT /api/v1/deployments/:deployment_id/status
+PATCH /api/v1/hosted-mocks/:deployment_id/status
 ```
 
 **Authentication:** Required
@@ -839,7 +867,7 @@ PUT /api/v1/deployments/:deployment_id/status
 #### Delete Deployment
 
 ```http
-DELETE /api/v1/deployments/:deployment_id
+DELETE /api/v1/hosted-mocks/:deployment_id
 ```
 
 **Authentication:** Required
@@ -855,7 +883,7 @@ DELETE /api/v1/deployments/:deployment_id
 #### Get Deployment Logs
 
 ```http
-GET /api/v1/deployments/:deployment_id/logs
+GET /api/v1/hosted-mocks/:deployment_id/logs
 ```
 
 **Authentication:** Required
@@ -879,7 +907,7 @@ GET /api/v1/deployments/:deployment_id/logs
 #### Get Deployment Metrics
 
 ```http
-GET /api/v1/deployments/:deployment_id/metrics
+GET /api/v1/hosted-mocks/:deployment_id/metrics
 ```
 
 **Authentication:** Required
