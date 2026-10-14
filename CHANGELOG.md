@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.3.234] - 2026-10-14
+
 ### Added
 
 - **[DevX]** Export live local workspace configuration to versioned JSON/YAML with credential references and stable ordering/timestamps. Authorized imports create new workspaces without overwriting existing state; explicit activation publishes namespaced static HTTP mocks atomically while retaining unrelated mocks. Unsupported authentication activation is rejected. (#1197)
@@ -23,6 +25,10 @@
 - **[DevX]** Behavioral-cloning HTTP handlers now live in intelligence and use shared foundation scenario types. A recorder storage adapter preserves the HTTP compatibility state and SQLite behavior without adding a reverse dependency. (#631)
 
 ### Fixed
+
+- **[DevX]** Return completed UUID template expansions before running unrelated token scans. Keep fresh UUID generation, repeated-token behavior, unresolved tokens, and bare response-function processing.
+
+- **[DevX]** Keep pre-commit Clippy in one invocation with the complete changed-file list. This avoids overlapping target-lock queues and repeated feature graphs while preserving crate/workspace selection and lint flags. (#706)
 
 - **[Cloud]** Enforce one case-insensitive email identity across concurrent registry signups and account lookups. Reject legacy collisions without merging accounts; clear verification after an email change. OAuth requires provider-verified email proof and rejects unverified local-account linking or replacement of an existing provider identity. (#908)
 

@@ -33,7 +33,7 @@ tracing = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true }
 tower-http = { workspace = true }
-mockforge-smtp = { version = "0.3.233", path = "../mockforge-smtp", optional = true }
+mockforge-smtp = { version = "0.3.234", path = "../mockforge-smtp", optional = true }
 async-trait = { workspace = true }
 glob = { workspace = true }
 globwalk = { workspace = true }
@@ -55,26 +55,26 @@ ring = { workspace = true }
 subtle = "2"
 bcrypt = "0.15"
 governor = "0.8"
-mockforge-core = { version = "0.3.233", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.234", path = "../mockforge-core" }
 mockforge-contracts = { path = "../mockforge-contracts" }
 mockforge-foundation = { path = "../mockforge-foundation" }
 mockforge-intelligence = { path = "../mockforge-intelligence" }
 mockforge-import = { path = "../mockforge-import" }
 mockforge-openapi = { path = "../mockforge-openapi" }
 mockforge-proxy = { path = "../mockforge-proxy" }
-mockforge-data = { version = "0.3.233", path = "../mockforge-data" }
-mockforge-observability = { version = "0.3.233", path = "../mockforge-observability" }
-mockforge-analytics = { version = "0.3.233", path = "../mockforge-analytics" }
-mockforge-recorder = { version = "0.3.233", path = "../mockforge-recorder" }
-mockforge-scenarios = { version = "0.3.233", path = "../mockforge-scenarios", optional = true }
-mockforge-tracing = { version = "0.3.233", path = "../mockforge-tracing" }
+mockforge-data = { version = "0.3.234", path = "../mockforge-data" }
+mockforge-observability = { version = "0.3.234", path = "../mockforge-observability" }
+mockforge-analytics = { version = "0.3.234", path = "../mockforge-analytics" }
+mockforge-recorder = { version = "0.3.234", path = "../mockforge-recorder" }
+mockforge-scenarios = { version = "0.3.234", path = "../mockforge-scenarios", optional = true }
+mockforge-tracing = { version = "0.3.234", path = "../mockforge-tracing" }
 opentelemetry = { version = "0.22", features = ["trace"] }
-mockforge-mqtt = { version = "0.3.233", path = "../mockforge-mqtt", optional = true }
-mockforge-chaos = { version = "0.3.233", path = "../mockforge-chaos" }
-mockforge-performance = { version = "0.3.233", path = "../mockforge-performance", optional = true }
-mockforge-world-state = { version = "0.3.233", path = "../mockforge-world-state", optional = true }
-mockforge-template-expansion = { version = "0.3.233", path = "../mockforge-template-expansion" }
-mockforge-route-chaos = { version = "0.3.233", path = "../mockforge-route-chaos", optional = true }
+mockforge-mqtt = { version = "0.3.234", path = "../mockforge-mqtt", optional = true }
+mockforge-chaos = { version = "0.3.234", path = "../mockforge-chaos" }
+mockforge-performance = { version = "0.3.234", path = "../mockforge-performance", optional = true }
+mockforge-world-state = { version = "0.3.234", path = "../mockforge-world-state", optional = true }
+mockforge-template-expansion = { version = "0.3.234", path = "../mockforge-template-expansion" }
+mockforge-route-chaos = { version = "0.3.234", path = "../mockforge-route-chaos", optional = true }
 futures-util = "0.3"
 rustls = "0.23"
 rustls-pemfile = "2.0"
@@ -82,11 +82,11 @@ tokio-rustls = "0.26"
 axum-server = { version = "0.8", features = ["tls-rustls-no-provider"] }
 sqlx = { version = "0.8", features = ["runtime-tokio-rustls", "postgres", "chrono", "uuid", "migrate"], optional = true }
 dashmap = { version = "6.2", optional = true }
-mockforge-pipelines = { version = "0.3.233", path = "../mockforge-pipelines", optional = true }
-mockforge-runtime-daemon = { version = "0.3.233", path = "../mockforge-runtime-daemon", optional = true }
-mockforge-kafka = { version = "0.3.233", path = "../mockforge-kafka", optional = true }
-mockforge-amqp = { version = "0.3.233", path = "../mockforge-amqp", optional = true }
-mockforge-bench = { version = "0.3.233", path = "../mockforge-bench", optional = true }
+mockforge-pipelines = { version = "0.3.234", path = "../mockforge-pipelines", optional = true }
+mockforge-runtime-daemon = { version = "0.3.234", path = "../mockforge-runtime-daemon", optional = true }
+mockforge-kafka = { version = "0.3.234", path = "../mockforge-kafka", optional = true }
+mockforge-amqp = { version = "0.3.234", path = "../mockforge-amqp", optional = true }
+mockforge-bench = { version = "0.3.234", path = "../mockforge-bench", optional = true }
 
 [features]
 default = ["chaos-engine", "performance-profiling", "world-state", "route-chaos", "scenario-engine"]
@@ -138,8 +138,8 @@ reqwest = { workspace = true }
 tempfile = "3"
 tokio-tungstenite = "0.28"
 futures-util = "0.3"
-mockforge-ws = { version = "0.3.233", path = "../mockforge-ws" }
-mockforge-plugin-core = { version = "0.3.233", path = "../mockforge-plugin-core" }
+mockforge-ws = { version = "0.3.234", path = "../mockforge-ws" }
+mockforge-plugin-core = { version = "0.3.234", path = "../mockforge-plugin-core" }
 opentelemetry_sdk = "0.22"
 uuid = { version = "1.23", features = ["v4"] }
 once_cell = { workspace = true }
