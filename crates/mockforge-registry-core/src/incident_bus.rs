@@ -33,11 +33,21 @@ pub fn map_finding_severity(severity: &str) -> Option<&'static str> {
     }
 }
 
+/// Translate observability alert vocabulary to routing severity centrally.
+pub fn map_alert_severity(severity: &str) -> Option<&'static str> {
+    match severity {
+        "critical" => Some("critical"),
+        "high" => Some("high"),
+        "warning" | "medium" => Some("medium"),
+        "info" | "low" => Some("low"),
+        _ => None,
+    }
+}
+
 /// Producer-facing interface to the incident pipeline.
 ///
-/// RPITIT keeps the trait object-safe enough for injection without an
-/// `async_trait` dependency; implementors return a future that outlives
-/// `&self`.
+/// RPITIT supports static dispatch and generic test injection without an
+/// `async_trait` dependency. This trait is not dyn-compatible.
 #[cfg(feature = "postgres")]
 pub trait IncidentBus: Send + Sync {
     fn raise(
@@ -71,9 +81,50 @@ impl IncidentBus for PgIncidentBus {
     }
 }
 
+/// IncidentBus on the caller's connection, including an existing transaction.
+/// Incident insertion uses a nested transaction/savepoint; the caller retains
+/// control of the outer commit. This lets workers keep a transaction-scoped
+/// coordination lock without acquiring another pool connection.
+#[cfg(feature = "postgres")]
+pub struct PgConnectionIncidentBus<'a> {
+    connection: tokio::sync::Mutex<&'a mut sqlx::PgConnection>,
+}
+
+#[cfg(feature = "postgres")]
+impl<'a> PgConnectionIncidentBus<'a> {
+    pub fn new(connection: &'a mut sqlx::PgConnection) -> Self {
+        Self {
+            connection: tokio::sync::Mutex::new(connection),
+        }
+    }
+}
+
+#[cfg(feature = "postgres")]
+impl IncidentBus for PgConnectionIncidentBus<'_> {
+    async fn raise(&self, input: RaiseIncidentInput<'_>) -> sqlx::Result<Incident> {
+        let mut connection = self.connection.lock().await;
+        Incident::raise(&mut connection, input).await
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::map_finding_severity;
+
+    #[test]
+    fn alert_vocabulary_is_centralized() {
+        for (input, expected) in [
+            ("critical", "critical"),
+            ("high", "high"),
+            ("warning", "medium"),
+            ("medium", "medium"),
+            ("info", "low"),
+            ("low", "low"),
+        ] {
+            assert_eq!(super::map_alert_severity(input), Some(expected));
+        }
+        assert_eq!(super::map_alert_severity("bogus"), None);
+    }
 
     #[test]
     fn breaking_and_critical_map_to_critical() {

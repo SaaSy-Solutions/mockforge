@@ -22,6 +22,7 @@ use axum::{
     http::HeaderMap,
     Json,
 };
+use mockforge_registry_core::models::observability_alert::ObservabilityAlert;
 use mockforge_registry_core::models::observability_query::{CreateDashboard, CreateSavedQuery};
 use serde::Deserialize;
 use uuid::Uuid;
@@ -88,6 +89,10 @@ pub async fn create_saved_query(
         )));
     }
 
+    let alert =
+        ObservabilityAlert::from_filters(&request.filters, &request.kind, request.workspace_id)
+            .map_err(ApiError::InvalidRequest)?;
+    validate_saved_query_scope(&state, org_id, request.workspace_id, alert.as_ref()).await?;
     let row = with_org_context(state.db.runtime_pool(), org_id, |tx| {
         Box::pin(async move {
             Ok(ObservabilitySavedQuery::create(
@@ -126,6 +131,13 @@ pub async fn update_saved_query(
     Json(request): Json<UpdateSavedQueryRequest>,
 ) -> ApiResult<Json<ObservabilitySavedQuery>> {
     let existing = load_authorized_query(&state, user_id, &headers, id).await?;
+    if let Some(filters) = &request.filters {
+        let alert =
+            ObservabilityAlert::from_filters(filters, &existing.kind, existing.workspace_id)
+                .map_err(ApiError::InvalidRequest)?;
+        validate_saved_query_scope(&state, existing.org_id, existing.workspace_id, alert.as_ref())
+            .await?;
+    }
     let updated = with_org_context(state.db.runtime_pool(), existing.org_id, |tx| {
         Box::pin(async move {
             Ok(ObservabilitySavedQuery::update(
@@ -312,6 +324,36 @@ async fn load_authorized_query(
         return Err(ApiError::InvalidRequest("Saved query not found".into()));
     }
     Ok(row)
+}
+
+async fn validate_saved_query_scope(
+    state: &AppState,
+    org_id: Uuid,
+    workspace_id: Option<Uuid>,
+    alert: Option<&ObservabilityAlert>,
+) -> ApiResult<()> {
+    let deployment_id = alert.and_then(|rule| rule.deployment_id);
+    let (workspace_owned, deployment_owned) = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            let workspace_owned = match workspace_id {
+                Some(id) => sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM workspaces WHERE id=$1 AND org_id=$2)")
+                    .bind(id).bind(org_id).fetch_one(&mut **tx).await?,
+                None => true,
+            };
+            let deployment_owned = match deployment_id {
+                Some(id) => sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM hosted_mocks WHERE id=$1 AND org_id=$2 AND deleted_at IS NULL)")
+                    .bind(id).bind(org_id).fetch_one(&mut **tx).await?,
+                None => true,
+            };
+            Ok((workspace_owned, deployment_owned))
+        })
+    }).await?;
+    if !workspace_owned || !deployment_owned {
+        return Err(ApiError::InvalidRequest(
+            "Saved query scope not found in this organization".into(),
+        ));
+    }
+    Ok(())
 }
 
 async fn load_authorized_dashboard(
