@@ -28,6 +28,8 @@
 
 ### Fixed
 
+- **[DevX]** Return completed UUID template expansions before running unrelated token scans. Keep fresh UUID generation, repeated-token behavior, unresolved tokens, and bare response-function processing.
+
 - **[DevX]** Keep pre-commit Clippy in one invocation with the complete changed-file list. This avoids overlapping target-lock queues and repeated feature graphs while preserving crate/workspace selection and lint flags. (#706)
 
 - **[Cloud]** Enforce one case-insensitive email identity across concurrent registry signups and account lookups. Reject legacy collisions without merging accounts; clear verification after an email change. OAuth requires provider-verified email proof and rejects unverified local-account linking or replacement of an existing provider identity. (#908)
