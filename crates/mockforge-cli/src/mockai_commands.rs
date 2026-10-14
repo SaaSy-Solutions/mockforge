@@ -4,14 +4,19 @@
 //! learning from examples, generating rules from OpenAPI, and enabling
 //! intelligent behavior for endpoints.
 
+#[cfg(feature = "recorder")]
 use chrono::{DateTime, Utc};
 use clap::Subcommand;
+#[cfg(feature = "recorder")]
+use mockforge_core::intelligent_behavior::openapi_generator::{
+    OpenApiGenerationConfig, OpenApiSpecGenerator,
+};
 use mockforge_core::intelligent_behavior::{
-    openapi_generator::{OpenApiGenerationConfig, OpenApiSpecGenerator},
     rule_generator::{ExamplePair, RuleGenerator},
     IntelligentBehaviorConfig, MockAI,
 };
 use mockforge_openapi::OpenApiSpec;
+#[cfg(feature = "recorder")]
 use mockforge_recorder::{
     database::RecorderDatabase,
     openapi_export::{QueryFilters, RecordingsToOpenApi},
@@ -487,6 +492,7 @@ async fn handle_status(
 }
 
 /// Handle generate-from-traffic command
+#[cfg(feature = "recorder")]
 async fn handle_generate_from_traffic(
     database: Option<PathBuf>,
     output: Option<PathBuf>,
@@ -617,6 +623,19 @@ async fn handle_generate_from_traffic(
     }
 
     Ok(())
+}
+
+#[cfg(not(feature = "recorder"))]
+async fn handle_generate_from_traffic(
+    _database: Option<PathBuf>,
+    _output: Option<PathBuf>,
+    _since: Option<String>,
+    _until: Option<String>,
+    _path_pattern: Option<String>,
+    _min_confidence: f64,
+    _verbose: bool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    Err("Generating MockAI rules from traffic requires the recorder Cargo feature".into())
 }
 
 #[cfg(test)]

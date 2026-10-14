@@ -26,6 +26,8 @@
 
 - **[DevX]** Preserve shared configuration types in minimal Core builds and gate optional workspace and advanced runtime integrations consistently. Voice workspace construction declares its workspace/data prerequisites, and advanced engines declare their workspace and persona-type prerequisites.
 
+- **[DevX]** Honor optional CLI protocol and subsystem features during shared startup, preserve standalone listeners and shutdown handling, and reject unavailable requested operations before creating runtime state. Declare HTTP and VBR prerequisites and include SMTP in its HTTP query-import gate.
+
 - **[DevX]** gRPC startup accepts an owned listener and retains its socket through discovery and TLS setup. Real client fixtures reserve loopback port-zero listeners instead of releasing a temporary port before server startup.
 
 - **[DevX]** OIDC environment fixtures run in isolated child processes, preventing parallel tests from overwriting issuer and discovery settings while exercising the real environment-based configuration paths.
