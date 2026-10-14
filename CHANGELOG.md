@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.3.234] - 2026-10-14
+
 ### Added
 
 - **[DevX]** Export live local workspace configuration to versioned JSON/YAML with credential references and stable ordering/timestamps. Authorized imports create new workspaces without overwriting existing state; explicit activation publishes namespaced static HTTP mocks atomically while retaining unrelated mocks. Unsupported authentication activation is rejected. (#1197)
