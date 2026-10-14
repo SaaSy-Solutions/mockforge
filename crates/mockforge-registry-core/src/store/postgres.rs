@@ -628,14 +628,14 @@ impl RegistryStore for PgRegistryStore {
         avatar_url: Option<&str>,
     ) -> StoreResult<()> {
         sqlx::query(
-            "UPDATE users SET github_id = $1, auth_provider = 'github', avatar_url = $2 WHERE id = $3",
+            "UPDATE users SET github_id = $1, auth_provider = 'github', avatar_url = $2 WHERE id = $3 AND is_verified AND (github_id IS NULL OR github_id = $1)",
         )
         .bind(github_id)
         .bind(avatar_url)
         .bind(user_id)
         .execute(&self.pool)
         .await
-        .map(|_| ())
+        .and_then(|result| if result.rows_affected() == 1 { Ok(()) } else { Err(sqlx::Error::RowNotFound) })
         .map_err(Into::into)
     }
 
@@ -646,14 +646,14 @@ impl RegistryStore for PgRegistryStore {
         avatar_url: Option<&str>,
     ) -> StoreResult<()> {
         sqlx::query(
-            "UPDATE users SET google_id = $1, auth_provider = 'google', avatar_url = $2 WHERE id = $3",
+            "UPDATE users SET google_id = $1, auth_provider = 'google', avatar_url = $2 WHERE id = $3 AND is_verified AND (google_id IS NULL OR google_id = $1)",
         )
         .bind(google_id)
         .bind(avatar_url)
         .bind(user_id)
         .execute(&self.pool)
         .await
-        .map(|_| ())
+        .and_then(|result| if result.rows_affected() == 1 { Ok(()) } else { Err(sqlx::Error::RowNotFound) })
         .map_err(Into::into)
     }
 

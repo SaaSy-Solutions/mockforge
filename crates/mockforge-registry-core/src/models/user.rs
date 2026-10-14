@@ -66,10 +66,12 @@ impl User {
 impl User {
     /// Find user by email
     pub async fn find_by_email(pool: &sqlx::PgPool, email: &str) -> sqlx::Result<Option<Self>> {
-        sqlx::query_as::<_, Self>("SELECT * FROM users WHERE email = $1")
-            .bind(email)
-            .fetch_optional(pool)
-            .await
+        sqlx::query_as::<_, Self>(
+            "SELECT * FROM users WHERE lower(btrim(email)) = lower(btrim($1))",
+        )
+        .bind(email)
+        .fetch_optional(pool)
+        .await
     }
 
     /// Find user by username

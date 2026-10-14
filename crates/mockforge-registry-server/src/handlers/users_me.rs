@@ -118,9 +118,8 @@ pub async fn update_me(
         .map(|e| e.trim().to_lowercase())
         .filter(|e| !e.is_empty());
     if let Some(ref e) = email {
-        // Very permissive check — the registration endpoint uses the same
-        // rule elsewhere (`contains('@')`) so we stay consistent.
-        if !e.contains('@') || !e.contains('.') {
+        use validator::ValidateEmail;
+        if e.len() > 255 || !e.validate_email() {
             return Err(ApiError::InvalidRequest("Email address is not valid".to_string()));
         }
         if let Some(existing) = state.store.find_user_by_email(e).await? {
