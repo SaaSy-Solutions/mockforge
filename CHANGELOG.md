@@ -38,6 +38,8 @@
 
 - **[DevX]** Honor optional HTTP scenario, world-state, performance and route-chaos feature gates for modules, state and route wiring, allowing minimal builds to retain basic mocks and health probes.
 
+- **[DevX]** Preserve shared configuration types in minimal Core builds and gate optional workspace and advanced runtime integrations consistently. Voice workspace construction declares its workspace/data prerequisites, and advanced engines declare their workspace and persona-type prerequisites.
+
 - **[DevX]** Integration builds check shared-disk headroom and restored Cargo library artifacts before compiling. Read-only diagnostics replace automatic target deletion and retain foreign or active build files. (#706)
 
 - **[DevX]** Integration preflight verifies an owned 1 MiB temporary allocation and flush, reporting per-user quota and space errors before build retries. Existing temporary files and caches are preserved. (#706)

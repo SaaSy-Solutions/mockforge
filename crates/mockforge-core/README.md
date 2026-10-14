@@ -18,6 +18,33 @@ MockForge Core includes:
 - **Workspace Management**: Organize and persist mock configurations
 - **Observability**: Request logging, metrics collection, and tracing
 
+## Library feature selection
+
+The minimal-build corrections described here are unreleased.
+
+Default features include data generation, AI, contracts, workspace management,
+voice, advanced engines, and scripting. Embedded applications can disable the
+bundle and enable individual features:
+
+```toml
+mockforge-core = { version = "0.3.233", default-features = false, features = ["workspace-mgmt"] }
+```
+
+Shared configuration types remain available with default features disabled, so
+JSON and YAML configuration can be moved between builds. An engine's configuration
+does not enable its Cargo feature. Workspace persistence and synchronization
+require `workspace-mgmt`; continuum blending and behavioral economics require
+`advanced`, which enables workspace management for snapshots and multi-tenant
+routing. Voice workspace construction requires workspace management and data
+and enables those two prerequisites. The advanced consistency engine enables the
+intelligence crate's persona data types because its state contains `PersonaProfile`.
+
+The targeted configuration and basic request controls can be run independently:
+
+```bash
+cargo test -p mockforge-core --no-default-features --test optional_feature_basics
+```
+
 ## Quick Start: Embedding MockForge
 
 ### Creating a Simple HTTP Mock Server

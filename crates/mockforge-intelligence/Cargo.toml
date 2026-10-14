@@ -72,7 +72,8 @@ database = ["sqlx"]
 # Mirrors mockforge-core's `advanced` feature so consistency / scenario_studio
 # (moved here in #555 phase 7) only compile when consumers ask for the
 # advanced feature set, same as before the move.
-advanced = []
+# Cross-protocol consistency carries PersonaProfile in its public state types.
+advanced = ["data"]
 # Mirrors mockforge-core's `data` / `persona-graph` features so the
 # moved-in #555-phase-7 `consistency` module's persona-graph-aware code
 # paths can still be gated identically. mockforge-data is now an

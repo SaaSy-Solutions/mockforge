@@ -83,7 +83,7 @@ pub struct ServerConfig {
     /// Observability configuration (metrics, tracing)
     pub observability: ObservabilityConfig,
     /// Multi-tenant workspace configuration
-    pub multi_tenant: crate::multi_tenant::MultiTenantConfig,
+    pub multi_tenant: mockforge_foundation::multi_tenant_types::MultiTenantConfig,
     /// Custom routes configuration
     #[serde(default)]
     pub routes: Vec<RouteConfig>,
@@ -109,13 +109,13 @@ pub struct ServerConfig {
     pub reality: RealitySliderConfig,
     /// Reality Continuum configuration for blending mock and real data sources
     #[serde(default)]
-    pub reality_continuum: crate::reality_continuum::ContinuumConfig,
+    pub reality_continuum: mockforge_foundation::reality_continuum::ContinuumConfig,
     /// Security monitoring and SIEM configuration
     #[serde(default)]
     pub security: SecurityConfig,
     /// Drift budget and contract monitoring configuration
     #[serde(default)]
-    pub drift_budget: crate::contract_drift::DriftBudgetConfig,
+    pub drift_budget: mockforge_foundation::contract_drift_types::DriftBudgetConfig,
     /// Incident management configuration
     #[serde(default)]
     pub incidents: IncidentConfig,
@@ -209,7 +209,7 @@ pub struct ProfileConfig {
     pub observability: Option<ObservabilityConfig>,
     /// Multi-tenant workspace configuration overrides
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub multi_tenant: Option<crate::multi_tenant::MultiTenantConfig>,
+    pub multi_tenant: Option<mockforge_foundation::multi_tenant_types::MultiTenantConfig>,
     /// Custom routes configuration overrides
     #[serde(skip_serializing_if = "Option::is_none")]
     pub routes: Option<Vec<RouteConfig>>,
@@ -224,7 +224,7 @@ pub struct ProfileConfig {
     pub reality: Option<RealitySliderConfig>,
     /// Reality Continuum configuration overrides
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub reality_continuum: Option<crate::reality_continuum::ContinuumConfig>,
+    pub reality_continuum: Option<mockforge_foundation::reality_continuum::ContinuumConfig>,
     /// Security configuration overrides
     #[serde(skip_serializing_if = "Option::is_none")]
     pub security: Option<SecurityConfig>,

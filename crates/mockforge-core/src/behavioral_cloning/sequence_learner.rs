@@ -4,9 +4,9 @@
 //! flows from real traffic using trace correlation.
 
 use crate::behavioral_cloning::types::BehavioralSequence;
-use crate::scenarios::ScenarioDefinition;
 use crate::Result;
 use async_trait::async_trait;
+use mockforge_foundation::scenario_types::ScenarioDefinition;
 use std::collections::HashMap;
 
 /// Trait for querying trace data for sequence learning
@@ -298,7 +298,7 @@ impl SequenceLearner {
     /// Converts a BehavioralSequence into a ScenarioDefinition
     /// that can be executed by the ScenarioExecutor.
     pub fn generate_sequence_scenario(sequence: &BehavioralSequence) -> ScenarioDefinition {
-        use crate::scenarios::ScenarioStep;
+        use mockforge_foundation::scenario_types::ScenarioStep;
 
         let mut scenario =
             ScenarioDefinition::new(&sequence.id, &sequence.name).with_tags(sequence.tags.clone());

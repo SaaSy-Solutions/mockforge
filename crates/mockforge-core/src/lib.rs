@@ -352,7 +352,7 @@ pub(crate) use mockforge_foundation::latency;
 /// `mockforge-foundation` (A12/A17); this PR moved the LLM-bound engines too.
 pub use mockforge_intelligence::intelligent_behavior;
 pub mod lifecycle;
-#[cfg(feature = "advanced")]
+#[cfg(feature = "workspace-mgmt")]
 // Config types moved to mockforge-foundation (A14);
 // MultiTenantWorkspaceRegistry + WorkspaceRouter stay here (hold Workspace).
 pub mod multi_tenant;
@@ -419,6 +419,7 @@ pub(crate) mod request_scripting;
 // Route chaos has been moved to mockforge-route-chaos crate to avoid Send issues
 // Import directly from mockforge-route-chaos crate instead of re-exporting here
 // to avoid circular dependency (mockforge-route-chaos depends on mockforge-core for config types)
+#[cfg(all(feature = "data", feature = "advanced"))]
 #[allow(dead_code)]
 pub(crate) mod persona_lifecycle_time;
 pub mod routing;
@@ -442,6 +443,7 @@ pub mod snapshots;
 pub(crate) use mockforge_openapi::spec_parser;
 pub mod stateful_handler;
 // sync_watcher stays in core.
+#[cfg(feature = "workspace-mgmt")]
 pub mod sync_watcher;
 /// Template expansion utilities (Send-safe, isolated from templating module)
 pub mod template_expansion;
@@ -541,7 +543,7 @@ pub use lifecycle::{
     LifecycleHook, LifecycleHookRegistry, MockLifecycleEvent, RequestContext, ResponseContext,
     ServerLifecycleEvent,
 };
-#[cfg(feature = "advanced")]
+#[cfg(feature = "workspace-mgmt")]
 pub use multi_tenant::{
     MultiTenantConfig, MultiTenantWorkspaceRegistry, RoutingStrategy, TenantWorkspace,
     WorkspaceContext, WorkspaceRouter, WorkspaceStats,
@@ -590,6 +592,7 @@ pub use request_logger::{
 };
 // Route chaos types moved to mockforge-route-chaos crate
 // Import directly: use mockforge_route_chaos::{RouteChaosInjector, RouteFaultResponse, RouteMatcher};
+pub use mockforge_foundation::time_travel::TimeTravelConfig;
 pub use routing::{HttpMethod, Route, RouteRegistry};
 pub use runtime_validation::{
     RuntimeValidationError, RuntimeValidationResult, RuntimeValidatorConfig, SchemaMetadata,
@@ -626,7 +629,7 @@ pub use time_travel::{
     cron::{CronJob, CronJobAction, CronScheduler},
     get_global_clock, is_time_travel_enabled, now as time_travel_now, register_global_clock,
     unregister_global_clock, RepeatConfig, ResponseScheduler, ScheduledResponse, TimeScenario,
-    TimeTravelConfig, TimeTravelManager, TimeTravelStatus, VirtualClock,
+    TimeTravelManager, TimeTravelStatus, VirtualClock,
 };
 #[cfg(feature = "advanced")]
 pub use time_travel_handler::{

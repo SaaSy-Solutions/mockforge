@@ -144,6 +144,7 @@ impl RealityTraceMetadata {
     ///
     /// Builds metadata from the consistency engine's unified state and
     /// the actual blend ratio used for the request.
+    #[cfg(feature = "advanced")]
     pub fn from_unified_state(
         unified_state: &crate::consistency::types::UnifiedState,
         blend_ratio: f64,
