@@ -22,6 +22,7 @@ pub mod login_attempt;
 pub mod mock_environment;
 pub mod mockai_rule_explanation;
 pub mod notification_channel;
+pub mod observability_alert;
 pub mod observability_query;
 pub mod org_template;
 pub mod organization;
