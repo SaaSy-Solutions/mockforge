@@ -1,3 +1,6 @@
+mod feature_selection;
+mod lifecycle;
+
 use std::path::PathBuf;
 
 #[cfg(feature = "chaos")]
@@ -7,10 +10,13 @@ use mockforge_chaos::config::ChaosConfig;
 use mockforge_core::encryption::init_key_store;
 use mockforge_core::ServerConfig;
 use mockforge_observability::prometheus::prometheus_router;
+#[cfg(feature = "http")]
 use mockforge_openapi::OpenApiSpec;
+#[cfg(any(feature = "http", feature = "smtp"))]
 use std::any::Any;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
+use tokio::sync::RwLock;
 
 /// Arguments for building server configuration and running the serve command.
 ///
@@ -892,16 +898,34 @@ pub async fn handle_serve(
 
     // Merge configuration sources
     let mut config = build_server_config_from_cli(&serve_args).await;
+    feature_selection::validate(&serve_args, &config)?;
 
-    // Determine ports to validate using final configuration
-    let mut final_ports = vec![
-        (config.http.port, "HTTP"),
-        (config.websocket.port, "WebSocket"),
-        (config.grpc.port, "gRPC"),
-    ];
-
+    // Validate only listeners present in this build. A standalone protocol
+    // must not fail because another protocol's default port is occupied.
+    let mut final_ports = Vec::new();
+    if cfg!(feature = "http") {
+        final_ports.push((config.http.port, "HTTP"));
+    }
+    if cfg!(feature = "ws") && config.websocket.port != 0 {
+        final_ports.push((config.websocket.port, "WebSocket"));
+    }
+    if cfg!(feature = "grpc") && config.grpc.enabled && config.grpc.port != 0 {
+        final_ports.push((config.grpc.port, "gRPC"));
+    }
     if config.admin.enabled {
+        if !cfg!(feature = "admin") {
+            return Err("Admin startup requires the admin Cargo feature".into());
+        }
         final_ports.push((config.admin.port, "Admin UI"));
+    }
+    if !cfg!(feature = "http") && serve_args.http_port.is_some() {
+        return Err("HTTP startup requires the http Cargo feature".into());
+    }
+    if !cfg!(feature = "tunnel")
+        && config.deceptive_deploy.enabled
+        && config.deceptive_deploy.auto_tunnel
+    {
+        return Err("Automatic tunnel startup requires the tunnel Cargo feature".into());
     }
 
     if config.observability.prometheus.enabled {
@@ -938,7 +962,7 @@ pub async fn handle_serve(
 
     // Apply network profile if specified
     if let Some(profile_name) = serve_args.network_profile {
-        use mockforge_chaos::core_network_profiles::NetworkProfileCatalog;
+        use mockforge_core::network_profiles::NetworkProfileCatalog;
         let catalog = NetworkProfileCatalog::new();
 
         if let Some(profile) = catalog.get(&profile_name) {
@@ -959,7 +983,7 @@ pub async fn handle_serve(
 
     // Enable random chaos mode if specified
     if serve_args.chaos_random {
-        use mockforge_chaos::core_chaos_utilities::ChaosConfig;
+        use mockforge_foundation::chaos_utilities::ChaosConfig;
 
         println!("🎲 Random chaos mode enabled");
         println!("   Error rate: {:.1}%", serve_args.chaos_random_error_rate * 100.0);
@@ -981,6 +1005,7 @@ pub async fn handle_serve(
 
     // Re-initialize logging with configuration from config file
     // This allows JSON logging, file output, and OpenTelemetry integration
+    #[cfg(feature = "tracing")]
     let logging_config = mockforge_observability::LoggingConfig {
         level: config.logging.level.clone(),
         json_format: config.logging.json_format,
@@ -992,12 +1017,17 @@ pub async fn handle_serve(
     // If OpenTelemetry tracing is enabled, initialize with tracing layer
     if let Some(ref otel_config) = config.observability.opentelemetry {
         if otel_config.enabled {
-            // Initialize OpenTelemetry tracer
-            if let Err(e) = initialize_opentelemetry_tracing(otel_config, &logging_config) {
-                tracing::warn!("Failed to initialize OpenTelemetry tracing: {}", e);
-                // Fall back to standard logging
-                if let Err(e) = mockforge_observability::init_logging(logging_config) {
-                    eprintln!("Failed to initialize logging: {}", e);
+            #[cfg(not(feature = "tracing"))]
+            return Err("OpenTelemetry startup requires the tracing Cargo feature".into());
+            #[cfg(feature = "tracing")]
+            {
+                // Initialize OpenTelemetry tracer
+                if let Err(e) = initialize_opentelemetry_tracing(otel_config, &logging_config) {
+                    tracing::warn!("Failed to initialize OpenTelemetry tracing: {}", e);
+                    // Fall back to standard logging
+                    if let Err(e) = mockforge_observability::init_logging(logging_config) {
+                        eprintln!("Failed to initialize logging: {}", e);
+                    }
                 }
             }
         }
@@ -1362,6 +1392,7 @@ pub async fn handle_serve(
     };
 
     // Build HTTP router with OpenAPI spec, chain support, multi-tenant, and traffic shaping if enabled
+    #[cfg(feature = "http")]
     let multi_tenant_config = if config.multi_tenant.enabled {
         Some(config.multi_tenant.clone())
     } else {
@@ -1395,7 +1426,7 @@ pub async fn handle_serve(
     } else {
         None
     };
-    #[cfg(not(feature = "smtp"))]
+    #[cfg(all(feature = "http", not(feature = "smtp")))]
     let smtp_registry = None::<Arc<dyn Any + Send + Sync>>;
 
     #[cfg(feature = "mqtt")]
@@ -1444,11 +1475,11 @@ pub async fn handle_serve(
         (None, None)
     };
 
-    #[cfg(feature = "mqtt")]
+    #[cfg(all(feature = "http", feature = "mqtt"))]
     let mqtt_broker_for_http = mqtt_session_manager
         .as_ref()
         .map(|sm| Arc::clone(sm) as Arc<dyn Any + Send + Sync>);
-    #[cfg(not(feature = "mqtt"))]
+    #[cfg(all(feature = "http", not(feature = "mqtt")))]
     let mqtt_broker_for_http = None::<Arc<dyn Any + Send + Sync>>;
 
     // Build the AMQP broker once, up front, so the same instance backs both
@@ -1469,11 +1500,11 @@ pub async fn handle_serve(
     } else {
         None
     };
-    #[cfg(feature = "amqp")]
+    #[cfg(all(feature = "http", feature = "amqp"))]
     let amqp_broker_for_http = amqp_broker
         .as_ref()
         .map(|broker| Arc::clone(broker) as Arc<dyn Any + Send + Sync>);
-    #[cfg(not(feature = "amqp"))]
+    #[cfg(all(feature = "http", not(feature = "amqp")))]
     let amqp_broker_for_http = None::<Arc<dyn Any + Send + Sync>>;
 
     // Same shared-broker pattern for Kafka: one `Arc<KafkaMockBroker>` backs
@@ -1492,23 +1523,27 @@ pub async fn handle_serve(
     } else {
         None
     };
-    #[cfg(feature = "kafka")]
+    #[cfg(all(feature = "http", feature = "kafka"))]
     let kafka_broker_for_http = kafka_broker
         .as_ref()
         .map(|broker| Arc::clone(broker) as Arc<dyn Any + Send + Sync>);
-    #[cfg(not(feature = "kafka"))]
+    #[cfg(all(feature = "http", not(feature = "kafka")))]
     let kafka_broker_for_http = None::<Arc<dyn Any + Send + Sync>>;
 
     // Create health manager for Kubernetes-native health checks
+    #[cfg(feature = "http")]
     use mockforge_http::HealthManager;
     use std::sync::Arc;
     use std::time::Duration;
 
+    #[cfg(feature = "http")]
     let health_manager = Arc::new(HealthManager::with_init_timeout(Duration::from_secs(60)));
+    #[cfg(feature = "http")]
     let health_manager_for_router = health_manager.clone();
 
     // Initialize TimeTravelManager if configured
     use mockforge_core::TimeTravelManager;
+    #[cfg(feature = "admin")]
     use mockforge_ui::time_travel_handlers;
 
     let time_travel_manager = {
@@ -1516,11 +1551,13 @@ pub async fn handle_serve(
         let manager = Arc::new(TimeTravelManager::new(time_travel_config));
 
         // Initialize the global time travel manager for UI handlers
+        #[cfg(feature = "admin")]
         time_travel_handlers::init_time_travel_manager(manager.clone());
         // Mirror the same handle into mockforge-http's process-wide
         // OnceLock so the time-travel routes mounted on the main HTTP
         // app (reachable on hosted mocks where the admin port isn't
         // exposed publicly) operate against the same manager.
+        #[cfg(feature = "http")]
         mockforge_http::time_travel_api::init_time_travel_manager(manager.clone());
 
         if manager.clock().is_enabled() {
@@ -1547,803 +1584,921 @@ pub async fn handle_serve(
     };
 
     // Initialize MutationRuleManager for time-based data mutations
+    #[cfg(all(feature = "admin", feature = "vbr"))]
     use mockforge_vbr::MutationRuleManager;
+    #[cfg(all(feature = "admin", feature = "vbr"))]
     let mutation_rule_manager = Arc::new(MutationRuleManager::new());
+    #[cfg(all(feature = "admin", feature = "vbr"))]
     time_travel_handlers::init_mutation_rule_manager(mutation_rule_manager.clone());
 
-    // Initialize MockAI in parallel with router building to improve startup time
-    // This allows MockAI initialization to happen concurrently with HTTP router setup
-    let mockai = if config.mockai.enabled {
-        use mockforge_core::intelligent_behavior::MockAI;
-        use std::sync::Arc;
-        use tokio::sync::RwLock;
-        use tracing::{debug, info};
+    #[cfg(not(feature = "admin"))]
+    let _ = &time_travel_manager;
 
-        let behavior_config = config.mockai.intelligent_behavior.clone();
-        let spec_path = config.http.openapi_spec.clone();
+    #[cfg(feature = "http")]
+    let http_setup = {
+        // Initialize MockAI in parallel with router building to improve startup time
+        // This allows MockAI initialization to happen concurrently with HTTP router setup
+        let mockai = if config.mockai.enabled {
+            use mockforge_core::intelligent_behavior::MockAI;
+            use std::sync::Arc;
+            use tokio::sync::RwLock;
+            use tracing::{debug, info};
 
-        // Create MockAI with a default instance first (fast), then upgrade in background
-        // This allows the server to start immediately while MockAI initializes
-        let mockai_arc = Arc::new(RwLock::new(MockAI::new(behavior_config.clone())));
-        let mockai_for_upgrade = mockai_arc.clone();
-        let behavior_config_for_upgrade = behavior_config.clone();
+            let behavior_config = config.mockai.intelligent_behavior.clone();
+            let spec_path = config.http.openapi_spec.clone();
 
-        // Spawn task to upgrade MockAI with OpenAPI spec if available (non-blocking)
-        tokio::spawn(async move {
-            if let Some(ref spec_path) = spec_path {
-                match OpenApiSpec::from_file(spec_path).await {
-                    Ok(openapi_spec) => {
-                        match MockAI::from_openapi(&openapi_spec, behavior_config_for_upgrade).await
-                        {
-                            Ok(instance) => {
-                                *mockai_for_upgrade.write().await = instance;
-                                info!("✅ MockAI upgraded with OpenAPI spec (background initialization)");
-                            }
-                            Err(e) => {
-                                debug!(
-                                    "MockAI not available (no OpenAI API key configured): {}",
-                                    e
-                                );
-                                // Keep default instance
+            // Create MockAI with a default instance first (fast), then upgrade in background
+            // This allows the server to start immediately while MockAI initializes
+            let mockai_arc = Arc::new(RwLock::new(MockAI::new(behavior_config.clone())));
+            let mockai_for_upgrade = mockai_arc.clone();
+            let behavior_config_for_upgrade = behavior_config.clone();
+
+            // Spawn task to upgrade MockAI with OpenAPI spec if available (non-blocking)
+            tokio::spawn(async move {
+                if let Some(ref spec_path) = spec_path {
+                    match OpenApiSpec::from_file(spec_path).await {
+                        Ok(openapi_spec) => {
+                            match MockAI::from_openapi(&openapi_spec, behavior_config_for_upgrade)
+                                .await
+                            {
+                                Ok(instance) => {
+                                    *mockai_for_upgrade.write().await = instance;
+                                    info!("✅ MockAI upgraded with OpenAPI spec (background initialization)");
+                                }
+                                Err(e) => {
+                                    debug!(
+                                        "MockAI not available (no OpenAI API key configured): {}",
+                                        e
+                                    );
+                                    // Keep default instance
+                                }
                             }
                         }
-                    }
-                    Err(e) => {
-                        debug!("Failed to load OpenAPI spec for MockAI: {}", e);
-                        // Keep default instance
+                        Err(e) => {
+                            debug!("Failed to load OpenAPI spec for MockAI: {}", e);
+                            // Keep default instance
+                        }
                     }
                 }
+            });
+
+            Some(mockai_arc)
+        } else {
+            None
+        };
+
+        // Create ValidationOptions from config for template expansion
+        use mockforge_openapi::openapi_routes::{ValidationMode, ValidationOptions};
+        let request_mode = if let Some(ref validation) = config.http.validation {
+            match validation.mode.as_str() {
+                "off" | "disable" | "disabled" => ValidationMode::Disabled,
+                "warn" | "warning" => ValidationMode::Warn,
+                _ => ValidationMode::Enforce,
             }
-        });
-
-        Some(mockai_arc)
-    } else {
-        None
-    };
-
-    // Create ValidationOptions from config for template expansion
-    use mockforge_openapi::openapi_routes::{ValidationMode, ValidationOptions};
-    let request_mode = if let Some(ref validation) = config.http.validation {
-        match validation.mode.as_str() {
-            "off" | "disable" | "disabled" => ValidationMode::Disabled,
-            "warn" | "warning" => ValidationMode::Warn,
-            _ => ValidationMode::Enforce,
-        }
-    } else {
-        ValidationMode::Enforce
-    };
-
-    let validation_options = ValidationOptions {
-        request_mode,
-        aggregate_errors: config.http.aggregate_validation_errors,
-        validate_responses: config.http.validate_responses,
-        overrides: std::collections::HashMap::new(),
-        admin_skip_prefixes: vec!["/__mockforge".to_string(), "/health".to_string()],
-        response_template_expand: config.http.response_template_expand,
-        validation_status: config.http.validation_status,
-    };
-
-    // Process multiple specs if provided
-    let final_spec_path = if !serve_args.spec.is_empty() || serve_args.spec_dir.is_some() {
-        use mockforge_openapi::multi_spec::{
-            group_specs_by_api_version, group_specs_by_openapi_version, load_specs_from_directory,
-            load_specs_from_files, merge_specs, ConflictStrategy,
+        } else {
+            ValidationMode::Enforce
         };
 
-        // Load specs
-        let specs = if !serve_args.spec.is_empty() {
-            load_specs_from_files(serve_args.spec.clone())
-                .await
-                .map_err(|e| format!("Failed to load spec files: {}", e))?
-        } else if let Some(ref spec_dir) = serve_args.spec_dir {
-            load_specs_from_directory(spec_dir)
-                .await
-                .map_err(|e| format!("Failed to load specs from directory: {}", e))?
-        } else {
-            Vec::new()
+        let validation_options = ValidationOptions {
+            request_mode,
+            aggregate_errors: config.http.aggregate_validation_errors,
+            validate_responses: config.http.validate_responses,
+            overrides: std::collections::HashMap::new(),
+            admin_skip_prefixes: vec!["/__mockforge".to_string(), "/health".to_string()],
+            response_template_expand: config.http.response_template_expand,
+            validation_status: config.http.validation_status,
         };
 
-        if specs.is_empty() {
-            config.http.openapi_spec.clone()
-        } else {
-            // Determine conflict strategy
-            let conflict_strategy = ConflictStrategy::from(serve_args.merge_conflicts.as_str());
+        // Process multiple specs if provided
+        let final_spec_path = if !serve_args.spec.is_empty() || serve_args.spec_dir.is_some() {
+            use mockforge_openapi::multi_spec::{
+                group_specs_by_api_version, group_specs_by_openapi_version,
+                load_specs_from_directory, load_specs_from_files, merge_specs, ConflictStrategy,
+            };
 
-            // Group by OpenAPI doc version first
-            let openapi_groups = group_specs_by_openapi_version(specs);
+            // Load specs
+            let specs = if !serve_args.spec.is_empty() {
+                load_specs_from_files(serve_args.spec.clone())
+                    .await
+                    .map_err(|e| format!("Failed to load spec files: {}", e))?
+            } else if let Some(ref spec_dir) = serve_args.spec_dir {
+                load_specs_from_directory(spec_dir)
+                    .await
+                    .map_err(|e| format!("Failed to load specs from directory: {}", e))?
+            } else {
+                Vec::new()
+            };
 
-            // Process each OpenAPI version group
-            let mut merged_specs: Vec<(String, OpenApiSpec)> = Vec::new();
-            for (_openapi_version, version_specs) in openapi_groups {
-                // Apply API versioning grouping if enabled
-                let api_versioning = serve_args.api_versioning.as_str();
-                match api_versioning {
-                    "info" | "path-prefix" => {
-                        // Group by API version
-                        let api_groups = group_specs_by_api_version(version_specs);
-                        for (api_version, api_specs) in api_groups {
-                            // Merge specs in this API version group
-                            match merge_specs(api_specs, conflict_strategy) {
-                                Ok(merged) => merged_specs.push((api_version, merged)),
+            if specs.is_empty() {
+                config.http.openapi_spec.clone()
+            } else {
+                // Determine conflict strategy
+                let conflict_strategy = ConflictStrategy::from(serve_args.merge_conflicts.as_str());
+
+                // Group by OpenAPI doc version first
+                let openapi_groups = group_specs_by_openapi_version(specs);
+
+                // Process each OpenAPI version group
+                let mut merged_specs: Vec<(String, OpenApiSpec)> = Vec::new();
+                for (_openapi_version, version_specs) in openapi_groups {
+                    // Apply API versioning grouping if enabled
+                    let api_versioning = serve_args.api_versioning.as_str();
+                    match api_versioning {
+                        "info" | "path-prefix" => {
+                            // Group by API version
+                            let api_groups = group_specs_by_api_version(version_specs);
+                            for (api_version, api_specs) in api_groups {
+                                // Merge specs in this API version group
+                                match merge_specs(api_specs, conflict_strategy) {
+                                    Ok(merged) => merged_specs.push((api_version, merged)),
+                                    Err(e) => {
+                                        return Err(format!("Failed to merge specs: {}", e).into());
+                                    }
+                                }
+                            }
+                        }
+                        _ => {
+                            // Merge all specs in this OpenAPI version group
+                            match merge_specs(version_specs, conflict_strategy) {
+                                Ok(merged) => merged_specs.push(("default".to_string(), merged)),
                                 Err(e) => {
                                     return Err(format!("Failed to merge specs: {}", e).into());
                                 }
                             }
                         }
                     }
-                    _ => {
-                        // Merge all specs in this OpenAPI version group
-                        match merge_specs(version_specs, conflict_strategy) {
-                            Ok(merged) => merged_specs.push(("default".to_string(), merged)),
-                            Err(e) => {
-                                return Err(format!("Failed to merge specs: {}", e).into());
+                }
+
+                // If we have multiple merged specs (different API versions), we need to handle them
+                // For now, merge them all into one (or we could create separate routers with path prefixes)
+                if merged_specs.len() == 1 {
+                    // Single merged spec - write to temp file
+                    let merged = &merged_specs[0].1;
+                    let raw_doc = merged
+                        .raw_document
+                        .as_ref()
+                        .ok_or_else(|| "Merged spec has no raw document".to_string())?;
+                    let merged_json = serde_json::to_string_pretty(raw_doc)
+                        .map_err(|e| format!("Failed to serialize merged spec: {}", e))?;
+
+                    // Use persistent temp file (won't be deleted automatically)
+                    let temp_dir = std::env::temp_dir();
+                    let temp_path = temp_dir
+                        .join(format!("mockforge_merged_spec_{}.json", uuid::Uuid::new_v4()));
+                    std::fs::write(&temp_path, merged_json.as_bytes())
+                        .map_err(|e| format!("Failed to write merged spec: {}", e))?;
+
+                    Some(temp_path.to_string_lossy().to_string())
+                } else if merged_specs.is_empty() {
+                    config.http.openapi_spec.clone()
+                } else if serve_args.api_versioning == "path-prefix" {
+                    let mut prefixed_specs: Vec<(PathBuf, OpenApiSpec)> = Vec::new();
+
+                    for (api_version, spec) in merged_specs {
+                        let version_suffix = api_version.trim().trim_start_matches('v');
+                        let prefix = format!("/v{}", version_suffix);
+                        let mut spec_json = spec.raw_document.clone().ok_or_else(|| {
+                            format!("Merged spec for version '{}' has no raw document", api_version)
+                        })?;
+
+                        if let Some(paths_obj) =
+                            spec_json.get_mut("paths").and_then(|p| p.as_object_mut())
+                        {
+                            let old_paths = std::mem::take(paths_obj);
+                            let mut new_paths = serde_json::Map::new();
+                            for (path, value) in old_paths {
+                                let normalized_path = if path.starts_with('/') {
+                                    path
+                                } else {
+                                    format!("/{}", path)
+                                };
+                                new_paths.insert(format!("{}{}", prefix, normalized_path), value);
                             }
+                            *paths_obj = new_paths;
+                        }
+
+                        let prefixed_spec = OpenApiSpec::from_json(spec_json).map_err(|e| {
+                            format!(
+                                "Failed to build prefixed spec for API version '{}': {}",
+                                api_version, e
+                            )
+                        })?;
+
+                        prefixed_specs
+                            .push((PathBuf::from(format!("api-{}", api_version)), prefixed_spec));
+                    }
+
+                    match merge_specs(prefixed_specs, conflict_strategy) {
+                        Ok(final_merged) => {
+                            let raw_doc = final_merged.raw_document.as_ref().ok_or_else(|| {
+                                "Final merged prefixed spec has no raw document".to_string()
+                            })?;
+                            let merged_json =
+                                serde_json::to_string_pretty(raw_doc).map_err(|e| {
+                                    format!("Failed to serialize prefixed merged spec: {}", e)
+                                })?;
+
+                            let temp_dir = std::env::temp_dir();
+                            let temp_path = temp_dir.join(format!(
+                                "mockforge_merged_prefixed_spec_{}.json",
+                                uuid::Uuid::new_v4()
+                            ));
+                            std::fs::write(&temp_path, merged_json.as_bytes()).map_err(|e| {
+                                format!("Failed to write prefixed merged spec: {}", e)
+                            })?;
+
+                            Some(temp_path.to_string_lossy().to_string())
+                        }
+                        Err(e) => {
+                            return Err(format!(
+                                "Failed to merge path-prefixed API version specs: {}",
+                                e
+                            )
+                            .into());
+                        }
+                    }
+                } else {
+                    // Multiple merged specs - for now, merge them all
+                    let all_specs: Vec<_> = merged_specs
+                        .into_iter()
+                        .map(|(_, s)| (PathBuf::from("merged"), s))
+                        .collect();
+                    match merge_specs(all_specs, conflict_strategy) {
+                        Ok(final_merged) => {
+                            let raw_doc = final_merged.raw_document.as_ref().ok_or_else(|| {
+                                "Final merged spec has no raw document".to_string()
+                            })?;
+                            let merged_json =
+                                serde_json::to_string_pretty(raw_doc).map_err(|e| {
+                                    format!("Failed to serialize final merged spec: {}", e)
+                                })?;
+
+                            // Use persistent temp file (won't be deleted automatically)
+                            let temp_dir = std::env::temp_dir();
+                            let temp_path = temp_dir.join(format!(
+                                "mockforge_merged_spec_{}.json",
+                                uuid::Uuid::new_v4()
+                            ));
+                            std::fs::write(&temp_path, merged_json.as_bytes())
+                                .map_err(|e| format!("Failed to write merged spec: {}", e))?;
+
+                            Some(temp_path.to_string_lossy().to_string())
+                        }
+                        Err(e) => {
+                            return Err(format!(
+                                "Failed to merge multiple API version specs: {}",
+                                e
+                            )
+                            .into());
                         }
                     }
                 }
             }
+        } else {
+            config.http.openapi_spec.clone()
+        };
 
-            // If we have multiple merged specs (different API versions), we need to handle them
-            // For now, merge them all into one (or we could create separate routers with path prefixes)
-            if merged_specs.len() == 1 {
-                // Single merged spec - write to temp file
-                let merged = &merged_specs[0].1;
-                let raw_doc = merged
-                    .raw_document
-                    .as_ref()
-                    .ok_or_else(|| "Merged spec has no raw document".to_string())?;
-                let merged_json = serde_json::to_string_pretty(raw_doc)
-                    .map_err(|e| format!("Failed to serialize merged spec: {}", e))?;
+        // Apply --base-path override: prefix all paths in the OpenAPI spec
+        let final_spec_path = if let Some(ref bp) = serve_args.base_path {
+            if let Some(ref spec) = final_spec_path {
+                let spec_content = tokio::fs::read_to_string(spec)
+                    .await
+                    .map_err(|e| format!("Failed to read spec for --base-path injection: {}", e))?;
+                let mut spec_json: serde_json::Value =
+                    if spec.ends_with(".yaml") || spec.ends_with(".yml") {
+                        serde_yaml::from_str(&spec_content)
+                            .map_err(|e| format!("Failed to parse spec YAML: {}", e))?
+                    } else {
+                        serde_json::from_str(&spec_content)
+                            .map_err(|e| format!("Failed to parse spec JSON: {}", e))?
+                    };
 
-                // Use persistent temp file (won't be deleted automatically)
+                // Normalize base path: ensure leading slash, strip trailing slash
+                let base = {
+                    let mut p = bp.clone();
+                    if !p.starts_with('/') {
+                        p.insert(0, '/');
+                    }
+                    p.trim_end_matches('/').to_string()
+                };
+
+                // Rewrite the paths object: prefix every path key with the base path
+                if let Some(paths_obj) = spec_json.get("paths").and_then(|v| v.as_object()).cloned()
+                {
+                    let mut new_paths = serde_json::Map::new();
+                    for (path_key, path_value) in paths_obj {
+                        let prefixed = format!("{}{}", base, path_key);
+                        new_paths.insert(prefixed, path_value);
+                    }
+                    spec_json["paths"] = serde_json::Value::Object(new_paths);
+                }
+
+                let modified_json = serde_json::to_string_pretty(&spec_json)
+                    .map_err(|e| format!("Failed to serialize spec with base path: {}", e))?;
                 let temp_dir = std::env::temp_dir();
                 let temp_path =
-                    temp_dir.join(format!("mockforge_merged_spec_{}.json", uuid::Uuid::new_v4()));
-                std::fs::write(&temp_path, merged_json.as_bytes())
-                    .map_err(|e| format!("Failed to write merged spec: {}", e))?;
+                    temp_dir.join(format!("mockforge_basepath_spec_{}.json", uuid::Uuid::new_v4()));
+                std::fs::write(&temp_path, modified_json.as_bytes())
+                    .map_err(|e| format!("Failed to write base-path spec: {}", e))?;
 
+                tracing::info!(
+                    "Applied --base-path '{}': prefixed all spec paths with '{}'",
+                    bp,
+                    base
+                );
                 Some(temp_path.to_string_lossy().to_string())
-            } else if merged_specs.is_empty() {
-                config.http.openapi_spec.clone()
-            } else if serve_args.api_versioning == "path-prefix" {
-                let mut prefixed_specs: Vec<(PathBuf, OpenApiSpec)> = Vec::new();
-
-                for (api_version, spec) in merged_specs {
-                    let version_suffix = api_version.trim().trim_start_matches('v');
-                    let prefix = format!("/v{}", version_suffix);
-                    let mut spec_json = spec.raw_document.clone().ok_or_else(|| {
-                        format!("Merged spec for version '{}' has no raw document", api_version)
-                    })?;
-
-                    if let Some(paths_obj) =
-                        spec_json.get_mut("paths").and_then(|p| p.as_object_mut())
-                    {
-                        let old_paths = std::mem::take(paths_obj);
-                        let mut new_paths = serde_json::Map::new();
-                        for (path, value) in old_paths {
-                            let normalized_path = if path.starts_with('/') {
-                                path
-                            } else {
-                                format!("/{}", path)
-                            };
-                            new_paths.insert(format!("{}{}", prefix, normalized_path), value);
-                        }
-                        *paths_obj = new_paths;
-                    }
-
-                    let prefixed_spec = OpenApiSpec::from_json(spec_json).map_err(|e| {
-                        format!(
-                            "Failed to build prefixed spec for API version '{}': {}",
-                            api_version, e
-                        )
-                    })?;
-
-                    prefixed_specs
-                        .push((PathBuf::from(format!("api-{}", api_version)), prefixed_spec));
-                }
-
-                match merge_specs(prefixed_specs, conflict_strategy) {
-                    Ok(final_merged) => {
-                        let raw_doc = final_merged.raw_document.as_ref().ok_or_else(|| {
-                            "Final merged prefixed spec has no raw document".to_string()
-                        })?;
-                        let merged_json = serde_json::to_string_pretty(raw_doc).map_err(|e| {
-                            format!("Failed to serialize prefixed merged spec: {}", e)
-                        })?;
-
-                        let temp_dir = std::env::temp_dir();
-                        let temp_path = temp_dir.join(format!(
-                            "mockforge_merged_prefixed_spec_{}.json",
-                            uuid::Uuid::new_v4()
-                        ));
-                        std::fs::write(&temp_path, merged_json.as_bytes())
-                            .map_err(|e| format!("Failed to write prefixed merged spec: {}", e))?;
-
-                        Some(temp_path.to_string_lossy().to_string())
-                    }
-                    Err(e) => {
-                        return Err(format!(
-                            "Failed to merge path-prefixed API version specs: {}",
-                            e
-                        )
-                        .into());
-                    }
-                }
             } else {
-                // Multiple merged specs - for now, merge them all
-                let all_specs: Vec<_> =
-                    merged_specs.into_iter().map(|(_, s)| (PathBuf::from("merged"), s)).collect();
-                match merge_specs(all_specs, conflict_strategy) {
-                    Ok(final_merged) => {
-                        let raw_doc = final_merged
-                            .raw_document
-                            .as_ref()
-                            .ok_or_else(|| "Final merged spec has no raw document".to_string())?;
-                        let merged_json = serde_json::to_string_pretty(raw_doc)
-                            .map_err(|e| format!("Failed to serialize final merged spec: {}", e))?;
+                final_spec_path
+            }
+        } else {
+            final_spec_path
+        };
 
-                        // Use persistent temp file (won't be deleted automatically)
-                        let temp_dir = std::env::temp_dir();
-                        let temp_path = temp_dir
-                            .join(format!("mockforge_merged_spec_{}.json", uuid::Uuid::new_v4()));
-                        std::fs::write(&temp_path, merged_json.as_bytes())
-                            .map_err(|e| format!("Failed to write merged spec: {}", e))?;
+        // Issue #929 — fail fast on a broken OpenAPI spec instead of silently
+        // starting with zero routes and reporting `healthy`. If a spec path is
+        // configured but the file is missing or unparsable, the HTTP builder used
+        // to log a single WARN and start "without OpenAPI integration", so every
+        // spec route 404'd while /health still said healthy — very hard to debug.
+        // We pre-flight the load here and refuse to start. Operators who genuinely
+        // want to boot without the spec can set MOCKFORGE_ALLOW_MISSING_SPEC=1.
+        if let Some(ref spec) = final_spec_path {
+            let allow_missing = std::env::var("MOCKFORGE_ALLOW_MISSING_SPEC")
+                .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+                .unwrap_or(false);
+            if let Err(e) = OpenApiSpec::from_file(spec).await {
+                if allow_missing {
+                    tracing::error!(
+                        "OpenAPI spec '{}' failed to load: {}. Continuing without it \
+                         (MOCKFORGE_ALLOW_MISSING_SPEC is set) — spec routes will 404.",
+                        spec,
+                        e
+                    );
+                } else {
+                    return Err(format!(
+                        "OpenAPI spec '{spec}' is configured but failed to load: {e}\n\
+                         The server would otherwise start with no spec routes while /health \
+                         still reports healthy (issue #929). Fix the path/spec, or set \
+                         MOCKFORGE_ALLOW_MISSING_SPEC=1 to start anyway."
+                    )
+                    .into());
+                }
+            }
+        }
 
-                        Some(temp_path.to_string_lossy().to_string())
+        // Configure traffic shaping for HTTP middleware when enabled
+        let traffic_shaping_enabled = config.core.traffic_shaping_enabled;
+        let traffic_shaper = if traffic_shaping_enabled {
+            Some(mockforge_core::TrafficShaper::new(config.core.traffic_shaping.clone()))
+        } else {
+            None
+        };
+
+        // One live rule set, applied by the HTTP router and editable through
+        // the admin server's /__mockforge/overrides API.
+        let overrides = mockforge_core::SharedOverrides::load(config.overrides.clone()).await;
+
+        // Use standard router
+        let mut http_app = mockforge_http::build_router_with_chains_and_multi_tenant(
+            final_spec_path,
+            Some(validation_options),
+            None, // circling_config
+            multi_tenant_config,
+            Some(config.routes.clone()),
+            config.http.cors.clone(),
+            None, // ai_generator
+            smtp_registry.as_ref().cloned(),
+            mqtt_broker_for_http,
+            amqp_broker_for_http,
+            kafka_broker_for_http,
+            traffic_shaper,                        // traffic_shaper
+            traffic_shaping_enabled,               // traffic_shaping_enabled
+            Some(health_manager_for_router),       // health_manager
+            mockai.clone(),                        // mockai
+            Some(config.deceptive_deploy.clone()), // deceptive_deploy_config
+            None,                                  // proxy_config (ProxyConfig not in ServerConfig)
+            overrides.clone(),
+        )
+        .await;
+
+        #[cfg(feature = "chaos")]
+        let (
+            chaos_config,
+            chaos_config_arc,
+            latency_tracker,
+            chaos_api_state,
+            resilience_mw_state,
+            resilience_api_state,
+        ) = {
+            // CLI-flag overrides for the #468 resilience patterns. The YAML
+            // `ChaosEngConfig` doesn't carry `circuit_breaker` / `bulkhead` fields
+            // today, so CLI is the only way to turn these on. `None` falls back to
+            // the chaos crate's defaults (which keep `enabled: false`), so the
+            // middleware stays a no-op until the operator opts in.
+            let cli_circuit_breaker = serve_args.circuit_breaker.then_some(
+                mockforge_chaos::config::CircuitBreakerConfig {
+                    enabled: true,
+                    failure_threshold: serve_args.circuit_breaker_failure_threshold,
+                    success_threshold: serve_args.circuit_breaker_success_threshold,
+                    timeout_ms: serve_args.circuit_breaker_timeout_ms,
+                    failure_rate_threshold: serve_args.circuit_breaker_failure_rate,
+                    half_open_max_requests: 3,
+                    min_requests_for_rate: 10,
+                    rolling_window_ms: 10_000,
+                },
+            );
+            let cli_bulkhead =
+                serve_args.bulkhead.then_some(mockforge_chaos::config::BulkheadConfig {
+                    enabled: true,
+                    max_concurrent_requests: serve_args.bulkhead_max_concurrent,
+                    max_queue_size: serve_args.bulkhead_max_queue,
+                    queue_timeout_ms: serve_args.bulkhead_queue_timeout_ms,
+                });
+
+            // Integrate chaos engineering API router
+            // Convert from ServerConfig's ChaosEngConfig to mockforge-chaos's ChaosConfig
+            let chaos_config = if let Some(ref chaos_eng_config) = config.observability.chaos {
+                // Convert ChaosEngConfig to ChaosConfig
+                let chaos_cfg = ChaosConfig {
+                    enabled: chaos_eng_config.enabled,
+                    latency: chaos_eng_config.latency.as_ref().map(|l| {
+                        mockforge_chaos::config::LatencyConfig {
+                            enabled: l.enabled,
+                            fixed_delay_ms: l.fixed_delay_ms,
+                            random_delay_range_ms: l.random_delay_range_ms,
+                            jitter_percent: l.jitter_percent,
+                            probability: l.probability,
+                        }
+                    }),
+                    fault_injection: chaos_eng_config
+                        .fault_injection
+                        .as_ref()
+                        .map(fault_config_to_chaos),
+                    rate_limit: chaos_eng_config.rate_limit.as_ref().map(|r| {
+                        mockforge_chaos::config::RateLimitConfig {
+                            enabled: r.enabled,
+                            requests_per_second: r.requests_per_second,
+                            burst_size: r.burst_size,
+                            per_ip: r.per_ip,
+                            per_endpoint: r.per_endpoint,
+                        }
+                    }),
+                    traffic_shaping: chaos_eng_config.traffic_shaping.as_ref().map(|t| {
+                        mockforge_chaos::config::TrafficShapingConfig {
+                            enabled: t.enabled,
+                            bandwidth_limit_bps: t.bandwidth_limit_bps,
+                            packet_loss_percent: t.packet_loss_percent,
+                            max_connections: 0,
+                            connection_timeout_ms: 30000,
+                        }
+                    }),
+                    circuit_breaker: cli_circuit_breaker.clone(),
+                    bulkhead: cli_bulkhead.clone(),
+                };
+                chaos_cfg
+            } else {
+                // Default chaos config if not configured — still honour CLI flags
+                // for the resilience patterns so `--circuit-breaker` works without
+                // a chaos YAML.
+                ChaosConfig {
+                    circuit_breaker: cli_circuit_breaker.clone(),
+                    bulkhead: cli_bulkhead.clone(),
+                    ..ChaosConfig::default()
+                }
+            };
+
+            // Create and merge chaos API router
+            // Pass MockAI instance if available for dynamic error message generation
+            // Note: Temporarily passing None to avoid type mismatch between different versions of MockAI
+            if mockai.is_some() && chaos_config.enabled {
+                tracing::warn!(
+                    "Chaos API is running without MockAI-assisted fault generation due temporary cross-crate type compatibility limits"
+                );
+            }
+            let (chaos_router, chaos_config_arc, latency_tracker, chaos_api_state) =
+                create_chaos_api_router(chaos_config.clone(), None);
+            http_app = http_app.merge(chaos_router);
+            println!("✅ Chaos Engineering API available at /api/chaos/*");
+
+            // Resilience middleware + dashboard state (#468 Phase 2 + CLI follow-up).
+            //
+            // We hand the same `Option<...Config>` values to both the chaos config
+            // (above) and the resilience state builder so `/api/chaos/*` and
+            // `/api/resilience/*` report identical settings. When both CLI flags
+            // are unset, the builder falls back to the disabled defaults and the
+            // middleware short-circuits per-request — effectively free.
+            let (resilience_mw_state, resilience_api_state) =
+                mockforge_chaos::resilience_state_from_configs(
+                    cli_circuit_breaker.clone(),
+                    cli_bulkhead.clone(),
+                );
+
+            (
+                chaos_config,
+                chaos_config_arc,
+                latency_tracker,
+                chaos_api_state,
+                resilience_mw_state,
+                resilience_api_state,
+            )
+        };
+
+        // Merge WebSocket router onto the HTTP app so `/ws` and `/ws/{*path}` are
+        // reachable on the same port as HTTP. This is required for hosted mocks,
+        // where Fly.io only exposes port 3000. The separate WS listener below
+        // (config.websocket.port) continues to run for local-dev convenience; set
+        // MOCKFORGE_WS_PORT=0 to skip it.
+        #[cfg(feature = "ws")]
+        {
+            http_app = http_app.merge(mockforge_ws::router());
+            println!("✅ WebSocket endpoint available at /ws (HTTP upgrade)");
+        }
+
+        // Mount the GraphQL router on the HTTP app at /graphql so it's reachable
+        // on the same port as HTTP. Uses the library's default schema generator;
+        // the schema_path config hook is wired separately.
+        #[cfg(feature = "graphql")]
+        {
+            match mockforge_graphql::create_router(None).await {
+                Ok(gql_router) => {
+                    http_app = http_app.merge(gql_router);
+                    println!(
+                        "✅ GraphQL endpoint available at /graphql (POST queries, GET playground)"
+                    );
+                }
+                Err(e) => {
+                    tracing::warn!("Failed to build GraphQL router; skipping: {}", e);
+                }
+            }
+        }
+
+        // Mount the mock LLM endpoint (#912) so an agent can point its base URL
+        // at MockForge and get OpenAI/Anthropic-shaped completions (with SSE
+        // streaming) for scale / offline / failure testing. Opt-in via --llm-mock.
+        // #915 adds proxy/record/replay modes over a real upstream.
+        if serve_args.llm_mock {
+            let mode = serve_args
+                .llm_mock_mode
+                .parse::<mockforge_http::llm_mock::LlmMockMode>()
+                .unwrap_or_else(|e| {
+                    tracing::warn!(target: "mockforge::serve", "{e}; defaulting to mock");
+                    mockforge_http::llm_mock::LlmMockMode::Mock
+                });
+            // API key: explicit flag wins, else fall back to the conventional env
+            // vars so `proxy`/`record` against a real provider needs no secret on
+            // the command line.
+            let api_key = serve_args.llm_mock_api_key.clone().or_else(|| {
+                std::env::var("OPENAI_API_KEY")
+                    .ok()
+                    .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
+            });
+            let llm_cfg = mockforge_http::llm_mock::LlmMockConfig {
+                mode,
+                upstream_base_url: serve_args.llm_mock_upstream.clone(),
+                upstream_api_key: api_key,
+                cassette_path: serve_args.llm_mock_cassette.clone(),
+                ..Default::default()
+            };
+            http_app = http_app.merge(mockforge_http::llm_mock::router(llm_cfg));
+            println!(
+                "✅ Mock LLM endpoint available at POST /v1/chat/completions, POST /v1/messages, GET /v1/models (OpenAI + Anthropic shapes, SSE streaming; mode={})",
+                mode
+            );
+        }
+
+        // Mount the mock MCP server (#913) so an agent acting as an MCP client can
+        // talk to MockForge over JSON-RPC. Opt-in via --mcp-mock.
+        if serve_args.mcp_mock {
+            http_app = http_app.merge(mockforge_http::mcp_mock::router(
+                mockforge_http::mcp_mock::McpMockConfig::default(),
+            ));
+            println!(
+                "✅ Mock MCP server available at POST /mcp (JSON-RPC: initialize, tools/list, tools/call, resources/list, prompts/list)"
+            );
+        }
+
+        // Mount the recorder API on the public HTTP app so callers can list,
+        // search, replay, and export captured requests on hosted-mock deployments
+        // (where the admin port 9080 isn't exposed). The recorder is opt-in via
+        // `config.observability.recorder.enabled`; if disabled or DB init fails
+        // the recorder middleware doesn't capture and these endpoints aren't
+        // mounted, mirroring the existing behaviour on the admin server.
+        //
+        // Storage caveat: today the recorder writes to a local SQLite file
+        // (`recorder_config.database_path`). Fly machines don't have a volume
+        // mounted by default, so on hosted mocks the capture log is wiped on
+        // every machine restart. Persistence is tracked in #234 and is a
+        // companion to the in-container log shipper (#232).
+        // Initialise the cloud log shipper (#232). When the orchestrator has
+        // wired `MOCKFORGE_LOG_INGEST_URL` + `MOCKFORGE_LOG_INGEST_TOKEN` into
+        // the Fly machine env, this builds an active shipper; otherwise it's a
+        // no-op handle that drops events silently. Layer the capture middleware
+        // onto `http_app` unconditionally — the cost when disabled is one
+        // function call per request.
+        let log_shipper_handle = mockforge_observability::log_shipper::from_env();
+        if log_shipper_handle.is_active() {
+            println!("✅ Cloud log shipper active — request logs forwarded to MockForge Cloud");
+        }
+        {
+            use axum::extract::ConnectInfo;
+            use axum::extract::Request as AxumRequest;
+            use axum::middleware::{from_fn, Next};
+            use axum::response::Response as AxumResponse;
+            use mockforge_observability::log_shipper::{LogShipperHandle, RequestLogEvent};
+            use std::net::SocketAddr;
+
+            async fn shipper_layer(
+                shipper: LogShipperHandle,
+                connect_info: Option<ConnectInfo<SocketAddr>>,
+                req: AxumRequest,
+                next: Next,
+            ) -> AxumResponse {
+                if !shipper.is_active() {
+                    return next.run(req).await;
+                }
+                let started = std::time::Instant::now();
+                let method = req.method().to_string();
+                let path = req.uri().path().to_string();
+                let user_agent = req
+                    .headers()
+                    .get("user-agent")
+                    .and_then(|h| h.to_str().ok())
+                    .map(|s| s.to_string());
+                let request_id = req
+                    .headers()
+                    .get("x-request-id")
+                    .and_then(|h| h.to_str().ok())
+                    .map(|s| s.to_string());
+                let bytes_in = req
+                    .headers()
+                    .get("content-length")
+                    .and_then(|h| h.to_str().ok())
+                    .and_then(|s| s.parse::<u64>().ok());
+                let client_ip = connect_info.map(|ci| ci.0.ip().to_string());
+
+                let response = next.run(req).await;
+                let status = response.status().as_u16();
+                let latency_ms = started.elapsed().as_millis().min(u32::MAX as u128) as u32;
+                let bytes_out = response
+                    .headers()
+                    .get("content-length")
+                    .and_then(|h| h.to_str().ok())
+                    .and_then(|s| s.parse::<u64>().ok());
+
+                shipper.enqueue(RequestLogEvent {
+                    timestamp: chrono::Utc::now(),
+                    method,
+                    path,
+                    status,
+                    latency_ms,
+                    matched_route: None,
+                    client_ip,
+                    user_agent,
+                    request_id,
+                    bytes_in,
+                    bytes_out,
+                });
+
+                response
+            }
+
+            let shipper_clone = log_shipper_handle.clone();
+            http_app = http_app.layer(from_fn(move |req: AxumRequest, next: Next| {
+                let shipper = shipper_clone.clone();
+                async move {
+                    let connect_info = req.extensions().get::<ConnectInfo<SocketAddr>>().cloned();
+                    shipper_layer(shipper, connect_info, req, next).await
+                }
+            }));
+        }
+
+        #[cfg(feature = "recorder")]
+        if let Some(ref recorder_config) = config.observability.recorder {
+            if recorder_config.enabled {
+                use axum::extract::ConnectInfo;
+                use axum::extract::Request as AxumRequest;
+                use axum::middleware::{from_fn, Next};
+                use std::net::SocketAddr;
+                use std::sync::Arc;
+
+                match mockforge_recorder::RecorderDatabase::new(&recorder_config.database_path)
+                    .await
+                {
+                    Ok(db) => {
+                        // Attach the cloud captures forwarder when running
+                        // on a hosted mock (#553, supersedes #234 part 2).
+                        // The forwarder POSTs each capture to the registry
+                        // ingest endpoint as it lands, treating cloud
+                        // Postgres as the durable source-of-truth. On
+                        // local / self-hosted runs the env vars are absent
+                        // and the handle is a no-op.
+                        let cloud_sync = mockforge_recorder::cloud_sync::from_env();
+                        if cloud_sync.is_active() {
+                            println!("✅ Recorder capture forwarder enabled — captures will forward to MockForge Cloud");
+                        }
+                        let recorder = Arc::new(
+                            mockforge_recorder::Recorder::new(db).with_cloud_sync(cloud_sync),
+                        );
+
+                        // Wire the recording middleware so HTTP requests actually
+                        // populate the recorder's database. Without this layer
+                        // the API mounts but `/api/recorder/requests` always
+                        // returns an empty list.
+                        let recorder_for_layer = recorder.clone();
+                        http_app = http_app.layer(from_fn(move |req: AxumRequest, next: Next| {
+                            let recorder = recorder_for_layer.clone();
+                            async move {
+                                let connect_info =
+                                    req.extensions().get::<ConnectInfo<SocketAddr>>().cloned();
+                                match connect_info {
+                                    Some(ci) => {
+                                        mockforge_recorder::recording_middleware(
+                                            recorder, ci, req, next,
+                                        )
+                                        .await
+                                    }
+                                    None => next.run(req).await,
+                                }
+                            }
+                        }));
+
+                        let recorder_router = mockforge_recorder::create_api_router(recorder, None);
+                        http_app = http_app.merge(recorder_router);
+                        println!(
+                            "✅ Recorder API available at /api/recorder/* (DB: {})",
+                            recorder_config.database_path
+                        );
                     }
                     Err(e) => {
-                        return Err(
-                            format!("Failed to merge multiple API version specs: {}", e).into()
+                        tracing::warn!(
+                            "Recorder DB init failed; /api/recorder routes will not be mounted: {}",
+                            e
                         );
                     }
                 }
             }
         }
-    } else {
-        config.http.openapi_spec.clone()
-    };
 
-    // Apply --base-path override: prefix all paths in the OpenAPI spec
-    let final_spec_path = if let Some(ref bp) = serve_args.base_path {
-        if let Some(ref spec) = final_spec_path {
-            let spec_content = tokio::fs::read_to_string(spec)
-                .await
-                .map_err(|e| format!("Failed to read spec for --base-path injection: {}", e))?;
-            let mut spec_json: serde_json::Value =
-                if spec.ends_with(".yaml") || spec.ends_with(".yml") {
-                    serde_yaml::from_str(&spec_content)
-                        .map_err(|e| format!("Failed to parse spec YAML: {}", e))?
-                } else {
-                    serde_json::from_str(&spec_content)
-                        .map_err(|e| format!("Failed to parse spec JSON: {}", e))?
-                };
+        // Store chaos_api_state for passing to admin server (Phase 3)
+        #[cfg(feature = "chaos")]
+        #[cfg(feature = "admin")]
+        let chaos_api_state_for_admin = Some(chaos_api_state.clone());
+        #[cfg(not(feature = "chaos"))]
+        #[cfg(feature = "admin")]
+        let chaos_api_state_for_admin = None;
 
-            // Normalize base path: ensure leading slash, strip trailing slash
-            let base = {
-                let mut p = bp.clone();
-                if !p.starts_with('/') {
-                    p.insert(0, '/');
-                }
-                p.trim_end_matches('/').to_string()
-            };
+        // Integrate chaos middleware if chaos is enabled
+        #[cfg(feature = "chaos")]
+        if chaos_config.enabled {
+            use axum::middleware::from_fn;
+            use mockforge_chaos::middleware::{chaos_middleware_with_state, ChaosMiddleware};
+            use std::sync::{Arc, OnceLock};
 
-            // Rewrite the paths object: prefix every path key with the base path
-            if let Some(paths_obj) = spec_json.get("paths").and_then(|v| v.as_object()).cloned() {
-                let mut new_paths = serde_json::Map::new();
-                for (path_key, path_value) in paths_obj {
-                    let prefixed = format!("{}{}", base, path_key);
-                    new_paths.insert(prefixed, path_value);
-                }
-                spec_json["paths"] = serde_json::Value::Object(new_paths);
-            }
+            // Create chaos middleware with shared config for hot-reload support
+            // Pass the shared config Arc from chaos_api_state
+            let chaos_middleware_instance =
+                Arc::new(ChaosMiddleware::new(chaos_config_arc.clone(), latency_tracker));
 
-            let modified_json = serde_json::to_string_pretty(&spec_json)
-                .map_err(|e| format!("Failed to serialize spec with base path: {}", e))?;
-            let temp_dir = std::env::temp_dir();
-            let temp_path =
-                temp_dir.join(format!("mockforge_basepath_spec_{}.json", uuid::Uuid::new_v4()));
-            std::fs::write(&temp_path, modified_json.as_bytes())
-                .map_err(|e| format!("Failed to write base-path spec: {}", e))?;
-
-            tracing::info!("Applied --base-path '{}': prefixed all spec paths with '{}'", bp, base);
-            Some(temp_path.to_string_lossy().to_string())
-        } else {
-            final_spec_path
-        }
-    } else {
-        final_spec_path
-    };
-
-    // Issue #929 — fail fast on a broken OpenAPI spec instead of silently
-    // starting with zero routes and reporting `healthy`. If a spec path is
-    // configured but the file is missing or unparsable, the HTTP builder used
-    // to log a single WARN and start "without OpenAPI integration", so every
-    // spec route 404'd while /health still said healthy — very hard to debug.
-    // We pre-flight the load here and refuse to start. Operators who genuinely
-    // want to boot without the spec can set MOCKFORGE_ALLOW_MISSING_SPEC=1.
-    if let Some(ref spec) = final_spec_path {
-        let allow_missing = std::env::var("MOCKFORGE_ALLOW_MISSING_SPEC")
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(false);
-        if let Err(e) = OpenApiSpec::from_file(spec).await {
-            if allow_missing {
-                tracing::error!(
-                    "OpenAPI spec '{}' failed to load: {}. Continuing without it \
-                     (MOCKFORGE_ALLOW_MISSING_SPEC is set) — spec routes will 404.",
-                    spec,
-                    e
-                );
-            } else {
-                return Err(format!(
-                    "OpenAPI spec '{spec}' is configured but failed to load: {e}\n\
-                     The server would otherwise start with no spec routes while /health \
-                     still reports healthy (issue #929). Fix the path/spec, or set \
-                     MOCKFORGE_ALLOW_MISSING_SPEC=1 to start anyway."
-                )
-                .into());
-            }
-        }
-    }
-
-    // Configure traffic shaping for HTTP middleware when enabled
-    let traffic_shaping_enabled = config.core.traffic_shaping_enabled;
-    let traffic_shaper = if traffic_shaping_enabled {
-        Some(mockforge_core::TrafficShaper::new(config.core.traffic_shaping.clone()))
-    } else {
-        None
-    };
-
-    // One live rule set, applied by the HTTP router and editable through
-    // the admin server's /__mockforge/overrides API.
-    let overrides = mockforge_core::SharedOverrides::load(config.overrides.clone()).await;
-
-    // Use standard router
-    let mut http_app = mockforge_http::build_router_with_chains_and_multi_tenant(
-        final_spec_path,
-        Some(validation_options),
-        None, // circling_config
-        multi_tenant_config,
-        Some(config.routes.clone()),
-        config.http.cors.clone(),
-        None, // ai_generator
-        smtp_registry.as_ref().cloned(),
-        mqtt_broker_for_http,
-        amqp_broker_for_http,
-        kafka_broker_for_http,
-        traffic_shaper,                        // traffic_shaper
-        traffic_shaping_enabled,               // traffic_shaping_enabled
-        Some(health_manager_for_router),       // health_manager
-        mockai.clone(),                        // mockai
-        Some(config.deceptive_deploy.clone()), // deceptive_deploy_config
-        None,                                  // proxy_config (ProxyConfig not in ServerConfig)
-        overrides.clone(),
-    )
-    .await;
-
-    // CLI-flag overrides for the #468 resilience patterns. The YAML
-    // `ChaosEngConfig` doesn't carry `circuit_breaker` / `bulkhead` fields
-    // today, so CLI is the only way to turn these on. `None` falls back to
-    // the chaos crate's defaults (which keep `enabled: false`), so the
-    // middleware stays a no-op until the operator opts in.
-    let cli_circuit_breaker =
-        serve_args
-            .circuit_breaker
-            .then_some(mockforge_chaos::config::CircuitBreakerConfig {
-                enabled: true,
-                failure_threshold: serve_args.circuit_breaker_failure_threshold,
-                success_threshold: serve_args.circuit_breaker_success_threshold,
-                timeout_ms: serve_args.circuit_breaker_timeout_ms,
-                failure_rate_threshold: serve_args.circuit_breaker_failure_rate,
-                half_open_max_requests: 3,
-                min_requests_for_rate: 10,
-                rolling_window_ms: 10_000,
-            });
-    let cli_bulkhead = serve_args.bulkhead.then_some(mockforge_chaos::config::BulkheadConfig {
-        enabled: true,
-        max_concurrent_requests: serve_args.bulkhead_max_concurrent,
-        max_queue_size: serve_args.bulkhead_max_queue,
-        queue_timeout_ms: serve_args.bulkhead_queue_timeout_ms,
-    });
-
-    // Integrate chaos engineering API router
-    // Convert from ServerConfig's ChaosEngConfig to mockforge-chaos's ChaosConfig
-    let chaos_config = if let Some(ref chaos_eng_config) = config.observability.chaos {
-        // Convert ChaosEngConfig to ChaosConfig
-        let chaos_cfg = ChaosConfig {
-            enabled: chaos_eng_config.enabled,
-            latency: chaos_eng_config.latency.as_ref().map(|l| {
-                mockforge_chaos::config::LatencyConfig {
-                    enabled: l.enabled,
-                    fixed_delay_ms: l.fixed_delay_ms,
-                    random_delay_range_ms: l.random_delay_range_ms,
-                    jitter_percent: l.jitter_percent,
-                    probability: l.probability,
-                }
-            }),
-            fault_injection: chaos_eng_config.fault_injection.as_ref().map(fault_config_to_chaos),
-            rate_limit: chaos_eng_config.rate_limit.as_ref().map(|r| {
-                mockforge_chaos::config::RateLimitConfig {
-                    enabled: r.enabled,
-                    requests_per_second: r.requests_per_second,
-                    burst_size: r.burst_size,
-                    per_ip: r.per_ip,
-                    per_endpoint: r.per_endpoint,
-                }
-            }),
-            traffic_shaping: chaos_eng_config.traffic_shaping.as_ref().map(|t| {
-                mockforge_chaos::config::TrafficShapingConfig {
-                    enabled: t.enabled,
-                    bandwidth_limit_bps: t.bandwidth_limit_bps,
-                    packet_loss_percent: t.packet_loss_percent,
-                    max_connections: 0,
-                    connection_timeout_ms: 30000,
-                }
-            }),
-            circuit_breaker: cli_circuit_breaker.clone(),
-            bulkhead: cli_bulkhead.clone(),
-        };
-        chaos_cfg
-    } else {
-        // Default chaos config if not configured — still honour CLI flags
-        // for the resilience patterns so `--circuit-breaker` works without
-        // a chaos YAML.
-        ChaosConfig {
-            circuit_breaker: cli_circuit_breaker.clone(),
-            bulkhead: cli_bulkhead.clone(),
-            ..ChaosConfig::default()
-        }
-    };
-
-    // Create and merge chaos API router
-    // Pass MockAI instance if available for dynamic error message generation
-    // Note: Temporarily passing None to avoid type mismatch between different versions of MockAI
-    if mockai.is_some() && chaos_config.enabled {
-        tracing::warn!(
-            "Chaos API is running without MockAI-assisted fault generation due temporary cross-crate type compatibility limits"
-        );
-    }
-    let (chaos_router, chaos_config_arc, latency_tracker, chaos_api_state) =
-        create_chaos_api_router(chaos_config.clone(), None);
-    http_app = http_app.merge(chaos_router);
-    println!("✅ Chaos Engineering API available at /api/chaos/*");
-
-    // Resilience middleware + dashboard state (#468 Phase 2 + CLI follow-up).
-    //
-    // We hand the same `Option<...Config>` values to both the chaos config
-    // (above) and the resilience state builder so `/api/chaos/*` and
-    // `/api/resilience/*` report identical settings. When both CLI flags
-    // are unset, the builder falls back to the disabled defaults and the
-    // middleware short-circuits per-request — effectively free.
-    let (resilience_mw_state, resilience_api_state) =
-        mockforge_chaos::resilience_state_from_configs(
-            cli_circuit_breaker.clone(),
-            cli_bulkhead.clone(),
-        );
-
-    // Merge WebSocket router onto the HTTP app so `/ws` and `/ws/{*path}` are
-    // reachable on the same port as HTTP. This is required for hosted mocks,
-    // where Fly.io only exposes port 3000. The separate WS listener below
-    // (config.websocket.port) continues to run for local-dev convenience; set
-    // MOCKFORGE_WS_PORT=0 to skip it.
-    #[cfg(feature = "ws")]
-    {
-        http_app = http_app.merge(mockforge_ws::router());
-        println!("✅ WebSocket endpoint available at /ws (HTTP upgrade)");
-    }
-
-    // Mount the GraphQL router on the HTTP app at /graphql so it's reachable
-    // on the same port as HTTP. Uses the library's default schema generator;
-    // the schema_path config hook is wired separately.
-    #[cfg(feature = "graphql")]
-    {
-        match mockforge_graphql::create_router(None).await {
-            Ok(gql_router) => {
-                http_app = http_app.merge(gql_router);
-                println!(
-                    "✅ GraphQL endpoint available at /graphql (POST queries, GET playground)"
-                );
-            }
-            Err(e) => {
-                tracing::warn!("Failed to build GraphQL router; skipping: {}", e);
-            }
-        }
-    }
-
-    // Mount the mock LLM endpoint (#912) so an agent can point its base URL
-    // at MockForge and get OpenAI/Anthropic-shaped completions (with SSE
-    // streaming) for scale / offline / failure testing. Opt-in via --llm-mock.
-    // #915 adds proxy/record/replay modes over a real upstream.
-    if serve_args.llm_mock {
-        let mode = serve_args
-            .llm_mock_mode
-            .parse::<mockforge_http::llm_mock::LlmMockMode>()
-            .unwrap_or_else(|e| {
-                tracing::warn!(target: "mockforge::serve", "{e}; defaulting to mock");
-                mockforge_http::llm_mock::LlmMockMode::Mock
-            });
-        // API key: explicit flag wins, else fall back to the conventional env
-        // vars so `proxy`/`record` against a real provider needs no secret on
-        // the command line.
-        let api_key = serve_args.llm_mock_api_key.clone().or_else(|| {
-            std::env::var("OPENAI_API_KEY")
-                .ok()
-                .or_else(|| std::env::var("ANTHROPIC_API_KEY").ok())
-        });
-        let llm_cfg = mockforge_http::llm_mock::LlmMockConfig {
-            mode,
-            upstream_base_url: serve_args.llm_mock_upstream.clone(),
-            upstream_api_key: api_key,
-            cassette_path: serve_args.llm_mock_cassette.clone(),
-            ..Default::default()
-        };
-        http_app = http_app.merge(mockforge_http::llm_mock::router(llm_cfg));
-        println!(
-            "✅ Mock LLM endpoint available at POST /v1/chat/completions, POST /v1/messages, GET /v1/models (OpenAI + Anthropic shapes, SSE streaming; mode={})",
-            mode
-        );
-    }
-
-    // Mount the mock MCP server (#913) so an agent acting as an MCP client can
-    // talk to MockForge over JSON-RPC. Opt-in via --mcp-mock.
-    if serve_args.mcp_mock {
-        http_app = http_app.merge(mockforge_http::mcp_mock::router(
-            mockforge_http::mcp_mock::McpMockConfig::default(),
-        ));
-        println!(
-            "✅ Mock MCP server available at POST /mcp (JSON-RPC: initialize, tools/list, tools/call, resources/list, prompts/list)"
-        );
-    }
-
-    // Mount the recorder API on the public HTTP app so callers can list,
-    // search, replay, and export captured requests on hosted-mock deployments
-    // (where the admin port 9080 isn't exposed). The recorder is opt-in via
-    // `config.observability.recorder.enabled`; if disabled or DB init fails
-    // the recorder middleware doesn't capture and these endpoints aren't
-    // mounted, mirroring the existing behaviour on the admin server.
-    //
-    // Storage caveat: today the recorder writes to a local SQLite file
-    // (`recorder_config.database_path`). Fly machines don't have a volume
-    // mounted by default, so on hosted mocks the capture log is wiped on
-    // every machine restart. Persistence is tracked in #234 and is a
-    // companion to the in-container log shipper (#232).
-    // Initialise the cloud log shipper (#232). When the orchestrator has
-    // wired `MOCKFORGE_LOG_INGEST_URL` + `MOCKFORGE_LOG_INGEST_TOKEN` into
-    // the Fly machine env, this builds an active shipper; otherwise it's a
-    // no-op handle that drops events silently. Layer the capture middleware
-    // onto `http_app` unconditionally — the cost when disabled is one
-    // function call per request.
-    let log_shipper_handle = mockforge_observability::log_shipper::from_env();
-    if log_shipper_handle.is_active() {
-        println!("✅ Cloud log shipper active — request logs forwarded to MockForge Cloud");
-    }
-    {
-        use axum::extract::ConnectInfo;
-        use axum::extract::Request as AxumRequest;
-        use axum::middleware::{from_fn, Next};
-        use axum::response::Response as AxumResponse;
-        use mockforge_observability::log_shipper::{LogShipperHandle, RequestLogEvent};
-        use std::net::SocketAddr;
-
-        async fn shipper_layer(
-            shipper: LogShipperHandle,
-            connect_info: Option<ConnectInfo<SocketAddr>>,
-            req: AxumRequest,
-            next: Next,
-        ) -> AxumResponse {
-            if !shipper.is_active() {
-                return next.run(req).await;
-            }
-            let started = std::time::Instant::now();
-            let method = req.method().to_string();
-            let path = req.uri().path().to_string();
-            let user_agent = req
-                .headers()
-                .get("user-agent")
-                .and_then(|h| h.to_str().ok())
-                .map(|s| s.to_string());
-            let request_id = req
-                .headers()
-                .get("x-request-id")
-                .and_then(|h| h.to_str().ok())
-                .map(|s| s.to_string());
-            let bytes_in = req
-                .headers()
-                .get("content-length")
-                .and_then(|h| h.to_str().ok())
-                .and_then(|s| s.parse::<u64>().ok());
-            let client_ip = connect_info.map(|ci| ci.0.ip().to_string());
-
-            let response = next.run(req).await;
-            let status = response.status().as_u16();
-            let latency_ms = started.elapsed().as_millis().min(u32::MAX as u128) as u32;
-            let bytes_out = response
-                .headers()
-                .get("content-length")
-                .and_then(|h| h.to_str().ok())
-                .and_then(|s| s.parse::<u64>().ok());
-
-            shipper.enqueue(RequestLogEvent {
-                timestamp: chrono::Utc::now(),
-                method,
-                path,
-                status,
-                latency_ms,
-                matched_route: None,
-                client_ip,
-                user_agent,
-                request_id,
-                bytes_in,
-                bytes_out,
+            // Initialize middleware injectors from actual config (async, but we spawn it)
+            let middleware_init = chaos_middleware_instance.clone();
+            tokio::spawn(async move {
+                middleware_init.init_from_config().await;
             });
 
-            response
-        }
+            // Store the middleware in a static OnceLock to avoid Send issues with closures
+            // This middleware will record latencies for the latency graph
+            static CHAOS_MIDDLEWARE: OnceLock<Arc<ChaosMiddleware>> = OnceLock::new();
+            let _ = CHAOS_MIDDLEWARE.set(chaos_middleware_instance.clone());
 
-        let shipper_clone = log_shipper_handle.clone();
-        http_app = http_app.layer(from_fn(move |req: AxumRequest, next: Next| {
-            let shipper = shipper_clone.clone();
-            async move {
-                let connect_info = req.extensions().get::<ConnectInfo<SocketAddr>>().cloned();
-                shipper_layer(shipper, connect_info, req, next).await
-            }
-        }));
-    }
-
-    #[cfg(feature = "recorder")]
-    if let Some(ref recorder_config) = config.observability.recorder {
-        if recorder_config.enabled {
-            use axum::extract::ConnectInfo;
-            use axum::extract::Request as AxumRequest;
-            use axum::middleware::{from_fn, Next};
-            use std::net::SocketAddr;
-            use std::sync::Arc;
-
-            match mockforge_recorder::RecorderDatabase::new(&recorder_config.database_path).await {
-                Ok(db) => {
-                    // Attach the cloud captures forwarder when running
-                    // on a hosted mock (#553, supersedes #234 part 2).
-                    // The forwarder POSTs each capture to the registry
-                    // ingest endpoint as it lands, treating cloud
-                    // Postgres as the durable source-of-truth. On
-                    // local / self-hosted runs the env vars are absent
-                    // and the handle is a no-op.
-                    let cloud_sync = mockforge_recorder::cloud_sync::from_env();
-                    if cloud_sync.is_active() {
-                        println!("✅ Recorder capture forwarder enabled — captures will forward to MockForge Cloud");
+            // Use a closure that accesses the static - this is Send-safe because
+            // the static is accessed inside the async block, not captured in the closure.
+            // The RNG used by the middleware is thread-local and created fresh each time,
+            // so it's safe even though the compiler can't prove it statically.
+            // SAFETY: rand::rng() uses thread-local storage, so each thread gets its own RNG instance.
+            // The RNG is created fresh on each call and never sent across threads, so this is Send-safe.
+            // We use a wrapper to assert Send safety for the future.
+            struct SendSafeWrapper<F>(F);
+            unsafe impl<F> Send for SendSafeWrapper<F> {}
+            impl<F: std::future::Future<Output = axum::response::Response>> std::future::Future
+                for SendSafeWrapper<F>
+            {
+                type Output = axum::response::Response;
+                fn poll(
+                    self: std::pin::Pin<&mut Self>,
+                    cx: &mut std::task::Context<'_>,
+                ) -> std::task::Poll<Self::Output> {
+                    unsafe {
+                        std::pin::Pin::new_unchecked(&mut self.get_unchecked_mut().0).poll(cx)
                     }
-                    let recorder =
-                        Arc::new(mockforge_recorder::Recorder::new(db).with_cloud_sync(cloud_sync));
+                }
+            }
 
-                    // Wire the recording middleware so HTTP requests actually
-                    // populate the recorder's database. Without this layer
-                    // the API mounts but `/api/recorder/requests` always
-                    // returns an empty list.
-                    let recorder_for_layer = recorder.clone();
-                    http_app = http_app.layer(from_fn(move |req: AxumRequest, next: Next| {
-                        let recorder = recorder_for_layer.clone();
-                        async move {
-                            let connect_info =
-                                req.extensions().get::<ConnectInfo<SocketAddr>>().cloned();
-                            match connect_info {
-                                Some(ci) => {
-                                    mockforge_recorder::recording_middleware(
-                                        recorder, ci, req, next,
-                                    )
-                                    .await
-                                }
-                                None => next.run(req).await,
-                            }
+            http_app = http_app.layer(from_fn(
+                |req: axum::extract::Request, next: axum::middleware::Next| {
+                    SendSafeWrapper(async move {
+                        if let Some(state) = CHAOS_MIDDLEWARE.get() {
+                            chaos_middleware_with_state(state.clone(), req, next).await
+                        } else {
+                            // Chaos middleware not initialized, pass through
+                            next.run(req).await
                         }
-                    }));
-
-                    let recorder_router = mockforge_recorder::create_api_router(recorder, None);
-                    http_app = http_app.merge(recorder_router);
-                    println!(
-                        "✅ Recorder API available at /api/recorder/* (DB: {})",
-                        recorder_config.database_path
-                    );
-                }
-                Err(e) => {
-                    tracing::warn!(
-                        "Recorder DB init failed; /api/recorder routes will not be mounted: {}",
-                        e
-                    );
-                }
-            }
+                    })
+                },
+            ));
+            println!("✅ Chaos middleware integrated - latency recording enabled");
         }
-    }
 
-    // Store chaos_api_state for passing to admin server (Phase 3)
-    let chaos_api_state_for_admin = chaos_api_state.clone();
-
-    // Integrate chaos middleware if chaos is enabled
-    if chaos_config.enabled {
-        use axum::middleware::from_fn;
-        use mockforge_chaos::middleware::{chaos_middleware_with_state, ChaosMiddleware};
-        use std::sync::{Arc, OnceLock};
-
-        // Create chaos middleware with shared config for hot-reload support
-        // Pass the shared config Arc from chaos_api_state
-        let chaos_middleware_instance =
-            Arc::new(ChaosMiddleware::new(chaos_config_arc.clone(), latency_tracker));
-
-        // Initialize middleware injectors from actual config (async, but we spawn it)
-        let middleware_init = chaos_middleware_instance.clone();
-        tokio::spawn(async move {
-            middleware_init.init_from_config().await;
-        });
-
-        // Store the middleware in a static OnceLock to avoid Send issues with closures
-        // This middleware will record latencies for the latency graph
-        static CHAOS_MIDDLEWARE: OnceLock<Arc<ChaosMiddleware>> = OnceLock::new();
-        let _ = CHAOS_MIDDLEWARE.set(chaos_middleware_instance.clone());
-
-        // Use a closure that accesses the static - this is Send-safe because
-        // the static is accessed inside the async block, not captured in the closure.
-        // The RNG used by the middleware is thread-local and created fresh each time,
-        // so it's safe even though the compiler can't prove it statically.
-        // SAFETY: rand::rng() uses thread-local storage, so each thread gets its own RNG instance.
-        // The RNG is created fresh on each call and never sent across threads, so this is Send-safe.
-        // We use a wrapper to assert Send safety for the future.
-        struct SendSafeWrapper<F>(F);
-        unsafe impl<F> Send for SendSafeWrapper<F> {}
-        impl<F: std::future::Future<Output = axum::response::Response>> std::future::Future
-            for SendSafeWrapper<F>
+        // Layer the HTTP metrics middleware as the outermost wrapper so every
+        // response — including chaos-mutated ones — bumps the rate-counter
+        // snapshot the dashboard's TPS / RPS200 sampler reads from. Without
+        // this layer those gauges stay flat at 0 even under heavy traffic
+        // (issue #79: `record_response` was wired but never on the request
+        // path).
         {
-            type Output = axum::response::Response;
-            fn poll(
-                self: std::pin::Pin<&mut Self>,
-                cx: &mut std::task::Context<'_>,
-            ) -> std::task::Poll<Self::Output> {
-                unsafe { std::pin::Pin::new_unchecked(&mut self.get_unchecked_mut().0).poll(cx) }
-            }
+            use axum::middleware::from_fn;
+            http_app = http_app.layer(from_fn(mockforge_http::collect_http_metrics));
         }
 
-        http_app =
-            http_app.layer(from_fn(|req: axum::extract::Request, next: axum::middleware::Next| {
-                SendSafeWrapper(async move {
-                    if let Some(state) = CHAOS_MIDDLEWARE.get() {
-                        chaos_middleware_with_state(state.clone(), req, next).await
-                    } else {
-                        // Chaos middleware not initialized, pass through
-                        next.run(req).await
-                    }
+        // Layer the resilience middleware (#468 Phase 2). Cheap when the
+        // managers are disabled (the default) — every request shortcuts
+        // through `allow_request` / `try_acquire` without taking either
+        // lock for long. When the operator turns the patterns on (planned
+        // CLI wiring), this layer is where each request's outcome gets
+        // attributed back to the per-endpoint circuit breaker.
+        #[cfg(feature = "chaos")]
+        {
+            use axum::middleware::from_fn_with_state;
+            http_app = http_app.layer(from_fn_with_state(
+                resilience_mw_state.clone(),
+                mockforge_chaos::resilience_middleware,
+            ));
+        }
+
+        #[cfg(feature = "chaos")]
+        #[cfg(feature = "admin")]
+        let resilience_api_state = Some(resilience_api_state);
+        #[cfg(not(feature = "chaos"))]
+        #[cfg(feature = "admin")]
+        let resilience_api_state = None;
+
+        // Outermost, after every router is merged: on hosted mocks, control-plane
+        // writes need the deployment's management token (#1085).
+        let http_app = mockforge_http::management_auth::gate_control_plane_writes(http_app);
+
+        #[cfg(feature = "chaos")]
+        let chaos_listener_cfg = if chaos_config.enabled
+            && chaos_config
+                .fault_injection
+                .as_ref()
+                .map(|f| {
+                    f.enabled
+                        && f.connection_errors
+                        && !matches!(
+                            f.connection_error_kind,
+                            mockforge_chaos::ConnectionErrorKind::Http503
+                        )
                 })
-            }));
-        println!("✅ Chaos middleware integrated - latency recording enabled");
-    }
+                .unwrap_or(false)
+        {
+            Some(chaos_config_arc.clone())
+        } else {
+            None
+        };
+        #[cfg(not(feature = "chaos"))]
+        let chaos_listener_cfg = None;
 
-    // Layer the HTTP metrics middleware as the outermost wrapper so every
-    // response — including chaos-mutated ones — bumps the rate-counter
-    // snapshot the dashboard's TPS / RPS200 sampler reads from. Without
-    // this layer those gauges stay flat at 0 even under heavy traffic
-    // (issue #79: `record_response` was wired but never on the request
-    // path).
-    {
-        use axum::middleware::from_fn;
-        http_app = http_app.layer(from_fn(mockforge_http::collect_http_metrics));
-    }
-
-    // Layer the resilience middleware (#468 Phase 2). Cheap when the
-    // managers are disabled (the default) — every request shortcuts
-    // through `allow_request` / `try_acquire` without taking either
-    // lock for long. When the operator turns the patterns on (planned
-    // CLI wiring), this layer is where each request's outcome gets
-    // attributed back to the per-endpoint circuit breaker.
-    {
-        use axum::middleware::from_fn_with_state;
-        http_app = http_app.layer(from_fn_with_state(
-            resilience_mw_state.clone(),
-            mockforge_chaos::resilience_middleware,
-        ));
-    }
-
-    // Outermost, after every router is merged: on hosted mocks, control-plane
-    // writes need the deployment's management token (#1085).
-    let http_app = mockforge_http::management_auth::gate_control_plane_writes(http_app);
+        #[cfg(feature = "admin")]
+        {
+            (
+                http_app,
+                chaos_api_state_for_admin,
+                resilience_api_state,
+                mockai,
+                overrides,
+                chaos_listener_cfg,
+            )
+        }
+        #[cfg(not(feature = "admin"))]
+        {
+            #[cfg(feature = "chaos")]
+            let _ = &resilience_api_state;
+            (http_app, chaos_listener_cfg)
+        }
+    };
+    #[cfg(all(feature = "http", feature = "admin"))]
+    let (
+        http_app,
+        chaos_api_state_for_admin,
+        resilience_api_state,
+        mockai,
+        overrides,
+        chaos_listener_cfg,
+    ) = http_setup;
+    #[cfg(all(feature = "http", not(feature = "admin")))]
+    let (http_app, chaos_listener_cfg) = http_setup;
 
     // Note: OData URI rewrite is applied at the service level in serve_router_with_tls()
 
+    #[cfg(feature = "http")]
     println!(
         "✅ HTTP server configured with health checks at http://localhost:{}/health (live, ready, startup)",
         config.http.port
@@ -2351,7 +2506,9 @@ pub async fn handle_serve(
     if !config.routes.is_empty() {
         println!("✅ Loaded {} custom routes", config.routes.len());
     }
+    #[cfg(feature = "ws")]
     println!("✅ WebSocket server configured at ws://localhost:{}/ws", config.websocket.port);
+    #[cfg(feature = "grpc")]
     println!("✅ gRPC server configured at localhost:{}", config.grpc.port);
     if config.admin.enabled {
         println!("✅ Admin UI configured at http://localhost:{}", config.admin.port);
@@ -2447,152 +2604,154 @@ pub async fn handle_serve(
     use tokio_util::sync::CancellationToken;
     let shutdown_token = CancellationToken::new();
 
-    // Set up graceful shutdown integration with health manager
-    let health_manager_for_shutdown = health_manager.clone();
-    let shutdown_token_for_health = shutdown_token.clone();
-    tokio::spawn(async move {
-        shutdown_token_for_health.cancelled().await;
-        health_manager_for_shutdown.trigger_shutdown().await;
-    });
-
-    // Start HTTP server
-    let http_port = config.http.port;
-
-    // Build TLS config: CLI flags take precedence over config file
-    let mut http_tls_config = config.http.tls.clone();
-
-    // Override with CLI flags if provided
-    if serve_args.tls_enabled || serve_args.https_port.is_some() {
-        http_tls_config = Some(mockforge_core::config::HttpTlsConfig {
-            enabled: true,
-            cert_file: serve_args
-                .tls_cert
-                .as_ref()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|| {
-                    http_tls_config.as_ref().map(|t| t.cert_file.clone()).unwrap_or_default()
-                }),
-            key_file: serve_args
-                .tls_key
-                .as_ref()
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_else(|| {
-                    http_tls_config.as_ref().map(|t| t.key_file.clone()).unwrap_or_default()
-                }),
-            ca_file: serve_args
-                .tls_ca
-                .as_ref()
-                .map(|p| p.to_string_lossy().to_string())
-                .or_else(|| http_tls_config.as_ref().and_then(|t| t.ca_file.clone())),
-            min_version: serve_args.tls_min_version.clone(),
-            cipher_suites: http_tls_config
-                .as_ref()
-                .map(|t| t.cipher_suites.clone())
-                .unwrap_or_default(),
-            require_client_cert: serve_args.mtls == "required",
-            mtls_mode: serve_args.mtls.clone(),
+    #[cfg(feature = "http")]
+    {
+        // Set up graceful shutdown integration with health manager
+        let health_manager_for_shutdown = health_manager.clone();
+        let shutdown_token_for_health = shutdown_token.clone();
+        tokio::spawn(async move {
+            shutdown_token_for_health.cancelled().await;
+            health_manager_for_shutdown.trigger_shutdown().await;
         });
-    } else if let Some(ref mut tls) = http_tls_config {
-        // Update mtls_mode from CLI if provided, even if TLS wasn't enabled via CLI
-        if serve_args.mtls != "off" {
-            tls.mtls_mode = serve_args.mtls.clone();
-            if serve_args.mtls == "required" {
-                tls.require_client_cert = true;
-            }
-        }
     }
 
-    let http_tls_config_final = http_tls_config.clone();
-    let http_shutdown = shutdown_token.clone();
-    let (http_bound_tx, http_bound_rx) = tokio::sync::oneshot::channel::<u16>();
-    let http_tls_for_log = http_tls_config_final.clone();
-    tokio::spawn(async move {
-        if let Ok(actual_port) = http_bound_rx.await {
-            match http_tls_for_log.as_ref() {
-                Some(tls) if tls.enabled => {
-                    println!("🔒 HTTPS server listening on https://localhost:{}", actual_port);
-                }
-                _ => {
-                    println!("📡 HTTP server listening on http://localhost:{}", actual_port);
+    #[cfg(feature = "http")]
+    let (http_handle, https_handle) = {
+        // Start HTTP server
+        let http_port = config.http.port;
+
+        // Build TLS config: CLI flags take precedence over config file
+        let mut http_tls_config = config.http.tls.clone();
+
+        // Override with CLI flags if provided
+        if serve_args.tls_enabled || serve_args.https_port.is_some() {
+            http_tls_config = Some(mockforge_core::config::HttpTlsConfig {
+                enabled: true,
+                cert_file: serve_args
+                    .tls_cert
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|| {
+                        http_tls_config.as_ref().map(|t| t.cert_file.clone()).unwrap_or_default()
+                    }),
+                key_file: serve_args
+                    .tls_key
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .unwrap_or_else(|| {
+                        http_tls_config.as_ref().map(|t| t.key_file.clone()).unwrap_or_default()
+                    }),
+                ca_file: serve_args
+                    .tls_ca
+                    .as_ref()
+                    .map(|p| p.to_string_lossy().to_string())
+                    .or_else(|| http_tls_config.as_ref().and_then(|t| t.ca_file.clone())),
+                min_version: serve_args.tls_min_version.clone(),
+                cipher_suites: http_tls_config
+                    .as_ref()
+                    .map(|t| t.cipher_suites.clone())
+                    .unwrap_or_default(),
+                require_client_cert: serve_args.mtls == "required",
+                mtls_mode: serve_args.mtls.clone(),
+            });
+        } else if let Some(ref mut tls) = http_tls_config {
+            // Update mtls_mode from CLI if provided, even if TLS wasn't enabled via CLI
+            if serve_args.mtls != "off" {
+                tls.mtls_mode = serve_args.mtls.clone();
+                if serve_args.mtls == "required" {
+                    tls.require_client_cert = true;
                 }
             }
         }
-    });
-    // If chaos is enabled AND uses TCP-level connection errors, wrap the HTTP
-    // listener so RST / FIN faults are surfaced before axum/hyper see the socket.
-    // For HTTP-503 mode (or chaos disabled), use the plain serve path so existing
-    // `ConnectInfo<SocketAddr>` handlers keep working.
-    let chaos_listener_cfg = if chaos_config.enabled
-        && chaos_config
-            .fault_injection
-            .as_ref()
-            .map(|f| {
-                f.enabled
-                    && f.connection_errors
-                    && !matches!(
-                        f.connection_error_kind,
-                        mockforge_chaos::ConnectionErrorKind::Http503
-                    )
-            })
-            .unwrap_or(false)
-    {
-        Some(chaos_config_arc.clone())
-    } else {
-        None
-    };
-    // Dual HTTP+HTTPS mode: when --https-port is set, the HTTP listener on
-    // --http-port is forced to plain HTTP and a second TLS listener is
-    // spawned on --https-port. Mirrors how nginx/apache let you serve the
-    // same routes on 80 and 443 simultaneously.
-    let dual_https_port = serve_args.https_port;
-    let plain_http_tls_config = if dual_https_port.is_some() {
-        None
-    } else {
-        http_tls_config_final.clone()
-    };
-    // Clones for the parallel HTTPS listener (taken before the HTTP spawn
-    // moves the originals). `Router` and `Option<Arc<RwLock<ChaosConfig>>>`
-    // are both cheap to clone.
-    let http_app_clone_for_dual = http_app.clone();
-    let chaos_listener_cfg_for_dual = chaos_listener_cfg.clone();
-    let mut http_handle = tokio::spawn(async move {
-        mockforge_http::serve_router_with_tls_notify_chaos_shutdown(
-            http_port,
-            http_app,
-            plain_http_tls_config,
-            Some(http_bound_tx),
-            chaos_listener_cfg,
-            http_shutdown.cancelled_owned(),
-        )
-        .await
-        .map_err(|e| format!("HTTP server error: {}", e))
-    });
 
-    // Spawn the parallel HTTPS listener on --https-port if requested.
-    // Reuses the same router (cloned) and the TLS config built above.
-    let mut https_handle = if let Some(https_port) = dual_https_port {
-        // --https-port also constructs the enabled certificate configuration
-        // above, while the primary listener stays plain HTTP in dual mode.
-        let https_tls = http_tls_config_final.clone();
-        let https_app = http_app_clone_for_dual.clone();
-        let https_shutdown = shutdown_token.clone();
-        let chaos_listener_cfg_https = chaos_listener_cfg_for_dual.clone();
-        Some(tokio::spawn(async move {
-            println!("🔒 HTTPS server listening on https://localhost:{}", https_port);
+        let http_tls_config_final = http_tls_config.clone();
+        let http_shutdown = shutdown_token.clone();
+        let (http_bound_tx, http_bound_rx) = tokio::sync::oneshot::channel::<u16>();
+        let http_tls_for_log = http_tls_config_final.clone();
+        tokio::spawn(async move {
+            if let Ok(actual_port) = http_bound_rx.await {
+                match http_tls_for_log.as_ref() {
+                    Some(tls) if tls.enabled => {
+                        println!("🔒 HTTPS server listening on https://localhost:{}", actual_port);
+                    }
+                    _ => {
+                        println!("📡 HTTP server listening on http://localhost:{}", actual_port);
+                    }
+                }
+            }
+        });
+        // If chaos is enabled AND uses TCP-level connection errors, wrap the HTTP
+        // listener so RST / FIN faults are surfaced before axum/hyper see the socket.
+        // For HTTP-503 mode (or chaos disabled), use the plain serve path so existing
+        // `ConnectInfo<SocketAddr>` handlers keep working.
+        // Dual HTTP+HTTPS mode: when --https-port is set, the HTTP listener on
+        // --http-port is forced to plain HTTP and a second TLS listener is
+        // spawned on --https-port. Mirrors how nginx/apache let you serve the
+        // same routes on 80 and 443 simultaneously.
+        let dual_https_port = serve_args.https_port;
+        let plain_http_tls_config = if dual_https_port.is_some() {
+            None
+        } else {
+            http_tls_config_final.clone()
+        };
+        // Clones for the parallel HTTPS listener (taken before the HTTP spawn
+        // moves the originals). `Router` and `Option<Arc<RwLock<ChaosConfig>>>`
+        // are both cheap to clone.
+        let http_app_clone_for_dual = http_app.clone();
+        let chaos_listener_cfg_for_dual = chaos_listener_cfg.clone();
+        let http_handle = tokio::spawn(async move {
             mockforge_http::serve_router_with_tls_notify_chaos_shutdown(
-                https_port,
-                https_app,
-                https_tls,
-                None,
-                chaos_listener_cfg_https,
-                https_shutdown.cancelled_owned(),
+                http_port,
+                http_app,
+                plain_http_tls_config,
+                Some(http_bound_tx),
+                chaos_listener_cfg,
+                http_shutdown.cancelled_owned(),
             )
             .await
-            .map_err(|e| format!("HTTPS server error: {}", e))
-        }))
-    } else {
-        None
+            .map_err(|e| format!("HTTP server error: {}", e))
+        });
+
+        // Spawn the parallel HTTPS listener on --https-port if requested.
+        // Reuses the same router (cloned) and the TLS config built above.
+        let https_handle = if let Some(https_port) = dual_https_port {
+            // --https-port also constructs the enabled certificate configuration
+            // above, while the primary listener stays plain HTTP in dual mode.
+            let https_tls = http_tls_config_final.clone();
+            let https_app = http_app_clone_for_dual.clone();
+            let https_shutdown = shutdown_token.clone();
+            let chaos_listener_cfg_https = chaos_listener_cfg_for_dual.clone();
+            Some(tokio::spawn(async move {
+                println!("🔒 HTTPS server listening on https://localhost:{}", https_port);
+                mockforge_http::serve_router_with_tls_notify_chaos_shutdown(
+                    https_port,
+                    https_app,
+                    https_tls,
+                    None,
+                    chaos_listener_cfg_https,
+                    https_shutdown.cancelled_owned(),
+                )
+                .await
+                .map_err(|e| format!("HTTPS server error: {}", e))
+            }))
+        } else {
+            None
+        };
+
+        (http_handle, https_handle)
     };
+    #[cfg(not(feature = "http"))]
+    let http_handle = {
+        let shutdown = shutdown_token.clone();
+        tokio::spawn(async move {
+            shutdown.cancelled().await;
+            Ok::<(), String>(())
+        })
+    };
+    #[cfg(not(feature = "http"))]
+    let https_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
+    #[cfg(feature = "tunnel")]
+    let http_port = config.http.port;
 
     // Start WebSocket server
     let ws_handle: tokio::task::JoinHandle<Result<(), String>> = {
@@ -2783,6 +2942,7 @@ pub async fn handle_serve(
     let _mqtt_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
     // Auto-start tunnel if deceptive deploy is enabled with auto_tunnel
+    #[cfg(feature = "tunnel")]
     let _tunnel_handle = if config.deceptive_deploy.enabled && config.deceptive_deploy.auto_tunnel {
         use mockforge_tunnel::{TunnelConfig, TunnelManager, TunnelProvider};
 
@@ -3022,110 +3182,129 @@ pub async fn handle_serve(
     #[cfg(not(feature = "tcp"))]
     let _tcp_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
-    // Create latency injector if latency is enabled (for hot-reload support)
-    use mockforge_foundation::latency::{FaultConfig, LatencyInjector};
-    use tokio::sync::RwLock;
+    #[cfg(feature = "admin")]
+    let admin_handle = {
+        // Create latency injector if latency is enabled (for hot-reload support)
+        use mockforge_foundation::latency::{FaultConfig, LatencyInjector};
+        use tokio::sync::RwLock;
 
-    let latency_injector_for_admin = if config.core.latency_enabled {
-        let latency_profile = config.core.default_latency.clone();
-        // Create a basic fault config (can be enhanced later)
-        let fault_config = FaultConfig::default();
-        Some(Arc::new(RwLock::new(LatencyInjector::new(latency_profile, fault_config))))
-    } else {
-        None
-    };
-
-    // Create recorder instance if configured
-    let recorder_for_admin: Option<Arc<mockforge_recorder::Recorder>> =
-        if let Some(ref recorder_config) = config.observability.recorder {
-            if recorder_config.enabled {
-                match mockforge_recorder::RecorderDatabase::new(&recorder_config.database_path)
-                    .await
-                {
-                    Ok(db) => {
-                        tracing::info!(
-                            "Admin: recorder initialized from {}",
-                            recorder_config.database_path
-                        );
-                        Some(Arc::new(mockforge_recorder::Recorder::new(db)))
-                    }
-                    Err(e) => {
-                        tracing::warn!("Admin: failed to initialize recorder database: {}", e);
-                        None
-                    }
-                }
-            } else {
-                None
-            }
+        let latency_injector_for_admin = if config.core.latency_enabled {
+            let latency_profile = config.core.default_latency.clone();
+            // Create a basic fault config (can be enhanced later)
+            let fault_config = FaultConfig::default();
+            Some(Arc::new(RwLock::new(LatencyInjector::new(latency_profile, fault_config))))
         } else {
             None
         };
 
-    // Create VBR engine with in-memory backend (lightweight, no disk side-effects)
-    let vbr_engine_for_admin: Option<Arc<mockforge_vbr::VbrEngine>> = {
-        let vbr_config = mockforge_vbr::VbrConfig::new()
-            .with_storage_backend(mockforge_vbr::StorageBackend::Memory);
-        match mockforge_vbr::VbrEngine::new(vbr_config).await {
-            Ok(engine) => {
-                tracing::info!("Admin: VBR engine initialized (in-memory)");
-                Some(Arc::new(engine))
-            }
-            Err(e) => {
-                tracing::warn!("Admin: failed to initialize VBR engine: {}", e);
+        // Create recorder instance if configured
+        #[cfg(feature = "recorder")]
+        let recorder_for_admin: Option<Arc<mockforge_recorder::Recorder>> =
+            if let Some(ref recorder_config) = config.observability.recorder {
+                if recorder_config.enabled {
+                    match mockforge_recorder::RecorderDatabase::new(&recorder_config.database_path)
+                        .await
+                    {
+                        Ok(db) => {
+                            tracing::info!(
+                                "Admin: recorder initialized from {}",
+                                recorder_config.database_path
+                            );
+                            Some(Arc::new(mockforge_recorder::Recorder::new(db)))
+                        }
+                        Err(e) => {
+                            tracing::warn!("Admin: failed to initialize recorder database: {}", e);
+                            None
+                        }
+                    }
+                } else {
+                    None
+                }
+            } else {
                 None
+            };
+
+        #[cfg(not(feature = "recorder"))]
+        let recorder_for_admin = None;
+
+        // Create VBR engine with in-memory backend (lightweight, no disk side-effects)
+        #[cfg(feature = "vbr")]
+        let vbr_engine_for_admin: Option<Arc<mockforge_vbr::VbrEngine>> = {
+            let vbr_config = mockforge_vbr::VbrConfig::new()
+                .with_storage_backend(mockforge_vbr::StorageBackend::Memory);
+            match mockforge_vbr::VbrEngine::new(vbr_config).await {
+                Ok(engine) => {
+                    tracing::info!("Admin: VBR engine initialized (in-memory)");
+                    Some(Arc::new(engine))
+                }
+                Err(e) => {
+                    tracing::warn!("Admin: failed to initialize VBR engine: {}", e);
+                    None
+                }
             }
-        }
-    };
+        };
 
-    // Create empty federation instance for admin dashboard
-    let federation_for_admin: Option<Arc<mockforge_federation::Federation>> =
-        Some(Arc::new(mockforge_federation::Federation::empty()));
+        #[cfg(not(feature = "vbr"))]
+        let vbr_engine_for_admin = None;
 
-    // Clone references for admin server
-    let chaos_api_state_for_admin_clone = chaos_api_state_for_admin.clone();
-    let latency_injector_for_admin_clone = latency_injector_for_admin.clone();
-    let mockai_for_admin = mockai.clone();
-    let continuum_config_for_admin = config.reality_continuum.clone();
-    let time_travel_manager_for_admin = time_travel_manager.clone();
+        // Create empty federation instance for admin dashboard
+        #[cfg(feature = "federation")]
+        let federation_for_admin: Option<Arc<mockforge_federation::Federation>> =
+            Some(Arc::new(mockforge_federation::Federation::empty()));
 
-    // Start Admin UI server (if enabled)
-    let admin_handle = if config.admin.enabled {
-        let admin_port = config.admin.port;
-        let http_port = config.http.port;
-        let ws_port = config.websocket.port;
-        let grpc_port = config.grpc.port;
-        let prometheus_url = config.admin.prometheus_url.clone();
-        let admin_shutdown = shutdown_token.clone();
-        // Clone all host values before the async move closure
-        let admin_host = config.admin.host.clone();
-        let http_host = config.http.host.clone();
-        let ws_host = config.websocket.host.clone();
-        let grpc_host = config.grpc.host.clone();
-        // Clone subsystem references for admin server
-        let chaos_state = chaos_api_state_for_admin_clone.clone();
-        let latency_injector = latency_injector_for_admin_clone.clone();
-        let mockai_ref = mockai_for_admin.clone();
-        let continuum_config = continuum_config_for_admin.clone();
-        let time_travel_manager_clone = time_travel_manager_for_admin.clone();
-        let recorder_clone = recorder_for_admin.clone();
-        let federation_clone = federation_for_admin.clone();
-        let vbr_engine_clone = vbr_engine_for_admin.clone();
-        let (admin_bound_tx, admin_bound_rx) = tokio::sync::oneshot::channel::<u16>();
-        let admin_host_for_log = admin_host.clone();
-        tokio::spawn(async move {
-            if let Ok(actual_port) = admin_bound_rx.await {
-                println!("🎛️ Admin UI listening on http://{}:{}", admin_host_for_log, actual_port);
-            }
-        });
-        Some(tokio::spawn(async move {
-            // Parse addresses with proper error handling. `format_bind_address`
-            // wraps bare IPv6 literals (e.g. `::`) in brackets so SocketAddr
-            // parses cleanly — without it, `format!("{host}:{port}")` with
-            // host=`::` produces the ambiguous `":::9080"` and fails (this is
-            // what blocked Fly 6PN reachability for #468 Phase 3).
-            use crate::progress::{format_bind_address, parse_address};
-            let addr =
-                match parse_address(&format_bind_address(&admin_host, admin_port), "admin UI") {
+        #[cfg(not(feature = "federation"))]
+        let federation_for_admin = None;
+
+        // Clone references for admin server
+        let chaos_api_state_for_admin_clone = chaos_api_state_for_admin.clone();
+        let latency_injector_for_admin_clone = latency_injector_for_admin.clone();
+        let mockai_for_admin = mockai.clone();
+        let continuum_config_for_admin = config.reality_continuum.clone();
+        let time_travel_manager_for_admin = time_travel_manager.clone();
+
+        // Start Admin UI server (if enabled)
+        let admin_handle = if config.admin.enabled {
+            let admin_port = config.admin.port;
+            let http_port = config.http.port;
+            let ws_port = config.websocket.port;
+            let grpc_port = config.grpc.port;
+            let prometheus_url = config.admin.prometheus_url.clone();
+            let admin_shutdown = shutdown_token.clone();
+            // Clone all host values before the async move closure
+            let admin_host = config.admin.host.clone();
+            let http_host = config.http.host.clone();
+            let ws_host = config.websocket.host.clone();
+            let grpc_host = config.grpc.host.clone();
+            // Clone subsystem references for admin server
+            let chaos_state = chaos_api_state_for_admin_clone.clone();
+            let latency_injector = latency_injector_for_admin_clone.clone();
+            let mockai_ref = mockai_for_admin.clone();
+            let continuum_config = continuum_config_for_admin.clone();
+            let time_travel_manager_clone = time_travel_manager_for_admin.clone();
+            let recorder_clone = recorder_for_admin.clone();
+            let federation_clone = federation_for_admin.clone();
+            let vbr_engine_clone = vbr_engine_for_admin.clone();
+            let (admin_bound_tx, admin_bound_rx) = tokio::sync::oneshot::channel::<u16>();
+            let admin_host_for_log = admin_host.clone();
+            tokio::spawn(async move {
+                if let Ok(actual_port) = admin_bound_rx.await {
+                    println!(
+                        "🎛️ Admin UI listening on http://{}:{}",
+                        admin_host_for_log, actual_port
+                    );
+                }
+            });
+            Some(tokio::spawn(async move {
+                // Parse addresses with proper error handling. `format_bind_address`
+                // wraps bare IPv6 literals (e.g. `::`) in brackets so SocketAddr
+                // parses cleanly — without it, `format!("{host}:{port}")` with
+                // host=`::` produces the ambiguous `":::9080"` and fails (this is
+                // what blocked Fly 6PN reachability for #468 Phase 3).
+                use crate::progress::{format_bind_address, parse_address};
+                let addr = match parse_address(
+                    &format_bind_address(&admin_host, admin_port),
+                    "admin UI",
+                ) {
                     Ok(addr) => addr,
                     Err(e) => {
                         return Err(format!(
@@ -3135,18 +3314,21 @@ pub async fn handle_serve(
                     }
                 };
 
-            let http_addr =
-                match parse_address(&format_bind_address(&http_host, http_port), "HTTP server") {
-                    Ok(addr) => Some(addr),
-                    Err(e) => {
-                        return Err(format!(
-                            "Failed to parse HTTP server address {}:{}: {}",
-                            http_host, http_port, e.message
-                        ))
-                    }
-                };
-            let ws_addr =
-                match parse_address(&format_bind_address(&ws_host, ws_port), "WebSocket server") {
+                let http_addr =
+                    match parse_address(&format_bind_address(&http_host, http_port), "HTTP server")
+                    {
+                        Ok(addr) => Some(addr),
+                        Err(e) => {
+                            return Err(format!(
+                                "Failed to parse HTTP server address {}:{}: {}",
+                                http_host, http_port, e.message
+                            ))
+                        }
+                    };
+                let ws_addr = match parse_address(
+                    &format_bind_address(&ws_host, ws_port),
+                    "WebSocket server",
+                ) {
                     Ok(addr) => Some(addr),
                     Err(e) => {
                         return Err(format!(
@@ -3155,52 +3337,58 @@ pub async fn handle_serve(
                         ))
                     }
                 };
-            let grpc_addr =
-                match parse_address(&format_bind_address(&grpc_host, grpc_port), "gRPC server") {
-                    Ok(addr) => Some(addr),
-                    Err(e) => {
-                        return Err(format!(
-                            "Failed to parse gRPC server address {}:{}: {}",
-                            grpc_host, grpc_port, e.message
-                        ))
+                let grpc_addr =
+                    match parse_address(&format_bind_address(&grpc_host, grpc_port), "gRPC server")
+                    {
+                        Ok(addr) => Some(addr),
+                        Err(e) => {
+                            return Err(format!(
+                                "Failed to parse gRPC server address {}:{}: {}",
+                                grpc_host, grpc_port, e.message
+                            ))
+                        }
+                    };
+
+                // Initialize continuum engine from config
+                let continuum_config = Some(continuum_config);
+                let virtual_clock_for_continuum = Some(time_travel_manager_clone.clock());
+
+                tokio::select! {
+                    result = mockforge_ui::start_admin_server_notify(
+                        addr,
+                        http_addr,
+                        ws_addr,
+                        grpc_addr,
+                        None, // graphql_server_addr
+                        true, // api_enabled
+                        prometheus_url,
+                        chaos_state,
+                        latency_injector,
+                        mockai_ref,
+                        continuum_config,
+                        virtual_clock_for_continuum,
+                        recorder_clone,
+                        federation_clone,
+                        vbr_engine_clone,
+                        resilience_api_state.clone(),
+                        Some(overrides.clone()),
+                        Some(admin_bound_tx),
+                    ) => {
+                        result.map_err(|e| format!("Admin UI server error: {}", e))
                     }
-                };
-
-            // Initialize continuum engine from config
-            let continuum_config = Some(continuum_config);
-            let virtual_clock_for_continuum = Some(time_travel_manager_clone.clock());
-
-            tokio::select! {
-                result = mockforge_ui::start_admin_server_notify(
-                    addr,
-                    http_addr,
-                    ws_addr,
-                    grpc_addr,
-                    None, // graphql_server_addr
-                    true, // api_enabled
-                    prometheus_url,
-                    Some(chaos_state),
-                    latency_injector,
-                    mockai_ref,
-                    continuum_config,
-                    virtual_clock_for_continuum,
-                    recorder_clone,
-                    federation_clone,
-                    vbr_engine_clone,
-                    Some(resilience_api_state.clone()),
-                    Some(overrides.clone()),
-                    Some(admin_bound_tx),
-                ) => {
-                    result.map_err(|e| format!("Admin UI server error: {}", e))
+                    _ = admin_shutdown.cancelled() => {
+                        Ok(())
+                    }
                 }
-                _ = admin_shutdown.cancelled() => {
-                    Ok(())
-                }
-            }
-        }))
-    } else {
-        None
+            }))
+        } else {
+            None
+        };
+
+        admin_handle
     };
+    #[cfg(not(feature = "admin"))]
+    let admin_handle: Option<tokio::task::JoinHandle<Result<(), String>>> = None;
 
     // Start Prometheus metrics server (if enabled)
     let metrics_handle = if config.observability.prometheus.enabled {
@@ -3232,175 +3420,25 @@ pub async fn handle_serve(
 
     // Give servers a moment to start, then mark service as ready
     tokio::time::sleep(Duration::from_millis(500)).await;
+    #[cfg(feature = "http")]
     health_manager.set_ready().await;
     tracing::info!("Service marked as ready - all servers initialized");
 
-    // Wait for all servers or shutdown signal, handling errors properly
-    let result = tokio::select! {
-        result = &mut http_handle => {
-            match result {
-                Ok(Ok(())) => {
-                    println!("📡 HTTP server stopped gracefully");
-                    None
-                }
-                Ok(Err(e)) => {
-                    eprintln!("❌ {}", e);
-                    Some(e)
-                }
-                Err(e) => {
-                    let error = format!("HTTP server task panicked: {}", e);
-                    eprintln!("❌ {}", error);
-                    Some(error)
-                }
-            }
-        }
-        result = async {
-            // Pend forever when --https-port wasn't passed; otherwise this
-            // arm watches the second TLS listener for shutdown / errors.
-            if let Some(handle) = https_handle.as_mut() {
-                Some(handle.await)
-            } else {
-                std::future::pending::<Option<Result<Result<(), String>, tokio::task::JoinError>>>().await
-            }
-        } => {
-            match result {
-                Some(Ok(Ok(()))) => {
-                    println!("🔒 HTTPS server stopped gracefully");
-                    None
-                }
-                Some(Ok(Err(e))) => {
-                    eprintln!("❌ {}", e);
-                    Some(e)
-                }
-                Some(Err(e)) => {
-                    let error = format!("HTTPS server task panicked: {}", e);
-                    eprintln!("❌ {}", error);
-                    Some(error)
-                }
-                None => None,
-            }
-        }
-        result = ws_handle => {
-            match result {
-                Ok(Ok(())) => {
-                    println!("🔌 WebSocket server stopped gracefully");
-                    None
-                }
-                Ok(Err(e)) => {
-                    eprintln!("❌ {}", e);
-                    Some(e)
-                }
-                Err(e) => {
-                    let error = format!("WebSocket server task panicked: {}", e);
-                    eprintln!("❌ {}", error);
-                    Some(error)
-                }
-            }
-        }
-        result = grpc_handle => {
-            match result {
-                Ok(Ok(())) => {
-                    println!("⚡ gRPC server stopped gracefully");
-                    None
-                }
-                Ok(Err(e)) => {
-                    eprintln!("❌ {}", e);
-                    Some(e)
-                }
-                Err(e) => {
-                    let error = format!("gRPC server task panicked: {}", e);
-                    eprintln!("❌ {}", error);
-                    Some(error)
-                }
-            }
-        }
-        result = async {
-            if let Some(handle) = admin_handle {
-                Some(handle.await)
-            } else {
-                std::future::pending::<Option<Result<Result<(), String>, tokio::task::JoinError>>>().await
-            }
-        } => {
-            match result {
-                Some(Ok(Ok(()))) => {
-                    println!("🎛️ Admin UI stopped gracefully");
-                    None
-                }
-                Some(Ok(Err(e))) => {
-                    eprintln!("❌ {}", e);
-                    Some(e)
-                }
-                Some(Err(e)) => {
-                    let error = format!("Admin UI task panicked: {}", e);
-                    eprintln!("❌ {}", error);
-                    Some(error)
-                }
-                None => None
-            }
-        }
-        result = async {
-            if let Some(handle) = metrics_handle {
-                Some(handle.await)
-            } else {
-                std::future::pending::<Option<Result<Result<(), String>, tokio::task::JoinError>>>().await
-            }
-        } => {
-            match result {
-                Some(Ok(Ok(()))) => {
-                    println!("📊 Metrics server stopped gracefully");
-                    None
-                }
-                Some(Ok(Err(e))) => {
-                    eprintln!("❌ {}", e);
-                    Some(e)
-                }
-                Some(Err(e)) => {
-                    let error = format!("Metrics server task panicked: {}", e);
-                    eprintln!("❌ {}", error);
-                    Some(error)
-                }
-                None => None
-            }
-        }
-        signal = shutdown => {
-            match signal {
-                Ok(()) => {
-                    println!("🛑 Received shutdown signal");
-                    health_manager.trigger_shutdown().await;
-                    None
-                }
-                Err(error) => Some(format!("Failed to listen for shutdown signals: {}", error)),
-            }
-        }
-    };
-
-    // Trigger shutdown for all remaining tasks
-    println!("👋 Shutting down remaining servers...");
-    shutdown_token.cancel();
-
-    // Stop accepting HTTP requests and allow active HTTP/HTTPS responses to
-    // finish. Bound the total wait below Docker's default ten-second grace.
-    let drained = tokio::time::timeout(Duration::from_secs(6), async {
-        if !http_handle.is_finished() {
-            let _ = (&mut http_handle).await;
-        }
-        if let Some(handle) = https_handle {
-            if !handle.is_finished() {
-                let _ = handle.await;
-            }
-        }
-    })
-    .await;
-    if drained.is_err() {
-        tracing::warn!("HTTP shutdown drain timed out after six seconds");
-    }
-
-    // Return error if any server failed
-    if let Some(error) = result {
-        Err(error.into())
-    } else {
-        Ok(())
-    }
+    lifecycle::supervise(
+        lifecycle::Listeners {
+            http: http_handle,
+            https: https_handle,
+            websocket: ws_handle,
+            grpc: grpc_handle,
+            admin: admin_handle,
+            metrics: metrics_handle,
+            #[cfg(feature = "http")]
+            health: health_manager,
+        },
+        shutdown,
+        shutdown_token,
+    )
+    .await
 }
 
 /// Convert YAML-loaded `mockforge_core::config::FaultConfig` into the chaos
@@ -3409,6 +3447,7 @@ pub async fn handle_serve(
 /// `partial_responses`, `payload_corruption`, `error_pattern`) were hardcoded
 /// to defaults during the bridge — only the runtime REST API (`PUT
 /// /api/chaos/config/faults`) could set them. They now flow from `--config`.
+#[cfg(feature = "chaos")]
 fn fault_config_to_chaos(
     f: &mockforge_core::config::FaultConfig,
 ) -> mockforge_chaos::config::FaultInjectionConfig {
@@ -3473,7 +3512,7 @@ fn fault_config_to_chaos(
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "chaos"))]
 mod chaos_yaml_bridge_tests {
     use super::*;
     use mockforge_chaos::config::{ConnectionErrorKind, CorruptionType, ErrorPattern};
