@@ -3,20 +3,14 @@
 //! Tests that verify CRUD operations, relationship endpoints, and database
 //! persistence work correctly end-to-end.
 
-use axum::{
-    extract::Extension,
-    http::StatusCode,
-    routing::{delete, get, patch, post, put},
-    Router,
-};
+use axum::{extract::Extension, http::StatusCode, Router};
 use mockforge_data::schema::{FieldDefinition, SchemaDefinition};
 use mockforge_vbr::{
-    config::VbrConfig,
+    config::{StorageBackend, VbrConfig},
     entities::Entity,
     handlers::HandlerContext,
-    migration::MigrationManager,
     schema::{ForeignKeyDefinition, VbrSchemaDefinition},
-    VbrEngine,
+    VbrEngine, VirtualDatabase,
 };
 use serde_json::{json, Value};
 use std::collections::HashMap;
@@ -24,11 +18,14 @@ use tokio::net::TcpListener;
 use tower::ServiceBuilder;
 use tower_http::cors::CorsLayer;
 
-/// Setup a test VBR engine with in-memory database
-async fn setup_test_engine() -> Result<VbrEngine, Box<dyn std::error::Error>> {
-    let config = VbrConfig::default();
+/// Setup a test VBR engine with an owned disposable SQLite database
+async fn setup_test_engine() -> Result<(tempfile::TempDir, VbrEngine), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let config = VbrConfig::default().with_storage_backend(StorageBackend::Sqlite {
+        path: directory.path().join("state.sqlite3"),
+    });
     let engine = VbrEngine::new(config).await?;
-    Ok(engine)
+    Ok((directory, engine))
 }
 
 /// Create a test user entity schema
@@ -162,19 +159,9 @@ async fn setup_test_server(
     registry.register(order_entity)?;
 
     // Run migrations
-    let migration_manager = MigrationManager::new();
     for entity_name in registry.list() {
         let entity = registry.get(&entity_name).unwrap();
-        let create_table_sql = migration_manager.generate_create_table(entity)?;
-
-        // Execute migration
-        database.execute(&create_table_sql, &[]).await?;
-
-        // Create foreign key constraints
-        let fk_sqls = migration_manager.generate_foreign_keys(entity);
-        for fk_sql in fk_sqls {
-            database.execute(&fk_sql, &[]).await?;
-        }
+        mockforge_vbr::migration::create_table_for_entity(database.as_ref(), entity).await?;
     }
 
     // Create handler context
@@ -185,28 +172,13 @@ async fn setup_test_server(
         snapshots_dir: None,
     };
 
-    // Create router with VBR routes
-    let router = Router::new()
-        // Health check
-        .route("/health", get(|| async { "OK" }))
-        // CRUD routes
-        .route("/api/:entity", get(mockforge_vbr::handlers::list_handler))
-        .route("/api/:entity", post(mockforge_vbr::handlers::create_handler))
-        .route("/api/:entity/:id", get(mockforge_vbr::handlers::get_handler))
-        .route("/api/:entity/:id", put(mockforge_vbr::handlers::update_handler))
-        .route("/api/:entity/:id", patch(mockforge_vbr::handlers::patch_handler))
-        .route("/api/:entity/:id", delete(mockforge_vbr::handlers::delete_handler))
-        // Relationship routes
-        .route(
-            "/api/:entity/:id/:relationship",
-            get(mockforge_vbr::handlers::get_relationship_handler),
-        )
-        .layer(
-            ServiceBuilder::new()
-                .layer(Extension(context))
-                .layer(CorsLayer::permissive())
-                .into_inner(),
-        );
+    // Use the production router, including current Axum path syntax.
+    let router = mockforge_vbr::integration::create_vbr_router("/api")?.layer(
+        ServiceBuilder::new()
+            .layer(Extension(context))
+            .layer(CorsLayer::permissive())
+            .into_inner(),
+    );
 
     // Bind to a random port
     let listener = TcpListener::bind("127.0.0.1:0").await?;
@@ -214,39 +186,84 @@ async fn setup_test_server(
     Ok((router, listener))
 }
 
+/// Stop the owned listener even when an assertion fails.
+struct ServerTask(tokio::task::JoinHandle<()>);
+
+impl Drop for ServerTask {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
 /// Test helper to create HTTP client
 fn create_test_client(_base_url: String) -> reqwest::Client {
-    reqwest::Client::new()
+    reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .unwrap()
+}
+
+/// Constraints must be stored in SQLite and enforced by every pooled connection.
+#[tokio::test]
+async fn test_sqlite_foreign_keys_persist_and_apply_cascades() {
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("foreign-keys.sqlite3");
+    let mut database = mockforge_vbr::database::SqliteDatabase::new(&path).await.unwrap();
+    let user = Entity::new("User".to_string(), create_user_schema());
+    let order = Entity::new("Order".to_string(), create_order_schema());
+    // Forward references are valid in SQLite table declarations.
+    mockforge_vbr::migration::create_table_for_entity(&database, &order)
+        .await
+        .unwrap();
+    mockforge_vbr::migration::create_table_for_entity(&database, &user)
+        .await
+        .unwrap();
+    database.close().await.unwrap();
+    let database = mockforge_vbr::database::SqliteDatabase::new(&path).await.unwrap();
+    let constraints = database.query("PRAGMA foreign_key_list(orders)", &[]).await.unwrap();
+    assert_eq!(constraints.len(), 1);
+    assert_eq!(constraints[0]["table"], "users");
+    assert_eq!(constraints[0]["from"], "user_id");
+    assert_eq!(constraints[0]["on_delete"], "CASCADE");
+    assert_eq!(constraints[0]["on_update"], "CASCADE");
+
+    let failures = futures_util::future::join_all((0..15).map(|_| {
+        database.execute("INSERT INTO orders (id, user_id, total, status) VALUES ('orphan', 'missing', 1, 'pending')", &[])
+    })).await;
+    for result in failures {
+        let error = result.expect_err("Every connection must reject an orphan child");
+        assert!(error.to_string().contains("FOREIGN KEY constraint failed"), "{error}");
+    }
+    assert!(database.query("SELECT * FROM orders", &[]).await.unwrap().is_empty());
+
+    database.execute("INSERT INTO users (id, name, email) VALUES ('parent', 'Fixture', 'parent@example.test')", &[]).await.unwrap();
+    database.execute("INSERT INTO orders (id, user_id, total, status) VALUES ('child', 'parent', 1, 'pending')", &[]).await.unwrap();
+    database
+        .execute("UPDATE users SET id = 'renamed' WHERE id = 'parent'", &[])
+        .await
+        .unwrap();
+    let rows = database
+        .query("SELECT user_id FROM orders WHERE id = 'child'", &[])
+        .await
+        .unwrap();
+    assert_eq!(rows[0]["user_id"], "renamed");
+    database.execute("DELETE FROM users WHERE id = 'renamed'", &[]).await.unwrap();
+    assert!(database.query("SELECT * FROM orders", &[]).await.unwrap().is_empty());
 }
 
 /// Test CRUD operations for users
 #[tokio::test]
 async fn test_user_crud_operations() {
-    let engine = match setup_test_engine().await {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("Skipping test: Failed to setup engine: {}", e);
-            return;
-        }
-    };
-
-    let (router, listener) = match setup_test_server(engine).await {
-        Ok((r, l)) => (r, l),
-        Err(e) => {
-            eprintln!("Skipping test: Failed to setup server: {}", e);
-            return;
-        }
-    };
+    let (_directory, engine) = setup_test_engine().await.expect("VBR engine setup must succeed");
+    let (router, listener) =
+        setup_test_server(engine).await.expect("VBR router setup must succeed");
 
     let addr = listener.local_addr().unwrap();
 
     // Start server in background
-    tokio::spawn(async move {
+    let _server = ServerTask(tokio::spawn(async move {
         axum::serve(listener, router).await.unwrap();
-    });
-
-    // Wait for server to be ready
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }));
 
     let client = create_test_client(format!("http://{}", addr));
     let base_url = format!("http://{}", addr);
@@ -360,30 +377,16 @@ async fn test_user_crud_operations() {
 /// Test relationship endpoints (one-to-many)
 #[tokio::test]
 async fn test_relationship_endpoints() {
-    let engine = match setup_test_engine().await {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("Skipping test: Failed to setup engine: {}", e);
-            return;
-        }
-    };
-
-    let (router, listener) = match setup_test_server(engine).await {
-        Ok((r, l)) => (r, l),
-        Err(e) => {
-            eprintln!("Skipping test: Failed to setup server: {}", e);
-            return;
-        }
-    };
+    let (_directory, engine) = setup_test_engine().await.expect("VBR engine setup must succeed");
+    let (router, listener) =
+        setup_test_server(engine).await.expect("VBR router setup must succeed");
 
     let addr = listener.local_addr().unwrap();
 
     // Start server
-    tokio::spawn(async move {
+    let _server = ServerTask(tokio::spawn(async move {
         axum::serve(listener, router).await.unwrap();
-    });
-
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }));
 
     let client = create_test_client(format!("http://{}", addr));
     let base_url = format!("http://{}", addr);
@@ -469,29 +472,15 @@ async fn test_relationship_endpoints() {
 /// Test pagination and filtering
 #[tokio::test]
 async fn test_pagination_and_filtering() {
-    let engine = match setup_test_engine().await {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("Skipping test: Failed to setup engine: {}", e);
-            return;
-        }
-    };
-
-    let (router, listener) = match setup_test_server(engine).await {
-        Ok((r, l)) => (r, l),
-        Err(e) => {
-            eprintln!("Skipping test: Failed to setup server: {}", e);
-            return;
-        }
-    };
+    let (_directory, engine) = setup_test_engine().await.expect("VBR engine setup must succeed");
+    let (router, listener) =
+        setup_test_server(engine).await.expect("VBR router setup must succeed");
 
     let addr = listener.local_addr().unwrap();
 
-    tokio::spawn(async move {
+    let _server = ServerTask(tokio::spawn(async move {
         axum::serve(listener, router).await.unwrap();
-    });
-
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }));
 
     let client = create_test_client(format!("http://{}", addr));
     let base_url = format!("http://{}", addr);
@@ -541,29 +530,15 @@ async fn test_pagination_and_filtering() {
 /// Test error handling
 #[tokio::test]
 async fn test_error_handling() {
-    let engine = match setup_test_engine().await {
-        Ok(e) => e,
-        Err(e) => {
-            eprintln!("Skipping test: Failed to setup engine: {}", e);
-            return;
-        }
-    };
-
-    let (router, listener) = match setup_test_server(engine).await {
-        Ok((r, l)) => (r, l),
-        Err(e) => {
-            eprintln!("Skipping test: Failed to setup server: {}", e);
-            return;
-        }
-    };
+    let (_directory, engine) = setup_test_engine().await.expect("VBR engine setup must succeed");
+    let (router, listener) =
+        setup_test_server(engine).await.expect("VBR router setup must succeed");
 
     let addr = listener.local_addr().unwrap();
 
-    tokio::spawn(async move {
+    let _server = ServerTask(tokio::spawn(async move {
         axum::serve(listener, router).await.unwrap();
-    });
-
-    tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    }));
 
     let client = create_test_client(format!("http://{}", addr));
     let base_url = format!("http://{}", addr);

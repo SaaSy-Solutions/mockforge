@@ -88,24 +88,16 @@ impl SqliteDatabase {
             })?;
         }
 
-        let db_url = format!("sqlite://{}?mode=rwc", path.display());
+        let options = sqlx::sqlite::SqliteConnectOptions::new()
+            .filename(&path)
+            .create_if_missing(true)
+            .foreign_keys(true)
+            .journal_mode(sqlx::sqlite::SqliteJournalMode::Wal);
         let pool = sqlx::sqlite::SqlitePoolOptions::new()
             .max_connections(10)
-            .connect(&db_url)
+            .connect_with(options)
             .await
             .map_err(|e| Error::internal(format!("Failed to connect to SQLite database: {}", e)))?;
-
-        // Enable WAL mode for better concurrency
-        sqlx::query("PRAGMA journal_mode = WAL")
-            .execute(&pool)
-            .await
-            .map_err(|e| Error::internal(format!("Failed to enable WAL mode: {}", e)))?;
-
-        // Enable foreign keys
-        sqlx::query("PRAGMA foreign_keys = ON")
-            .execute(&pool)
-            .await
-            .map_err(|e| Error::internal(format!("Failed to enable foreign keys: {}", e)))?;
 
         Ok(Self { pool, path })
     }

@@ -310,7 +310,7 @@ pub async fn create_handler(
     Path(entity_name): Path<String>,
     Extension(context): Extension<HandlerContext>,
     Json(mut body): Json<Value>,
-) -> std::result::Result<Json<Value>, (StatusCode, Json<Value>)> {
+) -> std::result::Result<(StatusCode, Json<Value>), (StatusCode, Json<Value>)> {
     let (entity, table_name) = get_entity_info(&context.registry, &entity_name)?;
 
     // Apply auto-generation rules
@@ -384,13 +384,34 @@ pub async fn create_handler(
         })?;
 
         // Fetch the created record
-        let primary_key = "id";
-        let select_query = format!("SELECT * FROM {} WHERE {} = ?", table_name, primary_key);
-        let select_results = context
-            .database
-            .query(&select_query, &[Value::String(inserted_id)])
-            .await
-            .map_err(|e| {
+        // SQLite's rowid is not a supplied text/UUID entity key. Prefer the
+        // actual (possibly generated) schema key values from the inserted body.
+        let primary_keys = if entity.schema.primary_key.is_empty() {
+            vec!["id".to_string()]
+        } else {
+            entity.schema.primary_key.clone()
+        };
+        let mut predicates = Vec::new();
+        let mut key_values = Vec::new();
+        for key in &primary_keys {
+            validate_field_name(key, entity)?;
+            predicates.push(format!("{} = ?", key));
+            let value = obj
+                .get(key)
+                .cloned()
+                .or_else(|| (primary_keys.len() == 1).then(|| Value::String(inserted_id.clone())));
+            let value = value.ok_or_else(|| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": "Missing created record key"})),
+                )
+            })?;
+            key_values.push(value);
+        }
+        let select_query =
+            format!("SELECT * FROM {} WHERE {}", table_name, predicates.join(" AND "));
+        let select_results =
+            context.database.query(&select_query, &key_values).await.map_err(|e| {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     Json(json!({"error": format!("Failed to fetch created record: {}", e)})),
@@ -398,9 +419,10 @@ pub async fn create_handler(
             })?;
 
         if let Some(result) = select_results.into_iter().next() {
-            Ok(Json(Value::Object(
-                result.into_iter().collect::<serde_json::Map<String, Value>>(),
-            )))
+            Ok((
+                StatusCode::CREATED,
+                Json(Value::Object(result.into_iter().collect::<serde_json::Map<String, Value>>())),
+            ))
         } else {
             Err((
                 StatusCode::INTERNAL_SERVER_ERROR,
