@@ -10,6 +10,8 @@
 
 - **[Contracts]** Add the `proxy` CLI command with passive or strict OpenAPI conformance validation and the shared violation feed. Preserve binary and redirect responses, honor configured upstream timeouts, and validate response status ranges, default schemas, and malformed JSON. (#864)
 
+- **[Cloud]** Saved observability queries can raise tenant-scoped incidents from request logs, traces, and recorded exchange metrics. Validated alert rules share centralized severity mapping and IncidentBus dispatch; repeated breaches deduplicate, sampled recovery resolves, and missing or incomplete telemetry does not imply recovery. (#720)
+
 - **[Cloud]** Monitored services support per-service cron schedules and IANA timezones, with legacy interval cadence preserved. Probe runs and due-state claims commit atomically so overlapping scheduler ticks do not enqueue the same occurrence twice. (#720)
 
 ### Changed
