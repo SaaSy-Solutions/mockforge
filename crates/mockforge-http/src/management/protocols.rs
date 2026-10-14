@@ -5,7 +5,7 @@
     feature = "amqp"
 ))]
 use axum::extract::Path;
-#[cfg(any(feature = "mqtt", feature = "kafka"))]
+#[cfg(any(feature = "smtp", feature = "mqtt", feature = "kafka"))]
 use axum::extract::Query;
 #[cfg(any(feature = "mqtt", feature = "kafka"))]
 use axum::response::sse::{Event, Sse};

@@ -22,6 +22,8 @@
 
 ### Fixed
 
+- **[DevX]** Honor optional CLI protocol and subsystem features during shared startup, preserve standalone listeners and shutdown handling, and reject unavailable requested operations before creating runtime state. Declare HTTP and VBR prerequisites and include SMTP in its HTTP query-import gate.
+
 - **[DevX]** gRPC startup accepts an owned listener and retains its socket through discovery and TLS setup. Real client fixtures reserve loopback port-zero listeners instead of releasing a temporary port before server startup.
 
 - **[DevX]** OIDC environment fixtures run in isolated child processes, preventing parallel tests from overwriting issuer and discovery settings while exercising the real environment-based configuration paths.
