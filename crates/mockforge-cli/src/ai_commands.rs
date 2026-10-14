@@ -219,6 +219,7 @@ pub(crate) async fn handle_test_ai(
 }
 
 /// Handle test generation from recorded API interactions
+#[cfg(feature = "recorder")]
 #[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_generate_tests(
     database: PathBuf,
@@ -404,4 +405,52 @@ pub(crate) async fn handle_generate_tests(
     println!("\n\u{1f389} Done! You can now run the generated tests.");
 
     Ok(())
+}
+#[cfg(not(feature = "recorder"))]
+#[allow(clippy::too_many_arguments)]
+pub(crate) async fn handle_generate_tests(
+    database: PathBuf,
+    format: String,
+    output: Option<PathBuf>,
+    protocol: Option<String>,
+    method: Option<String>,
+    path: Option<String>,
+    status_code: Option<u16>,
+    limit: usize,
+    suite_name: String,
+    base_url: String,
+    ai_descriptions: bool,
+    llm_provider: String,
+    llm_model: String,
+    llm_endpoint: Option<String>,
+    llm_api_key: Option<String>,
+    validate_body: bool,
+    validate_status: bool,
+    validate_headers: bool,
+    validate_timing: bool,
+    max_duration_ms: Option<u64>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let _ = (
+        database,
+        format,
+        output,
+        protocol,
+        method,
+        path,
+        status_code,
+        limit,
+        suite_name,
+        base_url,
+        ai_descriptions,
+        llm_provider,
+        llm_model,
+        llm_endpoint,
+        llm_api_key,
+        validate_body,
+        validate_status,
+        validate_headers,
+        validate_timing,
+        max_duration_ms,
+    );
+    Err("Generating tests from recordings requires the recorder Cargo feature".into())
 }
