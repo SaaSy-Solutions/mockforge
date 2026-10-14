@@ -36,6 +36,8 @@
 
 - **[Contracts]** Move drift-budget and contract-health handlers into Intelligence through typed engine providers, retaining the existing HTTP state constructors and feature gates. Bind timeline workspace IDs as UUIDs so persisted threat and forecast rows appear instead of an empty successful response. (#632)
 
+- **[DevX]** Preserve the public HTTP handler module paths for consistency, fidelity and X-Ray after moving their implementations to Intelligence. (#632)
+
 - **[DevX]** Honor optional HTTP scenario, world-state, performance and route-chaos feature gates for modules, state and route wiring, allowing minimal builds to retain basic mocks and health probes.
 
 - **[DevX]** Integration builds check shared-disk headroom and restored Cargo library artifacts before compiling. Read-only diagnostics replace automatic target deletion and retain foreign or active build files. (#706)

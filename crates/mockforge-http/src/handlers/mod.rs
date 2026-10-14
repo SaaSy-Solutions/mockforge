@@ -1,5 +1,8 @@
 //! HTTP handlers module
 
+// Keep the public module paths used by downstream consumers before extraction.
+pub use mockforge_intelligence::handlers::{consistency, fidelity, xray};
+
 pub mod ab_testing;
 pub mod access_review;
 pub mod auth_helpers;
