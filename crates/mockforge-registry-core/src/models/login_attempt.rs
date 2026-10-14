@@ -48,7 +48,7 @@ impl LoginAttempt {
         let count: (i64,) = sqlx::query_as(
             r#"
             SELECT COUNT(*) FROM login_attempts
-            WHERE email = $1 AND success = FALSE AND created_at > $2
+            WHERE lower(btrim(email)) = lower(btrim($1)) AND success = FALSE AND created_at > $2
             "#,
         )
         .bind(email)
