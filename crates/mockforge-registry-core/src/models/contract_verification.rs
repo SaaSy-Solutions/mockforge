@@ -36,6 +36,12 @@ pub struct MonitoredService {
     /// MOCKFORGE_CONTRACT_PROBE_INTERVAL_SECS default.
     #[serde(default)]
     pub probe_interval_secs: Option<i32>,
+    /// Optional cron expression. Overrides interval cadence when present.
+    #[serde(default)]
+    pub probe_cron: Option<String>,
+    /// IANA timezone used to evaluate `probe_cron`; defaults to UTC.
+    #[serde(default = "default_probe_timezone")]
+    pub probe_timezone: String,
     /// When this service was last enqueued by the probe worker. Drives
     /// the due-filter in [`MonitoredService::list_probeable_due`].
     #[serde(default)]
@@ -118,6 +124,14 @@ pub struct CreateMonitoredService<'a> {
     pub traffic_source_ref: Option<&'a str>,
     /// Optional per-service probe cadence in seconds (#720).
     pub probe_interval_secs: Option<i32>,
+    /// Optional per-service cron expression, taking precedence over interval.
+    pub probe_cron: Option<&'a str>,
+    /// IANA timezone for the cron expression.
+    pub probe_timezone: &'a str,
+}
+
+fn default_probe_timezone() -> String {
+    "UTC".into()
 }
 
 #[cfg(feature = "postgres")]
@@ -163,11 +177,12 @@ impl MonitoredService {
 
     /// #720 — probeable services whose cadence is DUE.
     ///
-    /// A service is due when it has never been probed, or when
+    /// Interval services are due when they have never been probed, or when
     /// `now - last_probed_at >= COALESCE(probe_interval_secs, default_secs)`.
     /// The worker calls this instead of [`Self::list_probeable`] so a
     /// 5-minute service and a 6-hour service coexist under one global
-    /// tick without wasted enqueues.
+    /// tick without wasted enqueues. Cron services are also returned so
+    /// the worker can evaluate their timezone-aware schedule.
     pub async fn list_probeable_due(
         executor: impl sqlx::PgExecutor<'_>,
         default_interval_secs: i64,
@@ -180,10 +195,11 @@ impl MonitoredService {
               AND openapi_spec_url IS NOT NULL
               AND openapi_spec_url <> ''
               AND (
-                    last_probed_at IS NULL
+                    probe_cron IS NOT NULL
+                    OR (probe_cron IS NULL AND (last_probed_at IS NULL
                     OR now() - last_probed_at >= make_interval(
                         secs => COALESCE(probe_interval_secs, $1)::int
-                    )
+                    )))
                   )
             ORDER BY workspace_id, name
             "#,
@@ -221,8 +237,9 @@ impl MonitoredService {
             r#"
             INSERT INTO monitored_services
                 (workspace_id, name, base_url, openapi_spec_url, openapi_spec_inline,
-                 auth_config, traffic_source, traffic_source_ref, probe_interval_secs)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                 auth_config, traffic_source, traffic_source_ref, probe_interval_secs,
+                 probe_cron, probe_timezone)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
             RETURNING *
             "#,
         )
@@ -235,6 +252,8 @@ impl MonitoredService {
         .bind(input.traffic_source)
         .bind(input.traffic_source_ref)
         .bind(input.probe_interval_secs)
+        .bind(input.probe_cron)
+        .bind(input.probe_timezone)
         .fetch_one(executor)
         .await
     }

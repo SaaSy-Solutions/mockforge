@@ -40,3 +40,36 @@ Issue #706 remains open for infrastructure deployment verification, the requeste
 recent nested-activity backstop, and investigation of the original missing-artifact
 failure. Current headroom and worker guards do not establish the cause of that
 historical failure, nor do they prove restored Rust caches are intact.
+
+## Integration cache readiness
+
+The integration workflow runs `scripts/ci/check_rust_cache.py` before and after
+Rust-cache restoration, before starting Cargo. Both checks are read-only. They
+require at least 10 GiB free on the checkout filesystem and report the restored
+target's logical size; a target above 30 GiB produces a capacity warning instead
+of an automatic deletion. Headroom is an observation at that instant, not a
+reservation against other runners' later allocations.
+
+The structural check examines completed library fingerprints. When Rust's
+cached dep-info declares library outputs, each declared artifact must be a
+nonempty regular file. This detects a missing `.rlib` even when its `.rmeta`
+still exists. Cached dep-info can contain another runner's absolute paths:
+only known output basenames are matched against the corresponding profile's
+`deps` directory in this checkout. The workflow pins `CARGO_TARGET_DIR` to the
+checkout's `target` so the inspected and compiled paths agree.
+Those stored paths are never opened. Cargo-check metadata and procedural-macro
+libraries are valid cache entries. Binary fingerprints are excluded because
+Rust-cache deliberately prunes profile-level executables.
+
+Targets and nested directory symlinks are rejected. The guard neither repairs
+nor deletes caches, including active or foreign artifacts. Run it before Cargo
+starts, as the workflow does; files changing during inspection can cause a
+readiness failure. A failure stops this job before compilation and prints a
+specific diagnostic. Resolve capacity through the infrastructure-owned process,
+or invalidate a proven inconsistent cache through the CI cache controls.
+
+This is a structural preflight, not a checksum verification of every artifact or
+a guarantee against later I/O failures. It does not establish the cause of the
+historical missing-rlib incident. Unit fixtures cover pressure, deleted and empty
+artifacts, metadata-only caches, procedural macros, cross-target profiles and
+symlink boundaries without modifying foreign data.

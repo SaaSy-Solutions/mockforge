@@ -292,7 +292,8 @@ impl SequenceLearner {
         Ok(learned_sequences)
     }
 
-    // `generate_sequence_scenario` lives in mockforge-http (the only caller)
+    // `generate_sequence_scenario` lives in handlers::behavioral_cloning,
+    // using shared foundation scenario types.
     // — keeping ScenarioDefinition out of this crate is what lets
     // mockforge-intelligence stop depending on mockforge-core and lets
     // mockforge-core depend on mockforge-intelligence (see Issue #562).

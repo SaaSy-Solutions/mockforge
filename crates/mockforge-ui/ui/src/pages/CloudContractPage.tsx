@@ -18,11 +18,23 @@ import {
 } from 'lucide-react';
 import { isCloudMode } from '../utils/cloudMode';
 import { useWorkspaceStore } from '../stores/useWorkspaceStore';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../components/ui/Dialog';
+import { confirmAction } from '../components/ui/ConfirmationDialog';
 import {
     cloudContractApi,
     type MonitoredService,
     type ContractDiffFinding,
+    type CreateMonitoredServiceRequest,
 } from '../services/api/cloudContract';
+
+type ServiceDraft = Omit<CreateMonitoredServiceRequest, 'probe_cron' | 'probe_timezone'> & {
+    probe_cron: string;
+    probe_timezone: string;
+};
+const emptyDraft = (): ServiceDraft => ({
+    name: '', base_url: '', openapi_spec_url: '', traffic_source: 'probe',
+    probe_cron: '', probe_timezone: 'UTC',
+});
 
 const SEVERITY_STYLES: Record<string, string> = {
     breaking:
@@ -51,12 +63,7 @@ const CloudView: React.FC = () => {
     const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
     const queryClient = useQueryClient();
     const [showCreate, setShowCreate] = useState(false);
-    const [draft, setDraft] = useState({
-        name: '',
-        base_url: '',
-        openapi_spec_url: '',
-        traffic_source: 'recorder',
-    });
+    const [draft, setDraft] = useState<ServiceDraft>(emptyDraft);
     const [historyFor, setHistoryFor] = useState<MonitoredService | null>(null);
     const [runMessage, setRunMessage] = useState<string | null>(null);
 
@@ -75,16 +82,24 @@ const CloudView: React.FC = () => {
     });
 
     const createMutation = useMutation({
-        mutationFn: () => cloudContractApi.createMonitoredService(workspaceId!, draft),
+        mutationFn: () => cloudContractApi.createMonitoredService(workspaceId!, {
+            ...draft,
+            name: draft.name.trim(),
+            base_url: draft.base_url.trim(),
+            openapi_spec_url: draft.openapi_spec_url.trim(),
+            probe_cron: draft.probe_cron.trim() || undefined,
+            probe_timezone: draft.probe_cron.trim() ? (draft.probe_timezone.trim() || 'UTC') : undefined,
+        }),
         onSuccess: () => {
             setShowCreate(false);
-            setDraft({ name: '', base_url: '', openapi_spec_url: '', traffic_source: 'recorder' });
+            setDraft(emptyDraft());
             queryClient.invalidateQueries({ queryKey: ['cloud', 'contract', 'services', workspaceId] });
         },
     });
 
     const deleteMutation = useMutation({
         mutationFn: (id: string) => cloudContractApi.deleteMonitoredService(id),
+        onError: (err: Error) => setRunMessage(`Delete failed: ${err.message}`),
         onSuccess: () =>
             queryClient.invalidateQueries({
                 queryKey: ['cloud', 'contract', 'services', workspaceId],
@@ -110,13 +125,14 @@ const CloudView: React.FC = () => {
 
     const services = servicesQuery.data ?? [];
     const fitness = fitnessQuery.data ?? [];
+    const runMessageIsError = runMessage?.startsWith('Trigger failed:') || runMessage?.startsWith('Delete failed:');
 
     return (
         <div className="p-6 max-w-7xl mx-auto">
-            <div className="flex justify-between items-start mb-6">
-                <div>
+            <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-6">
+                <div className="min-w-0">
                     <h1 className="text-2xl font-semibold tracking-tight text-foreground flex items-center gap-2">
-                        <GitCompare className="w-6 h-6 text-pink-500" />
+                        <GitCompare className="w-6 h-6 shrink-0 text-pink-500" />
                         Cloud Contract & Verification
                     </h1>
                     <p className="text-gray-600 dark:text-gray-400">
@@ -124,7 +140,7 @@ const CloudView: React.FC = () => {
                         traffic source determines what the diff is measured against.
                     </p>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2">
                     <button
                         onClick={() => servicesQuery.refetch()}
                         className="flex items-center px-3 py-2 border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg text-sm"
@@ -145,7 +161,7 @@ const CloudView: React.FC = () => {
             </div>
 
             {runMessage && (
-                <div className="mb-4 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-400 p-4 rounded-lg text-sm flex items-center justify-between">
+                <div role={runMessageIsError ? 'alert' : 'status'} className={`mb-4 p-4 rounded-lg text-sm flex items-center justify-between ${runMessageIsError ? 'bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-400' : 'bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-400'}`}>
                     <span>{runMessage}</span>
                     <button onClick={() => setRunMessage(null)} className="text-xs underline">
                         dismiss
@@ -179,7 +195,7 @@ const CloudView: React.FC = () => {
                     </button>
                 </div>
             ) : (
-                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden mb-8">
+                <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 overflow-x-auto mb-8">
                     <table className="w-full text-left text-sm">
                         <thead className="bg-gray-50 dark:bg-gray-900/50 border-b border-gray-200 dark:border-gray-700">
                             <tr>
@@ -187,6 +203,7 @@ const CloudView: React.FC = () => {
                                 <th className="px-6 py-4 font-medium text-gray-500 dark:text-gray-400">Base URL</th>
                                 <th className="px-6 py-4 font-medium text-gray-500 dark:text-gray-400">Spec URL</th>
                                 <th className="px-6 py-4 font-medium text-gray-500 dark:text-gray-400">Traffic</th>
+                                <th className="px-6 py-4 font-medium text-gray-500 dark:text-gray-400">Schedule</th>
                                 <th className="px-6 py-4 font-medium text-gray-500 dark:text-gray-400 text-right">Actions</th>
                             </tr>
                         </thead>
@@ -197,8 +214,8 @@ const CloudView: React.FC = () => {
                                     svc={s}
                                     onTrigger={() => triggerMutation.mutate(s.id)}
                                     onHistory={() => setHistoryFor(s)}
-                                    onDelete={() => {
-                                        if (confirm(`Delete monitored service "${s.name}"?`))
+                                    onDelete={async () => {
+                                        if (await confirmAction(`Delete monitored service "${s.name}"?`))
                                             deleteMutation.mutate(s.id);
                                     }}
                                 />
@@ -270,11 +287,16 @@ const ServiceRow: React.FC<{
             {svc.openapi_spec_url}
         </td>
         <td className="px-6 py-4 text-xs">{svc.traffic_source}</td>
+        <td className="px-6 py-4 text-xs">
+            {svc.probe_cron ? <><code>{svc.probe_cron}</code><div>{svc.probe_timezone || 'UTC'}</div></>
+                : svc.probe_interval_secs ? `Every ${svc.probe_interval_secs} seconds` : 'Default interval'}
+        </td>
         <td className="px-6 py-4 text-right space-x-1">
             <button
                 onClick={onTrigger}
                 className="p-2 text-pink-600 hover:bg-pink-50 dark:hover:bg-pink-900/20 rounded-lg"
                 title="Trigger diff run"
+                aria-label={`Trigger diff for ${svc.name}`}
             >
                 <Play className="w-4 h-4" />
             </button>
@@ -282,6 +304,7 @@ const ServiceRow: React.FC<{
                 onClick={onHistory}
                 className="p-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg"
                 title="View diff history"
+                aria-label={`View history for ${svc.name}`}
             >
                 <GitCompare className="w-4 h-4" />
             </button>
@@ -289,6 +312,7 @@ const ServiceRow: React.FC<{
                 onClick={onDelete}
                 className="p-2 text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg"
                 title="Delete"
+                aria-label={`Delete ${svc.name}`}
             >
                 <Trash2 className="w-4 h-4" />
             </button>
@@ -297,34 +321,27 @@ const ServiceRow: React.FC<{
 );
 
 const CreateModal: React.FC<{
-    state: { name: string; base_url: string; openapi_spec_url: string; traffic_source: string };
-    setState: React.Dispatch<
-        React.SetStateAction<{
-            name: string;
-            base_url: string;
-            openapi_spec_url: string;
-            traffic_source: string;
-        }>
-    >;
+    state: ServiceDraft;
+    setState: React.Dispatch<React.SetStateAction<ServiceDraft>>;
     onClose: () => void;
     onSubmit: () => void;
     submitting: boolean;
     error: string | null;
 }> = ({ state, setState, onClose, onSubmit, submitting, error }) => (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full border border-gray-200 dark:border-gray-700">
-            <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-                <h2 className="text-xl font-semibold">New Monitored Service</h2>
-            </div>
-            <div className="p-6 space-y-4">
+    <Dialog open onOpenChange={(open) => { if (!open) onClose(); }}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto" aria-labelledby="service-dialog-title">
+            <DialogHeader><DialogTitle id="service-dialog-title">New Monitored Service</DialogTitle></DialogHeader>
+            <form onSubmit={(event) => { event.preventDefault(); if (!submitting) onSubmit(); }}>
+            <div className="space-y-4">
                 {error && (
-                    <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-3 rounded text-sm">
+                    <div role="alert" className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-3 rounded text-sm">
                         {error}
                     </div>
                 )}
                 <div className="space-y-2">
-                    <label className="block text-sm font-medium">Name</label>
+                    <label htmlFor="service-name" className="block text-sm font-medium">Name</label>
                     <input
+                        id="service-name" required
                         type="text"
                         value={state.name}
                         onChange={(e) => setState({ ...state, name: e.target.value })}
@@ -332,52 +349,74 @@ const CreateModal: React.FC<{
                     />
                 </div>
                 <div className="space-y-2">
-                    <label className="block text-sm font-medium">Base URL</label>
+                    <label htmlFor="service-base-url" className="block text-sm font-medium">Base URL</label>
                     <input
+                        id="service-base-url" required
                         type="url"
                         value={state.base_url}
                         onChange={(e) => setState({ ...state, base_url: e.target.value })}
                         placeholder="https://api.example.com"
-                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-pink-500 font-mono text-xs"
+                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-pink-500 font-mono text-base"
                     />
                 </div>
                 <div className="space-y-2">
-                    <label className="block text-sm font-medium">OpenAPI spec URL</label>
+                    <label htmlFor="service-spec-url" className="block text-sm font-medium">OpenAPI spec URL</label>
                     <input
+                        id="service-spec-url" required
                         type="url"
                         value={state.openapi_spec_url}
                         onChange={(e) => setState({ ...state, openapi_spec_url: e.target.value })}
                         placeholder="https://api.example.com/openapi.json"
-                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-pink-500 font-mono text-xs"
+                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-pink-500 font-mono text-base"
                     />
                 </div>
                 <div className="space-y-2">
-                    <label className="block text-sm font-medium">Traffic source</label>
+                    <label htmlFor="service-traffic" className="block text-sm font-medium">Traffic source</label>
                     <select
+                        id="service-traffic"
                         value={state.traffic_source}
-                        onChange={(e) => setState({ ...state, traffic_source: e.target.value })}
+                        onChange={(e) => setState({ ...state, traffic_source: e.target.value as ServiceDraft['traffic_source'] })}
                         className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-pink-500"
                     >
-                        <option value="recorder">recorder (replay captures)</option>
-                        <option value="synthetic">synthetic (executor-generated)</option>
-                        <option value="live">live (production traffic — careful)</option>
+                        <option value="probe">Probe requests</option>
+                        <option value="capture_session">Captured traffic</option>
+                        <option value="logs">Runtime logs</option>
                     </select>
                 </div>
+                <div className="space-y-2">
+                    <label htmlFor="service-cron" className="block text-sm font-medium">Cron schedule (optional)</label>
+                    <input id="service-cron" value={state.probe_cron}
+                        onChange={(e) => setState({ ...state, probe_cron: e.target.value })}
+                        placeholder="0 */5 * * * *" aria-describedby="service-cron-help"
+                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-pink-500 font-mono" />
+                    <p id="service-cron-help" className="text-sm text-gray-600 dark:text-gray-300">
+                        Seconds come first. This example runs every five minutes. Leave blank to use the default interval.
+                    </p>
+                </div>
+                {state.probe_cron.trim() && <div className="space-y-2">
+                    <label htmlFor="service-timezone" className="block text-sm font-medium">Schedule timezone</label>
+                    <input id="service-timezone" value={state.probe_timezone}
+                        onChange={(e) => setState({ ...state, probe_timezone: e.target.value })}
+                        placeholder="UTC" aria-describedby="service-timezone-help"
+                        className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-pink-500" />
+                    <p id="service-timezone-help" className="text-sm text-gray-600 dark:text-gray-300">Use an IANA timezone, such as America/New_York. Blank uses UTC.</p>
+                </div>}
             </div>
             <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
-                <button onClick={onClose} className="px-4 py-2">
+                <button type="button" onClick={onClose} className="px-4 py-2">
                     Cancel
                 </button>
                 <button
-                    onClick={onSubmit}
-                    disabled={!state.name || !state.base_url || !state.openapi_spec_url || submitting}
+                    type="submit"
+                    disabled={!state.name.trim() || !state.base_url.trim() || !state.openapi_spec_url.trim() || submitting}
                     className="px-4 py-2 bg-pink-600 hover:bg-pink-700 text-white rounded-lg disabled:opacity-50"
                 >
                     {submitting ? 'Creating…' : 'Create'}
                 </button>
             </div>
-        </div>
-    </div>
+            </form>
+        </DialogContent>
+    </Dialog>
 );
 
 const HistoryModal: React.FC<{ service: MonitoredService; onClose: () => void }> = ({
