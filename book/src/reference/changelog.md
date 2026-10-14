@@ -10,6 +10,8 @@
 
 - **[Contracts]** Add the `proxy` CLI command with passive or strict OpenAPI conformance validation and the shared violation feed. Preserve binary and redirect responses, honor configured upstream timeouts, and validate response status ranges, default schemas, and malformed JSON. (#864)
 
+- **[Cloud]** Saved observability queries can raise tenant-scoped incidents from request logs, traces, and recorded exchange metrics. Validated alert rules share centralized severity mapping and IncidentBus dispatch; repeated breaches deduplicate, sampled recovery resolves, and missing or incomplete telemetry does not imply recovery. (#720)
+
 - **[Cloud]** Monitored services support per-service cron schedules and IANA timezones, with legacy interval cadence preserved. Probe runs and due-state claims commit atomically so overlapping scheduler ticks do not enqueue the same occurrence twice. (#720)
 
 ### Changed
@@ -24,7 +26,7 @@
 
 ### Fixed
 
-- **[DevX]** Preserve shared configuration types in minimal Core builds and gate optional workspace and advanced runtime integrations consistently. Voice workspace construction declares its workspace/data prerequisites, and advanced engines declare their workspace and persona-type prerequisites.
+- **[Protocols]** AMQP pull deliveries and committed transaction publishes are recorded; rolled-back publishes and empty pulls remain excluded. MQTT captures retained deliveries and last-will publishes and deliveries. Publisher confirmations use a separate sequence from consumer delivery tags, allowing publish and consume operations on the same channel. Real AMQP, MQTT and Kafka clients verify durable recording payloads and metadata. (#715)
 
 - **[DevX]** Honor optional CLI protocol and subsystem features during shared startup, preserve standalone listeners and shutdown handling, and reject unavailable requested operations before creating runtime state. Declare HTTP and VBR prerequisites and include SMTP in its HTTP query-import gate.
 
@@ -35,6 +37,8 @@
 - **[Contracts]** Move drift-budget and contract-health handlers into Intelligence through typed engine providers, retaining the existing HTTP state constructors and feature gates. Bind timeline workspace IDs as UUIDs so persisted threat and forecast rows appear instead of an empty successful response. (#632)
 
 - **[DevX]** Honor optional HTTP scenario, world-state, performance and route-chaos feature gates for modules, state and route wiring, allowing minimal builds to retain basic mocks and health probes.
+
+- **[DevX]** Preserve shared configuration types in minimal Core builds and gate optional workspace and advanced runtime integrations consistently. Voice workspace construction declares its workspace/data prerequisites, and advanced engines declare their workspace and persona-type prerequisites.
 
 - **[DevX]** Integration builds check shared-disk headroom and restored Cargo library artifacts before compiling. Read-only diagnostics replace automatic target deletion and retain foreign or active build files. (#706)
 

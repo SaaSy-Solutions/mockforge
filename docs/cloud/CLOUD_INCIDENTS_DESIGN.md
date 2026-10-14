@@ -187,3 +187,7 @@ Total: ~13 working days for v1.
 1. PagerDuty in v1 or v2? It's the most-requested integration but adds testing complexity (their API requires real keys). Recommend v2 unless an early customer asks.
 2. Should drift incidents reuse the existing `driftApi` shape so the local UI keeps working in self-hosted mode, or unify on the new generic `incidents` shape and have local mode also persist them? Probably unify — less code paths.
 3. Free tier with read-only status page only is harsh; should it at least see a count of incidents so the upgrade prompt makes sense?
+
+## Observability alert configuration
+
+See [Observability alert incidents](OBSERVABILITY_ALERTS.md) for saved-query rules, stored signal definitions, supported scope, recovery behavior, and IncidentBus integration.

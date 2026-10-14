@@ -242,6 +242,7 @@ async fn main() -> Result<()> {
     // the org's BYOK provider. Disabled via TEST_GENERATION_WORKER_DISABLED=1.
     workers::test_generation_worker::start_test_generation_worker(state.clone());
     workers::incident_dispatcher::start_incident_dispatcher_worker(db.pool().clone());
+    workers::observability_alerts::start_observability_alert_worker(db.pool().clone());
     workers::snapshot_retention::start_snapshot_retention_worker(
         db.pool().clone(),
         state.storage.clone(),
