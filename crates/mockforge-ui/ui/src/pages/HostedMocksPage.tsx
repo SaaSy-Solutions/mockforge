@@ -5,7 +5,7 @@ import { confirmAction } from '../components/ui/ConfirmationDialog';
  * Manage cloud-hosted mock service deployments
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader, EmptyState as DSEmptyState } from '@/components/ui/DesignSystem';
 import { useHostedMockStream } from '@/hooks/useHostedMockStream';
@@ -169,6 +169,7 @@ interface ProjectOption {
 
 export const HostedMocksPage: React.FC = () => {
   const routerNavigate = useNavigate();
+  const specUploadInput = useRef<HTMLInputElement>(null);
 
   const navigateToExplorer = useCallback((deployment: Deployment) => {
     if (!deployment.deployment_url) return;
@@ -1041,12 +1042,12 @@ export const HostedMocksPage: React.FC = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Health</TableCell>
-                <TableCell>URL</TableCell>
-                <TableCell>Created</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableCell component="th" scope="col">Name</TableCell>
+                <TableCell component="th" scope="col">Status</TableCell>
+                <TableCell component="th" scope="col">Health</TableCell>
+                <TableCell component="th" scope="col">URL</TableCell>
+                <TableCell component="th" scope="col">Created</TableCell>
+                <TableCell component="th" scope="col" align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -1309,26 +1310,28 @@ export const HostedMocksPage: React.FC = () => {
               />
               <Button
                 variant="outlined"
-                component="label"
+                type="button"
+                onClick={() => specUploadInput.current?.click()}
                 startIcon={uploadingSpec ? <CircularProgress size={16} /> : <UploadFileIcon />}
                 disabled={uploadingSpec}
                 sx={{ whiteSpace: 'nowrap', mt: 1 }}
               >
                 {uploadingSpec ? 'Uploading…' : 'Upload'}
-                <input
-                  type="file"
-                  accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml"
-                  hidden
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      handleUploadSpec(file);
-                    }
-                    // Reset so selecting the same file again still fires onChange
-                    e.target.value = '';
-                  }}
-                />
               </Button>
+              <input
+                ref={specUploadInput}
+                type="file"
+                accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml"
+                hidden
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    handleUploadSpec(file);
+                  }
+                  // Reset so selecting the same file again still fires onChange
+                  e.target.value = '';
+                }}
+              />
             </Box>
 
             <TextField

@@ -54,6 +54,8 @@
 
 - **[Cloud]** Contract-drift AI callbacks carry the persisted run identity so usage audits identify the originating user. The registry verifies the run, suite, and sampled workspace belong to the requested organization and rejects forged actor claims; scheduled and older anonymous callbacks remain anonymous. (#869)
 
+- **[Cloud]** Hosted-mock spec upload uses a keyboard-accessible native button, and deployment table headers expose column semantics. Cloud configuration and dashboard browser tests follow their supported workspace features, while local server controls retain separate coverage. (#1051)
+
 ## [0.3.233] - 2026-10-12
 
 ### Fixed

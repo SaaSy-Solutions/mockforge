@@ -46,7 +46,7 @@ test.describe('Auth race + PWA meta — Deployed Site', () => {
       // on it ensures the initial render + its effects have run, which
       // is when the old loadWorkspaces() race would have fired.
       await expect(
-        page.getByRole('button', { name: 'Sign In' })
+        page.getByRole('button', { name: 'Sign In', exact: true })
       ).toBeVisible({ timeout: 20_000 });
 
       // Give any lingering effects a chance to fire a stray request.
