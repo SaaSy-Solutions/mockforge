@@ -172,6 +172,9 @@ pub async fn oauth_callback(
             if let Some(user) = state.store.find_user_by_github_id(&user_info.provider_id).await? {
                 user
             } else if let Some(user) = state.store.find_user_by_email(&user_info.email).await? {
+                if !user.is_verified {
+                    return Err(ApiError::ValidationFailed("Verify the existing account email using its original sign-in before connecting an OAuth provider".into()));
+                }
                 // Link GitHub account to existing user
                 state
                     .store
@@ -190,6 +193,9 @@ pub async fn oauth_callback(
             if let Some(user) = state.store.find_user_by_google_id(&user_info.provider_id).await? {
                 user
             } else if let Some(user) = state.store.find_user_by_email(&user_info.email).await? {
+                if !user.is_verified {
+                    return Err(ApiError::ValidationFailed("Verify the existing account email using its original sign-in before connecting an OAuth provider".into()));
+                }
                 // Link Google account to existing user
                 state
                     .store
@@ -264,77 +270,8 @@ struct OAuthUserInfo {
     avatar_url: Option<String>,
 }
 
-/// Fetch user info from OAuth provider
-async fn fetch_user_info(
-    provider: OAuthProvider,
-    access_token: &str,
-) -> Result<OAuthUserInfo, ApiError> {
-    match provider {
-        OAuthProvider::GitHub => {
-            let client = reqwest::Client::new();
-            let response = client
-                .get("https://api.github.com/user")
-                .header("Authorization", format!("Bearer {}", access_token))
-                .header("User-Agent", "MockForge")
-                .send()
-                .await
-                .map_err(|e| {
-                    ApiError::Internal(anyhow::anyhow!("Failed to fetch GitHub user: {}", e))
-                })?;
-
-            let user: serde_json::Value = response.json().await.map_err(|e| {
-                ApiError::Internal(anyhow::anyhow!("Failed to parse GitHub response: {}", e))
-            })?;
-
-            Ok(OAuthUserInfo {
-                provider_id: user["id"]
-                    .as_u64()
-                    .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Invalid GitHub user ID")))?
-                    .to_string(),
-                username: user["login"]
-                    .as_str()
-                    .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Invalid GitHub username")))?
-                    .to_string(),
-                email: user["email"].as_str().unwrap_or("").to_string(),
-                avatar_url: user["avatar_url"].as_str().map(|s| s.to_string()),
-            })
-        }
-        OAuthProvider::Google => {
-            let client = reqwest::Client::new();
-            let response = client
-                .get("https://www.googleapis.com/oauth2/v2/userinfo")
-                .header("Authorization", format!("Bearer {}", access_token))
-                .send()
-                .await
-                .map_err(|e| {
-                    ApiError::Internal(anyhow::anyhow!("Failed to fetch Google user: {}", e))
-                })?;
-
-            let user: serde_json::Value = response.json().await.map_err(|e| {
-                ApiError::Internal(anyhow::anyhow!("Failed to parse Google response: {}", e))
-            })?;
-
-            Ok(OAuthUserInfo {
-                provider_id: user["id"]
-                    .as_str()
-                    .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Invalid Google user ID")))?
-                    .to_string(),
-                username: user["email"]
-                    .as_str()
-                    .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Invalid Google email")))?
-                    .split('@')
-                    .next()
-                    .unwrap_or("user")
-                    .to_string(),
-                email: user["email"]
-                    .as_str()
-                    .ok_or_else(|| ApiError::Internal(anyhow::anyhow!("Invalid Google email")))?
-                    .to_string(),
-                avatar_url: user["picture"].as_str().map(|s| s.to_string()),
-            })
-        }
-    }
-}
+mod verified_identity;
+use verified_identity::fetch_user_info;
 
 /// Create new user from OAuth info
 async fn create_oauth_user(

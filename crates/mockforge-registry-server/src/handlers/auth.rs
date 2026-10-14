@@ -171,8 +171,13 @@ pub struct AuthResponseV2 {
 
 pub async fn register(
     State(state): State<AppState>,
-    Json(request): Json<RegisterRequest>,
+    Json(mut request): Json<RegisterRequest>,
 ) -> ApiResult<impl axum::response::IntoResponse> {
+    use validator::ValidateEmail;
+    request.email = request.email.trim().to_lowercase();
+    if request.email.len() > 255 || !request.email.validate_email() {
+        return Err(ApiError::InvalidRequest("Email address is not valid".into()));
+    }
     // Validate input
     if request.username.len() < 3 {
         return Err(ApiError::InvalidRequest("Username must be at least 3 characters".to_string()));
@@ -198,7 +203,15 @@ pub async fn register(
     let user = state
         .store
         .create_user(&request.username, &request.email, &password_hash)
-        .await?;
+        .await
+        .map_err(|error| match error {
+            crate::error::StoreError::Database(sqlx::Error::Database(ref database))
+                if database.code().as_deref() == Some("23505") =>
+            {
+                ApiError::Conflict("Email or username already registered".into())
+            }
+            other => other.into(),
+        })?;
 
     // Auto-create a personal organization for the user
     let org_slug = format!("{}-personal", request.username.to_lowercase().replace(' ', "-"));
