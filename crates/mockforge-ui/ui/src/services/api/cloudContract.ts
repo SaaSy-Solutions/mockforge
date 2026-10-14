@@ -15,6 +15,9 @@ export interface MonitoredService {
   openapi_spec_url: string;
   traffic_source: string;
   enabled: boolean;
+  probe_interval_secs?: number | null;
+  probe_cron?: string | null;
+  probe_timezone?: string;
   created_at: string;
   updated_at: string;
 }
@@ -23,7 +26,10 @@ export interface CreateMonitoredServiceRequest {
   name: string;
   base_url: string;
   openapi_spec_url: string;
-  traffic_source: string;
+  traffic_source: 'logs' | 'capture_session' | 'probe';
+  probe_interval_secs?: number;
+  probe_cron?: string;
+  probe_timezone?: string;
 }
 
 export interface ContractDiffRun {

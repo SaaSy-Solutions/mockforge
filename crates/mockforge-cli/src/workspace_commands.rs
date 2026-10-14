@@ -6,6 +6,43 @@ use serde_json::json;
 
 #[derive(Subcommand)]
 pub enum WorkspaceCommands {
+    /// Publish a workspace's namespaced static responses to the configured HTTP runtime.
+    Activate {
+        workspace_id: String,
+        #[arg(long, default_value = "http://localhost:9080")]
+        admin_url: String,
+        #[arg(long, default_value = "MOCKFORGE_ADMIN_TOKEN")]
+        token_env: String,
+    },
+    /// Export current local workspace configuration with credential references.
+    Export {
+        workspace_id: String,
+        #[arg(long)]
+        output: std::path::PathBuf,
+        #[arg(long, value_enum, default_value = "yaml")]
+        format: crate::workspace_transfer::WorkspaceFileFormat,
+        #[arg(long, default_value = "http://localhost:9080")]
+        admin_url: String,
+        /// Environment variable containing a local admin JWT; no token is placed in argv.
+        #[arg(long, default_value = "MOCKFORGE_ADMIN_TOKEN")]
+        token_env: String,
+        /// Atomically replace an existing export file.
+        #[arg(long)]
+        force: bool,
+    },
+    /// Import a versioned JSON/YAML export into a new local workspace.
+    Import {
+        input: std::path::PathBuf,
+        #[arg(long)]
+        workspace_id: String,
+        #[arg(long, default_value = "http://localhost:9080")]
+        admin_url: String,
+        #[arg(long, default_value = "MOCKFORGE_ADMIN_TOKEN")]
+        token_env: String,
+        /// Resolve only the export's declared reference variables from the caller environment.
+        #[arg(long)]
+        resolve_env: bool,
+    },
     /// List all workspaces
     ///
     /// Examples:
@@ -158,6 +195,48 @@ pub async fn handle_workspace_command(
     command: WorkspaceCommands,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match command {
+        WorkspaceCommands::Activate {
+            workspace_id,
+            admin_url,
+            token_env,
+        } => {
+            crate::workspace_transfer::activate_workspace(&workspace_id, &admin_url, &token_env)
+                .await?;
+        }
+        WorkspaceCommands::Export {
+            workspace_id,
+            output,
+            format,
+            admin_url,
+            token_env,
+            force,
+        } => {
+            crate::workspace_transfer::export_workspace(
+                &workspace_id,
+                &admin_url,
+                &token_env,
+                &output,
+                format,
+                force,
+            )
+            .await?;
+        }
+        WorkspaceCommands::Import {
+            input,
+            workspace_id,
+            admin_url,
+            token_env,
+            resolve_env,
+        } => {
+            crate::workspace_transfer::import_workspace(
+                &input,
+                &workspace_id,
+                &admin_url,
+                &token_env,
+                resolve_env,
+            )
+            .await?;
+        }
         WorkspaceCommands::List { admin_url, format } => {
             list_workspaces(&admin_url, &format).await?;
         }

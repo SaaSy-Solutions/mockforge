@@ -1,14 +1,18 @@
-//! Incident Replay API handlers
-
-use axum::extract::State;
-use axum::response::Json;
-use mockforge_chaos::incident_replay::{
-    IncidentFormatAdapter, IncidentReplayGenerator, IncidentTimeline,
+//! Compatibility state and typed Chaos adapter for Intelligence handlers.
+use axum::{extract::State, response::Json};
+use mockforge_chaos::{
+    incident_replay::{IncidentFormatAdapter, IncidentReplayGenerator, IncidentTimeline},
+    OrchestratedScenario,
 };
-use mockforge_chaos::OrchestratedScenario;
-use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use mockforge_intelligence::handlers::incident_replay::{self as handlers, IncidentReplayProvider};
+use serde_json::Value;
 use std::sync::Arc;
+
+pub use handlers::ImportIncidentRequest;
+/// Original typed replay request.
+pub type GenerateReplayRequest = handlers::GenerateReplayRequest<IncidentTimeline>;
+/// Original typed replay response.
+pub type ReplayGenerationResponse = handlers::ReplayGenerationResponse<OrchestratedScenario>;
 
 /// Incident replay API state
 #[derive(Clone)]
@@ -32,125 +36,43 @@ impl Default for IncidentReplayState {
     }
 }
 
-/// Request to generate a chaos scenario from an incident timeline
-#[derive(Debug, Deserialize)]
-pub struct GenerateReplayRequest {
-    /// Incident timeline data
-    pub timeline: IncidentTimeline,
-    /// Format of the timeline (if importing from external source)
-    #[serde(default)]
-    pub format: Option<String>,
+impl IncidentReplayProvider for IncidentReplayState {
+    type Timeline = IncidentTimeline;
+    type Scenario = OrchestratedScenario;
+    fn generate_scenario(&self, timeline: &Self::Timeline) -> Self::Scenario {
+        self.generator.generate_scenario(timeline)
+    }
+    fn export_scenario_to_json(&self, scenario: &Self::Scenario) -> Result<String, String> {
+        self.generator.export_scenario_to_json(scenario).map_err(|e| e.to_string())
+    }
+    fn export_scenario_to_yaml(&self, scenario: &Self::Scenario) -> Result<String, String> {
+        self.generator.export_scenario_to_yaml(scenario).map_err(|e| e.to_string())
+    }
+    fn import_pagerduty(&self, data: &Value) -> Result<Self::Timeline, String> {
+        IncidentFormatAdapter::from_pagerduty(data)
+    }
+    fn import_datadog(&self, data: &Value) -> Result<Self::Timeline, String> {
+        IncidentFormatAdapter::from_datadog(data)
+    }
 }
-
-/// Request to import an incident timeline from external format
-#[derive(Debug, Deserialize)]
-pub struct ImportIncidentRequest {
-    /// Incident data in external format (JSON)
-    pub data: Value,
-    /// Format type: "pagerduty", "datadog", "custom"
-    pub format: String,
-}
-
-/// Response for replay generation
-#[derive(Debug, Serialize)]
-pub struct ReplayGenerationResponse {
-    /// Success flag
-    pub success: bool,
-    /// Generated orchestrated scenario
-    pub scenario: OrchestratedScenario,
-    /// Scenario in JSON format
-    pub scenario_json: String,
-    /// Scenario in YAML format
-    pub scenario_yaml: String,
-}
-
-/// Generate a chaos scenario from an incident timeline
-///
-/// POST /api/v1/chaos/incident-replay/generate
+/// Generate through the original state and request paths.
 pub async fn generate_replay(
-    State(state): State<IncidentReplayState>,
-    Json(request): Json<GenerateReplayRequest>,
+    state: State<IncidentReplayState>,
+    request: Json<GenerateReplayRequest>,
 ) -> Result<Json<Value>, String> {
-    let generator = &state.generator;
-    let scenario = generator.generate_scenario(&request.timeline);
-
-    // Export to JSON and YAML
-    let scenario_json = generator
-        .export_scenario_to_json(&scenario)
-        .map_err(|e| format!("Failed to export scenario to JSON: {}", e))?;
-    let scenario_yaml = generator
-        .export_scenario_to_yaml(&scenario)
-        .map_err(|e| format!("Failed to export scenario to YAML: {}", e))?;
-
-    Ok(Json(json!({
-        "success": true,
-        "scenario": scenario,
-        "scenario_json": scenario_json,
-        "scenario_yaml": scenario_yaml,
-    })))
+    handlers::generate_replay(state, request).await
 }
-
-/// Import incident timeline from external format
-///
-/// POST /api/v1/chaos/incident-replay/import
+/// Import through the original state and request paths.
 pub async fn import_incident(
-    State(_state): State<IncidentReplayState>,
-    Json(request): Json<ImportIncidentRequest>,
+    state: State<IncidentReplayState>,
+    request: Json<ImportIncidentRequest>,
 ) -> Result<Json<Value>, String> {
-    let timeline = match request.format.as_str() {
-        "pagerduty" => IncidentFormatAdapter::from_pagerduty(&request.data)
-            .map_err(|e| format!("Failed to parse PagerDuty format: {}", e))?,
-        "datadog" => IncidentFormatAdapter::from_datadog(&request.data)
-            .map_err(|e| format!("Failed to parse Datadog format: {}", e))?,
-        "custom" => {
-            // Try to parse as JSON directly
-            serde_json::from_value::<IncidentTimeline>(request.data)
-                .map_err(|e| format!("Failed to parse custom format: {}", e))?
-        }
-        _ => return Err(format!("Unsupported format: {}", request.format)),
-    };
-
-    Ok(Json(json!({
-        "success": true,
-        "timeline": timeline,
-    })))
+    handlers::import_incident(state, request).await
 }
-
-/// Import and generate scenario in one step
-///
-/// POST /api/v1/chaos/incident-replay/import-and-generate
+/// Import and generate through the original state and request paths.
 pub async fn import_and_generate(
-    State(state): State<IncidentReplayState>,
-    Json(request): Json<ImportIncidentRequest>,
+    state: State<IncidentReplayState>,
+    request: Json<ImportIncidentRequest>,
 ) -> Result<Json<Value>, String> {
-    // First import the timeline
-    let timeline = match request.format.as_str() {
-        "pagerduty" => IncidentFormatAdapter::from_pagerduty(&request.data)
-            .map_err(|e| format!("Failed to parse PagerDuty format: {}", e))?,
-        "datadog" => IncidentFormatAdapter::from_datadog(&request.data)
-            .map_err(|e| format!("Failed to parse Datadog format: {}", e))?,
-        "custom" => serde_json::from_value::<IncidentTimeline>(request.data)
-            .map_err(|e| format!("Failed to parse custom format: {}", e))?,
-        _ => return Err(format!("Unsupported format: {}", request.format)),
-    };
-
-    // Then generate the scenario
-    let generator = &state.generator;
-    let scenario = generator.generate_scenario(&timeline);
-
-    // Export to JSON and YAML
-    let scenario_json = generator
-        .export_scenario_to_json(&scenario)
-        .map_err(|e| format!("Failed to export scenario to JSON: {}", e))?;
-    let scenario_yaml = generator
-        .export_scenario_to_yaml(&scenario)
-        .map_err(|e| format!("Failed to export scenario to YAML: {}", e))?;
-
-    Ok(Json(json!({
-        "success": true,
-        "timeline": timeline,
-        "scenario": scenario,
-        "scenario_json": scenario_json,
-        "scenario_yaml": scenario_yaml,
-    })))
+    handlers::import_and_generate(state, request).await
 }

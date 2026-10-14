@@ -162,6 +162,33 @@ The original issue proposed handler-first extraction. Audit findings reverse the
 
 This ADR is **Phase 1**. The implementer judged Phase 2 too risky to bundle: the AI handlers cannot be moved cleanly without first shifting their core-side implementations, which is a multi-day refactor that needs its own issue, plan, and review. A follow-up issue will track Phase A (the core-side untangle). `behavioral_cloning.rs` is the only handler whose dependencies already live in `mockforge-intelligence`; it is a candidate for a small standalone "proof of concept" PR.
 
+### Drift budget and contract health boundary
+
+The drift-budget and contract-health handler implementations now live in
+`mockforge-intelligence::handlers`. Their structural incident manager and budget
+engine deliberately remain in Core. Intelligence defines typed incident, budget,
+GitOps and state-provider interfaces; Core implements the engine interfaces, and
+HTTP supplies its existing state instances. Intelligence does not depend on Core
+or Pipelines. HTTP retains the public state fields and handler re-exports so
+existing struct literals and route constructors continue to work.
+
+The contract timeline's optional database provider defaults to no connection.
+HTTP exposes its database field only under its own database feature, even when
+another crate independently enables Intelligence's database feature. Pipeline
+publication remains in the HTTP adapter under its existing feature gate; the
+extracted handler supplies threshold metadata after successful PR generation.
+
+This extraction retains the existing budget-write behavior: returning a created
+budget does not mutate the immutable budget engine. It does not add persistence
+or change incident transitions, budget precedence, or GitOps configuration.
+Database timeline queries bind the workspace as a UUID, matching both migrated
+schema columns. The former text binding silently returned an empty successful
+timeline even when matching rows existed. A malformed workspace now returns
+400 when a database is connected; states without a connection retain their
+existing string-based incident filtering.
+The other handler extractions tracked by #632 remain separate
+work; these two moves do not complete that issue.
+
 ## Consequences
 
 **Positive:**
@@ -175,3 +202,66 @@ This ADR is **Phase 1**. The implementer judged Phase 2 too risky to bundle: the
 
 **Neutral:**
 - The existence of `mockforge-intelligence` and `mockforge-proxy` as partially-populated crates is intentional and called out in the intelligence crate's own docstring; this ADR formalises that they are mid-migration, not abandoned.
+
+
+### Risk simulation boundary (#632)
+
+Risk simulation calls the application's authentication engine, which still lives
+in HTTP pending the broader auth extraction (#635). Intelligence owns the six
+simulation handler implementations and their router through a typed
+`RiskSimulationEngine` interface. The existing HTTP `RiskSimulationState` keeps
+its public `Arc<RiskEngine>` field and supplies that exact shared engine;
+simulation changes remain visible to authentication consumers. The interface
+covers score and factor overrides, clearing both overrides, and assessment using
+the application's configured thresholds and rules.
+
+`RiskAssessment`, `RiskFactor`, and `RiskAction` move without behavior or wire
+changes to foundation. HTTP re-exports them at their original auth paths, so the
+engine and external users retain the same type names. Foundation gains neither
+Axum nor engine dependencies. Intelligence gains no HTTP dependency or alternate
+risk engine. Scores, factor precedence, action thresholds, route paths and JSON
+responses retain existing behavior. This is an internal API and adds no UI,
+production auth deployment, or completion claim for #635 or the other #632
+handlers.
+
+### Failure designer and incident replay boundaries (#632)
+
+Chaos depends on Core, and Core depends on Intelligence. Intelligence therefore
+accepts typed downstream providers rather than depending on Chaos. The providers
+use associated rule, timeline, and scenario types: the concrete Chaos types remain
+at the HTTP compatibility boundary, without converting the domain inputs into
+untyped JSON. Existing route-config and external incident payloads remain JSON
+because that is their original contract.
+
+Intelligence owns request decoding, validation responses, generation and preview
+assembly, format dispatch, exports, and error prefixes. HTTP retains the original
+public state fields, constructors, defaults, concrete request/response aliases,
+and thin function adapters. Its providers delegate to the same real Chaos engines
+and format adapters. No manifest or dependency changes are needed.
+
+Actual TCP controls run against both original and extracted handlers, covering
+all six failure types, webhook/null preview fields, validation and extractor
+errors, custom/PagerDuty/Datadog import dispatch, and JSON/YAML scenario exports.
+The adapters retain the existing simplified external-format interpretation and
+the existing HTTP 200 text error behavior; they add no live provider integration,
+incident fidelity guarantee, or broader authentication extraction (#635). The
+remaining #632 handler work still requires its own merge and main-branch audit.
+
+
+### Snapshot diff management projection (#632)
+
+Intelligence owns snapshot DTOs, HTTP storage/filtering routes and pure mock
+comparison. A typed `SnapshotStateProvider` projects the consuming application's
+current mocks into `MockSnapshotItem` values. HTTP implements that interface on
+its existing `ManagementState`, preserving the prior status-code default,
+response body/headers and serialized mock configuration. Public DTO and router
+paths remain available through HTTP re-exports; Intelligence gains no HTTP or
+Core dependency.
+
+The migration retains the existing process-global in-memory store, method/path
+comparison keys, list filters, live comparison fallbacks and five emitted
+difference kinds. `ConfigMismatch` remains a declared variant that the current
+comparison does not emit. This source move adds neither durable snapshot storage
+nor tenant isolation and does not establish deployed-account acceptance. Those
+behaviors must not be inferred from extraction or compatibility tests. The
+failure-designer and incident-replay boundaries remain separate #632 work.

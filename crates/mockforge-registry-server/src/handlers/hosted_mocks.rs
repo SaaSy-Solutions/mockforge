@@ -2,6 +2,8 @@
 //!
 //! Provides endpoints for deploying, managing, and monitoring cloud-hosted mock services
 
+pub mod workspace;
+
 use axum::{
     extract::{Multipart, Path, Query, State},
     http::HeaderMap,
@@ -47,6 +49,8 @@ pub async fn create_deployment(
     checker
         .require_permission(user_id, org_ctx.org_id, Permission::HostedMockCreate)
         .await?;
+
+    workspace::validate(&state, org_ctx.org_id, request.workspace_id).await?;
 
     // Block deployment for past_due subscriptions whose payment has been
     // outstanding for >24h — per #449 acceptance criterion. The earlier
@@ -206,15 +210,18 @@ pub async fn create_deployment(
     // Create deployment record
     let deployment = state
         .store
-        .create_hosted_mock(
-            org_ctx.org_id,
-            request.project_id,
-            &request.name,
-            slug,
-            request.description.as_deref(),
-            config_json,
-            request.openapi_spec_url.as_deref(),
-            request.region.as_deref(),
+        .create_hosted_mock_scoped(
+            mockforge_registry_core::models::hosted_mock::HostedMockCreation {
+                org_id: org_ctx.org_id,
+                project_id: request.project_id,
+                workspace_id: request.workspace_id,
+                name: &request.name,
+                slug,
+                description: request.description.as_deref(),
+                config_json,
+                openapi_spec_url: request.openapi_spec_url.as_deref(),
+                region: request.region.as_deref(),
+            },
         )
         .await?;
 
@@ -285,7 +292,7 @@ pub async fn create_deployment(
         ApiError::Internal(anyhow::anyhow!("Failed to retrieve created deployment"))
     })?;
 
-    Ok(Json(DeploymentResponse::from(deployment)))
+    Ok(Json(workspace::response(&state, org_ctx.org_id, deployment).await?))
 }
 
 /// List all deployments for the organization
@@ -302,8 +309,7 @@ pub async fn list_deployments(
     // Get all deployments
     let deployments = state.store.list_hosted_mocks_by_org(org_ctx.org_id).await?;
 
-    let responses: Vec<DeploymentResponse> =
-        deployments.into_iter().map(DeploymentResponse::from).collect();
+    let responses = workspace::responses(&state, org_ctx.org_id, deployments).await?;
 
     Ok(Json(responses))
 }
@@ -334,7 +340,7 @@ pub async fn get_deployment(
         ));
     }
 
-    Ok(Json(DeploymentResponse::from(deployment)))
+    Ok(Json(workspace::response(&state, org_ctx.org_id, deployment).await?))
 }
 
 /// Update deployment status (internal/admin use)
@@ -424,7 +430,7 @@ pub async fn update_deployment_status(
         }
     }
 
-    Ok(Json(DeploymentResponse::from(deployment)))
+    Ok(Json(workspace::response(&state, org_ctx.org_id, deployment).await?))
 }
 
 /// Delete a deployment
@@ -1067,7 +1073,7 @@ pub async fn stop_deployment(
         ApiError::Internal(anyhow::anyhow!("Failed to retrieve updated deployment"))
     })?;
 
-    Ok(Json(DeploymentResponse::from(updated)))
+    Ok(Json(workspace::response(&state, org_ctx.org_id, updated).await?))
 }
 
 /// Start a stopped hosted mock deployment.
@@ -1140,7 +1146,7 @@ pub async fn start_deployment(
         ApiError::Internal(anyhow::anyhow!("Failed to retrieve updated deployment"))
     })?;
 
-    Ok(Json(DeploymentResponse::from(updated)))
+    Ok(Json(workspace::response(&state, org_ctx.org_id, updated).await?))
 }
 
 /// Get deployment logs
@@ -1629,6 +1635,17 @@ pub async fn ingest_runtime_captures(
 
     let pool = state.db.pool();
     let mut tx = pool.begin().await.map_err(ApiError::Database)?;
+    // One verified attribution for this entire batch. A concurrent reassignment
+    // waits until ingestion commits; an unavailable deployment cannot ingest.
+    let workspace_id = sqlx::query_scalar::<_, Option<Uuid>>(
+        "SELECT workspace_id FROM hosted_mocks WHERE id=$1 AND deleted_at IS NULL FOR SHARE",
+    )
+    .bind(deployment_id)
+    .fetch_optional(&mut *tx)
+    .await
+    .map_err(ApiError::Database)?
+    .ok_or_else(|| ApiError::InvalidRequest("Deployment unavailable".into()))?;
+
     for (capture_id, exchange) in &exchanges {
         let req = &exchange.request;
         let resp = exchange.response.as_ref();
@@ -1639,11 +1656,11 @@ pub async fn ingest_runtime_captures(
                 query_params, request_headers, request_body, request_body_encoding,
                 client_ip, trace_id, span_id, duration_ms, status_code, tags,
                 response_status_code, response_headers, response_body,
-                response_body_encoding, response_size_bytes, response_timestamp
+                response_body_encoding, response_size_bytes, response_timestamp, workspace_id
             )
             VALUES (
                 $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
-                $15, $16, $17, $18, $19, $20, $21, $22
+                $15, $16, $17, $18, $19, $20, $21, $22, $23
             )
             ON CONFLICT (deployment_id, capture_id) DO NOTHING
             "#,
@@ -1670,6 +1687,7 @@ pub async fn ingest_runtime_captures(
         .bind(resp.map(|r| r.body_encoding.as_str()))
         .bind(resp.map(|r| r.size_bytes))
         .bind(resp.map(|r| r.timestamp))
+        .bind(workspace_id)
         .execute(&mut *tx)
         .await
         .map_err(ApiError::Database)?;
@@ -2679,6 +2697,8 @@ pub struct CreateDeploymentRequest {
     pub slug: Option<String>,
     pub description: Option<String>,
     pub project_id: Option<Uuid>,
+    /// Explicit tenant-owned attribution; omitted means unassigned.
+    pub workspace_id: Option<Uuid>,
     pub config_json: serde_json::Value,
     pub openapi_spec_url: Option<String>,
     pub region: Option<String>,
@@ -2706,6 +2726,7 @@ pub struct UpdateStatusRequest {
 
 #[derive(Debug, Serialize)]
 pub struct DeploymentResponse {
+    pub workspace_id: Option<Uuid>,
     pub id: Uuid,
     pub org_id: Uuid,
     pub project_id: Option<Uuid>,
@@ -2735,6 +2756,7 @@ impl From<HostedMock> for DeploymentResponse {
         let enabled_protocols = mock.enabled_protocols();
         let upstream_url = mock.upstream_url();
         Self {
+            workspace_id: None,
             id: mock.id,
             org_id: mock.org_id,
             project_id: mock.project_id,

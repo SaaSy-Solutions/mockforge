@@ -95,6 +95,32 @@ To install it system-wide after building:
 cargo install --path crates/mockforge-cli
 ```
 
+### Selecting CLI features from source
+
+The standalone feature-build corrections in this section are unreleased. Use a
+checkout containing those corrections; installed releases have their own feature
+support and validation history.
+
+Build only the CLI package and select the capabilities you need:
+
+```bash
+cargo build -p mockforge-cli --release --no-default-features --features ws
+cargo build -p mockforge-cli --release --no-default-features --features http,recorder
+```
+
+`ws` and `grpc` provide their own listeners. `graphql`, `admin`, and automatic
+`tunnel` startup depend on the main HTTP listener, so those features enable
+`http`. Scenario packs include VBR entity definitions, so `scenarios` enables
+`vbr`. Recorder-backed commands require `recorder`; the common command parser
+remains available and reports a missing feature before creating a recording
+database or output file. HTTP-only and admin-only runtime state is initialized
+only when its feature is compiled.
+
+Startup validates explicitly requested capabilities before opening listeners.
+A protocol-only build checks the ports it can actually listen on. Default builds
+retain their existing command set; a minimal build supports the remaining
+utilities without silently starting unavailable servers.
+
 ## Verification
 
 After installation, verify MockForge is working:

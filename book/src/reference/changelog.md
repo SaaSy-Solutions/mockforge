@@ -2,9 +2,47 @@
 
 ## [Unreleased]
 
+### Added
+
+- **[DevX]** Export live local workspace configuration to versioned JSON/YAML with credential references and stable ordering/timestamps. Authorized imports create new workspaces without overwriting existing state; explicit activation publishes namespaced static HTTP mocks atomically while retaining unrelated mocks. Unsupported authentication activation is rejected. (#1197)
+
+- **[Cloud]** Hosted deployments can explicitly select or change their capture workspace in the API and portal. Recorder batches use the deployment's verified organization/workspace, preserve historical attribution, and reject cross-organization assignments; unassigned deployments stay unassigned. (#720)
+
+- **[Contracts]** Add the `proxy` CLI command with passive or strict OpenAPI conformance validation and the shared violation feed. Preserve binary and redirect responses, honor configured upstream timeouts, and validate response status ranges, default schemas, and malformed JSON. (#864)
+
+- **[Cloud]** Monitored services support per-service cron schedules and IANA timezones, with legacy interval cadence preserved. Probe runs and due-state claims commit atomically so overlapping scheduler ticks do not enqueue the same occurrence twice. (#720)
+
+### Changed
+
+- **[DevX]** Failure-designer and incident-replay HTTP handlers now live in Intelligence behind typed Chaos providers, preserving the existing HTTP states, request types, generated scenarios, import formats, and error responses. (#632)
+
+- **[DevX]** Snapshot diff routes and comparison logic now live in Intelligence behind a typed current-mock projection. HTTP retains its management state, public DTO paths and router signature. (#632)
+
+- **[DevX]** Risk-simulation HTTP handlers now live in intelligence behind a typed engine interface. Shared risk-assessment DTOs live in foundation, while HTTP retains its original state fields and public auth type paths. (#632)
+
+- **[DevX]** Behavioral-cloning HTTP handlers now live in intelligence and use shared foundation scenario types. A recorder storage adapter preserves the HTTP compatibility state and SQLite behavior without adding a reverse dependency. (#631)
+
 ### Fixed
 
 - **[Cloud]** Hosted-mock spec upload uses a keyboard-accessible native button, and deployment table headers expose column semantics. Cloud configuration and dashboard browser tests follow their supported workspace features, while local server controls retain separate coverage. (#1051)
+
+- **[DevX]** Honor optional CLI protocol and subsystem features during shared startup, preserve standalone listeners and shutdown handling, and reject unavailable requested operations before creating runtime state. Declare HTTP and VBR prerequisites and include SMTP in its HTTP query-import gate.
+
+- **[DevX]** gRPC startup accepts an owned listener and retains its socket through discovery and TLS setup. Real client fixtures reserve loopback port-zero listeners instead of releasing a temporary port before server startup.
+
+- **[DevX]** OIDC environment fixtures run in isolated child processes, preventing parallel tests from overwriting issuer and discovery settings while exercising the real environment-based configuration paths.
+
+- **[Contracts]** Move drift-budget and contract-health handlers into Intelligence through typed engine providers, retaining the existing HTTP state constructors and feature gates. Bind timeline workspace IDs as UUIDs so persisted threat and forecast rows appear instead of an empty successful response. (#632)
+
+- **[DevX]** Honor optional HTTP scenario, world-state, performance and route-chaos feature gates for modules, state and route wiring, allowing minimal builds to retain basic mocks and health probes.
+
+- **[DevX]** Integration builds check shared-disk headroom and restored Cargo library artifacts before compiling. Read-only diagnostics replace automatic target deletion and retain foreign or active build files. (#706)
+
+- **[DevX]** Publish Recorder before the AMQP, Kafka and MQTT crates that depend on it. The publish-list guard checks normal and build dependency order, preventing partial releases caused by missing same-version dependencies.
+
+- **[Security]** Update the locked QUIC protocol dependency to `quinn-proto` 0.11.18, fixing five RustSec packet-handling and memory-exhaustion advisories. Its required Rand 0.10 patch dependency is updated without enabling new protocol features.
+
+- **[Cloud]** Contract-drift AI callbacks carry the persisted run identity so usage audits identify the originating user. The registry verifies the run, suite, and sampled workspace belong to the requested organization and rejects forged actor claims; scheduled and older anonymous callbacks remain anonymous. (#869)
 
 ## [0.3.233] - 2026-10-12
 

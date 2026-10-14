@@ -3,13 +3,7 @@
 //! Commands for managing recorded flows, viewing timelines, and compiling scenarios.
 
 use clap::Subcommand;
-use mockforge_recorder::behavioral_cloning::{
-    flow_recorder::{FlowRecorder, FlowRecordingConfig},
-    FlowCompiler, ScenarioStorage,
-};
-use mockforge_recorder::RecorderDatabase;
 use std::path::PathBuf;
-use tracing::info;
 
 #[derive(Subcommand)]
 pub enum FlowCommands {
@@ -136,246 +130,270 @@ pub enum FlowCommands {
     },
 }
 
-pub async fn handle_flow_command(command: FlowCommands) -> anyhow::Result<()> {
-    // Get database path from environment or use default
-    let db_path =
-        std::env::var("MOCKFORGE_RECORDER_DB").unwrap_or_else(|_| "recordings.db".to_string());
-    let db = RecorderDatabase::new(&db_path).await?;
+#[cfg(feature = "recorder")]
+pub use recording::handle_flow_command;
 
-    match command {
-        FlowCommands::List { limit } => handle_list(db, limit).await,
-        FlowCommands::View { flow_id, verbose } => handle_view(db, flow_id, verbose).await,
-        FlowCommands::Tag {
-            flow_id,
-            name,
-            tags,
-            description,
-        } => handle_tag(db, flow_id, name, tags, description).await,
-        FlowCommands::Compile {
-            flow_id,
-            scenario_name,
-            flex_mode,
-        } => handle_compile(db, flow_id, scenario_name, flex_mode).await,
-        FlowCommands::Scenarios { limit } => handle_scenarios(db, limit).await,
-        FlowCommands::Export {
-            scenario_id,
-            output,
-            format,
-        } => handle_export(db, scenario_id, output, format).await,
-        FlowCommands::Import { input, format } => handle_import(db, input, format).await,
-        FlowCommands::Replay {
-            scenario_id,
-            flex_mode,
-        } => handle_replay(db, scenario_id, flex_mode).await,
-    }
+#[cfg(not(feature = "recorder"))]
+pub async fn handle_flow_command(_command: FlowCommands) -> anyhow::Result<()> {
+    anyhow::bail!("The flow command requires the recorder Cargo feature")
 }
 
-async fn handle_list(db: RecorderDatabase, limit: usize) -> anyhow::Result<()> {
-    let config = FlowRecordingConfig::default();
-    let recorder = FlowRecorder::new(db, config);
-    let flows = recorder.list_flows(Some(limit)).await?;
+#[cfg(feature = "recorder")]
+mod recording {
+    use super::*;
+    use mockforge_recorder::behavioral_cloning::{
+        flow_recorder::{FlowRecorder, FlowRecordingConfig},
+        FlowCompiler, ScenarioStorage,
+    };
+    use mockforge_recorder::RecorderDatabase;
+    use tracing::info;
 
-    println!("Found {} flows:\n", flows.len());
-    for flow in flows {
+    pub async fn handle_flow_command(command: FlowCommands) -> anyhow::Result<()> {
+        // Get database path from environment or use default
+        let db_path =
+            std::env::var("MOCKFORGE_RECORDER_DB").unwrap_or_else(|_| "recordings.db".to_string());
+        let db = RecorderDatabase::new(&db_path).await?;
+
+        match command {
+            FlowCommands::List { limit } => handle_list(db, limit).await,
+            FlowCommands::View { flow_id, verbose } => handle_view(db, flow_id, verbose).await,
+            FlowCommands::Tag {
+                flow_id,
+                name,
+                tags,
+                description,
+            } => handle_tag(db, flow_id, name, tags, description).await,
+            FlowCommands::Compile {
+                flow_id,
+                scenario_name,
+                flex_mode,
+            } => handle_compile(db, flow_id, scenario_name, flex_mode).await,
+            FlowCommands::Scenarios { limit } => handle_scenarios(db, limit).await,
+            FlowCommands::Export {
+                scenario_id,
+                output,
+                format,
+            } => handle_export(db, scenario_id, output, format).await,
+            FlowCommands::Import { input, format } => handle_import(db, input, format).await,
+            FlowCommands::Replay {
+                scenario_id,
+                flex_mode,
+            } => handle_replay(db, scenario_id, flex_mode).await,
+        }
+    }
+
+    async fn handle_list(db: RecorderDatabase, limit: usize) -> anyhow::Result<()> {
+        let config = FlowRecordingConfig::default();
+        let recorder = FlowRecorder::new(db, config);
+        let flows = recorder.list_flows(Some(limit)).await?;
+
+        println!("Found {} flows:\n", flows.len());
+        for flow in flows {
+            let name = flow.name.as_deref().unwrap_or("(unnamed)");
+            let step_count = flow.steps.len();
+            println!("  {} - {} ({} steps)", flow.id, name, step_count);
+            if let Some(desc) = &flow.description {
+                println!("    {}", desc);
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn handle_view(
+        db: RecorderDatabase,
+        flow_id: String,
+        verbose: bool,
+    ) -> anyhow::Result<()> {
+        let config = FlowRecordingConfig::default();
+        let recorder = FlowRecorder::new(db.clone(), config);
+        let flow = recorder
+            .get_flow(&flow_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Flow not found: {}", flow_id))?;
+
         let name = flow.name.as_deref().unwrap_or("(unnamed)");
-        let step_count = flow.steps.len();
-        println!("  {} - {} ({} steps)", flow.id, name, step_count);
+        println!("Flow: {} - {}\n", flow.id, name);
         if let Some(desc) = &flow.description {
-            println!("    {}", desc);
+            println!("Description: {}\n", desc);
         }
-    }
 
-    Ok(())
-}
+        println!("Timeline ({} steps):\n", flow.steps.len());
+        println!("  Step | Label      | Timing  | Request ID");
+        println!("  -----|------------|---------|------------");
 
-async fn handle_view(db: RecorderDatabase, flow_id: String, verbose: bool) -> anyhow::Result<()> {
-    let config = FlowRecordingConfig::default();
-    let recorder = FlowRecorder::new(db.clone(), config);
-    let flow = recorder
-        .get_flow(&flow_id)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("Flow not found: {}", flow_id))?;
+        for (idx, step) in flow.steps.iter().enumerate() {
+            let label = step.step_label.as_deref().unwrap_or("-");
+            let timing =
+                step.timing_ms.map(|t| format!("{}ms", t)).unwrap_or_else(|| "-".to_string());
+            println!("  {:4} | {:10} | {:7} | {}", idx + 1, label, timing, step.request_id);
 
-    let name = flow.name.as_deref().unwrap_or("(unnamed)");
-    println!("Flow: {} - {}\n", flow.id, name);
-    if let Some(desc) = &flow.description {
-        println!("Description: {}\n", desc);
-    }
-
-    println!("Timeline ({} steps):\n", flow.steps.len());
-    println!("  Step | Label      | Timing  | Request ID");
-    println!("  -----|------------|---------|------------");
-
-    for (idx, step) in flow.steps.iter().enumerate() {
-        let label = step.step_label.as_deref().unwrap_or("-");
-        let timing = step.timing_ms.map(|t| format!("{}ms", t)).unwrap_or_else(|| "-".to_string());
-        println!("  {:4} | {:10} | {:7} | {}", idx + 1, label, timing, step.request_id);
-
-        if verbose {
-            // Fetch and display request details
-            if let Ok(Some(request)) = db.get_request(&step.request_id).await {
-                println!("        Request Details:");
-                println!("          Method: {}", request.method);
-                println!("          Path: {}", request.path);
-                if let Some(query) = &request.query_params {
-                    println!("          Query: {}", query);
+            if verbose {
+                // Fetch and display request details
+                if let Ok(Some(request)) = db.get_request(&step.request_id).await {
+                    println!("        Request Details:");
+                    println!("          Method: {}", request.method);
+                    println!("          Path: {}", request.path);
+                    if let Some(query) = &request.query_params {
+                        println!("          Query: {}", query);
+                    }
+                    if let Some(body) = &request.body {
+                        let body_preview = if body.len() > 200 {
+                            format!("{}...", &body[..200])
+                        } else {
+                            body.clone()
+                        };
+                        println!("          Body: {}", body_preview);
+                    }
                 }
-                if let Some(body) = &request.body {
-                    let body_preview = if body.len() > 200 {
-                        format!("{}...", &body[..200])
-                    } else {
-                        body.clone()
-                    };
-                    println!("          Body: {}", body_preview);
-                }
-            }
-            if let Ok(Some(response)) = db.get_response(&step.request_id).await {
-                println!("        Response Details:");
-                println!("          Status: {}", response.status_code);
-                if let Some(body) = &response.body {
-                    let body_preview = if body.len() > 200 {
-                        format!("{}...", &body[..200])
-                    } else {
-                        body.clone()
-                    };
-                    println!("          Body: {}", body_preview);
+                if let Ok(Some(response)) = db.get_response(&step.request_id).await {
+                    println!("        Response Details:");
+                    println!("          Status: {}", response.status_code);
+                    if let Some(body) = &response.body {
+                        let body_preview = if body.len() > 200 {
+                            format!("{}...", &body[..200])
+                        } else {
+                            body.clone()
+                        };
+                        println!("          Body: {}", body_preview);
+                    }
                 }
             }
         }
+
+        Ok(())
     }
 
-    Ok(())
-}
+    async fn handle_tag(
+        db: RecorderDatabase,
+        flow_id: String,
+        name: String,
+        tags: Option<String>,
+        description: Option<String>,
+    ) -> anyhow::Result<()> {
+        let config = FlowRecordingConfig::default();
+        let recorder = FlowRecorder::new(db, config);
 
-async fn handle_tag(
-    db: RecorderDatabase,
-    flow_id: String,
-    name: String,
-    tags: Option<String>,
-    description: Option<String>,
-) -> anyhow::Result<()> {
-    let config = FlowRecordingConfig::default();
-    let recorder = FlowRecorder::new(db, config);
+        let tags_vec = tags
+            .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
+            .unwrap_or_default();
 
-    let tags_vec = tags
-        .map(|t| t.split(',').map(|s| s.trim().to_string()).collect())
-        .unwrap_or_default();
+        recorder
+            .update_flow_metadata(&flow_id, Some(&name), description.as_deref(), Some(tags_vec))
+            .await?;
 
-    recorder
-        .update_flow_metadata(&flow_id, Some(&name), description.as_deref(), Some(tags_vec))
-        .await?;
+        info!("Tagged flow {} as '{}'", flow_id, name);
+        println!("Flow {} tagged as '{}'", flow_id, name);
 
-    info!("Tagged flow {} as '{}'", flow_id, name);
-    println!("Flow {} tagged as '{}'", flow_id, name);
+        Ok(())
+    }
 
-    Ok(())
-}
+    async fn handle_compile(
+        db: RecorderDatabase,
+        flow_id: String,
+        scenario_name: String,
+        flex_mode: bool,
+    ) -> anyhow::Result<()> {
+        let config = FlowRecordingConfig::default();
+        let recorder = FlowRecorder::new(db.clone(), config);
+        let flow = recorder
+            .get_flow(&flow_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Flow not found: {}", flow_id))?;
 
-async fn handle_compile(
-    db: RecorderDatabase,
-    flow_id: String,
-    scenario_name: String,
-    flex_mode: bool,
-) -> anyhow::Result<()> {
-    let config = FlowRecordingConfig::default();
-    let recorder = FlowRecorder::new(db.clone(), config);
-    let flow = recorder
-        .get_flow(&flow_id)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("Flow not found: {}", flow_id))?;
+        let compiler = FlowCompiler::new(db.clone());
+        let strict_mode = !flex_mode;
+        let scenario = compiler.compile_flow(&flow, scenario_name.clone(), strict_mode).await?;
 
-    let compiler = FlowCompiler::new(db.clone());
-    let strict_mode = !flex_mode;
-    let scenario = compiler.compile_flow(&flow, scenario_name.clone(), strict_mode).await?;
+        // Store the scenario
+        let storage = ScenarioStorage::new(db);
+        let version = storage.store_scenario_auto_version(&scenario).await?;
 
-    // Store the scenario
-    let storage = ScenarioStorage::new(db);
-    let version = storage.store_scenario_auto_version(&scenario).await?;
+        info!("Compiled flow {} into scenario {} v{}", flow_id, scenario.id, version);
+        println!(
+            "Compiled flow {} into scenario '{}' (ID: {}, Version: {})",
+            flow_id, scenario_name, scenario.id, version
+        );
 
-    info!("Compiled flow {} into scenario {} v{}", flow_id, scenario.id, version);
-    println!(
-        "Compiled flow {} into scenario '{}' (ID: {}, Version: {})",
-        flow_id, scenario_name, scenario.id, version
-    );
+        Ok(())
+    }
 
-    Ok(())
-}
+    async fn handle_scenarios(db: RecorderDatabase, limit: usize) -> anyhow::Result<()> {
+        let storage = ScenarioStorage::new(db);
+        let scenarios = storage.list_scenarios(Some(limit)).await?;
 
-async fn handle_scenarios(db: RecorderDatabase, limit: usize) -> anyhow::Result<()> {
-    let storage = ScenarioStorage::new(db);
-    let scenarios = storage.list_scenarios(Some(limit)).await?;
+        println!("Found {} scenarios:\n", scenarios.len());
+        for scenario in scenarios {
+            println!("  {} - {} v{}", scenario.id, scenario.name, scenario.version);
+            if let Some(desc) = &scenario.description {
+                println!("    {}", desc);
+            }
+            if !scenario.tags.is_empty() {
+                println!("    Tags: {}", scenario.tags.join(", "));
+            }
+        }
 
-    println!("Found {} scenarios:\n", scenarios.len());
-    for scenario in scenarios {
-        println!("  {} - {} v{}", scenario.id, scenario.name, scenario.version);
+        Ok(())
+    }
+
+    async fn handle_export(
+        db: RecorderDatabase,
+        scenario_id: String,
+        output: PathBuf,
+        _format: String,
+    ) -> anyhow::Result<()> {
+        let storage = ScenarioStorage::new(db);
+        storage.export_scenario_to_file(&scenario_id, &output).await?;
+
+        println!("Exported scenario {} to {}", scenario_id, output.display());
+        Ok(())
+    }
+
+    async fn handle_import(
+        db: RecorderDatabase,
+        input: PathBuf,
+        _format: Option<String>,
+    ) -> anyhow::Result<()> {
+        let storage = ScenarioStorage::new(db.clone());
+        let scenario = storage.import_scenario_from_file(&input).await?;
+
+        // Store the imported scenario
+        let version = storage.store_scenario_auto_version(&scenario).await?;
+
+        println!(
+            "Imported scenario '{}' (ID: {}, Version: {})",
+            scenario.name, scenario.id, version
+        );
+        Ok(())
+    }
+
+    async fn handle_replay(
+        db: RecorderDatabase,
+        scenario_id: String,
+        flex_mode: bool,
+    ) -> anyhow::Result<()> {
+        let storage = ScenarioStorage::new(db.clone());
+        let scenario = storage
+            .get_scenario(&scenario_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Scenario not found: {}", scenario_id))?;
+
+        println!("Replaying scenario: {} ({} steps)", scenario.name, scenario.steps.len());
+        println!("Mode: {}\n", if flex_mode { "flex" } else { "strict" });
+
+        // For CLI replay, we just validate the scenario
+        // Actual replay happens when the server is running with the scenario activated
+        println!("Scenario is ready for replay.");
+        println!("To use this scenario in a running server, activate it via the Admin UI or API.");
+        println!("\nScenario details:");
+        println!("  ID: {}", scenario.id);
+        println!("  Name: {}", scenario.name);
         if let Some(desc) = &scenario.description {
-            println!("    {}", desc);
+            println!("  Description: {}", desc);
         }
-        if !scenario.tags.is_empty() {
-            println!("    Tags: {}", scenario.tags.join(", "));
-        }
+        println!("  Steps: {}", scenario.steps.len());
+        println!("  State variables: {}", scenario.state_variables.len());
+
+        Ok(())
     }
-
-    Ok(())
-}
-
-async fn handle_export(
-    db: RecorderDatabase,
-    scenario_id: String,
-    output: PathBuf,
-    _format: String,
-) -> anyhow::Result<()> {
-    let storage = ScenarioStorage::new(db);
-    storage.export_scenario_to_file(&scenario_id, &output).await?;
-
-    println!("Exported scenario {} to {}", scenario_id, output.display());
-    Ok(())
-}
-
-async fn handle_import(
-    db: RecorderDatabase,
-    input: PathBuf,
-    _format: Option<String>,
-) -> anyhow::Result<()> {
-    let storage = ScenarioStorage::new(db.clone());
-    let scenario = storage.import_scenario_from_file(&input).await?;
-
-    // Store the imported scenario
-    let version = storage.store_scenario_auto_version(&scenario).await?;
-
-    println!(
-        "Imported scenario '{}' (ID: {}, Version: {})",
-        scenario.name, scenario.id, version
-    );
-    Ok(())
-}
-
-async fn handle_replay(
-    db: RecorderDatabase,
-    scenario_id: String,
-    flex_mode: bool,
-) -> anyhow::Result<()> {
-    let storage = ScenarioStorage::new(db.clone());
-    let scenario = storage
-        .get_scenario(&scenario_id)
-        .await?
-        .ok_or_else(|| anyhow::anyhow!("Scenario not found: {}", scenario_id))?;
-
-    println!("Replaying scenario: {} ({} steps)", scenario.name, scenario.steps.len());
-    println!("Mode: {}\n", if flex_mode { "flex" } else { "strict" });
-
-    // For CLI replay, we just validate the scenario
-    // Actual replay happens when the server is running with the scenario activated
-    println!("Scenario is ready for replay.");
-    println!("To use this scenario in a running server, activate it via the Admin UI or API.");
-    println!("\nScenario details:");
-    println!("  ID: {}", scenario.id);
-    println!("  Name: {}", scenario.name);
-    if let Some(desc) = &scenario.description {
-        println!("  Description: {}", desc);
-    }
-    println!("  Steps: {}", scenario.steps.len());
-    println!("  State variables: {}", scenario.state_variables.len());
-
-    Ok(())
 }
