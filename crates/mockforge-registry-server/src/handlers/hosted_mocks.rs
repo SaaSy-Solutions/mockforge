@@ -94,40 +94,17 @@ pub async fn create_deployment(
         }
     }
 
-    // Check plan limits
-    let limits = &org_ctx.org.limits_json;
-    let max_hosted_mocks = limits.get("max_hosted_mocks").and_then(|v| v.as_i64()).unwrap_or(0);
-
-    if max_hosted_mocks >= 0 {
-        // Count existing active deployments
-        let existing = state.store.list_hosted_mocks_by_org(org_ctx.org_id).await?;
-
-        let active_count = existing
-            .iter()
-            .filter(|m| {
-                matches!(m.status(), DeploymentStatus::Active | DeploymentStatus::Deploying)
-            })
-            .count();
-
-        if active_count as i64 >= max_hosted_mocks {
-            return Err(ApiError::InvalidRequest(format!(
-                "Hosted mocks limit exceeded. Your plan allows {} active deployments. Upgrade to deploy more.",
-                max_hosted_mocks
-            )));
-        }
-    }
-
     // Validate slug format
     let generated_slug;
     let slug = match request.slug.as_deref() {
         Some(s) => s,
         None => {
-            generated_slug = request
+            let base = request
                 .name
                 .to_lowercase()
                 .chars()
                 .map(|c| {
-                    if c.is_alphanumeric() || c == '-' {
+                    if c.is_ascii_alphanumeric() || c == '-' {
                         c
                     } else {
                         '-'
@@ -136,13 +113,24 @@ pub async fn create_deployment(
                 .collect::<String>()
                 .trim_matches('-')
                 .replace("--", "-");
+            let base = base.chars().take(40).collect::<String>();
+            let base = base.trim_matches('-');
+            let base = if base.is_empty() { "mock" } else { base };
+            generated_slug = format!("{}-{}", base, &Uuid::new_v4().simple().to_string()[..12]);
             &generated_slug
         }
     };
 
-    if !slug.chars().all(|c| c.is_alphanumeric() || c == '-') {
+    let canonical_slug = slug.to_ascii_lowercase();
+    let slug = canonical_slug.as_str();
+    if slug.is_empty()
+        || slug.len() > 63
+        || slug.starts_with('-')
+        || slug.ends_with('-')
+        || !slug.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+    {
         return Err(ApiError::InvalidRequest(
-            "Slug must contain only alphanumeric characters and hyphens".to_string(),
+            "Slug must be 1–63 ASCII letters, digits or hyphens, without a leading or trailing hyphen".to_string(),
         ));
     }
 
@@ -207,23 +195,10 @@ pub async fn create_deployment(
         }
     }
 
-    // Create deployment record
-    let deployment = state
-        .store
-        .create_hosted_mock_scoped(
-            mockforge_registry_core::models::hosted_mock::HostedMockCreation {
-                org_id: org_ctx.org_id,
-                project_id: request.project_id,
-                workspace_id: request.workspace_id,
-                name: &request.name,
-                slug,
-                description: request.description.as_deref(),
-                config_json,
-                openapi_spec_url: request.openapi_spec_url.as_deref(),
-                region: request.region.as_deref(),
-            },
-        )
-        .await?;
+    // Count and insert under one tenant-scoped organization lock. Pending
+    // rows reserve capacity immediately, before the deployer starts work.
+    let deployment =
+        super::hosted_capacity::create(&state, org_ctx.org_id, &request, slug, config_json).await?;
 
     // Log deployment creation
     log_deployment_event(
@@ -452,9 +427,14 @@ pub async fn delete_deployment(
         .await?;
 
     // Get deployment
-    let deployment = state
-        .store
-        .find_hosted_mock_by_id(deployment_id)
+    let mut lifecycle = super::hosted_capacity::LifecycleGuard::acquire(
+        state.db.runtime_pool(),
+        org_ctx.org_id,
+        deployment_id,
+    )
+    .await?;
+    let deployment = lifecycle
+        .find()
         .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
@@ -465,13 +445,41 @@ pub async fn delete_deployment(
         ));
     }
 
-    // Record audit log before deletion
+    // Only registry-recorded local deployments can skip remote cleanup. Legacy
+    // rows without a backend marker require provider reconciliation as well.
+    let local = deployment.metadata_json.get("hosting_backend").and_then(|value| value.as_str())
+        == Some("multitenant");
+    let flyio_client = if local {
+        None
+    } else {
+        Some(FlyioClient::new(std::env::var("FLYIO_API_TOKEN").map_err(|_| {
+            ApiError::InvalidRequest(
+                "Hosted deployment provider is not configured; cannot confirm cleanup".into(),
+            )
+        })?))
+    };
+
+    // Capture audit context; record completion only after successful cleanup.
     let ip_address = headers
         .get("X-Forwarded-For")
         .or_else(|| headers.get("X-Real-IP"))
         .and_then(|h| h.to_str().ok())
         .map(|s| s.split(',').next().unwrap_or(s).trim());
     let user_agent = headers.get("User-Agent").and_then(|h| h.to_str().ok());
+
+    lifecycle.request_deletion().await?;
+
+    if let Some(flyio_client) = flyio_client {
+        flyio_client
+            .delete_app_confirmed(&deployment_app_name(&deployment))
+            .await
+            .map_err(|error| {
+                ApiError::Internal(anyhow::anyhow!("Provider cleanup is unconfirmed: {}", error))
+            })?;
+    }
+
+    // Soft delete from database
+    lifecycle.complete_deletion().await?;
 
     state
         .store
@@ -489,118 +497,6 @@ pub async fn delete_deployment(
             user_agent,
         )
         .await;
-
-    // Update status to deleting before cleanup
-    state
-        .store
-        .update_hosted_mock_status(deployment_id, DeploymentStatus::Deleting, None)
-        .await?;
-
-    // Trigger actual deletion (stop service, cleanup resources, etc.)
-    // Try to delete from Fly.io if configured
-    if let Ok(flyio_token) = std::env::var("FLYIO_API_TOKEN") {
-        let flyio_client = FlyioClient::new(flyio_token);
-
-        // Generate app name (same as in orchestrator)
-        let app_name = format!(
-            "mockforge-{}-{}",
-            deployment
-                .org_id
-                .to_string()
-                .replace("-", "")
-                .chars()
-                .take(8)
-                .collect::<String>(),
-            deployment.slug
-        );
-
-        // Try to get machine_id from metadata
-        let machine_id = deployment.metadata_json.get("flyio_machine_id").and_then(|v| v.as_str());
-
-        if let Some(machine_id) = machine_id {
-            // Delete the specific machine
-            match flyio_client.delete_machine(&app_name, machine_id).await {
-                Ok(_) => {
-                    log_deployment_event(
-                        state.db.runtime_pool(),
-                        org_ctx.org_id,
-                        deployment_id,
-                        "info",
-                        &format!("Deleted Fly.io machine: {}", machine_id),
-                        None,
-                    )
-                    .await
-                    .ok();
-                }
-                Err(e) => {
-                    warn!("Failed to delete Fly.io machine {}: {}", machine_id, e);
-                    log_deployment_event(
-                        state.db.runtime_pool(),
-                        org_ctx.org_id,
-                        deployment_id,
-                        "warning",
-                        &format!("Failed to delete Fly.io machine: {}", e),
-                        None,
-                    )
-                    .await
-                    .ok();
-                    // Continue with app deletion and database deletion
-                }
-            }
-        } else {
-            // Machine ID not found in metadata, try to list and delete all machines
-            warn!(
-                "Machine ID not found in metadata for deployment {}, attempting to list machines",
-                deployment_id
-            );
-            match flyio_client.list_machines(&app_name).await {
-                Ok(machines) => {
-                    for machine in machines {
-                        if let Err(e) = flyio_client.delete_machine(&app_name, &machine.id).await {
-                            warn!("Failed to delete Fly.io machine {}: {}", machine.id, e);
-                        } else {
-                            log_deployment_event(
-                                state.db.runtime_pool(),
-                                org_ctx.org_id,
-                                deployment_id,
-                                "info",
-                                &format!("Deleted Fly.io machine: {}", machine.id),
-                                None,
-                            )
-                            .await
-                            .ok();
-                        }
-                    }
-                }
-                Err(e) => {
-                    warn!("Failed to list Fly.io machines for app {}: {}", app_name, e);
-                    // Continue with app deletion and database deletion
-                }
-            }
-        }
-
-        // Delete the Fly.io app itself to avoid empty apps piling up
-        match flyio_client.delete_app(&app_name).await {
-            Ok(_) => {
-                log_deployment_event(
-                    state.db.runtime_pool(),
-                    org_ctx.org_id,
-                    deployment_id,
-                    "info",
-                    &format!("Deleted Fly.io app: {}", app_name),
-                    None,
-                )
-                .await
-                .ok();
-            }
-            Err(e) => {
-                warn!("Failed to delete Fly.io app {}: {}", app_name, e);
-            }
-        }
-    }
-
-    // Soft delete from database
-    state.store.delete_hosted_mock(deployment_id).await?;
 
     log_deployment_event(
         state.db.runtime_pool(),
@@ -650,9 +546,15 @@ pub async fn redeploy_deployment(
         .await?;
 
     // Get existing deployment
-    let deployment = state
-        .store
-        .find_hosted_mock_by_id(deployment_id)
+    let mut lifecycle = super::hosted_capacity::LifecycleGuard::acquire(
+        state.db.runtime_pool(),
+        org_ctx.org_id,
+        deployment_id,
+    )
+    .await?;
+    lifecycle.ensure_not_deleting().await?;
+    let deployment = lifecycle
+        .find()
         .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
@@ -733,7 +635,9 @@ pub async fn redeploy_deployment(
     // the runtime pool (#1087).
     let rt_pool = state.db.runtime_pool().clone();
     let bg_org_id = org_ctx.org_id;
+    let storage = state.storage.clone();
     tokio::spawn(async move {
+        let _lifecycle = lifecycle;
         let rt_pool = &rt_pool;
         let set_status = |status: DeploymentStatus, msg: Option<String>| async move {
             crate::store::with_org_context(rt_pool, bg_org_id, move |tx| {
@@ -775,6 +679,24 @@ pub async fn redeploy_deployment(
                 }
             };
 
+        if crate::deployment::local_runtime::is_local(&updated_deployment) {
+            let compiled =
+                crate::deployment::spec_source::refresh(rt_pool, &storage, &updated_deployment)
+                    .await
+                    .and_then(|deployment| {
+                        crate::deployment::local_runtime::prepare(&deployment)
+                            .map_err(anyhow::Error::msg)
+                    });
+            match compiled {
+                Ok(_) => {
+                    let _ = set_status(DeploymentStatus::Active, None).await;
+                }
+                Err(error) => {
+                    let _ = set_status(DeploymentStatus::Failed, Some(error.to_string())).await;
+                }
+            }
+            return;
+        }
         // Try to redeploy via Fly.io if configured
         if let Ok(flyio_token) = std::env::var("FLYIO_API_TOKEN") {
             let flyio_client = FlyioClient::new(flyio_token);
@@ -1018,9 +940,15 @@ pub async fn stop_deployment(
         .require_permission(user_id, org_ctx.org_id, Permission::HostedMockUpdate)
         .await?;
 
-    let deployment = state
-        .store
-        .find_hosted_mock_by_id(deployment_id)
+    let mut lifecycle = super::hosted_capacity::LifecycleGuard::acquire(
+        state.db.runtime_pool(),
+        org_ctx.org_id,
+        deployment_id,
+    )
+    .await?;
+    lifecycle.ensure_not_deleting().await?;
+    let deployment = lifecycle
+        .find()
         .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
@@ -1036,21 +964,25 @@ pub async fn stop_deployment(
         )));
     }
 
-    if let Ok(flyio_token) = std::env::var("FLYIO_API_TOKEN") {
-        let flyio_client = FlyioClient::new(flyio_token);
-        let app_name = deployment_app_name(&deployment);
-        let machine_id = deployment.metadata_json.get("flyio_machine_id").and_then(|v| v.as_str());
-
-        if let Some(machine_id) = machine_id {
-            flyio_client.stop_machine(&app_name, machine_id).await.map_err(|e| {
-                ApiError::Internal(anyhow::anyhow!("Failed to stop machine: {}", e))
+    if !crate::deployment::local_runtime::is_local(&deployment) {
+        let machine_id = deployment
+            .metadata_json
+            .get("flyio_machine_id")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| {
+                ApiError::InvalidRequest(
+                    "No Fly.io machine ID found in deployment metadata; cannot stop".into(),
+                )
             })?;
-        } else {
-            warn!(
-                "No Fly.io machine ID found for deployment {}; marking as stopped anyway",
-                deployment_id
-            );
-        }
+        let flyio_token = std::env::var("FLYIO_API_TOKEN").map_err(|_| {
+            ApiError::InvalidRequest("Hosted deployment provider is not configured".into())
+        })?;
+        FlyioClient::new(flyio_token)
+            .stop_machine_confirmed(&deployment_app_name(&deployment), machine_id)
+            .await
+            .map_err(|error| {
+                ApiError::Internal(anyhow::anyhow!("Failed to confirm machine stopped: {}", error))
+            })?;
     }
 
     state
@@ -1092,9 +1024,17 @@ pub async fn start_deployment(
         .require_permission(user_id, org_ctx.org_id, Permission::HostedMockUpdate)
         .await?;
 
-    let deployment = state
-        .store
-        .find_hosted_mock_by_id(deployment_id)
+    super::entitlements::require_verified_free_owner(&state, &org_ctx.org).await?;
+
+    let mut lifecycle = super::hosted_capacity::LifecycleGuard::acquire(
+        state.db.runtime_pool(),
+        org_ctx.org_id,
+        deployment_id,
+    )
+    .await?;
+    lifecycle.ensure_not_deleting().await?;
+    let deployment = lifecycle
+        .find()
         .await?
         .ok_or_else(|| ApiError::InvalidRequest("Deployment not found".to_string()))?;
 
@@ -1103,27 +1043,52 @@ pub async fn start_deployment(
     }
 
     let status = deployment.status();
-    if !matches!(status, DeploymentStatus::Stopped) {
+    // A canceled or uncertain start retains its committed pending reservation.
+    // Only already-provisioned pending deployments may retry this operation.
+    if !matches!(status, DeploymentStatus::Stopped | DeploymentStatus::Pending)
+        || deployment.deployment_url.is_none()
+    {
         return Err(ApiError::InvalidRequest(format!(
-            "Cannot start a deployment with status '{}'. Must be 'stopped'.",
+            "Cannot start a deployment with status '{}'. Must be stopped or awaiting restart with an existing deployment.",
             status
         )));
     }
 
-    if let Ok(flyio_token) = std::env::var("FLYIO_API_TOKEN") {
+    if crate::deployment::local_runtime::is_local(&deployment) {
+        lifecycle.reserve_restart().await?;
+        let refreshed = crate::deployment::spec_source::refresh(
+            state.db.runtime_pool(),
+            &state.storage,
+            &deployment,
+        )
+        .await
+        .map_err(|error| ApiError::InvalidRequest(error.to_string()))?;
+        let _router = crate::deployment::local_runtime::prepare(&refreshed)
+            .map_err(ApiError::InvalidRequest)?;
+    } else {
+        let flyio_token = std::env::var("FLYIO_API_TOKEN").map_err(|_| {
+            ApiError::InvalidRequest("Hosted deployment provider is not configured".into())
+        })?;
+        let machine_id = deployment
+            .metadata_json
+            .get("flyio_machine_id")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| {
+                ApiError::InvalidRequest(
+                    "No Fly.io machine ID found in deployment metadata; cannot start".into(),
+                )
+            })?;
+        lifecycle.reserve_restart().await?;
         let flyio_client = FlyioClient::new(flyio_token);
         let app_name = deployment_app_name(&deployment);
-        let machine_id = deployment.metadata_json.get("flyio_machine_id").and_then(|v| v.as_str());
-
-        if let Some(machine_id) = machine_id {
-            flyio_client.start_machine(&app_name, machine_id).await.map_err(|e| {
-                ApiError::Internal(anyhow::anyhow!("Failed to start machine: {}", e))
+        // An error may follow an accepted remote start. Leave the pending intent
+        // and capacity reservation intact until confirmation or reconciliation.
+        flyio_client
+            .start_machine_confirmed(&app_name, machine_id)
+            .await
+            .map_err(|error| {
+                ApiError::Internal(anyhow::anyhow!("Failed to confirm machine started: {}", error))
             })?;
-        } else {
-            return Err(ApiError::InvalidRequest(
-                "No Fly.io machine ID found in deployment metadata; cannot start".to_string(),
-            ));
-        }
     }
 
     state

@@ -4,6 +4,8 @@
 
 ### Added
 
+- **[Cloud]** Share Free hosted capacity, monthly request limits and platform AI credits across a verified owner’s organizations. Preserve spent allowances through account recreation, bound deleted identity retention, retain uncertain provider budgets, and require audited usage evidence plus execution fences for stopped-call recovery. Keep provider execution connections separate from API requests. (#834, #868)
+
 - **[DevX]** Export live local workspace configuration to versioned JSON/YAML with credential references and stable ordering/timestamps. Authorized imports create new workspaces without overwriting existing state; explicit activation publishes namespaced static HTTP mocks atomically while retaining unrelated mocks. Unsupported authentication activation is rejected. (#1197)
 
 - **[Cloud]** Hosted deployments can explicitly select or change their capture workspace in the API and portal. Recorder batches use the deployment's verified organization/workspace, preserve historical attribution, and reject cross-organization assignments; unassigned deployments stay unassigned. (#720)

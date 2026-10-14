@@ -75,6 +75,7 @@ repos:
     entry: python3 scripts/precommit/clippy_scoped.py
     language: system
     pass_filenames: true
+    require_serial: true
     # Only fire on Rust source or Cargo manifest changes. Docs / UI / CI
     # config edits skip clippy entirely, which is the big iteration-speed
     # win (pre-commit clippy was 5-15 min per commit before this).

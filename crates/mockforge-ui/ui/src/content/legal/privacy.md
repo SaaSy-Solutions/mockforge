@@ -45,6 +45,7 @@ MockForge Cloud is hosted in the United States. If you access it from outside th
 - Account and Customer Content: kept while your account is active and deleted within 30 days of account deletion (backups age out within 90 days).
 - Request logs and diagnostic data: generally kept for up to 90 days.
 - Billing records: kept as long as tax and accounting law requires.
+- Free allowance abuse prevention: a private salted digest of verified email identities and quota accounting survives account deletion to prevent resetting a spent monthly allowance. Deleted-account identity bindings are eligible for deletion after 35 days and are removed by a daily cleanup, normally within 36 days. These digests are pseudonymous personal data; they are not exposed to other accounts. Verified email aliases remain bound while the account is active.
 - Security and audit logs: records of security-relevant events (the event type, timestamp, IP address, user agent, and pseudonymous identifiers such as internal account, organization or invitation IDs) are kept for 400 days from the event and then deleted automatically. They do not record your email address or username; a failed sign-in for an email address that has no account is recorded with a keyed hash of that address, not the address itself. We keep these logs after you delete your account, for security, fraud prevention and to comply with legal obligations (GDPR Art. 17(3)(b) and (e)). Once your account is deleted, they are no longer linked to your account details.
 
 ## 6. Security
