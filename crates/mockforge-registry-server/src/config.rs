@@ -28,6 +28,9 @@ pub struct Config {
     pub s3_bucket: String,
     pub s3_region: String,
     pub s3_endpoint: Option<String>, // For MinIO/custom S3
+    /// Fail startup instead of falling back to local storage when S3 is
+    /// configured but unreachable (`STORAGE_REQUIRE_S3`).
+    pub storage_require_s3: bool,
 
     /// Upload limits
     pub max_plugin_size: usize, // in bytes (default 50MB)
@@ -107,6 +110,7 @@ impl Config {
     /// - `S3_BUCKET`: S3 bucket name (default: "mockforge-plugins")
     /// - `S3_REGION`: S3 region (default: "us-east-1")
     /// - `S3_ENDPOINT`: Custom S3 endpoint for MinIO/compatible storage
+    /// - `STORAGE_REQUIRE_S3`: fail startup rather than fall back to local storage
     /// - `MAX_PLUGIN_SIZE`: Maximum plugin size in bytes (default: 52428800 / 50MB)
     /// - `RATE_LIMIT_PER_MINUTE`: Rate limit per minute (default: 60)
     /// - `ANALYTICS_DB_PATH`: Path to analytics database
@@ -162,6 +166,10 @@ impl Config {
             s3_endpoint: std::env::var("S3_ENDPOINT")
                 .ok()
                 .or_else(|| std::env::var("AWS_ENDPOINT_URL_S3").ok()),
+            storage_require_s3: std::env::var("STORAGE_REQUIRE_S3")
+                .ok()
+                .map(|v| v.to_lowercase() == "true" || v == "1")
+                .unwrap_or(false),
             max_plugin_size: std::env::var("MAX_PLUGIN_SIZE")
                 .unwrap_or_else(|_| "52428800".to_string()) // 50MB
                 .parse()
@@ -228,6 +236,7 @@ mod tests {
         assert_eq!(config.max_plugin_size, 52428800); // 50MB
         assert_eq!(config.rate_limit_per_minute, 60);
         assert!(config.s3_endpoint.is_none());
+        assert!(!config.storage_require_s3);
         assert!(config.analytics_db_path.is_none());
         assert_eq!(config.shutdown_timeout_secs, 30); // Default shutdown timeout
 
@@ -246,6 +255,7 @@ mod tests {
         std::env::set_var("S3_BUCKET", "custom-bucket");
         std::env::set_var("S3_REGION", "eu-west-1");
         std::env::set_var("S3_ENDPOINT", "http://localhost:9000");
+        std::env::set_var("STORAGE_REQUIRE_S3", "true");
         std::env::set_var("MAX_PLUGIN_SIZE", "10485760"); // 10MB
         std::env::set_var("RATE_LIMIT_PER_MINUTE", "120");
         std::env::set_var("ANALYTICS_DB_PATH", "/custom/path/analytics.db");
@@ -259,6 +269,7 @@ mod tests {
         assert_eq!(config.s3_bucket, "custom-bucket");
         assert_eq!(config.s3_region, "eu-west-1");
         assert_eq!(config.s3_endpoint, Some("http://localhost:9000".to_string()));
+        assert!(config.storage_require_s3);
         assert_eq!(config.max_plugin_size, 10485760);
         assert_eq!(config.rate_limit_per_minute, 120);
         assert_eq!(config.analytics_db_path, Some("/custom/path/analytics.db".to_string()));
@@ -270,6 +281,7 @@ mod tests {
         std::env::remove_var("JWT_SECRET");
         std::env::remove_var("S3_BUCKET");
         std::env::remove_var("S3_REGION");
+        std::env::remove_var("STORAGE_REQUIRE_S3");
         std::env::remove_var("S3_ENDPOINT");
         std::env::remove_var("MAX_PLUGIN_SIZE");
         std::env::remove_var("RATE_LIMIT_PER_MINUTE");

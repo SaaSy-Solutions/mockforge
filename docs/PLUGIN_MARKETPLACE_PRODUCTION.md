@@ -53,10 +53,13 @@ Routes are registered in `crates/mockforge-registry-server/src/routes.rs`.
 `PluginStorage` is S3-compatible with a local-filesystem fallback:
 
 - **S3 backend** via `aws-sdk-s3`. Honors a custom endpoint (`S3_ENDPOINT` / `AWS_ENDPOINT_URL_S3`)
-  with explicit credentials, or the default AWS credential-provider chain. Performs a
+  with explicit credentials, or the default AWS credential-provider chain. Custom endpoints
+  (MinIO, Cloudflare R2, ...) use path-style bucket addressing. Performs a
   connectivity/health check on startup.
 - **Local fallback**: if no usable bucket is configured or the S3 health check fails, falls
   back to a local directory (`STORAGE_PATH`, default `./data/storage`). Used for dev/test.
+  Set `STORAGE_REQUIRE_S3=true` to fail startup instead, so a misconfigured bucket can't
+  silently store artifacts on ephemeral local disk.
 - Key components are sanitized before use in S3 keys or file paths.
 
 Relevant env: `S3_BUCKET` / `BUCKET_NAME`, `S3_REGION` / `AWS_REGION`, `S3_ENDPOINT`,
@@ -88,6 +91,7 @@ Common optional:
 ```bash
 PORT=8080                          # default 8080
 STORAGE_PATH=./data/storage        # local storage dir when S3 is not configured
+STORAGE_REQUIRE_S3=true            # fail startup instead of falling back to STORAGE_PATH
 S3_BUCKET=mockforge-plugins        # enables S3 backend
 AWS_REGION=us-east-1
 REDIS_URL=redis://localhost:6379   # enables Redis-backed rate limiting

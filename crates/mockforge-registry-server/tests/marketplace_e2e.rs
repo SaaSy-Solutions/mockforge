@@ -191,6 +191,20 @@ async fn test_plugin_marketplace_workflow() {
     assert_eq!(publish_body["success"], true);
     let plugin_name = format!("test-plugin-{}", test_id);
 
+    // The tracked download must return the uploaded bytes. With S3 storage it
+    // redirects to a presigned URL; the bucket rejects unsigned reads (#1239).
+    let download = helper
+        .client
+        .get(format!(
+            "{}/api/v1/plugins/{}/versions/1.0.0/download",
+            helper.base_url, plugin_name
+        ))
+        .send()
+        .await
+        .expect("Failed to download plugin");
+    assert!(download.status().is_success(), "Plugin download failed: {}", download.status());
+    assert_eq!(download.bytes().await.unwrap().as_ref(), wasm_data.as_slice());
+
     // Step 4: Search for the plugin
     //
     // `SearchQuery` in `mockforge-plugin-registry` uses camelCase and requires
@@ -470,6 +484,32 @@ async fn test_scenario_marketplace_workflow() {
         publish_response.text().await
     );
 
+    // The advertised package URL must be fetchable (#1239). Local-storage
+    // `/storage/` paths aren't routed, so only check absolute URLs.
+    let version_response = helper
+        .client
+        .get(format!(
+            "{}/api/v1/marketplace/scenarios/{}/versions/1.0.0",
+            helper.base_url, scenario_name
+        ))
+        .header("Authorization", helper.auth_header().unwrap())
+        .send()
+        .await
+        .expect("Failed to get scenario version");
+    assert!(
+        version_response.status().is_success(),
+        "Scenario version lookup failed: {}",
+        version_response.status()
+    );
+    let version_body: serde_json::Value = version_response.json().await.unwrap();
+    let package_url = version_body["download_url"].as_str().expect("download_url").to_string();
+    if package_url.starts_with("http") {
+        let package =
+            helper.client.get(&package_url).send().await.expect("Failed to fetch package");
+        assert!(package.status().is_success(), "Package fetch failed: {}", package.status());
+        assert_eq!(package.bytes().await.unwrap().as_ref(), package_data.as_slice());
+    }
+
     // Step 4: Search for the scenario
     //
     // `ScenarioSearchQuery` uses snake_case; `tags` is required (no
@@ -746,4 +786,138 @@ async fn test_template_star_flow() {
     // Anonymous POST to star endpoint must be rejected.
     let anon = Client::new().post(&star_path).send().await.expect("anonymous request");
     assert_eq!(anon.status().as_u16(), 401, "anonymous star should be 401");
+}
+
+async fn publish_plugin_bytes(
+    helper: &MarketplaceTestHelper,
+    name: &str,
+    wasm: &[u8],
+) -> reqwest::StatusCode {
+    helper
+        .client
+        .post(format!("{}/api/v1/plugins/publish", helper.base_url))
+        .header("Authorization", helper.auth_header().unwrap())
+        .json(&json!({
+            "name": name,
+            "version": "1.0.0",
+            "description": "Overwrite guard test",
+            "category": "testing",
+            "license": "MIT",
+            "tags": vec!["test"],
+            "checksum": MarketplaceTestHelper::calculate_checksum(wasm),
+            "file_size": wasm.len() as i64,
+            "wasm_data": base64::engine::general_purpose::STANDARD.encode(wasm),
+            "dependencies": {}
+        }))
+        .send()
+        .await
+        .expect("Failed to publish plugin")
+        .status()
+}
+
+async fn publish_scenario_bytes(
+    helper: &MarketplaceTestHelper,
+    name: &str,
+    package: &[u8],
+) -> reqwest::StatusCode {
+    let manifest = json!({ "name": name, "version": "1.0.0", "description": "Overwrite guard" });
+    helper
+        .client
+        .post(format!("{}/api/v1/marketplace/scenarios/publish", helper.base_url))
+        .header("Authorization", helper.auth_header().unwrap())
+        .header("X-Org-Id", helper.org_id.unwrap().to_string())
+        .json(&json!({
+            "manifest": manifest.to_string(),
+            "checksum": MarketplaceTestHelper::calculate_checksum(package),
+            "size": package.len() as u64,
+            "package": base64::engine::general_purpose::STANDARD.encode(package)
+        }))
+        .send()
+        .await
+        .expect("Failed to publish scenario")
+        .status()
+}
+
+/// Another tenant can't publish over an existing plugin or scenario, and an
+/// owner can't replace a published version. Rejections happen before the
+/// upload, so the served artifact keeps the original bytes.
+#[tokio::test]
+#[ignore] // Requires running registry server
+async fn test_publish_cannot_overwrite_existing_artifacts() {
+    let base_url =
+        std::env::var("REGISTRY_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
+    let test_id = Uuid::new_v4().simple();
+    let mut owner = MarketplaceTestHelper::new(base_url.clone());
+    owner
+        .register_user(&format!("owner_{test_id}"), &format!("owner_{test_id}@example.com"))
+        .await
+        .expect("Failed to register owner");
+    owner
+        .create_org(&format!("owner-org-{test_id}"))
+        .await
+        .expect("Failed to create org");
+    let mut other = MarketplaceTestHelper::new(base_url);
+    other
+        .register_user(&format!("other_{test_id}"), &format!("other_{test_id}@example.com"))
+        .await
+        .expect("Failed to register other user");
+    other
+        .create_org(&format!("other-org-{test_id}"))
+        .await
+        .expect("Failed to create org");
+
+    let original = MarketplaceTestHelper::create_test_wasm();
+    // Same header plus an empty custom section: valid wasm, different bytes.
+    let mut replacement = original.clone();
+    replacement.extend_from_slice(&[0x00, 0x02, 0x01, b'x']);
+    let plugin = format!("guard-plugin-{test_id}");
+    assert!(publish_plugin_bytes(&owner, &plugin, &original).await.is_success());
+    assert_eq!(
+        publish_plugin_bytes(&other, &plugin, &replacement).await,
+        reqwest::StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        publish_plugin_bytes(&owner, &plugin, &replacement).await,
+        reqwest::StatusCode::CONFLICT
+    );
+    let served = owner
+        .client
+        .get(format!("{}/api/v1/plugins/{}/versions/1.0.0/download", owner.base_url, plugin))
+        .send()
+        .await
+        .expect("Failed to download plugin");
+    assert!(served.status().is_success());
+    assert_eq!(served.bytes().await.unwrap().as_ref(), original.as_slice());
+
+    let package = MarketplaceTestHelper::create_test_package();
+    let mut other_package = package.clone();
+    *other_package.last_mut().unwrap() = 0x01;
+    let scenario = format!("guard-scenario-{test_id}");
+    assert!(publish_scenario_bytes(&owner, &scenario, &package).await.is_success());
+    assert_eq!(
+        publish_scenario_bytes(&other, &scenario, &other_package).await,
+        reqwest::StatusCode::FORBIDDEN
+    );
+    // 409 for a published version, unless the plan's scenario limit (1 by
+    // default) rejects first with 400; either way nothing is uploaded.
+    let republish = publish_scenario_bytes(&owner, &scenario, &other_package).await;
+    assert!(republish.is_client_error(), "owner republish returned {republish}");
+    let version: serde_json::Value = owner
+        .client
+        .get(format!(
+            "{}/api/v1/marketplace/scenarios/{}/versions/1.0.0",
+            owner.base_url, scenario
+        ))
+        .header("Authorization", owner.auth_header().unwrap())
+        .send()
+        .await
+        .expect("Failed to get scenario version")
+        .json()
+        .await
+        .unwrap();
+    let url = version["download_url"].as_str().unwrap().to_string();
+    if url.starts_with("http") {
+        let served = owner.client.get(&url).send().await.expect("Failed to fetch package");
+        assert_eq!(served.bytes().await.unwrap().as_ref(), package.as_slice());
+    }
 }
