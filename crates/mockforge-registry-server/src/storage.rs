@@ -554,8 +554,8 @@ impl PluginStorage {
     /// side too, no org_id column).
     pub async fn upload_snapshot_blob(
         &self,
-        workspace_id: uuid::Uuid,
-        snapshot_id: uuid::Uuid,
+        workspace_id: Uuid,
+        snapshot_id: Uuid,
         data: Vec<u8>,
     ) -> Result<String> {
         let key = format!("snapshots/{workspace_id}/{snapshot_id}.json");
@@ -584,8 +584,8 @@ impl PluginStorage {
     /// uploaded. Returns the raw bytes — caller deserializes.
     pub async fn read_snapshot_blob(
         &self,
-        workspace_id: uuid::Uuid,
-        snapshot_id: uuid::Uuid,
+        workspace_id: Uuid,
+        snapshot_id: Uuid,
     ) -> Result<Vec<u8>> {
         let key = format!("snapshots/{workspace_id}/{snapshot_id}.json");
         match &self.backend {
@@ -608,11 +608,7 @@ impl PluginStorage {
     /// Delete a snapshot's blob (called from snapshot retention
     /// worker once the row is marked `expired`). Idempotent — missing
     /// keys are not an error.
-    pub async fn delete_snapshot_blob(
-        &self,
-        workspace_id: uuid::Uuid,
-        snapshot_id: uuid::Uuid,
-    ) -> Result<()> {
+    pub async fn delete_snapshot_blob(&self, workspace_id: Uuid, snapshot_id: Uuid) -> Result<()> {
         let key = format!("snapshots/{workspace_id}/{snapshot_id}.json");
         match &self.backend {
             StorageBackend::S3 { client, bucket, .. } => {
