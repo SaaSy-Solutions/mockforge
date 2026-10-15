@@ -4,6 +4,7 @@ pub mod audit_log_retention;
 pub mod contract_probe;
 pub mod fly_spend_alert;
 pub mod incident_dispatcher;
+pub mod observability_alerts;
 pub mod osv_sync;
 pub mod plugin_scanner;
 pub mod runtime_logs_retention;

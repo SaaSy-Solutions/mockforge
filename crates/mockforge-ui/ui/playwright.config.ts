@@ -2,7 +2,7 @@ import { defineConfig, devices } from '@playwright/test';
 
 /**
  * Playwright configuration for MockForge Admin UI v2
- * 
+ *
  * This configuration enables end-to-end testing of the Admin UI,
  * including all major pages and functionality.
  */
@@ -10,13 +10,17 @@ export default defineConfig({
   // Test directory
   testDir: './e2e',
 
+  // Cloud deployment specs have separate authentication and capabilities.
+  // Run them with playwright-deployed.config.ts, never the local project.
+  testIgnore: ['**/*-deployed.spec.ts'],
+
   // Global setup/teardown for coverage collection
   globalSetup: process.env.COLLECT_COVERAGE === 'true' ? './e2e/global-setup.ts' : undefined,
   globalTeardown: process.env.COLLECT_COVERAGE === 'true' ? './e2e/global-teardown.ts' : undefined,
 
   // Test setup file (auto-imported before all tests)
   // Note: We'll use a different approach - see coverage-helpers.ts for manual collection
-  
+
   // Timeout for each test
   timeout: 60 * 1000, // 60 seconds - increased for login and navigation
 
@@ -97,4 +101,3 @@ export default defineConfig({
   //   stderr: 'pipe',
   // },
 });
-

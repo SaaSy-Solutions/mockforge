@@ -26,7 +26,7 @@
 #[deprecated(note = "Use mockforge_template_expansion::expand_templates_in_json instead")]
 pub fn expand_templates_in_json(
     value: serde_json::Value,
-    context: &crate::ai_response::RequestContext,
+    context: &mockforge_foundation::ai_response::RequestContext,
 ) -> serde_json::Value {
     use serde_json::Value;
 
@@ -109,7 +109,7 @@ fn value_to_string(val: &serde_json::Value) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ai_response::RequestContext;
+    use mockforge_foundation::ai_response::RequestContext;
     use serde_json::json;
     use std::collections::HashMap;
 

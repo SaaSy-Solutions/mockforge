@@ -37,7 +37,7 @@ test.describe('Hosted Mocks — Deployed Site', () => {
 
     // Wait for the Hosted Mocks heading
     await expect(
-      mainContent(page).getByRole('heading', { name: 'Hosted Mocks' })
+      mainContent(page).getByRole('heading', { name: 'Hosted Mocks', level: 1, exact: true })
     ).toBeVisible({ timeout: 10000 });
   });
 
@@ -52,20 +52,19 @@ test.describe('Hosted Mocks — Deployed Site', () => {
 
     test('should display the page heading', async ({ page }) => {
       await expect(
-        mainContent(page).getByRole('heading', { name: 'Hosted Mocks' })
+        mainContent(page).getByRole('heading', { name: 'Hosted Mocks', level: 1, exact: true })
       ).toBeVisible();
     });
 
     test('should display the page subtitle', async ({ page }) => {
       await expect(
-        mainContent(page).getByText('Deploy and manage cloud-hosted mock services')
+        mainContent(page).getByText('Deploy mock APIs to the cloud and monitor their health, traffic and logs.', { exact: true })
       ).toBeVisible();
     });
 
     test('should display breadcrumb navigation', async ({ page }) => {
-      const banner = page.getByRole('banner');
-      await expect(banner.getByText('Home')).toBeVisible();
-      await expect(banner.getByText('Hosted Mocks')).toBeVisible();
+      const breadcrumb = page.getByRole('navigation', { name: 'Breadcrumb', exact: true });
+      await expect(breadcrumb.locator('[aria-current="page"]')).toHaveText('Hosted Mocks');
     });
   });
 
@@ -91,7 +90,7 @@ test.describe('Hosted Mocks — Deployed Site', () => {
       await page.waitForTimeout(1500);
 
       await expect(
-        main.getByRole('heading', { name: 'Hosted Mocks' })
+        main.getByRole('heading', { name: 'Hosted Mocks', level: 1, exact: true })
       ).toBeVisible();
     });
   });
@@ -275,7 +274,7 @@ test.describe('Hosted Mocks — Deployed Site', () => {
       }
 
       await expect(
-        main.getByRole('heading', { name: 'Hosted Mocks' })
+        main.getByRole('heading', { name: 'Hosted Mocks', level: 1, exact: true })
       ).toBeVisible();
     });
   });
@@ -304,8 +303,7 @@ test.describe('Hosted Mocks — Deployed Site', () => {
       const dialog = page.getByRole('dialog');
       const region = dialog.getByRole('combobox', { name: 'Region' });
       await expect(region).toBeVisible();
-      // Default is "iad" — the Select renders the full "Label (code)" string
-      await expect(region).toContainText('iad');
+      await expect(region).toHaveValue('iad');
 
       await dialog.getByRole('button', { name: 'Cancel' }).click();
     });
@@ -315,17 +313,17 @@ test.describe('Hosted Mocks — Deployed Site', () => {
       await page.waitForTimeout(500);
 
       const dialog = page.getByRole('dialog');
-      await dialog.getByRole('combobox', { name: 'Region' }).click();
-      await page.waitForTimeout(300);
+      const region = dialog.getByRole('combobox', { name: 'Region' });
+      // The compatibility Select is a native select; its options do not
+      // render as a separate popup listbox in the page's accessibility tree.
+      for (const code of ['iad', 'lhr', 'nrt']) {
+        await expect(region.locator(`option[value="${code}"]`)).toHaveCount(1);
+      }
+      await region.selectOption('lhr');
+      await expect(region).toHaveValue('lhr');
+      await region.selectOption('iad');
+      await expect(region).toHaveValue('iad');
 
-      // Menu renders as a listbox outside the dialog
-      const listbox = page.getByRole('listbox');
-      await expect(listbox.getByRole('option', { name: /iad/ })).toBeVisible();
-      await expect(listbox.getByRole('option', { name: /lhr/ })).toBeVisible();
-      await expect(listbox.getByRole('option', { name: /nrt/ })).toBeVisible();
-
-      // Close the menu without changing the selection
-      await page.keyboard.press('Escape');
       await dialog.getByRole('button', { name: 'Cancel' }).click();
     });
 
@@ -394,15 +392,14 @@ test.describe('Hosted Mocks — Deployed Site', () => {
       const firstRowStatus = (await firstDataRow.locator('td').nth(1).textContent()) ?? '';
 
       if (/active/i.test(firstRowStatus)) {
-        // Redeploy + Stop buttons expose their labels via the MUI Tooltip's
-        // `aria-label`. Scope to the first row so we don't pick up matches
-        // from other rows.
-        await expect(firstDataRow.getByLabel('Redeploy')).toBeVisible();
-        await expect(firstDataRow.getByLabel('Stop')).toBeVisible();
+        // Row actions include the deployment name in their accessible label.
+        // Scope to the row so another deployment cannot satisfy the assertion.
+        await expect(firstDataRow.getByRole('button', { name: /^Redeploy / })).toBeVisible();
+        await expect(firstDataRow.getByRole('button', { name: /^Stop deployment / })).toBeVisible();
       } else if (/stopped/i.test(firstRowStatus)) {
-        await expect(firstDataRow.getByLabel('Start')).toBeVisible();
+        await expect(firstDataRow.getByRole('button', { name: /^Start deployment / })).toBeVisible();
       } else if (/failed/i.test(firstRowStatus)) {
-        await expect(firstDataRow.getByLabel('Redeploy')).toBeVisible();
+        await expect(firstDataRow.getByRole('button', { name: /^Redeploy / })).toBeVisible();
       }
       // If pending/deploying/deleting, no lifecycle buttons are expected
       // yet — the test simply passes without additional assertions.
@@ -485,36 +482,36 @@ test.describe('Hosted Mocks — Deployed Site', () => {
     test('should navigate to Dashboard and back', async ({ page }) => {
       const nav = page.locator('nav[aria-label="Main navigation"]');
 
-      await nav.getByRole('button', { name: 'Dashboard' }).click();
+      await nav.getByRole('link', { name: 'Dashboard', exact: true }).click();
       await page.waitForTimeout(1500);
 
       await expect(
         mainContent(page).getByRole('heading', { name: 'Dashboard', level: 1 })
       ).toBeVisible({ timeout: 5000 });
 
-      await nav.getByRole('button', { name: 'Hosted Mocks' }).click();
+      await nav.getByRole('link', { name: 'Hosted Mocks', exact: true }).click();
       await page.waitForTimeout(1500);
 
       await expect(
-        mainContent(page).getByRole('heading', { name: 'Hosted Mocks' })
+        mainContent(page).getByRole('heading', { name: 'Hosted Mocks', level: 1, exact: true })
       ).toBeVisible({ timeout: 5000 });
     });
 
     test('should navigate to Services and back', async ({ page }) => {
       const nav = page.locator('nav[aria-label="Main navigation"]');
 
-      await nav.getByRole('button', { name: 'Services' }).click();
+      await nav.getByRole('link', { name: 'Services', exact: true }).click();
       await page.waitForTimeout(1500);
 
       await expect(
         mainContent(page).getByRole('heading', { name: 'Services', exact: true, level: 1 })
       ).toBeVisible({ timeout: 5000 });
 
-      await nav.getByRole('button', { name: 'Hosted Mocks' }).click();
+      await nav.getByRole('link', { name: 'Hosted Mocks', exact: true }).click();
       await page.waitForTimeout(1500);
 
       await expect(
-        mainContent(page).getByRole('heading', { name: 'Hosted Mocks' })
+        mainContent(page).getByRole('heading', { name: 'Hosted Mocks', level: 1, exact: true })
       ).toBeVisible({ timeout: 5000 });
     });
   });
@@ -525,7 +522,7 @@ test.describe('Hosted Mocks — Deployed Site', () => {
   test.describe('Accessibility', () => {
     test('should have a page heading', async ({ page }) => {
       await expect(
-        mainContent(page).getByRole('heading', { name: 'Hosted Mocks' })
+        mainContent(page).getByRole('heading', { name: 'Hosted Mocks', level: 1, exact: true })
       ).toBeVisible();
     });
 

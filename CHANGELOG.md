@@ -1,6 +1,77 @@
 ## [Unreleased]
 
+## [0.3.234] - 2026-10-14
+
+### Added
+
+- **[DevX]** Export live local workspace configuration to versioned JSON/YAML with credential references and stable ordering/timestamps. Authorized imports create new workspaces without overwriting existing state; explicit activation publishes namespaced static HTTP mocks atomically while retaining unrelated mocks. Unsupported authentication activation is rejected. (#1197)
+
+- **[Cloud]** Hosted deployments can explicitly select or change their capture workspace in the API and portal. Recorder batches use the deployment's verified organization/workspace, preserve historical attribution, and reject cross-organization assignments; unassigned deployments stay unassigned. (#720)
+
+- **[Contracts]** Add the `proxy` CLI command with passive or strict OpenAPI conformance validation and the shared violation feed. Preserve binary and redirect responses, honor configured upstream timeouts, and validate response status ranges, default schemas, and malformed JSON. (#864)
+
+- **[Cloud]** Saved observability queries can raise tenant-scoped incidents from request logs, traces, and recorded exchange metrics. Validated alert rules share centralized severity mapping and IncidentBus dispatch; repeated breaches deduplicate, sampled recovery resolves, and missing or incomplete telemetry does not imply recovery. (#720)
+
+- **[Cloud]** Monitored services support per-service cron schedules and IANA timezones, with legacy interval cadence preserved. Probe runs and due-state claims commit atomically so overlapping scheduler ticks do not enqueue the same occurrence twice. (#720)
+
+### Changed
+
+- **[DevX]** Failure-designer and incident-replay HTTP handlers now live in Intelligence behind typed Chaos providers, preserving the existing HTTP states, request types, generated scenarios, import formats, and error responses. (#632)
+
+- **[DevX]** Snapshot diff routes and comparison logic now live in Intelligence behind a typed current-mock projection. HTTP retains its management state, public DTO paths and router signature. (#632)
+
+- **[DevX]** Risk-simulation HTTP handlers now live in intelligence behind a typed engine interface. Shared risk-assessment DTOs live in foundation, while HTTP retains its original state fields and public auth type paths. (#632)
+
+- **[DevX]** Behavioral-cloning HTTP handlers now live in intelligence and use shared foundation scenario types. A recorder storage adapter preserves the HTTP compatibility state and SQLite behavior without adding a reverse dependency. (#631)
+
 ### Fixed
+
+- **[DevX]** Return completed UUID template expansions before running unrelated token scans. Keep fresh UUID generation, repeated-token behavior, unresolved tokens, and bare response-function processing.
+
+- **[DevX]** Keep pre-commit Clippy in one invocation with the complete changed-file list. This avoids overlapping target-lock queues and repeated feature graphs while preserving crate/workspace selection and lint flags. (#706)
+
+- **[Cloud]** Enforce one case-insensitive email identity across concurrent registry signups and account lookups. Reject legacy collisions without merging accounts; clear verification after an email change. OAuth requires provider-verified email proof and rejects unverified local-account linking or replacement of an existing provider identity. (#908)
+
+- **[Protocols]** AMQP pull deliveries and committed transaction publishes are recorded; rolled-back publishes and empty pulls remain excluded. MQTT captures retained deliveries and last-will publishes and deliveries. Publisher confirmations use a separate sequence from consumer delivery tags, allowing publish and consume operations on the same channel. Real AMQP, MQTT and Kafka clients verify durable recording payloads and metadata. (#715)
+
+- **[DevX]** Honor optional CLI protocol and subsystem features during shared startup, preserve standalone listeners and shutdown handling, and reject unavailable requested operations before creating runtime state. Declare HTTP and VBR prerequisites and include SMTP in its HTTP query-import gate.
+
+- **[DevX]** gRPC startup accepts an owned listener and retains its socket through discovery and TLS setup. Real client fixtures reserve loopback port-zero listeners instead of releasing a temporary port before server startup.
+
+- **[DevX]** OIDC environment fixtures run in isolated child processes, preventing parallel tests from overwriting issuer and discovery settings while exercising the real environment-based configuration paths.
+
+- **[Contracts]** Move drift-budget and contract-health handlers into Intelligence through typed engine providers, retaining the existing HTTP state constructors and feature gates. Bind timeline workspace IDs as UUIDs so persisted threat and forecast rows appear instead of an empty successful response. (#632)
+
+- **[DevX]** Preserve the public HTTP handler module paths for consistency, fidelity and X-Ray after moving their implementations to Intelligence. (#632)
+
+- **[DevX]** Honor optional HTTP scenario, world-state, performance and route-chaos feature gates for modules, state and route wiring, allowing minimal builds to retain basic mocks and health probes.
+
+- **[DevX]** Preserve shared configuration types in minimal Core builds and gate optional workspace and advanced runtime integrations consistently. Voice workspace construction declares its workspace/data prerequisites, and advanced engines declare their workspace and persona-type prerequisites.
+
+- **[DevX]** Integration builds check shared-disk headroom and restored Cargo library artifacts before compiling. Read-only diagnostics replace automatic target deletion and retain foreign or active build files. (#706)
+
+- **[DevX]** Integration preflight verifies an owned 1 MiB temporary allocation and flush, reporting per-user quota and space errors before build retries. Existing temporary files and caches are preserved. (#706)
+
+- **[DevX]** Publish Recorder before the AMQP, Kafka and MQTT crates that depend on it. The publish-list guard checks normal and build dependency order, preventing partial releases caused by missing same-version dependencies.
+
+- **[VBR]** Create SQLite foreign keys with table declarations and enforce them on every connection. Return created records using their actual keys with HTTP 201. Runtime tests use isolated databases and fail on setup errors instead of silently passing.
+
+- **[Security]** Update the locked QUIC protocol dependency to `quinn-proto` 0.11.18, fixing five RustSec packet-handling and memory-exhaustion advisories. Its required Rand 0.10 patch dependency is updated without enabling new protocol features.
+
+- **[Cloud]** Contract-drift AI callbacks carry the persisted run identity so usage audits identify the originating user. The registry verifies the run, suite, and sampled workspace belong to the requested organization and rejects forged actor claims; scheduled and older anonymous callbacks remain anonymous. (#869)
+
+- **[Cloud]** Hosted-mock spec upload uses a keyboard-accessible native button, and deployment table headers expose column semantics. Cloud configuration and dashboard browser tests follow their supported workspace features, while local server controls retain separate coverage. (#1051)
+
+## [0.3.233] - 2026-10-12
+
+### Fixed
+
+- **[DevX]** Explicit mock health routes coexist with built-in health probes instead of crashing server startup; this restores the generated `init` project's OpenAPI example. (#851)
+- **[DevX]** The README opens with a working Docker example and a reproducible cold-start measurement. New `init` projects print their startup command and test request; installation guidance no longer promises a 30-second source build. (#851)
+- **[Cloud]** HTTP hook response previews truncate at a valid UTF-8 boundary, preventing logging from panicking on multibyte response bodies in both orchestration implementations.
+
+- **[DevX]** `ftp serve --config` reads standalone FTP settings or a server YAML `ftp` section, loads configuration-relative fixture directories, and honors explicit CLI overrides. FTP listeners apply the configured passive port range and idle timeout. (#794)
+- **[Cloud]** Stripe trials allow checkout without a payment method and cancel when the trial ends without one; zero-trial paid checkout still collects a card. Actual SDK request tests cover both paid plans and billing intervals. (#837, #714)
 
 - **[Reality]** Verify persona CI-hit recording from actual HTTP headers through SQLite persistence, including optional run IDs and ignored blank/invalid labels, and document analytics setup and tenant-context limits. (#716)
 

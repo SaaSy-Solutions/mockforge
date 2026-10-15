@@ -1,11 +1,14 @@
 //! Priority-based HTTP request handler implementing the full priority chain:
 //! Custom Fixtures → Replay → Stateful → Route Chaos (per-route fault/latency) → Global Fail → Proxy → Mock → Record
 
+#[cfg(feature = "advanced")]
 use crate::behavioral_economics::BehavioralEconomicsEngine;
 use crate::stateful_handler::StatefulResponseHandler;
+#[cfg(feature = "advanced")]
+use crate::RealityContinuumEngine;
 use crate::{
-    CustomFixtureLoader, Error, FailureInjector, ProxyHandler, RealityContinuumEngine,
-    RecordReplayHandler, RequestFingerprint, ResponsePriority, ResponseSource, Result,
+    CustomFixtureLoader, Error, FailureInjector, ProxyHandler, RecordReplayHandler,
+    RequestFingerprint, ResponsePriority, ResponseSource, Result,
 };
 // RouteChaosInjector moved to mockforge-route-chaos crate to avoid Send issues
 // We define a trait here that RouteChaosInjector can implement to avoid circular dependency
@@ -121,8 +124,10 @@ pub struct PriorityHttpHandler {
     /// OpenAPI spec for tag extraction
     openapi_spec: Option<crate::openapi::spec::OpenApiSpec>,
     /// Reality Continuum engine for blending mock and real responses
+    #[cfg(feature = "advanced")]
     continuum_engine: Option<Arc<RealityContinuumEngine>>,
     /// Behavioral Economics Engine for reactive mock behavior
+    #[cfg(feature = "advanced")]
     behavioral_economics_engine: Option<Arc<RwLock<BehavioralEconomicsEngine>>>,
     /// Request tracking for metrics (endpoint -> (request_count, error_count, last_request_time))
     #[allow(dead_code, clippy::type_complexity)]
@@ -211,7 +216,9 @@ impl PriorityHttpHandler {
             proxy_handler,
             mock_generator,
             openapi_spec: None,
+            #[cfg(feature = "advanced")]
             continuum_engine: None,
+            #[cfg(feature = "advanced")]
             behavioral_economics_engine: None,
             request_metrics: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -235,7 +242,9 @@ impl PriorityHttpHandler {
             proxy_handler,
             mock_generator,
             openapi_spec,
+            #[cfg(feature = "advanced")]
             continuum_engine: None,
+            #[cfg(feature = "advanced")]
             behavioral_economics_engine: None,
             request_metrics: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -260,12 +269,14 @@ impl PriorityHttpHandler {
     }
 
     /// Set Reality Continuum engine
+    #[cfg(feature = "advanced")]
     pub fn with_continuum_engine(mut self, engine: Arc<RealityContinuumEngine>) -> Self {
         self.continuum_engine = Some(engine);
         self
     }
 
     /// Set Behavioral Economics Engine
+    #[cfg(feature = "advanced")]
     pub fn with_behavioral_economics_engine(
         mut self,
         engine: Arc<RwLock<BehavioralEconomicsEngine>>,
@@ -472,6 +483,7 @@ impl PriorityHttpHandler {
         }
 
         // Check if Reality Continuum is enabled and should blend responses
+        #[cfg(feature = "advanced")]
         let should_blend = if let Some(ref continuum_engine) = self.continuum_engine {
             continuum_engine.is_enabled().await
         } else {
@@ -495,6 +507,7 @@ impl PriorityHttpHandler {
                 let is_shadow = proxy_handler.config.should_shadow(uri.path());
 
                 // If continuum is enabled, we need both mock and real responses
+                #[cfg(feature = "advanced")]
                 if should_blend {
                     // Fetch both responses in parallel
                     let proxy_future = proxy_handler.proxy_request(method, uri, headers, body);
@@ -842,6 +855,9 @@ impl PriorityHttpHandler {
         uri: &Uri,
         latency_ms: Option<u64>,
     ) -> Result<PriorityResponse> {
+        #[cfg(not(feature = "advanced"))]
+        let _ = (uri, latency_ms);
+        #[cfg(feature = "advanced")]
         if let Some(ref engine) = self.behavioral_economics_engine {
             let engine = engine.read().await;
             let evaluator = engine.condition_evaluator();
@@ -1189,22 +1205,26 @@ mod tests {
         let handler = handler.with_route_chaos_injector(route_chaos);
         assert!(handler.route_chaos_injector.is_some());
 
-        // Test with_continuum_engine
-        let continuum_engine = Arc::new(RealityContinuumEngine::new(
-            crate::reality_continuum::config::ContinuumConfig::default(),
-        ));
-        let handler = handler.with_continuum_engine(continuum_engine);
-        assert!(handler.continuum_engine.is_some());
+        #[cfg(feature = "advanced")]
+        let handler = {
+            // Test with_continuum_engine
+            let continuum_engine = Arc::new(RealityContinuumEngine::new(
+                crate::reality_continuum::config::ContinuumConfig::default(),
+            ));
+            let handler = handler.with_continuum_engine(continuum_engine);
+            assert!(handler.continuum_engine.is_some());
 
-        // Test with_behavioral_economics_engine
-        let behavioral_engine = Arc::new(RwLock::new(
-            BehavioralEconomicsEngine::new(
-                crate::behavioral_economics::config::BehavioralEconomicsConfig::default(),
-            )
-            .unwrap(),
-        ));
-        let handler = handler.with_behavioral_economics_engine(behavioral_engine);
-        assert!(handler.behavioral_economics_engine.is_some());
+            // Test with_behavioral_economics_engine
+            let behavioral_engine = Arc::new(RwLock::new(
+                BehavioralEconomicsEngine::new(
+                    crate::behavioral_economics::config::BehavioralEconomicsConfig::default(),
+                )
+                .unwrap(),
+            ));
+            let handler = handler.with_behavioral_economics_engine(behavioral_engine);
+            assert!(handler.behavioral_economics_engine.is_some());
+            handler
+        };
 
         // Test with_behavioral_scenario_replay
         let scenario_replay = Arc::new(MockBehavioralScenarioReplay);
@@ -1608,6 +1628,7 @@ paths:
         assert_eq!(response.source.source_type, "mock");
     }
 
+    #[cfg(feature = "advanced")]
     #[tokio::test]
     async fn test_behavioral_economics_engine_path() {
         let temp_dir = TempDir::new().unwrap();
@@ -1930,6 +1951,7 @@ paths:
         assert_eq!(response.source.source_type, "mock");
     }
 
+    #[cfg(feature = "advanced")]
     #[tokio::test]
     async fn test_continuum_engine_enabled_check() {
         let temp_dir = TempDir::new().unwrap();

@@ -17,13 +17,6 @@ fn proto_dir() -> String {
     manifest.join("proto").to_string_lossy().into_owned()
 }
 
-async fn free_port() -> u16 {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let port = listener.local_addr().unwrap().port();
-    drop(listener);
-    port
-}
-
 /// Poll until the server is accepting TCP connections, or time out.
 async fn wait_for_port(port: u16, max: Duration) {
     let deadline = tokio::time::Instant::now() + max;
@@ -38,12 +31,17 @@ async fn wait_for_port(port: u16, max: Duration) {
     }
 }
 
-/// Spawn a Greeter mock server on a free port and return the client
+/// Spawn a Greeter mock server on an owned, continuously reserved port and return the client
 /// endpoint URL + the server JoinHandle. Caller aborts the handle to
 /// stop the server. HTTP bridge + reflection are disabled — we only
 /// need the gRPC socket for these tests.
 async fn spawn_greeter() -> (String, tokio::task::JoinHandle<()>) {
-    let port = free_port().await;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    assert!(
+        tokio::net::TcpListener::bind(listener.local_addr().unwrap()).await.is_err(),
+        "the fixture must retain exclusive ownership of its endpoint during startup"
+    );
     // proto_dir must be the bundled absolute path (the default `"proto"`
     // relative path only works when CWD happens to be the crate root,
     // which isn't guaranteed for `cargo test --test`).
@@ -56,7 +54,7 @@ async fn spawn_greeter() -> (String, tokio::task::JoinHandle<()>) {
         overrides: vec![],
     };
     let handle = tokio::spawn(async move {
-        mockforge_grpc::start_with_config(port, None, config).await.unwrap();
+        mockforge_grpc::start_with_listener(listener, None, config).await.unwrap();
     });
     wait_for_port(port, Duration::from_secs(5)).await;
     (format!("http://127.0.0.1:{port}"), handle)

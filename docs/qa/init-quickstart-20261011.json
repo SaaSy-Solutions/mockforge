@@ -1,0 +1,13 @@
+{
+  "cli_version": "mockforge 0.3.232",
+  "binary_sha256": "8d47db0532c009af5151563a33c7457a404ec62c6fd28ac9523e5f20841ed2d9",
+  "new_project_prints_start_command": true,
+  "new_project_prints_test_request": true,
+  "generated_configuration_runs_without_edits": true,
+  "http_users_response_valid": true,
+  "user_count": 1,
+  "container_start_to_response_seconds": 0.548,
+  "existing_configuration_preserved": true,
+  "existing_custom_port_does_not_print_default_curl": true,
+  "no_examples_does_not_print_example_request": true
+}

@@ -89,24 +89,9 @@ dependencies = [
 
 [[package]]
 name = "alloc-no-stdlib"
-version = "2.0.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc7bb162ec39d46ab1ca8c77bf72e890535becd1751bb45f64c597edb4c8c6b3"
-
-[[package]]
-name = "alloc-no-stdlib"
 version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c2fb6cfd47bf496ff64095c20eaba0c201404ee38714d4142fcfa1dc334fcc7a"
-
-[[package]]
-name = "alloc-stdlib"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "94fb8275041c72129eb51b7d0322c29b8387a0386127718b096429201a5d6ece"
-dependencies = [
- "alloc-no-stdlib 2.0.4",
-]
 
 [[package]]
 name = "alloc-stdlib"
@@ -114,7 +99,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0b5c1865780388bfa186411ab5f247819487fc4864c6e9c3106611fa347586e1"
 dependencies = [
- "alloc-no-stdlib 3.0.0",
+ "alloc-no-stdlib",
 ]
 
 [[package]]
@@ -451,9 +436,9 @@ dependencies = [
 
 [[package]]
 name = "async-compression"
-version = "0.4.41"
+version = "0.4.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d0f9ee0f6e02ffd7ad5816e9464499fba7b3effd01123b515c41d1697c43dad1"
+checksum = "515a1f282e33d55983c499d7e9e87082e81cbc32974825bf9032f928392d5844"
 dependencies = [
  "compression-codecs",
  "compression-core",
@@ -1222,7 +1207,7 @@ dependencies = [
  "http 1.5.0",
  "http-body 0.4.6",
  "hyper 0.14.32",
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "hyper-rustls 0.24.2",
  "hyper-rustls 0.27.7",
  "hyper-util",
@@ -1397,7 +1382,7 @@ dependencies = [
  "http 1.5.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "hyper-util",
  "itoa",
  "matchit 0.7.3",
@@ -1433,7 +1418,7 @@ dependencies = [
  "http 1.5.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "hyper-util",
  "itoa",
  "matchit 0.8.4",
@@ -1536,7 +1521,7 @@ dependencies = [
  "fs-err",
  "http 1.5.0",
  "http-body 1.0.1",
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "hyper-util",
  "pin-project-lite",
  "rustls 0.23.45",
@@ -1561,7 +1546,7 @@ dependencies = [
  "cookie",
  "http 1.5.0",
  "http-body-util",
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "hyper-util",
  "mime",
  "pretty_assertions",
@@ -1959,34 +1944,13 @@ dependencies = [
 
 [[package]]
 name = "brotli"
-version = "8.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4bd8b9603c7aa97359dbd97ecf258968c95f3adddd6db2f7e7a5bef101c84560"
-dependencies = [
- "alloc-no-stdlib 2.0.4",
- "alloc-stdlib 0.2.2",
- "brotli-decompressor 5.0.0",
-]
-
-[[package]]
-name = "brotli"
 version = "9.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8b851b75c23ca7873623d612fe49bd1989aeb03d08fb9432187eb253d3d4c6b"
 dependencies = [
- "alloc-no-stdlib 3.0.0",
- "alloc-stdlib 0.3.0",
- "brotli-decompressor 6.0.1",
-]
-
-[[package]]
-name = "brotli-decompressor"
-version = "5.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "874bb8112abecc98cbd6d81ea4fa7e94fb9449648c93cc89aa40c81c24d7de03"
-dependencies = [
- "alloc-no-stdlib 2.0.4",
- "alloc-stdlib 0.2.2",
+ "alloc-no-stdlib",
+ "alloc-stdlib",
+ "brotli-decompressor",
 ]
 
 [[package]]
@@ -1995,8 +1959,8 @@ version = "6.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "941cd9bd4ddab83cb46fa5a2d428f1c857b24ac78cb876cf7beb710840934bd7"
 dependencies = [
- "alloc-no-stdlib 3.0.0",
- "alloc-stdlib 0.3.0",
+ "alloc-no-stdlib",
+ "alloc-stdlib",
 ]
 
 [[package]]
@@ -2614,23 +2578,23 @@ dependencies = [
 
 [[package]]
 name = "compression-codecs"
-version = "0.4.37"
+version = "0.4.45"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eb7b51a7d9c967fc26773061ba86150f19c50c0d65c887cb1fbe295fd16619b7"
+checksum = "98fc98460ba0ad5317075d3632b8dfc45d0be8c4a49347c2a38272019717614a"
 dependencies = [
- "brotli 8.0.2",
+ "brotli",
  "compression-core",
  "flate2",
  "memchr",
- "zstd",
- "zstd-safe",
+ "zstd 0.14.2",
+ "zstd-safe 8.1.0",
 ]
 
 [[package]]
 name = "compression-core"
-version = "0.4.31"
+version = "0.4.33"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "75984efb6ed102a0d42db99afb6c1948f0380d1d91808d5529916e6c08b49d8d"
+checksum = "6e8ccc4ea9f6acc32d102c0f6d471d11d913ad15f20c04de743374861fa1d414"
 
 [[package]]
 name = "concurrent-queue"
@@ -4957,11 +4921,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "139ef39800118c7683f2fd3c98c1b23c09ae076556b435f8e9064ae108aaeeec"
 dependencies = [
  "cfg-if 1.0.4",
+ "js-sys",
  "libc",
  "r-efi",
  "rand_core 0.10.0",
  "wasip2",
  "wasip3",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -5187,7 +5153,7 @@ dependencies = [
  "google-cloud-wkt",
  "http 1.5.0",
  "pin-project",
- "rand 0.10.0",
+ "rand 0.10.3",
  "serde",
  "serde_json",
  "thiserror 2.0.18",
@@ -5210,7 +5176,7 @@ dependencies = [
  "http 1.5.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "lazy_static",
  "opentelemetry 0.32.0",
  "opentelemetry-semantic-conventions 0.32.0",
@@ -5718,7 +5684,7 @@ dependencies = [
  "idna",
  "ipnet",
  "jni 0.22.4",
- "rand 0.10.0",
+ "rand 0.10.3",
  "thiserror 2.0.18",
  "tinyvec",
  "tokio",
@@ -5738,7 +5704,7 @@ dependencies = [
  "jni 0.22.4",
  "once_cell",
  "prefix-trie",
- "rand 0.10.0",
+ "rand 0.10.3",
  "ring",
  "thiserror 2.0.18",
  "tinyvec",
@@ -5763,7 +5729,7 @@ dependencies = [
  "ndk-context",
  "once_cell",
  "parking_lot",
- "rand 0.10.0",
+ "rand 0.10.3",
  "resolv-conf",
  "smallvec",
  "system-configuration 0.7.0",
@@ -5985,9 +5951,9 @@ dependencies = [
 
 [[package]]
 name = "hyper"
-version = "1.11.1"
+version = "1.12.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "27b501faa50e7a26c3d3560ca625132f4078a17771f4810baf70475ae48cbe43"
+checksum = "2c3e324da4c95177d6291d4c8730197c0d1822f8a9766814a4a44fa5ab797c9c"
 dependencies = [
  "atomic-waker",
  "bytes",
@@ -6028,7 +5994,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3c93eb611681b207e1fe55d5a71ecf91572ec8a6705cdb6857f7d8d5242cf58"
 dependencies = [
  "http 1.5.0",
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "hyper-util",
  "rustls 0.23.45",
  "rustls-native-certs 0.8.3",
@@ -6057,7 +6023,7 @@ version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2b90d566bffbce6a75bd8b09a05aa8c2cb1fabb6cb348f8840c9e4c90a0d83b0"
 dependencies = [
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "hyper-util",
  "pin-project-lite",
  "tokio",
@@ -6085,7 +6051,7 @@ checksum = "70206fc6890eaca9fde8a0bf71caa2ddfc9fe045ac9e5c70df101a7dbde866e0"
 dependencies = [
  "bytes",
  "http-body-util",
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "hyper-util",
  "native-tls",
  "tokio",
@@ -6105,7 +6071,7 @@ dependencies = [
  "futures-util",
  "http 1.5.0",
  "http-body 1.0.1",
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "ipnet",
  "libc",
  "percent-encoding",
@@ -7123,9 +7089,9 @@ dependencies = [
 
 [[package]]
 name = "libc"
-version = "0.2.189"
+version = "0.2.190"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3eaf3ede3fee6db1a4c2ee091bf8a8b4dccdc6d17f656fb07896ee72867612f2"
+checksum = "ce5d3ddc6d3fa000eb1536d85e147bfe31aacaba692ed6a876f95cb7c855be78"
 
 [[package]]
 name = "libdbus-sys"
@@ -7377,14 +7343,16 @@ dependencies = [
 
 [[package]]
 name = "mac-notification-sys"
-version = "0.6.9"
+version = "0.6.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "65fd3f75411f4725061682ed91f131946e912859d0044d39c4ec0aac818d7621"
+checksum = "fd604973958ddcc11b561193c0fb96ba146506ef2f231ef2e7c35fd2cbc9beca"
 dependencies = [
  "cc",
+ "log",
  "objc2",
  "objc2-foundation",
  "time",
+ "uuid",
 ]
 
 [[package]]
@@ -7523,9 +7491,9 @@ checksum = "68354c5c6bd36d73ff3feceb05efa59b6acb7626617f4962be322a825e61f79a"
 
 [[package]]
 name = "minisign-verify"
-version = "0.2.4"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e856fdd13623a2f5f2f54676a4ee49502a96a80ef4a62bcedd23d52427c44d43"
+checksum = "871285dc19d8d0ebe0eef3d0e99a205f2a71363b122632cbbfa4a6c370a960ce"
 
 [[package]]
 name = "miniz_oxide"
@@ -7587,7 +7555,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ai-core"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "async-trait",
  "chrono",
@@ -7604,7 +7572,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-amqp"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7628,7 +7596,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-analytics"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "chrono",
@@ -7650,7 +7618,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-behavioral-cloning"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "async-trait",
  "chrono",
@@ -7663,7 +7631,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-bench"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-stream",
@@ -7703,7 +7671,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-chaos"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7744,7 +7712,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-chaos-ml"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "chrono",
@@ -7759,7 +7727,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-chaos-orchestration"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -7782,7 +7750,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-chaos-proxy"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "axum 0.8.9",
  "mockforge-bench",
@@ -7798,7 +7766,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-cli"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -7816,7 +7784,7 @@ dependencies = [
  "futures-lite 2.6.1",
  "hex",
  "hound",
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "indicatif",
  "jsonschema",
  "lapin",
@@ -7841,6 +7809,7 @@ dependencies = [
  "mockforge-pipelines",
  "mockforge-plugin-core",
  "mockforge-plugin-loader",
+ "mockforge-proxy",
  "mockforge-recorder",
  "mockforge-scenarios",
  "mockforge-smtp",
@@ -7879,7 +7848,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-collab"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "argon2",
@@ -7897,7 +7866,7 @@ dependencies = [
  "dashmap 6.2.1",
  "futures",
  "google-cloud-storage",
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "jsonwebtoken",
  "mockforge-core",
  "mockforge-foundation",
@@ -7924,7 +7893,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-config"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "schemars 0.8.22",
  "serde",
@@ -7934,7 +7903,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-contracts"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "async-trait",
  "bytes",
@@ -7959,7 +7928,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-core"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -8032,7 +8001,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-data"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8066,7 +8035,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-desktop"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -8099,7 +8068,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-federation"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8122,7 +8091,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-foundation"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "async-trait",
  "chrono",
@@ -8147,7 +8116,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ftp"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8174,7 +8143,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-graphql"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-graphql",
@@ -8212,7 +8181,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-grpc"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -8256,7 +8225,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-http"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8273,7 +8242,7 @@ dependencies = [
  "governor 0.8.1",
  "hex",
  "http 1.5.0",
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "itertools 0.14.0",
  "json-patch 4.2.0",
  "jsonpath",
@@ -8339,7 +8308,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-import"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "axum 0.8.9",
  "base64 0.22.1",
@@ -8357,7 +8326,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-integration-tests"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -8386,7 +8355,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-intelligence"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8421,7 +8390,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-k8s-operator"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "chrono",
@@ -8443,7 +8412,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-kafka"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8466,12 +8435,12 @@ dependencies = [
  "tokio",
  "tracing",
  "uuid",
- "zstd",
+ "zstd 0.13.3",
 ]
 
 [[package]]
 name = "mockforge-mqtt"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8497,7 +8466,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-observability"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "axum 0.8.9",
  "chrono",
@@ -8520,7 +8489,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-openapi"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -8546,7 +8515,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-performance"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8562,7 +8531,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-pipelines"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8592,7 +8561,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-platform-signing"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "async-trait",
  "aws-config",
@@ -8611,7 +8580,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-cli"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "base64 0.21.7",
@@ -8641,7 +8610,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-core"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8649,7 +8618,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "handlebars 4.5.0",
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "rand 0.9.5",
  "regex",
  "semver",
@@ -8670,7 +8639,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-egress"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "ipnet",
@@ -8685,7 +8654,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-host"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "base64 0.22.1",
@@ -8709,7 +8678,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-loader"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8749,7 +8718,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-registry"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "chrono",
  "dirs 5.0.1",
@@ -8767,7 +8736,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-response-graphql"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8786,7 +8755,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-plugin-sdk"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8811,8 +8780,9 @@ dependencies = [
 
 [[package]]
 name = "mockforge-proxy"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
+ "async-compression",
  "axum 0.8.9",
  "chrono",
  "http 1.5.0",
@@ -8835,7 +8805,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-recorder"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8869,7 +8839,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-registry-core"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -8908,7 +8878,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-registry-server"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-nats",
@@ -8945,6 +8915,7 @@ dependencies = [
  "mockforge-plugin-registry",
  "mockforge-registry-core",
  "mockforge-scenarios",
+ "mockforge-test-runner",
  "oauth2",
  "opentelemetry-proto 0.32.0",
  "prometheus",
@@ -8986,7 +8957,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-reporting"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "chrono",
@@ -9006,7 +8977,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-route-chaos"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -9019,7 +8990,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-runtime-daemon"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -9041,7 +9012,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-scenarios"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9078,7 +9049,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-sdk"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "axum 0.8.9",
@@ -9106,7 +9077,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-security-core"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "aes-gcm",
  "anyhow",
@@ -9136,7 +9107,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-smtp"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9163,7 +9134,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tcp"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9186,14 +9157,14 @@ dependencies = [
 
 [[package]]
 name = "mockforge-template-expansion"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "mockforge-test"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "assert_cmd",
@@ -9220,7 +9191,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-test-integration-examples"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "mockforge-test",
  "tokio",
@@ -9231,7 +9202,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-test-runner"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9253,7 +9224,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tracing"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "axum 0.8.9",
  "http 1.5.0",
@@ -9271,7 +9242,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tui"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "arboard",
@@ -9295,7 +9266,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-tunnel"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9304,7 +9275,7 @@ dependencies = [
  "chrono",
  "futures",
  "governor 0.8.1",
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "reqwest 0.12.28",
  "rustls 0.23.45",
  "rustls-pemfile 2.2.0",
@@ -9326,7 +9297,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ui"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9378,7 +9349,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-vbr"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9413,7 +9384,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-workspace"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "globwalk",
  "mockforge-core",
@@ -9424,7 +9395,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-world-state"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -9441,7 +9412,7 @@ dependencies = [
 
 [[package]]
 name = "mockforge-ws"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "async-trait",
  "axum 0.8.9",
@@ -9482,7 +9453,7 @@ dependencies = [
  "http 1.5.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "hyper-util",
  "log",
  "pin-project-lite",
@@ -9808,9 +9779,9 @@ dependencies = [
 
 [[package]]
 name = "notify-rust"
-version = "4.12.0"
+version = "4.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21af20a1b50be5ac5861f74af1a863da53a11c38684d9818d82f1c42f7fdc6c2"
+checksum = "4587364a9a0074333429b3df75a30a205340c56a536ca3eb6ca0e59b87bbf8af"
 dependencies = [
  "futures-lite 2.6.1",
  "log",
@@ -11737,9 +11708,9 @@ dependencies = [
 
 [[package]]
 name = "protoc-bin-vendored"
-version = "3.2.0"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d1c381df33c98266b5f08186583660090a4ffa0889e76c7e9a5e175f645a67fa"
+checksum = "8760a25b6ff9c620324822737e468478fa092234190d2e449760344354896ed9"
 dependencies = [
  "protoc-bin-vendored-linux-aarch_64",
  "protoc-bin-vendored-linux-ppcle_64",
@@ -11753,51 +11724,51 @@ dependencies = [
 
 [[package]]
 name = "protoc-bin-vendored-linux-aarch_64"
-version = "3.2.0"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c350df4d49b5b9e3ca79f7e646fde2377b199e13cfa87320308397e1f37e1a4c"
+checksum = "73fa2624782ca04cd44f51554566717377acd240e4c0016d757dd74fccc9324f"
 
 [[package]]
 name = "protoc-bin-vendored-linux-ppcle_64"
-version = "3.2.0"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a55a63e6c7244f19b5c6393f025017eb5d793fd5467823a099740a7a4222440c"
+checksum = "e2417e9817fa237dab803ad4dda7357a111656e242959cc6b8f9a1a583367d42"
 
 [[package]]
 name = "protoc-bin-vendored-linux-s390_64"
-version = "3.2.0"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1dba5565db4288e935d5330a07c264a4ee8e4a5b4a4e6f4e83fad824cc32f3b0"
+checksum = "4d189c34636356a46a7ed3188233dc8a88c431278cc54d4a19b096a2d270e985"
 
 [[package]]
 name = "protoc-bin-vendored-linux-x86_32"
-version = "3.2.0"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8854774b24ee28b7868cd71dccaae8e02a2365e67a4a87a6cd11ee6cdbdf9cf5"
+checksum = "171e39f1e846e5f322ced1ac3b8d4cd3a3833ca24b6e5d58b3632574fe6204fa"
 
 [[package]]
 name = "protoc-bin-vendored-linux-x86_64"
-version = "3.2.0"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b38b07546580df720fa464ce124c4b03630a6fb83e05c336fea2a241df7e5d78"
+checksum = "873cdcc097593432086661aa432b8078f1cd87bfb02847c332e98ae2c119e966"
 
 [[package]]
 name = "protoc-bin-vendored-macos-aarch_64"
-version = "3.2.0"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "89278a9926ce312e51f1d999fee8825d324d603213344a9a706daa009f1d8092"
+checksum = "eeb72df001783b8297847fe8f5f874ee400fd742c843d60583e8c23d96977c7f"
 
 [[package]]
 name = "protoc-bin-vendored-macos-x86_64"
-version = "3.2.0"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "81745feda7ccfb9471d7a4de888f0652e806d5795b61480605d4943176299756"
+checksum = "b04652167eca899dda05f32f5481adeaf25c623a98ce2fc146a001cc59a2add7"
 
 [[package]]
 name = "protoc-bin-vendored-win32"
-version = "3.2.0"
+version = "3.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "95067976aca6421a523e491fce939a3e65249bac4b977adee0ee9771568e8aa3"
+checksum = "263a3f48f01e7309e857138bd47f785585b4a005e8e56c6d2824ce91195999c3"
 
 [[package]]
 name = "proxy-protocol"
@@ -11909,15 +11880,6 @@ dependencies = [
 
 [[package]]
 name = "quick-xml"
-version = "0.37.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "331e97a1af0bf59823e6eadffe373d7b27f485be8748f71471c662c1f269b7fb"
-dependencies = [
- "memchr",
-]
-
-[[package]]
-name = "quick-xml"
 version = "0.38.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b66c2058c55a409d601666cffe35f04333cf1013010882cec174a7467cd4e21c"
@@ -11957,15 +11919,16 @@ dependencies = [
 
 [[package]]
 name = "quinn-proto"
-version = "0.11.15"
+version = "0.11.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fcb935c5bec503c2f0e306bdd3e58bb9029dcb14fa8d9ac76e3a5256ac0763e"
+checksum = "a9746dbde176634f4f2f1faf2404e30a31b2bc1e9cafb5329c95d8177a18c9fc"
 dependencies = [
  "aws-lc-rs",
  "bytes",
- "getrandom 0.3.4",
+ "getrandom 0.4.1",
  "lru-slab",
- "rand 0.9.5",
+ "rand 0.10.3",
+ "rand_pcg",
  "ring",
  "rustc-hash",
  "rustls 0.23.45",
@@ -12054,9 +12017,9 @@ dependencies = [
 
 [[package]]
 name = "rand"
-version = "0.10.0"
+version = "0.10.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bc266eb313df6c5c09c1c7b1fbe2510961e5bcd3add930c1e31f7ed9da0feff8"
+checksum = "65c9fb96cbc91e3478eaae79a69fcd3f1ae4ad052e471fe6732fff548984b4af"
 dependencies = [
  "chacha20 0.10.2",
  "getrandom 0.4.1",
@@ -12133,6 +12096,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ca3129af7b92a17112d59ad498c6f81eaf463253766b90396d39ea7a39d6613c"
 dependencies = [
  "rand_core 0.5.1",
+]
+
+[[package]]
+name = "rand_pcg"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "caa0f4137e1c0a72f4c651489402276c8e8e1cf081f3b0ba156d2cbeef09e86a"
+dependencies = [
+ "rand_core 0.10.0",
 ]
 
 [[package]]
@@ -12487,7 +12459,7 @@ dependencies = [
  "http 1.5.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "hyper-rustls 0.27.7",
  "hyper-tls 0.6.0",
  "hyper-util",
@@ -12532,7 +12504,7 @@ dependencies = [
  "http 1.5.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "hyper-rustls 0.27.7",
  "hyper-util",
  "js-sys",
@@ -13428,9 +13400,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.151"
+version = "1.0.152"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14"
+checksum = "1741ab7a6cc54a03a89b5d563ed60075c277d9e3cfa73ad0c1f23f23974703c6"
 dependencies = [
  "itoa",
  "memchr",
@@ -13652,7 +13624,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1e362d9935bc50f019969e2f9ecd66786612daae13e8f277be7bfb66e8bed3f7"
 dependencies = [
  "libc",
- "sigchld",
  "windows-sys 0.60.2",
 ]
 
@@ -13676,17 +13647,6 @@ name = "shlex"
 version = "1.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
-
-[[package]]
-name = "sigchld"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47106eded3c154e70176fc83df9737335c94ce22f821c32d17ed1db1f83badb1"
-dependencies = [
- "libc",
- "os_pipe",
- "signal-hook",
-]
 
 [[package]]
 name = "signal-hook"
@@ -14616,9 +14576,9 @@ checksum = "adb6935a6f5c20170eeceb1a3835a49e12e19d792f6dd344ccc76a985ca5a6ca"
 
 [[package]]
 name = "tauri"
-version = "2.12.1"
+version = "2.12.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed99ee9694a2deb776d91cae48ac7411ddfc89ecae2f9b5041111d8c88f2ace9"
+checksum = "d061d042ccd2df9c9f1508c1e63d835278c0a4c8801eb41764080e51f2eaaf34"
 dependencies = [
  "anyhow",
  "bytes",
@@ -14667,9 +14627,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-build"
-version = "2.7.1"
+version = "2.7.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "59563ca5b331fd97f27ee9672ec8d36d33bb3c9e2c9f6710a1a5687256052e45"
+checksum = "2eea0b6302f82c574b21af6fc6ae6e86183b9280853c22621d0abf0936911ffc"
 dependencies = [
  "anyhow",
  "cargo_toml",
@@ -14693,7 +14653,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e50213e463086ecc283d7e9f51c30cc0fd304ad457425158018be26dbf0d0a80"
 dependencies = [
  "base64 0.22.1",
- "brotli 9.0.0",
+ "brotli",
  "ico",
  "json-patch 4.2.0",
  "plist",
@@ -14745,9 +14705,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-dialog"
-version = "2.8.1"
+version = "2.8.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "daf9a5c92e39bdd84f22f6be9230e39d0c4e140345f71ffe6058dca4f71127cf"
+checksum = "3dca325d6e66e9170f2e1b9631722e4e544bcbc51781575d266abdaba697bd51"
 dependencies = [
  "log",
  "raw-window-handle",
@@ -14763,9 +14723,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-fs"
-version = "2.6.0"
+version = "2.7.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "466eb32466fe5021b6728b06862f9ff14a9f7e1af890047654e03a96d7c0e1bb"
+checksum = "213fae2d85d4b76b06de5915d1862db9fa74541171f9d2c15da6ac9bd6e788c6"
 dependencies = [
  "anyhow",
  "dunce",
@@ -14787,9 +14747,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-global-shortcut"
-version = "2.4.0"
+version = "2.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bd2e1f725891a1613af8f25bf918ba3357654b0fd3f2d794c0ce76cbdd92ed2"
+checksum = "93ff17919fe09852d269bd37b1d3d2e993b9dbb514afe7acbf3346c1d3627e2d"
 dependencies = [
  "global-hotkey",
  "log",
@@ -14802,9 +14762,9 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-notification"
-version = "2.5.1"
+version = "2.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "533770889abb60a0407d5a32096182f0e6463f5a3dfaa675be94580aa14070e1"
+checksum = "8cf3cce3ea492b3a8a7f431a4e5dd5d31dc41b2a4a243faa660cbe8095a577bd"
 dependencies = [
  "log",
  "notify-rust",
@@ -14817,13 +14777,14 @@ dependencies = [
  "thiserror 2.0.18",
  "time",
  "url",
+ "zbus",
 ]
 
 [[package]]
 name = "tauri-plugin-opener"
-version = "2.7.0"
+version = "2.7.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d39404b2572927e0d3ed30a7ca226037f7508d22e79c96ee6ef0d42b6a4b3345"
+checksum = "85dead674ee41937d042ee855d785f07ee67206f19402200c12b9255964d5ac8"
 dependencies = [
  "dunce",
  "glob",
@@ -14843,11 +14804,12 @@ dependencies = [
 
 [[package]]
 name = "tauri-plugin-shell"
-version = "2.4.0"
+version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "094bdbc47e5efe36544ba21b3a53ab5c724150236cf55e6c9be46191deb6eab6"
+checksum = "8567d42b2c7264355daa1df415ec77f52aa42e885924c86a969be2e920e05521"
 dependencies = [
  "encoding_rs",
+ "libc",
  "log",
  "open",
  "os_pipe",
@@ -14860,13 +14822,14 @@ dependencies = [
  "tauri-plugin",
  "thiserror 2.0.18",
  "tokio",
+ "windows-sys 0.60.2",
 ]
 
 [[package]]
 name = "tauri-plugin-updater"
-version = "2.13.1"
+version = "2.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3cb0b2ea3e85ca287990d3859a29cc5cb18024240fd78f62e027fb7963670f18"
+checksum = "855a336eb389d2c1502244fd48fa2d8cb487a430f691bbaed025195f99a04489"
 dependencies = [
  "base64 0.22.1",
  "dirs 7.0.0",
@@ -14874,6 +14837,7 @@ dependencies = [
  "futures-util",
  "http 1.5.0",
  "infer 0.22.0",
+ "libc",
  "log",
  "minisign-verify",
  "osakit",
@@ -14953,7 +14917,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2ff55a614843b9a3f010f211df637c94df2607175b8d0f6e0f4a7c19e18621ee"
 dependencies = [
  "anyhow",
- "brotli 9.0.0",
+ "brotli",
  "cargo_metadata",
  "ctor",
  "dom_query",
@@ -14997,13 +14961,12 @@ dependencies = [
 
 [[package]]
 name = "tauri-winrt-notification"
-version = "0.7.2"
+version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0b1e66e07de489fe43a46678dd0b8df65e0c973909df1b60ba33874e297ba9b9"
+checksum = "f37a6c354fd28fc9e322ed9bd47e3959576dad28c9d58ea1cf888cce1c7ccb36"
 dependencies = [
- "quick-xml 0.37.5",
  "thiserror 2.0.18",
- "windows 0.61.3",
+ "windows 0.62.2",
  "windows-version",
 ]
 
@@ -15081,7 +15044,7 @@ checksum = "8f50febec83f5ee1df3015341d8bd429f2d1cc62bcba7ea2076759d315084683"
 
 [[package]]
 name = "test-openapi"
-version = "0.3.232"
+version = "0.3.234"
 dependencies = [
  "mockforge-core",
  "serde_json",
@@ -15253,9 +15216,9 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "1.53.1"
+version = "1.53.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "202caea871b69668250d242070849eb495be178ed697a3e98aebce5bc81a0bed"
+checksum = "e95f91fcc7a621e8b030f6aa23c71fe9838ae2fb4d8118b75602a328f5144044"
 dependencies = [
  "bytes",
  "libc",
@@ -15421,9 +15384,9 @@ dependencies = [
 
 [[package]]
 name = "tokio-util"
-version = "0.7.19"
+version = "0.7.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "494815d09bf52b5548659851081238f0ca39ff638363907596da739561c62c52"
+checksum = "e464cf451ba96ebfc6f9b6542f17ee8b8956e33f1e40d9690624e59d7a7f8a4b"
 dependencies = [
  "bytes",
  "futures-core",
@@ -15635,7 +15598,7 @@ dependencies = [
  "http 1.5.0",
  "http-body 1.0.1",
  "http-body-util",
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "hyper-timeout 0.5.2",
  "hyper-util",
  "percent-encoding",
@@ -16328,9 +16291,9 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "uuid"
-version = "1.26.1"
+version = "1.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2ef6dac1e96601b4fb3acccccff2139741fcb757cb9a36089bf5be91cfb285ce"
+checksum = "7cc1186384beb7dd8eedea376413fd654937285ea6c9cfbb928dc3043ea4b606"
 dependencies = [
  "atomic",
  "getrandom 0.4.1",
@@ -16489,9 +16452,9 @@ dependencies = [
 
 [[package]]
 name = "want"
-version = "0.3.1"
+version = "0.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bfa7760aed19e106de2c7c0b581b509f2f25d3dacaf737cb82ac61bc6d760b0e"
+checksum = "ec4cdd0dd910afe868b7ef477227d8d538b46b3075031afee8a9f2acb0a2ed0b"
 dependencies = [
  "try-lock",
 ]
@@ -16850,7 +16813,7 @@ dependencies = [
  "sha2 0.10.9",
  "toml 0.8.23",
  "windows-sys 0.60.2",
- "zstd",
+ "zstd 0.13.3",
 ]
 
 [[package]]
@@ -18040,7 +18003,7 @@ dependencies = [
  "futures",
  "http 1.5.0",
  "http-body-util",
- "hyper 1.11.1",
+ "hyper 1.12.0",
  "hyper-util",
  "log",
  "once_cell",
@@ -18676,7 +18639,7 @@ dependencies = [
  "xz2",
  "zeroize",
  "zopfli",
- "zstd",
+ "zstd 0.13.3",
 ]
 
 [[package]]
@@ -18721,7 +18684,16 @@ version = "0.13.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e91ee311a569c327171651566e07972200e76fcfe2242a4fa446149a3881c08a"
 dependencies = [
- "zstd-safe",
+ "zstd-safe 7.2.4",
+]
+
+[[package]]
+name = "zstd"
+version = "0.14.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "057cfd910cfac363a0ada849592624b4c9ff2e10bef504c3433810d78ed96f93"
+dependencies = [
+ "zstd-safe 8.1.0",
 ]
 
 [[package]]
@@ -18734,10 +18706,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "zstd-sys"
-version = "2.0.16+zstd.1.5.7"
+name = "zstd-safe"
+version = "8.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91e19ebc2adc8f83e43039e79776e3fda8ca919132d68a1fed6a5faca2683748"
+checksum = "bdd44c6a7284e91f3717755b24315a302edd9153a01f753c3cba3d765e8eafac"
+dependencies = [
+ "zstd-sys",
+]
+
+[[package]]
+name = "zstd-sys"
+version = "2.1.1+zstd.1.5.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "aeec9eaf2dffbbd09201e23bd0ffcbaa33bb8e9266a10734fd7ed90a85eca078"
 dependencies = [
  "cc",
  "pkg-config",

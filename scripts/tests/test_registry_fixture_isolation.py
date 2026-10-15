@@ -76,17 +76,22 @@ class FixtureIsolationTests(unittest.TestCase):
         self.assertIn('docker compose -f "$COMPOSE_FILE_GATE" port db 5432', RLS)
         self.assertIn('export DATABASE_URL="$OWNER_URL"', RLS)
 
-    def test_both_lanes_retain_all_thirteen_e2e_targets(self):
-        expected = {
+    def test_both_lanes_retain_registry_e2e_targets(self):
+        # The Hetzner split kept these thirteen on both lanes. Main later added
+        # hosted_capture_workspaces_e2e (#1210) and diff_finding_incident_e2e
+        # (#1207) to the base lane only; the RLS array was not extended.
+        original = {
             "workspace_content_e2e", "signup_flow_e2e", "marketplace_e2e",
             "cloud_verification_e2e", "cloud_ai_contract_diff_e2e", "cloud_conformance_e2e",
             "paid_flow_e2e", "hosted_mock_overrides_e2e", "audit_integrity_e2e",
             "rls_coverage_e2e", "hosted_mock_rls_routes_e2e", "rls_join_coverage_e2e",
             "cross_tenant_chaos_capture_e2e",
         }
-        self.assertEqual(set(re.findall(r"--test ([a-z0-9_]+)", step_script("Run E2E tests"))), expected)
+        base = original.union({"hosted_capture_workspaces_e2e", "diff_finding_incident_e2e"})
+        self.assertEqual(set(re.findall(r"--test ([a-z0-9_]+)", step_script("Run E2E tests"))), base)
         array = RLS.split("E2E_TESTS=(", 1)[1].split(")", 1)[0]
-        self.assertEqual(set(re.findall(r"--test ([a-z0-9_]+)", array)), expected)
+        self.assertEqual(set(re.findall(r"--test ([a-z0-9_]+)", array)), original)
+        self.assertIn("workers::contract_probe::postgres_tests::due_claims_serialize_and_failed_timestamp_rolls_back_run", WORKFLOW)
         self.assertIn("-- --ignored --nocapture --test-threads=1", WORKFLOW)
         self.assertIn("--no-fail-fast", RLS)
 

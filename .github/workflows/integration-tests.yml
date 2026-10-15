@@ -8,6 +8,9 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/integration-tests.yml'
+      - 'scripts/ci/check_rust_cache.py'
+      - 'scripts/ci/rust_cache_*.py'
+      - 'scripts/tests/test_rust_cache_guard.py'
   pull_request:
     branches: [main, develop]
     paths:
@@ -15,6 +18,9 @@ on:
       - 'Cargo.toml'
       - 'Cargo.lock'
       - '.github/workflows/integration-tests.yml'
+      - 'scripts/ci/check_rust_cache.py'
+      - 'scripts/ci/rust_cache_*.py'
+      - 'scripts/tests/test_rust_cache_guard.py'
   workflow_dispatch:
 
 env:
@@ -26,6 +32,10 @@ env:
   # consistent with rustc being killed under CPU/memory pressure
   # without triggering the OOM-killer log).
   CARGO_BUILD_JOBS: "4"
+  # This job already needs the release CLI and release E2E harness. Keep
+  # integration tests in that profile too, instead of retaining a second
+  # debug dependency graph while the release harness is linked.
+  CARGO_INCREMENTAL: "0"
   # Force rustup to use stable regardless of whatever a sibling repo
   # pinned as the user-level default. `dtolnay/rust-toolchain@stable`
   # installs stable but does not change the default; RUSTUP_TOOLCHAIN
@@ -43,10 +53,8 @@ jobs:
   integration-tests:
     name: Integration Tests
     runs-on: [self-hosted, linux, x64, rust]
-    # 30 min was tight even on a warm target/. After the target/ size
-    # guard wipes at >30GB, cold rebuilds take ~25 min plus test time,
-    # which overran the prior limit. 60 min leaves headroom for the
-    # occasional cold run without holding the runner hostage.
+    # Cold release builds plus test execution can exceed 30 minutes.
+    # The cache guard is read-only and never wipes target/.
     timeout-minutes: 60
 
     steps:
@@ -55,7 +63,9 @@ jobs:
         # (GH Actions context: `runner.*` is step-scoped). Writing to
         # `$GITHUB_ENV` here exports it to every subsequent step in this job,
         # including the rust-toolchain composite action and rust-cache.
-        run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+        run: |
+          echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+          echo "CARGO_TARGET_DIR=$GITHUB_WORKSPACE/target" >> "$GITHUB_ENV"
 
       - name: Checkout repository
         uses: actions/checkout@v7
@@ -77,21 +87,26 @@ jobs:
       - name: Install protoc (protobuf compiler)
         run: 'dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev > /dev/null 2>&1 || { echo "::error::Required system deps missing on self-hosted runner. Run on the runner host: sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev"; exit 1; }'
 
-      # Self-hosted runner has persistent disk shared across multiple
-      # runners; target/ can balloon past 60GB between jobs and fill the
-      # 150GB NVMe (five other SaaS runners live on the same box). If
-      # target/ has grown past 30GB, wipe it — cheaper than disk-full.
-      - name: Guard target/ size on self-hosted runner
+      - name: Verify cache guard fixtures
         run: |
-          if [ -d target ] && [ "$(du -sb target | awk '{print $1}')" -gt 32212254720 ]; then
-            echo "target/ exceeds 30GB — wiping to avoid disk-full on shared runner"
-            rm -rf target
-          fi
+          python3 scripts/tests/test_rust_cache_guard.py
+          python3 scripts/tests/test_temp_directory_guard.py
+
+      - name: Verify build temporary-directory allocation and user quota
+        run: python3 scripts/ci/check_temp_directory.py
+
+      - name: Check disk headroom before cache restore
+        run: python3 scripts/ci/check_rust_cache.py --workspace "$GITHUB_WORKSPACE"
 
       - name: Cache dependencies
         uses: Swatinem/rust-cache@v2
         with:
           env-vars: "CARGO_HOME"
+
+      # Restored artifacts need checking too. This guard never deletes a
+      # target or follows its symlinks, so active/foreign caches are preserved.
+      - name: Check restored Rust cache and disk headroom
+        run: python3 scripts/ci/check_rust_cache.py --workspace "$GITHUB_WORKSPACE"
 
       - name: Build MockForge binary (needed for integration tests)
         # Retry once on transient "No such file or directory" / SIGKILL
@@ -138,11 +153,11 @@ jobs:
       # The E2E phase later in this job runs them with --test-threads=1.
       - name: Run integration tests (non-ignored)
         run: |
-          cargo test --package mockforge-integration-tests --test '*' -- --nocapture --skip 'protocols::'
+          cargo test --package mockforge-integration-tests --release --test '*' -- --nocapture --skip 'protocols::'
 
       - name: Upload test artifacts
         if: always()
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: integration-test-results
           path: |
@@ -162,6 +177,10 @@ jobs:
       #
       # E2E runs only on PRs and main (the former job's `if:` gate) — skipped
       # on develop pushes and manual dispatch.
+      - name: Check disk headroom before E2E execution
+        if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+        run: python3 scripts/ci/check_rust_cache.py --workspace "$GITHUB_WORKSPACE"
+
       - name: Run E2E tests
         if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
         # Target the `e2e` integration-test binary (tests/tests/e2e.rs) and
@@ -181,7 +200,7 @@ jobs:
 
       - name: Upload E2E test results
         if: failure() && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
-        uses: actions/upload-artifact@v7.0.1
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: e2e-test-results
           path: target/test-results/

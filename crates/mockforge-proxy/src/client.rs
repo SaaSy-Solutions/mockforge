@@ -16,6 +16,21 @@ impl ProxyClient {
         Self { client }
     }
 
+    /// Build a client with the configured upstream timeout and redirect policy.
+    pub fn with_options(timeout_seconds: u64, follow_redirects: bool) -> Result<Self> {
+        let redirects = if follow_redirects {
+            reqwest::redirect::Policy::limited(10)
+        } else {
+            reqwest::redirect::Policy::none()
+        };
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(timeout_seconds))
+            .redirect(redirects)
+            .build()
+            .map_err(|e| Error::internal(format!("Cannot configure proxy client: {e}")))?;
+        Ok(Self { client })
+    }
+
     /// Send an HTTP request
     pub async fn send_request(
         &self,

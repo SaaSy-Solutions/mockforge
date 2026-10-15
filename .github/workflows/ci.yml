@@ -547,9 +547,6 @@ jobs:
     - name: Test plugin publication request boundary
       run: python3 scripts/tests/test_plugin_publish_request.py
 
-    - name: Test crate publication status
-      run: python3 scripts/tests/test_publish_crates_status.py
-
     - name: Set per-runner CARGO_HOME on Hetzner
       if: runner.environment == 'self-hosted'
       run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
@@ -569,6 +566,9 @@ jobs:
     - name: Install Rust toolchain
       if: runner.environment == 'github-hosted'
       uses: ./.github/actions/rust-toolchain
+
+    - name: Test crate publication status
+      run: python3 scripts/tests/test_publish_crates_status.py
 
     - name: Prepare job-owned security audit tools on Hetzner
       if: runner.environment == 'self-hosted'
@@ -601,7 +601,7 @@ jobs:
 
     - name: Install pinned security audit tools
       if: runner.environment == 'github-hosted'
-      uses: taiki-e/install-action@v2.87.22
+      uses: taiki-e/install-action@v2.87.27
       with:
         tool: cargo-audit@0.22.2,cargo-deny@0.20.2
         fallback: none

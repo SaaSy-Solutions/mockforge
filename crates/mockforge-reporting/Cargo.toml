@@ -42,7 +42,7 @@ tera = "1.19"
 tokio = { version = "1.52", features = ["full"] }
 
 # MockForge dependencies
-mockforge-chaos = { version = "0.3.70", path = "../mockforge-chaos" }
+mockforge-chaos = { version = "0.3.234", path = "../mockforge-chaos" }
 
 # UUID generation
 uuid = { version = "1.23", features = ["v4", "serde"] }

@@ -11,9 +11,10 @@ pub struct IncidentConfig {
     /// Storage configuration
     pub storage: IncidentStorageConfig,
     /// External integrations configuration
-    pub external_integrations: crate::incidents::integrations::ExternalIntegrationConfig,
+    pub external_integrations:
+        mockforge_intelligence::incidents::integrations::ExternalIntegrationConfig,
     /// Webhook configurations
-    pub webhooks: Vec<crate::incidents::integrations::WebhookConfig>,
+    pub webhooks: Vec<mockforge_intelligence::incidents::integrations::WebhookConfig>,
 }
 
 /// Incident storage configuration
@@ -69,7 +70,7 @@ pub struct BehavioralEconomicsConfig {
     pub enabled: bool,
     /// List of behavior rules
     #[serde(default)]
-    pub rules: Vec<crate::behavioral_economics::BehaviorRule>,
+    pub rules: Vec<mockforge_intelligence::behavioral_economics::BehaviorRule>,
     /// Global sensitivity for behavioral changes (0.0 - 1.0)
     /// A higher sensitivity means mocks react more strongly to conditions.
     #[serde(default = "default_behavioral_sensitivity")]

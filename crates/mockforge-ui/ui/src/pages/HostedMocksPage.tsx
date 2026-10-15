@@ -5,7 +5,7 @@ import { confirmAction } from '../components/ui/ConfirmationDialog';
  * Manage cloud-hosted mock service deployments
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader, EmptyState as DSEmptyState } from '@/components/ui/DesignSystem';
 import { useHostedMockStream } from '@/hooks/useHostedMockStream';
@@ -25,6 +25,7 @@ import {
 } from '@/hooks/useDeploymentTraces';
 import { useDeploymentStateMachines } from '@/hooks/useDeploymentStateMachines';
 import { ManagementTokenField } from '@/components/hosted/ManagementTokenField';
+import { DeploymentWorkspaceEditor, DeploymentWorkspaceSelect } from '@/components/hosted/DeploymentWorkspaceField';
 import { getAuthToken } from '@/services/tokenStorage';
 import {
   Box,
@@ -125,6 +126,7 @@ interface Deployment {
   id: string;
   org_id: string;
   project_id?: string;
+  workspace_id?: string | null;
   name: string;
   slug: string;
   description?: string;
@@ -167,6 +169,7 @@ interface ProjectOption {
 
 export const HostedMocksPage: React.FC = () => {
   const routerNavigate = useNavigate();
+  const specUploadInput = useRef<HTMLInputElement>(null);
 
   const navigateToExplorer = useCallback((deployment: Deployment) => {
     if (!deployment.deployment_url) return;
@@ -203,6 +206,7 @@ export const HostedMocksPage: React.FC = () => {
     upstream_url: '',
     region: 'iad',
     project_id: '',
+    workspace_id: '',
   });
 
   // Optional protocols beyond HTTP. HTTP is implicit (always present);
@@ -618,6 +622,7 @@ export const HostedMocksPage: React.FC = () => {
         upstream_url: formData.upstream_url.trim() || undefined,
         region: formData.region || undefined,
         project_id: formData.project_id || undefined,
+        workspace_id: formData.workspace_id || undefined,
         enabled_protocols: enabledProtocols,
       };
 
@@ -654,6 +659,7 @@ export const HostedMocksPage: React.FC = () => {
         upstream_url: '',
         region: 'iad',
         project_id: '',
+        workspace_id: '',
       });
       setEnabledOptionalProtocols([]);
       loadDeployments();
@@ -1036,12 +1042,12 @@ export const HostedMocksPage: React.FC = () => {
           <Table>
             <TableHead>
               <TableRow>
-                <TableCell>Name</TableCell>
-                <TableCell>Status</TableCell>
-                <TableCell>Health</TableCell>
-                <TableCell>URL</TableCell>
-                <TableCell>Created</TableCell>
-                <TableCell align="right">Actions</TableCell>
+                <TableCell component="th" scope="col">Name</TableCell>
+                <TableCell component="th" scope="col">Status</TableCell>
+                <TableCell component="th" scope="col">Health</TableCell>
+                <TableCell component="th" scope="col">URL</TableCell>
+                <TableCell component="th" scope="col">Created</TableCell>
+                <TableCell component="th" scope="col" align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -1274,6 +1280,9 @@ export const HostedMocksPage: React.FC = () => {
               )}
             </FormControl>
 
+            <DeploymentWorkspaceSelect value={formData.workspace_id} disabled={creating}
+              onChange={workspace_id => setFormData(previous => ({ ...previous, workspace_id }))} />
+
             <FormControl fullWidth>
               <InputLabel id="hosted-mock-region-label">Region</InputLabel>
               <Select
@@ -1301,26 +1310,28 @@ export const HostedMocksPage: React.FC = () => {
               />
               <Button
                 variant="outlined"
-                component="label"
+                type="button"
+                onClick={() => specUploadInput.current?.click()}
                 startIcon={uploadingSpec ? <CircularProgress size={16} /> : <UploadFileIcon />}
                 disabled={uploadingSpec}
                 sx={{ whiteSpace: 'nowrap', mt: 1 }}
               >
                 {uploadingSpec ? 'Uploading…' : 'Upload'}
-                <input
-                  type="file"
-                  accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml"
-                  hidden
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      handleUploadSpec(file);
-                    }
-                    // Reset so selecting the same file again still fires onChange
-                    e.target.value = '';
-                  }}
-                />
               </Button>
+              <input
+                ref={specUploadInput}
+                type="file"
+                accept=".json,.yaml,.yml,application/json,application/yaml,text/yaml"
+                hidden
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    handleUploadSpec(file);
+                  }
+                  // Reset so selecting the same file again still fires onChange
+                  e.target.value = '';
+                }}
+              />
             </Box>
 
             <TextField
@@ -1450,6 +1461,16 @@ export const HostedMocksPage: React.FC = () => {
 
               {detailsTab === 0 && (
                 <Box>
+                  <DeploymentWorkspaceEditor key={selectedDeployment.id}
+                    deploymentId={selectedDeployment.id} orgId={selectedDeployment.org_id}
+                    workspaceId={selectedDeployment.workspace_id}
+                    onSaved={workspace_id => {
+                      const id = selectedDeployment.id;
+                      setSelectedDeployment(previous => previous?.id === id
+                        ? { ...previous, workspace_id } : previous);
+                      setDeployments(previous => previous.map(deployment => deployment.id === id
+                        ? { ...deployment, workspace_id } : deployment));
+                    }} />
                   {selectedDeployment.description && (
                     <Typography variant="body1" paragraph>
                       {selectedDeployment.description}

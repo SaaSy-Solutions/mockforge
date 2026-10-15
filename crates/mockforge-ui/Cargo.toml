@@ -51,20 +51,20 @@ reqwest = { workspace = true }
 sysinfo = { workspace = true }
 html-escape = "0.2"
 once_cell = "1.21"
-mockforge-core = { version = "0.3.70", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.234", path = "../mockforge-core" }
 mockforge-openapi = { path = "../mockforge-openapi" }
 mockforge-foundation = { path = "../mockforge-foundation" }
-mockforge-http = { version = "0.3.70", path = "../mockforge-http", features = ["smtp", "mqtt", "conformance"] }
-mockforge-ws = { version = "0.3.70", path = "../mockforge-ws" }
-mockforge-grpc = { version = "0.3.70", path = "../mockforge-grpc" }
-mockforge-vbr = { version = "0.3.70", path = "../mockforge-vbr" }
-mockforge-plugin-core = { version = "0.3.70", path = "../mockforge-plugin-core" }
-mockforge-plugin-loader = { version = "0.3.70", path = "../mockforge-plugin-loader" }
-mockforge-analytics = { version = "0.3.70", path = "../mockforge-analytics" }
-mockforge-chaos = { version = "0.3.70", path = "../mockforge-chaos" }
-mockforge-collab = { version = "0.3.70", path = "../mockforge-collab" }
-mockforge-recorder = { version = "0.3.70", path = "../mockforge-recorder" }
-mockforge-federation = { version = "0.3.70", path = "../mockforge-federation" }
+mockforge-http = { version = "0.3.234", path = "../mockforge-http", features = ["smtp", "mqtt", "conformance"] }
+mockforge-ws = { version = "0.3.234", path = "../mockforge-ws" }
+mockforge-grpc = { version = "0.3.234", path = "../mockforge-grpc" }
+mockforge-vbr = { version = "0.3.234", path = "../mockforge-vbr" }
+mockforge-plugin-core = { version = "0.3.234", path = "../mockforge-plugin-core" }
+mockforge-plugin-loader = { version = "0.3.234", path = "../mockforge-plugin-loader" }
+mockforge-analytics = { version = "0.3.234", path = "../mockforge-analytics" }
+mockforge-chaos = { version = "0.3.234", path = "../mockforge-chaos" }
+mockforge-collab = { version = "0.3.234", path = "../mockforge-collab" }
+mockforge-recorder = { version = "0.3.234", path = "../mockforge-recorder" }
+mockforge-federation = { version = "0.3.234", path = "../mockforge-federation" }
 base64 = { workspace = true }
 rand = { workspace = true }
 jsonwebtoken = "9.3"
@@ -79,6 +79,8 @@ jsonptr = "0.7.1"
 # Pulled in without default features with only `sqlite` enabled so we
 # don't drag in the Postgres sqlx backend.
 mockforge-registry-core = { path = "../mockforge-registry-core", default-features = false, features = ["sqlite"], optional = true }
+
+urlencoding = { workspace = true }
 
 [features]
 default = ["registry-admin"]
@@ -99,4 +101,3 @@ axum = { workspace = true, features = ["macros"] }
 tokio = { workspace = true, features = ["rt", "macros"] }
 # Need ServiceExt for oneshot
 tower = { version = "0.5", features = ["util"] }
-urlencoding = { workspace = true }

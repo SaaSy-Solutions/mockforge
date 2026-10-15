@@ -181,12 +181,34 @@ Host binding for the gRPC server is YAML-only (`grpc.host`).
 - `MOCKFORGE_KAFKA_ADVERTISED_HOST=<host>` — hostname advertised in metadata responses (defaults to the bind host).
 - `MOCKFORGE_KAFKA_ADVERTISED_PORT=<int>` — port advertised in metadata responses (defaults to the bind port).
 - `MOCKFORGE_KAFKA_FIXTURES_DIR=path/to/kafka-fixtures` — directory of pre-recorded Kafka topic fixtures.
-- `MOCKFORGE_KAFKA_RECORDING_DB=path/to/recording.sqlite` — SQLite file for recording produce/consume exchanges; when set, every Kafka exchange is persisted for replay.
+- `MOCKFORGE_KAFKA_RECORDING_DB=path/to/recording.sqlite` — SQLite file for best-effort produce/consume recording; see the capture semantics below.
 
 ## AMQP / MQTT Protocol
 
 - `MOCKFORGE_AMQP_RECORDING_DB=path/to/recording.sqlite` — SQLite file for recording AMQP publish/deliver exchanges; when set, every exchange is persisted for replay. Unset or unusable path is a no-op.
 - `MOCKFORGE_MQTT_RECORDING_DB=path/to/recording.sqlite` — SQLite file for recording MQTT publish/deliver exchanges; when set, every exchange is persisted for replay. Unset or unusable path is a no-op.
+
+## Async Broker Recording
+
+Set these paths before starting the corresponding broker. Recording is optional;
+unset or empty values leave it disabled. An unusable database path is logged and
+the broker continues serving traffic without recording.
+
+| Variable | Captured message events |
+|---|---|
+| `MOCKFORGE_KAFKA_RECORDING_DB` | Accepted produces and messages returned by fetches, with partition, offset and UTF-8 key metadata. |
+| `MOCKFORGE_MQTT_RECORDING_DB` | Publishes and subscriber deliveries, including retained snapshots and last wills, with client ID, QoS and retain metadata. |
+| `MOCKFORGE_AMQP_RECORDING_DB` | Publishes, committed transaction publishes, push deliveries and successful `Basic.Get` deliveries. Empty pulls and rolled-back transaction publishes produce no message events. |
+
+Each database stores protocol, operation and topic or queue path in the shared
+recorder schema. UTF-8 payloads are stored directly; binary payloads use base64
+and set `body_encoding` accordingly. MQTT stores the client ID in `client_ip`;
+it does not infer the client's network address.
+
+Writes run in background tasks and are best effort. A broker acknowledgment is
+not a database-flush acknowledgment; abrupt process termination can lose pending
+writes. A message served again by a fetch or delivery can produce another
+consume event.
 
 ## Federation
 
@@ -539,3 +561,12 @@ Both relax SSRF protection and must never be set in production. Each accepts
     verified-domain trust model
 
 For more detailed configuration options, see the [Configuration Files](files.md) documentation.
+
+### Local workspace transfer credentials (unreleased)
+
+`MOCKFORGE_ADMIN_TOKEN` supplies a local admin JWT to `workspace export` and
+`workspace import`; `--token-env` selects another caller variable. Token values
+are not placed in command arguments or exported files. Generated
+`MOCKFORGE_WORKSPACE_EXPORT_VALUE_000000` reference names are resolved only when
+`workspace import --resolve-env` is explicitly requested. See
+[workspace transfer documentation](../../../docs/dev-notes/SYNC_README.md).

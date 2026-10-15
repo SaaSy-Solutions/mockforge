@@ -1,5 +1,29 @@
 # How to Run E2E Tests
 
+## Choose the server interface
+
+The default `playwright.config.ts` tests the local Admin UI and excludes
+`*-deployed.spec.ts`. Run cloud deployment specs with
+`playwright-deployed.config.ts`; those specs require the cloud app and its
+cloud authentication setup. A locally hosted build of the cloud interface is
+still a cloud interface, not a local-server Admin UI.
+
+Do not use cloud test failures for missing local port, validation, or latency
+controls as evidence of a registry-origin outage. Connection/DNS failures and
+incorrect UI expectations are separate failures and must remain visible.
+
+
+
+## Dashboard coverage
+
+The cloud dashboard suite checks cloud KPI values against `/api/v1/dashboard`, organization activity, polling, navigation, global search/theme controls, and recovery from a client-intercepted 503. Local CPU/memory, request streams, reality controls and virtual clocks are not cloud dashboard capabilities. The local simulation contracts live in `dashboard-local-server.spec.ts`; run them against a disposable loopback backend with one worker:
+
+```bash
+pnpm exec playwright test --config=playwright.config.ts e2e/dashboard-local-server.spec.ts --workers=1
+```
+
+Those cases assert backend state as well as rendered controls and restore the original level/clock settings after each case. They use default file ordering so a failure does not skip every later case.
+
 ## Prerequisites
 
 1. **Start the dev server** (in one terminal):
@@ -120,4 +144,3 @@ Then in another terminal:
 cd crates/mockforge-ui/ui
 COLLECT_COVERAGE=true npx playwright test --project=chromium e2e/coverage-collector.spec.ts
 ```
-

@@ -7,6 +7,7 @@
 - [Getting Started](getting-started/getting-started.md)
 - [Installation](getting-started/installation.md)
 - [Your First Mock API in 5 Minutes](getting-started/five-minute-api.md)
+    - [First mock: measurement](getting-started/first-mock-benchmark.md)
 - [Quick Start](getting-started/quick-start.md)
 - [Basic Concepts](getting-started/concepts.md)
 

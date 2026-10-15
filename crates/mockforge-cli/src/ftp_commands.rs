@@ -1,10 +1,10 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use clap::Subcommand;
 use mockforge_core::config::FtpConfig;
 use mockforge_ftp::{
     FileContent, FileMetadata, FtpServer, GenerationPattern, VirtualFile, VirtualFileSystem,
 };
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 /// FTP server management commands
 #[derive(Subcommand)]
@@ -16,21 +16,21 @@ pub enum FtpCommands {
     ///   mockforge ftp serve --config ftp-config.yaml
     #[command(verbatim_doc_comment)]
     Serve {
-        /// FTP server port
-        #[arg(short, long, default_value = "2121")]
-        port: u16,
+        /// FTP server port (defaults to 2121 without a configuration file)
+        #[arg(short, long)]
+        port: Option<u16>,
 
-        /// FTP server host
-        #[arg(long, default_value = "127.0.0.1")]
-        host: String,
+        /// FTP server host (defaults to 127.0.0.1 without a configuration file)
+        #[arg(long)]
+        host: Option<String>,
 
-        /// Configuration file path
+        /// FTP settings YAML, or server YAML with an ftp section
         #[arg(short, long)]
         config: Option<PathBuf>,
 
         /// Virtual root directory
-        #[arg(long, default_value = "/")]
-        virtual_root: String,
+        #[arg(long)]
+        virtual_root: Option<String>,
     },
 
     /// Manage FTP fixtures
@@ -166,24 +166,90 @@ pub async fn handle_ftp_command(command: FtpCommands) -> Result<()> {
     }
 }
 
-async fn handle_ftp_serve(
-    port: u16,
-    host: String,
-    _config: Option<PathBuf>,
-    virtual_root: String,
-) -> Result<()> {
-    println!("Starting FTP server on {}:{}", host, port);
-
-    let config = FtpConfig {
-        host,
-        port,
-        virtual_root: virtual_root.into(),
-        ..Default::default()
+async fn resolve_ftp_config(
+    port: Option<u16>,
+    host: Option<String>,
+    config_path: Option<&Path>,
+    virtual_root: Option<String>,
+) -> Result<FtpConfig> {
+    let mut config = if let Some(path) = config_path {
+        let contents = tokio::fs::read_to_string(path)
+            .await
+            .with_context(|| format!("Could not read FTP configuration {}", path.display()))?;
+        let document: serde_yaml::Value = serde_yaml::from_str(&contents)
+            .with_context(|| format!("Invalid FTP configuration {}", path.display()))?;
+        // Accept standalone FTP settings or the FTP section of a server config.
+        let settings = document.get("ftp").cloned().unwrap_or(document);
+        let mut config: FtpConfig = serde_yaml::from_value(settings)
+            .with_context(|| format!("Invalid FTP settings in {}", path.display()))?;
+        if let Some(directory) = &mut config.fixtures_dir {
+            if directory.is_relative() {
+                *directory = path.parent().unwrap_or_else(|| Path::new(".")).join(&*directory);
+            }
+        }
+        config
+    } else {
+        // Preserve the standalone CLI defaults when no file is supplied.
+        FtpConfig {
+            host: "127.0.0.1".to_string(),
+            virtual_root: PathBuf::from("/"),
+            ..Default::default()
+        }
     };
+    if let Some(port) = port {
+        config.port = port;
+    }
+    if let Some(host) = host {
+        config.host = host;
+    }
+    if let Some(root) = virtual_root {
+        config.virtual_root = root.into();
+    }
+    if config.passive_ports.0 > config.passive_ports.1 {
+        anyhow::bail!("FTP passive port range must start at or below its end");
+    }
+    Ok(config)
+}
 
-    let server = FtpServer::new(config);
+async fn load_server_fixtures(directory: Option<&Path>) -> Result<Vec<mockforge_ftp::FtpFixture>> {
+    let Some(directory) = directory else {
+        return Ok(Vec::new());
+    };
+    let mut entries = tokio::fs::read_dir(directory).await.with_context(|| {
+        format!("Could not read FTP fixtures directory {}", directory.display())
+    })?;
+    let mut files = Vec::new();
+    while let Some(entry) = entries.next_entry().await? {
+        let path = entry.path();
+        if entry.file_type().await?.is_file()
+            && matches!(path.extension().and_then(|ext| ext.to_str()), Some("yaml" | "yml"))
+        {
+            files.push(path);
+        }
+    }
+    files.sort();
+    let mut fixtures = Vec::new();
+    for file in files {
+        let contents = tokio::fs::read_to_string(&file).await?;
+        fixtures.push(
+            serde_yaml::from_str(&contents)
+                .with_context(|| format!("Invalid FTP fixture {}", file.display()))?,
+        );
+    }
+    Ok(fixtures)
+}
+
+async fn handle_ftp_serve(
+    port: Option<u16>,
+    host: Option<String>,
+    config_path: Option<PathBuf>,
+    virtual_root: Option<String>,
+) -> Result<()> {
+    let config = resolve_ftp_config(port, host, config_path.as_deref(), virtual_root).await?;
+    let fixtures = load_server_fixtures(config.fixtures_dir.as_deref()).await?;
+    println!("Starting FTP server on {}:{}", config.host, config.port);
+    let server = FtpServer::new_with_fixtures(config, fixtures)?;
     server.start().await?;
-
     Ok(())
 }
 
@@ -370,10 +436,10 @@ mod tests {
     #[test]
     fn test_ftp_commands_serve_variant() {
         let _cmd = FtpCommands::Serve {
-            port: 2121,
-            host: "127.0.0.1".to_string(),
+            port: Some(2121),
+            host: Some("127.0.0.1".to_string()),
             config: None,
-            virtual_root: "/".to_string(),
+            virtual_root: Some("/".to_string()),
         };
     }
 

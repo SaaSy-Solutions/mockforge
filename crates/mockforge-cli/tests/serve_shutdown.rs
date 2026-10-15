@@ -21,12 +21,17 @@ impl Drop for OwnedChild {
 
 async fn assert_serve_stops_for(signal: &str, seed_default_users: bool, grace: Duration) {
     let directory = tempfile::tempdir().expect("isolated server workspace");
+    // Child startup must not discover a host .env or fall back to the root
+    // drive for its own temporary files after clearing the environment.
+    std::fs::write(directory.path().join(".env"), "").expect("empty fixture environment");
     let mut command = Command::cargo_bin("mockforge").expect("compiled CLI binary");
     command
         .env_clear()
+        .env("TMPDIR", directory.path())
         .current_dir(directory.path())
         .args([
             "serve",
+            "--no-config",
             "--http-port",
             "0",
             "--ws-port",

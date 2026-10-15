@@ -15,6 +15,7 @@
 pub use errors::*;
 pub use key_management::{FileKeyStorage, KeyStorage, KeyStore as KeyManagementStore};
 
+#[cfg(feature = "workspace-mgmt")]
 use crate::workspace_persistence::WorkspacePersistence;
 use aes_gcm::{
     aead::{Aead, KeyInit},
@@ -1118,6 +1119,7 @@ pub mod utils {
     use super::*;
 
     /// Check if encryption is enabled for a workspace
+    #[cfg(feature = "workspace-mgmt")]
     pub async fn is_encryption_enabled_for_workspace(
         persistence: &WorkspacePersistence,
         workspace_id: &str,
@@ -1132,6 +1134,7 @@ pub mod utils {
     }
 
     /// Get the auto-encryption config for a workspace
+    #[cfg(feature = "workspace-mgmt")]
     pub async fn get_auto_encryption_config(
         persistence: &WorkspacePersistence,
         workspace_id: &str,

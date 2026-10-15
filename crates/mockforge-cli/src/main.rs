@@ -1,7 +1,9 @@
 use clap::{Args, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Shell};
+#[cfg(feature = "http")]
 use std::net::SocketAddr;
 use std::path::PathBuf;
+#[cfg(feature = "http")]
 use tokio::net::TcpListener;
 
 mod ai_commands;
@@ -46,6 +48,8 @@ mod orchestrate_commands;
 mod plugin_commands;
 #[allow(dead_code)]
 mod progress;
+#[cfg(feature = "http")]
+mod proxy_commands;
 #[cfg(feature = "recorder")]
 #[allow(dead_code)]
 mod recorder_commands;
@@ -53,6 +57,7 @@ mod recorder_commands;
 mod scenario_commands;
 mod schema;
 mod serve;
+mod shutdown;
 #[cfg(feature = "smtp")]
 #[allow(dead_code)]
 mod smtp_commands;
@@ -72,6 +77,7 @@ mod voice_commands;
 #[allow(dead_code)]
 mod wizard;
 mod workspace_commands;
+mod workspace_transfer;
 
 #[cfg(test)]
 mod tests;
@@ -683,6 +689,10 @@ enum Commands {
     ///   mockforge serve --traffic-shaping --bandwidth-limit 500000 --burst-size 50000
     #[command(verbatim_doc_comment)]
     Serve(Box<ServeCliArgs>),
+
+    /// Forward HTTP traffic to an upstream, optionally recording contract violations
+    #[cfg(feature = "http")]
+    Proxy(proxy_commands::ProxyArgs),
 
     /// SMTP server management and mailbox operations
     ///
@@ -3076,6 +3086,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             })
             .await?;
         }
+        #[cfg(feature = "http")]
+        Commands::Proxy(args) => {
+            proxy_commands::run(args).await?;
+        }
         #[cfg(feature = "smtp")]
         Commands::Smtp { smtp_command } => {
             smtp_commands::handle_smtp_command(smtp_command).await?;
@@ -4115,6 +4129,7 @@ mod cli_tests {
     }
 }
 
+#[cfg(feature = "admin")]
 async fn handle_admin(
     port: u16,
     _config: Option<PathBuf>,
@@ -4155,6 +4170,7 @@ async fn handle_admin(
     Ok(())
 }
 
+#[cfg(feature = "http")]
 #[allow(clippy::too_many_arguments)]
 async fn handle_quick(
     file: PathBuf,
@@ -4296,4 +4312,27 @@ fn handle_completions(shell: Shell) {
     let mut cmd = Cli::command();
     let bin_name = cmd.get_name().to_string();
     generate(shell, &mut cmd, bin_name, &mut std::io::stdout());
+}
+#[cfg(not(feature = "http"))]
+#[allow(clippy::too_many_arguments)]
+async fn handle_quick(
+    file: PathBuf,
+    port: u16,
+    host: String,
+    admin: bool,
+    admin_port: u16,
+    metrics: bool,
+    metrics_port: u16,
+    logging: bool,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    let _ = (file, port, host, admin, admin_port, metrics, metrics_port, logging);
+    Err("Quick mock serving requires the http Cargo feature".into())
+}
+
+#[cfg(not(feature = "admin"))]
+async fn handle_admin(
+    _port: u16,
+    _config: Option<PathBuf>,
+) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    Err("The admin command requires the admin Cargo feature".into())
 }

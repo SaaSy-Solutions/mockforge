@@ -28,10 +28,13 @@
 //     `mockforge-recorder` already depends on `mockforge-intelligence`,
 //     intelligence cannot host the orchestration layer without a cycle,
 //     so this handler stays here intentionally.
-//   - `handlers::{contract_health, drift_budget, failure_designer,
-//     incident_replay, protocol_contracts}` — coupled to
-//     `mockforge_chaos`, the chaos crate would need its own #555-style
-//     bucket before these can follow.
+//   - `handlers::{contract_health, drift_budget}` are compatibility state
+//     adapters for Intelligence handlers. Typed providers retain the structural
+//     Core engines without adding a Core dependency to Intelligence; pipeline
+//     publication remains in the HTTP adapter.
+//   - `handlers::{failure_designer, incident_replay, risk_simulation,
+//     snapshot_diff}` still need downstream engine/state boundaries under #632.
+//     Protocol contracts remain part of the HTTP-native contract surface.
 
 //! # MockForge HTTP
 //!
@@ -262,6 +265,7 @@ pub mod reality_proxy;
 /// Replay listing and fixture management
 pub mod replay_listing;
 pub mod request_logging;
+#[cfg(feature = "route-chaos")]
 pub mod route_chaos_runtime;
 /// Runtime named-scenario activation API
 #[cfg(feature = "scenario-engine")]
@@ -271,6 +275,7 @@ pub mod spec_import;
 /// Server-Sent Events for streaming logs and metrics
 pub mod sse;
 /// State machine API for scenario state machines
+#[cfg(feature = "scenario-engine")]
 pub mod state_machine_api;
 /// Time-travel runtime API mirrored from the admin server onto the main HTTP port
 pub mod time_travel_api;
@@ -1807,7 +1812,14 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Start with basic router
     let mut app = Router::new();
-    let mut include_default_health = true;
+    // Configured routes use an any-method dispatcher and reserve their entire path.
+    let mut mock_health_paths: Vec<String> = route_configs
+        .as_ref()
+        .into_iter()
+        .flatten()
+        .filter(|route| health::HEALTH_PATHS.contains(&route.path.as_str()))
+        .map(|route| route.path.clone())
+        .collect();
     let mut captured_routes: Vec<RouteInfo> = Vec::new();
 
     // If an OpenAPI spec is provided, integrate it
@@ -1857,13 +1869,16 @@ pub async fn build_router_with_chains_and_multi_tenant(
                 }
                 registry = registry.with_overrides(Arc::new(overrides.clone()));
 
-                if registry
-                    .routes()
-                    .iter()
-                    .any(|route| route.method == "GET" && route.path == "/health")
-                {
-                    include_default_health = false;
-                }
+                mock_health_paths.extend(
+                    registry
+                        .routes()
+                        .iter()
+                        .filter(|route| {
+                            route.method.eq_ignore_ascii_case("GET")
+                                && health::HEALTH_PATHS.contains(&route.path.as_str())
+                        })
+                        .map(|route| route.path.clone()),
+                );
                 // Capture route info for the /__mockforge/routes endpoint
                 captured_routes = registry
                     .routes()
@@ -1933,6 +1948,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     // Register custom routes from config with advanced routing features
     // Create RouteChaosInjector for advanced fault injection and latency
     // Store as trait object to avoid circular dependency (RouteChaosInjectorTrait is in mockforge-core)
+    #[cfg(feature = "route-chaos")]
     let route_chaos_injector: Option<
         std::sync::Arc<dyn mockforge_core::priority_handler::RouteChaosInjectorTrait>,
     > = if let Some(ref route_configs) = route_configs {
@@ -1968,6 +1984,11 @@ pub async fn build_router_with_chains_and_multi_tenant(
     } else {
         None
     };
+
+    #[cfg(not(feature = "route-chaos"))]
+    let route_chaos_injector: Option<
+        std::sync::Arc<dyn mockforge_core::priority_handler::RouteChaosInjectorTrait>,
+    > = None;
 
     if let Some(route_configs) = route_configs {
         use axum::http::StatusCode;
@@ -2128,12 +2149,11 @@ pub async fn build_router_with_chains_and_multi_tenant(
 
     // Add health check endpoints
     if let Some(health) = health_manager {
-        // Use comprehensive health check router with all probe endpoints
-        app = app.merge(health::health_router(health));
-        info!(
-            "Health check endpoints enabled: /health, /health/live, /health/ready, /health/startup"
-        );
-    } else if include_default_health {
+        // Explicit mock handlers take precedence over overlapping built-in probes.
+        let excluded_paths: Vec<&str> = mock_health_paths.iter().map(String::as_str).collect();
+        app = app.merge(health::health_router_with_exclusions(health, &excluded_paths));
+        info!("Default health probes enabled on paths not supplied by mock routes");
+    } else if !mock_health_paths.iter().any(|path| path == "/health") {
         // Fallback to basic health endpoint for backwards compatibility
         app = app.route(
             "/health",
@@ -2365,6 +2385,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
     // the static per-route handlers so operators can add/remove fault and
     // latency rules without redeploying. Static rules from the YAML
     // config still apply to their routes; runtime rules are additive.
+    #[cfg(feature = "route-chaos")]
     {
         use crate::route_chaos_runtime::{
             route_chaos_api_router, runtime_route_chaos_middleware, RuntimeRouteChaosState,
@@ -3041,6 +3062,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         }
 
         // Add performance mode endpoints
+        #[cfg(feature = "performance-profiling")]
         {
             use crate::handlers::performance::{performance_router, PerformanceState};
             let performance_state = PerformanceState::new();
@@ -3049,6 +3071,7 @@ pub async fn build_router_with_chains_and_multi_tenant(
         }
 
         // Add world state endpoints
+        #[cfg(feature = "world-state")]
         {
             use crate::handlers::world_state::{world_state_router, WorldStateState};
             use mockforge_world_state::WorldStateEngine;

@@ -32,7 +32,12 @@ async fn librdkafka_produce_then_fetch_round_trip() {
         ..KafkaConfig::default()
     };
 
-    let broker = Arc::new(KafkaMockBroker::new(config.clone()).await.expect("broker init"));
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("traffic.db");
+    let db = mockforge_recorder::RecorderDatabase::new(&path).await.unwrap();
+    let mut broker = KafkaMockBroker::new(config.clone()).await.expect("broker init");
+    broker.set_recorder(Arc::new(mockforge_recorder::Recorder::new(db.clone())));
+    let broker = Arc::new(broker);
 
     // Pre-register the topic with one partition so Metadata + Fetch both
     // find it; auto-create is only done on produce.
@@ -115,5 +120,36 @@ async fn librdkafka_produce_then_fetch_round_trip() {
     assert_eq!(received.0, b"record-one");
     assert_eq!(received.1.as_deref(), Some(b"k1".as_ref()));
 
+    let filter = || mockforge_recorder::query::QueryFilter {
+        protocol: Some(mockforge_recorder::models::Protocol::Kafka),
+        ..Default::default()
+    };
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(3);
+    loop {
+        let rows = mockforge_recorder::query::execute_query(&db, filter()).await.unwrap();
+        if rows.exchanges.iter().any(|e| e.request.method == "consume") {
+            break;
+        }
+        assert!(tokio::time::Instant::now() < deadline, "fetch was not recorded");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    drop(producer);
     server_handle.abort();
+    let _ = server_handle.await;
+    let reopened = mockforge_recorder::RecorderDatabase::new(&path).await.unwrap();
+    let rows = mockforge_recorder::query::execute_query(&reopened, filter()).await.unwrap();
+    for op in ["produce", "consume"] {
+        let events: Vec<_> = rows.exchanges.iter().filter(|e| e.request.method == op).collect();
+        assert!(!events.is_empty(), "missing durable {op} event");
+        for event in events {
+            assert_eq!(event.request.path, "fetch-topic");
+            assert_eq!(event.request.body.as_deref(), Some("record-one"));
+            assert_eq!(event.request.body_encoding, "utf8");
+            let metadata: serde_json::Value =
+                serde_json::from_str(event.request.query_params.as_deref().unwrap()).unwrap();
+            assert_eq!(metadata["partition"], 0);
+            assert_eq!(metadata["offset"], 0);
+            assert_eq!(metadata["key"], "k1");
+        }
+    }
 }

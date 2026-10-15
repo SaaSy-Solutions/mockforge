@@ -4,9 +4,9 @@
 //! including environment configurations, security baselines, and blueprints.
 
 use crate::chaos_utilities::ChaosConfig;
-use crate::contract_drift::DriftBudgetConfig;
 use crate::reality::RealityLevel;
 use crate::workspace::{MockEnvironmentName, Workspace};
+use mockforge_foundation::contract_drift_types::DriftBudgetConfig;
 use serde_json::Value;
 
 /// Template environment configuration
