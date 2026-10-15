@@ -8,6 +8,7 @@ use aws_sdk_s3::{
 };
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+use uuid::Uuid;
 
 use crate::config::Config;
 
@@ -212,9 +213,38 @@ impl PluginStorage {
     /// A URL a client can fetch for a stored object URL. Objects in our
     /// bucket aren't publicly readable (R2 and MinIO require signed
     /// requests), so those get a presigned GET valid for `ttl`. Anything
-    /// else (local `/storage/` paths, seeded or user-supplied URLs) is
-    /// returned unchanged.
+    /// else (local `/storage/` paths, seeded URLs) is returned unchanged.
+    ///
+    /// Only for URLs the server wrote itself. User-supplied URLs could name
+    /// another tenant's object; use [`Self::fetch_spec_url`] for those.
     pub async fn fetch_url(&self, stored: &str, ttl: Duration) -> String {
+        self.presign_if(stored, ttl, |_| true).await
+    }
+
+    /// Like [`Self::fetch_url`] for a user-supplied OpenAPI spec URL: only
+    /// a spec `org_id` uploaded (`specs/{org_id}/{name}.json`, exactly as
+    /// `upload_spec` writes it) is presigned. Any other URL, including other
+    /// tenants' objects, is returned unchanged and stays unreadable.
+    pub async fn fetch_spec_url(&self, stored: &str, org_id: Uuid, ttl: Duration) -> String {
+        self.presign_if(stored, ttl, |key| Self::is_org_spec_key(key, org_id)).await
+    }
+
+    fn is_org_spec_key(key: &str, org_id: Uuid) -> bool {
+        let Some(file) = key.strip_prefix(&format!("specs/{org_id}/")) else {
+            return false;
+        };
+        let Some(stem) = file.strip_suffix(".json") else {
+            return false;
+        };
+        !stem.is_empty() && Self::sanitize_key_component(stem) == stem
+    }
+
+    async fn presign_if(
+        &self,
+        stored: &str,
+        ttl: Duration,
+        allow: impl Fn(&str) -> bool,
+    ) -> String {
         let StorageBackend::S3 {
             client,
             bucket,
@@ -223,7 +253,9 @@ impl PluginStorage {
         else {
             return stored.to_string();
         };
-        let Some(key) = Self::key_from_url(endpoint.as_deref(), bucket, stored) else {
+        let Some(key) =
+            Self::key_from_url(endpoint.as_deref(), bucket, stored).filter(|key| allow(key))
+        else {
             return stored.to_string();
         };
         let presigned = async {
@@ -776,6 +808,32 @@ mod tests {
         let seeded = "https://registry.mockforge.dev/plugins/a/1.0.0.wasm";
         assert_eq!(storage.fetch_url(seeded, Duration::from_secs(900)).await, seeded);
         assert_eq!(storage.local_key("/storage/plugins/a/1.0.0.wasm"), None);
+    }
+
+    #[tokio::test]
+    async fn spec_urls_presign_only_the_callers_own_uploads() {
+        let storage = s3_storage("http://127.0.0.1:59000");
+        let ours = Uuid::new_v4();
+        let theirs = Uuid::new_v4();
+        let ttl = Duration::from_secs(900);
+        let spec =
+            |org: Uuid, file: &str| format!("http://127.0.0.1:59000/bucket/specs/{org}/{file}");
+
+        let own = spec(ours, "petstore.json");
+        assert!(storage.fetch_spec_url(&own, ours, ttl).await.contains("X-Amz-Signature="));
+
+        // Another tenant's spec, traversal, nesting, or a non-spec object in
+        // our bucket must come back unsigned (and so unreadable).
+        for url in [
+            spec(theirs, "petstore.json"),
+            spec(ours, "../THEIRS/petstore.json").replace("THEIRS", &theirs.to_string()),
+            spec(ours, "nested/petstore.json"),
+            spec(ours, "petstore.yaml"),
+            spec(ours, "Petstore.json"),
+            format!("http://127.0.0.1:59000/bucket/snapshots/{ours}/s.json"),
+        ] {
+            assert_eq!(storage.fetch_spec_url(&url, ours, ttl).await, url);
+        }
     }
 
     #[tokio::test]

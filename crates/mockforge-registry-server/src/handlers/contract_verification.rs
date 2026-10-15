@@ -254,7 +254,12 @@ pub async fn trigger_diff_run(
     .await?;
 
     let spec_url = match svc.openapi_spec_url.as_deref() {
-        Some(url) => Some(state.storage.fetch_url(url, crate::storage::RUNNER_FETCH_TTL).await),
+        Some(url) => Some(
+            state
+                .storage
+                .fetch_spec_url(url, org_id, crate::storage::RUNNER_FETCH_TTL)
+                .await,
+        ),
         None => None,
     };
     if let Err(e) = crate::run_queue::enqueue(

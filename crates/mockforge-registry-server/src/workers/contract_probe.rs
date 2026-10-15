@@ -187,7 +187,7 @@ async fn enqueue_for_service(
 
     if let Some(ProbeQueue { redis, storage }) = queue {
         let spec_url = match svc.openapi_spec_url.as_deref() {
-            Some(url) => Some(storage.fetch_url(url, RUNNER_FETCH_TTL).await),
+            Some(url) => Some(storage.fetch_spec_url(url, run.org_id, RUNNER_FETCH_TTL).await),
             None => None,
         };
         if let Err(e) = enqueue(

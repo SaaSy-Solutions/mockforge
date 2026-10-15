@@ -3127,7 +3127,10 @@ pub async fn trigger_smoke_run(
     // ─── Build the runner payload ────────────────────────────────
     let mut payload = build_smoke_payload(&deployment, &req)?;
     if let Some(spec_url) = payload["openapi_spec_url"].as_str() {
-        let spec_url = state.storage.fetch_url(spec_url, crate::storage::RUNNER_FETCH_TTL).await;
+        let spec_url = state
+            .storage
+            .fetch_spec_url(spec_url, deployment.org_id, crate::storage::RUNNER_FETCH_TTL)
+            .await;
         payload["openapi_spec_url"] = spec_url.into();
     }
 
