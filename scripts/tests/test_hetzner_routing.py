@@ -14,8 +14,7 @@ LABELS = ['self-hosted', 'linux', 'x64', 'rust']
 ROUTE = '${{ (github.event_name != \'pull_request\' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(\'["self-hosted","linux","x64","rust"]\') || \'ubuntu-latest\' }}'
 TARGETS = {
     'ci.yml': ['changes', 'test', 'ui-test', 'warning-gate',
-               'warning-ratchet-preview', 'security-audit', 'msrv',
-               'typos', 'changelog-validation'],
+               'warning-ratchet-preview', 'security-audit', 'msrv'],
     'registry-e2e.yml': ['changes', 'registry-e2e', 'registry-e2e-rls'],
 }
 
@@ -171,6 +170,17 @@ class HetznerRoutingTest(unittest.TestCase):
         self.assertIn('os: [ubuntu-latest, macos-latest, windows-latest]', plugin['build'])
         for name in ['npm', 'python', 'maven', 'nuget']:
             self.assertEqual(route(jobs(f'{name}-publish-sdk.yml')['publish']), 'ubuntu-latest')
+
+    def test_light_non_rust_jobs_stay_on_free_hosted_runners(self):
+        # Public repo: standard GitHub-hosted runners cost nothing, so text and
+        # manifest checks must not take Hetzner Rust capacity.
+        for filename, job_id in [('ci.yml', 'typos'), ('ci.yml', 'changelog-validation'),
+                                 ('migration-guard.yml', 'check'),
+                                 ('k8s-tests.yml', 'validate-manifests'),
+                                 ('k8s-tests.yml', 'lint-helm-charts'),
+                                 ('k8s-tests.yml', 'cost-estimation')]:
+            with self.subTest(workflow=filename, job=job_id):
+                self.assertEqual(route(jobs(filename)[job_id]), 'ubuntu-latest')
 
     def test_monitoring_and_isolated_benchmark_capacity_are_not_silently_degraded(self):
         for filename, job_id in [('runner-health.yml', 'check'), ('production-smoke.yml', 'smoke'), ('benchmarks.yml', 'benchmark')]:

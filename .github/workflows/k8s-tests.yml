@@ -22,7 +22,7 @@ concurrency:
 jobs:
   validate-manifests:
     name: Validate Kubernetes Manifests
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
@@ -49,7 +49,7 @@ jobs:
 
   lint-helm-charts:
     name: Lint Helm Charts
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
@@ -397,7 +397,7 @@ jobs:
 
   cost-estimation:
     name: Cost Estimation
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     if: github.event_name == 'workflow_dispatch'  # Only run on manual trigger
 
