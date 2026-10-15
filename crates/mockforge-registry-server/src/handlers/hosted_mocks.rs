@@ -3090,7 +3090,14 @@ pub async fn trigger_smoke_run(
     }
 
     // ─── Build the runner payload ────────────────────────────────
-    let payload = build_smoke_payload(&deployment, &req)?;
+    let mut payload = build_smoke_payload(&deployment, &req)?;
+    if let Some(spec_url) = payload["openapi_spec_url"].as_str() {
+        let spec_url = state
+            .storage
+            .fetch_spec_url(spec_url, deployment.org_id, crate::storage::RUNNER_FETCH_TTL)
+            .await;
+        payload["openapi_spec_url"] = spec_url.into();
+    }
 
     // ─── Enqueue test_runs row ───────────────────────────────────
     let (run_org_id, suite_id) = (org_ctx.org_id, deployment.id);

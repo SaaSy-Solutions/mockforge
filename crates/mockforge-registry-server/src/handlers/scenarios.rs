@@ -2,6 +2,8 @@
 //!
 //! Provides endpoints for the scenario marketplace (data scenarios for mock systems)
 
+use std::time::Duration;
+
 use axum::{
     extract::{Path, State},
     http::HeaderMap,
@@ -15,8 +17,20 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::{resolve_org_context, AuthUser, OptionalAuthUser},
     models::{AuditEventType, FeatureType, ScenarioReview, ScenarioVersion, UsageCounter, User},
+    storage::PluginStorage,
     AppState,
 };
+
+/// How long presigned package URLs in scenario responses stay valid.
+const DOWNLOAD_URL_TTL: Duration = Duration::from_secs(60 * 60);
+
+/// Swap stored package URLs for ones clients can fetch (see
+/// `PluginStorage::fetch_url`).
+async fn resolve_download_urls(storage: &PluginStorage, entries: &mut [ScenarioVersionEntry]) {
+    for entry in entries {
+        entry.download_url = storage.fetch_url(&entry.download_url, DOWNLOAD_URL_TTL).await;
+    }
+}
 
 /// Search scenarios
 /// Supports org filtering: if user is authenticated, includes their org's private scenarios
@@ -97,7 +111,7 @@ pub async fn search_scenarios(
             .map_err(ApiError::Database)?
             .unwrap_or_else(|| User::placeholder(scenario.author_id));
 
-        let version_entries: Vec<ScenarioVersionEntry> = versions
+        let mut version_entries: Vec<ScenarioVersionEntry> = versions
             .into_iter()
             .filter(|v| !v.yanked)
             .map(|v| ScenarioVersionEntry {
@@ -110,6 +124,7 @@ pub async fn search_scenarios(
                 min_mockforge_version: v.min_mockforge_version,
             })
             .collect();
+        resolve_download_urls(&state.storage, &mut version_entries).await;
 
         // Load top 3 reviews (most helpful) for search results
         let reviews = ScenarioReview::get_by_scenario(pool, scenario.id, 3, 0)
@@ -211,7 +226,7 @@ pub async fn get_scenario(
         .await?
         .unwrap_or_else(|| User::placeholder(scenario.author_id));
 
-    let version_entries: Vec<ScenarioVersionEntry> = versions
+    let mut version_entries: Vec<ScenarioVersionEntry> = versions
         .into_iter()
         .map(|v| ScenarioVersionEntry {
             version: v.version,
@@ -223,6 +238,7 @@ pub async fn get_scenario(
             min_mockforge_version: v.min_mockforge_version,
         })
         .collect();
+    resolve_download_urls(&state.storage, &mut version_entries).await;
 
     // Load top 5 reviews (most helpful) for single scenario view
     let reviews = ScenarioReview::get_by_scenario(pool, scenario.id, 5, 0)
@@ -310,9 +326,11 @@ pub async fn get_scenario_version(
         .map_err(ApiError::Database)?
         .ok_or_else(|| ApiError::InvalidVersion(version.clone()))?;
 
+    let download_url =
+        state.storage.fetch_url(&scenario_version.download_url, DOWNLOAD_URL_TTL).await;
     Ok(Json(ScenarioVersionEntry {
         version: scenario_version.version,
-        download_url: scenario_version.download_url,
+        download_url,
         checksum: scenario_version.checksum,
         size: scenario_version.file_size as u64,
         published_at: scenario_version.published_at.to_rfc3339(),
@@ -432,6 +450,27 @@ pub async fn publish_scenario(
         .trim_matches('-')
         .replace("--", "-");
 
+    // Only the owner (its org, or its author when it has none) may publish
+    // under an existing name, and versions are immutable. Check before
+    // uploading so a rejected publish can't overwrite a served package.
+    let existing = state.store.find_scenario_by_name(&name).await?;
+    if let Some(scenario) = &existing {
+        let owned = match scenario.org_id {
+            Some(org_id) => org_id == org_ctx.org_id,
+            None => scenario.author_id == author_id,
+        };
+        if !owned {
+            return Err(ApiError::PermissionDenied);
+        }
+        if ScenarioVersion::find(pool, scenario.id, &version)
+            .await
+            .map_err(ApiError::Database)?
+            .is_some()
+        {
+            return Err(ApiError::ScenarioExists(format!("{name}@{version}")));
+        }
+    }
+
     // Upload to storage
     let download_url = state
         .storage
@@ -440,7 +479,7 @@ pub async fn publish_scenario(
         .map_err(|e| ApiError::Storage(e.to_string()))?;
 
     // Create or update scenario
-    let scenario = if let Some(existing) = state.store.find_scenario_by_name(&name).await? {
+    let scenario = if let Some(existing) = existing {
         // Update existing scenario
         existing
     } else {
@@ -536,6 +575,7 @@ pub async fn publish_scenario(
     // Record metrics
     metrics.record_publish_success();
 
+    let download_url = state.storage.fetch_url(&download_url, DOWNLOAD_URL_TTL).await;
     Ok(Json(PublishScenarioResponse {
         name: name.to_string(),
         version: version.to_string(),

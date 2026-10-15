@@ -293,6 +293,24 @@ pub async fn publish_template(
         return Err(ApiError::InvalidRequest("Checksum mismatch".to_string()));
     }
 
+    // Versions are immutable, and only the owner may touch an existing one.
+    // Check before uploading so a rejected publish can't overwrite the
+    // served package at templates/{name}/{version}.
+    if let Some(existing) = state
+        .store
+        .find_template_by_name_version(&request.name, &request.version)
+        .await?
+    {
+        let owned = match existing.org_id {
+            Some(org_id) => org_id == org_ctx.org_id,
+            None => existing.author_id == author_id,
+        };
+        if !owned {
+            return Err(ApiError::PermissionDenied);
+        }
+        return Err(ApiError::TemplateExists(format!("{}@{}", request.name, request.version)));
+    }
+
     // Upload to storage
     let download_url = state
         .storage
@@ -300,28 +318,19 @@ pub async fn publish_template(
         .await
         .map_err(|e| ApiError::Storage(e.to_string()))?;
 
-    // Create or update template
-    let template = if let Some(existing) = state
+    let template = state
         .store
-        .find_template_by_name_version(&request.name, &request.version)
-        .await?
-    {
-        existing
-    } else {
-        state
-            .store
-            .create_template(
-                Some(org_ctx.org_id),
-                &request.name,
-                &request.slug,
-                &request.description,
-                author_id,
-                &request.version,
-                request.category,
-                request.content_json.clone(),
-            )
-            .await?
-    };
+        .create_template(
+            Some(org_ctx.org_id),
+            &request.name,
+            &request.slug,
+            &request.description,
+            author_id,
+            &request.version,
+            request.category,
+            request.content_json.clone(),
+        )
+        .await?;
 
     // Create version entry
     TemplateVersion::create(
@@ -387,6 +396,11 @@ pub async fn publish_template(
     // Record metrics
     metrics.record_publish_success();
 
+    // The stored URL stays canonical; the publisher gets one it can fetch.
+    let download_url = state
+        .storage
+        .fetch_url(&download_url, std::time::Duration::from_secs(60 * 60))
+        .await;
     Ok(Json(PublishTemplateResponse {
         name: request.name,
         version: request.version,

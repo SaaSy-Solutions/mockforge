@@ -237,7 +237,11 @@ async fn main() -> Result<()> {
     // the runner-side ContractExecutor already knows how to fetch +
     // parse the spec; this scheduler owns the "fire on a cadence,
     // not only when the user clicks the button" piece.
-    workers::contract_probe::start_contract_probe_worker(db.pool().clone(), state.redis.clone());
+    workers::contract_probe::start_contract_probe_worker(
+        db.pool().clone(),
+        state.redis.clone(),
+        state.storage.clone(),
+    );
     // Cloud Test Generator (#469 Phase 3) — drains queued LLM jobs against
     // the org's BYOK provider. Disabled via TEST_GENERATION_WORKER_DISABLED=1.
     workers::test_generation_worker::start_test_generation_worker(state.clone());

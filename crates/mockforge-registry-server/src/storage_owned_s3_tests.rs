@@ -76,6 +76,7 @@ impl Fixture {
             backend: StorageBackend::S3 {
                 client: S3Client::from_conf(config),
                 bucket: "fixture-bucket".into(),
+                endpoint: Some(self.endpoint.clone()),
             },
         }
     }
@@ -137,4 +138,19 @@ async fn owned_s3_spec_enforces_streamed_size_and_missing_object_errors() {
     let error = read(&storage, org, &source("missing.json")).await.unwrap_err();
     assert_eq!(error.to_string(), "Uploaded specification is unavailable");
     assert_eq!(fixture.paths.lock().unwrap().len(), 3);
+}
+
+#[tokio::test]
+async fn owned_s3_spec_accepts_current_and_pre_1236_object_urls() {
+    let org = Uuid::new_v4();
+    let fixture = Fixture::start(org).await;
+    let storage = fixture.storage();
+    let path_style = format!("{}/fixture-bucket/specs/{org}/valid.json", fixture.endpoint);
+    let legacy = format!("https://fixture-bucket.s3.amazonaws.com/specs/{org}/valid.json");
+    for source in [&path_style, &legacy] {
+        let document = read(&storage, org, source).await.unwrap();
+        assert_eq!(document.as_deref(), Some(&br#"{"openapi":"3.0.0"}"#[..]), "{source}");
+    }
+    let foreign_bucket = format!("{}/other-bucket/specs/{org}/valid.json", fixture.endpoint);
+    assert_eq!(read(&storage, org, &foreign_bucket).await.unwrap(), None);
 }

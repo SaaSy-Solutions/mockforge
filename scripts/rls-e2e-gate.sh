@@ -45,14 +45,10 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." >/dev/null && pwd)"
 cd "$REPO_ROOT" >/dev/null
 
 # ---------------------------------------------------------------------------
-# Configuration. This gate runs its OWN stack (docker-compose.rls-gate.yml) so
-# it can never contend with the required "Registry E2E" job's stack.
-# ---------------------------------------------------------------------------
-# Deliberately NOT the ports in docker-compose.e2e.yml. The required
-# "Registry E2E" job binds 55432 / 59000 / 58080 with fixed container names, and
-# the self-hosted host runs several runners at once, so a shared stack lets this
-# gate knock over the check that gates every PR (it did, on #965:
-# "failed to bind host port 0.0.0.0:55432/tcp: address already in use").
+# Configuration. This gate owns a separate Compose project so it cannot
+# contend with the baseline registry suite or another gate invocation.
+# The old fixed-port/base-stack design broke required checks on PR #965;
+# both lanes now use project-owned names and Docker-assigned loopback ports.
 # See docker-compose.rls-gate.yml.
 COMPOSE_FILE_GATE="${COMPOSE_FILE_GATE:-docker-compose.rls-gate.yml}"
 
@@ -68,6 +64,13 @@ COMPOSE_FILE_GATE="${COMPOSE_FILE_GATE:-docker-compose.rls-gate.yml}"
 # every other subcommand reads it.
 STATE_FILE="${STATE_FILE:-$REPO_ROOT/.rls-gate-state}"
 __SUBCMD="${1:-all}"
+# Ownership is established only by this process's exclusive state claim. An
+# inherited environment variable must never authorize cleanup after refusal.
+OWNS_GATE_STATE=false
+if { [ "$__SUBCMD" = "up" ] || [ "$__SUBCMD" = "all" ]; } && [ -e "$STATE_FILE" ]; then
+  echo "error: gate state already exists at $STATE_FILE; use the recorded gate or run down first" >&2
+  exit 1
+fi
 if [ "$__SUBCMD" != "up" ] && [ "$__SUBCMD" != "all" ] && [ -f "$STATE_FILE" ]; then
   # shellcheck disable=SC1090
   . "$STATE_FILE"
@@ -76,10 +79,19 @@ fi
 # Compose project names allow only [a-z0-9_-]; hosted runners are named
 # like "GitHub Actions 1000072017".
 runner_slug="$(printf '%s' "${RUNNER_NAME:-local}" | tr '[:upper:]' '[:lower:]' | tr -c 'a-z0-9_-' '-')"
-export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-rlsgate-$$-${runner_slug}}"
+# A PID can be reused after a killed job leaves Docker resources behind.
+# Keep a durable run/attempt identity plus randomness; later local subcommands
+# reuse the exact project read from STATE_FILE above.
+if [ -z "${COMPOSE_PROJECT_NAME:-}" ]; then
+  project_uuid="$(python3 -c 'import uuid; print(uuid.uuid4().hex)')"
+  [[ "$project_uuid" =~ ^[a-f0-9]{32}$ ]] || { echo "error: invalid project UUID" >&2; exit 1; }
+  COMPOSE_PROJECT_NAME="rlsgate-${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-0}-${project_uuid}-${runner_slug}"
+fi
+export COMPOSE_PROJECT_NAME
 
-# Free ephemeral ports, chosen now, rather than fixed ones. Explicit
-# PG_PORT/MINIO_PORT/REGISTRY_PORT still win so a local run can pin them.
+# Docker allocates service ports atomically when the requested host port is 0.
+# Explicit ports still win for local use. The native server gets a free-port
+# candidate and fails closed if another process binds it before startup.
 pick_free_port() {
   python3 - <<'PYPORT'
 import socket
@@ -89,9 +101,9 @@ print(s.getsockname()[1])
 s.close()
 PYPORT
 }
-PG_PORT="${PG_PORT:-$(pick_free_port)}"
-MINIO_PORT="${MINIO_PORT:-$(pick_free_port)}"
-MINIO_CONSOLE_PORT="${MINIO_CONSOLE_PORT:-$(pick_free_port)}"
+PG_PORT="${PG_PORT:-0}"
+MINIO_PORT="${MINIO_PORT:-0}"
+MINIO_CONSOLE_PORT="${MINIO_CONSOLE_PORT:-0}"
 REGISTRY_PORT="${REGISTRY_PORT:-$(pick_free_port)}"
 export PG_PORT MINIO_PORT MINIO_CONSOLE_PORT
 
@@ -109,7 +121,7 @@ APP_URL="postgres://${APP_ROLE}:${APP_ROLE_PASSWORD}@localhost:${PG_PORT}/${PG_D
 
 STORAGE_PATH="${STORAGE_PATH:-${TMPDIR:-/tmp}/mf-rls-gate-storage}"
 SERVER_LOG="${SERVER_LOG:-$REPO_ROOT/rls-gate-registry-server.log}"
-SERVER_PID_FILE="$REPO_ROOT/rls-gate-registry-server.pid"
+SERVER_PID_FILE="${SERVER_PID_FILE:-$REPO_ROOT/rls-gate-registry-server.json}"
 
 # Honor a shared CARGO_TARGET_DIR (worktrees commonly point at one target dir
 # to avoid recompiling every registry dependency per checkout).
@@ -159,7 +171,7 @@ psql_app()   { PGPASSWORD="$APP_ROLE_PASSWORD" psql -h localhost -p "$PG_PORT" -
 
 require_tools() {
   local missing=()
-  for t in docker cargo curl psql; do
+  for t in docker cargo curl psql python3 timeout; do
     command -v "$t" >/dev/null 2>&1 || missing+=("$t")
   done
   [ ${#missing[@]} -eq 0 ] || die "missing required tools: ${missing[*]}"
@@ -175,22 +187,63 @@ svc_health() {
 }
 
 write_state() {
-  cat >"$STATE_FILE" <<EOF
+  local destination="$STATE_FILE"
+  if [ "${1:-}" = new ]; then
+    # Atomically claim the state path: a concurrent local up must not overwrite
+    # another invocation's project locator or tear it down in its EXIT trap.
+    (set -o noclobber; : > "$STATE_FILE") || return 1
+    OWNS_GATE_STATE=true
+  fi
+  destination="$(mktemp "${STATE_FILE}.XXXXXX")"
+  cat >"$destination" <<EOF
 COMPOSE_PROJECT_NAME="$COMPOSE_PROJECT_NAME"
 PG_PORT="$PG_PORT"
 MINIO_PORT="$MINIO_PORT"
 MINIO_CONSOLE_PORT="$MINIO_CONSOLE_PORT"
 REGISTRY_PORT="$REGISTRY_PORT"
 EOF
+  mv -- "$destination" "$STATE_FILE"
+}
+
+require_fresh_project() {
+  [[ "$COMPOSE_PROJECT_NAME" =~ ^[a-z0-9][a-z0-9_-]{1,180}$ ]] || die "invalid Compose project identity"
+  local kind format existing
+  # Refuse residual resources before claiming this invocation's state. Never
+  # adopt or tear down a prior run's containers, networks, or volumes.
+  for kind in container network volume; do
+    format='{{.ID}}'
+    [ "$kind" != volume ] || format='{{.Name}}'
+    local args=("$kind" ls)
+    [ "$kind" != container ] || args+=(--all)
+    existing="$(timeout --signal=KILL 20s docker "${args[@]}" \
+      --filter "label=com.docker.compose.project=$COMPOSE_PROJECT_NAME" --format "$format")" \
+      || die "cannot establish fresh Compose project ownership"
+    [ -z "$existing" ] || die "Compose project already exists; refusing to adopt it"
+  done
 }
 
 compose_up() {
   log "Starting Postgres + MinIO ($COMPOSE_FILE_GATE)"
-  # Same leftover-state guard as registry-e2e.yml: a killed prior run can hold
-  # the fixed host ports.
-  # Scoped to THIS compose project, so it cannot reach a sibling run's stack.
-  docker compose -f "$COMPOSE_FILE_GATE" down --remove-orphans --volumes >/dev/null 2>&1 || true
+  # A fresh project requires no pre-emptive teardown of anything on the host.
   docker compose -f "$COMPOSE_FILE_GATE" up -d
+  FIXTURE_DB_CID="$(docker compose -f "$COMPOSE_FILE_GATE" ps -q db)"
+  FIXTURE_MINIO_CID="$(docker compose -f "$COMPOSE_FILE_GATE" ps -q minio)"
+  local endpoint
+  endpoint="$(docker compose -f "$COMPOSE_FILE_GATE" port db 5432)"
+  [[ "$endpoint" =~ ^127\.0\.0\.1:[0-9]+$ ]] || die "invalid database endpoint: $endpoint"
+  PG_PORT="${endpoint##*:}"
+  endpoint="$(docker compose -f "$COMPOSE_FILE_GATE" port minio 9000)"
+  [[ "$endpoint" =~ ^127\.0\.0\.1:[0-9]+$ ]] || die "invalid MinIO endpoint: $endpoint"
+  MINIO_PORT="${endpoint##*:}"
+  endpoint="$(docker compose -f "$COMPOSE_FILE_GATE" port minio 9001)"
+  [[ "$endpoint" =~ ^127\.0\.0\.1:[0-9]+$ ]] || die "invalid MinIO console endpoint: $endpoint"
+  MINIO_CONSOLE_PORT="${endpoint##*:}"
+  export PG_PORT MINIO_PORT MINIO_CONSOLE_PORT
+  OWNER_URL="postgres://${PG_SUPERUSER}:${PG_SUPERPASS}@localhost:${PG_PORT}/${PG_DB}"
+  APP_URL="postgres://${APP_ROLE}:${APP_ROLE_PASSWORD}@localhost:${PG_PORT}/${PG_DB}"
+  export DATABASE_URL="$OWNER_URL"
+  export S3_ENDPOINT="http://localhost:${MINIO_PORT}"
+  write_state
 
   local i
   for i in $(seq 1 60); do
@@ -207,6 +260,7 @@ compose_up() {
     fi
     sleep 1
   done
+  [ "$(svc_health minio)" = "healthy" ] || die "minio never became healthy"
   docker compose -f "$COMPOSE_FILE_GATE" logs minio-init 2>/dev/null | tail -3 || true
 }
 
@@ -216,15 +270,9 @@ build_server() {
 }
 
 stop_server() {
-  if [ -f "$SERVER_PID_FILE" ]; then
-    kill "$(cat "$SERVER_PID_FILE")" 2>/dev/null || true
-    rm -f "$SERVER_PID_FILE"
-  fi
-  # Deliberately NOT a blanket `pkill -f mockforge-registry-server`: that would
-  # kill the server belonging to a concurrent run of this same gate. The recorded
-  # pid plus our (now unique) port are enough.
-  fuser -k "${REGISTRY_PORT}/tcp" 2>/dev/null || true
-  sleep 1
+  # Only the PID and kernel start time recorded by this invocation may receive
+  # a signal. A selected port is not ownership: another process can bind it.
+  python3 "$REPO_ROOT/scripts/ci-owned-process.py" stop "$SERVER_PID_FILE"
 }
 
 # Boot the server and wait for /health. $1 = human label. Any extra env the
@@ -233,10 +281,10 @@ boot_server() {
   local label="$1"
   mkdir -p "$STORAGE_PATH"
   log "Booting registry-server ($label)"
-  PORT="$REGISTRY_PORT" HOST="0.0.0.0" STORAGE_PATH="$STORAGE_PATH" \
-    nohup "$SERVER_BIN" >"$SERVER_LOG" 2>&1 &
-  local pid=$!
-  echo "$pid" >"$SERVER_PID_FILE"
+  local pid
+  pid="$(PORT="$REGISTRY_PORT" HOST="127.0.0.1" STORAGE_PATH="$STORAGE_PATH" \
+    python3 "$REPO_ROOT/scripts/ci-owned-process.py" start \
+      --receipt "$SERVER_PID_FILE" --log "$SERVER_LOG" -- "$SERVER_BIN")"
 
   local i
   for i in $(seq 1 60); do
@@ -382,7 +430,8 @@ SQL
 
 cmd_up() {
   require_tools
-  write_state
+  require_fresh_project
+  write_state new
   compose_up
   build_server
 
@@ -474,12 +523,58 @@ cmd_test() {
     -- --ignored --nocapture --test-threads=1
 }
 
+start_evidence() {
+  # Optional for the local dev loop; CI supplies a unique per-run output path.
+  [ -n "${EVIDENCE_OUTPUT:-}" ] || return 0
+  local args=(--project "$COMPOSE_PROJECT_NAME" --compose "$COMPOSE_FILE_GATE"
+    --run-id "$GITHUB_RUN_ID" --output "$EVIDENCE_OUTPUT"
+    --port "$REGISTRY_PORT" --receipt "$SERVER_PID_FILE"
+    --db-cid "$FIXTURE_DB_CID" --minio-cid "$FIXTURE_MINIO_CID")
+  python3 "$REPO_ROOT/scripts/ci-fixture-evidence.py" sample "${args[@]}"
+  python3 "$REPO_ROOT/scripts/ci-owned-process.py" start \
+    --receipt "${SERVER_PID_FILE}.monitor.json" --log "${SERVER_PID_FILE}.monitor.log" \
+    -- python3 "$REPO_ROOT/scripts/ci-fixture-evidence.py" monitor "${args[@]}"
+}
+
 cmd_down() {
-  log "Tearing down"
-  stop_server
-  docker compose -f "$COMPOSE_FILE_GATE" down -v >/dev/null 2>&1 || true
-  rm -f "$STATE_FILE"
-  echo "done"
+  log "Tearing down owned project $COMPOSE_PROJECT_NAME"
+  local cleanup_rc=0
+  # Attempt both narrow cleanup operations even when one fails. Keep the
+  # locator/receipt if cleanup is incomplete instead of hiding a leaked stack.
+  if [ -n "${EVIDENCE_OUTPUT:-}" ]; then
+    python3 "$REPO_ROOT/scripts/ci-owned-process.py" stop "${SERVER_PID_FILE}.monitor.json" || cleanup_rc=$?
+  fi
+  stop_server || cleanup_rc=$?
+  timeout --signal=KILL 60s docker compose -f "$COMPOSE_FILE_GATE" down --timeout 10 -v >/dev/null 2>&1 || cleanup_rc=$?
+  if [ -n "${EVIDENCE_OUTPUT:-}" ] && [ -f "$EVIDENCE_OUTPUT" ]; then
+    python3 "$REPO_ROOT/scripts/ci-fixture-evidence.py" cleaned \
+      --project "$COMPOSE_PROJECT_NAME" --compose "$COMPOSE_FILE_GATE" \
+      --run-id "$GITHUB_RUN_ID" --output "$EVIDENCE_OUTPUT" || cleanup_rc=$?
+    python3 "$REPO_ROOT/scripts/ci-fixture-evidence.py" verify \
+      --project "$COMPOSE_PROJECT_NAME" --output "$EVIDENCE_OUTPUT" || cleanup_rc=$?
+  fi
+  if [ "$cleanup_rc" -eq 0 ]; then
+    rm -f "$STATE_FILE"
+    echo "done"
+  else
+    warn "owned cleanup failed; retain $STATE_FILE for project $COMPOSE_PROJECT_NAME"
+  fi
+  return "$cleanup_rc"
+}
+
+cleanup_on_exit() {
+  local original_rc=$?
+  local cleanup_rc=0
+  trap - EXIT
+  trap '' INT TERM
+  if [ "${OWNS_GATE_STATE:-false}" = true ]; then
+    cmd_down || cleanup_rc=$?
+  fi
+  # Never turn a failed suite/setup into success or replace its diagnosis.
+  if [ "$original_rc" -ne 0 ]; then
+    exit "$original_rc"
+  fi
+  exit "$cleanup_rc"
 }
 
 cmd_psql_app() {
@@ -490,18 +585,32 @@ cmd_psql_app() {
 
 cmd_all() {
   local rc=0
+  # set -e failures in setup and cancellation also tear down only this run.
+  trap cleanup_on_exit EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   cmd_up
+  start_evidence
   cmd_test || rc=$?
   if [ "$rc" -ne 0 ]; then
     log "E2E failed under RLS — dumping server log tail"
     tail -200 "$SERVER_LOG" || true
   fi
-  cmd_down
   return "$rc"
 }
 
+cmd_up_transaction() {
+  # Standalone setup leaves a live reusable gate only after success. A failed
+  # or cancelled setup must use the same ownership-guarded cleanup as CI all.
+  trap cleanup_on_exit EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  cmd_up
+  trap - EXIT INT TERM
+}
+
 case "${1:-all}" in
-  up)       shift; cmd_up "$@" ;;
+  up)       shift; cmd_up_transaction "$@" ;;
   test)     shift; cmd_test "$@" ;;
   control)  shift; cmd_control "$@" ;;
   rearm)    shift; cmd_rearm "$@" ;;

@@ -1,38 +1,15 @@
 # Postgres + MinIO for the RLS coverage gate (scripts/rls-e2e-gate.sh, #832).
 #
-# WHY THIS IS A SEPARATE FILE FROM docker-compose.e2e.yml
+# The RLS lane runs all E2E tests a second time under a NOBYPASSRLS role.
+# It keeps a separate Compose project and state from the baseline lane.
 #
-# The RLS gate runs the E2E suite a SECOND time per PR, against a NOBYPASSRLS
-# role. If it reused docker-compose.e2e.yml it would want the same fixed host
-# ports (55432 / 59000) and the same `container_name`s as the required
-# "Registry E2E (Postgres + MinIO)" job.
+# Fixed global container names/ports previously caused cross-run teardown and
+# bind races (#965). Neither fixture file may set container_name; generated
+# names stay inside this invocation's unique COMPOSE_PROJECT_NAME.
 #
-# The self-hosted CI host runs multiple runners side by side, so those two
-# stacks can be live at the same moment across different workflow runs even
-# though the jobs are serialized *within* a run. That is not hypothetical: it
-# took the required check down on PR #965 with
-#
-#   Error response from daemon: failed to set up container networking: driver
-#   failed programming external connectivity on endpoint mockforge-e2e-db:
-#   failed to bind host port 0.0.0.0:55432/tcp: address already in use
-#
-# — the base job failed before running a single test, so the PR looked broken
-# when nothing was wrong with it.
-#
-# A second stack on its own ports and its own container names cannot contend
-# with the required check, whatever the interleaving. The base compose file is
-# deliberately left untouched so this change cannot regress the job that gates
-# every PR.
-#
-# There are deliberately NO `container_name:` entries. A fixed container name is
-# global to the docker daemon, so it defeats compose's project-name isolation and
-# two runs of THIS job collide on it — the host runs several runners side by
-# side. That showed up as `Error response from daemon: No such container: <id>`
-# when one run's teardown raced the other's `up`. Names are left to compose so
-# COMPOSE_PROJECT_NAME keeps concurrent runs apart; the script sets a unique one.
-#
-# Ports default to free ephemeral ports picked at runtime (see the script) and
-# stay overridable via PG_PORT / MINIO_PORT for local use.
+# The gate script requests host port 0 and reads Docker's actual allocation.
+# Direct local Compose use retains the documented defaults; callers may still
+# override PG_PORT, MINIO_PORT and MINIO_CONSOLE_PORT.
 
 services:
   db:
@@ -42,7 +19,7 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: mockforge_registry
     ports:
-      - "${PG_PORT:-55434}:5432"
+      - "127.0.0.1:${PG_PORT:-55434}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d mockforge_registry"]
       interval: 2s
@@ -58,8 +35,8 @@ services:
       MINIO_ROOT_PASSWORD: minioadmin
     command: server /data --console-address ":9001"
     ports:
-      - "${MINIO_PORT:-59010}:9000"
-      - "${MINIO_CONSOLE_PORT:-59011}:9001"
+      - "127.0.0.1:${MINIO_PORT:-59010}:9000"
+      - "127.0.0.1:${MINIO_CONSOLE_PORT:-59011}:9001"
     healthcheck:
       test: ["CMD", "curl", "-sf", "http://localhost:9000/minio/health/ready"]
       interval: 2s

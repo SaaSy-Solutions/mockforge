@@ -1,8 +1,11 @@
 //! Plugin-related handlers
 
+use std::time::Duration;
+
 use axum::{
     extract::{Path, State},
-    response::Redirect,
+    http::header,
+    response::{IntoResponse, Redirect, Response},
     Json,
 };
 use mockforge_plugin_registry::{
@@ -16,6 +19,9 @@ use crate::{
     models::{AuditEventType, TokenScope, User},
     AppState,
 };
+
+/// How long a presigned artifact URL from the download redirect stays valid.
+const DOWNLOAD_URL_TTL: Duration = Duration::from_secs(15 * 60);
 
 /// Build the canonical download URL clients see in API responses. Clients
 /// follow this 302 to the artifact and the server records the hit.
@@ -313,14 +319,15 @@ pub async fn get_version(
 }
 
 /// Tracked-download redirect. Bumps both the plugin-level and version-level
-/// counters then 302-redirects to the artifact URL stored on the version
-/// row. Yanked versions still resolve so existing installs that re-fetch
+/// counters then 302-redirects to the artifact: a presigned URL for objects
+/// in our private bucket, or the stored URL otherwise. Local-storage
+/// artifacts are streamed directly since `/storage/` isn't routed. Yanked versions still resolve so existing installs that re-fetch
 /// the artifact don't break — the registry just stops advertising them
 /// in the catalog.
 pub async fn download_version(
     State(state): State<AppState>,
     Path((name, version)): Path<(String, String)>,
-) -> ApiResult<Redirect> {
+) -> ApiResult<Response> {
     let plugin = state
         .store
         .find_plugin_by_name(&name)
@@ -344,7 +351,15 @@ pub async fn download_version(
         tracing::warn!(plugin = %name, version = %version, error = %e, "increment_plugin_download failed");
     }
 
-    Ok(Redirect::temporary(&plugin_version.download_url))
+    if state.storage.local_key(&plugin_version.download_url).is_some() {
+        // Derive the key rather than trusting the stored path.
+        let key = crate::storage::PluginStorage::plugin_object_key(&plugin.name, &version)
+            .map_err(ApiError::Internal)?;
+        let bytes = state.storage.download_plugin(&key).await.map_err(ApiError::Internal)?;
+        return Ok(([(header::CONTENT_TYPE, "application/wasm")], bytes).into_response());
+    }
+    let url = state.storage.fetch_url(&plugin_version.download_url, DOWNLOAD_URL_TTL).await;
+    Ok(Redirect::temporary(&url).into_response())
 }
 
 #[derive(Debug, Deserialize)]
@@ -405,8 +420,18 @@ pub async fn publish_plugin(
 
     let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "plugin");
 
-    // Check if plugin exists
+    // Check if plugin exists. Only its author may publish under the name,
+    // and versions are immutable: both checks run before anything is
+    // uploaded, so a rejected publish can't overwrite a served artifact.
     let existing = state.store.find_plugin_by_name(&request.name).await?;
+    if let Some(plugin) = &existing {
+        if plugin.author_id != author_id {
+            return Err(ApiError::PermissionDenied);
+        }
+        if state.store.find_plugin_version(plugin.id, &request.version).await?.is_some() {
+            return Err(ApiError::PluginExists(format!("{}@{}", request.name, request.version)));
+        }
+    }
 
     let plugin = if let Some(mut plugin) = existing {
         // Update existing plugin
