@@ -387,6 +387,11 @@ pub async fn publish_template(
     // Record metrics
     metrics.record_publish_success();
 
+    // The stored URL stays canonical; the publisher gets one it can fetch.
+    let download_url = state
+        .storage
+        .fetch_url(&download_url, std::time::Duration::from_secs(60 * 60))
+        .await;
     Ok(Json(PublishTemplateResponse {
         name: request.name,
         version: request.version,

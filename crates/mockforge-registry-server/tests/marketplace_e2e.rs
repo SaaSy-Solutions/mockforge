@@ -191,6 +191,20 @@ async fn test_plugin_marketplace_workflow() {
     assert_eq!(publish_body["success"], true);
     let plugin_name = format!("test-plugin-{}", test_id);
 
+    // The tracked download must return the uploaded bytes. With S3 storage it
+    // redirects to a presigned URL; the bucket rejects unsigned reads (#1239).
+    let download = helper
+        .client
+        .get(format!(
+            "{}/api/v1/plugins/{}/versions/1.0.0/download",
+            helper.base_url, plugin_name
+        ))
+        .send()
+        .await
+        .expect("Failed to download plugin");
+    assert!(download.status().is_success(), "Plugin download failed: {}", download.status());
+    assert_eq!(download.bytes().await.unwrap().as_ref(), wasm_data.as_slice());
+
     // Step 4: Search for the plugin
     //
     // `SearchQuery` in `mockforge-plugin-registry` uses camelCase and requires
@@ -469,6 +483,32 @@ async fn test_scenario_marketplace_workflow() {
         "Scenario publish failed: {:?}",
         publish_response.text().await
     );
+
+    // The advertised package URL must be fetchable (#1239). Local-storage
+    // `/storage/` paths aren't routed, so only check absolute URLs.
+    let version_response = helper
+        .client
+        .get(format!(
+            "{}/api/v1/marketplace/scenarios/{}/versions/1.0.0",
+            helper.base_url, scenario_name
+        ))
+        .header("Authorization", helper.auth_header().unwrap())
+        .send()
+        .await
+        .expect("Failed to get scenario version");
+    assert!(
+        version_response.status().is_success(),
+        "Scenario version lookup failed: {}",
+        version_response.status()
+    );
+    let version_body: serde_json::Value = version_response.json().await.unwrap();
+    let package_url = version_body["download_url"].as_str().expect("download_url").to_string();
+    if package_url.starts_with("http") {
+        let package =
+            helper.client.get(&package_url).send().await.expect("Failed to fetch package");
+        assert!(package.status().is_success(), "Package fetch failed: {}", package.status());
+        assert_eq!(package.bytes().await.unwrap().as_ref(), package_data.as_slice());
+    }
 
     // Step 4: Search for the scenario
     //

@@ -39,6 +39,7 @@ use tracing::{debug, error, info, warn};
 
 use crate::redis::RedisPool;
 use crate::run_queue::{enqueue, EnqueuedJob};
+use crate::storage::{PluginStorage, RUNNER_FETCH_TTL};
 
 fn cadence_interval_from_env() -> Duration {
     const DEFAULT_SECS: u64 = 1800;
@@ -53,7 +54,15 @@ fn cadence_interval_from_env() -> Duration {
 /// Start the contract-probe worker. Spawns a tokio task that ticks at
 /// the configured interval and enqueues `contract_diff` jobs for every
 /// enabled, probeable monitored service.
-pub fn start_contract_probe_worker(pool: PgPool, redis: Option<RedisPool>) {
+/// Where due probes go: the run queue plus storage to presign uploaded
+/// specs the runner fetches.
+#[derive(Clone, Copy)]
+pub struct ProbeQueue<'a> {
+    pub redis: &'a RedisPool,
+    pub storage: &'a PluginStorage,
+}
+
+pub fn start_contract_probe_worker(pool: PgPool, redis: Option<RedisPool>, storage: PluginStorage) {
     let interval = Duration::from_secs(30);
     info!(interval_secs = interval.as_secs(), "contract_probe worker started");
     tokio::spawn(async move {
@@ -62,7 +71,11 @@ pub fn start_contract_probe_worker(pool: PgPool, redis: Option<RedisPool>) {
         ticker.tick().await;
         loop {
             ticker.tick().await;
-            if let Err(e) = run_tick(&pool, redis.as_ref()).await {
+            let queue = redis.as_ref().map(|redis| ProbeQueue {
+                redis,
+                storage: &storage,
+            });
+            if let Err(e) = run_tick(&pool, queue).await {
                 error!(error = %e, "contract_probe tick failed");
             }
         }
@@ -72,7 +85,7 @@ pub fn start_contract_probe_worker(pool: PgPool, redis: Option<RedisPool>) {
 /// One tick: enqueue a contract_diff job for every probeable service
 /// whose cadence is due (#720). Returns the number of jobs enqueued
 /// (for observability + tests).
-pub async fn run_tick(pool: &PgPool, redis: Option<&RedisPool>) -> sqlx::Result<u32> {
+pub async fn run_tick(pool: &PgPool, queue: Option<ProbeQueue<'_>>) -> sqlx::Result<u32> {
     let now = Utc::now();
     let default_secs = cadence_interval_from_env().as_secs() as i64;
     let services = MonitoredService::list_probeable_due(pool, default_secs).await?;
@@ -82,7 +95,7 @@ pub async fn run_tick(pool: &PgPool, redis: Option<&RedisPool>) -> sqlx::Result<
     }
     let mut enqueued = 0u32;
     for svc in services {
-        match enqueue_for_service(pool, redis, &svc, now, default_secs).await {
+        match enqueue_for_service(pool, queue, &svc, now, default_secs).await {
             Ok(true) => enqueued += 1,
             Ok(false) => {}
             Err(e) => warn!(
@@ -121,7 +134,7 @@ fn probe_is_due(
 
 async fn enqueue_for_service(
     pool: &PgPool,
-    redis: Option<&RedisPool>,
+    queue: Option<ProbeQueue<'_>>,
     candidate: &MonitoredService,
     now: DateTime<Utc>,
     default_secs: i64,
@@ -172,7 +185,11 @@ async fn enqueue_for_service(
         .await?;
     tx.commit().await?;
 
-    if let Some(redis) = redis {
+    if let Some(ProbeQueue { redis, storage }) = queue {
+        let spec_url = match svc.openapi_spec_url.as_deref() {
+            Some(url) => Some(storage.fetch_url(url, RUNNER_FETCH_TTL).await),
+            None => None,
+        };
         if let Err(e) = enqueue(
             Some(redis),
             EnqueuedJob {
@@ -183,7 +200,7 @@ async fn enqueue_for_service(
                 payload: serde_json::json!({
                     "service_name": svc.name,
                     "base_url": svc.base_url,
-                    "openapi_spec_url": svc.openapi_spec_url,
+                    "openapi_spec_url": spec_url,
                     "traffic_source": svc.traffic_source,
                     "workspace_id": svc.workspace_id,
                 }),
