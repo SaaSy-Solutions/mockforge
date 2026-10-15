@@ -815,6 +815,33 @@ async fn publish_plugin_bytes(
         .status()
 }
 
+async fn publish_template_bytes(
+    helper: &MarketplaceTestHelper,
+    name: &str,
+    package: &[u8],
+) -> reqwest::StatusCode {
+    helper
+        .client
+        .post(format!("{}/api/v1/marketplace/templates/publish", helper.base_url))
+        .header("Authorization", helper.auth_header().unwrap())
+        .header("X-Org-Id", helper.org_id.unwrap().to_string())
+        .json(&json!({
+            "name": name,
+            "slug": name,
+            "description": "Overwrite guard",
+            "version": "1.0.0",
+            "category": "network-chaos",
+            "content_json": json!({ "name": name, "version": "1.0.0", "description": "guard" }),
+            "checksum": MarketplaceTestHelper::calculate_checksum(package),
+            "file_size": package.len() as i64,
+            "package": base64::engine::general_purpose::STANDARD.encode(package)
+        }))
+        .send()
+        .await
+        .expect("Failed to publish template")
+        .status()
+}
+
 async fn publish_scenario_bytes(
     helper: &MarketplaceTestHelper,
     name: &str,
@@ -920,4 +947,17 @@ async fn test_publish_cannot_overwrite_existing_artifacts() {
         let served = owner.client.get(&url).send().await.expect("Failed to fetch package");
         assert_eq!(served.bytes().await.unwrap().as_ref(), package.as_slice());
     }
+
+    // Under RLS the publishing org can't see another org's rows, so these
+    // checks must look across orgs or the upload overwrites first.
+    let template = format!("guard-template-{test_id}");
+    assert!(publish_template_bytes(&owner, &template, &package).await.is_success());
+    assert_eq!(
+        publish_template_bytes(&other, &template, &other_package).await,
+        reqwest::StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        publish_template_bytes(&owner, &template, &other_package).await,
+        reqwest::StatusCode::CONFLICT
+    );
 }
