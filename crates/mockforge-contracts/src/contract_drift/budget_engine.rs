@@ -337,41 +337,14 @@ impl DriftBudgetEngine {
         service_name: Option<&str>,
         tags: Option<&[String]>,
     ) -> DriftBudget {
-        // Priority 1: Per-workspace budget
-        if let Some(workspace_id) = workspace_id {
-            if let Some(budget) = self.config.per_workspace_budgets.get(workspace_id) {
-                return budget.clone();
-            }
-        }
-
-        // Priority 2: Per-service budget (explicit service name)
-        if let Some(service_name) = service_name {
-            if let Some(budget) = self.config.per_service_budgets.get(service_name) {
-                return budget.clone();
-            }
-        }
-
-        // Priority 3: Per-tag budget (from OpenAPI tags)
-        if let Some(tags) = tags {
-            for tag in tags {
-                if let Some(budget) = self.config.per_tag_budgets.get(tag) {
-                    return budget.clone();
-                }
-                // Also check per_service_budgets for tag matches
-                if let Some(budget) = self.config.per_service_budgets.get(tag) {
-                    return budget.clone();
-                }
-            }
-        }
-
-        // Priority 4: Per-endpoint budget
-        let key = format!("{} {}", method, endpoint);
-        if let Some(budget) = self.config.per_endpoint_budgets.get(&key) {
-            return budget.clone();
-        }
-
-        // Priority 5: Default budget
-        self.config.default_budget.clone().unwrap_or_default()
+        super::budget_resolution::budget_for(
+            &self.config,
+            endpoint,
+            method,
+            workspace_id,
+            service_name,
+            tags,
+        )
     }
 
     /// Get the drift budget configuration

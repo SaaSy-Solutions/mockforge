@@ -18,6 +18,7 @@
 pub mod breaking_change_detector;
 pub mod budget_engine;
 pub mod budget_providers;
+mod budget_resolution;
 pub mod field_tracking;
 pub mod forecasting;
 pub mod grpc_contract;
