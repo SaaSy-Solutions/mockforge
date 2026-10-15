@@ -20,7 +20,7 @@
 //! `--keep-rounds` prunes old `round_*` dirs, matching `mockforge bench`.
 
 use crate::chunked_bench::{
-    build_json_body, is_json_content_type, run, ChunkedBenchConfig, ChunkedBenchResult,
+    build_json_body, is_json_content_type, per_second, run, ChunkedBenchConfig, ChunkedBenchResult,
 };
 use crate::parallel_executor::ParallelExecutor;
 use crate::request_gen::RequestGenerator;
@@ -89,18 +89,33 @@ struct TargetOutcome {
     failed: u64,
     bytes_sent: u64,
     elapsed: Duration,
+    /// Sum of each operation's request-start window (`--duration`).
+    load_window: Duration,
     status_counts: HashMap<u16, u64>,
     /// An operation errored out entirely (vs. individual requests failing).
     run_failed: bool,
 }
 
 impl TargetOutcome {
+    /// Report fields derived from the counters, shared by the single- and
+    /// multi-target summaries.
+    fn rate_fields(&self) -> serde_json::Value {
+        serde_json::json!({
+            "elapsed_seconds": self.elapsed.as_secs_f64(),
+            "measured_rps": per_second(self.total_requests as f64, self.elapsed),
+            "load_window_seconds": self.load_window.as_secs_f64(),
+            "start_window_rps": per_second(self.total_requests as f64, self.load_window),
+            "upload_mbps": per_second(self.bytes_sent as f64 * 8.0, self.elapsed) / 1_000_000.0,
+        })
+    }
+
     fn absorb(&mut self, r: &ChunkedBenchResult) {
         self.total_requests += r.total_requests;
         self.successful += r.successful;
         self.failed += r.failed;
         self.bytes_sent += r.bytes_sent;
         self.elapsed += r.elapsed;
+        self.load_window += r.load_window;
         for (code, n) in &r.status_counts {
             *self.status_counts.entry(*code).or_insert(0) += n;
         }
@@ -221,14 +236,12 @@ impl ChunkedCommand {
                     "bytes_sent": o.bytes_sent,
                     "status_counts": o.status_counts,
                     "run_failed": o.run_failed,
-                    "elapsed_seconds": o.elapsed.as_secs_f64(),
-                    "measured_rps": measured_rps(o.total_requests, o.elapsed),
                     "rps_per_target": self.rps,
                     "rate_limit_enabled": self.rps.is_some(),
                     "new_connection_per_request": self.cps,
                     "raw_body": self.raw_body,
                 });
-                Ok((!o.run_failed, summary))
+                Ok((!o.run_failed, merge_json(summary, o.rate_fields())))
             }
             (None, Some(file)) => self.execute_multi_target(file, output).await,
             (None, None) => bail!("either --target or --targets-file is required"),
@@ -278,34 +291,37 @@ impl ChunkedCommand {
                         all_ok = false;
                     }
                     println!(
-                        "  {:<10} {}  requests={} ok={} failed={} bytes={}{}",
+                        "  {:<10} {}  requests={} ok={} failed={} bytes={} start_rps={:.2} rps={:.2}{}",
                         name,
                         run.url,
                         o.total_requests,
                         o.successful,
                         o.failed,
                         o.bytes_sent,
+                        per_second(o.total_requests as f64, o.load_window),
+                        per_second(o.total_requests as f64, o.elapsed),
                         if o.run_failed {
                             "  (some operations failed to run)"
                         } else {
                             ""
                         }
                     );
-                    rows.push(serde_json::json!({
-                        "target": name,
-                        "url": run.url,
-                        "spec": run.spec.as_ref().map(|p| p.display().to_string()),
-                        // Per-target files (exports / violations) exist only in spec mode.
-                        "output_dir": run.spec.as_ref().map(|_| run.output.display().to_string()),
-                        "total_requests": o.total_requests,
-                        "successful": o.successful,
-                        "failed": o.failed,
-                        "bytes_sent": o.bytes_sent,
-                        "status_counts": o.status_counts,
-                        "run_failed": o.run_failed,
-                        "elapsed_seconds": o.elapsed.as_secs_f64(),
-                        "measured_rps": measured_rps(o.total_requests, o.elapsed),
-                    }));
+                    rows.push(merge_json(
+                        serde_json::json!({
+                            "target": name,
+                            "url": run.url,
+                            "spec": run.spec.as_ref().map(|p| p.display().to_string()),
+                            // Per-target files (exports / violations) exist only in spec mode.
+                            "output_dir": run.spec.as_ref().map(|_| run.output.display().to_string()),
+                            "total_requests": o.total_requests,
+                            "successful": o.successful,
+                            "failed": o.failed,
+                            "bytes_sent": o.bytes_sent,
+                            "status_counts": o.status_counts,
+                            "run_failed": o.run_failed,
+                        }),
+                        o.rate_fields(),
+                    ));
                 }
                 Err(e) => {
                     all_ok = false;
@@ -694,6 +710,9 @@ fn export_record(
             "bytes_sent": r.bytes_sent,
             "elapsed_ms": r.elapsed.as_millis(),
             "req_per_sec": r.req_per_sec,
+            "load_window_ms": r.load_window.as_millis(),
+            "start_rate_per_sec": r.start_rate_per_sec,
+            "upload_mbps": r.upload_mbps,
             "avg_latency_ms": r.avg_latency_ms,
             "p50_ms": r.p50_ms,
             "p95_ms": r.p95_ms,
@@ -708,13 +727,11 @@ fn export_record(
     })
 }
 
-/// Completed request attempts per second across a target's sequential operations.
-fn measured_rps(requests: u64, elapsed: Duration) -> f64 {
-    if elapsed.is_zero() {
-        0.0
-    } else {
-        requests as f64 / elapsed.as_secs_f64()
+fn merge_json(mut base: serde_json::Value, extra: serde_json::Value) -> serde_json::Value {
+    if let (Some(base), serde_json::Value::Object(extra)) = (base.as_object_mut(), extra) {
+        base.extend(extra);
     }
+    base
 }
 
 /// Print one result block. The block is built first and printed with one
@@ -731,7 +748,17 @@ fn print_result(prefix: &str, label: &str, r: &ChunkedBenchResult) {
     line(format!("  Successful:     {}", r.successful));
     line(format!("  Failed:         {}", r.failed));
     line(format!("  Bytes sent:     {}", r.bytes_sent));
-    line(format!("  Throughput:     {:.2} req/s", r.req_per_sec));
+    line(format!(
+        "  RPS (started):  {:.2} req/s over the {:.1}s load window",
+        r.start_rate_per_sec,
+        r.load_window.as_secs_f64()
+    ));
+    line(format!(
+        "  RPS (overall):  {:.2} req/s over {:.1}s, incl. in-flight drain",
+        r.req_per_sec,
+        r.elapsed.as_secs_f64()
+    ));
+    line(format!("  Upload:         {:.2} Mbps", r.upload_mbps));
     line(format!(
         "  Latency:        avg={:.1}ms p50={}ms p95={}ms p99={}ms",
         r.avg_latency_ms, r.p50_ms, r.p95_ms, r.p99_ms
@@ -973,6 +1000,11 @@ mod tests {
         let measured = row["measured_rps"].as_f64().unwrap();
         let expected = requests as f64 / elapsed;
         assert!((measured - expected).abs() <= expected.abs() * 1e-12);
+        let window = row["load_window_seconds"].as_f64().unwrap();
+        assert!(window > 0.0);
+        let started = row["start_window_rps"].as_f64().unwrap();
+        assert!((started - requests as f64 / window).abs() <= started * 1e-12);
+        assert!(row["upload_mbps"].as_f64().unwrap() > 0.0);
         assert_eq!(row["status_counts"]["400"], requests);
         let exported: serde_json::Value = serde_json::from_slice(
             &std::fs::read(c.output.join("round_2/target_1/chunked-requests.json")).unwrap(),
@@ -1019,6 +1051,24 @@ mod tests {
         let (_, summary) = c.execute_pass(Path::new("unused")).await.unwrap();
         assert!(summary["status_counts"]["400"].as_u64().unwrap() > 0);
         raw.assert_async().await;
+    }
+
+    #[test]
+    fn start_window_rps_excludes_in_flight_drain() {
+        // Srikanth's 30s `--rps 1` run: 30 starts, last response at 77s.
+        let o = TargetOutcome {
+            total_requests: 30,
+            bytes_sent: 30 * 1_048_576,
+            elapsed: Duration::from_secs(77),
+            load_window: Duration::from_secs(30),
+            ..Default::default()
+        };
+        let f = o.rate_fields();
+        assert_eq!(f["start_window_rps"], 1.0);
+        assert_eq!(f["load_window_seconds"], 30.0);
+        assert!((f["measured_rps"].as_f64().unwrap() - 30.0 / 77.0).abs() < 1e-12);
+        let mbps = 30.0 * 1_048_576.0 * 8.0 / 77.0 / 1e6;
+        assert!((f["upload_mbps"].as_f64().unwrap() - mbps).abs() < 1e-12);
     }
 
     #[test]

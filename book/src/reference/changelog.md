@@ -2,6 +2,16 @@
 
 ## [Unreleased]
 
+## [0.3.235] - 2026-10-15
+
+### Security
+
+- **[DevX]** Update rustls to 0.23.46 (RUSTSEC-2026-0346/0347/0348/0349) and wasmtime/wasmtime-wasi to 36.0.18 (RUSTSEC-2026-0352/0363). The remaining rustls 0.21 copy has no patched release; its removal is tracked in #1232.
+
+### Fixed
+
+- **[DevX]** `bench-chunked` now reports the request-start rate alongside the overall rate, so short runs can be checked against `--rps`. Summaries add `start_window_rps` (attempts divided by `load_window_seconds`, the sum of each operation's `--duration`) and `upload_mbps`; exported operations add `start_rate_per_sec`, `load_window_ms` and `upload_mbps`. The console replaces the ambiguous `Throughput: N req/s` line with `RPS (started)`, `RPS (overall)` (including the in-flight drain) and `Upload: N Mbps`. Existing fields are unchanged. (#79)
+
 ## [0.3.234] - 2026-10-14
 
 ### Added
