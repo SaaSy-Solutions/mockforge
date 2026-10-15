@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Security
+
+- **[Cloud]** Remove most of the rustls 0.21 dependency graph (RUSTSEC-2026-0346/0349): the AWS SDK S3/KMS clients drop their legacy hyper 0.14 TLS stack, `oauth2` no longer pulls reqwest 0.11 (registry OAuth code exchange uses the workspace reqwest client with redirects disabled), the SMTP STARTTLS listener moves to tokio-rustls 0.26 with an explicit ring provider, and unused TLS dependencies are dropped from mockforge-tcp. The Kubernetes operator's kube 0.87 client is the only remaining rustls 0.21 user. (#1232)
+
 ## [0.3.235] - 2026-10-15
 
 ### Security

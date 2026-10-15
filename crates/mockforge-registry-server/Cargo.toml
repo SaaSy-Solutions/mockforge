@@ -98,7 +98,7 @@ data-encoding = "2.11" # Base32 encoding for TOTP secrets
 rand = { workspace = true } # Random number generation for tokens
 
 # Storage (feature: `storage-s3`)
-aws-sdk-s3 = { version = "1.124", optional = true }
+aws-sdk-s3 = { version = "1.124", optional = true, default-features = false, features = ["sigv4a", "http-1x", "default-https-client", "rt-tokio"] }
 aws-config = { version = "1.1", optional = true }
 
 # Utilities
@@ -208,7 +208,7 @@ async-stream = "0.3"
 lettre = { version = "0.11", features = ["tokio1-native-tls", "builder", "smtp-transport"], optional = true }
 
 # OAuth 2.0 (feature: `oauth`)
-oauth2 = { version = "4.4", features = ["reqwest"], optional = true }
+oauth2 = { version = "4.4", default-features = false, optional = true }
 
 # Stripe payments (feature: `stripe`)
 async-stripe = { version = "0.41", default-features = false, features = ["runtime-tokio-hyper", "checkout", "webhook-events", "billing", "connect"], optional = true }

@@ -459,7 +459,7 @@ fn write_self_signed_cert(dir: &std::path::Path) -> (std::path::PathBuf, std::pa
 /// cert without extra plumbing.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn smtp_raw_client_starttls_actually_upgrades_socket() {
-    use tokio_rustls::rustls::{Certificate, ClientConfig, RootCertStore, ServerName};
+    use tokio_rustls::rustls::{crypto, pki_types::ServerName, ClientConfig, RootCertStore};
     use tokio_rustls::TlsConnector;
 
     let tmp = tempfile::tempdir().expect("tempdir");
@@ -523,18 +523,18 @@ async fn smtp_raw_client_starttls_actually_upgrades_socket() {
     // Trust the server's self-signed cert for this test only. In
     // production lettre/others would verify against the system root
     // store; here we add the test cert directly so the handshake
-    // succeeds. rustls 0.21 API (via tokio-rustls 0.24) takes raw
-    // `Certificate(Vec<u8>)` rather than the newer `CertificateDer`.
+    // succeeds.
     let cert_bytes = std::fs::read(&cert_path).unwrap();
-    let der_certs = rustls_pemfile::certs(&mut cert_bytes.as_slice()).expect("parse PEM");
     let mut root_store = RootCertStore::empty();
-    for der in der_certs {
-        root_store.add(&Certificate(der)).expect("add cert");
+    for der in rustls_pemfile::certs(&mut cert_bytes.as_slice()) {
+        root_store.add(der.expect("parse PEM")).expect("add cert");
     }
-    let client_cfg = ClientConfig::builder()
-        .with_safe_defaults()
-        .with_root_certificates(root_store)
-        .with_no_client_auth();
+    let client_cfg =
+        ClientConfig::builder_with_provider(Arc::new(crypto::ring::default_provider()))
+            .with_safe_default_protocol_versions()
+            .unwrap()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
     let connector = TlsConnector::from(Arc::new(client_cfg));
     let server_name = ServerName::try_from("localhost").unwrap();
     let mut tls = tokio::time::timeout(Duration::from_secs(5), connector.connect(server_name, tcp))
