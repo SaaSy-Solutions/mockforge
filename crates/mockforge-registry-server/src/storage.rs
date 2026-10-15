@@ -7,8 +7,14 @@ use aws_sdk_s3::{
     Client as S3Client,
 };
 use std::path::{Path, PathBuf};
+use std::time::Duration;
+use uuid::Uuid;
 
 use crate::config::Config;
+
+/// Validity of presigned URLs handed to queued runner jobs, which may wait
+/// in the queue before fetching.
+pub const RUNNER_FETCH_TTL: Duration = Duration::from_secs(24 * 60 * 60);
 
 #[derive(Clone)]
 enum StorageBackend {
@@ -188,6 +194,93 @@ impl PluginStorage {
                 .with_context(|| format!("Failed to delete file: {}", file_path.display()))?;
         }
         Ok(())
+    }
+
+    /// Object key for a URL that `s3_url` built for this bucket, accepting
+    /// both the endpoint form and the AWS virtual-hosted form.
+    fn key_from_url(endpoint: Option<&str>, bucket: &str, url: &str) -> Option<String> {
+        let mut prefixes = vec![format!("https://{bucket}.s3.amazonaws.com/")];
+        if let Some(endpoint) = endpoint {
+            prefixes.push(format!("{}/{}/", endpoint.trim_end_matches('/'), bucket));
+        }
+        prefixes
+            .iter()
+            .find_map(|p| url.strip_prefix(p.as_str()))
+            .filter(|key| !key.is_empty())
+            .map(str::to_string)
+    }
+
+    /// A URL a client can fetch for a stored object URL. Objects in our
+    /// bucket aren't publicly readable (R2 and MinIO require signed
+    /// requests), so those get a presigned GET valid for `ttl`. Anything
+    /// else (local `/storage/` paths, seeded URLs) is returned unchanged.
+    ///
+    /// Only for URLs the server wrote itself. User-supplied URLs could name
+    /// another tenant's object; use [`Self::fetch_spec_url`] for those.
+    pub async fn fetch_url(&self, stored: &str, ttl: Duration) -> String {
+        self.presign_if(stored, ttl, |_| true).await
+    }
+
+    /// Like [`Self::fetch_url`] for a user-supplied OpenAPI spec URL: only
+    /// a spec `org_id` uploaded (`specs/{org_id}/{name}.json`, exactly as
+    /// `upload_spec` writes it) is presigned. Any other URL, including other
+    /// tenants' objects, is returned unchanged and stays unreadable.
+    pub async fn fetch_spec_url(&self, stored: &str, org_id: Uuid, ttl: Duration) -> String {
+        self.presign_if(stored, ttl, |key| Self::is_org_spec_key(key, org_id)).await
+    }
+
+    fn is_org_spec_key(key: &str, org_id: Uuid) -> bool {
+        let Some(file) = key.strip_prefix(&format!("specs/{org_id}/")) else {
+            return false;
+        };
+        let Some(stem) = file.strip_suffix(".json") else {
+            return false;
+        };
+        !stem.is_empty() && Self::sanitize_key_component(stem) == stem
+    }
+
+    async fn presign_if(
+        &self,
+        stored: &str,
+        ttl: Duration,
+        allow: impl Fn(&str) -> bool,
+    ) -> String {
+        let StorageBackend::S3 {
+            client,
+            bucket,
+            endpoint,
+        } = &self.backend
+        else {
+            return stored.to_string();
+        };
+        let Some(key) =
+            Self::key_from_url(endpoint.as_deref(), bucket, stored).filter(|key| allow(key))
+        else {
+            return stored.to_string();
+        };
+        let presigned = async {
+            let config = aws_sdk_s3::presigning::PresigningConfig::expires_in(ttl)?;
+            let request = client.get_object().bucket(bucket).key(&key).presigned(config).await?;
+            anyhow::Ok(request.uri().to_string())
+        };
+        match presigned.await {
+            Ok(url) => url,
+            Err(e) => {
+                tracing::warn!(key = %key, error = %e, "failed to presign object URL");
+                stored.to_string()
+            }
+        }
+    }
+
+    /// Object key for a stored local-storage URL (`/storage/{key}`). These
+    /// paths aren't routed, so callers serve the bytes themselves.
+    pub fn local_key<'a>(&self, stored: &'a str) -> Option<&'a str> {
+        match &self.backend {
+            StorageBackend::Local { .. } => {
+                stored.strip_prefix("/storage/").filter(|key| !key.is_empty())
+            }
+            StorageBackend::S3 { .. } => None,
+        }
     }
 
     /// Build an S3 download URL for the given bucket and key. Uses the
@@ -461,8 +554,8 @@ impl PluginStorage {
     /// side too, no org_id column).
     pub async fn upload_snapshot_blob(
         &self,
-        workspace_id: uuid::Uuid,
-        snapshot_id: uuid::Uuid,
+        workspace_id: Uuid,
+        snapshot_id: Uuid,
         data: Vec<u8>,
     ) -> Result<String> {
         let key = format!("snapshots/{workspace_id}/{snapshot_id}.json");
@@ -491,8 +584,8 @@ impl PluginStorage {
     /// uploaded. Returns the raw bytes — caller deserializes.
     pub async fn read_snapshot_blob(
         &self,
-        workspace_id: uuid::Uuid,
-        snapshot_id: uuid::Uuid,
+        workspace_id: Uuid,
+        snapshot_id: Uuid,
     ) -> Result<Vec<u8>> {
         let key = format!("snapshots/{workspace_id}/{snapshot_id}.json");
         match &self.backend {
@@ -515,11 +608,7 @@ impl PluginStorage {
     /// Delete a snapshot's blob (called from snapshot retention
     /// worker once the row is marked `expired`). Idempotent — missing
     /// keys are not an error.
-    pub async fn delete_snapshot_blob(
-        &self,
-        workspace_id: uuid::Uuid,
-        snapshot_id: uuid::Uuid,
-    ) -> Result<()> {
+    pub async fn delete_snapshot_blob(&self, workspace_id: Uuid, snapshot_id: Uuid) -> Result<()> {
         let key = format!("snapshots/{workspace_id}/{snapshot_id}.json");
         match &self.backend {
             StorageBackend::S3 { client, bucket, .. } => {
@@ -665,6 +754,96 @@ mod tests {
             "https://acct.r2.cloudflarestorage.com/bucket/k"
         );
         assert_eq!(PluginStorage::s3_url(None, "bucket", "k"), "https://bucket.s3.amazonaws.com/k");
+    }
+
+    fn s3_storage(endpoint: &str) -> PluginStorage {
+        let config = aws_sdk_s3::Config::builder()
+            .behavior_version(BehaviorVersion::latest())
+            .region(Region::new("auto"))
+            .credentials_provider(Credentials::new("id", "secret", None, None, "test"))
+            .endpoint_url(endpoint)
+            .force_path_style(true)
+            .build();
+        PluginStorage {
+            backend: StorageBackend::S3 {
+                client: S3Client::from_conf(config),
+                bucket: "bucket".to_string(),
+                endpoint: Some(endpoint.to_string()),
+            },
+        }
+    }
+
+    #[test]
+    fn key_from_url_accepts_only_our_bucket() {
+        let ep = Some("https://acct.r2.cloudflarestorage.com");
+        let key = |url| PluginStorage::key_from_url(ep, "bucket", url);
+        assert_eq!(
+            key("https://acct.r2.cloudflarestorage.com/bucket/plugins/a/1.0.0.wasm").as_deref(),
+            Some("plugins/a/1.0.0.wasm")
+        );
+        // URLs stored before #1236 used the AWS form even with a custom endpoint.
+        assert_eq!(key("https://bucket.s3.amazonaws.com/k").as_deref(), Some("k"));
+        assert_eq!(key("https://acct.r2.cloudflarestorage.com/other/k"), None);
+        assert_eq!(key("https://registry.mockforge.dev/plugins/a/1.0.0.wasm"), None);
+        assert_eq!(key("https://acct.r2.cloudflarestorage.com/bucket/"), None);
+    }
+
+    #[tokio::test]
+    async fn fetch_url_presigns_objects_in_our_bucket() {
+        let storage = s3_storage("http://127.0.0.1:59000");
+        let url = storage
+            .fetch_url(
+                "http://127.0.0.1:59000/bucket/plugins/a/1.0.0.wasm",
+                Duration::from_secs(900),
+            )
+            .await;
+        assert!(url.starts_with("http://127.0.0.1:59000/bucket/plugins/a/1.0.0.wasm?"), "{url}");
+        assert!(url.contains("X-Amz-Signature="), "{url}");
+        assert!(url.contains("X-Amz-Expires=900"), "{url}");
+
+        let seeded = "https://registry.mockforge.dev/plugins/a/1.0.0.wasm";
+        assert_eq!(storage.fetch_url(seeded, Duration::from_secs(900)).await, seeded);
+        assert_eq!(storage.local_key("/storage/plugins/a/1.0.0.wasm"), None);
+    }
+
+    #[tokio::test]
+    async fn spec_urls_presign_only_the_callers_own_uploads() {
+        let storage = s3_storage("http://127.0.0.1:59000");
+        let ours = Uuid::new_v4();
+        let theirs = Uuid::new_v4();
+        let ttl = Duration::from_secs(900);
+        let spec =
+            |org: Uuid, file: &str| format!("http://127.0.0.1:59000/bucket/specs/{org}/{file}");
+
+        let own = spec(ours, "petstore.json");
+        assert!(storage.fetch_spec_url(&own, ours, ttl).await.contains("X-Amz-Signature="));
+
+        // Another tenant's spec, traversal, nesting, or a non-spec object in
+        // our bucket must come back unsigned (and so unreadable).
+        for url in [
+            spec(theirs, "petstore.json"),
+            spec(ours, "../THEIRS/petstore.json").replace("THEIRS", &theirs.to_string()),
+            spec(ours, "nested/petstore.json"),
+            spec(ours, "petstore.yaml"),
+            spec(ours, "Petstore.json"),
+            format!("http://127.0.0.1:59000/bucket/snapshots/{ours}/s.json"),
+        ] {
+            assert_eq!(storage.fetch_spec_url(&url, ours, ttl).await, url);
+        }
+    }
+
+    #[tokio::test]
+    async fn local_urls_are_served_not_presigned() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let storage = PluginStorage {
+            backend: StorageBackend::Local {
+                base_dir: temp_dir.path().to_path_buf(),
+            },
+        };
+        let stored = "/storage/plugins/a/1.0.0.wasm";
+        assert_eq!(storage.fetch_url(stored, Duration::from_secs(900)).await, stored);
+        assert_eq!(storage.local_key(stored), Some("plugins/a/1.0.0.wasm"));
+        assert_eq!(storage.local_key("https://registry.mockforge.dev/x.wasm"), None);
     }
 
     #[tokio::test]
