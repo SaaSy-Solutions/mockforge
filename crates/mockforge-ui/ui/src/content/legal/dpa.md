@@ -36,6 +36,7 @@ Customer authorizes the Sub-processors below. We impose data-protection obligati
 - **Fly.io:** compute for customer-deployed hosted mocks served at `*.mocks.mockforge.dev` (United States).
 - **Stripe:** payment processing and subscription billing (United States).
 - **Brevo:** transactional email delivery (European Union).
+- **OpenAI:** AI text generation for features that use MockForge's platform AI allowance; requests made with a customer-supplied provider key do not use OpenAI on our behalf (United States). Announced October 15, 2026; processing begins no earlier than November 14, 2026.
 
 ## 8. Assistance and data subject requests
 

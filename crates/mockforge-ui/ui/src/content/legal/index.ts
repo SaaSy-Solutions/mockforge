@@ -44,7 +44,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentId, LegalDocument> = {
     title: 'Privacy Policy',
     path: '/legal/privacy',
     version: '2.4',
-    lastUpdated: 'October 14, 2026',
+    lastUpdated: 'October 15, 2026',
     markdown: privacyMarkdown,
   },
   dpa: {
@@ -52,7 +52,7 @@ export const LEGAL_DOCUMENTS: Record<LegalDocumentId, LegalDocument> = {
     title: 'Data Processing Agreement',
     path: '/legal/dpa',
     version: '2.4',
-    lastUpdated: 'October 14, 2026',
+    lastUpdated: 'October 15, 2026',
     markdown: dpaMarkdown,
   },
 };

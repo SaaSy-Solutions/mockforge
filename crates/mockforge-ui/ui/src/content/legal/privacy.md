@@ -24,13 +24,13 @@ This Privacy Policy explains how **SaaSy Solutions LLC** ("we", "us") collects, 
 
 Where the GDPR applies, our legal bases are performance of our contract with you, our legitimate interests in operating and securing the Service, compliance with legal obligations, and your consent where we ask for it.
 
-We do not sell or rent personal data, and we do not use Customer Content to train machine-learning models. MockForge Cloud does not send Customer Content to third-party AI or LLM providers; AI features use only a provider key you supply yourself.
+We do not sell or rent personal data, and we do not use Customer Content to train machine-learning models. From November 14, 2026, AI features that run on MockForge's platform AI allowance send your prompt and the specification, fixture or other content you include with it to OpenAI, our AI sub-processor, to generate the response. If you configure your own provider key, those requests go to that provider instead, at your direction, and do not use the platform allowance.
 
 ## 3. Sharing
 
 We share personal data only:
 
-- with the sub-processors listed in Section 7 of our [Data Processing Agreement](/legal/dpa), which host, store, secure, bill for and send email from the Service on our behalf under contractual confidentiality and security obligations;
+- with the sub-processors listed in Section 7 of our [Data Processing Agreement](/legal/dpa), which host, store, secure, bill for, send email from and generate platform AI responses for the Service on our behalf under contractual confidentiality and security obligations;
 - with other members of your organization, as your organization's settings allow;
 - with AI or other third-party providers you configure yourself (for example, your own API keys), at your direction;
 - when required by law or to protect the rights, safety and security of our users, the public or us;

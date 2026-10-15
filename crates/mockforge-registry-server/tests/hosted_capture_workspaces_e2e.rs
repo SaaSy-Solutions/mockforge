@@ -340,6 +340,13 @@ async fn hosted_capture_workspace_http_lifecycle() {
         .status()
         .is_client_error());
     for org in [org, foreign_org] {
+        // Synthetic deployments have no provider resources, so they can be
+        // removed directly to satisfy the unfinished-cleanup guard (#1229).
+        sqlx::query("DELETE FROM hosted_mocks WHERE org_id=$1")
+            .bind(org)
+            .execute(&pool)
+            .await
+            .unwrap();
         sqlx::query("DELETE FROM organizations WHERE id=$1")
             .bind(org)
             .execute(&pool)
