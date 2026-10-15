@@ -251,4 +251,71 @@ class EvidenceTests(unittest.TestCase):
         self.run_metadata_descendant_case(kill_observer=False, client_ignores_term=False)
 
 
+class ProbeMissTests(unittest.TestCase):
+    """A stalled /health probe on a busy runner is retried, not fatal (main run 38780287954)."""
+
+    def setUp(self):
+        self.base = EvidenceTests('setUp')
+        self.base.setUp()
+        self.args = self.base.args
+
+    def tearDown(self):
+        self.base.tearDown()
+
+    def miss(self):
+        error = evidence.ProbeUnavailable('daemon-12345678')
+        error.__cause__ = TimeoutError()
+        return error
+
+    def run_monitor(self, outcomes):
+        clock = iter(range(0, 10**6, 10))
+        def fake(args):
+            outcome = outcomes.pop(0)
+            if not outcomes:
+                evidence.STOPPING = True
+            if outcome:
+                raise outcome
+        with patch.object(evidence, 'sample', side_effect=fake), patch.object(evidence.signal, 'signal'), \
+                patch.object(evidence.time, 'monotonic', side_effect=lambda: next(clock)):
+            evidence.monitor(self.args)
+
+    def test_probe_timeout_is_retryable_but_http_status_is_not(self):
+        with patch.object(evidence, 'docker', side_effect=self.base.docker), \
+                patch.object(evidence.LOCAL_HTTP, 'open', side_effect=TimeoutError()):
+            with self.assertRaises(evidence.ProbeUnavailable) as caught:
+                evidence.sample(self.args, 'healthy')
+        self.assertEqual(caught.exception.daemon, 'daemon-12345678')
+        unavailable = evidence.urllib.error.HTTPError('http://127.0.0.1:43210/health', 503, 'unavailable', {}, None)
+        with patch.object(evidence, 'docker', side_effect=self.base.docker), \
+                patch.object(evidence.LOCAL_HTTP, 'open', side_effect=unavailable):
+            with self.assertRaises(evidence.urllib.error.HTTPError):
+                evidence.sample(self.args, 'healthy')
+
+    def test_isolated_probe_misses_are_recorded_as_retries(self):
+        self.run_monitor([self.miss(), None, self.miss(), self.miss(), None])
+        rows = [(row['phase'], row['consecutive'], row['daemon']) for row in evidence.events(self.args.output)]
+        self.assertEqual(rows, [('health_retry', 1, 'daemon-12345678'),
+                                ('health_retry', 1, 'daemon-12345678'),
+                                ('health_retry', 2, 'daemon-12345678')])
+
+    def test_consecutive_probe_misses_still_fail_closed(self):
+        with self.assertRaises(evidence.ProbeUnavailable):
+            self.run_monitor([self.miss(), self.miss(), self.miss(), None])
+        last = evidence.events(self.args.output)[-1]
+        self.assertEqual((last['phase'], last['consecutive'], last['error']), ('health_error', 3, 'TimeoutError'))
+
+    def test_evidence_with_a_retry_row_verifies(self):
+        self.base.sample('started')
+        self.base.sample('healthy')
+        evidence.emit(self.args, 'health_retry', daemon='daemon-12345678', error='TimeoutError', consecutive=1)
+        self.base.sample('healthy')
+        with patch.object(evidence, 'docker', side_effect=self.base.docker):
+            evidence.cleaned(self.args)
+        data = evidence.verify(self.args.output, self.args.project)
+        self.assertIn('health_retry', [row['phase'] for row in data])
+        with contextlib.redirect_stdout(io.StringIO()) as output:
+            evidence.emit_verified(data)
+        self.assertEqual(len(output.getvalue().splitlines()), 5)
+
+
 if __name__=='__main__': unittest.main()
