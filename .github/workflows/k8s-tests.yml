@@ -22,7 +22,7 @@ concurrency:
 jobs:
   validate-manifests:
     name: Validate Kubernetes Manifests
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
@@ -49,7 +49,7 @@ jobs:
 
   lint-helm-charts:
     name: Lint Helm Charts
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
@@ -88,7 +88,7 @@ jobs:
 
   security-scan:
     name: Security Scan
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
       contents: read
@@ -139,7 +139,7 @@ jobs:
 
   test-in-kind:
     name: Test in KinD Cluster
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
 
     steps:
@@ -203,7 +203,7 @@ jobs:
 
   integration-tests:
     name: Integration Tests
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: test-in-kind
 
@@ -283,7 +283,7 @@ jobs:
 
   chaos-tests:
     name: Chaos Engineering Tests
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     # Slow (Chaos Mesh install + two timed experiments), so manual and weekly
     # only. Gating this on `push` left it dead: push is not a trigger here.
@@ -397,7 +397,7 @@ jobs:
 
   cost-estimation:
     name: Cost Estimation
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     if: github.event_name == 'workflow_dispatch'  # Only run on manual trigger
 

@@ -21,7 +21,7 @@ permissions:
 jobs:
   build:
     name: Build root, registry, runner and egress images without publishing
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@v7

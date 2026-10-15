@@ -1,0 +1,24 @@
+name: Runner guard
+
+# Public repo: keep jobs on GitHub's free standard runners. See
+# .github/scripts/runner_guard.py for what is allowed and why.
+
+on:
+  pull_request:
+    paths: [".github/workflows/**", ".github/scripts/runner_guard.py"]
+  push:
+    branches: [main]
+    paths: [".github/workflows/**", ".github/scripts/runner_guard.py"]
+
+permissions:
+  contents: read
+
+jobs:
+  runner-guard:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Allow only free standard or approved self-hosted runners
+        env:
+          SELF_HOSTED_OK: "ashburn-images.yml:build,docker-build.yml:build-and-push"
+        run: python3 .github/scripts/runner_guard.py

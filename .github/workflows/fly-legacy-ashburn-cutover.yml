@@ -50,4 +50,4 @@ jobs:
           name: fly-legacy-cutover-receipt-${{ github.run_id }}
           path: fly-legacy-cutover-receipt*.json
           if-no-files-found: ignore
-          retention-days: 30
+          retention-days: 3
