@@ -450,6 +450,27 @@ pub async fn publish_scenario(
         .trim_matches('-')
         .replace("--", "-");
 
+    // Only the owner (its org, or its author when it has none) may publish
+    // under an existing name, and versions are immutable. Check before
+    // uploading so a rejected publish can't overwrite a served package.
+    let existing = state.store.find_scenario_by_name(&name).await?;
+    if let Some(scenario) = &existing {
+        let owned = match scenario.org_id {
+            Some(org_id) => org_id == org_ctx.org_id,
+            None => scenario.author_id == author_id,
+        };
+        if !owned {
+            return Err(ApiError::PermissionDenied);
+        }
+        if ScenarioVersion::find(pool, scenario.id, &version)
+            .await
+            .map_err(ApiError::Database)?
+            .is_some()
+        {
+            return Err(ApiError::ScenarioExists(format!("{name}@{version}")));
+        }
+    }
+
     // Upload to storage
     let download_url = state
         .storage
@@ -458,7 +479,7 @@ pub async fn publish_scenario(
         .map_err(|e| ApiError::Storage(e.to_string()))?;
 
     // Create or update scenario
-    let scenario = if let Some(existing) = state.store.find_scenario_by_name(&name).await? {
+    let scenario = if let Some(existing) = existing {
         // Update existing scenario
         existing
     } else {

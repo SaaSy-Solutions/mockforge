@@ -351,8 +351,11 @@ pub async fn download_version(
         tracing::warn!(plugin = %name, version = %version, error = %e, "increment_plugin_download failed");
     }
 
-    if let Some(key) = state.storage.local_key(&plugin_version.download_url) {
-        let bytes = state.storage.download_plugin(key).await.map_err(ApiError::Internal)?;
+    if state.storage.local_key(&plugin_version.download_url).is_some() {
+        // Derive the key rather than trusting the stored path.
+        let key = crate::storage::PluginStorage::plugin_object_key(&plugin.name, &version)
+            .map_err(ApiError::Internal)?;
+        let bytes = state.storage.download_plugin(&key).await.map_err(ApiError::Internal)?;
         return Ok(([(header::CONTENT_TYPE, "application/wasm")], bytes).into_response());
     }
     let url = state.storage.fetch_url(&plugin_version.download_url, DOWNLOAD_URL_TTL).await;
@@ -417,8 +420,18 @@ pub async fn publish_plugin(
 
     let metrics = crate::metrics::MarketplaceMetrics::start(state.metrics.clone(), "plugin");
 
-    // Check if plugin exists
+    // Check if plugin exists. Only its author may publish under the name,
+    // and versions are immutable: both checks run before anything is
+    // uploaded, so a rejected publish can't overwrite a served artifact.
     let existing = state.store.find_plugin_by_name(&request.name).await?;
+    if let Some(plugin) = &existing {
+        if plugin.author_id != author_id {
+            return Err(ApiError::PermissionDenied);
+        }
+        if state.store.find_plugin_version(plugin.id, &request.version).await?.is_some() {
+            return Err(ApiError::PluginExists(format!("{}@{}", request.name, request.version)));
+        }
+    }
 
     let plugin = if let Some(mut plugin) = existing {
         // Update existing plugin
