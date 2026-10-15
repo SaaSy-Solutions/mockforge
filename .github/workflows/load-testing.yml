@@ -109,7 +109,7 @@ jobs:
           path: |
             tests/load/load-test-results.json
             mockforge-server.log
-          retention-days: 30
+          retention-days: 7
 
       - name: Check performance thresholds
         run: |
@@ -187,7 +187,7 @@ jobs:
           path: |
             tests/load/load-test-results-extended.json
             mockforge-server.log
-          retention-days: 90
+          retention-days: 7
 
       - name: Check performance thresholds
         run: |
@@ -239,7 +239,7 @@ jobs:
         with:
           name: benchmark-results
           path: benchmark-results.txt
-          retention-days: 90
+          retention-days: 7
 
       - name: Check for performance regressions
         if: false  # Script doesn't exist yet, skip for now

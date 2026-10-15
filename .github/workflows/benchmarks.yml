@@ -138,7 +138,7 @@ jobs:
             target/criterion/
             benchmark-report.md
             paired-benchmarks/
-          retention-days: 30
+          retention-days: 7
 
       - name: Generate performance dashboard
         env:
@@ -152,7 +152,7 @@ jobs:
         with:
           name: performance-dashboard
           path: performance-dashboard.html
-          retention-days: 90
+          retention-days: 7
 
       - name: Comment PR with benchmark results
         if: github.event_name == 'pull_request'
