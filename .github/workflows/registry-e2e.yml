@@ -262,6 +262,9 @@ jobs:
           # is cleaned each job. (Must live in this STEP env, not the job-level
           # env block — the `runner` context isn't available there.)
           STORAGE_PATH: "${{ env.FIXTURE_ROOT }}/storage"
+          # MinIO is configured above, so a failed S3 health check must fail
+          # the job rather than silently fall back to STORAGE_PATH (#1236).
+          STORAGE_REQUIRE_S3: "true"
         run: |
           mkdir -p "$STORAGE_PATH"
 

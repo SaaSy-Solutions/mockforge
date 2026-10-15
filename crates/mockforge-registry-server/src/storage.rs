@@ -12,8 +12,15 @@ use crate::config::Config;
 
 #[derive(Clone)]
 enum StorageBackend {
-    S3 { client: S3Client, bucket: String },
-    Local { base_dir: PathBuf },
+    S3 {
+        client: S3Client,
+        bucket: String,
+        /// Custom endpoint (MinIO, R2, ...) used to build object URLs.
+        endpoint: Option<String>,
+    },
+    Local {
+        base_dir: PathBuf,
+    },
 }
 
 #[derive(Clone)]
@@ -45,7 +52,7 @@ impl PluginStorage {
         };
 
         if use_s3 {
-            let aws_config = if let Some(endpoint) = &config.s3_endpoint {
+            let s3_config = if let Some(endpoint) = &config.s3_endpoint {
                 let access_key_id = std::env::var("AWS_ACCESS_KEY_ID")
                     .context("AWS_ACCESS_KEY_ID is required when using custom S3 endpoint")?;
                 let secret_access_key = std::env::var("AWS_SECRET_ACCESS_KEY")
@@ -56,25 +63,29 @@ impl PluginStorage {
                 let credentials =
                     Credentials::new(access_key_id, secret_access_key, None, None, "static");
 
-                aws_config::defaults(BehaviorVersion::latest())
+                let shared = aws_config::defaults(BehaviorVersion::latest())
                     .region(Region::new(config.s3_region.clone()))
                     .credentials_provider(credentials)
                     .endpoint_url(endpoint)
                     .load()
-                    .await
+                    .await;
+                // Custom endpoints address buckets by path: MinIO rejects
+                // virtual-hosted `bucket.host` names, and R2 accepts both.
+                aws_sdk_s3::config::Builder::from(&shared).force_path_style(true).build()
             } else {
                 tracing::info!(
                     "Using AWS S3 with default credentials provider chain (region: {})",
                     config.s3_region
                 );
 
-                aws_config::defaults(BehaviorVersion::latest())
+                let shared = aws_config::defaults(BehaviorVersion::latest())
                     .region(Region::new(config.s3_region.clone()))
                     .load()
-                    .await
+                    .await;
+                aws_sdk_s3::config::Builder::from(&shared).build()
             };
 
-            let client = S3Client::new(&aws_config);
+            let client = S3Client::from_conf(s3_config);
             let bucket = config.s3_bucket.clone();
 
             // Validate S3 connectivity — fall back to local storage if unreachable
@@ -82,8 +93,18 @@ impl PluginStorage {
                 Ok(_) => {
                     tracing::info!("S3 storage verified (bucket: {})", bucket);
                     return Ok(Self {
-                        backend: StorageBackend::S3 { client, bucket },
+                        backend: StorageBackend::S3 {
+                            client,
+                            bucket,
+                            endpoint: config.s3_endpoint.clone(),
+                        },
                     });
+                }
+                Err(e) if config.storage_require_s3 => {
+                    anyhow::bail!(
+                        "S3 health check failed (bucket: {bucket}): {e}; \
+                         STORAGE_REQUIRE_S3 forbids falling back to local storage"
+                    );
                 }
                 Err(e) => {
                     tracing::warn!(
@@ -94,6 +115,13 @@ impl PluginStorage {
                     // Fall through to local storage
                 }
             }
+        }
+
+        if config.storage_require_s3 && !use_s3 {
+            anyhow::bail!(
+                "STORAGE_REQUIRE_S3 is set but S3 is not configured \
+                 (set S3_ENDPOINT with AWS credentials, or an AWS bucket)"
+            );
         }
 
         // Local filesystem fallback
@@ -162,12 +190,13 @@ impl PluginStorage {
         Ok(())
     }
 
-    /// Build an S3 download URL for the given bucket and key
-    fn s3_url(bucket: &str, key: &str) -> String {
-        if let Ok(endpoint) = std::env::var("S3_ENDPOINT") {
-            format!("{}/{}/{}", endpoint, bucket, key)
-        } else {
-            format!("https://{}.s3.amazonaws.com/{}", bucket, key)
+    /// Build an S3 download URL for the given bucket and key. Uses the
+    /// resolved endpoint (`S3_ENDPOINT` or `AWS_ENDPOINT_URL_S3`), path-style
+    /// to match the client.
+    fn s3_url(endpoint: Option<&str>, bucket: &str, key: &str) -> String {
+        match endpoint {
+            Some(endpoint) => format!("{}/{}/{}", endpoint.trim_end_matches('/'), bucket, key),
+            None => format!("https://{}.s3.amazonaws.com/{}", bucket, key),
         }
     }
 
@@ -190,7 +219,11 @@ impl PluginStorage {
         let key = format!("plugins/{}/{}.wasm", safe_name, safe_version);
 
         match &self.backend {
-            StorageBackend::S3 { client, bucket } => {
+            StorageBackend::S3 {
+                client,
+                bucket,
+                endpoint,
+            } => {
                 client
                     .put_object()
                     .bucket(bucket)
@@ -199,7 +232,7 @@ impl PluginStorage {
                     .content_type("application/wasm")
                     .send()
                     .await?;
-                Ok(Self::s3_url(bucket, &key))
+                Ok(Self::s3_url(endpoint.as_deref(), bucket, &key))
             }
             StorageBackend::Local { base_dir } => Self::local_write(base_dir, &key, data).await,
         }
@@ -237,7 +270,11 @@ impl PluginStorage {
         let key = format!("templates/{}/{}.{}", safe_name, safe_version, extension);
 
         match &self.backend {
-            StorageBackend::S3 { client, bucket } => {
+            StorageBackend::S3 {
+                client,
+                bucket,
+                endpoint,
+            } => {
                 client
                     .put_object()
                     .bucket(bucket)
@@ -250,7 +287,7 @@ impl PluginStorage {
                     })
                     .send()
                     .await?;
-                Ok(Self::s3_url(bucket, &key))
+                Ok(Self::s3_url(endpoint.as_deref(), bucket, &key))
             }
             StorageBackend::Local { base_dir } => Self::local_write(base_dir, &key, data).await,
         }
@@ -288,7 +325,11 @@ impl PluginStorage {
         let key = format!("scenarios/{}/{}.{}", safe_name, safe_version, extension);
 
         match &self.backend {
-            StorageBackend::S3 { client, bucket } => {
+            StorageBackend::S3 {
+                client,
+                bucket,
+                endpoint,
+            } => {
                 client
                     .put_object()
                     .bucket(bucket)
@@ -301,7 +342,7 @@ impl PluginStorage {
                     })
                     .send()
                     .await?;
-                Ok(Self::s3_url(bucket, &key))
+                Ok(Self::s3_url(endpoint.as_deref(), bucket, &key))
             }
             StorageBackend::Local { base_dir } => Self::local_write(base_dir, &key, data).await,
         }
@@ -324,7 +365,7 @@ impl PluginStorage {
 
     pub async fn download_plugin(&self, key: &str) -> Result<Vec<u8>> {
         match &self.backend {
-            StorageBackend::S3 { client, bucket } => {
+            StorageBackend::S3 { client, bucket, .. } => {
                 let response = client.get_object().bucket(bucket).key(key).send().await?;
                 let bytes = response.body.collect().await?;
                 Ok(bytes.to_vec())
@@ -335,7 +376,7 @@ impl PluginStorage {
 
     pub async fn delete_plugin(&self, key: &str) -> Result<()> {
         match &self.backend {
-            StorageBackend::S3 { client, bucket } => {
+            StorageBackend::S3 { client, bucket, .. } => {
                 client.delete_object().bucket(bucket).key(key).send().await?;
                 Ok(())
             }
@@ -363,7 +404,11 @@ impl PluginStorage {
         let key = format!("specs/{}/{}.json", safe_org, safe_name);
 
         match &self.backend {
-            StorageBackend::S3 { client, bucket } => {
+            StorageBackend::S3 {
+                client,
+                bucket,
+                endpoint,
+            } => {
                 client
                     .put_object()
                     .bucket(bucket)
@@ -372,7 +417,7 @@ impl PluginStorage {
                     .content_type("application/json")
                     .send()
                     .await?;
-                Ok(Self::s3_url(bucket, &key))
+                Ok(Self::s3_url(endpoint.as_deref(), bucket, &key))
             }
             StorageBackend::Local { base_dir } => Self::local_write(base_dir, &key, data).await,
         }
@@ -381,7 +426,7 @@ impl PluginStorage {
     /// Health check - verify storage connectivity
     pub async fn health_check(&self) -> Result<()> {
         match &self.backend {
-            StorageBackend::S3 { client, bucket } => {
+            StorageBackend::S3 { client, bucket, .. } => {
                 client
                     .head_bucket()
                     .bucket(bucket)
@@ -422,7 +467,11 @@ impl PluginStorage {
     ) -> Result<String> {
         let key = format!("snapshots/{workspace_id}/{snapshot_id}.json");
         match &self.backend {
-            StorageBackend::S3 { client, bucket } => {
+            StorageBackend::S3 {
+                client,
+                bucket,
+                endpoint,
+            } => {
                 client
                     .put_object()
                     .bucket(bucket)
@@ -432,7 +481,7 @@ impl PluginStorage {
                     .send()
                     .await
                     .context("snapshot upload to S3 failed")?;
-                Ok(Self::s3_url(bucket, &key))
+                Ok(Self::s3_url(endpoint.as_deref(), bucket, &key))
             }
             StorageBackend::Local { base_dir } => Self::local_write(base_dir, &key, data).await,
         }
@@ -447,7 +496,7 @@ impl PluginStorage {
     ) -> Result<Vec<u8>> {
         let key = format!("snapshots/{workspace_id}/{snapshot_id}.json");
         match &self.backend {
-            StorageBackend::S3 { client, bucket } => {
+            StorageBackend::S3 { client, bucket, .. } => {
                 let resp = client
                     .get_object()
                     .bucket(bucket)
@@ -473,7 +522,7 @@ impl PluginStorage {
     ) -> Result<()> {
         let key = format!("snapshots/{workspace_id}/{snapshot_id}.json");
         match &self.backend {
-            StorageBackend::S3 { client, bucket } => {
+            StorageBackend::S3 { client, bucket, .. } => {
                 client
                     .delete_object()
                     .bucket(bucket)
@@ -603,6 +652,19 @@ mod tests {
         // Delete
         PluginStorage::local_delete(&base_dir, key).await.unwrap();
         assert!(PluginStorage::local_read(&base_dir, key).await.is_err());
+    }
+
+    #[test]
+    fn s3_url_uses_path_style_for_custom_endpoints() {
+        assert_eq!(
+            PluginStorage::s3_url(Some("http://127.0.0.1:59000/"), "mockforge-plugins", "a/b.wasm"),
+            "http://127.0.0.1:59000/mockforge-plugins/a/b.wasm"
+        );
+        assert_eq!(
+            PluginStorage::s3_url(Some("https://acct.r2.cloudflarestorage.com"), "bucket", "k"),
+            "https://acct.r2.cloudflarestorage.com/bucket/k"
+        );
+        assert_eq!(PluginStorage::s3_url(None, "bucket", "k"), "https://bucket.s3.amazonaws.com/k");
     }
 
     #[tokio::test]
