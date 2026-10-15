@@ -32,9 +32,9 @@ mail-parser = "0.11"
 chrono = { workspace = true }
 uuid = { workspace = true }
 regex = { workspace = true }
-tokio-rustls = "0.24"
-rustls-pemfile = "1.0"
-rustls = "0.23"
+tokio-rustls = "0.26"
+rustls-pemfile = "2"
+rustls = { version = "0.23", features = ["ring"] }
 base64 = { workspace = true }
 
 [dev-dependencies]
