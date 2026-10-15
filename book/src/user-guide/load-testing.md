@@ -235,6 +235,15 @@ only start about 10 / 128 ≈ 0.08 requests per second, so raise
   configured. This average includes time spent finishing in-flight requests;
   it is not the configured start rate or a successful-response rate.
   With `--export-requests`, each operation also has `result.req_per_sec`.
+- `start_window_rps` is the same attempt count divided by
+  `load_window_seconds`, the sum of each operation's `--duration`: the window
+  during which requests could start. This is the number to compare with
+  `--rps`; it is not diluted by waiting for in-flight requests, so it stays
+  meaningful on 30 or 60 second runs. Exported operations carry the
+  equivalent `result.start_rate_per_sec` and `result.load_window_ms`.
+- `upload_mbps` is request body bytes sent, in megabits per second over
+  `elapsed_seconds`. `bytes_sent` counts the full body of each attempt that
+  received an HTTP response.
 - `new_connection_per_request` is true only with `--cps`. Without it,
   connections can be reused. With `--cps --rps 1`, each target starts at most
   one request per second, each on a fresh connection. Failed connection
@@ -258,12 +267,20 @@ workers. Two targets can each start one request/s independently; the limit
 is not divided between them. It is a ceiling, not a guarantee: workers
 waiting for an upload or response cannot start another request.
 
-A short run can report substantially less throughput even when starts are
-paced correctly. `--duration` ends the window for starting requests, then
+A short run reports a much lower `measured_rps` even when starts are paced
+correctly. `--duration` ends the window for starting requests, then
 in-flight requests finish. For example, 26 attempts started during a
 30-second window and finished after 76.28 seconds report
-`measured_rps = 26 / 76.28 = 0.34`. Dividing the same count by the start
-window gives about `26 / 30 = 0.87` attempts/s. That is a window average,
+`measured_rps = 26 / 76.28 = 0.34`, while `start_window_rps` reports
+`26 / 30 = 0.87` attempts/s. The console shows both:
+
+```text
+  RPS (started):  0.87 req/s over the 30.0s load window
+  RPS (overall):  0.34 req/s over 76.3s, incl. in-flight drain
+  Upload:         2.86 Mbps
+```
+
+Use `RPS (started)` / `start_window_rps` to check a `--rps` cap. That is a window average,
 not proof of evenly spaced starts; verify start timestamps at the receiver
 or in a packet capture. Even a healthy target with 12.75-second uploads can
 report roughly `30 / (29 + 12.75) = 0.72` requests/s on a 30-second run.

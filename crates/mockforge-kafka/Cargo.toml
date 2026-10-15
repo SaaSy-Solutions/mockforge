@@ -13,8 +13,8 @@ keywords = ["kafka", "event-streaming", "mock", "testing"]
 categories = ["development-tools::testing", "network-programming"]
 
 [dependencies]
-mockforge-core = { version = "0.3.234", path = "../mockforge-core" }
-mockforge-recorder = { version = "0.3.234", path = "../mockforge-recorder" }
+mockforge-core = { version = "0.3.235", path = "../mockforge-core" }
+mockforge-recorder = { version = "0.3.235", path = "../mockforge-recorder" }
 tokio = { workspace = true }
  rdkafka = "0.38"
 serde = { workspace = true }

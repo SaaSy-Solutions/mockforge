@@ -17,15 +17,15 @@ description = "Developer SDK for embedding MockForge in tests and applications"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
-mockforge-core = { version = "0.3.234", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.235", path = "../mockforge-core" }
 mockforge-openapi = { path = "../mockforge-openapi" }
 mockforge-foundation = { path = "../mockforge-foundation" }
-mockforge-http = { version = "0.3.234", path = "../mockforge-http" }
-mockforge-ws = { version = "0.3.234", path = "../mockforge-ws", optional = true }
-mockforge-grpc = { version = "0.3.234", path = "../mockforge-grpc", optional = true }
-mockforge-graphql = { version = "0.3.234", path = "../mockforge-graphql", optional = true }
-mockforge-observability = { version = "0.3.234", path = "../mockforge-observability" }
-mockforge-data = { version = "0.3.234", path = "../mockforge-data" }
+mockforge-http = { version = "0.3.235", path = "../mockforge-http" }
+mockforge-ws = { version = "0.3.235", path = "../mockforge-ws", optional = true }
+mockforge-grpc = { version = "0.3.235", path = "../mockforge-grpc", optional = true }
+mockforge-graphql = { version = "0.3.235", path = "../mockforge-graphql", optional = true }
+mockforge-observability = { version = "0.3.235", path = "../mockforge-observability" }
+mockforge-data = { version = "0.3.235", path = "../mockforge-data" }
 
 tokio = { workspace = true, features = ["full"] }
 serde = { workspace = true }
