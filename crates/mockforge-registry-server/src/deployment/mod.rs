@@ -11,4 +11,5 @@ pub(crate) mod local_runtime;
 pub mod metrics;
 pub mod orchestrator;
 pub mod router;
+pub(crate) mod spec_budget;
 pub(crate) mod spec_source;

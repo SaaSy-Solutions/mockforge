@@ -241,18 +241,16 @@ impl DeploymentOrchestrator {
         );
         // Free mocks have no externally reachable backend that bypasses the
         // registry's hard request cap. Paid isolated hosting is unchanged.
-        let use_fly = self.flyio_client.is_some() && plan != crate::models::Plan::Free;
-        let backend = if use_fly { "flyio" } else { "multitenant" };
+        // Free deployments never reach a configured provider.
+        let fly = self.flyio_client.as_ref().filter(|_| plan != crate::models::Plan::Free);
+        let backend = fly.map_or("multitenant", |_| "flyio");
         sqlx::query("UPDATE hosted_mocks SET metadata_json = jsonb_set(COALESCE(metadata_json, '{}'::jsonb), '{hosting_backend}', to_jsonb($2::text)) WHERE id = $1 AND org_id = $3")
             .bind(deployment.id).bind(backend).bind(deployment.org_id).execute(pool).await?;
 
-        // Deploy using Fly.io if configured
-        if use_fly {
-            let flyio_client = self.flyio_client.as_ref().expect("provider selected above");
-            self.deploy_to_flyio(flyio_client, deployment).await?;
-        } else {
+        match fly {
+            Some(flyio_client) => self.deploy_to_flyio(flyio_client, deployment).await?,
             // Fallback: use multitenant router (single process routing)
-            self.deploy_to_multitenant_router(deployment).await?;
+            None => self.deploy_to_multitenant_router(deployment).await?,
         }
 
         // Update status to active
@@ -989,186 +987,9 @@ mod tests {
 }
 
 #[cfg(test)]
-mod cleanup_reconciliation_tests {
-    use super::*;
-    use crate::{
-        database::Database,
-        models::Plan,
-        store::{PgRegistryStore, RegistryStore},
-    };
-    use axum::{
-        extract::Request,
-        http::{Method, StatusCode},
-        routing::any,
-        Router,
-    };
-    use std::sync::{
-        atomic::{AtomicBool, Ordering},
-        Mutex,
-    };
-
-    #[tokio::test]
-    #[ignore = "requires isolated Postgres and local HTTP listener"]
-    async fn failed_cleanup_retries_legacy_tombstones_without_trusting_display_status() {
-        let url = std::env::var("TEST_DATABASE_URL").expect("isolated Postgres required");
-        let db = Database::connect(&url).await.unwrap();
-        db.migrate().await.unwrap();
-        let store = PgRegistryStore::new(db.pool().clone());
-        let tag = Uuid::new_v4().simple().to_string();
-        let user = store
-            .create_user(&tag, &format!("{tag}@example.invalid"), "disabled-test-account")
-            .await
-            .unwrap();
-        let org = store
-            .create_organization("Cleanup fixture", &tag, user.id, Plan::Free)
-            .await
-            .unwrap();
-        let ids = [Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()];
-        for (index, id) in ids.iter().enumerate() {
-            sqlx::query("INSERT INTO hosted_mocks (id, org_id, name, slug, config_json, status, deleted_at, deletion_requested_at, metadata_json) VALUES ($1, $2, 'Cleanup fixture', $3, '{}'::jsonb, $4, CASE WHEN $5 THEN NOW() - INTERVAL '1 day' ELSE NULL END, CASE WHEN $5 THEN NOW() - INTERVAL '1 day' ELSE NULL END, '{}'::jsonb)")
-                .bind(id).bind(org.id).bind(id.simple().to_string())
-                .bind(if index == 0 { "active" } else { "deleting" })
-                .bind(index == 1).execute(db.pool()).await.unwrap();
-        }
-        let legacy_deleted: chrono::DateTime<chrono::Utc> =
-            sqlx::query_scalar("SELECT deleted_at FROM hosted_mocks WHERE id = $1")
-                .bind(ids[1])
-                .fetch_one(db.pool())
-                .await
-                .unwrap();
-        let fail = Arc::new(AtomicBool::new(true));
-        let calls = Arc::new(Mutex::new(Vec::new()));
-        let response_fail = fail.clone();
-        let captured = calls.clone();
-        let router = Router::new().fallback(any(move |request: Request| {
-            let fail = response_fail.clone();
-            let calls = captured.clone();
-            async move {
-                let method = request.method().clone();
-                calls.lock().unwrap().push((method.clone(), request.uri().to_string()));
-                if method == Method::DELETE {
-                    StatusCode::ACCEPTED
-                } else if fail.load(Ordering::SeqCst) {
-                    StatusCode::SERVICE_UNAVAILABLE
-                } else {
-                    StatusCode::NOT_FOUND
-                }
-            }
-        }));
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let endpoint = format!("http://{}", listener.local_addr().unwrap());
-        let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
-        let worker = DeploymentOrchestrator {
-            db: Arc::new(db.pool().clone()),
-            flyio_client: Some(FlyioClient::for_test_endpoint(endpoint)),
-            storage: None,
-            flyio_org_slug: None,
-        };
-        assert!(worker.delete_deployment(ids[0]).await.is_err());
-        let reserved: bool =
-            sqlx::query_scalar("SELECT capacity_reserved FROM hosted_mocks WHERE id = $1")
-                .bind(ids[0])
-                .fetch_one(db.pool())
-                .await
-                .unwrap();
-        assert!(reserved);
-        fail.store(false, Ordering::SeqCst);
-        worker.process_requested_deletions().await.unwrap();
-        for id in &ids[..2] {
-            let row: (bool, bool) = sqlx::query_as(
-                "SELECT deleted_at IS NOT NULL, capacity_reserved FROM hosted_mocks WHERE id = $1",
-            )
-            .bind(id)
-            .fetch_one(db.pool())
-            .await
-            .unwrap();
-            assert_eq!(row, (true, false));
-        }
-        let after: chrono::DateTime<chrono::Utc> =
-            sqlx::query_scalar("SELECT deleted_at FROM hosted_mocks WHERE id = $1")
-                .bind(ids[1])
-                .fetch_one(db.pool())
-                .await
-                .unwrap();
-        assert_eq!(after, legacy_deleted);
-        let untouched: (bool, bool, bool) = sqlx::query_as("SELECT deleted_at IS NULL, capacity_reserved, deletion_requested_at IS NULL FROM hosted_mocks WHERE id = $1")
-            .bind(ids[2]).fetch_one(db.pool()).await.unwrap();
-        assert_eq!(untouched, (true, true, true));
-        let before = calls.lock().unwrap().len();
-        worker.process_requested_deletions().await.unwrap();
-        assert_eq!(calls.lock().unwrap().len(), before);
-        assert!(calls
-            .lock()
-            .unwrap()
-            .iter()
-            .all(|(_, uri)| !uri.contains(&ids[2].simple().to_string())));
-        server.abort();
-    }
-}
+#[path = "orchestrator_cleanup_tests.rs"]
+mod cleanup_reconciliation_tests;
 
 #[cfg(test)]
-mod free_provider_boundary_tests {
-    use super::*;
-    use crate::{
-        database::Database,
-        models::Plan,
-        store::{PgRegistryStore, RegistryStore},
-    };
-    use axum::{http::StatusCode, routing::any, Router};
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    #[tokio::test]
-    #[ignore = "requires isolated Postgres and local HTTP listener"]
-    async fn free_deployment_never_calls_configured_provider_and_invalid_routes_stay_inactive() {
-        let db = Database::connect(&std::env::var("TEST_DATABASE_URL").unwrap()).await.unwrap();
-        db.migrate().await.unwrap();
-        let store = PgRegistryStore::new(db.pool().clone());
-        let tag = Uuid::new_v4().simple().to_string();
-        let user = store
-            .create_user(&tag, &format!("{tag}@example.invalid"), "disabled-test-account")
-            .await
-            .unwrap();
-        let calls = Arc::new(AtomicUsize::new(0));
-        let captured = calls.clone();
-        let provider = Router::new().fallback(any(move || {
-            let calls = captured.clone();
-            async move {
-                calls.fetch_add(1, Ordering::SeqCst);
-                StatusCode::INTERNAL_SERVER_ERROR
-            }
-        }));
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let endpoint = format!("http://{}", listener.local_addr().unwrap());
-        let server = tokio::spawn(async move {
-            axum::serve(listener, provider).await.unwrap();
-        });
-        let orchestrator = DeploymentOrchestrator {
-            db: Arc::new(db.pool().clone()),
-            flyio_client: Some(FlyioClient::for_test_endpoint(endpoint)),
-            storage: None,
-            flyio_org_slug: Some("fixture".into()),
-        };
-        for (index, config) in [
-            serde_json::json!({"routes":[{"path":"/users/{id}","method":"GET","response":{"status":200,"body":{"name":"Ada"}}}]}),
-            serde_json::json!({"routes":[{"path":"/:id","method":"GET","response":{"status":200}}]}),
-            serde_json::json!({"routes":[{"path":"/","method":"GET","response":{"status":200,"headers":{"Set-Cookie":"mock-cookie=fixture"}}}]}),
-        ].into_iter().enumerate() {
-            let label = Uuid::new_v4().simple().to_string();
-            let org = store.create_organization("Provider boundary", &label, user.id, Plan::Free).await.unwrap();
-            let id: Uuid = sqlx::query_scalar("INSERT INTO hosted_mocks (org_id,name,slug,config_json,status) VALUES ($1,'Provider boundary',$2,$3,'pending') RETURNING id")
-                .bind(org.id).bind(&label).bind(config).fetch_one(db.pool()).await.unwrap();
-            let deployment = HostedMock::find_by_id(db.pool(), id).await.unwrap().unwrap();
-            let result = orchestrator.deploy(&deployment).await;
-            if index == 0 { result.unwrap(); } else { assert!(result.is_err()); }
-            let stored: (String, Option<String>, String, bool) = sqlx::query_as("SELECT status, internal_url, metadata_json->>'hosting_backend', capacity_reserved FROM hosted_mocks WHERE id=$1")
-                .bind(id).fetch_one(db.pool()).await.unwrap();
-            assert_eq!(stored.0 == "active", index == 0);
-            assert_eq!(stored.1, None, "Free must not create a public provider origin");
-            assert_eq!(stored.2, "multitenant");
-            assert!(stored.3, "invalid config must not lose its pending cleanup reservation");
-        }
-        assert_eq!(calls.load(Ordering::SeqCst), 0);
-        server.abort();
-        assert!(server.await.unwrap_err().is_cancelled());
-    }
-}
+#[path = "orchestrator_free_boundary_tests.rs"]
+mod free_provider_boundary_tests;
