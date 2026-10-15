@@ -153,7 +153,7 @@ text = p.read_text()
 
 # 1) Inline-table path deps: `mockforge-X = { ... path = ... }` without version.
 pattern = re.compile(
-    r'^(?P<ind>\s*)(?P<name>mockforge-[a-z0-9-]+)\s*=\s*\{(?P<body>[^}]*path\s*=[^}]*)\}\s*$',
+    r'^(?P<ind>\s*)(?P<name>mockforge-[a-z0-9-]+)\s*=\s*\{(?P<body>[^}]*path\s*=[^}]*)\}[ \t]*$',
     re.MULTILINE,
 )
 def add_version(m):
@@ -162,7 +162,15 @@ def add_version(m):
     return m.group(0)
   body = body.strip().lstrip(',').strip()
   return f'{m.group("ind")}{m.group("name")} = {{ version = "{v}", {body} }}'
-text = pattern.sub(add_version, text)
+# Skip `[dev-dependencies]` tables: cargo strips versionless path dev-deps on
+# publish, but pinning a version makes crates.io resolve them, which fails
+# for unpublished crates (registry-server -> mockforge-test-runner, v0.3.234).
+chunks = re.split(r'^(\[[^\]\n]+\])[ \t]*$', text, flags=re.MULTILINE)
+out = [pattern.sub(add_version, chunks[0])]
+for header, body in zip(chunks[1::2], chunks[2::2]):
+  out.append(header)
+  out.append(body if header.endswith('dev-dependencies]') else pattern.sub(add_version, body))
+text = ''.join(out)
 
 # 2) `publish = false` -> `publish = true`
 text = re.sub(
