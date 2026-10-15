@@ -310,7 +310,7 @@ jobs:
       run: python3 scripts/tests/test_publish_crates_status.py
 
     - name: Install pinned security audit tools
-      uses: taiki-e/install-action@v2.87.22
+      uses: taiki-e/install-action@v2.87.27
       with:
         tool: cargo-audit@0.22.2,cargo-deny@0.20.2
         fallback: none
