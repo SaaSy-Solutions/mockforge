@@ -278,6 +278,12 @@ pub fn expand_str_with_context(input: &str, context: &TemplatingContext) -> Stri
         out = out.replace("{{uuid}}", &uuid::Uuid::new_v4().to_string());
     }
 
+    // UUID-only expansion is complete. Bare response() expressions still need
+    // their original chain pass even when no braced tokens remain.
+    if !out.contains("{{") && !out.contains("response(") {
+        return out;
+    }
+
     // Only get current time if we need it (for {{now}} or time offsets)
     let needs_time = out.contains("{{now}}") || NOW_OFFSET_RE.is_match(&out);
     let current_time = if needs_time {
@@ -734,6 +740,48 @@ mod tests {
     use super::*;
     use crate::request_chaining::{ChainContext, ChainResponse, ChainTemplatingContext};
     use serde_json::json;
+
+    #[test]
+    fn finished_uuid_expansion_preserves_repetition_and_freshness() {
+        let first = expand_str("{{uuid}}|{{uuid}}");
+        let (left, right) = first.split_once('|').unwrap();
+        assert_eq!(left, right);
+        assert_eq!(uuid::Uuid::parse_str(left).unwrap().get_version_num(), 4);
+        assert_ne!(left, expand_str("{{uuid}}"));
+    }
+
+    #[test]
+    fn uuid_expansion_preserves_remaining_environment_and_unknown_tokens() {
+        let context = TemplatingContext::with_env(HashMap::from([(
+            "fixture".into(),
+            "fixture-value".into(),
+        )]));
+        let result = expand_str_with_context("{{uuid}}|{{fixture}}|{{unknown}}", &context);
+        let parts: Vec<_> = result.split('|').collect();
+        assert!(uuid::Uuid::parse_str(parts[0]).is_ok());
+        assert_eq!(&parts[1..], &["fixture-value", "{{unknown}}"]);
+    }
+
+    #[test]
+    fn uuid_expansion_preserves_bare_response_function_processing() {
+        let mut chain = ChainContext::new();
+        chain.store_response(
+            "fixture".into(),
+            ChainResponse {
+                status: 200,
+                headers: HashMap::new(),
+                body: Some(json!({"id": 42})),
+                duration_ms: 1,
+                executed_at: "2026-10-14T00:00:00Z".into(),
+                error: None,
+            },
+        );
+        let context = TemplatingContext::with_chain(ChainTemplatingContext::new(chain));
+        let result = expand_str_with_context("{{uuid}}|response('fixture', 'id')", &context);
+        let (id, value) = result.split_once('|').unwrap();
+        assert!(uuid::Uuid::parse_str(id).is_ok());
+        assert_eq!(value, "42");
+    }
 
     #[test]
     fn test_expand_str_with_context() {

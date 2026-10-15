@@ -8,8 +8,8 @@ use axum::{
     Json,
 };
 use oauth2::{
-    basic::BasicClient, reqwest::async_http_client, AuthUrl, AuthorizationCode, ClientId,
-    ClientSecret, RedirectUrl, Scope, TokenResponse, TokenUrl,
+    basic::BasicClient, AuthUrl, AuthorizationCode, ClientId, ClientSecret, HttpRequest,
+    HttpResponse, RedirectUrl, Scope, TokenResponse, TokenUrl,
 };
 use serde::Deserialize;
 
@@ -20,6 +20,41 @@ use crate::{
     AppState,
 };
 use chrono::{Duration, Utc};
+
+/// Token-exchange transport for oauth2 4.x on the workspace reqwest client
+/// (oauth2's bundled client is reqwest 0.11 on rustls 0.21). Redirects stay
+/// disabled, as in oauth2's own client, so a token endpoint can't bounce the
+/// authorization code to another host.
+async fn token_http_client(request: HttpRequest) -> Result<HttpResponse, std::io::Error> {
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .map_err(std::io::Error::other)?;
+    let method = reqwest::Method::from_bytes(request.method.as_str().as_bytes())
+        .map_err(std::io::Error::other)?;
+    let mut builder = client.request(method, request.url.as_str()).body(request.body);
+    for (name, value) in &request.headers {
+        builder = builder.header(name.as_str(), value.as_bytes());
+    }
+    let response = builder.send().await.map_err(std::io::Error::other)?;
+    let status_code = oauth2::http::StatusCode::from_u16(response.status().as_u16())
+        .map_err(std::io::Error::other)?;
+    let mut headers = oauth2::http::HeaderMap::new();
+    for (name, value) in response.headers() {
+        headers.append(
+            oauth2::http::header::HeaderName::from_bytes(name.as_str().as_bytes())
+                .map_err(std::io::Error::other)?,
+            oauth2::http::HeaderValue::from_bytes(value.as_bytes())
+                .map_err(std::io::Error::other)?,
+        );
+    }
+    let body = response.bytes().await.map_err(std::io::Error::other)?.to_vec();
+    Ok(HttpResponse {
+        status_code,
+        headers,
+        body,
+    })
+}
 
 /// OAuth provider type
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -157,7 +192,7 @@ pub async fn oauth_callback(
     // Exchange authorization code for access token
     let code = AuthorizationCode::new(params.code.clone());
     let token_result =
-        client.exchange_code(code).request_async(async_http_client).await.map_err(|e| {
+        client.exchange_code(code).request_async(token_http_client).await.map_err(|e| {
             ApiError::Internal(anyhow::anyhow!("OAuth token exchange failed: {}", e))
         })?;
 
@@ -390,4 +425,87 @@ fn generate_state_token() -> String {
 pub struct OAuthCallbackParams {
     pub code: String,
     pub state: Option<String>,
+}
+
+#[cfg(test)]
+mod token_exchange_tests {
+    use super::*;
+    use axum::{http::HeaderMap, response::Redirect, routing::post, Router};
+    use std::sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    };
+
+    async fn serve(app: Router) -> (String, tokio::task::JoinHandle<()>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let task = tokio::spawn(async move {
+            axum::serve(listener, app).await.unwrap();
+        });
+        (url, task)
+    }
+
+    fn client(token_url: String) -> BasicClient {
+        BasicClient::new(
+            ClientId::new("fixture-client".into()),
+            Some(ClientSecret::new("fixture-secret".into())),
+            AuthUrl::new("https://provider.invalid/authorize".into()).unwrap(),
+            Some(TokenUrl::new(token_url).unwrap()),
+        )
+    }
+
+    #[tokio::test]
+    async fn exchanges_code_over_workspace_client() {
+        let app = Router::new().route(
+            "/token",
+            post(|headers: HeaderMap, body: String| async move {
+                assert!(headers
+                    .get("authorization")
+                    .and_then(|v| v.to_str().ok())
+                    .is_some_and(|v| v.starts_with("Basic ")));
+                assert!(body.contains("grant_type=authorization_code"), "{body}");
+                assert!(body.contains("code=fixture-code"), "{body}");
+                (
+                    [("content-type", "application/json")],
+                    r#"{"access_token":"fixture-token","token_type":"bearer"}"#,
+                )
+            }),
+        );
+        let (url, task) = serve(app).await;
+        let token = client(format!("{url}/token"))
+            .exchange_code(AuthorizationCode::new("fixture-code".into()))
+            .request_async(token_http_client)
+            .await
+            .unwrap();
+        assert_eq!(token.access_token().secret(), "fixture-token");
+        task.abort();
+    }
+
+    #[tokio::test]
+    async fn token_endpoint_redirects_are_not_followed() {
+        let followed = Arc::new(AtomicBool::new(false));
+        let hit = followed.clone();
+        let app = Router::new()
+            .route("/token", post(|| async { Redirect::temporary("/elsewhere") }))
+            .route(
+                "/elsewhere",
+                post(move || {
+                    hit.store(true, Ordering::SeqCst);
+                    async {
+                        (
+                            [("content-type", "application/json")],
+                            r#"{"access_token":"stolen","token_type":"bearer"}"#,
+                        )
+                    }
+                }),
+            );
+        let (url, task) = serve(app).await;
+        let result = client(format!("{url}/token"))
+            .exchange_code(AuthorizationCode::new("fixture-code".into()))
+            .request_async(token_http_client)
+            .await;
+        assert!(result.is_err());
+        assert!(!followed.load(Ordering::SeqCst), "redirect must not be followed");
+        task.abort();
+    }
 }

@@ -68,13 +68,13 @@ bincode = "1.3"
 redis = { version = "0.24", features = ["tokio-comp", "connection-manager"], optional = true }
 
 # Tracing
-mockforge-tracing = { version = "0.3.233", path = "../mockforge-tracing" }
+mockforge-tracing = { version = "0.3.235", path = "../mockforge-tracing" }
 
 # Recorder
-mockforge-recorder = { version = "0.3.233", path = "../mockforge-recorder" }
+mockforge-recorder = { version = "0.3.235", path = "../mockforge-recorder" }
 
 # Core (for MockAI integration)
-mockforge-core = { version = "0.3.233", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.235", path = "../mockforge-core" }
 mockforge-openapi = { path = "../mockforge-openapi" }
 mockforge-foundation = { path = "../mockforge-foundation" }
 

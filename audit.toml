@@ -64,6 +64,13 @@ ignore = [
     { id = "RUSTSEC-2026-0099", reason = "rustls-webpki wildcard name constraints — pinned by transitive deps across 3 rustls majors" },
     { id = "RUSTSEC-2026-0104", reason = "rustls-webpki CRL parsing panic — pinned by transitive deps across 3 rustls majors" },
 
+    # rustls 0.21.12 has no patched 0.21 release. rustls 0.23 is at the
+    # fixed 0.23.46; the only 0.21 copy left is kube-client 0.87 in
+    # mockforge-k8s-operator (the operator's client to the Kubernetes API).
+    # Remove both once a kube major bump empties `cargo tree -i rustls@0.21.12` (#1232).
+    { id = "RUSTSEC-2026-0346", reason = "rustls 0.21 Debug impls expose session secrets — only via kube-client 0.87; no 0.21 fix; kube bump tracked in #1232" },
+    { id = "RUSTSEC-2026-0349", reason = "rustls 0.21 ServerHello downgrade — only via kube-client 0.87; no 0.21 fix; kube bump tracked in #1232" },
+
     # rkyv 0.7.46, reached only as an UNENABLED optional feature of
     # rust_decimal. This one is not reachable in anything we build, and
     # unlike the entries above it is not waiting on an upstream bump —

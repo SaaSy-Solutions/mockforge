@@ -174,7 +174,17 @@ pub struct ChunkedBenchResult {
     pub failed: u64,
     pub bytes_sent: u64,
     pub elapsed: Duration,
+    /// Completed attempts over `elapsed`, which includes waiting for the
+    /// requests still in flight when the load window closed.
     pub req_per_sec: f64,
+    /// The window during which new requests could start (`--duration`).
+    pub load_window: Duration,
+    /// Attempts over `load_window`: the rate requests were started, which is
+    /// what `--rps` caps. Unlike `req_per_sec`, short runs aren't diluted by
+    /// the final in-flight drain.
+    pub start_rate_per_sec: f64,
+    /// Upload bandwidth in megabits/s: `bytes_sent * 8 / elapsed / 1e6`.
+    pub upload_mbps: f64,
     pub latencies_ms: Vec<u64>,
     pub avg_latency_ms: f64,
     pub p50_ms: u64,
@@ -276,7 +286,9 @@ pub async fn run(cfg: ChunkedBenchConfig) -> anyhow::Result<ChunkedBenchResult> 
     }
 
     let elapsed = started_at.elapsed();
+    let load_window = cfg.duration;
     let total = total_requests.load(Ordering::Relaxed);
+    let sent = bytes_sent.load(Ordering::Relaxed);
     let mut samples: Vec<u64> = {
         let mut g = latencies.lock().await;
         std::mem::take(&mut *g)
@@ -307,13 +319,12 @@ pub async fn run(cfg: ChunkedBenchConfig) -> anyhow::Result<ChunkedBenchResult> 
         total_requests: total,
         successful: successful.load(Ordering::Relaxed),
         failed: failed.load(Ordering::Relaxed),
-        bytes_sent: bytes_sent.load(Ordering::Relaxed),
+        bytes_sent: sent,
         elapsed,
-        req_per_sec: if elapsed.as_secs_f64() > 0.0 {
-            total as f64 / elapsed.as_secs_f64()
-        } else {
-            0.0
-        },
+        req_per_sec: per_second(total as f64, elapsed),
+        load_window,
+        start_rate_per_sec: per_second(total as f64, load_window),
+        upload_mbps: per_second(sent as f64 * 8.0, elapsed) / 1_000_000.0,
         avg_latency_ms: avg,
         p50_ms: p(0.50),
         p95_ms: p(0.95),
@@ -322,6 +333,14 @@ pub async fn run(cfg: ChunkedBenchConfig) -> anyhow::Result<ChunkedBenchResult> 
         status_counts: final_status_counts,
         error_samples: final_error_samples,
     })
+}
+
+pub(crate) fn per_second(amount: f64, window: Duration) -> f64 {
+    if window.is_zero() {
+        0.0
+    } else {
+        amount / window.as_secs_f64()
+    }
 }
 
 /// Per-request outcome from `send_one_chunked_request`. Carries an
@@ -491,6 +510,10 @@ mod tests {
         // against a local server would do hundreds.
         assert!((4..=6).contains(&r.total_requests), "got {} requests", r.total_requests);
         assert_eq!(r.failed, 0);
+        // The start rate divides by the 1s load window, not the drain.
+        assert_eq!(r.load_window, Duration::from_millis(1000));
+        assert!((r.start_rate_per_sec - r.total_requests as f64).abs() < 1e-9);
+        assert!(r.start_rate_per_sec <= 5.0 + 1e-9);
     }
 
     #[tokio::test]

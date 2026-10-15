@@ -2,6 +2,22 @@
 
 ## [Unreleased]
 
+### Security
+
+- **[Cloud]** Remove most of the rustls 0.21 dependency graph (RUSTSEC-2026-0346/0349): the AWS SDK S3/KMS clients drop their legacy hyper 0.14 TLS stack, `oauth2` no longer pulls reqwest 0.11 (registry OAuth code exchange uses the workspace reqwest client with redirects disabled), the SMTP STARTTLS listener moves to tokio-rustls 0.26 with an explicit ring provider, and unused TLS dependencies are dropped from mockforge-tcp. The Kubernetes operator's kube 0.87 client is the only remaining rustls 0.21 user. (#1232)
+
+## [0.3.235] - 2026-10-15
+
+### Security
+
+- **[DevX]** Update rustls to 0.23.46 (RUSTSEC-2026-0346/0347/0348/0349) and wasmtime/wasmtime-wasi to 36.0.18 (RUSTSEC-2026-0352/0363). The remaining rustls 0.21 copy has no patched release; its removal is tracked in #1232.
+
+### Fixed
+
+- **[DevX]** `bench-chunked` now reports the request-start rate alongside the overall rate, so short runs can be checked against `--rps`. Summaries add `start_window_rps` (attempts divided by `load_window_seconds`, the sum of each operation's `--duration`) and `upload_mbps`; exported operations add `start_rate_per_sec`, `load_window_ms` and `upload_mbps`. The console replaces the ambiguous `Throughput: N req/s` line with `RPS (started)`, `RPS (overall)` (including the in-flight drain) and `Upload: N Mbps`. Existing fields are unchanged. (#79)
+
+## [0.3.234] - 2026-10-14
+
 ### Added
 
 - **[Cloud]** Share Free hosted capacity, monthly request limits and platform AI credits across a verified owner’s organizations. Preserve spent allowances through account recreation, bound deleted identity retention, retain uncertain provider budgets, and require audited usage evidence plus execution fences for stopped-call recovery. Keep provider execution connections separate from API requests. (#834, #868)
@@ -27,6 +43,10 @@
 - **[DevX]** Behavioral-cloning HTTP handlers now live in intelligence and use shared foundation scenario types. A recorder storage adapter preserves the HTTP compatibility state and SQLite behavior without adding a reverse dependency. (#631)
 
 ### Fixed
+
+- **[DevX]** Return completed UUID template expansions before running unrelated token scans. Keep fresh UUID generation, repeated-token behavior, unresolved tokens, and bare response-function processing.
+
+- **[DevX]** Keep pre-commit Clippy in one invocation with the complete changed-file list. This avoids overlapping target-lock queues and repeated feature graphs while preserving crate/workspace selection and lint flags. (#706)
 
 - **[Cloud]** Enforce one case-insensitive email identity across concurrent registry signups and account lookups. Reject legacy collisions without merging accounts; clear verification after an email change. OAuth requires provider-verified email proof and rejects unverified local-account linking or replacement of an existing provider identity. (#908)
 

@@ -29,7 +29,7 @@ ring = { workspace = true }
 # AWS SDK (feature: `aws-kms`). Version-pinned to match
 # `mockforge-registry-server::storage` so cargo can resolve a single
 # AWS smithy stack across the workspace.
-aws-sdk-kms = { version = "1.50", optional = true }
+aws-sdk-kms = { version = "1.50", optional = true, default-features = false, features = ["default-https-client", "rt-tokio"] }
 aws-config = { version = "1.1", optional = true }
 aws-smithy-types = { version = "1.4", optional = true }
 

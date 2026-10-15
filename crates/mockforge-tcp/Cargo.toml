@@ -15,7 +15,7 @@ categories = ["development-tools", "network-programming"]
 
 [dependencies]
 # MockForge core
-mockforge-core = { version = "0.3.233", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.235", path = "../mockforge-core" }
 
 # Standard workspace dependencies
 tokio = { workspace = true, features = ["net", "io-util", "time", "sync"] }
@@ -28,10 +28,6 @@ anyhow = { workspace = true }
 thiserror = { workspace = true }
 regex = { workspace = true }
 
-# TCP/TLS-specific dependencies
-tokio-rustls = "0.24"
-rustls-pemfile = "1.0"
-rustls = "0.23"
 hex = "0.4"
 base64 = "0.22"
 

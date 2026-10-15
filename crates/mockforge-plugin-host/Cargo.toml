@@ -30,8 +30,8 @@ path = "src/main.rs"
 [dependencies]
 # Reuse the existing plugin-loader's Wasmtime integration:
 # MemoryTracker (PR #396) and InvocationMetricsBus (PR #388).
-mockforge-plugin-loader = { version = "0.3.233", path = "../mockforge-plugin-loader" }
-mockforge-plugin-core = { version = "0.3.233", path = "../mockforge-plugin-core" }
+mockforge-plugin-loader = { version = "0.3.235", path = "../mockforge-plugin-loader" }
+mockforge-plugin-core = { version = "0.3.235", path = "../mockforge-plugin-core" }
 
 # Async runtime + Unix socket I/O
 tokio = { workspace = true, features = ["rt-multi-thread", "macros", "net", "signal", "time", "sync", "io-util"] }
@@ -74,7 +74,7 @@ ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 # events against its currently-trusted set — so we depend on the
 # crate without the `aws-kms` feature (which would pull in the
 # AWS SDK transitive tree).
-mockforge-platform-signing = { version = "0.3.233", path = "../mockforge-platform-signing" }
+mockforge-platform-signing = { version = "0.3.235", path = "../mockforge-platform-signing" }
 
 # HTTP client for the kill-switch blocklist poll task (RFC §8.3)
 # and the trust-root refresh loop (issue #549).

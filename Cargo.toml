@@ -96,7 +96,7 @@ resolver = "2"
 
 # Workspace-wide package metadata
 [workspace.package]
-version = "0.3.233"
+version = "0.3.235"
 edition = "2021"
 rust-version = "1.96.0"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]
@@ -215,7 +215,7 @@ parking_lot = "0.12"
 
 # Authentication libraries
 jsonwebtoken = "9.0"
-oauth2 = "4.4"
+oauth2 = { version = "4.4", default-features = false }
 ring = "0.17"
 
 # Encryption libraries
