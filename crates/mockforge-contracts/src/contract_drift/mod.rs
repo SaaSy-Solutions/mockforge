@@ -12,26 +12,12 @@
 //! - types: Shared drift-related types (DriftBudget, DriftMetrics, etc.) + drift_result_from_diff helper
 //! - websocket_contract: WebSocket contract implementation (jsonschema)
 //!
-//! NOTE: Only `budget_engine` remains in `mockforge-core::contract_drift`,
-//! because it depends on `mockforge-openapi::OpenApiSpec` and on
-//! in-core sibling types (`consumer_mapping::ConsumerImpactAnalyzer`,
-//! `fitness::FitnessFunctionRegistry`). Moving it would require contracts
-//! to depend on `mockforge-openapi`, expanding the contracts surface area.
-//! Tracked for future re-audit at issue #604's closing comment.
-//!
-//! Update from earlier NOTE: the previously-listed blockers
-//! (`ai_contract_diff::Mismatch`, `ContractDiffResult`, etc.) are
-//! actually in `mockforge-foundation::contract_diff_types` already —
-//! they were promoted in an earlier migration (Phase 6 / A5). Modules
-//! that used those types as their only "core-only" dep moved to
-//! contracts in #604.
-//!
-//! `consumer_mapping` and `fitness` previously lived here as duplicates of the
-//! core copies; they were deleted in #602 since the contracts copies had no
-//! callers. The 3 shared `FitnessFunction*` types live in
-//! `mockforge_foundation::contract_drift_types`.
+//! Budget evaluation consumes typed caller-provided fitness and consumer sources.
+//! The Core compatibility layer retains its concrete registry/configuration APIs.
 
 pub mod breaking_change_detector;
+pub mod budget_engine;
+pub mod budget_providers;
 pub mod field_tracking;
 pub mod forecasting;
 pub mod grpc_contract;
@@ -41,6 +27,7 @@ pub mod types;
 pub mod websocket_contract;
 
 pub use breaking_change_detector::BreakingChangeDetector;
+pub use budget_engine::DriftBudgetEngine;
 pub use field_tracking::{FieldCountRecord, FieldCountTracker};
 pub use forecasting::{
     ChangeForecast, ForecastAggregationLevel, ForecastPattern, ForecastStatistics, Forecaster,

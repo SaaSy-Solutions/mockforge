@@ -5,9 +5,9 @@
 //! This module provides functionality for tracking contract drift, managing drift budgets,
 //! and detecting breaking changes according to configurable rules.
 //!
-//! Only `budget_engine` remains here. All other contract-drift modules have moved to
-//! `mockforge-contracts::contract_drift`. Forwarding re-exports below keep existing
-//! `crate::contract_drift::*` paths in core resolving without touching callers.
+//! Budget evaluation lives in Contracts. This module retains concrete registry
+//! adapters and compatibility entrypoints so existing Core callers keep their
+//! constructors, setters and error types.
 
 pub mod budget_engine;
 pub mod consumer_mapping;

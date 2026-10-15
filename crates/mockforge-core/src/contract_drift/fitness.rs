@@ -1390,6 +1390,24 @@ fn calculate_protocol_schema_depth(schema: &serde_json::Value) -> u32 {
     }
 }
 
+impl mockforge_contracts::contract_drift::budget_providers::FitnessSource
+    for FitnessFunctionRegistry
+{
+    fn evaluate_fitness(
+        &self,
+        old_spec: Option<&OpenApiSpec>,
+        new_spec: &OpenApiSpec,
+        diff: &ContractDiffResult,
+        endpoint: &str,
+        method: &str,
+        workspace: Option<&str>,
+        service: Option<&str>,
+    ) -> Option<Vec<FitnessTestResult>> {
+        self.evaluate_all(old_spec, new_spec, diff, endpoint, method, workspace, service)
+            .ok()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

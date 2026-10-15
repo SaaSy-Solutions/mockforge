@@ -92,3 +92,26 @@ pub fn drift_budget_router<S: DriftBudgetStateProvider>(state: S) -> axum::Route
         .route("/api/v1/drift/metrics", get(get_drift_metrics::<S>))
         .with_state(state)
 }
+
+impl DriftBudgetSource for mockforge_contracts::contract_drift::DriftBudgetEngine {
+    fn config(&self) -> &DriftBudgetConfig {
+        mockforge_contracts::contract_drift::DriftBudgetEngine::config(self)
+    }
+    fn get_budget_for_endpoint(
+        &self,
+        endpoint: &str,
+        method: &str,
+        workspace_id: Option<&str>,
+        service_name: Option<&str>,
+        tags: Option<&[String]>,
+    ) -> DriftBudget {
+        mockforge_contracts::contract_drift::DriftBudgetEngine::get_budget_for_endpoint(
+            self,
+            endpoint,
+            method,
+            workspace_id,
+            service_name,
+            tags,
+        )
+    }
+}
