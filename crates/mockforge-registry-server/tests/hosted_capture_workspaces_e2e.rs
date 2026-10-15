@@ -79,8 +79,9 @@ async fn hosted_capture_workspace_http_lifecycle() {
         .send()
         .await
         .unwrap();
-    assert!(created.status().is_success());
+    let status = created.status();
     let created: Value = created.json().await.unwrap();
+    assert!(status.is_success(), "{status}: {created}");
     assert_eq!(created["workspace_id"], json!(workspace));
     let id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
     let detail: Value = own
