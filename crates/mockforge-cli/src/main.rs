@@ -2672,6 +2672,21 @@ enum Commands {
         /// `campaign.jsonl` and `round-summaries/` are never pruned (#79).
         #[arg(long, value_name = "N")]
         keep_rounds: Option<u32>,
+
+        /// Seconds one request may take end to end (connect, chunked upload,
+        /// response) before it counts as failed and timed out, freeing its
+        /// worker. Default: twice the minimum upload time plus 60s (85.5s for
+        /// 1 MiB in 4 KiB chunks 50 ms apart). `0` disables the timeout and
+        /// waits on OS TCP timeouts (#79).
+        #[arg(long, value_name = "SECS")]
+        request_timeout: Option<u64>,
+
+        /// With --spec: start each operation as soon as the previous one's
+        /// --duration window closes instead of after its in-flight uploads
+        /// finish, so request starts (and --rps) stay continuous across
+        /// operations. Workers of consecutive operations overlap briefly (#79).
+        #[arg(long)]
+        overlap_operations: bool,
     },
 
     /// Generate HTTP load marked with QoS / DSCP traffic classes (#933)
@@ -3769,6 +3784,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             rounds,
             repeat_until,
             keep_rounds,
+            request_timeout,
+            overlap_operations,
         } => {
             use mockforge_bench::chunked_command::ChunkedCommand;
             use mockforge_bench::command::BenchCommand;
@@ -3831,6 +3848,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
                 rounds,
                 repeat_until,
                 keep_rounds,
+                request_timeout: request_timeout.map(std::time::Duration::from_secs),
+                overlap_operations,
             };
             match cmd.execute().await {
                 Ok(true) => {}
@@ -4088,6 +4107,36 @@ mod cli_tests {
                         _ => panic!("expected bench-chunked command"),
                     }
                 }
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+
+    #[cfg(feature = "bench")]
+    #[test]
+    fn parses_chunked_request_timeout_and_overlap() {
+        std::thread::Builder::new()
+            .stack_size(8 * 1024 * 1024)
+            .spawn(|| {
+                let parse = |extra: &[&str]| {
+                    let mut args = vec!["mockforge", "bench-chunked", "--target", "http://x/u"];
+                    args.extend_from_slice(extra);
+                    match Cli::try_parse_from(args).unwrap().command {
+                        Commands::BenchChunked {
+                            request_timeout,
+                            overlap_operations,
+                            ..
+                        } => (request_timeout, overlap_operations),
+                        _ => panic!("expected bench-chunked command"),
+                    }
+                };
+                assert_eq!(parse(&[]), (None, false));
+                assert_eq!(
+                    parse(&["--request-timeout", "90", "--overlap-operations"]),
+                    (Some(90), true)
+                );
+                assert_eq!(parse(&["--request-timeout", "0"]), (Some(0), false));
             })
             .unwrap()
             .join()

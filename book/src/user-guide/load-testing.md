@@ -250,6 +250,12 @@ only start about 10 / 128 ≈ 0.08 requests per second, so raise
   attempts can mean fewer established connections than request starts;
   these reports do not measure established connections per second.
 - `raw_body` records whether the raw filler override was selected.
+- `timed_out` counts failed attempts that hit the request timeout (a subset
+  of `failed`). `request_timeout_mode` is `auto`, `fixed`, or `off`, with
+  `request_timeout_secs` set for `fixed`.
+- `overlap_operations` records whether `--overlap-operations` was used. With
+  it, `elapsed_seconds` is the pass's wall clock rather than the sum of
+  operation runtimes, since operations overlap.
   Existing report fields are retained; these explanatory fields are additive.
 
 For 1 MiB uploads in 4 KiB chunks with 50 ms between chunks, the minimum
@@ -309,6 +315,35 @@ To investigate:
 `--cps` changes connection reuse, not the request-rate ceiling. Add it only
 when testing a new connection per request; request starts are not a measure
 of successfully established TCP/TLS connections.
+
+### Long campaigns and stalled requests
+
+**Where `measured_rps` falls short of `--rps`.** With `--spec`, operations
+run one after another and each waits for its in-flight uploads before the
+next starts. Starts pause for about one request time (13 s for the 1 MiB
+example above) at every operation boundary, so a campaign of 30-second
+operations averages roughly `30 / (30 + 13) ≈ 0.70` requests/s even though
+each window starts at exactly `--rps 1`. Raising `--rps` to compensate
+overshoots the rate inside each window. Instead, add
+`--overlap-operations`: each operation starts as soon as the previous one's
+`--duration` window closes, so starts stay continuous at `--rps` across the
+whole pass. Workers of consecutive operations overlap for one request time,
+so up to twice `--concurrency` connections can be open briefly. Rounds of a
+`--repeat-until` campaign still run one after another, so each round ends
+with one drain.
+
+**Without `--rps`,** each worker sends requests back to back, so the steady
+rate is `concurrency / request time` (20 workers and 13.07 s uploads give
+1.53 requests/s). Short windows round up: all workers start at once, so a
+30-second window fits three starts per worker (`60 / 30 = 2.00`).
+
+**Request timeout.** Each worker sends one whole request at a time on its
+own connection; a stalled request blocks only that worker. `--request-timeout
+SECS` bounds a request end to end (connect, upload, response). It defaults to
+twice the minimum upload time plus 60 s (85.5 s for the 1 MiB example). A
+request that misses it counts as failed and `timed_out`, and its worker moves
+on; the console shows `Failed: N (M timed out after Xs)`. `--request-timeout
+0` disables it, leaving a silent drop to the OS TCP timeouts (minutes).
 
 **Chunked + chaos matching** — pair with `chunked_only: true` in
 `fault_injection.request_matcher` (see
