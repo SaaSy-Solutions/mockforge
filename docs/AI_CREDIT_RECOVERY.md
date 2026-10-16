@@ -48,10 +48,28 @@ provider usage evidence. A task racing recovery checks reservation state under
 the fence before contacting the provider, preventing execution after recovery.
 Never infer zero usage from process death, elapsed time or a released database
 connection: the remote provider may still be processing. Confirm final usage
-before submitting the evidence reference. Legacy pending calls do not have this
-protocol and remain ineligible for online recovery; they require a separately
-verified service drain and provider-evidence procedure. Do not manually change
-reservation state or counters to bypass these controls.
+before submitting the evidence reference. Do not manually change reservation
+state or counters to bypass these controls.
+
+### Legacy (unfenced) pending calls
+
+A pending reservation without `execution_fenced` predates migration 107 and is
+ineligible for online recovery. Released builds cannot create one: the
+reservations table (migration 96) and the fence (migration 107) ship and apply
+together, and every admission inserts `execution_fenced = TRUE`. Only an
+environment that ran an unreleased intermediate build can hold such rows.
+
+Before and after every deployment that applies these migrations, confirm the
+count is zero with the owner role:
+
+```sql
+SELECT count(*) FROM ai_token_reservations
+WHERE state = 'pending' AND NOT execution_fenced;
+```
+
+A non-zero count means that environment ran unreleased code. Do not reconcile
+those rows or edit them by hand: provider usage for them cannot be fenced, so
+resolve that environment by restoring it rather than settling in place.
 
 ## Verified identity continuity
 
@@ -62,7 +80,9 @@ on that account is combined once; repeated verification does not add it again.
 Outstanding platform calls must still be resolved before account deletion.
 
 The binding stores a salted SHA-256 digest rather than a raw email. The database
-salt and digest table have forced row-level security with no request-role access.
+salt and digest table have row-level security enabled with no policy and no
+grants, so request roles cannot read them; only owner-run functions and the
+owner-pool cleanup worker do.
 These digests remain pseudonymous anti-abuse data, not anonymous data, and are
 covered by the Free allowance retention disclosure. Deleted-account bindings
 expire after 35 days; the daily owner-pool cleanup normally removes them within
