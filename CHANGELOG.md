@@ -4,9 +4,21 @@
 
 - **[Cloud]** Share Free hosted capacity, monthly request limits and platform AI credits across a verified owner’s organizations. Preserve spent allowances through account recreation, bound deleted identity retention, retain uncertain provider budgets, and require audited usage evidence plus execution fences for stopped-call recovery. Keep provider execution connections separate from API requests. (#834, #868) The Privacy Policy and DPA disclose OpenAI as the platform AI sub-processor, with processing beginning no earlier than November 14, 2026.
 
+## [0.3.236] - 2026-10-16
+
+### Added
+
+- **[DevX]** `bench-chunked --request-timeout SECS` bounds each request end to end (connect, chunked upload, response). The default is twice the minimum upload time plus 60 s, and `0` disables it. Timed-out attempts count as failed and in a new `timed_out` field, and the console shows `Failed: N (M timed out after Xs)`. Previously no timeout was set, so a silently dropped upload held its worker for minutes until OS TCP timeouts fired. (#79)
+- **[DevX]** `bench-chunked --spec ... --overlap-operations` starts each operation when the previous one's `--duration` window closes instead of after its in-flight uploads finish, so request starts stay continuous at `--rps` across operations in long campaigns. With it, `elapsed_seconds` is the pass's wall clock. (#79)
+
 ### Changed
 
 - **[Contracts]** Move drift-budget evaluation into Contracts behind typed fitness and consumer-impact providers. Preserve Core constructors, concrete registry setters and evaluation entrypoints, while allowing cross-crate consumers to use the Contracts-owned engine. (#636)
+
+### Fixed
+
+- **[Cloud]** Registry S3 storage with a custom endpoint (MinIO, Cloudflare R2) uses path-style addressing, so MinIO buckets verify instead of silently falling back to local storage. New `STORAGE_REQUIRE_S3=true` fails startup rather than fall back. (#1236)
+- **[Cloud]** Registry artifact downloads from the private bucket use presigned URLs. Spec URLs handed to the test runner are presigned only for the caller's own uploads. Publishing can no longer overwrite another owner's plugin, scenario or template, including under RLS, and published versions are immutable (409). (#1239)
 
 ### Security
 

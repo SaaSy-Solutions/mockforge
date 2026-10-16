@@ -51,20 +51,20 @@ reqwest = { workspace = true }
 sysinfo = { workspace = true }
 html-escape = "0.2"
 once_cell = "1.21"
-mockforge-core = { version = "0.3.235", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.236", path = "../mockforge-core" }
 mockforge-openapi = { path = "../mockforge-openapi" }
 mockforge-foundation = { path = "../mockforge-foundation" }
-mockforge-http = { version = "0.3.235", path = "../mockforge-http", features = ["smtp", "mqtt", "conformance"] }
-mockforge-ws = { version = "0.3.235", path = "../mockforge-ws" }
-mockforge-grpc = { version = "0.3.235", path = "../mockforge-grpc" }
-mockforge-vbr = { version = "0.3.235", path = "../mockforge-vbr" }
-mockforge-plugin-core = { version = "0.3.235", path = "../mockforge-plugin-core" }
-mockforge-plugin-loader = { version = "0.3.235", path = "../mockforge-plugin-loader" }
-mockforge-analytics = { version = "0.3.235", path = "../mockforge-analytics" }
-mockforge-chaos = { version = "0.3.235", path = "../mockforge-chaos" }
-mockforge-collab = { version = "0.3.235", path = "../mockforge-collab" }
-mockforge-recorder = { version = "0.3.235", path = "../mockforge-recorder" }
-mockforge-federation = { version = "0.3.235", path = "../mockforge-federation" }
+mockforge-http = { version = "0.3.236", path = "../mockforge-http", features = ["smtp", "mqtt", "conformance"] }
+mockforge-ws = { version = "0.3.236", path = "../mockforge-ws" }
+mockforge-grpc = { version = "0.3.236", path = "../mockforge-grpc" }
+mockforge-vbr = { version = "0.3.236", path = "../mockforge-vbr" }
+mockforge-plugin-core = { version = "0.3.236", path = "../mockforge-plugin-core" }
+mockforge-plugin-loader = { version = "0.3.236", path = "../mockforge-plugin-loader" }
+mockforge-analytics = { version = "0.3.236", path = "../mockforge-analytics" }
+mockforge-chaos = { version = "0.3.236", path = "../mockforge-chaos" }
+mockforge-collab = { version = "0.3.236", path = "../mockforge-collab" }
+mockforge-recorder = { version = "0.3.236", path = "../mockforge-recorder" }
+mockforge-federation = { version = "0.3.236", path = "../mockforge-federation" }
 base64 = { workspace = true }
 rand = { workspace = true }
 jsonwebtoken = "9.3"

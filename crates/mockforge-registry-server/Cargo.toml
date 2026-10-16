@@ -168,15 +168,15 @@ rustls-pemfile = { version = "2.0", optional = true }
 # Internal dependencies
 mockforge-platform-signing = { path = "../mockforge-platform-signing" }
 mockforge-registry-core = { path = "../mockforge-registry-core", default-features = false, features = ["postgres"] }
-mockforge-analytics = { version = "0.3.235", path = "../mockforge-analytics" }
-mockforge-collab = { version = "0.3.235", path = "../mockforge-collab" }
-mockforge-core = { version = "0.3.235", path = "../mockforge-core" }
-mockforge-federation = { version = "0.3.235", path = "../mockforge-federation" }
-mockforge-scenarios = { version = "0.3.235", path = "../mockforge-scenarios" }
-mockforge-plugin-registry = { version = "0.3.235", path = "../mockforge-plugin-registry" }
-mockforge-observability = { version = "0.3.235", path = "../mockforge-observability", default-features = false, features = ["sysinfo", "log-shipper"] }
-mockforge-http = { version = "0.3.235", path = "../mockforge-http" }
-mockforge-openapi = { version = "0.3.235", path = "../mockforge-openapi" }
+mockforge-analytics = { version = "0.3.236", path = "../mockforge-analytics" }
+mockforge-collab = { version = "0.3.236", path = "../mockforge-collab" }
+mockforge-core = { version = "0.3.236", path = "../mockforge-core" }
+mockforge-federation = { version = "0.3.236", path = "../mockforge-federation" }
+mockforge-scenarios = { version = "0.3.236", path = "../mockforge-scenarios" }
+mockforge-plugin-registry = { version = "0.3.236", path = "../mockforge-plugin-registry" }
+mockforge-observability = { version = "0.3.236", path = "../mockforge-observability", default-features = false, features = ["sysinfo", "log-shipper"] }
+mockforge-http = { version = "0.3.236", path = "../mockforge-http" }
+mockforge-openapi = { version = "0.3.236", path = "../mockforge-openapi" }
 # SSRF guard reused at the trigger_run handler — primary enforcement
 # before runs hit the Redis queue. The runner-side guard in
 # mockforge_bench::cloud_api is defense-in-depth.
