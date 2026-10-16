@@ -19,7 +19,7 @@ concurrency:
 jobs:
   check:
     name: Migration files are append-only
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7
