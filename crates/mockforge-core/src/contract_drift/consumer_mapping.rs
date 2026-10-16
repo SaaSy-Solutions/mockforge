@@ -407,6 +407,14 @@ impl ConsumerImpactAnalyzer {
     }
 }
 
+impl mockforge_contracts::contract_drift::budget_providers::ConsumerImpactSource
+    for ConsumerImpactAnalyzer
+{
+    fn consumer_impact(&self, endpoint: &str, method: &str) -> Option<ConsumerImpact> {
+        self.analyze_impact(endpoint, method)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
