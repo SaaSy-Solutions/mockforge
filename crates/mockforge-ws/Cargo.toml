@@ -32,12 +32,12 @@ fastrand = "2.4"
 async-trait = { workspace = true }
 thiserror = "2.0"
 tokio-tungstenite = { version = "0.28", features = ["rustls-tls-native-roots"] }
-mockforge-core = { version = "0.3.235", path = "../mockforge-core" }
+mockforge-core = { version = "0.3.236", path = "../mockforge-core" }
 mockforge-foundation = { path = "../mockforge-foundation" }
 mockforge-openapi = { path = "../mockforge-openapi" }
-mockforge-data = { version = "0.3.235", path = "../mockforge-data" }
-mockforge-observability = { version = "0.3.235", path = "../mockforge-observability" }
-mockforge-tracing = { version = "0.3.235", path = "../mockforge-tracing" }
+mockforge-data = { version = "0.3.236", path = "../mockforge-data" }
+mockforge-observability = { version = "0.3.236", path = "../mockforge-observability" }
+mockforge-tracing = { version = "0.3.236", path = "../mockforge-tracing" }
 opentelemetry = { version = "0.22", features = ["trace"] }
 
 [dev-dependencies]

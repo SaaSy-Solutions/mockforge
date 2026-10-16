@@ -68,6 +68,13 @@ pub struct ChunkedCommand {
     pub repeat_until: Option<Duration>,
     /// Campaign: keep only the newest N `round_*` dirs.
     pub keep_rounds: Option<u32>,
+    /// Per-request timeout. `None` derives one from the body size and chunk
+    /// pacing ([`ChunkedBenchConfig::auto_request_timeout`]); zero disables it.
+    pub request_timeout: Option<Duration>,
+    /// Spec mode: start each operation as soon as the previous one's load
+    /// window closes, instead of after its in-flight uploads finish, so the
+    /// start rate stays continuous across operations.
+    pub overlap_operations: bool,
 }
 
 /// One target's resolved run plan.
@@ -91,6 +98,8 @@ struct TargetOutcome {
     elapsed: Duration,
     /// Sum of each operation's request-start window (`--duration`).
     load_window: Duration,
+    /// Failed attempts that hit the request timeout.
+    timed_out: u64,
     status_counts: HashMap<u16, u64>,
     /// An operation errored out entirely (vs. individual requests failing).
     run_failed: bool,
@@ -106,6 +115,7 @@ impl TargetOutcome {
             "load_window_seconds": self.load_window.as_secs_f64(),
             "start_window_rps": per_second(self.total_requests as f64, self.load_window),
             "upload_mbps": per_second(self.bytes_sent as f64 * 8.0, self.elapsed) / 1_000_000.0,
+            "timed_out": self.timed_out,
         })
     }
 
@@ -116,6 +126,7 @@ impl TargetOutcome {
         self.bytes_sent += r.bytes_sent;
         self.elapsed += r.elapsed;
         self.load_window += r.load_window;
+        self.timed_out += r.timed_out;
         for (code, n) in &r.status_counts {
             *self.status_counts.entry(*code).or_insert(0) += n;
         }
@@ -240,7 +251,9 @@ impl ChunkedCommand {
                     "rate_limit_enabled": self.rps.is_some(),
                     "new_connection_per_request": self.cps,
                     "raw_body": self.raw_body,
+                    "overlap_operations": self.overlap_operations,
                 });
+                let summary = merge_json(summary, self.request_timeout_fields());
                 Ok((!o.run_failed, merge_json(summary, o.rate_fields())))
             }
             (None, Some(file)) => self.execute_multi_target(file, output).await,
@@ -350,8 +363,10 @@ impl ChunkedCommand {
             "rate_limit_enabled": self.rps.is_some(),
             "new_connection_per_request": self.cps,
             "raw_body": self.raw_body,
+            "overlap_operations": self.overlap_operations,
             "targets": rows,
         });
+        let payload = merge_json(payload, self.request_timeout_fields());
         std::fs::write(&path, serde_json::to_string_pretty(&payload)?)
             .with_context(|| format!("failed to write {:?}", path))?;
         println!("📝 Wrote {:?}", path);
@@ -378,7 +393,7 @@ impl ChunkedCommand {
                 );
             }
         }
-        ChunkedBenchConfig {
+        let mut cfg = ChunkedBenchConfig {
             target_url: url,
             method,
             concurrency: self.concurrency,
@@ -391,7 +406,24 @@ impl ChunkedCommand {
             rps: self.rps,
             no_keep_alive: self.cps,
             body,
-        }
+            request_timeout: None,
+        };
+        cfg.request_timeout = match self.request_timeout {
+            None => Some(cfg.auto_request_timeout()),
+            Some(t) if t.is_zero() => None,
+            Some(t) => Some(t),
+        };
+        cfg
+    }
+
+    /// How the summary describes `--request-timeout`.
+    fn request_timeout_fields(&self) -> serde_json::Value {
+        let (mode, secs) = match self.request_timeout {
+            None => ("auto", None),
+            Some(t) if t.is_zero() => ("off", None),
+            Some(t) => ("fixed", Some(t.as_secs_f64())),
+        };
+        serde_json::json!({ "request_timeout_mode": mode, "request_timeout_secs": secs })
     }
 
     async fn run_target(&self, t: &TargetRun) -> anyhow::Result<TargetOutcome> {
@@ -416,6 +448,9 @@ impl ChunkedCommand {
             }
             if self.export_requests {
                 eprintln!("Note: --export-requests requires --spec (skipped)");
+            }
+            if self.overlap_operations {
+                eprintln!("Note: --overlap-operations requires --spec (single operation)");
             }
         }
         let method = reqwest::Method::from_bytes(self.method.to_uppercase().as_bytes())
@@ -557,19 +592,40 @@ impl ChunkedCommand {
 
         let mut outcome = TargetOutcome::default();
         let mut export_records: Vec<serde_json::Value> = Vec::new();
-        for (label, method_str, url, op_path, json_seed) in &planned {
-            let method = match reqwest::Method::from_bytes(method_str.as_bytes()) {
-                Ok(m) => m,
-                Err(_) => {
-                    eprintln!("{p}✗ {}: invalid method `{}`", label, method_str);
-                    outcome.run_failed = true;
-                    continue;
+        // Sequential: each operation starts after the previous one's in-flight
+        // uploads finish. Overlapped: operation k starts k load windows in, as
+        // the previous window closes, so starts never pause between operations.
+        let pass_started = tokio::time::Instant::now();
+        let in_parallel = if self.overlap_operations {
+            planned.len().max(1)
+        } else {
+            1
+        };
+        let mut runs = futures::stream::iter(planned.iter().enumerate())
+            .map(|(i, (label, method_str, url, op_path, json_seed))| async move {
+                if self.overlap_operations {
+                    tokio::time::sleep_until(pass_started + self.duration * i as u32).await;
                 }
+                let result = match reqwest::Method::from_bytes(method_str.as_bytes()) {
+                    Ok(method) => {
+                        println!();
+                        println!("{p}→ {} {}  ({})", method_str, op_path, url);
+                        let cfg =
+                            self.bench_config(url.clone(), method, &t.headers, json_seed.as_ref());
+                        Some(run(cfg).await)
+                    }
+                    Err(_) => None,
+                };
+                (label, method_str, url, op_path, result)
+            })
+            .buffered(in_parallel);
+        while let Some((label, method_str, url, op_path, result)) = runs.next().await {
+            let Some(result) = result else {
+                eprintln!("{p}✗ {}: invalid method `{}`", label, method_str);
+                outcome.run_failed = true;
+                continue;
             };
-            println!();
-            println!("{p}→ {} {}  ({})", method_str, op_path, url);
-            let cfg = self.bench_config(url.clone(), method, &t.headers, json_seed.as_ref());
-            match run(cfg).await {
+            match result {
                 Ok(r) => {
                     print_result(p, label, &r);
                     outcome.absorb(&r);
@@ -584,6 +640,12 @@ impl ChunkedCommand {
                     outcome.run_failed = true;
                 }
             }
+        }
+        drop(runs);
+        if self.overlap_operations {
+            // Operations ran concurrently, so summing their runtimes would
+            // double count; use the pass's wall clock instead.
+            outcome.elapsed = pass_started.elapsed();
         }
 
         if self.export_requests {
@@ -713,6 +775,8 @@ fn export_record(
             "load_window_ms": r.load_window.as_millis(),
             "start_rate_per_sec": r.start_rate_per_sec,
             "upload_mbps": r.upload_mbps,
+            "timed_out": r.timed_out,
+            "request_timeout_ms": r.request_timeout.map(|t| t.as_millis()),
             "avg_latency_ms": r.avg_latency_ms,
             "p50_ms": r.p50_ms,
             "p95_ms": r.p95_ms,
@@ -746,7 +810,15 @@ fn print_result(prefix: &str, label: &str, r: &ChunkedBenchResult) {
     line(format!("Chunked bench [{}] complete in {:?}", label, r.elapsed));
     line(format!("  Total requests: {}", r.total_requests));
     line(format!("  Successful:     {}", r.successful));
-    line(format!("  Failed:         {}", r.failed));
+    match r.request_timeout {
+        Some(t) if r.timed_out > 0 => line(format!(
+            "  Failed:         {} ({} timed out after {:.1}s)",
+            r.failed,
+            r.timed_out,
+            t.as_secs_f64()
+        )),
+        _ => line(format!("  Failed:         {}", r.failed)),
+    }
     line(format!("  Bytes sent:     {}", r.bytes_sent));
     line(format!(
         "  RPS (started):  {:.2} req/s over the {:.1}s load window",
@@ -858,6 +930,8 @@ mod tests {
             rounds: None,
             repeat_until: None,
             keep_rounds: None,
+            request_timeout: None,
+            overlap_operations: false,
         }
     }
 
@@ -1069,6 +1143,115 @@ mod tests {
         assert!((f["measured_rps"].as_f64().unwrap() - 30.0 / 77.0).abs() < 1e-12);
         let mbps = 30.0 * 1_048_576.0 * 8.0 / 77.0 / 1e6;
         assert!((f["upload_mbps"].as_f64().unwrap() - mbps).abs() < 1e-12);
+    }
+
+    /// Records when each request arrives (by path), then holds the response
+    /// for `hold` so every operation has an in-flight drain.
+    async fn slow_receiver(
+        hold: Duration,
+    ) -> (String, Arc<std::sync::Mutex<Vec<(String, std::time::Instant)>>>) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let arrivals = Arc::new(std::sync::Mutex::new(Vec::new()));
+        let log = arrivals.clone();
+        tokio::spawn(async move {
+            loop {
+                let (mut sock, _) = listener.accept().await.unwrap();
+                let log = log.clone();
+                tokio::spawn(async move {
+                    let mut buf = Vec::new();
+                    let mut chunk = [0u8; 4096];
+                    loop {
+                        // One request: headers, then a chunked body ending in 0\r\n\r\n.
+                        let header_end = loop {
+                            if let Some(i) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+                                break i + 4;
+                            }
+                            match sock.read(&mut chunk).await {
+                                Ok(0) | Err(_) => return,
+                                Ok(n) => buf.extend_from_slice(&chunk[..n]),
+                            }
+                        };
+                        let head = String::from_utf8_lossy(&buf[..header_end]).to_string();
+                        let path = head.split_whitespace().nth(1).unwrap_or("").to_string();
+                        log.lock().unwrap().push((path, std::time::Instant::now()));
+                        let body_end = loop {
+                            if let Some(i) =
+                                buf[header_end..].windows(5).position(|w| w == b"0\r\n\r\n")
+                            {
+                                break header_end + i + 5;
+                            }
+                            match sock.read(&mut chunk).await {
+                                Ok(0) | Err(_) => return,
+                                Ok(n) => buf.extend_from_slice(&chunk[..n]),
+                            }
+                        };
+                        buf.drain(..body_end);
+                        tokio::time::sleep(hold).await;
+                        let ok = b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\n\r\n";
+                        if sock.write_all(ok).await.is_err() {
+                            return;
+                        }
+                    }
+                });
+            }
+        });
+        (url, arrivals)
+    }
+
+    async fn second_operation_start(overlap: bool) -> (Duration, serde_json::Value) {
+        let (url, arrivals) = slow_receiver(Duration::from_millis(1200)).await;
+        let dir = tempfile::tempdir().unwrap();
+        let spec = dir.path().join("api.json");
+        let op = |id: &str| {
+            serde_json::json!({"post": {
+                "operationId": id,
+                "requestBody": {"content": {"application/octet-stream": {"schema": {"type": "string"}}}},
+                "responses": {"200": {"description": "ok"}}
+            }})
+        };
+        std::fs::write(
+            &spec,
+            serde_json::json!({
+                "openapi": "3.0.3", "info": {"title": "t", "version": "1"},
+                "paths": {"/a": op("a"), "/b": op("b")}
+            })
+            .to_string(),
+        )
+        .unwrap();
+        let mut c = cmd(Some(&url), None);
+        c.spec = Some(spec);
+        c.duration = Duration::from_millis(400);
+        c.overlap_operations = overlap;
+        let started = std::time::Instant::now();
+        let (ok, summary) = c.execute_pass(dir.path()).await.unwrap();
+        assert!(ok);
+        let first_b = arrivals
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|(path, _)| path == "/b")
+            .map(|(_, at)| at.duration_since(started))
+            .expect("operation /b ran");
+        (first_b, summary)
+    }
+
+    #[tokio::test]
+    async fn overlap_operations_starts_the_next_operation_when_the_window_closes() {
+        // Each request is held 1.2s against a 0.4s load window.
+        let (sequential, seq_summary) = second_operation_start(false).await;
+        let (overlapped, overlap_summary) = second_operation_start(true).await;
+        assert!(sequential >= Duration::from_millis(1200), "sequential /b at {sequential:?}");
+        assert!(overlapped < Duration::from_millis(900), "overlapped /b at {overlapped:?}");
+
+        assert_eq!(overlap_summary["overlap_operations"], true);
+        assert_eq!(seq_summary["overlap_operations"], false);
+        // Overlapped elapsed is the pass's wall clock, not the sum of runtimes.
+        let wall = overlap_summary["elapsed_seconds"].as_f64().unwrap();
+        let summed = seq_summary["elapsed_seconds"].as_f64().unwrap();
+        assert!(wall < summed - 0.5, "overlap {wall}s vs sequential {summed}s");
+        assert_eq!(overlap_summary["request_timeout_mode"], "auto");
     }
 
     #[test]
