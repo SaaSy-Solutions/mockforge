@@ -11,6 +11,7 @@ use crate::{
     error::{ApiError, ApiResult},
     middleware::AuthUser,
     models::{AuditEventType, AuditLog},
+    store::with_org_transaction,
     AppState,
 };
 
@@ -46,13 +47,7 @@ pub async fn reconcile(
     {
         return Err(ApiError::InvalidRequest("Provide an opaque evidence reference of 1–128 letters, digits, dots, underscores or hyphens".into()));
     }
-    let mut transaction = state.db.runtime_pool().begin().await?;
-    sqlx::query("SELECT set_config('app.current_org_id', $1, true)")
-        .bind(org_id.to_string())
-        .execute(&mut *transaction)
-        .await?;
-    let tx = &mut transaction;
-    let response: ApiResult<ReconcileResponse> = async {
+    let response = with_org_transaction(state.db.runtime_pool(), org_id, |tx| Box::pin(async move {
         // Hold the administrator row against concurrent revocation until commit.
         let admin: Option<bool> = sqlx::query_scalar("SELECT is_admin FROM users WHERE id=$1 FOR SHARE")
             .bind(actor).fetch_optional(&mut **tx).await?;
@@ -107,9 +102,7 @@ pub async fn reconcile(
         AuditLog::create(&mut *tx, org_id, Some(actor), AuditEventType::AdminImpersonation,
             "Reconciled uncertain platform AI usage".into(),
             Some(serde_json::json!({"action":"ai_credit_reconciliation", "reservation_id":reservation_id,"actual_tokens":actual,"evidence_reference":reference})), None, None).await?;
-        Ok(ReconcileResponse { reservation_id, actual_tokens: actual, already_reconciled: false })
-    }.await;
-    let response = response?;
-    transaction.commit().await?;
+        Ok::<_, ApiError>(ReconcileResponse { reservation_id, actual_tokens: actual, already_reconciled: false })
+    })).await?;
     Ok(Json(response))
 }

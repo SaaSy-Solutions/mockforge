@@ -11,11 +11,12 @@ CREATE TABLE free_verified_identities (
     account_deleted_at TIMESTAMPTZ
 );
 -- Request roles must never inspect the salt or enumerate retained identities.
+-- RLS with no policy denies every non-owner role. These tables are not tenant
+-- data, so they get no org policy and no FORCE: only the owner (the
+-- SECURITY DEFINER functions below and the owner-pool cleanup worker) reads them.
 REVOKE ALL ON free_identity_secret,free_verified_identities FROM PUBLIC;
 ALTER TABLE free_identity_secret ENABLE ROW LEVEL SECURITY;
-ALTER TABLE free_identity_secret FORCE ROW LEVEL SECURITY;
 ALTER TABLE free_verified_identities ENABLE ROW LEVEL SECURITY;
-ALTER TABLE free_verified_identities FORCE ROW LEVEL SECURITY;
 
 CREATE FUNCTION preserve_verified_free_identity() RETURNS trigger
 LANGUAGE plpgsql SECURITY DEFINER SET search_path=public,pg_temp AS $$

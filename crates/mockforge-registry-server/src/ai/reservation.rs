@@ -4,7 +4,7 @@ use crate::{
     error::{ApiError, ApiResult},
     handlers::usage::effective_limits,
     models::{Organization, Plan, UsageCounter},
-    store::with_org_context,
+    store::{with_org_context, with_org_transaction},
     AppState,
 };
 use chrono::Datelike;
@@ -187,21 +187,21 @@ pub async fn call_with_budget_attributed(
         // Keep a transaction-scoped execution fence for the provider task.
         // A recovery racing task startup wins before the provider is contacted;
         // the state check below prevents that task from executing afterward.
-        let mut execution = state.db.ai_execution_pool().begin().await?;
-        sqlx::query("SELECT set_config('app.current_org_id',$1,true)")
-            .bind(reservation.org_id.to_string()).execute(&mut *execution).await?;
-        sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,107))")
-            .bind(reservation.id.to_string()).execute(&mut *execution).await?;
-        let pending: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ai_token_reservations WHERE id=$1 AND org_id=$2 AND state='pending' AND execution_fenced)")
-            .bind(reservation.id).bind(reservation.org_id).fetch_one(&mut *execution).await?;
-        if !pending {
-            return Err(ApiError::InvalidRequest("AI call was recovered before execution".into()));
-        }
-        let result = call_llm(call).await;
+        // The fence transaction only reads, so it ends (and releases its
+        // connection) before settlement acquires shared accounting locks,
+        // avoiding pool starvation and reversed lock order.
+        let (reservation_id, org_id) = (reservation.id, reservation.org_id);
+        let result = with_org_transaction(state.db.ai_execution_pool(), org_id, |tx| Box::pin(async move {
+            sqlx::query("SELECT pg_advisory_xact_lock(hashtextextended($1,107))")
+                .bind(reservation_id.to_string()).execute(&mut **tx).await?;
+            let pending: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM ai_token_reservations WHERE id=$1 AND org_id=$2 AND state='pending' AND execution_fenced)")
+                .bind(reservation_id).bind(org_id).fetch_one(&mut **tx).await?;
+            if !pending {
+                return Err(ApiError::InvalidRequest("AI call was recovered before execution".into()));
+            }
+            Ok(call_llm(call).await)
+        })).await?;
         let actual = result.as_ref().ok().map(LlmResult::total_tokens);
-        // Release the execution connection before settlement acquires shared
-        // accounting locks, avoiding pool starvation and reversed lock order.
-        execution.rollback().await?;
         settle(&state, reservation, actual).await?;
         result
     })

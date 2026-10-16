@@ -687,14 +687,26 @@ pub async fn redeploy_deployment(
                         crate::deployment::local_runtime::prepare(&deployment)
                             .map_err(anyhow::Error::msg)
                     });
-            match compiled {
+            // Same log trail as the provider path, so users see the outcome.
+            let (level, message) = match compiled {
                 Ok(_) => {
                     let _ = set_status(DeploymentStatus::Active, None).await;
+                    ("info", "Redeployment completed successfully".to_string())
                 }
                 Err(error) => {
                     let _ = set_status(DeploymentStatus::Failed, Some(error.to_string())).await;
+                    ("error", format!("Redeployment failed: {error}"))
                 }
-            }
+            };
+            let _ = log_deployment_event(
+                rt_pool,
+                bg_org_id,
+                deployment_id_clone,
+                level,
+                &message,
+                None,
+            )
+            .await;
             return;
         }
         // Try to redeploy via Fly.io if configured
