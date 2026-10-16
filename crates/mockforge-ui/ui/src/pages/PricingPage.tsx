@@ -138,21 +138,25 @@ export function PricingPage() {
               </li>
               <li className="flex items-start">
                 <CheckCircle2 className="w-5 h-5 mr-2 text-success-500 flex-shrink-0 mt-0.5" />
-                <span>BYOK for AI features</span>
+                <span>5,000 platform AI tokens/month; BYOK supported</span>
               </li>
               <li className="flex items-start">
                 <CheckCircle2 className="w-5 h-5 mr-2 text-success-500 flex-shrink-0 mt-0.5" />
                 <span>Basic marketplace access</span>
               </li>
               <li className="flex items-start">
-                <XCircle className="w-5 h-5 mr-2 text-muted-foreground flex-shrink-0 mt-0.5" />
-                <span className="text-muted-foreground">No hosted mocks</span>
+                <CheckCircle2 className="w-5 h-5 mr-2 text-success-500 flex-shrink-0 mt-0.5" />
+                <span>1 hosted HTTP mock</span>
               </li>
               <li className="flex items-start">
                 <XCircle className="w-5 h-5 mr-2 text-muted-foreground flex-shrink-0 mt-0.5" />
                 <span className="text-muted-foreground">Community support</span>
               </li>
             </ul>
+            <p className="text-sm text-muted-foreground">
+              Free hosted capacity and monthly allowances are shared across your
+              organizations. Email verification is required for hosting and platform AI.
+            </p>
             <Button className="w-full" onClick={handleGetStarted}>
               Get Started Free
             </Button>
@@ -311,9 +315,7 @@ export function PricingPage() {
                 </tr>
                 <tr className="border-b">
                   <td className="p-4 font-medium">Hosted Mocks</td>
-                  <td className="text-center p-4">
-                    <XCircle className="w-5 h-5 mx-auto text-muted-foreground" />
-                  </td>
+                  <td className="text-center p-4">1 HTTP mock</td>
                   <td className="text-center p-4">
                     <CheckCircle2 className="w-5 h-5 mx-auto text-success-500" />
                   </td>
@@ -323,7 +325,7 @@ export function PricingPage() {
                 </tr>
                 <tr className="border-b">
                   <td className="p-4 font-medium">AI Tokens (Included)</td>
-                  <td className="text-center p-4">BYOK only</td>
+                  <td className="text-center p-4">5K/month</td>
                   <td className="text-center p-4">100K</td>
                   <td className="text-center p-4">1M</td>
                 </tr>

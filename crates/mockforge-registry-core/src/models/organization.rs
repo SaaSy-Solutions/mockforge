@@ -394,6 +394,14 @@ impl OrgRole {
     }
 }
 
+impl Plan {
+    /// Default entitlements for a newly created or downgraded organization.
+    #[cfg(feature = "postgres")]
+    pub fn default_limits(self) -> serde_json::Value {
+        get_default_limits(self)
+    }
+}
+
 /// Get default limits for a plan
 #[cfg(feature = "postgres")]
 fn get_default_limits(plan: Plan) -> serde_json::Value {
@@ -408,11 +416,11 @@ fn get_default_limits(plan: Plan) -> serde_json::Value {
             "max_templates_published": 3,
             "max_scenarios_published": 1,
             "max_publisher_keys": 3, // ed25519 keys per user (active count)
-            "ai_tokens_per_month": 0, // BYOK only
-            "hosted_mocks": false,
-            "max_hosted_mocks": 0,
-            "mock_request_body_mb": 1, // tight cap even if user is force-upgraded
-            "mock_rps_limit": 10, // 10 RPS — sanity guard if hosted_mocks ever flips on
+            "ai_tokens_per_month": 5000, // capped platform AI evaluation allowance
+            "hosted_mocks": true,
+            "max_hosted_mocks": 1,
+            "mock_request_body_mb": 1, // one-megabyte cap for the free hosted mock
+            "mock_rps_limit": 10, // 10 RPS per free hosted mock
             "runner_seconds_per_month": 0, // no test execution on Free
             "max_concurrent_runs": 0,
             "max_tunnel_reservations": 1, // 1 ephemeral subdomain
@@ -766,9 +774,9 @@ mod tests {
         assert_eq!(limits["max_plugins_published"], 1);
         assert_eq!(limits["max_templates_published"], 3);
         assert_eq!(limits["max_scenarios_published"], 1);
-        assert_eq!(limits["ai_tokens_per_month"], 0);
-        assert_eq!(limits["hosted_mocks"], false);
-        assert_eq!(limits["max_hosted_mocks"], 0);
+        assert_eq!(limits["ai_tokens_per_month"], 5000);
+        assert_eq!(limits["hosted_mocks"], true);
+        assert_eq!(limits["max_hosted_mocks"], 1);
         assert_eq!(limits["mock_request_body_mb"], 1);
         assert_eq!(limits["mock_rps_limit"], 10);
     }

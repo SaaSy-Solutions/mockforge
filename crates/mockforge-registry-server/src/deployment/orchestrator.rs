@@ -67,6 +67,7 @@ pub struct DeploymentOrchestrator {
     db: Arc<PgPool>,
     flyio_client: Option<FlyioClient>,
     flyio_org_slug: Option<String>,
+    storage: Option<crate::storage::PluginStorage>,
 }
 
 impl DeploymentOrchestrator {
@@ -81,22 +82,58 @@ impl DeploymentOrchestrator {
             db,
             flyio_client,
             flyio_org_slug: flyio_org_slug.or_else(|| std::env::var("FLYIO_ORG_SLUG").ok()),
+            storage: None,
         }
+    }
+
+    /// Use the registry's tenant-scoped upload storage for local OpenAPI mocks.
+    pub fn with_storage(mut self, storage: crate::storage::PluginStorage) -> Self {
+        self.storage = Some(storage);
+        self
     }
 
     /// Start the orchestrator background task
     pub fn start(self: Arc<Self>) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
-            let mut interval = interval(Duration::from_secs(10)); // Check every 10 seconds
-
-            loop {
-                interval.tick().await;
-
-                if let Err(e) = self.process_pending_deployments().await {
-                    error!("Error processing pending deployments: {}", e);
+            // Slow provider cleanup must not block new deployment polling.
+            // Both loops belong to this task, so aborting it cancels both
+            // futures instead of leaving an orphan cleanup task running.
+            let cleanup = async {
+                let mut interval = interval(Duration::from_secs(10));
+                loop {
+                    interval.tick().await;
+                    if let Err(e) = self.process_requested_deletions().await {
+                        error!("Error reconciling requested deletions: {}", e);
+                    }
                 }
-            }
+            };
+            let provisioning = async {
+                let mut interval = interval(Duration::from_secs(10));
+                loop {
+                    interval.tick().await;
+                    if let Err(e) = self.process_pending_deployments().await {
+                        error!("Error processing pending deployments: {}", e);
+                    }
+                }
+            };
+            tokio::join!(cleanup, provisioning);
         })
+    }
+
+    /// Retry only durable, authorized deletion intents, including legacy
+    /// soft-deleted rows whose resources were never confirmed absent.
+    async fn process_requested_deletions(&self) -> Result<()> {
+        let ids: Vec<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM hosted_mocks WHERE (capacity_reserved OR deleted_at IS NULL) AND deletion_requested_at IS NOT NULL ORDER BY updated_at ASC LIMIT 10",
+        )
+        .fetch_all(self.db.as_ref())
+        .await?;
+        for id in ids {
+            if let Err(error) = self.cleanup_deployment(id, false).await {
+                warn!("Cleanup remains unconfirmed for {}: {}", id, error);
+            }
+        }
+        Ok(())
     }
 
     /// Process pending deployments
@@ -112,6 +149,7 @@ impl DeploymentOrchestrator {
             WHERE status IN ('pending', 'deploying')
             AND deployment_url IS NULL
             AND deleted_at IS NULL
+            AND deletion_requested_at IS NULL
             ORDER BY created_at ASC
             LIMIT 10
             "#,
@@ -156,6 +194,30 @@ impl DeploymentOrchestrator {
 
         let pool = self.db.as_ref();
 
+        let mut lifecycle = match crate::handlers::hosted_capacity::LifecycleGuard::acquire(
+            pool,
+            deployment.org_id,
+            deployment.id,
+        )
+        .await
+        {
+            Ok(guard) => guard,
+            Err(crate::error::ApiError::Conflict(_)) => return Ok(()),
+            Err(error) => return Err(error.into()),
+        };
+        let Some(current) = lifecycle.find().await? else {
+            return Ok(());
+        };
+        if lifecycle.deletion_requested().await? {
+            return Ok(());
+        }
+        if !matches!(current.status(), DeploymentStatus::Pending | DeploymentStatus::Deploying)
+            || current.deployment_url.is_some()
+        {
+            return Ok(());
+        }
+        let deployment = &current;
+
         // Update status to deploying
         HostedMock::update_status(pool, deployment.id, DeploymentStatus::Deploying, None)
             .await
@@ -165,12 +227,30 @@ impl DeploymentOrchestrator {
             .await
             .context("Failed to create deployment log")?;
 
-        // Deploy using Fly.io if configured
-        if let Some(ref flyio_client) = self.flyio_client {
-            self.deploy_to_flyio(flyio_client, deployment).await?;
-        } else {
+        // Record the selected backend before the first provider request. A
+        // missing machine ID after a timeout must not imply a local deployment.
+        let org = crate::models::Organization::find_by_id(pool, deployment.org_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Organization not found"))?;
+        let subscription =
+            crate::models::Subscription::find_by_org(pool, deployment.org_id).await?;
+        let plan = crate::handlers::entitlements::resolve_effective_plan(
+            org.plan(),
+            subscription.as_ref(),
+            chrono::Utc::now(),
+        );
+        // Free mocks have no externally reachable backend that bypasses the
+        // registry's hard request cap. Paid isolated hosting is unchanged.
+        // Free deployments never reach a configured provider.
+        let fly = self.flyio_client.as_ref().filter(|_| plan != crate::models::Plan::Free);
+        let backend = fly.map_or("multitenant", |_| "flyio");
+        sqlx::query("UPDATE hosted_mocks SET metadata_json = jsonb_set(COALESCE(metadata_json, '{}'::jsonb), '{hosting_backend}', to_jsonb($2::text)) WHERE id = $1 AND org_id = $3")
+            .bind(deployment.id).bind(backend).bind(deployment.org_id).execute(pool).await?;
+
+        match fly {
+            Some(flyio_client) => self.deploy_to_flyio(flyio_client, deployment).await?,
             // Fallback: use multitenant router (single process routing)
-            self.deploy_to_multitenant_router(deployment).await?;
+            None => self.deploy_to_multitenant_router(deployment).await?,
         }
 
         // Update status to active
@@ -542,6 +622,17 @@ impl DeploymentOrchestrator {
 
         let pool = self.db.as_ref();
 
+        let mut lifecycle = crate::handlers::hosted_capacity::LifecycleGuard::acquire(
+            pool,
+            deployment.org_id,
+            deployment.id,
+        )
+        .await?;
+        let current =
+            lifecycle.find().await?.ok_or_else(|| anyhow::anyhow!("Deployment not found"))?;
+        lifecycle.ensure_not_deleting().await?;
+        let deployment = &current;
+
         HostedMock::update_status(pool, deployment.id, DeploymentStatus::Deploying, None)
             .await
             .context("Failed to update deployment status")?;
@@ -550,7 +641,9 @@ impl DeploymentOrchestrator {
             .await
             .context("Failed to create deployment log")?;
 
-        if let Some(ref flyio_client) = self.flyio_client {
+        if super::local_runtime::is_local(deployment) {
+            self.deploy_to_multitenant_router(deployment).await?;
+        } else if let Some(ref flyio_client) = self.flyio_client {
             self.redeploy_to_flyio(flyio_client, deployment).await?;
         } else {
             // For multitenant router, just restart
@@ -720,10 +813,25 @@ impl DeploymentOrchestrator {
     async fn deploy_to_multitenant_router(&self, deployment: &HostedMock) -> Result<()> {
         let pool = self.db.as_ref();
 
+        let refreshed = if deployment.openapi_spec_url.is_some() {
+            let storage = self
+                .storage
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Uploaded specification storage is unavailable"))?;
+            super::spec_source::refresh(pool, storage, deployment).await?
+        } else {
+            deployment.clone()
+        };
+        let deployment = &refreshed;
+
+        // Invalid configuration cannot be reported as an active deployment.
+        let _router = super::local_runtime::prepare(deployment).map_err(anyhow::Error::msg)?;
+
         // For multitenant router, we just need to set the deployment URL
         // The router will handle routing based on org/project/env
         let base_url = std::env::var("MOCKFORGE_BASE_URL")
-            .unwrap_or_else(|_| "https://mocks.mockforge.dev".to_string());
+            .unwrap_or_else(|_| "https://registry.mockforge.dev".to_string());
+        let base_url = base_url.trim_end_matches('/');
 
         let deployment_url =
             format!("{}/mocks/{}/{}", base_url, deployment.org_id, deployment.slug);
@@ -760,57 +868,69 @@ impl DeploymentOrchestrator {
 
     /// Delete a deployment
     pub async fn delete_deployment(&self, deployment_id: Uuid) -> Result<()> {
+        self.cleanup_deployment(deployment_id, true).await
+    }
+
+    async fn cleanup_deployment(&self, deployment_id: Uuid, request_new: bool) -> Result<()> {
         let pool = self.db.as_ref();
 
-        let deployment = HostedMock::find_by_id(pool, deployment_id)
-            .await
-            .context("Failed to find deployment")?
+        let deployment =
+            sqlx::query_as::<_, HostedMock>("SELECT * FROM hosted_mocks WHERE id = $1")
+                .bind(deployment_id)
+                .fetch_optional(pool)
+                .await
+                .context("Failed to find deployment")?
+                .ok_or_else(|| anyhow::anyhow!("Deployment not found"))?;
+
+        let mut lifecycle = crate::handlers::hosted_capacity::LifecycleGuard::acquire(
+            pool,
+            deployment.org_id,
+            deployment.id,
+        )
+        .await?;
+        let deployment = lifecycle
+            .find_for_cleanup()
+            .await?
             .ok_or_else(|| anyhow::anyhow!("Deployment not found"))?;
 
-        // Update status to deleting
-        HostedMock::update_status(pool, deployment_id, DeploymentStatus::Deleting, None).await?;
+        if !request_new && !lifecycle.deletion_requested().await? {
+            return Ok(());
+        }
+        if deployment.deleted_at.is_some() {
+            let reserved: bool = sqlx::query_scalar(
+                "SELECT capacity_reserved FROM hosted_mocks WHERE id = $1 AND org_id = $2",
+            )
+            .bind(deployment_id)
+            .bind(deployment.org_id)
+            .fetch_one(pool)
+            .await?;
+            if !reserved {
+                return Ok(());
+            }
+        }
+        // This also rotates unsuccessful attempts behind other queued intents.
+        lifecycle.request_deletion().await?;
 
         DeploymentLog::create(pool, deployment_id, "info", "Starting deletion", None).await?;
 
-        // Delete from Fly.io if deployed there
-        if let Some(ref flyio_client) = self.flyio_client {
-            if let Some(machine_id) =
-                deployment.metadata_json.get("flyio_machine_id").and_then(|v| v.as_str())
-            {
-                // Reconstruct app name from org_id + slug (same logic as deploy)
-                let app_name = format!(
-                    "mockforge-{}-{}",
-                    deployment
-                        .org_id
-                        .to_string()
-                        .replace('-', "")
-                        .chars()
-                        .take(8)
-                        .collect::<String>(),
-                    deployment.slug
-                );
-
-                if let Err(e) = flyio_client.delete_machine(&app_name, machine_id).await {
-                    warn!("Failed to delete Fly.io machine: {}", e);
-                }
-                // Delete the Fly.io app after removing the machine
-                if let Err(e) = flyio_client.delete_app(&app_name).await {
-                    warn!("Failed to delete Fly.io app {}: {}", app_name, e);
-                }
-            }
+        let local =
+            deployment.metadata_json.get("hosting_backend").and_then(|value| value.as_str())
+                == Some("multitenant");
+        if !local {
+            let flyio_client = self.flyio_client.as_ref().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Hosted deployment provider is not configured; cannot confirm cleanup"
+                )
+            })?;
+            let app_name = format!(
+                "mockforge-{}-{}",
+                &deployment.org_id.simple().to_string()[..8],
+                deployment.slug
+            );
+            flyio_client.delete_app_confirmed(&app_name).await?;
         }
 
-        // Soft delete in database
-        sqlx::query(
-            r#"
-            UPDATE hosted_mocks
-            SET deleted_at = NOW()
-            WHERE id = $1
-            "#,
-        )
-        .bind(deployment_id)
-        .execute(pool)
-        .await?;
+        lifecycle.complete_deletion().await?;
 
         DeploymentLog::create(pool, deployment_id, "info", "Deletion completed", None).await?;
 
@@ -865,3 +985,11 @@ mod tests {
         assert!(!env.contains_key("SENTRY_DSN"));
     }
 }
+
+#[cfg(test)]
+#[path = "orchestrator_cleanup_tests.rs"]
+mod cleanup_reconciliation_tests;
+
+#[cfg(test)]
+#[path = "orchestrator_free_boundary_tests.rs"]
+mod free_provider_boundary_tests;

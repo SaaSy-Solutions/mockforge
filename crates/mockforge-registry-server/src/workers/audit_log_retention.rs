@@ -27,6 +27,9 @@ pub fn start_audit_log_retention_worker(pool: PgPool) {
         let mut interval = tokio::time::interval(RETENTION_TICK);
         loop {
             interval.tick().await;
+            if let Err(error) = purge_deleted_free_identities(&pool).await {
+                error!(%error, "Free identity retention pass failed");
+            }
             match AuditLog::purge_expired(&pool).await {
                 Ok(0) => {}
                 Ok(n) => info!(deleted = n, "audit log retention: purged expired rows"),
@@ -34,4 +37,12 @@ pub fn start_audit_log_retention_worker(pool: PgPool) {
             }
         }
     });
+}
+
+/// Retain deleted-account quota identity bindings for 35 days; daily execution
+/// removes them within 36 days under normal worker operation. Active identities
+/// remain attached to their existing account, including verified email aliases.
+pub async fn purge_deleted_free_identities(pool: &PgPool) -> Result<u64, sqlx::Error> {
+    Ok(sqlx::query("DELETE FROM free_verified_identities WHERE account_deleted_at < NOW()-INTERVAL '35 days' AND NOT EXISTS(SELECT 1 FROM users WHERE users.id=free_verified_identities.owner_user_id)")
+        .execute(pool).await?.rows_affected())
 }

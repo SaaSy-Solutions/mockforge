@@ -79,8 +79,9 @@ async fn hosted_capture_workspace_http_lifecycle() {
         .send()
         .await
         .unwrap();
-    assert!(created.status().is_success());
+    let status = created.status();
     let created: Value = created.json().await.unwrap();
+    assert!(status.is_success(), "{status}: {created}");
     assert_eq!(created["workspace_id"], json!(workspace));
     let id = Uuid::parse_str(created["id"].as_str().unwrap()).unwrap();
     let detail: Value = own
@@ -340,6 +341,13 @@ async fn hosted_capture_workspace_http_lifecycle() {
         .status()
         .is_client_error());
     for org in [org, foreign_org] {
+        // Synthetic deployments have no provider resources, so they can be
+        // removed directly to satisfy the unfinished-cleanup guard (#1229).
+        sqlx::query("DELETE FROM hosted_mocks WHERE org_id=$1")
+            .bind(org)
+            .execute(&pool)
+            .await
+            .unwrap();
         sqlx::query("DELETE FROM organizations WHERE id=$1")
             .bind(org)
             .execute(&pool)

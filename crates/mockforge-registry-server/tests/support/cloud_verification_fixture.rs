@@ -56,6 +56,13 @@ pub(crate) async fn register_and_setup(base_url: &str, pool: &PgPool) -> E2e {
         .or_else(|| body["token"].as_str())
         .expect("no access token")
         .to_string();
+    // Stand in for the email-verification link: Free hosting and platform AI
+    // require a verified owner (#1229).
+    sqlx::query("UPDATE users SET is_verified = TRUE WHERE email = $1")
+        .bind(&email)
+        .execute(pool)
+        .await
+        .expect("verify fixture owner failed");
 
     let org_slug = format!("ver-{}", ts);
     let res = client

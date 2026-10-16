@@ -17,6 +17,9 @@ pub struct Database {
     /// when it is unset this simply aliases `pool`. Handlers that rely on the RLS backstop MUST run
     /// their queries through `with_org_context` to bind `app.current_org_id`.
     runtime_pool: PgPool,
+    /// Bounded provider execution fences use the restricted request role but
+    /// separate connections so slow providers cannot consume the request pool.
+    ai_execution_pool: PgPool,
     /// True when `APP_DATABASE_URL` was set, i.e. `runtime_pool` is its own
     /// pool (which may still point at the same role; see `check_rls_roles`).
     runtime_is_separate: bool,
@@ -174,9 +177,13 @@ impl Database {
         let runtime_is_separate =
             std::env::var("APP_DATABASE_URL").map(|u| !u.trim().is_empty()).unwrap_or(false);
 
+        let ai_execution_pool = PgPoolOptions::new()
+            .max_connections(max_connections.clamp(1, 4))
+            .connect_lazy_with((*runtime_pool.connect_options()).clone());
         Ok(Self {
             pool,
             runtime_pool,
+            ai_execution_pool,
             runtime_is_separate,
         })
     }
@@ -335,11 +342,15 @@ impl Database {
         &self.pool
     }
 
+    /// Provider fences have at most four connections per process, separate
+    /// from API accounting/recovery connections and using the same RLS role.
+    pub fn ai_execution_pool(&self) -> &PgPool {
+        &self.ai_execution_pool
+    }
+
     /// Request-path pool for tenant-isolated queries (#832). Aliases
-    /// [`Self::pool`] unless `APP_DATABASE_URL` is set, in which case it is a
-    /// dedicated `NOBYPASSRLS` role the RLS policies enforce against. The
-    /// request-handling `RegistryStore` is built from this pool; migrations and
-    /// cross-org workers keep using [`Self::pool`].
+    /// [`Self::pool`] unless `APP_DATABASE_URL` supplies a restricted role.
+    /// Migrations and cross-org workers continue using [`Self::pool`].
     pub fn runtime_pool(&self) -> &PgPool {
         &self.runtime_pool
     }

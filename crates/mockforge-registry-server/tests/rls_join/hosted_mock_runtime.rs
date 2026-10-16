@@ -37,12 +37,27 @@ async fn owner_db() -> PgPool {
 
 /// Create a hosted mock through the API (exercises the bound
 /// "Deployment created" log write) and return its id.
+///
+/// No hosting provider runs in this suite, so the deployment is recorded as
+/// served by the local multitenant runtime, with the URL that runtime assigns:
+/// stop/start/delete then complete locally instead of failing closed for lack
+/// of provider confirmation.
 async fn create_deployment(e: &E2e, name: &str) -> String {
     let body = ok(
         "create deployment",
         e.post("/api/v1/hosted-mocks", json!({ "name": name, "config_json": {} })).await,
     );
-    str_field("create deployment", &body, "id")
+    let id = str_field("create deployment", &body, "id");
+    sqlx::query(
+        "UPDATE hosted_mocks SET metadata_json = jsonb_set(COALESCE(metadata_json, '{}'::jsonb), \
+         '{hosting_backend}', '\"multitenant\"'::jsonb), \
+         deployment_url = 'http://127.0.0.1/mocks/' || org_id || '/' || slug WHERE id = $1",
+    )
+    .bind(Uuid::parse_str(&id).unwrap())
+    .execute(&owner_db().await)
+    .await
+    .expect("mark deployment as locally served");
+    id
 }
 
 async fn set_status(db: &PgPool, deployment_id: &str, status: &str) {
