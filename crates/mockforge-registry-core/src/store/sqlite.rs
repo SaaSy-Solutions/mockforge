@@ -2057,6 +2057,14 @@ impl RegistryStore for SqliteRegistryStore {
         }
     }
 
+    async fn find_template_by_name_version_any_org(
+        &self,
+        name: &str,
+        version: &str,
+    ) -> StoreResult<Option<Template>> {
+        self.find_template_by_name_version(name, version).await
+    }
+
     async fn list_templates_by_org(&self, org_id: Uuid) -> StoreResult<Vec<Template>> {
         let rows = sqlx::query("SELECT * FROM templates WHERE org_id = ? ORDER BY created_at DESC")
             .bind(org_id.to_string())
@@ -2212,6 +2220,11 @@ impl RegistryStore for SqliteRegistryStore {
             Some(r) => Ok(Some(row_to_scenario(&r)?)),
             None => Ok(None),
         }
+    }
+
+    async fn find_scenario_by_name_any_org(&self, name: &str) -> StoreResult<Option<Scenario>> {
+        // SQLite has no RLS: the scoped lookup already sees every org.
+        self.find_scenario_by_name(name).await
     }
 
     async fn find_scenario_by_id(&self, id: Uuid) -> StoreResult<Option<Scenario>> {

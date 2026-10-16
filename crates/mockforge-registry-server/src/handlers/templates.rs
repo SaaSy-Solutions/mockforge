@@ -295,10 +295,11 @@ pub async fn publish_template(
 
     // Versions are immutable, and only the owner may touch an existing one.
     // Check before uploading so a rejected publish can't overwrite the
-    // served package at templates/{name}/{version}.
+    // served package at templates/{name}/{version}. Looked up across orgs:
+    // under the caller's RLS org another org's template is invisible.
     if let Some(existing) = state
         .store
-        .find_template_by_name_version(&request.name, &request.version)
+        .find_template_by_name_version_any_org(&request.name, &request.version)
         .await?
     {
         let owned = match existing.org_id {

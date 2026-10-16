@@ -1754,6 +1754,16 @@ impl RegistryStore for PgRegistryStore {
         .await
     }
 
+    async fn find_template_by_name_version_any_org(
+        &self,
+        name: &str,
+        version: &str,
+    ) -> StoreResult<Option<Template>> {
+        Template::find_by_name_version(&self.owner_pool, name, version)
+            .await
+            .map_err(Into::into)
+    }
+
     async fn list_templates_by_org(&self, org_id: Uuid) -> StoreResult<Vec<Template>> {
         crate::store::with_optional_org(&self.pool, Some(org_id), |tx| {
             Box::pin(
@@ -1839,6 +1849,10 @@ impl RegistryStore for PgRegistryStore {
             )
         })
         .await
+    }
+
+    async fn find_scenario_by_name_any_org(&self, name: &str) -> StoreResult<Option<Scenario>> {
+        Scenario::find_by_name(&self.owner_pool, name).await.map_err(Into::into)
     }
 
     async fn find_scenario_by_id(&self, id: Uuid) -> StoreResult<Option<Scenario>> {

@@ -4,6 +4,10 @@
 
 - **[Cloud]** Share Free hosted capacity, monthly request limits and platform AI credits across a verified owner’s organizations. Preserve spent allowances through account recreation, bound deleted identity retention, retain uncertain provider budgets, and require audited usage evidence plus execution fences for stopped-call recovery. Keep provider execution connections separate from API requests. (#834, #868) The Privacy Policy and DPA disclose OpenAI as the platform AI sub-processor, with processing beginning no earlier than November 14, 2026.
 
+### Changed
+
+- **[Contracts]** Move drift-budget evaluation into Contracts behind typed fitness and consumer-impact providers. Preserve Core constructors, concrete registry setters and evaluation entrypoints, while allowing cross-crate consumers to use the Contracts-owned engine. (#636)
+
 ### Security
 
 - **[Cloud]** Remove most of the rustls 0.21 dependency graph (RUSTSEC-2026-0346/0349): the AWS SDK S3/KMS clients drop their legacy hyper 0.14 TLS stack, `oauth2` no longer pulls reqwest 0.11 (registry OAuth code exchange uses the workspace reqwest client with redirects disabled), the SMTP STARTTLS listener moves to tokio-rustls 0.26 with an explicit ring provider, and unused TLS dependencies are dropped from mockforge-tcp. The Kubernetes operator's kube 0.87 client is the only remaining rustls 0.21 user. (#1232)

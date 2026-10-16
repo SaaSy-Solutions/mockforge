@@ -168,6 +168,10 @@ jobs:
         with:
           name: sbom
           path: sbom.json
+          # Human-facing report: no job downloads it and it can be
+          # regenerated from the pushed digest. Keep it short; the org
+          # Actions storage quota is full.
+          retention-days: 7
 
       - name: Install Cosign
         if: github.event_name != 'pull_request'

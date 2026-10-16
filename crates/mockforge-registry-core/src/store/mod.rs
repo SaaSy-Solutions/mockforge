@@ -1526,6 +1526,14 @@ pub trait RegistryStore: Send + Sync + 'static {
         version: &str,
     ) -> StoreResult<Option<Template>>;
 
+    /// Template name+version lookup across every org, outside RLS. Same
+    /// purpose and restriction as [`Self::find_scenario_by_name_any_org`].
+    async fn find_template_by_name_version_any_org(
+        &self,
+        name: &str,
+        version: &str,
+    ) -> StoreResult<Option<Template>>;
+
     async fn list_templates_by_org(&self, org_id: Uuid) -> StoreResult<Vec<Template>>;
 
     async fn search_templates(
@@ -1565,6 +1573,12 @@ pub trait RegistryStore: Send + Sync + 'static {
     ) -> StoreResult<Scenario>;
 
     async fn find_scenario_by_name(&self, name: &str) -> StoreResult<Option<Scenario>>;
+
+    /// Look up a scenario by name across every org, outside RLS. Names (and
+    /// the storage keys derived from them) are global, so publish needs this
+    /// to tell "new name" from "another org's name". Only for that ownership
+    /// check: never return the row to the caller.
+    async fn find_scenario_by_name_any_org(&self, name: &str) -> StoreResult<Option<Scenario>>;
 
     /// Look up a scenario by UUID, regardless of org scoping. Callers that
     /// care about org access control must check `scenario.org_id` themselves.

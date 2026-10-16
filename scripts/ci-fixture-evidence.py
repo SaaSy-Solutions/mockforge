@@ -13,6 +13,7 @@ import re
 import signal
 import subprocess
 import time
+import urllib.error
 import urllib.request
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,6 +33,19 @@ LOCAL_HTTP = urllib.request.build_opener(urllib.request.ProxyHandler({}), NoRedi
 
 class Stopping(Exception):
     pass
+
+
+class ProbeUnavailable(Exception):
+    """The registry health probe got no HTTP answer (timeout or refused)."""
+
+    def __init__(self, daemon):
+        super().__init__("registry health probe unavailable")
+        self.daemon = daemon
+
+
+# A busy runner can stall one 2s /health probe; that is not a fixture failure.
+# Consecutive misses at this count still fail closed.
+MAX_CONSECUTIVE_PROBE_MISSES = 3
 
 
 def docker(*args):
@@ -123,9 +137,14 @@ def sample(args, phase="healthy"):
         raise ValueError("invalid fixture port")
     if STOPPING:
         raise Stopping()
-    with LOCAL_HTTP.open(f"http://127.0.0.1:{args.port}/health", timeout=2) as response:
-        if response.status != 200:
-            raise RuntimeError("owned registry is not healthy")
+    try:
+        with LOCAL_HTTP.open(f"http://127.0.0.1:{args.port}/health", timeout=2) as response:
+            if response.status != 200:
+                raise RuntimeError("owned registry is not healthy")
+    except urllib.error.HTTPError:
+        raise
+    except (TimeoutError, ConnectionError, urllib.error.URLError) as error:
+        raise ProbeUnavailable(daemon) from error
     emit(args, phase, daemon=daemon, services=services, ports=ports, registry_healthy=True)
 
 
@@ -143,11 +162,20 @@ def monitor(args):
     signal.signal(signal.SIGINT, stop)
     signal.signal(signal.SIGTERM, stop)
     deadline = time.monotonic() + args.max_seconds
+    misses = 0
     while not STOPPING and time.monotonic() < deadline:
         try:
             sample(args)
+            misses = 0
         except Stopping:
             return
+        except ProbeUnavailable as error:
+            misses += 1
+            cause = type(error.__cause__).__name__
+            if misses >= MAX_CONSECUTIVE_PROBE_MISSES:
+                emit(args, "health_error", daemon=error.daemon, error=cause, consecutive=misses)
+                raise
+            emit(args, "health_retry", daemon=error.daemon, error=cause, consecutive=misses)
         except Exception as error:
             emit(args, "health_error", error=type(error).__name__)
             raise

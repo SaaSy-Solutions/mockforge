@@ -108,7 +108,7 @@ jobs:
             crates/${{ matrix.crate }}/mutation-results/
             crates/${{ matrix.crate }}/mutation-report.json
             crates/${{ matrix.crate }}/mutation-output.log
-          retention-days: 30
+          retention-days: 7
 
   aggregate-results:
     name: Aggregate Mutation Results

@@ -453,7 +453,9 @@ pub async fn publish_scenario(
     // Only the owner (its org, or its author when it has none) may publish
     // under an existing name, and versions are immutable. Check before
     // uploading so a rejected publish can't overwrite a served package.
-    let existing = state.store.find_scenario_by_name(&name).await?;
+    // Names are global but this route runs under the caller's RLS org, where
+    // another org's scenario is invisible; check ownership across orgs.
+    let existing = state.store.find_scenario_by_name_any_org(&name).await?;
     if let Some(scenario) = &existing {
         let owned = match scenario.org_id {
             Some(org_id) => org_id == org_ctx.org_id,

@@ -80,8 +80,8 @@ CRATES=(
   mockforge-observability
   mockforge-plugin-loader
   mockforge-plugin-sdk
-  mockforge-contracts
   mockforge-openapi
+  mockforge-contracts
   mockforge-intelligence
   mockforge-core
   mockforge-recorder
