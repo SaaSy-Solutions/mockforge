@@ -1,17 +1,13 @@
 import { useState } from 'react';
 import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
 import { ContentCopy as CopyIcon, Key as KeyIcon } from '@mui/icons-material';
-import { fetchJsonWithErrorBody } from '@/services/api/client';
-
-interface ManagementToken {
-  token: string;
-  header: string;
-}
+import { fetchManagementToken, type ManagementToken } from '@/hooks/useManagementToken';
 
 /**
- * Reveals a hosted mock's management token. Control-plane writes on the mock
- * (creating mocks, chaos, time travel, recorder) need it in the
- * X-MockForge-Management-Token header; reads and the mocked API itself do not.
+ * Reveals a hosted mock's management token. Every control-plane route on the
+ * mock (`/__mockforge/*` except the docs page, chaos, time travel, recorder),
+ * reads as well as writes, needs it in the X-MockForge-Management-Token
+ * header; only the mocked API itself does not.
  */
 export function ManagementTokenField({ deploymentId }: { deploymentId: string }) {
   const [value, setValue] = useState<ManagementToken | null>(null);
@@ -21,11 +17,7 @@ export function ManagementTokenField({ deploymentId }: { deploymentId: string })
   const reveal = async () => {
     setError(null);
     try {
-      setValue(
-        (await fetchJsonWithErrorBody(
-          `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/management-token`,
-        )) as ManagementToken,
-      );
+      setValue(await fetchManagementToken(deploymentId));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the token');
     }
@@ -67,8 +59,8 @@ export function ManagementTokenField({ deploymentId }: { deploymentId: string })
       )}
       <Typography variant="caption" color="text.secondary" component="p">
         {value
-          ? `Send as ${value.header} on writes to /__mockforge/* and other MockForge control routes. Reads and your mocked API don't need it.`
-          : 'Needed to change this mock through its management API from curl or your own client.'}
+          ? `Send as ${value.header} on every request to /__mockforge/* and other MockForge control routes, reads included. Your mocked API doesn't need it.`
+          : 'Needed to read or change this mock through its management API from curl or your own client.'}
       </Typography>
       {error && (
         <Typography variant="caption" color="error">

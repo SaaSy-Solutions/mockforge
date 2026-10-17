@@ -12,6 +12,7 @@
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useConnectionStore } from '@/components/layout/ConnectionStatus';
 import { useWebSocket } from './useWebSocket';
+import { managementWsProtocols } from './useManagementToken';
 import { logger } from '@/utils/logger';
 
 export interface HostedMockLogEntry {
@@ -46,6 +47,12 @@ export interface UseHostedMockStreamOptions {
   enabled?: boolean;
   /** Max number of log entries to keep in memory */
   maxLogs?: number;
+  /**
+   * The deployment's management token. The hosted mock rejects
+   * `/__mockforge/ws` without it, so the stream stays disconnected until one
+   * is supplied. It is sent as a WebSocket subprotocol, never in the URL.
+   */
+  managementToken?: string | null;
 }
 
 export interface UseHostedMockStreamReturn {
@@ -75,7 +82,7 @@ export function useHostedMockStream(
   deploymentUrl: string | undefined,
   options: UseHostedMockStreamOptions = {},
 ): UseHostedMockStreamReturn {
-  const { enabled = true, maxLogs = 200 } = options;
+  const { enabled = true, maxLogs = 200, managementToken } = options;
 
   const [logs, setLogs] = useState<HostedMockLogEntry[]>([]);
   const [metrics, setMetrics] = useState<HostedMockMetricsSnapshot | null>(null);
@@ -88,7 +95,8 @@ export function useHostedMockStream(
   const wsUrl = deploymentUrl ? toWsUrl(deploymentUrl) : '';
 
   const { lastMessage, connected, connect, disconnect } = useWebSocket(wsUrl, {
-    autoConnect: enabled && !!deploymentUrl,
+    autoConnect: enabled && !!deploymentUrl && !!managementToken,
+    protocols: managementToken ? managementWsProtocols(managementToken) : undefined,
     reconnect: {
       enabled: true,
       maxAttempts: 10,
