@@ -1,9 +1,5 @@
 ## [Unreleased]
 
-### Security
-
-- **[Cloud]** The registry accepts `?token=` as a credential only on the three SSE stream routes (hosted-mock runtime logs, test-run events, test-generation jobs), which browsers' `EventSource` cannot send headers to. Before, every authenticated route accepted it, so tokens could be put in ordinary URLs and end up in proxy logs, browser history and referrers. The check uses the route template axum matched, so trailing slashes, extra segments or encoded variants of a stream URL don't widen it, and `mfx_` API tokens are never accepted from a URL. Request logs and trace spans now redact `token` and `access_token` query values on every route. Header and session-cookie auth are unchanged. **Breaking** for a client that put a token in the query string of a non-stream route; send `Authorization: Bearer` instead. No client in this repo did. (#1018)
-
 ## [0.3.236] - 2026-10-16
 
 ### Added
