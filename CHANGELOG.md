@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security
+
+- **[HTTP]** MockForge's control plane on the HTTP port now needs a management credential for reads as well as writes, on hosted and self-hosted servers. This covers `/__mockforge/*` (management API, chains, contract diff, fixtures, MockAI, time travel, route chaos, network profiles, scenarios, the live stream), `/api/chaos`, `/api/recorder`, `/api/verification`, `/api/world-state`, `/api/performance` and the `/api/v1/*` management APIs. Before this, self-hosted servers served all of it to anyone who could reach the port (it always bound `0.0.0.0`), and hosted mocks served every read anonymously. Set `MOCKFORGE_MANAGEMENT_TOKEN` (32+ characters) and send it as `X-MockForge-Management-Token`; the admin user's Basic credentials also work. Without a credential the control plane answers 401. `MOCKFORGE_INSECURE_MANAGEMENT=1` turns the check off only when `MOCKFORGE_HTTP_HOST` is a loopback address; otherwise the server refuses to start. Your mocked API, `/health*` and `/__mockforge/docs` stay public. The HTTP server now binds `MOCKFORGE_HTTP_HOST` instead of always `0.0.0.0`. The CLI, SDKs, IDE and browser extensions and the cloud UI send the token. A mock that shares a control router's prefix (for example `POST /api/v1/auth/login`) is no longer caught by the hosted-mock write gate. (#1011)
+
 ## [0.3.236] - 2026-10-16
 
 ### Added
