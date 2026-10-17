@@ -83,7 +83,7 @@ class CloudRecorderApi {
 
   async replaySession(
     sessionId: string,
-    body: { target_url?: string; synthetic_captures?: number } = {},
+    body: { target_url: string },
   ): Promise<{ id: string; status: string; kind: string }> {
     this.guard('replaySession');
     return fetchJsonWithErrorBody(
