@@ -268,7 +268,7 @@ async fn login_rejects_the_published_seed_credentials() {
             .send()
             .await
             .unwrap();
-        // A 4xx "invalid credentials", not a 5xx from an unparseable hash.
+        // A 4xx "invalid credentials", not a 5xx from an unparsable hash.
         assert!(response.status().is_client_error(), "{email}: {}", response.status());
         let body = response.text().await.unwrap();
         assert!(!body.contains("access_token") && !body.contains("user_id"), "{email}: {body}");
