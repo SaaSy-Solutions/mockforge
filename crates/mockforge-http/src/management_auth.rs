@@ -245,6 +245,19 @@ impl ControlPlanePolicy {
         matches!(self.mode, Mode::UnauthenticatedLoopback)
     }
 
+    /// Whether the request presents the configured management token
+    fn token_matches(&self, headers: &HeaderMap) -> bool {
+        let Mode::Credentials {
+            token: Some(expected),
+            ..
+        } = &self.mode
+        else {
+            return false;
+        };
+        presented_tokens(headers)
+            .any(|presented| bool::from(presented.as_bytes().ct_eq(expected.as_bytes())))
+    }
+
     fn authorize(&self, headers: &HeaderMap) -> Result<(), Denial> {
         match &self.mode {
             Mode::UnauthenticatedLoopback => {
@@ -260,13 +273,8 @@ impl ControlPlanePolicy {
                 token: None,
                 admin: None,
             } => Err(Denial::Locked),
-            Mode::Credentials { token, admin } => {
-                let token_ok = token.as_ref().is_some_and(|expected| {
-                    presented_tokens(headers).any(|presented| {
-                        bool::from(presented.as_bytes().ct_eq(expected.as_bytes()))
-                    })
-                });
-                if token_ok {
+            Mode::Credentials { admin, .. } => {
+                if self.token_matches(headers) {
                     return Ok(());
                 }
                 let admin_ok = admin.as_ref().is_some_and(|admin| {
@@ -445,7 +453,17 @@ async fn outer_gate(
 ) -> Response {
     req.extensions_mut().remove::<Authorized>();
     req.extensions_mut().insert(policy.clone());
-    if is_reserved_path(req.uri().path()) && !is_public_reserved(&req) && !is_cors_preflight(&req) {
+    // Check the token here, then take it off the request so the recorder,
+    // request logs and handlers inside never see (or store) it.
+    if policy.token_matches(req.headers()) {
+        req.extensions_mut().insert(Authorized);
+    }
+    strip_token(req.headers_mut(), &policy);
+    if req.extensions().get::<Authorized>().is_none()
+        && is_reserved_path(req.uri().path())
+        && !is_public_reserved(&req)
+        && !is_cors_preflight(&req)
+    {
         if let Err(denial) = policy.authorize(req.headers()) {
             warn!(path = %req.uri().path(), "control-plane request refused");
             return denial.into_response();
@@ -453,6 +471,48 @@ async fn outer_gate(
         req.extensions_mut().insert(Authorized);
     }
     next.run(req).await
+}
+
+/// Remove every place the management token can travel: its header, a
+/// Bearer header carrying it, and `mockforge-token.` WebSocket subprotocols.
+fn strip_token(headers: &mut HeaderMap, policy: &ControlPlanePolicy) {
+    headers.remove(MANAGEMENT_TOKEN_HEADER);
+    if let Mode::Credentials {
+        token: Some(expected),
+        ..
+    } = &policy.mode
+    {
+        let bearer_is_token = headers
+            .get(header::AUTHORIZATION)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.strip_prefix("Bearer "))
+            .is_some_and(|t| bool::from(t.trim().as_bytes().ct_eq(expected.as_bytes())));
+        if bearer_is_token {
+            headers.remove(header::AUTHORIZATION);
+        }
+    }
+    let protocols: Vec<String> = headers
+        .get_all(header::SEC_WEBSOCKET_PROTOCOL)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(','))
+        .map(str::trim)
+        .filter(|p| !p.is_empty())
+        .map(str::to_string)
+        .collect();
+    if protocols.iter().any(|p| p.starts_with(WS_TOKEN_PROTOCOL_PREFIX)) {
+        headers.remove(header::SEC_WEBSOCKET_PROTOCOL);
+        let kept: Vec<&str> = protocols
+            .iter()
+            .map(String::as_str)
+            .filter(|p| !p.starts_with(WS_TOKEN_PROTOCOL_PREFIX))
+            .collect();
+        if let Ok(value) = HeaderValue::from_str(&kept.join(", ")) {
+            if !kept.is_empty() {
+                headers.insert(header::SEC_WEBSOCKET_PROTOCOL, value);
+            }
+        }
+    }
 }
 
 async fn inner_gate(req: Request<Body>, next: Next) -> Response {
@@ -662,6 +722,56 @@ mod tests {
                 assert_eq!(status(app(policy()), Method::GET, path, &headers).await, 200, "{path}");
             }
         }
+    }
+
+    #[tokio::test]
+    async fn the_token_never_reaches_inner_layers_or_handlers() {
+        let echo = |headers: HeaderMap| async move {
+            let seen: Vec<String> = headers
+                .iter()
+                .map(|(k, v)| format!("{k}={}", v.to_str().unwrap_or("")))
+                .collect();
+            seen.join("\n")
+        };
+        let app = install(
+            protect(Router::new().route("/api/chaos/config", get(echo)))
+                .merge(Router::new().route("/__mockforge/ws", get(echo)).route("/mock", get(echo))),
+            ControlPlanePolicy::with_token(TOKEN).unwrap(),
+        );
+        let bearer = format!("Bearer {TOKEN}");
+        let protocol = format!("{WS_PROTOCOL}, {WS_TOKEN_PROTOCOL_PREFIX}{TOKEN}");
+        for (path, headers) in [
+            ("/api/chaos/config", vec![(MANAGEMENT_TOKEN_HEADER, TOKEN)]),
+            ("/api/chaos/config", vec![("authorization", bearer.as_str())]),
+            ("/mock", vec![(MANAGEMENT_TOKEN_HEADER, TOKEN)]),
+            (
+                "/__mockforge/ws",
+                vec![
+                    ("upgrade", "websocket"),
+                    ("sec-websocket-protocol", protocol.as_str()),
+                ],
+            ),
+        ] {
+            let mut req = Request::builder().uri(path);
+            for (k, v) in &headers {
+                req = req.header(*k, *v);
+            }
+            let response = app.clone().oneshot(req.body(Body::empty()).unwrap()).await.unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{path}");
+            let body = axum::body::to_bytes(response.into_body(), 1 << 16).await.unwrap();
+            let body = String::from_utf8_lossy(&body);
+            assert!(!body.contains(TOKEN), "{path} saw the token: {body}");
+        }
+        // A Bearer that is not the management token is left for mock auth.
+        let req = Request::builder()
+            .uri("/mock")
+            .header("authorization", "Bearer user-jwt")
+            .body(Body::empty())
+            .unwrap();
+        let body = axum::body::to_bytes(app.oneshot(req).await.unwrap().into_body(), 1 << 16)
+            .await
+            .unwrap();
+        assert!(String::from_utf8_lossy(&body).contains("Bearer user-jwt"));
     }
 
     #[tokio::test]
