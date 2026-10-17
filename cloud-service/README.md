@@ -1,20 +1,19 @@
 # MockForge Cloud Service - Managed SaaS
 
-**Status:** Production-Ready Infrastructure
-**Last Updated:** 2025-01-27
+**Last Updated:** 2026-10-17
 
-This directory contains production deployment configurations for the fully managed MockForge SaaS service.
+This directory holds operations material (runbook, incident response, launch checklist) for the managed MockForge service.
+
+> **Current production topology.** MockForge Cloud runs in a single region (US East, Ashburn) on one host, behind Cloudflare. There is no multi-region deployment or failover, and no contractual uptime SLA. Production health is checked by an automated smoke test every 15 minutes (`.github/workflows/production-smoke.yml`). The "Architecture" and "Features" sections below describe the original design target, not what runs today.
 
 ---
 
 ## Overview
 
-The MockForge Cloud Service is a fully managed SaaS offering that provides:
-- Automatic scaling
-- Multi-region deployment
-- 99.9% uptime SLA
-- 24/7 monitoring
-- Managed infrastructure
+The MockForge Cloud Service is a managed offering that provides:
+- Hosted mock deployments and the registry API
+- Managed infrastructure (single region, US East)
+- Automated production smoke checks
 - Customer support
 
 ---
@@ -120,7 +119,7 @@ cloud-service/
 
 ### Infrastructure
 
-- ✅ Multi-region deployment
+- ⬜ Multi-region deployment (not deployed; production is single-region)
 - ✅ Auto-scaling (horizontal and vertical)
 - ✅ Load balancing with health checks
 - ✅ Database replication and backups
@@ -173,7 +172,7 @@ cloud-service/
 
 ### Key Metrics
 
-- **Availability**: 99.9% uptime target
+- **Availability**: internal 99.9% goal, not a contractual SLA
 - **Latency**: P95 < 200ms
 - **Error Rate**: < 0.1%
 - **Throughput**: Requests per second
