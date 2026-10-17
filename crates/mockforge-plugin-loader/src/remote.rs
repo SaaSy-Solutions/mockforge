@@ -278,7 +278,7 @@ impl RemotePluginLoader {
                 None => continue,
             };
 
-            if file.name().ends_with('/') {
+            if file.is_dir() {
                 fs::create_dir_all(&outpath).map_err(|e| {
                     PluginLoaderError::fs(format!("Failed to create directory: {}", e))
                 })?;

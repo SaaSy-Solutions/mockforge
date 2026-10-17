@@ -143,12 +143,15 @@ fn read_manifest_from_zip(zip_path: &Path) -> Result<(String, String)> {
     let manifest_name = {
         let mut found = None;
         for i in 0..archive.len() {
-            if let Ok(entry) = archive.by_index(i) {
-                let name = entry.name().to_string();
-                if name == "plugin.yaml" || name == "plugin.yml" {
-                    found = Some(name);
-                    break;
-                }
+            let Ok(entry) = archive.by_index(i) else {
+                continue;
+            };
+            let Ok(name) = entry.name() else {
+                continue;
+            };
+            if name == "plugin.yaml" || name == "plugin.yml" {
+                found = Some(name.into_owned());
+                break;
             }
         }
         found.context("Package does not contain a plugin.yaml or plugin.yml")?
@@ -196,7 +199,8 @@ fn validate_package(package_path: &Path) -> Result<()> {
     let has_wasm = (0..archive.len()).any(|i| {
         archive
             .by_index(i)
-            .map(|entry| entry.name().ends_with(".wasm"))
+            .ok()
+            .and_then(|entry| entry.name().ok().map(|name| name.ends_with(".wasm")))
             .unwrap_or(false)
     });
     if !has_wasm {

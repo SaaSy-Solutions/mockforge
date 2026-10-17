@@ -142,7 +142,7 @@ serde_jcs = { workspace = true }
 
 # OSV bulk-dump support for the osv_sync worker: per-ecosystem advisory
 # zips from https://osv.dev/data.
-zip = { version = "2.2", default-features = false, features = ["deflate"] }
+zip = { version = "9.0", default-features = false, features = ["deflate"] }
 
 # Validation
 validator = { version = "0.20", features = ["derive"] }

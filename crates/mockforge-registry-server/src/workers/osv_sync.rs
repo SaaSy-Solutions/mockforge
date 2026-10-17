@@ -286,7 +286,13 @@ async fn stream_zip_file_to_store(
             if !entry.is_file() {
                 continue;
             }
-            let name = entry.name().to_string();
+            let name = match entry.name() {
+                Ok(name) => name.into_owned(),
+                Err(_) => {
+                    entry_skipped += 1;
+                    continue;
+                }
+            };
             if !name.to_ascii_lowercase().ends_with(".json") {
                 continue;
             }
@@ -469,7 +475,14 @@ fn parse_bulk_zip_sync(bytes: &[u8]) -> anyhow::Result<Vec<OsvImportRecord>> {
         if !entry.is_file() {
             continue;
         }
-        let name = entry.name().to_string();
+        let name = match entry.name() {
+            Ok(name) => name.into_owned(),
+            Err(e) => {
+                warn!("OSV sync: skipping entry with unreadable name: {}", e);
+                skipped += 1;
+                continue;
+            }
+        };
         if !name.to_ascii_lowercase().ends_with(".json") {
             continue;
         }
@@ -589,7 +602,7 @@ mod tests {
         {
             let cursor = std::io::Cursor::new(&mut zip_bytes);
             let mut writer = zip::ZipWriter::new(cursor);
-            let opts: FileOptions<'_, ()> =
+            let opts: FileOptions<'_, '_, ()> =
                 FileOptions::default().compression_method(zip::CompressionMethod::Stored);
 
             writer.start_file("GHSA-good.json", opts).unwrap();
