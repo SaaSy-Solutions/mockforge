@@ -134,8 +134,9 @@ fn every_control_mount_is_protected() {
             }
             // `.route("/__mockforge/...")` inside a router that is itself
             // passed to protect: the router variable is checked at its mount.
-            if call == ".route(" && args.starts_with("\"/__mockforge/routes\"")
-                || call == ".route(" && args.starts_with("\"/__mockforge/coverage\"")
+            if call == ".route("
+                && (args.starts_with("\"/__mockforge/routes\"")
+                    || args.starts_with("\"/__mockforge/coverage\""))
             {
                 continue;
             }
@@ -151,14 +152,20 @@ fn every_control_mount_is_protected() {
     assert!(protected >= 40, "only {protected} protected mounts found; is the scan broken?");
 }
 
-/// `(mount prefix or "" for merge, router fn name)` for each protected mount
-fn protected_mounts(lib: &str) -> Vec<(String, String)> {
+/// `(mount prefix or "" for merge, router fn name)`
+/// for every mount that is not on the public list, protected or not, so an
+/// unprotected control router is probed (and fails) here too.
+fn control_mounts(lib: &str) -> Vec<(String, String)> {
     let mut mounts = Vec::new();
     for (call, args) in mount_calls(lib) {
-        let Some(at) = args.find("management_auth::protect(") else {
+        if call == ".route(" || call == ".nest_service(" || is_public_mount(&args) {
             continue;
+        }
+        let inner = match args.find("management_auth::protect(") {
+            Some(at) => &args[at + "management_auth::protect(".len()..],
+            None if call == ".nest(" => args.split_once(',').map_or("", |(_, rest)| rest.trim()),
+            None => args.as_str(),
         };
-        let inner = &args[at + "management_auth::protect(".len()..];
         let name: String = inner
             .chars()
             .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == ':')
@@ -347,7 +354,7 @@ async fn every_control_route_refuses_bad_credentials() {
 
     let lib = production_source(&read(&manifest_dir().join("src/lib.rs")));
     let mut table: BTreeMap<String, (Method, String)> = BTreeMap::new();
-    for (prefix, router) in protected_mounts(&lib) {
+    for (prefix, router) in control_mounts(&lib) {
         // `routes_router` is a local `Router::new().route(...)` chain in lib.rs.
         let body = if router == "routes_router" {
             ".route(\"/__mockforge/routes\", get(h)).route(\"/__mockforge/coverage\", get(h))"
