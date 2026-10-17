@@ -223,32 +223,32 @@ pub async fn list_scopes() -> Json<Vec<TokenScopeInfo>> {
         TokenScopeInfo {
             value: TokenScope::ReadPackages.to_string(),
             label: "Read Packages".to_string(),
-            description: "Read and search packages".to_string(),
+            description: "Read package metadata, stars and org signing keys".to_string(),
         },
         TokenScopeInfo {
             value: TokenScope::PublishPackages.to_string(),
             label: "Publish Packages".to_string(),
-            description: "Publish new package versions".to_string(),
+            description: "Publish and yank plugins, scenarios and templates".to_string(),
         },
         TokenScopeInfo {
             value: TokenScope::DeployMocks.to_string(),
             label: "Deploy Mocks".to_string(),
-            description: "Deploy hosted mock services".to_string(),
+            description: "Create, update and delete hosted mocks, workspaces, test suites and runs, captures and other cloud mock resources".to_string(),
         },
         TokenScopeInfo {
             value: TokenScope::AdminOrg.to_string(),
             label: "Admin Organization".to_string(),
-            description: "Full organization administration".to_string(),
+            description: "Manage organization settings, members, invitations and trust roots. Token management, SSO and account security always require a signed-in session".to_string(),
         },
         TokenScopeInfo {
             value: TokenScope::ReadUsage.to_string(),
             label: "Read Usage".to_string(),
-            description: "Read usage analytics and metrics".to_string(),
+            description: "Read usage, quota and analytics".to_string(),
         },
         TokenScopeInfo {
             value: TokenScope::ManageBilling.to_string(),
             label: "Manage Billing".to_string(),
-            description: "Manage billing and subscription".to_string(),
+            description: "View and manage billing and subscription".to_string(),
         },
     ])
 }
