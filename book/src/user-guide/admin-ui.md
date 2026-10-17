@@ -32,36 +32,30 @@ Access the interface at `http://localhost:9080` (or the port set with `--admin-p
 Every admin endpoint, reads included, needs a login. When the admin server is
 bound to loopback (`127.0.0.1`, the default outside containers) and no
 credentials are configured, anonymous reads of `/__mockforge/*` are still
-allowed from the same machine and the demo users below are seeded. Bound to any
+allowed from the same machine. Bound to any
 other address (`0.0.0.0`, `::`, every container), the admin server refuses to
 start until you set `MOCKFORGE_ADMIN_PASSWORD` (12+ characters; logs in as
-`admin`, or `MOCKFORGE_ADMIN_USERNAME`, and replaces the demo users),
+`admin`, or `MOCKFORGE_ADMIN_USERNAME`),
 `MOCKFORGE_MANAGEMENT_TOKEN` (32+ characters; send it as
 `X-MockForge-Management-Token` or pass it to `mockforge-tui --token`), or
 `JWT_SECRET`.
 
-On a loopback bind the Admin UI seeds three demo roles:
+There are no built-in users or default passwords, in any environment. To log
+in to the UI, including on loopback, set `MOCKFORGE_ADMIN_PASSWORD`:
 
-#### Admin Role
-- **Username**: `admin`
-- **Password**: `admin123`
-- **Permissions**: Full access to all features
+```bash
+MOCKFORGE_ADMIN_PASSWORD='choose-a-long-password' mockforge serve --admin
+```
 
-#### Editor Role
-- **Username**: `editor`
-- **Password**: `editor123`
-- **Permissions**: Create/edit fixtures, routes, and configuration (no user
-  management)
-
-#### Viewer Role
-- **Username**: `viewer`
-- **Password**: `viewer123`
-- **Permissions**: Read-only access to dashboard, logs, and metrics
+That login has the **Admin** role (full access). The **Editor** (create and
+edit fixtures, routes and configuration, no user management) and **Viewer**
+(read-only dashboard, logs and metrics) roles are honoured in JWTs you sign
+yourself with `JWT_SECRET`.
 
 ### First Login
 
 1. Navigate to the admin URL
-2. Enter your credentials or click "Demo Admin" for quick access
+2. Sign in with `admin` (or `MOCKFORGE_ADMIN_USERNAME`) and your `MOCKFORGE_ADMIN_PASSWORD`
 3. The interface will load with role-appropriate navigation
 
 ## Core Features
@@ -347,7 +341,7 @@ GET /__mockforge/logs/sse
 # Verify admin credentials against the embedded admin server
 curl -X POST http://localhost:9080/__mockforge/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"admin","password":"admin123"}'
+  -d "{\"username\":\"admin\",\"password\":\"$MOCKFORGE_ADMIN_PASSWORD\"}"
 ```
 
 If the curl above returns a token but the browser login page still fails,

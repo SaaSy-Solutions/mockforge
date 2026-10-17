@@ -13,7 +13,8 @@
 //!   `X-MockForge-Management-Token` or `Authorization: Bearer`. The registry
 //!   sets it on every hosted mock and sends it on its private-network calls.
 //! - `MOCKFORGE_ADMIN_PASSWORD` (with optional `MOCKFORGE_ADMIN_USERNAME`,
-//!   default `admin`): the admin UI login, replacing the built-in demo users.
+//!   default `admin`): the admin UI login. It is the only login the admin UI
+//!   ever creates; there are no built-in users (#1016).
 //! - `JWT_SECRET`: the operator signs admin JWTs themselves.
 
 use std::fmt;
@@ -267,9 +268,8 @@ pub fn policy_for_bind(addr: SocketAddr, env: &AdminAuthEnv) -> Result<AdminAcce
              MOCKFORGE_ADMIN_HOST."
         ));
     }
-    // The built-in demo users (admin/admin123) exist only when neither an
-    // admin password nor a JWT secret is configured. Their tokens must not
-    // open a network-reachable server, so JWTs are refused in that case.
+    // With only a management token there is no admin login and no operator
+    // JWT secret, so no admin UI JWT can be legitimate: refuse them.
     let accept_jwt = env.admin_password || env.jwt_secret;
     Ok(AdminAccessPolicy::authenticated(accept_jwt, env.management_token.clone()))
 }
@@ -347,10 +347,10 @@ mod tests {
     }
 
     #[test]
-    fn non_loopback_token_only_refuses_demo_user_jwts() {
+    fn non_loopback_token_only_refuses_jwts() {
         let policy = policy_for_bind(addr("[::]:9080"), &token_env()).expect("token configured");
         assert!(!policy.allows_anonymous_loopback_reads());
-        assert!(!policy.accepts_jwt(), "demo-user JWTs must not open a reachable server");
+        assert!(!policy.accepts_jwt(), "no JWT can be legitimate without a login or secret");
     }
 
     #[test]

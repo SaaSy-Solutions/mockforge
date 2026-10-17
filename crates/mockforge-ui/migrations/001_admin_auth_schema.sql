@@ -50,34 +50,5 @@ CREATE INDEX IF NOT EXISTS idx_login_attempts_username ON login_attempts(usernam
 CREATE INDEX IF NOT EXISTS idx_login_attempts_created_at ON login_attempts(created_at);
 CREATE INDEX IF NOT EXISTS idx_login_attempts_ip ON login_attempts(ip_address);
 
--- Insert default admin user (password: admin123)
--- Password hash is bcrypt hash of "admin123" with cost 12
--- In production, this should be changed immediately
-INSERT OR IGNORE INTO admin_users (id, username, password_hash, role, email)
-VALUES (
-    '00000000-0000-0000-0000-000000000001',
-    'admin',
-    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYqJZ5q5q5q',
-    'admin',
-    'admin@mockforge.dev'
-);
-
--- Insert default viewer user (password: viewer123)
-INSERT OR IGNORE INTO admin_users (id, username, password_hash, role, email)
-VALUES (
-    '00000000-0000-0000-0000-000000000002',
-    'viewer',
-    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYqJZ5q5q5q',
-    'viewer',
-    'viewer@mockforge.dev'
-);
-
--- Insert default editor user (password: editor123)
-INSERT OR IGNORE INTO admin_users (id, username, password_hash, role, email)
-VALUES (
-    '00000000-0000-0000-0000-000000000003',
-    'editor',
-    '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5GyYqJZ5q5q5q',
-    'editor',
-    'editor@mockforge.dev'
-);
+-- No default users (#1016). Accounts are created by the operator; a migration
+-- runs against every database, so it must never ship a known login.

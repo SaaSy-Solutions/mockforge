@@ -344,8 +344,8 @@ async fn valid_credentials_are_accepted() {
 
 #[tokio::test]
 async fn token_only_policy_refuses_jwts_and_dev_headers() {
-    // Non-loopback with only a management token: the demo users exist, so
-    // their JWTs (and the dev header fallback) must not authenticate.
+    // Non-loopback with only a management token: no admin login exists, so
+    // no JWT (and no dev header fallback) may authenticate.
     let router =
         with_policy(AdminAccessPolicy::authenticated(false, Some(MANAGEMENT_TOKEN.into())));
     let by_jwt = request("GET", "/__mockforge/logs")
