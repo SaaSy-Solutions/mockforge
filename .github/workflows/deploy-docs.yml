@@ -8,6 +8,7 @@ on:
       - '.github/workflows/deploy-docs.yml'
       - '.github/actions/setup-mdbook/**'
       - 'scripts/generate_docs_sitemap.py'
+      - 'scripts/inject_docs_canonicals.py'
   workflow_dispatch:
 
 # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
@@ -46,6 +47,12 @@ jobs:
     - name: Generate sitemap.xml
       run: python3 scripts/generate_docs_sitemap.py --book-dir book --base-url https://docs.mockforge.dev/
 
+    - name: Add canonical links
+      run: python3 scripts/inject_docs_canonicals.py --book-dir book --base-url https://docs.mockforge.dev/
+
+    - name: Verify IndexNow key file is in the build
+      run: test "$(cat book/book/b7e4c2a9f1d84630a5c7e2b9d0f3a614.txt)" = b7e4c2a9f1d84630a5c7e2b9d0f3a614
+
     - name: Setup Pages
       uses: actions/configure-pages@v6
 
@@ -57,3 +64,39 @@ jobs:
     - name: Deploy to GitHub Pages
       id: deployment
       uses: actions/deploy-pages@v5
+
+  # Notify IndexNow (Bing, Yandex, Seznam, Naver, ...) of every URL in the
+  # live docs sitemap after a successful production deploy. Best-effort: a
+  # failure here never fails the deploy.
+  indexnow:
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: github.ref == 'refs/heads/main'
+    continue-on-error: true
+    permissions:
+      contents: read
+    steps:
+    - name: Submit sitemap URLs to IndexNow
+      env:
+        INDEXNOW_HOST: docs.mockforge.dev
+        INDEXNOW_KEY: b7e4c2a9f1d84630a5c7e2b9d0f3a614
+      run: |
+        set -euo pipefail
+        curl -fsSL --retry 3 --retry-delay 10 "https://${INDEXNOW_HOST}/sitemap.xml" -o sitemap.xml
+        grep -o '<loc>[^<]*</loc>' sitemap.xml | sed -e 's#<loc>##' -e 's#</loc>##' > urls.txt
+        echo "Found $(wc -l < urls.txt) URLs in sitemap"
+        test -s urls.txt
+        jq -n \
+          --arg host "$INDEXNOW_HOST" \
+          --arg key "$INDEXNOW_KEY" \
+          --arg keyLocation "https://${INDEXNOW_HOST}/${INDEXNOW_KEY}.txt" \
+          --rawfile urls urls.txt \
+          '{host: $host, key: $key, keyLocation: $keyLocation, urlList: ($urls | split("\n") | map(select(length > 0)))}' \
+          > payload.json
+        status=$(curl -sS -o response.txt -w '%{http_code}' \
+          -X POST "https://api.indexnow.org/indexnow" \
+          -H 'Content-Type: application/json; charset=utf-8' \
+          --data @payload.json)
+        echo "IndexNow responded HTTP ${status}"
+        cat response.txt || true
+        case "$status" in 200|202) ;; *) exit 1 ;; esac

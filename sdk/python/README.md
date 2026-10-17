@@ -16,8 +16,14 @@ cargo install mockforge-cli
 
 ## Installation
 
+The SDK is not yet published to PyPI (the `mockforge` name there belongs to an
+unrelated project), so install it from this repository:
+
 ```bash
-pip install mockforge-sdk
+pip install "mockforge-sdk @ git+https://github.com/SaaSy-Solutions/mockforge.git#subdirectory=sdk/python"
+
+# Or from a local checkout
+pip install ./sdk/python
 ```
 
 ## Usage
@@ -141,18 +147,8 @@ def clear_stubs(mock_server):
 
 ### pytest Plugin
 
-MockForge also provides a pytest plugin for easier integration:
-
-```bash
-pip install mockforge-pytest
-```
-
-```python
-# pytest will auto-discover the plugin
-def test_api(mockforge):
-    mockforge.stub_response('GET', '/api/test', {'status': 'ok'})
-    # ...
-```
+There is no separate pytest plugin package yet; use a `conftest.py` fixture
+like the one above.
 
 ## Environment Variables
 
