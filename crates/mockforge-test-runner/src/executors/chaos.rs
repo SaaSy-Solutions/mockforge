@@ -16,30 +16,18 @@ use mockforge_chaos_proxy::{CampaignCounters, ChaosClient, ChaosDirective};
 use std::time::Instant;
 
 use crate::callbacks::RegistryCallbacks;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::executors::{Executor, JobOutcome, JobStatus, RunJob};
 
 /// Executor for chaos campaigns.
 pub struct ChaosExecutor;
 
 impl ChaosExecutor {
-    /// How many synthetic fault events to emit. Capped to keep a
-    /// runaway campaign config from spamming the event log.
-    fn synthetic_fault_count(payload: &serde_json::Value) -> u32 {
-        let raw = payload.get("synthetic_faults").and_then(|v| v.as_u64()).unwrap_or(2);
-        raw.clamp(1, 50) as u32
-    }
-
-    fn synthetic_fault_ms(payload: &serde_json::Value) -> u64 {
-        let raw = payload.get("synthetic_fault_ms").and_then(|v| v.as_u64()).unwrap_or(150);
-        raw.min(5000)
-    }
-
     /// Pull the user's declared faults out of campaign.config so the
     /// executor can iterate the real list. Recognized shape:
     /// `config.faults = [{ kind, duration_ms?, name? }, ...]`.
     /// Returns (kind, duration_ms) tuples, capped at 50 entries.
-    fn extract_real_faults(payload: &serde_json::Value) -> Vec<(String, u64)> {
+    fn extract_faults(payload: &serde_json::Value) -> Vec<(String, u64)> {
         let arr = payload.get("config").and_then(|c| c.get("faults")).and_then(|v| v.as_array());
         let Some(arr) = arr else {
             return Vec::new();
@@ -117,16 +105,12 @@ impl Executor for ChaosExecutor {
     }
 
     async fn execute(&self, job: RunJob, callbacks: &RegistryCallbacks) -> Result<JobOutcome> {
-        let started = Instant::now();
-        callbacks.run_started(job.run_id).await?;
-
-        let real_faults = Self::extract_real_faults(&job.payload);
-        let using_real_config = !real_faults.is_empty();
-        let synth_fault_count = Self::synthetic_fault_count(&job.payload);
-        let synth_fault_ms = Self::synthetic_fault_ms(&job.payload);
-        // Own these so we can move `job` into helper paths without
-        // tripping E0505. The original `&str` borrows would extend
-        // through any helper that consumes `job`.
+        let faults = Self::extract_faults(&job.payload);
+        if faults.is_empty() {
+            return Err(Error::Executor(
+                "chaos_campaign requires at least one entry in `config.faults`".into(),
+            ));
+        }
         let target_kind = job
             .payload
             .get("target_kind")
@@ -137,194 +121,113 @@ impl Executor for ChaosExecutor {
             .payload
             .get("target_ref")
             .and_then(|v| v.as_str())
-            .unwrap_or("(unspecified)")
+            .map(str::trim)
+            .unwrap_or_default()
             .to_string();
         let safety_cap = Self::safety_max_duration_ms(&job.payload);
+        let hosted_deployment_id = match target_kind.as_str() {
+            "hosted_mock" => Some(uuid::Uuid::parse_str(&target_ref).map_err(|_| {
+                Error::Executor(
+                    "chaos_campaign with `target_kind: hosted_mock` requires a valid deployment UUID in `target_ref`"
+                        .into(),
+                )
+            })?),
+            "external" => None,
+            other => {
+                return Err(Error::Executor(format!(
+                    "chaos_campaign has unsupported `target_kind` `{other}`; use `hosted_mock` or `external`"
+                )))
+            }
+        };
 
-        // External path — actually inject chaos at the network layer
-        // via mockforge-chaos-proxy's ChaosClient (#349). Refuses to
-        // run without the authorized flag; if anything goes wrong
-        // during setup (SSRF reject, missing target_url) the
-        // executor returns a clean errored outcome so the registry
-        // surfaces the failure.
+        let started = Instant::now();
+        callbacks.run_started(job.run_id).await?;
+
         if target_kind == "external" {
-            return run_external_chaos(
-                job,
-                callbacks,
-                started,
-                &target_ref,
-                &real_faults,
-                synth_fault_count,
-                synth_fault_ms,
-                safety_cap,
-                using_real_config,
-            )
-            .await;
+            return run_external_chaos(job, callbacks, started, &target_ref, &faults, safety_cap)
+                .await;
         }
 
-        // For target_kind=hosted_mock, target_ref is the deployment_id.
-        // Try real chaos: enable on the deployment for the run, disable
-        // at the end. If the toggle call fails (deployment doesn't
-        // expose admin, network blip, etc.) we still emit synthetic
-        // events so the run produces a coherent outcome.
-        let real_chaos_target_id = if target_kind == "hosted_mock" {
-            uuid::Uuid::parse_str(&target_ref).ok()
-        } else {
-            None
-        };
-        let real_chaos_enabled = if let Some(deployment_id) = real_chaos_target_id {
-            match callbacks.toggle_hosted_chaos(job.run_id, deployment_id, true).await {
-                Ok(()) => {
-                    callbacks
-                        .run_event(
-                            job.run_id,
-                            1,
-                            "log",
-                            serde_json::json!({
-                                "level": "info",
-                                "message": format!(
-                                    "Real chaos enabled on deployment {deployment_id}"
-                                ),
-                                "synthetic": false,
-                                "tracking_task": 7,
-                            }),
-                        )
-                        .await?;
-                    true
-                }
-                Err(e) => {
-                    tracing::warn!(error = %e, %deployment_id, "real chaos toggle failed; falling back to synthetic events");
-                    callbacks
-                        .run_event(
-                            job.run_id,
-                            1,
-                            "log",
-                            serde_json::json!({
-                                "level": "warn",
-                                "message": format!(
-                                    "real chaos toggle failed: {e}; emitting synthetic events"
-                                ),
-                                "synthetic": true,
-                                "tracking_task": 7,
-                            }),
-                        )
-                        .await?;
-                    false
-                }
-            }
-        } else {
-            false
-        };
-
-        let fault_count = if using_real_config {
-            real_faults.len() as u32
-        } else {
-            synth_fault_count
-        };
+        let deployment_id = hosted_deployment_id.ok_or_else(|| {
+            Error::Executor("chaos_campaign hosted target validation failed".into())
+        })?;
+        callbacks
+            .toggle_hosted_chaos(job.run_id, deployment_id, true)
+            .await
+            .map_err(|error| {
+                Error::Executor(format!(
+                    "chaos_campaign failed to enable chaos on deployment {deployment_id}: {error}"
+                ))
+            })?;
 
         callbacks
             .run_event(
                 job.run_id,
-                2,
+                1,
                 "log",
                 serde_json::json!({
                     "level": "info",
-                    "message": format!(
-                        "{}: target_kind='{}', target_ref='{}', faults={}",
-                        if using_real_config { "Chaos campaign (config-driven)" } else { "Synthetic chaos campaign" },
-                        target_kind, target_ref, fault_count,
-                    ),
-                    "synthetic": !using_real_config,
-                    "real_chaos_enabled": real_chaos_enabled,
+                    "message": format!("Chaos enabled on deployment {deployment_id}; faults={}", faults.len()),
                     "tracking_task": 7,
                 }),
             )
             .await?;
 
-        let mut next_seq: u32 = 3;
+        let mut next_seq: u32 = 2;
         let mut aborted = false;
         let mut abort_reason: Option<String> = None;
-        for i in 1..=fault_count {
-            // Safety: respect max_duration_ms from safety_config.
+        let mut fault_count = 0u32;
+        for (index, (fault_kind, fault_ms)) in faults.iter().enumerate() {
             if let Some(max_ms) = safety_cap {
                 let elapsed_ms = started.elapsed().as_millis() as u64;
                 if elapsed_ms >= max_ms {
                     aborted = true;
                     abort_reason = Some(format!(
                         "safety_config.max_duration_ms ({}ms) reached after {} faults",
-                        max_ms,
-                        i - 1
+                        max_ms, fault_count
                     ));
                     break;
                 }
             }
-            let (fault_kind, fault_ms) = if using_real_config {
-                real_faults
-                    .get((i - 1) as usize)
-                    .cloned()
-                    .unwrap_or_else(|| ("unknown".into(), synth_fault_ms))
-            } else {
-                ("synthetic-latency".into(), synth_fault_ms)
-            };
+            let fault_index = index + 1;
             callbacks
                 .run_event(
                     job.run_id,
                     next_seq,
                     "fault_injected",
                     serde_json::json!({
-                        "fault_index": i,
+                        "fault_index": fault_index,
                         "fault_kind": fault_kind,
                         "duration_ms": fault_ms,
                     }),
                 )
                 .await?;
             next_seq += 1;
-            tokio::time::sleep(std::time::Duration::from_millis(fault_ms)).await;
+            tokio::time::sleep(std::time::Duration::from_millis(*fault_ms)).await;
             callbacks
                 .run_event(
                     job.run_id,
                     next_seq,
                     "fault_recovered",
-                    serde_json::json!({ "fault_index": i, "fault_kind": fault_kind }),
+                    serde_json::json!({ "fault_index": fault_index, "fault_kind": fault_kind }),
                 )
                 .await?;
             next_seq += 1;
+            fault_count += 1;
         }
 
-        // Disable real chaos at the end of the run if we enabled it.
-        // Best-effort — failure to disable is logged but doesn't change
-        // the run's pass/fail status (the safety_config.max_duration_ms
-        // cap still bounds blast radius).
-        if real_chaos_enabled {
-            if let Some(deployment_id) = real_chaos_target_id {
-                if let Err(e) =
-                    callbacks.toggle_hosted_chaos(job.run_id, deployment_id, false).await
-                {
-                    tracing::error!(
-                        error = %e,
-                        %deployment_id,
-                        "failed to disable real chaos at end of run — investigate immediately",
-                    );
-                    callbacks
-                        .run_event(
-                            job.run_id,
-                            next_seq,
-                            "log",
-                            serde_json::json!({
-                                "level": "error",
-                                "message": format!(
-                                    "failed to disable real chaos at end of run: {e} — manual intervention required"
-                                ),
-                            }),
-                        )
-                        .await?;
-                }
-            }
-        }
+        callbacks
+            .toggle_hosted_chaos(job.run_id, deployment_id, false)
+            .await
+            .map_err(|error| {
+                Error::Executor(format!(
+                    "chaos_campaign failed to disable chaos on deployment {deployment_id}: {error}"
+                ))
+            })?;
 
         let elapsed = started.elapsed();
         let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
-        let status = if aborted {
+        let status = if aborted || fault_count == 0 {
             JobStatus::Failed
         } else {
             JobStatus::Passed
@@ -334,17 +237,10 @@ impl Executor for ChaosExecutor {
             status,
             runner_seconds: secs,
             summary: Some(serde_json::json!({
-                "executor_phase": if real_chaos_enabled {
-                    "real_hosted_mock"
-                } else if using_real_config {
-                    "config_driven"
-                } else {
-                    "synthetic"
-                },
+                "executor_phase": "real_hosted_mock",
                 "tracking_task": 7,
                 "target_kind": target_kind,
                 "target_ref": target_ref,
-                "real_chaos_enabled": real_chaos_enabled,
                 "fault_count": fault_count,
                 "aborted": aborted,
                 "abort_reason": abort_reason,
@@ -356,21 +252,16 @@ impl Executor for ChaosExecutor {
 
 /// Drive an external-target chaos campaign through
 /// `mockforge-chaos-proxy::ChaosClient`. One iteration per declared
-/// fault (or one synthetic latency fault when no config), each
-/// sending `external_probes_per_fault` real HTTP probes through the
-/// chaos client. Probe outcomes are aggregated into a
+/// fault, each sending `external_probes_per_fault` real HTTP probes
+/// through the chaos client. Probe outcomes are aggregated into a
 /// `chaos_summary` metric event at the end.
-#[allow(clippy::too_many_arguments)]
 async fn run_external_chaos(
     job: RunJob,
     callbacks: &RegistryCallbacks,
     started: Instant,
     target_ref: &str,
-    real_faults: &[(String, u64)],
-    synth_fault_count: u32,
-    synth_fault_ms: u64,
+    faults: &[(String, u64)],
     safety_cap: Option<u64>,
-    using_real_config: bool,
 ) -> Result<JobOutcome> {
     // 1. Authorization gate. Refuse to run if the user hasn't
     //    explicitly set external_target_authorized=true.
@@ -426,11 +317,7 @@ async fn run_external_chaos(
 
     let probes_per_fault = ChaosExecutor::external_probes_per_fault(&job.payload);
     let probe_method = ChaosExecutor::external_probe_method(&job.payload);
-    let fault_count = if using_real_config {
-        real_faults.len() as u32
-    } else {
-        synth_fault_count
-    };
+    let fault_count = faults.len() as u32;
 
     callbacks
         .run_event(
@@ -475,14 +362,7 @@ async fn run_external_chaos(
         // intended fault duration window. Probabilistic fault rates
         // would land in a follow-up — for v1 each fault iteration
         // applies its single directive at probability 1.0.
-        let (fault_kind, fault_ms) = if using_real_config {
-            real_faults
-                .get((i - 1) as usize)
-                .cloned()
-                .unwrap_or_else(|| ("latency".into(), synth_fault_ms))
-        } else {
-            ("latency".into(), synth_fault_ms)
-        };
+        let (fault_kind, fault_ms) = faults[(i - 1) as usize].clone();
 
         let directive = build_directive(&fault_kind, fault_ms);
 
@@ -641,22 +521,43 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    #[test]
-    fn fault_count_default() {
-        assert_eq!(ChaosExecutor::synthetic_fault_count(&json!({})), 2);
+    fn job(payload: serde_json::Value) -> RunJob {
+        RunJob {
+            run_id: uuid::Uuid::new_v4(),
+            org_id: uuid::Uuid::new_v4(),
+            source_id: uuid::Uuid::new_v4(),
+            kind: "chaos_campaign".to_string(),
+            payload,
+        }
     }
 
-    #[test]
-    fn fault_count_clamps() {
-        assert_eq!(ChaosExecutor::synthetic_fault_count(&json!({ "synthetic_faults": 999 })), 50);
-        assert_eq!(ChaosExecutor::synthetic_fault_count(&json!({ "synthetic_faults": 0 })), 1);
+    #[tokio::test]
+    async fn campaign_without_faults_is_an_executor_error() {
+        let callbacks = RegistryCallbacks::for_test();
+        let result = ChaosExecutor.execute(job(json!({})), &callbacks).await;
+        assert!(
+            matches!(result, Err(Error::Executor(ref message)) if message.contains("config.faults")),
+            "campaign without real faults must error, got {result:?}"
+        );
     }
 
-    #[test]
-    fn fault_ms_caps() {
-        assert_eq!(
-            ChaosExecutor::synthetic_fault_ms(&json!({ "synthetic_fault_ms": 60_000 })),
-            5000
+    #[tokio::test]
+    async fn hosted_toggle_failure_is_an_executor_error() {
+        let callbacks = RegistryCallbacks::for_test_failing_chaos_toggle();
+        let deployment_id = uuid::Uuid::new_v4();
+        let result = ChaosExecutor
+            .execute(
+                job(json!({
+                    "target_kind": "hosted_mock",
+                    "target_ref": deployment_id,
+                    "config": {"faults": [{"kind": "latency", "duration_ms": 0}]},
+                })),
+                &callbacks,
+            )
+            .await;
+        assert!(
+            matches!(result, Err(Error::Executor(ref message)) if message.contains("failed to enable chaos")),
+            "toggle failure must error, got {result:?}"
         );
     }
 
