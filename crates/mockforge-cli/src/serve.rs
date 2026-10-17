@@ -1,7 +1,7 @@
 mod feature_selection;
 mod lifecycle;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[cfg(feature = "chaos")]
 use mockforge_chaos::api::create_chaos_api_router;
@@ -820,6 +820,12 @@ pub async fn handle_serve(
         }
     };
 
+    // Specs supplied through MOCKFORGE_CONFIG / MOCKFORGE_OPENAPI_SPEC_URL are
+    // remote content, so their directory is never a `{{fs.readFile}}` root (#1015).
+    let spec_from_env = serve_args.spec.is_empty()
+        && (std::env::var("MOCKFORGE_CONFIG").is_ok()
+            || std::env::var("MOCKFORGE_OPENAPI_SPEC_URL").is_ok());
+
     // If no spec files provided, check MOCKFORGE_CONFIG env var (inline spec content)
     // or MOCKFORGE_OPENAPI_SPEC_URL env var (URL or local path to spec)
     let spec = if serve_args.spec.is_empty() {
@@ -898,6 +904,12 @@ pub async fn handle_serve(
 
     // Merge configuration sources
     let mut config = build_server_config_from_cli(&serve_args).await;
+
+    register_template_fs_root(
+        spec_from_env,
+        serve_args.spec_dir.as_deref(),
+        config.http.openapi_spec.as_deref(),
+    );
     feature_selection::validate(&serve_args, &config)?;
 
     // Validate only listeners present in this build. A standalone protocol
@@ -3595,5 +3607,68 @@ mod chaos_yaml_bridge_tests {
         assert_eq!(bridged.corruption_type, CorruptionType::None);
         assert!(bridged.error_pattern.is_none());
         assert!(bridged.request_matcher.is_none());
+    }
+}
+
+/// Default `{{fs.readFile}}` root: the user's spec directory (#1015).
+///
+/// `MOCKFORGE_TEMPLATE_FS_ROOT` overrides this, and hosted mocks ignore it.
+fn template_fs_default_root(
+    spec_from_env: bool,
+    spec_dir: Option<&Path>,
+    openapi_spec: Option<&str>,
+) -> Option<PathBuf> {
+    if spec_from_env {
+        return None;
+    }
+    if let Some(dir) = spec_dir {
+        return Some(dir.to_path_buf());
+    }
+    let spec = Path::new(openapi_spec?);
+    match spec.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => Some(parent.to_path_buf()),
+        _ => Some(PathBuf::from(".")),
+    }
+}
+
+fn register_template_fs_root(
+    spec_from_env: bool,
+    spec_dir: Option<&Path>,
+    openapi_spec: Option<&str>,
+) {
+    let root = template_fs_default_root(spec_from_env, spec_dir, openapi_spec);
+    if let Some(ref root) = root {
+        tracing::debug!("fs.readFile template root: {}", root.display());
+    }
+    mockforge_core::template_fs::set_default_root(root);
+}
+
+#[cfg(test)]
+mod template_fs_root_tests {
+    use super::*;
+
+    #[test]
+    fn spec_directory_is_the_default_root() {
+        assert_eq!(
+            template_fs_default_root(false, None, Some("specs/api.yaml")),
+            Some(PathBuf::from("specs"))
+        );
+        assert_eq!(
+            template_fs_default_root(false, None, Some("api.yaml")),
+            Some(PathBuf::from("."))
+        );
+        assert_eq!(
+            template_fs_default_root(false, Some(Path::new("/srv/specs")), Some("x/api.yaml")),
+            Some(PathBuf::from("/srv/specs"))
+        );
+    }
+
+    #[test]
+    fn remote_or_missing_spec_has_no_root() {
+        assert_eq!(
+            template_fs_default_root(true, None, Some("/tmp/mockforge-specs/spec.json")),
+            None
+        );
+        assert_eq!(template_fs_default_root(false, None, None), None);
     }
 }
