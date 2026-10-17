@@ -1,9 +1,5 @@
 ## [Unreleased]
 
-### Security
-
-- **[DevX]** `{{fs.readFile}}` only reads files under one root: `MOCKFORGE_TEMPLATE_FS_ROOT`, or by default the directory of the spec given to `mockforge serve`. It refuses `..`, percent-encoded and Windows-style paths, symlinks that escape the root, `/proc`, `/sys`, `/dev`, `/etc` and env-like files, and files over `MOCKFORGE_TEMPLATE_FS_MAX_BYTES` (default 1 MiB). It is disabled when no root is configured, for specs from `MOCKFORGE_CONFIG` / `MOCKFORGE_OPENAPI_SPEC_URL`, and on hosted mocks unless `MOCKFORGE_TEMPLATE_FS_ROOT` is set. Previously any spec could read any local file into a response. (#1015)
-
 ## [0.3.236] - 2026-10-16
 
 ### Added
