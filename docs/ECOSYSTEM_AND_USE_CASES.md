@@ -21,7 +21,6 @@ MockForge offers native SDKs and client libraries across multiple programming la
 | **Embedded Testing** | ✅ Native embedding in all languages | ✅ Java embedding, clients for others |
 | **CLI Requirement** | Optional (Rust SDK embeds directly) | Optional (standalone mode available) |
 | **Plugin System** | WASM-based (multi-language) + Remote Protocol | Java extensions |
-| **Performance** | ⚡ High (native Rust) | Medium (JVM overhead) |
 
 **Key Difference**: While WireMock is primarily a Java library with client wrappers, MockForge provides native SDKs that can embed the mock server directly or communicate with a standalone server, offering flexibility for different use cases.
 
@@ -279,7 +278,7 @@ MockForge's plugin system enables extending functionality across languages:
 1. **WASM Plugins**: Write plugins in Rust, Go (via TinyGo), or AssemblyScript
 2. **Remote Plugins**: Run plugins as standalone HTTP/gRPC services in any language
 
-This provides flexibility beyond WireMock's Java-only extension model.
+WireMock extensions, by comparison, are written in Java.
 
 ---
 
@@ -458,7 +457,7 @@ public async Task TestUserService()
 | **Language Support** | 6 languages natively | Java natively, clients for others |
 | **Embedded Mode** | ✅ All languages | ✅ Java only |
 | **Test Framework Integration** | ✅ All major frameworks | ✅ JUnit, TestNG |
-| **Template Support** | ✅ Advanced (faker, UUIDs, time) | ⚠️ Basic |
+| **Template Support** | ✅ Faker, UUIDs, time | ✅ Handlebars (Faker via extension) |
 
 ---
 
@@ -574,9 +573,9 @@ async def test_realtime_notifications():
 
 | Feature | MockForge | WireMock |
 |---------|-----------|----------|
-| **Multi-Protocol** | ✅ HTTP, gRPC, WebSocket, GraphQL | ⚠️ HTTP only |
+| **Multi-Protocol** | ✅ HTTP, gRPC, WebSocket, GraphQL | ⚠️ HTTP; gRPC and GraphQL via extensions; WebSocket in 4.x beta |
 | **Stateful Mocking** | ✅ Full support | ✅ Full support |
-| **Protocol-Specific** | ✅ Native gRPC, WebSocket | ❌ HTTP only |
+| **Protocol-Specific** | ✅ Built-in gRPC, WebSocket | ⚠️ gRPC via `wiremock-grpc-extension`; WebSocket in 4.x beta |
 | **Scenario Switching** | ✅ Header-based | ✅ State machine |
 
 ---
@@ -693,8 +692,8 @@ with MockServer(
 |---------|-----------|----------|
 | **Proxy Mode** | ✅ Full support | ✅ Full support |
 | **Record/Replay** | ✅ Built-in | ✅ Built-in |
-| **OpenAPI Integration** | ✅ Auto-generate from spec | ⚠️ Manual mapping |
-| **Multi-Protocol Proxy** | ✅ HTTP, gRPC, WebSocket | ⚠️ HTTP only |
+| **OpenAPI Integration** | ✅ Auto-generate from spec | ⚠️ Import in WireMock Cloud; hand-written stubs in OSS |
+| **Multi-Protocol Proxy** | ✅ HTTP, gRPC, WebSocket | ✅ HTTP (others not documented) |
 
 ---
 
@@ -790,9 +789,9 @@ services:
 |---------|-----------|----------|
 | **Standalone Mode** | ✅ Full support | ✅ Full support |
 | **Configuration Files** | ✅ YAML/JSON | ✅ JSON |
-| **Workspace Sync** | ✅ Git integration | ❌ No |
-| **Admin UI** | ✅ Modern React UI | ⚠️ Basic |
-| **Docker Support** | ✅ Official images | ✅ Community images |
+| **Workspace Sync** | ✅ Git integration | — |
+| **Admin UI** | ✅ React web UI | ⚠️ Admin API; web UI in WireMock Cloud |
+| **Docker Support** | ✅ Official images | ✅ Official images |
 
 ---
 
@@ -922,8 +921,8 @@ for i := 0; i < 100; i++ {
 | **Latency Injection** | ✅ Fixed, Normal, Exponential | ✅ Fixed, LogNormal |
 | **Failure Injection** | ✅ Configurable rates | ✅ Scenarios |
 | **Timeout Simulation** | ✅ Built-in | ✅ Built-in |
-| **Network Profiles** | ✅ 3G, 4G, 5G presets | ⚠️ Manual configuration |
-| **Chaos Patterns** | ✅ Advanced | ⚠️ Basic |
+| **Network Profiles** | ✅ 3G, 4G, 5G presets | — |
+| **Chaos Patterns** | ✅ Faker, UUIDs, time | ✅ Handlebars |
 
 ---
 
@@ -1037,11 +1036,11 @@ with MockServer(
 
 | Feature | MockForge | WireMock |
 |---------|-----------|----------|
-| **OpenAPI Support** | ✅ Full auto-generation | ⚠️ Manual mapping |
-| **GraphQL Support** | ✅ Native schema mocking | ❌ No |
-| **gRPC Support** | ✅ Native proto mocking | ❌ No |
-| **AI Enhancement** | ✅ LLM-powered generation | ❌ No |
-| **Schema Validation** | ✅ Built-in | ⚠️ Manual |
+| **OpenAPI Support** | ✅ Full auto-generation | ⚠️ Import in WireMock Cloud; hand-written stubs in OSS |
+| **GraphQL Support** | ✅ Schema-based mocking | ⚠️ Via `wiremock-graphql-extension` |
+| **gRPC Support** | ✅ Proto-based mocking | ⚠️ Via `wiremock-grpc-extension` |
+| **AI Enhancement** | ✅ LLM-powered generation | — |
+| **Schema Validation** | ✅ Built-in | — |
 
 ---
 
@@ -1065,11 +1064,11 @@ with MockServer(
 | Use Case | MockForge | WireMock |
 |----------|-----------|----------|
 | **Unit Tests** | ✅ All languages | ✅ Java, clients for others |
-| **Integration Tests** | ✅ Multi-protocol | ✅ HTTP only |
+| **Integration Tests** | ✅ Multi-protocol | ✅ HTTP; gRPC/GraphQL via extensions |
 | **Service Virtualization** | ✅ Full proxy + record/replay | ✅ Full proxy + record/replay |
 | **Development Environments** | ✅ Workspace sync, Admin UI | ✅ Standalone mode |
-| **Flaky Dependency Isolation** | ✅ Advanced chaos patterns | ✅ Basic failure injection |
-| **Non-Existent API Simulation** | ✅ OpenAPI/GraphQL/gRPC | ⚠️ Manual setup |
+| **Flaky Dependency Isolation** | ✅ Chaos patterns | ✅ Delays and fault injection |
+| **Non-Existent API Simulation** | ✅ OpenAPI/GraphQL/gRPC | ⚠️ Hand-written stubs in OSS; OpenAPI import in WireMock Cloud |
 
 ### Feature Parity Analysis
 
