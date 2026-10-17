@@ -4,6 +4,7 @@
 
 ### Fixed
 
+- **[Cloud]** The SQLite registry store (self-hosted registry admin) now rotates API tokens and lists tokens due for rotation, like the Postgres store. Before, rotation returned an error and the rotation reminder list was always empty. Both stores now generate `mfx_` tokens in one URL-safe format (32 random bytes, unpadded URL-safe base64), so new Postgres tokens no longer contain `+`, `/` or `=`. Existing tokens keep working. (#1266)
 - **[Cloud]** The cloud test runner never reports `passed` for a run that did no work. Stubbed job kinds (unit, behavioral clone, snapshots, scenario/orchestration/state-machine flows, verification suites) now finish `errored` with `not_implemented`; `contract_diff` and `replay` error out when their spec or captures are missing instead of passing; every outcome records `summary.work_count`, and a `passed` result with zero work becomes `failed` with `no_work_executed` (#1264).
 
 ### Security

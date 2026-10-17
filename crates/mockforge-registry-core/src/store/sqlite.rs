@@ -542,13 +542,7 @@ impl RegistryStore for SqliteRegistryStore {
         scopes: &[TokenScope],
         expires_at: Option<DateTime<Utc>>,
     ) -> StoreResult<(String, ApiToken)> {
-        // Generate a 32-byte random token, base64-encode, prefix with `mfx_`.
-        use base64::{engine::general_purpose, Engine as _};
-        use rand::RngCore;
-        let mut buf = [0u8; 32];
-        rand::rng().fill_bytes(&mut buf);
-        let full_token = format!("mfx_{}", general_purpose::URL_SAFE_NO_PAD.encode(buf));
-        let token_prefix: String = full_token.chars().take(12).collect();
+        let (full_token, token_prefix) = ApiToken::generate_secret();
         let hashed_token = bcrypt::hash(&full_token, bcrypt::DEFAULT_COST)
             .map_err(|e| StoreError::Hash(format!("bcrypt: {}", e)))?;
 
@@ -649,25 +643,64 @@ impl RegistryStore for SqliteRegistryStore {
         Ok(())
     }
 
-    #[allow(unused_variables)]
     async fn rotate_api_token(
         &self,
         token_id: Uuid,
         new_name: Option<&str>,
         delete_old: bool,
     ) -> StoreResult<(String, ApiToken, Option<ApiToken>)> {
-        Err(StoreError::Hash(
-            "rotate_api_token: not yet implemented in SQLite backend".into(),
-        ))
+        // Same contract as the Postgres store: a replacement with the old
+        // token's org, user, scopes and expiry, then the optional delete. The
+        // replacement is created first, so a failed delete leaves both tokens
+        // valid rather than none.
+        let old = self.find_api_token_by_id(token_id).await?.ok_or(StoreError::NotFound)?;
+        let scopes: Vec<TokenScope> =
+            old.scopes.iter().filter_map(|s| TokenScope::from_string(s)).collect();
+        let (full_token, new_token) = self
+            .create_api_token(
+                old.org_id,
+                old.user_id,
+                new_name.unwrap_or(&old.name),
+                &scopes,
+                old.expires_at,
+            )
+            .await?;
+        let deleted = if delete_old {
+            self.delete_api_token(token_id).await?;
+            Some(old)
+        } else {
+            None
+        };
+        Ok((full_token, new_token, deleted))
     }
 
-    #[allow(unused_variables)]
     async fn find_api_tokens_needing_rotation(
         &self,
         org_id: Option<Uuid>,
         days_old: i64,
     ) -> StoreResult<Vec<ApiToken>> {
-        Ok(Vec::new())
+        let rows = match org_id {
+            Some(org_id) => {
+                sqlx::query("SELECT * FROM api_tokens WHERE org_id = ? ORDER BY created_at ASC")
+                    .bind(org_id.to_string())
+                    .fetch_all(&self.pool)
+                    .await?
+            }
+            None => {
+                sqlx::query("SELECT * FROM api_tokens ORDER BY created_at ASC")
+                    .fetch_all(&self.pool)
+                    .await?
+            }
+        };
+        // Timestamps are RFC 3339 text; compare parsed values, not strings.
+        let mut tokens = Vec::new();
+        for row in &rows {
+            let token = row_to_api_token(row)?;
+            if token.needs_rotation(days_old) {
+                tokens.push(token);
+            }
+        }
+        Ok(tokens)
     }
 
     async fn get_org_setting(&self, org_id: Uuid, key: &str) -> StoreResult<Option<OrgSetting>> {
@@ -6125,6 +6158,92 @@ mod tests {
         .await
         .unwrap();
         id
+    }
+
+    /// SQLite rotation used to return an error, and the rotation finder
+    /// always returned nothing (#1266).
+    #[tokio::test]
+    async fn test_rotate_api_token_matches_postgres_contract() {
+        let store = memory_store().await;
+        let user_id = Uuid::new_v4();
+        let org_id = seed_org(&store, user_id).await;
+        let scopes = vec![TokenScope::DeployMocks, TokenScope::ReadUsage];
+        let (old_plain, old) = store
+            .create_api_token(org_id, Some(user_id), "ci", &scopes, None)
+            .await
+            .unwrap();
+
+        let (kept_plain, kept, none) = store.rotate_api_token(old.id, None, false).await.unwrap();
+        assert!(none.is_none());
+        assert_ne!(kept.id, old.id);
+        assert_eq!(kept.name, "ci");
+        assert_eq!((kept.org_id, kept.user_id), (org_id, Some(user_id)));
+        assert!(kept.has_scope(&TokenScope::DeployMocks) && kept.has_scope(&TokenScope::ReadUsage));
+        assert!(store.verify_api_token(&old_plain).await.unwrap().is_some(), "old still valid");
+        assert!(store.verify_api_token(&kept_plain).await.unwrap().is_some());
+
+        let (new_plain, renamed, deleted) =
+            store.rotate_api_token(kept.id, Some("ci-2"), true).await.unwrap();
+        assert_eq!(renamed.name, "ci-2");
+        assert_eq!(deleted.map(|t| t.id), Some(kept.id));
+        assert!(store.verify_api_token(&kept_plain).await.unwrap().is_none(), "rotated out");
+        assert!(store.verify_api_token(&new_plain).await.unwrap().is_some());
+
+        assert!(matches!(
+            store.rotate_api_token(Uuid::new_v4(), None, false).await,
+            Err(StoreError::NotFound)
+        ));
+    }
+
+    #[tokio::test]
+    async fn test_find_api_tokens_needing_rotation_filters_by_age_and_org() {
+        let store = memory_store().await;
+        let user_id = Uuid::new_v4();
+        let org_a = seed_org(&store, user_id).await;
+        let org_b = seed_org(&store, Uuid::new_v4()).await;
+        let (_, stale) = store.create_api_token(org_a, None, "stale", &[], None).await.unwrap();
+        let (_, fresh) = store.create_api_token(org_a, None, "fresh", &[], None).await.unwrap();
+        let (_, other) = store.create_api_token(org_b, None, "other", &[], None).await.unwrap();
+        let (_, expired) = store
+            .create_api_token(
+                org_a,
+                None,
+                "expired",
+                &[],
+                Some(Utc::now() - chrono::Duration::days(1)),
+            )
+            .await
+            .unwrap();
+        let old = (Utc::now() - chrono::Duration::days(120)).to_rfc3339();
+        for id in [stale.id, other.id, expired.id] {
+            sqlx::query("UPDATE api_tokens SET created_at = ? WHERE id = ?")
+                .bind(&old)
+                .bind(id.to_string())
+                .execute(store.pool())
+                .await
+                .unwrap();
+        }
+
+        let ids = |v: Vec<ApiToken>| v.into_iter().map(|t| t.id).collect::<Vec<_>>();
+        let scoped = ids(store.find_api_tokens_needing_rotation(Some(org_a), 90).await.unwrap());
+        assert_eq!(scoped, vec![stale.id], "fresh and expired tokens are not due");
+        let mut all = ids(store.find_api_tokens_needing_rotation(None, 90).await.unwrap());
+        all.sort();
+        let mut want = vec![stale.id, other.id];
+        want.sort();
+        assert_eq!(all, want);
+        assert!(!scoped.contains(&fresh.id));
+    }
+
+    #[test]
+    fn test_generated_token_is_url_safe() {
+        for _ in 0..64 {
+            let (token, prefix) = ApiToken::generate_secret();
+            let body = token.strip_prefix("mfx_").expect("mfx_ prefix");
+            assert_eq!(body.len(), 43, "32 bytes, unpadded base64");
+            assert!(body.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_'));
+            assert_eq!(prefix, token[..12]);
+        }
     }
 
     #[tokio::test]

@@ -72,16 +72,7 @@ impl ApiToken {
         scopes: &[TokenScope],
         expires_at: Option<DateTime<Utc>>,
     ) -> sqlx::Result<(String, Self)> {
-        // Generate token: mfx_<random_base64>
-        use base64::{engine::general_purpose, Engine as _};
-        let token_suffix = {
-            use rand::Rng;
-            let mut rng = rand::rng();
-            let random_bytes: Vec<u8> = (0..32).map(|_| rng.random()).collect();
-            general_purpose::STANDARD.encode(&random_bytes)
-        };
-        let full_token = format!("mfx_{}", token_suffix);
-        let token_prefix = full_token.chars().take(12).collect::<String>(); // "mfx_" + 8 chars
+        let (full_token, token_prefix) = Self::generate_secret();
 
         // Hash the token
         let hashed_token = bcrypt::hash(&full_token, bcrypt::DEFAULT_COST)
@@ -277,6 +268,19 @@ impl ApiToken {
 // separate impl block (NOT gated on `postgres`) so that sqlite-only builds
 // of the crate still have access to scope checks, rotation heuristics, etc.
 impl ApiToken {
+    /// Generate a new plaintext token and its lookup prefix. The token is
+    /// `mfx_` followed by 32 random bytes in URL-safe base64 without padding,
+    /// so it can travel in a URL or header unescaped. Every backend uses this.
+    pub fn generate_secret() -> (String, String) {
+        use base64::{engine::general_purpose, Engine as _};
+        use rand::RngCore;
+        let mut buf = [0u8; 32];
+        rand::rng().fill_bytes(&mut buf);
+        let full_token = format!("mfx_{}", general_purpose::URL_SAFE_NO_PAD.encode(buf));
+        let token_prefix = full_token.chars().take(12).collect(); // "mfx_" + 8 chars
+        (full_token, token_prefix)
+    }
+
     /// Check if token has a specific scope
     pub fn has_scope(&self, scope: &TokenScope) -> bool {
         let scope_str = scope.to_string();
