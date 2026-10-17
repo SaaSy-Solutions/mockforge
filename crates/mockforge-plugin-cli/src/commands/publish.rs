@@ -144,7 +144,10 @@ fn read_manifest_from_zip(zip_path: &Path) -> Result<(String, String)> {
         let mut found = None;
         for i in 0..archive.len() {
             if let Ok(entry) = archive.by_index(i) {
-                let name = entry.name().to_string();
+                // An undecodable entry name cannot be the manifest.
+                let Ok(name) = entry.name().map(|name| name.to_string()) else {
+                    continue;
+                };
                 if name == "plugin.yaml" || name == "plugin.yml" {
                     found = Some(name);
                     break;
@@ -196,7 +199,7 @@ fn validate_package(package_path: &Path) -> Result<()> {
     let has_wasm = (0..archive.len()).any(|i| {
         archive
             .by_index(i)
-            .map(|entry| entry.name().ends_with(".wasm"))
+            .map(|entry| entry.name().is_ok_and(|name| name.ends_with(".wasm")))
             .unwrap_or(false)
     });
     if !has_wasm {
