@@ -13,7 +13,7 @@ use crate::git::{GitPluginConfig, GitPluginLoader, GitPluginSource};
 use crate::loader::PluginLoader;
 use crate::metadata::{MetadataStore, PluginMetadata};
 use crate::remote::{RemotePluginConfig, RemotePluginLoader};
-use crate::signature::SignatureVerifier;
+use crate::signature::{has_signature_file, SignatureVerifier, SIGNATURE_FILE};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -106,28 +106,21 @@ impl std::fmt::Display for PluginSource {
     }
 }
 
-/// Installation options
-#[derive(Debug, Clone)]
+/// Installation options. The default verifies signatures and refuses
+/// unsigned plugins.
+#[derive(Debug, Clone, Default)]
 pub struct InstallOptions {
     /// Force reinstall even if plugin already exists
     pub force: bool,
-    /// Skip validation checks
+    /// Skip manifest and WASM validation checks. Never skips signature
+    /// verification.
     pub skip_validation: bool,
-    /// Verify plugin signature (if available)
-    pub verify_signature: bool,
+    /// Install a plugin that has no `plugin.sig`. For local development
+    /// plugins only. A signature that is present but fails verification
+    /// is still rejected.
+    pub allow_unsigned: bool,
     /// Expected checksum for verification (URL sources)
     pub expected_checksum: Option<String>,
-}
-
-impl Default for InstallOptions {
-    fn default() -> Self {
-        Self {
-            force: false,
-            skip_validation: false,
-            verify_signature: true,
-            expected_checksum: None,
-        }
-    }
 }
 
 /// Unified plugin installer
@@ -198,13 +191,13 @@ impl PluginInstaller {
             }
         };
 
-        // Verify signature if enabled
-        if options.verify_signature && !options.skip_validation {
-            if let Err(e) = self.verify_plugin_signature(&plugin_dir) {
-                tracing::warn!("Plugin signature verification failed: {}", e);
-                // Don't fail installation, just warn
-            }
-        }
+        // Signature verification gates installation. It runs before
+        // validation and loading, and `skip_validation` does not bypass it.
+        self.enforce_plugin_signature(
+            &plugin_dir,
+            source,
+            options.allow_unsigned || self.config.allow_unsigned,
+        )?;
 
         // Validate the plugin
         if !options.skip_validation {
@@ -304,10 +297,46 @@ impl PluginInstaller {
         self.remote_loader.download_with_checksum(&download_url, checksum_ref).await
     }
 
-    /// Verify plugin signature using cryptographic verification
-    fn verify_plugin_signature(&self, plugin_dir: &Path) -> LoaderResult<()> {
-        let verifier = SignatureVerifier::new(&self.config);
-        verifier.verify_plugin_signature(plugin_dir)
+    /// Require a valid signature from a trusted, unexpired, unrevoked key.
+    ///
+    /// With `allow_unsigned`, a plugin without `plugin.sig` installs with a
+    /// warning. A signature that is present is always verified, and a
+    /// failure aborts the install.
+    fn enforce_plugin_signature(
+        &self,
+        plugin_dir: &Path,
+        source: &PluginSource,
+        allow_unsigned: bool,
+    ) -> LoaderResult<()> {
+        if !has_signature_file(plugin_dir) {
+            if allow_unsigned {
+                tracing::warn!(
+                    source = %source,
+                    "INSTALLING UNSIGNED PLUGIN: signature verification skipped because \
+                     unsigned plugins were explicitly allowed. Only do this for local \
+                     development plugins you built yourself."
+                );
+                return Ok(());
+            }
+            return Err(PluginLoaderError::security(format!(
+                "Plugin from {} is unsigned (no {}). Refusing to install. For a local \
+                 development plugin, pass --allow-unsigned.",
+                source, SIGNATURE_FILE
+            )));
+        }
+
+        let strict = PluginLoaderConfig {
+            allow_unsigned: false,
+            ..self.config.clone()
+        };
+        SignatureVerifier::new(&strict)
+            .verify_plugin_signature(plugin_dir)
+            .map_err(|e| {
+                PluginLoaderError::security(format!(
+                    "Plugin signature verification failed for {}: {}",
+                    source, e
+                ))
+            })
     }
 
     /// Uninstall a plugin
@@ -326,8 +355,18 @@ impl PluginInstaller {
         self.loader.list_plugins().await
     }
 
-    /// Update a plugin to the latest version
+    /// Update a plugin to the latest version. Unsigned plugins are refused.
     pub async fn update(&self, plugin_id: &PluginId) -> LoaderResult<()> {
+        self.update_with_options(plugin_id, false).await
+    }
+
+    /// Update a plugin, optionally allowing an unsigned replacement (see
+    /// [`InstallOptions::allow_unsigned`]).
+    pub async fn update_with_options(
+        &self,
+        plugin_id: &PluginId,
+        allow_unsigned: bool,
+    ) -> LoaderResult<()> {
         tracing::info!("Updating plugin: {}", plugin_id);
 
         // Get plugin metadata to find original source
@@ -352,7 +391,7 @@ impl PluginInstaller {
         let options = InstallOptions {
             force: true,
             skip_validation: false,
-            verify_signature: true,
+            allow_unsigned,
             expected_checksum: None,
         };
 
@@ -385,8 +424,17 @@ impl PluginInstaller {
         Ok(())
     }
 
-    /// Update all plugins to their latest versions
+    /// Update all plugins to their latest versions. Unsigned plugins are
+    /// refused.
     pub async fn update_all(&self) -> LoaderResult<Vec<PluginId>> {
+        self.update_all_with_options(false).await
+    }
+
+    /// Update all plugins, optionally allowing unsigned replacements.
+    pub async fn update_all_with_options(
+        &self,
+        allow_unsigned: bool,
+    ) -> LoaderResult<Vec<PluginId>> {
         tracing::info!("Updating all plugins");
 
         // Get list of all plugins with metadata
@@ -407,7 +455,7 @@ impl PluginInstaller {
 
         // Update each plugin
         for plugin_id in plugin_ids {
-            match self.update(&plugin_id).await {
+            match self.update_with_options(&plugin_id, allow_unsigned).await {
                 Ok(_) => {
                     tracing::info!("Successfully updated plugin: {}", plugin_id);
                     updated.push(plugin_id);
@@ -681,7 +729,7 @@ mod tests {
         let options = InstallOptions::default();
         assert!(!options.force);
         assert!(!options.skip_validation);
-        assert!(options.verify_signature);
+        assert!(!options.allow_unsigned);
         assert!(options.expected_checksum.is_none());
     }
 
@@ -707,11 +755,10 @@ mod tests {
     fn test_install_options_skip_validation() {
         let options = InstallOptions {
             skip_validation: true,
-            verify_signature: false,
             ..Default::default()
         };
         assert!(options.skip_validation);
-        assert!(!options.verify_signature);
+        assert!(!options.allow_unsigned);
     }
 
     #[test]
@@ -719,7 +766,7 @@ mod tests {
         let options = InstallOptions {
             force: true,
             skip_validation: false,
-            verify_signature: true,
+            allow_unsigned: false,
             expected_checksum: Some("test".to_string()),
         };
         let cloned = options.clone();
@@ -843,6 +890,261 @@ mod tests {
         let selected = select_registry_version(&entry).expect("expected selected version");
         assert_eq!(selected.version, "2.0.0");
         assert_eq!(selected.download_url, "https://example.com/2.0.0.wasm");
+    }
+
+    // ===== Signature enforcement (#1013) =====
+
+    mod signature_enforcement {
+        use super::*;
+        use crate::signature::PluginSignature;
+        use crate::signature_gen::{generate_ed25519_keypair, sign_plugin_ed25519};
+        use chrono::{Duration as ChronoDuration, Utc};
+        use tempfile::TempDir;
+
+        const KEY_ID: &str = "publisher-key";
+
+        struct Fixture {
+            _home: TempDir,
+            installer: PluginInstaller,
+            private_key: Vec<u8>,
+        }
+
+        fn installer_with(config: PluginLoaderConfig, home: &TempDir) -> PluginInstaller {
+            let remote_loader = RemotePluginLoader::new(RemotePluginConfig {
+                cache_dir: home.path().join("downloads"),
+                ..Default::default()
+            })
+            .expect("temp cache dir is writable");
+            let git_loader = GitPluginLoader::new(GitPluginConfig {
+                cache_dir: home.path().join("git"),
+                ..Default::default()
+            })
+            .expect("temp cache dir is writable");
+            PluginInstaller {
+                loader: PluginLoader::new(config.clone()),
+                remote_loader,
+                git_loader,
+                config,
+                metadata_store: std::sync::Arc::new(tokio::sync::RwLock::new(MetadataStore::new(
+                    home.path().join("metadata"),
+                ))),
+            }
+        }
+
+        /// Installer trusting one freshly generated key, plus an optional
+        /// config tweak (expiry, revocation, wrong key).
+        fn fixture(tweak: impl FnOnce(&mut PluginLoaderConfig, &[u8])) -> Fixture {
+            let home = TempDir::new().expect("tempdir");
+            let (private_key, public_key) = generate_ed25519_keypair().expect("keygen");
+            let mut config = PluginLoaderConfig {
+                trusted_keys: vec![KEY_ID.to_string()],
+                ..Default::default()
+            };
+            config.key_data.insert(KEY_ID.to_string(), public_key.clone());
+            tweak(&mut config, &public_key);
+            let installer = installer_with(config, &home);
+            Fixture {
+                _home: home,
+                installer,
+                private_key,
+            }
+        }
+
+        fn plugin_dir(wasm: &[u8]) -> TempDir {
+            let dir = TempDir::new().expect("tempdir");
+            std::fs::write(dir.path().join("plugin.yaml"), "id: sig-test\n").expect("write");
+            std::fs::write(dir.path().join("plugin.wasm"), wasm).expect("write");
+            dir
+        }
+
+        async fn install(
+            fx: &Fixture,
+            dir: &TempDir,
+            options: InstallOptions,
+        ) -> LoaderResult<PluginId> {
+            let source = PluginSource::Local(dir.path().to_path_buf());
+            fx.installer.install_from_source(&source, options).await
+        }
+
+        /// The fixture has no loadable manifest, so a plugin that clears the
+        /// signature gate fails later in manifest validation instead.
+        fn assert_passed_signature_gate(result: LoaderResult<PluginId>) {
+            let err = result.expect_err("fixture manifest is not loadable");
+            assert!(!err.is_security_error(), "blocked by signature gate: {err}");
+        }
+
+        fn assert_blocked(result: LoaderResult<PluginId>, needle: &str) {
+            let err = result.expect_err("install must be blocked");
+            assert!(err.is_security_error(), "expected security error, got: {err}");
+            assert!(err.to_string().contains(needle), "unexpected error: {err}");
+        }
+
+        #[tokio::test]
+        async fn unsigned_plugin_is_blocked_by_default() {
+            let fx = fixture(|_, _| {});
+            let dir = plugin_dir(b"\0asm-good");
+            assert_blocked(install(&fx, &dir, InstallOptions::default()).await, "unsigned");
+        }
+
+        #[tokio::test]
+        async fn skip_validation_does_not_bypass_signature() {
+            let fx = fixture(|_, _| {});
+            let dir = plugin_dir(b"\0asm-good");
+            let options = InstallOptions {
+                skip_validation: true,
+                ..Default::default()
+            };
+            assert_blocked(install(&fx, &dir, options).await, "unsigned");
+        }
+
+        #[tokio::test]
+        async fn explicit_allow_unsigned_installs_unsigned_plugin() {
+            let fx = fixture(|_, _| {});
+            let dir = plugin_dir(b"\0asm-good");
+            let options = InstallOptions {
+                allow_unsigned: true,
+                ..Default::default()
+            };
+            assert_passed_signature_gate(install(&fx, &dir, options).await);
+        }
+
+        #[tokio::test]
+        async fn valid_signature_passes() {
+            let fx = fixture(|_, _| {});
+            let dir = plugin_dir(b"\0asm-good");
+            sign_plugin_ed25519(dir.path(), KEY_ID, &fx.private_key).expect("sign");
+            assert_passed_signature_gate(install(&fx, &dir, InstallOptions::default()).await);
+        }
+
+        #[tokio::test]
+        async fn tampered_wasm_is_blocked() {
+            let fx = fixture(|_, _| {});
+            let dir = plugin_dir(b"\0asm-good");
+            sign_plugin_ed25519(dir.path(), KEY_ID, &fx.private_key).expect("sign");
+            std::fs::write(dir.path().join("plugin.wasm"), b"\0asm-evil").expect("write");
+            assert_blocked(install(&fx, &dir, InstallOptions::default()).await, "modified");
+        }
+
+        #[tokio::test]
+        async fn injected_file_is_blocked() {
+            let fx = fixture(|_, _| {});
+            let dir = plugin_dir(b"\0asm-good");
+            sign_plugin_ed25519(dir.path(), KEY_ID, &fx.private_key).expect("sign");
+            std::fs::create_dir(dir.path().join("assets")).expect("mkdir");
+            std::fs::write(dir.path().join("assets/extra.js"), b"evil()").expect("write");
+            assert_blocked(install(&fx, &dir, InstallOptions::default()).await, "modified");
+        }
+
+        #[tokio::test]
+        async fn tampered_signature_is_blocked_even_with_allow_unsigned() {
+            let fx = fixture(|_, _| {});
+            let dir = plugin_dir(b"\0asm-good");
+            sign_plugin_ed25519(dir.path(), KEY_ID, &fx.private_key).expect("sign");
+            std::fs::write(dir.path().join("plugin.wasm"), b"\0asm-evil").expect("write");
+            let options = InstallOptions {
+                allow_unsigned: true,
+                ..Default::default()
+            };
+            assert_blocked(install(&fx, &dir, options).await, "modified");
+        }
+
+        #[tokio::test]
+        async fn wrong_key_is_blocked() {
+            let (_, other_public) = generate_ed25519_keypair().expect("keygen");
+            let fx = fixture(move |config, _| {
+                config.key_data.insert(KEY_ID.to_string(), other_public);
+            });
+            let dir = plugin_dir(b"\0asm-good");
+            sign_plugin_ed25519(dir.path(), KEY_ID, &fx.private_key).expect("sign");
+            assert_blocked(
+                install(&fx, &dir, InstallOptions::default()).await,
+                "Invalid signature",
+            );
+        }
+
+        #[tokio::test]
+        async fn untrusted_key_is_blocked() {
+            let fx = fixture(|_, _| {});
+            let dir = plugin_dir(b"\0asm-good");
+            sign_plugin_ed25519(dir.path(), "someone-else", &fx.private_key).expect("sign");
+            assert_blocked(install(&fx, &dir, InstallOptions::default()).await, "not in trusted");
+        }
+
+        #[tokio::test]
+        async fn expired_key_is_blocked() {
+            let fx = fixture(|config, _| {
+                config
+                    .key_expires_at
+                    .insert(KEY_ID.to_string(), Utc::now() - ChronoDuration::days(1));
+            });
+            let dir = plugin_dir(b"\0asm-good");
+            sign_plugin_ed25519(dir.path(), KEY_ID, &fx.private_key).expect("sign");
+            assert_blocked(install(&fx, &dir, InstallOptions::default()).await, "expired");
+        }
+
+        #[tokio::test]
+        async fn unexpired_key_passes() {
+            let fx = fixture(|config, _| {
+                config
+                    .key_expires_at
+                    .insert(KEY_ID.to_string(), Utc::now() + ChronoDuration::days(30));
+            });
+            let dir = plugin_dir(b"\0asm-good");
+            sign_plugin_ed25519(dir.path(), KEY_ID, &fx.private_key).expect("sign");
+            assert_passed_signature_gate(install(&fx, &dir, InstallOptions::default()).await);
+        }
+
+        #[tokio::test]
+        async fn revoked_key_is_blocked() {
+            let fx = fixture(|config, _| {
+                config.revoked_keys.push(KEY_ID.to_string());
+            });
+            let dir = plugin_dir(b"\0asm-good");
+            sign_plugin_ed25519(dir.path(), KEY_ID, &fx.private_key).expect("sign");
+            assert_blocked(install(&fx, &dir, InstallOptions::default()).await, "revoked");
+        }
+
+        #[tokio::test]
+        async fn signature_for_different_artifact_is_blocked() {
+            let fx = fixture(|_, _| {});
+            let signed = plugin_dir(b"\0asm-good");
+            sign_plugin_ed25519(signed.path(), KEY_ID, &fx.private_key).expect("sign");
+            let other = plugin_dir(b"\0asm-other");
+            std::fs::copy(signed.path().join("plugin.sig"), other.path().join("plugin.sig"))
+                .expect("copy");
+            assert_blocked(install(&fx, &other, InstallOptions::default()).await, "different");
+        }
+
+        #[tokio::test]
+        async fn legacy_manifest_only_signature_is_blocked() {
+            let fx = fixture(|_, _| {});
+            let dir = plugin_dir(b"\0asm-good");
+            let mut sig = sign_plugin_ed25519(dir.path(), KEY_ID, &fx.private_key).expect("sign");
+            sig.format_version = 1;
+            let json = serde_json::to_string(&sig).expect("serialize");
+            std::fs::write(dir.path().join("plugin.sig"), json).expect("write");
+            assert_blocked(install(&fx, &dir, InstallOptions::default()).await, "format v1");
+
+            // A v1 file has no format_version field at all.
+            let mut raw: serde_json::Value = serde_json::from_str(
+                &std::fs::read_to_string(dir.path().join("plugin.sig")).expect("read"),
+            )
+            .expect("json");
+            raw.as_object_mut().expect("object").remove("format_version");
+            let parsed: PluginSignature = serde_json::from_value(raw).expect("parse");
+            assert_eq!(parsed.format_version, 1);
+        }
+
+        #[tokio::test]
+        async fn config_allow_unsigned_still_rejects_bad_signature() {
+            let fx = fixture(|config, _| {
+                config.allow_unsigned = true;
+                config.revoked_keys.push(KEY_ID.to_string());
+            });
+            let dir = plugin_dir(b"\0asm-good");
+            sign_plugin_ed25519(dir.path(), KEY_ID, &fx.private_key).expect("sign");
+            assert_blocked(install(&fx, &dir, InstallOptions::default()).await, "revoked");
+        }
     }
 
     #[test]

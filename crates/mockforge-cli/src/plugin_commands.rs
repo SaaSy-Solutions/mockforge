@@ -1,7 +1,10 @@
 //! Plugin management CLI commands
 
 use clap::Subcommand;
-use mockforge_plugin_loader::{InstallOptions, PluginInstaller, PluginLoaderConfig, PluginSource};
+use mockforge_plugin_loader::{
+    resolve_trust_store_path, InstallOptions, PluginInstaller, PluginLoaderConfig, PluginSource,
+    TrustStoreFile,
+};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -22,13 +25,22 @@ pub enum PluginCommands {
         #[arg(long)]
         force: bool,
 
-        /// Skip validation checks
+        /// Skip manifest and WASM validation checks (the signature is
+        /// still verified)
         #[arg(long)]
         skip_validation: bool,
 
-        /// Don't verify plugin signature
-        #[arg(long)]
-        no_verify: bool,
+        /// Install a plugin that has no plugin.sig. For local development
+        /// plugins you built yourself only. A signature that is present but
+        /// invalid, expired or revoked is still rejected.
+        #[arg(long, alias = "no-verify")]
+        allow_unsigned: bool,
+
+        /// Trust store JSON with the publisher keys to accept. Defaults to
+        /// $MOCKFORGE_PLUGIN_TRUSTED_KEYS_FILE, then
+        /// ~/.mockforge/trusted-keys.json
+        #[arg(long, value_name = "FILE")]
+        trusted_keys: Option<PathBuf>,
 
         /// Expected SHA-256 checksum (for URL sources)
         #[arg(long)]
@@ -62,6 +74,15 @@ pub enum PluginCommands {
         /// Update all installed plugins
         #[arg(long)]
         all: bool,
+
+        /// Accept an unsigned replacement. For local development plugins
+        /// only; invalid signatures are still rejected.
+        #[arg(long)]
+        allow_unsigned: bool,
+
+        /// Trust store JSON with the publisher keys to accept
+        #[arg(long, value_name = "FILE")]
+        trusted_keys: Option<PathBuf>,
     },
 
     /// Validate a plugin without installing
@@ -113,6 +134,27 @@ pub enum PluginCommands {
     },
 }
 
+/// Loader config with the publisher keys from the trust store, if any.
+pub(crate) fn plugin_loader_config(
+    trusted_keys: Option<&Path>,
+) -> anyhow::Result<PluginLoaderConfig> {
+    let mut config = PluginLoaderConfig::default();
+    if let Some(path) = resolve_trust_store_path(trusted_keys) {
+        let count = TrustStoreFile::load(&path)?.apply_to(&mut config)?;
+        tracing::info!(path = %path.display(), keys = count, "loaded plugin trust store");
+    }
+    Ok(config)
+}
+
+/// Loud, unconditional warning for the unsigned-plugin opt-out.
+pub(crate) fn warn_allow_unsigned() {
+    eprintln!(
+        "⚠️  WARNING: --allow-unsigned skips signature checks for plugins without a \
+         plugin.sig.\n   Only use it for local development plugins you built yourself. \
+         An unsigned plugin runs\n   with whatever code its author shipped."
+    );
+}
+
 /// Handle plugin commands
 pub async fn handle_plugin_command(command: PluginCommands) -> anyhow::Result<()> {
     match command {
@@ -120,18 +162,23 @@ pub async fn handle_plugin_command(command: PluginCommands) -> anyhow::Result<()
             source,
             force,
             skip_validation,
-            no_verify,
+            allow_unsigned,
+            trusted_keys,
             checksum,
         } => {
             println!("🔌 Installing plugin from: {}", source);
 
-            let config = PluginLoaderConfig::default();
+            let config = plugin_loader_config(trusted_keys.as_deref())?;
             let installer = PluginInstaller::new(config)?;
+
+            if allow_unsigned {
+                warn_allow_unsigned();
+            }
 
             let options = InstallOptions {
                 force,
                 skip_validation,
-                verify_signature: !no_verify,
+                allow_unsigned,
                 expected_checksum: checksum,
             };
 
@@ -225,13 +272,21 @@ pub async fn handle_plugin_command(command: PluginCommands) -> anyhow::Result<()
             }
         }
 
-        PluginCommands::Update { plugin_id, all } => {
+        PluginCommands::Update {
+            plugin_id,
+            all,
+            allow_unsigned,
+            trusted_keys,
+        } => {
+            if allow_unsigned {
+                warn_allow_unsigned();
+            }
             if all {
                 println!("🔄 Updating all plugins...");
-                let config = PluginLoaderConfig::default();
+                let config = plugin_loader_config(trusted_keys.as_deref())?;
                 let installer = PluginInstaller::new(config)?;
 
-                match installer.update_all().await {
+                match installer.update_all_with_options(allow_unsigned).await {
                     Ok(updated) => {
                         println!("✅ Updated {} plugins", updated.len());
                         for id in updated {
@@ -246,11 +301,11 @@ pub async fn handle_plugin_command(command: PluginCommands) -> anyhow::Result<()
             } else if let Some(id) = plugin_id {
                 println!("🔄 Updating plugin: {}", id);
 
-                let config = PluginLoaderConfig::default();
+                let config = plugin_loader_config(trusted_keys.as_deref())?;
                 let installer = PluginInstaller::new(config)?;
                 let plugin_id = mockforge_plugin_core::PluginId::new(&id);
 
-                match installer.update(&plugin_id).await {
+                match installer.update_with_options(&plugin_id, allow_unsigned).await {
                     Ok(_) => {
                         println!("✅ Plugin updated successfully");
                     }
