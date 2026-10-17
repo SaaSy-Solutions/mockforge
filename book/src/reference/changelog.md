@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Security
+
+- **[Cloud]** Upgrade `zip` to 9.0.4 in mockforge-cli, plugin-loader, plugin-cli, scenarios and registry-server (RUSTSEC-2026-0367/0368/0369). MockForge's own archive handling already avoided `extract()` and checked `enclosed_name()`; entry names that cannot be decoded are now skipped. The desktop app's auto-updater still bundles zip 4.6.1, which only unpacks signature-verified MockForge updates.
+
 ## [0.3.236] - 2026-10-16
 
 ### Added
