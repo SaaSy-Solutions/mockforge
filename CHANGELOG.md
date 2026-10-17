@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security
+
+- **[DevX]** `mockforge plugin install` and `plugin update` now refuse a plugin whose signature is missing or fails verification. Before, a failed check only logged a warning and the plugin installed anyway, and `--skip-validation` skipped the check entirely. Signatures (format v2) now cover every file in the plugin directory, not only `plugin.toml`, so a swapped WASM module, an added file or a `plugin.sig` copied from another plugin fails. Keys can be revoked or given an expiry in a trust store (`--trusted-keys FILE`, `$MOCKFORGE_PLUGIN_TRUSTED_KEYS_FILE` or `~/.mockforge/trusted-keys.json`). `--allow-unsigned` installs a plugin with no `plugin.sig`, for local development only, with a warning; a signature that is present but invalid is still rejected. **Breaking:** unsigned plugins need `--allow-unsigned`, v1 signatures must be re-signed, `--no-verify` is now an alias of `--allow-unsigned`, and `InstallOptions::verify_signature` is replaced by `allow_unsigned`. (#1013)
+
 ## [0.3.236] - 2026-10-16
 
 ### Added
