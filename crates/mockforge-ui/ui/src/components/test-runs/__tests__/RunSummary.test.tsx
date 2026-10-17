@@ -17,4 +17,34 @@ describe('Run summary presentation', () => {
     render(<RunSummary run={{ kind, summary: { executor_phase: 'real_bench' } }} />);
     expect(screen.getByText('Run summary')).toBeVisible();
   });
+  it('shows a not-implemented run as such instead of a results widget', () => {
+    render(
+      <RunSummary
+        run={{
+          kind: 'chaos_campaign',
+          summary: {
+            executor_phase: 'unsupported',
+            status_reason: 'not_implemented',
+            error: "'snapshot_restore' runs are not implemented by the cloud runner",
+            work_count: 0,
+          },
+        }}
+      />,
+    );
+    expect(screen.getByText('Not implemented')).toBeVisible();
+    expect(screen.getByText("'snapshot_restore' runs are not implemented by the cloud runner")).toBeVisible();
+  });
+  it('shows a zero-work run as no work executed', () => {
+    render(
+      <RunSummary
+        run={{ kind: 'bench', summary: { executor_phase: 'real_bench', status_reason: 'no_work_executed' } }}
+      />,
+    );
+    expect(screen.getByText('No work executed')).toBeVisible();
+    expect(screen.queryByText('Bench results')).not.toBeInTheDocument();
+  });
+  it('names other status reasons', () => {
+    render(<RunSummary run={{ kind: 'contract_diff', summary: { status_reason: 'spec_http_error' } }} />);
+    expect(screen.getByText('Run did not execute (spec_http_error)')).toBeVisible();
+  });
 });
