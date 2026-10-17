@@ -1,9 +1,5 @@
 ## [Unreleased]
 
-### Security
-
-- **[Cloud]** The registry now enforces `mfx_` API token scopes on every token-authenticated route. Before, only plugin publishing checked them, so any valid token could deploy, update or delete hosted mocks, run tests and use other cloud resources. Hosted mocks and other cloud mock resources need `deploy:mocks`. Token management, account security, SSO, GDPR, platform admin and promotion approvals reject tokens. Routes without a declared scope reject tokens. Tokens are bound to their own organization: an `{org_id}` path or `X-Organization-Id` naming another org returns 403, and so does any `X-Organization-Slug`. **Breaking for tokens that relied on the missing check.** Tokens created without `deploy:mocks` (the column default is `read:packages`) now get `403 INSUFFICIENT_SCOPE` naming the missing scope. Re-issue them with the needed scope. (#1263)
-
 ## [0.3.236] - 2026-10-16
 
 ### Added
