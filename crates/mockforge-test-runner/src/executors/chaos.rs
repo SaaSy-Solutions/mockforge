@@ -169,7 +169,7 @@ impl Executor for ChaosExecutor {
 
         // For target_kind=hosted_mock, target_ref is the deployment_id.
         // Enable chaos on the deployment for the run and disable it at
-        // the end. Any other target kind, an unparseable deployment id,
+        // the end. Any other target kind, an unparsable deployment id,
         // or a failed toggle means no chaos reached a target, so the run
         // errors instead of emitting synthetic fault events (#1264).
         if target_kind != "hosted_mock" {
