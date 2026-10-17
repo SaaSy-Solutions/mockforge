@@ -1,4 +1,4 @@
-.PHONY: help dev start stop clean migrate seed test build
+.PHONY: help dev start stop clean migrate dev-seed test build
 
 help: ## Show this help message
 	@echo 'Usage: make [target]'
@@ -29,11 +29,8 @@ migrate: ## Run database migrations
 	@which sqlx >/dev/null 2>&1 || (echo "Installing sqlx-cli..." && cargo install sqlx-cli --no-default-features --features postgres)
 	sqlx migrate run --database-url "postgres://postgres:password@localhost:5432/mockforge_registry"
 
-seed: migrate ## Run migrations and seed test data
-	@echo "Database seeded with test data"
-	@echo "  Admin user: admin@mockforge.dev / admin123"
-	@echo "  Test user: test@example.com / test123"
-	@echo "  Sample plugins: auth-jwt, template-crypto, datasource-csv"
+dev-seed: migrate ## Run migrations and create a LOCAL dev admin with a random password
+	MOCKFORGE_DEV_SEED=1 ./dev-seed.sh
 
 run: ## Run registry server locally
 	cargo run --package mockforge-registry-server
