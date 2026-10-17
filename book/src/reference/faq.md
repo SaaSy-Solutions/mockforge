@@ -466,7 +466,7 @@ Use `mockforge admin` to run the Admin UI as a standalone server without startin
 
 ### Is authentication available?
 
-**Yes.** The Admin UI uses JWT login with three roles: Admin (full access), Editor (manage mocks and fixtures), and Viewer (read-only). Every admin endpoint, reads included, is permission-checked per role. Bound to loopback with no credentials configured, anonymous `GET /__mockforge/*` reads are allowed from the same machine so the TUI can poll them, and MockForge seeds demo users (`admin` / `admin123`, `editor` / `editor123`, `viewer` / `viewer123`).
+**Yes.** The Admin UI uses JWT login with three roles: Admin (full access), Editor (manage mocks and fixtures), and Viewer (read-only). Every admin endpoint, reads included, is permission-checked per role. Bound to loopback with no credentials configured, anonymous `GET /__mockforge/*` reads are allowed from the same machine so the TUI can poll them. There are no built-in users or default passwords; set `MOCKFORGE_ADMIN_PASSWORD` to log in.
 
 Bound to any other address, the admin server refuses to start until you set `MOCKFORGE_ADMIN_PASSWORD` (12+ characters; replaces the demo users), `MOCKFORGE_MANAGEMENT_TOKEN` (32+ characters; for API clients and `mockforge-tui --token`) or `JWT_SECRET`. OAuth/SSO login is not available in the local Admin UI; MockForge Cloud supports OIDC and SAML SSO.
 

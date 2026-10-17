@@ -19,7 +19,7 @@ impl Drop for OwnedChild {
     }
 }
 
-async fn assert_serve_stops_for(signal: &str, seed_default_users: bool, grace: Duration) {
+async fn assert_serve_stops_for(signal: &str, admin_login: bool, grace: Duration) {
     let directory = tempfile::tempdir().expect("isolated server workspace");
     // Child startup must not discover a host .env or fall back to the root
     // drive for its own temporary files after clearing the environment.
@@ -46,10 +46,10 @@ async fn assert_serve_stops_for(signal: &str, seed_default_users: bool, grace: D
         ])
         .stdout(Stdio::piped())
         .stderr(Stdio::null());
-    if !seed_default_users {
-        // Production does not need development users. Avoid their synchronous
-        // password hashing when checking the shorter, two-second grace period.
-        command.env("MOCKFORGE_DISABLE_DEV_SEED_USERS", "true");
+    if admin_login {
+        // A configured admin login is hashed on a startup thread; shutdown
+        // must not wait for it. There are no built-in users to seed (#1016).
+        command.env("MOCKFORGE_ADMIN_PASSWORD", "shutdown-fixture-password");
     }
     let mut child = OwnedChild(command.spawn().expect("start owned CLI process"));
     let stdout = child.0.stdout.take().expect("stdout pipe");
