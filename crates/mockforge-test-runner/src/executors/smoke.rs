@@ -265,6 +265,7 @@ impl Executor for SmokeTestExecutor {
         Ok(JobOutcome {
             status,
             runner_seconds: secs,
+            work_count: probed as u64,
             summary: Some(serde_json::json!({
                 "executor_phase": "real",
                 "tracking_task": 4,
@@ -492,6 +493,7 @@ async fn errored_run(
     Ok(JobOutcome {
         status: JobStatus::Errored,
         runner_seconds: secs,
+        work_count: 0,
         summary: Some(serde_json::json!({
             "executor_phase": "errored_pre_flight",
             "tracking_task": 4,

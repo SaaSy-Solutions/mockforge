@@ -325,6 +325,7 @@ async fn evaluate_latency_threshold(
         return Ok(JobOutcome {
             status: JobStatus::Errored,
             runner_seconds: (elapsed.as_secs_f64().ceil() as i32).max(1),
+            work_count: 0,
             summary: Some(serde_json::json!({
                 "executor_phase": "real_latency_threshold",
                 "tracking_task": 8,
@@ -410,6 +411,7 @@ async fn evaluate_latency_threshold(
             JobStatus::Failed
         },
         runner_seconds: secs,
+        work_count: u64::try_from(stats.count).unwrap_or(0),
         summary: Some(serde_json::json!({
             "executor_phase": "real_latency_threshold",
             "tracking_task": 8,
@@ -550,6 +552,7 @@ async fn evaluate_error_rate(
         return Ok(JobOutcome {
             status: JobStatus::Errored,
             runner_seconds: (elapsed.as_secs_f64().ceil() as i32).max(1),
+            work_count: 0,
             summary: Some(serde_json::json!({
                 "executor_phase": "real_error_rate",
                 "tracking_task": 8,
@@ -617,6 +620,7 @@ async fn evaluate_error_rate(
             JobStatus::Failed
         },
         runner_seconds: secs,
+        work_count: u64::try_from(stats.count).unwrap_or(0),
         summary: Some(serde_json::json!({
             "executor_phase": "real_error_rate",
             "tracking_task": 8,
@@ -771,6 +775,7 @@ async fn evaluate_contract_stability(
         return Ok(JobOutcome {
             status: JobStatus::Errored,
             runner_seconds: (elapsed.as_secs_f64().ceil() as i32).max(1),
+            work_count: 0,
             summary: Some(serde_json::json!({
                 "executor_phase": "real_contract_stability",
                 "tracking_task": 8,
@@ -847,6 +852,7 @@ async fn evaluate_contract_stability(
             JobStatus::Failed
         },
         runner_seconds: secs,
+        work_count: u64::try_from(stats.run_count).unwrap_or(0),
         summary: Some(serde_json::json!({
             "executor_phase": "real_contract_stability",
             "tracking_task": 8,
@@ -903,6 +909,7 @@ async fn errored_run(
     Ok(JobOutcome {
         status: JobStatus::Errored,
         runner_seconds: secs,
+        work_count: 0,
         summary: Some(serde_json::json!({
             "executor_phase": "errored_pre_flight",
             "tracking_task": 8,

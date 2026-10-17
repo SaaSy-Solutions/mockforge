@@ -1,17 +1,19 @@
 //! Snapshot capture/restore executor (#10 / Phase 2). Handles
 //! `snapshot_capture` and `snapshot_restore`.
 //!
-//! Synthetic-pass mode: emits "component_dumped" events (capture) or
-//! "component_restored" events (restore) and returns `passed`. Real
-//! impl will dump/load workspace state + write to blob storage and
-//! call Snapshot::mark_ready via a callback.
+//! Not implemented. A real implementation must dump/load workspace state,
+//! write it to blob storage, and call `Snapshot::mark_ready` via a
+//! callback. Until then every run finishes `errored` with
+//! `status_reason = "not_implemented"`, so the registry marks the
+//! snapshot failed instead of telling the user their state was captured
+//! or restored (#1264).
 
 use async_trait::async_trait;
 use std::time::Instant;
 
 use crate::callbacks::RegistryCallbacks;
 use crate::error::Result;
-use crate::executors::{Executor, JobOutcome, JobStatus, RunJob};
+use crate::executors::{unsupported, Executor, JobOutcome, RunJob};
 
 /// Executor for snapshot capture + restore.
 pub struct SnapshotExecutor {
@@ -22,10 +24,6 @@ impl SnapshotExecutor {
     /// Construct for one of `snapshot_capture` or `snapshot_restore`.
     pub fn for_kind(kind: &'static str) -> Self {
         Self { kind }
-    }
-
-    fn synthetic_components(_payload: &serde_json::Value) -> &'static [&'static str] {
-        &["mocks", "scenarios", "fixtures", "world_state"]
     }
 }
 
@@ -38,75 +36,11 @@ impl Executor for SnapshotExecutor {
     async fn execute(&self, job: RunJob, callbacks: &RegistryCallbacks) -> Result<JobOutcome> {
         let started = Instant::now();
         callbacks.run_started(job.run_id).await?;
-
-        let event_type = if self.kind == "snapshot_restore" {
-            "component_restored"
+        let detail = if self.kind == "snapshot_restore" {
+            "no workspace state was restored"
         } else {
-            "component_dumped"
+            "no workspace state was captured"
         };
-        let components = Self::synthetic_components(&job.payload);
-
-        callbacks
-            .run_event(
-                job.run_id,
-                1,
-                "log",
-                serde_json::json!({
-                    "level": "info",
-                    "message": format!(
-                        "Synthetic {} on {} components",
-                        self.kind,
-                        components.len()
-                    ),
-                    "synthetic": true,
-                    "tracking_task": 10,
-                }),
-            )
-            .await?;
-
-        let mut next_seq: u32 = 2;
-        for (i, comp) in components.iter().enumerate() {
-            callbacks
-                .run_event(
-                    job.run_id,
-                    next_seq,
-                    event_type,
-                    serde_json::json!({
-                        "component": comp,
-                        "size_bytes": 1024 * (i as u64 + 1),
-                    }),
-                )
-                .await?;
-            next_seq += 1;
-            tokio::time::sleep(std::time::Duration::from_millis(50)).await;
-        }
-
-        let elapsed = started.elapsed();
-        let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
-
-        Ok(JobOutcome {
-            status: JobStatus::Passed,
-            runner_seconds: secs,
-            summary: Some(serde_json::json!({
-                "executor_phase": "synthetic",
-                "tracking_task": 10,
-                "kind": self.kind,
-                "components": components,
-                "wall_ms": elapsed.as_millis() as u64,
-            })),
-        })
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::json;
-
-    #[test]
-    fn components_list_is_stable() {
-        let comps = SnapshotExecutor::synthetic_components(&json!({}));
-        assert_eq!(comps.len(), 4);
-        assert!(comps.contains(&"mocks"));
+        unsupported(&job, callbacks, started, 1, detail).await
     }
 }

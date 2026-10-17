@@ -13,6 +13,14 @@ export const RunSummary: React.FC<{ run: Pick<TestRun, 'kind' | 'summary'> }> = 
     const phase = (summary['executor_phase'] as string | undefined) ?? '';
     const kind = run.kind;
 
+    // The runner sets `status_reason` when a run did no real work: the
+    // kind is not implemented, inputs were missing, or zero cases ran.
+    // Say so plainly instead of rendering a per-kind results widget.
+    const statusReason = summary['status_reason'];
+    if (typeof statusReason === 'string' && statusReason !== '') {
+        return <NoWorkNotice summary={summary} reason={statusReason} />;
+    }
+
     const presenter = SUMMARY_PRESENTERS.get(kind);
     if (presenter && (!presenter.phases || presenter.phases.includes(phase))) {
         const Component = presenter.component;
@@ -23,6 +31,37 @@ export const RunSummary: React.FC<{ run: Pick<TestRun, 'kind' | 'summary'> }> = 
             <summary className="cursor-pointer text-sm font-medium">Run summary</summary>
             <pre className="text-xs mt-2 overflow-x-auto">{JSON.stringify(summary, null, 2)}</pre>
         </details>
+    );
+};
+
+const REASON_LABELS: Record<string, string> = {
+    not_implemented: 'Not implemented',
+    no_work_executed: 'No work executed',
+};
+
+const NoWorkNotice: React.FC<{ summary: Record<string, unknown>; reason: string }> = ({
+    summary,
+    reason,
+}) => {
+    const error = summary['error'];
+    return (
+        <div className="space-y-2">
+            <div
+                role="status"
+                className="rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3 text-sm"
+            >
+                <div className="font-medium text-amber-800 dark:text-amber-300">
+                    {REASON_LABELS[reason] ?? `Run did not execute (${reason})`}
+                </div>
+                {typeof error === 'string' && error !== '' && (
+                    <div className="mt-1 text-amber-700 dark:text-amber-400">{error}</div>
+                )}
+            </div>
+            <details className="bg-gray-50 dark:bg-gray-900/50 rounded p-3">
+                <summary className="cursor-pointer text-sm font-medium">Run summary</summary>
+                <pre className="text-xs mt-2 overflow-x-auto">{JSON.stringify(summary, null, 2)}</pre>
+            </details>
+        </div>
     );
 };
 

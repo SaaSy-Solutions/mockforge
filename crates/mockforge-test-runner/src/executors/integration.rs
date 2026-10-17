@@ -134,6 +134,7 @@ pub async fn run_integration(
             return Ok(JobOutcome {
                 status: JobStatus::Errored,
                 runner_seconds: 1,
+                work_count: 0,
                 summary: Some(serde_json::json!({
                     "executor_phase": "real",
                     "tracking_task": 356,
@@ -284,6 +285,7 @@ pub async fn run_integration(
     Ok(JobOutcome {
         status,
         runner_seconds: secs,
+        work_count: u64::from(total),
         summary: Some(serde_json::json!({
             "executor_phase": "real",
             "tracking_task": 356,

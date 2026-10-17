@@ -1,32 +1,45 @@
-//! Contract diff / verification / fitness executor (#8 / Phase 2).
-//! Handles `contract_diff | verification_suite | fitness_evaluation`.
+//! Contract diff executor (#8 / Phase 2). Handles `contract_diff` and
+//! `verification_suite`.
 //!
-//! Real-fetch mode (kind=contract_diff): when the queue payload includes
-//! `openapi_spec_url`, the executor fetches the spec, parses it,
-//! enumerates declared endpoints, and emits one event per endpoint plus
-//! summary stats. It does NOT yet diff against live traffic — that
-//! requires the `mockforge-ai-contract-diff` pipeline (separate crate
-//! that doesn't exist yet) for the AI-assisted scoring.
+//! `contract_diff` fetches the OpenAPI spec at `openapi_spec_url`, parses
+//! it, and compares its declared endpoints with the workspace's recent
+//! traffic. A missing URL, a fetch error, a non-2xx response, or a body
+//! that is not an OpenAPI/Swagger document finishes the run `errored`
+//! with a `status_reason` (#1264). It used to fall back to synthetic
+//! findings and report `passed`, so a broken spec URL produced a green
+//! contract check.
 //!
-//! Synthetic-pass mode: when the spec URL is missing or the fetch
-//! fails the executor falls back to emitting a couple of synthetic
-//! findings so the UI's severity-grouped view still has data to render.
+//! `verification_suite` has no executor yet and finishes `errored` with
+//! `status_reason = "not_implemented"`.
 
 use async_trait::async_trait;
 use std::time::Instant;
 
 use crate::callbacks::{ContractDriftEndpoint, ContractDriftScoreRequest, RegistryCallbacks};
 use crate::error::Result;
-use crate::executors::{Executor, JobOutcome, JobStatus, RunJob};
+use crate::executors::{errored_with_reason, unsupported, Executor, JobOutcome, JobStatus, RunJob};
+use crate::target_client::TargetClient;
 
-/// Executor for the three contract-/fitness-related kinds.
+/// `status_reason` when the payload has no `openapi_spec_url`.
+pub const REASON_SPEC_MISSING: &str = "spec_missing";
+/// `status_reason` when the SSRF guard refuses `openapi_spec_url`.
+pub const REASON_SPEC_URL_REJECTED: &str = "spec_url_rejected";
+/// `status_reason` when the spec request fails or its body can't be read.
+pub const REASON_SPEC_FETCH_FAILED: &str = "spec_fetch_failed";
+/// `status_reason` when the spec URL answers with a non-2xx status.
+pub const REASON_SPEC_HTTP_ERROR: &str = "spec_http_error";
+/// `status_reason` when the body is not an OpenAPI/Swagger document.
+pub const REASON_SPEC_INVALID: &str = "spec_invalid";
+/// `status_reason` when the workspace traffic lookup fails.
+pub const REASON_TRAFFIC_UNAVAILABLE: &str = "traffic_unavailable";
+
+/// Executor for the contract kinds.
 pub struct ContractExecutor {
     kind: &'static str,
 }
 
 impl ContractExecutor {
-    /// Construct for `contract_diff`, `verification_suite`, or
-    /// `fitness_evaluation`.
+    /// Construct for `contract_diff` or `verification_suite`.
     pub fn for_kind(kind: &'static str) -> Self {
         Self { kind }
     }
@@ -42,37 +55,110 @@ impl Executor for ContractExecutor {
         let started = Instant::now();
         callbacks.run_started(job.run_id).await?;
 
+        if self.kind != "contract_diff" {
+            return unsupported(&job, callbacks, started, 1, "no verification was performed").await;
+        }
+
         let service_name = job
             .payload
             .get("service_name")
             .and_then(|v| v.as_str())
             .unwrap_or("(unspecified)")
             .to_string();
-        let spec_url =
-            job.payload.get("openapi_spec_url").and_then(|v| v.as_str()).map(String::from);
+        let spec_url = job
+            .payload
+            .get("openapi_spec_url")
+            .and_then(|v| v.as_str())
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(String::from);
+        let Some(spec_url) = spec_url else {
+            return errored_with_reason(
+                &job,
+                callbacks,
+                started,
+                1,
+                REASON_SPEC_MISSING,
+                "contract_diff requires `openapi_spec_url`; no spec was compared".to_string(),
+            )
+            .await;
+        };
 
-        // Real-fetch only applies to contract_diff. The other kinds
-        // (verification_suite, fitness_evaluation) need their own
-        // executor logic and stay synthetic for now.
-        if self.kind == "contract_diff" {
-            if let Some(url) = spec_url.as_deref() {
-                if !url.is_empty() {
-                    return run_real_contract_diff(job, callbacks, started, &service_name, url)
-                        .await;
-                }
-            }
-        }
-
-        run_synthetic(self.kind, job, callbacks, started, &service_name).await
+        let client =
+            TargetClient::new(std::time::Duration::from_secs(30), "mockforge-contract-diff/1.0")?;
+        run_real_contract_diff(job, callbacks, started, &service_name, &spec_url, &client).await
     }
 }
 
-async fn run_real_contract_diff(
+/// Why a spec could not be loaded: a `status_reason` plus a message.
+#[derive(Debug)]
+pub(crate) struct SpecError {
+    reason: &'static str,
+    message: String,
+}
+
+/// Fetch and parse the OpenAPI document at `spec_url`. Returns the raw
+/// text (for the AI pass) and the parsed document. Fails on transport
+/// errors, non-2xx responses, and bodies that are not an OpenAPI 3.x or
+/// Swagger 2.0 document with a `paths` object.
+pub(crate) async fn fetch_spec(
+    client: &TargetClient,
+    spec_url: &str,
+) -> std::result::Result<(String, serde_json::Value), SpecError> {
+    let request = client.get(spec_url).map_err(|e| SpecError {
+        reason: REASON_SPEC_URL_REJECTED,
+        message: format!("openapi_spec_url rejected by SSRF guard: {e}"),
+    })?;
+    let resp = request.send().await.map_err(|e| SpecError {
+        reason: REASON_SPEC_FETCH_FAILED,
+        message: format!("spec fetch failed: {e}"),
+    })?;
+    let status = resp.status();
+    if !status.is_success() {
+        return Err(SpecError {
+            reason: REASON_SPEC_HTTP_ERROR,
+            message: format!("spec fetch returned HTTP {status}"),
+        });
+    }
+    let text = resp.text().await.map_err(|e| SpecError {
+        reason: REASON_SPEC_FETCH_FAILED,
+        message: format!("spec body read failed: {e}"),
+    })?;
+    let spec = parse_spec(&text).map_err(|message| SpecError {
+        reason: REASON_SPEC_INVALID,
+        message,
+    })?;
+    Ok((text, spec))
+}
+
+/// Parse JSON or YAML and require an OpenAPI/Swagger document. YAML
+/// accepts almost any text as a scalar, so the shape check is what stops
+/// an HTML error page from parsing as an empty spec.
+fn parse_spec(text: &str) -> std::result::Result<serde_json::Value, String> {
+    let spec: serde_json::Value = match serde_json::from_str(text) {
+        Ok(v) => v,
+        Err(_) => serde_yaml::from_str(text)
+            .map_err(|e| format!("spec parse failed (not JSON or YAML): {e}"))?,
+    };
+    let Some(obj) = spec.as_object() else {
+        return Err("spec is not a JSON/YAML object".to_string());
+    };
+    if !obj.contains_key("openapi") && !obj.contains_key("swagger") {
+        return Err("spec has no `openapi` or `swagger` version field".to_string());
+    }
+    if !obj.get("paths").is_some_and(|p| p.is_object()) {
+        return Err("spec has no `paths` object".to_string());
+    }
+    Ok(spec)
+}
+
+pub(crate) async fn run_real_contract_diff(
     job: RunJob,
     callbacks: &RegistryCallbacks,
     started: Instant,
     service_name: &str,
     spec_url: &str,
+    client: &TargetClient,
 ) -> Result<JobOutcome> {
     callbacks
         .run_event(
@@ -88,88 +174,11 @@ async fn run_real_contract_diff(
         )
         .await?;
 
-    let client = crate::target_client::TargetClient::new(
-        std::time::Duration::from_secs(30),
-        "mockforge-contract-diff/1.0",
-    )?;
-    let request = client.get(spec_url).map_err(|e| {
-        crate::error::Error::Executor(format!("openapi_spec_url rejected by SSRF guard: {e}"))
-    })?;
-
-    let spec_text = match request.send().await {
-        Ok(resp) => {
-            let status = resp.status();
-            match resp.text().await {
-                Ok(t) if status.is_success() => t,
-                Ok(_body) => {
-                    callbacks
-                        .run_event(
-                            job.run_id,
-                            2,
-                            "log",
-                            serde_json::json!({
-                                "level": "warn",
-                                "message": format!("spec fetch returned HTTP {}; falling back to synthetic", status),
-                            }),
-                        )
-                        .await?;
-                    return run_synthetic("contract_diff", job, callbacks, started, service_name)
-                        .await;
-                }
-                Err(e) => {
-                    callbacks
-                        .run_event(
-                            job.run_id,
-                            2,
-                            "log",
-                            serde_json::json!({
-                                "level": "warn",
-                                "message": format!("spec body read failed: {e}; falling back to synthetic"),
-                            }),
-                        )
-                        .await?;
-                    return run_synthetic("contract_diff", job, callbacks, started, service_name)
-                        .await;
-                }
-            }
-        }
+    let (spec_text, spec) = match fetch_spec(client, spec_url).await {
+        Ok(loaded) => loaded,
         Err(e) => {
-            callbacks
-                .run_event(
-                    job.run_id,
-                    2,
-                    "log",
-                    serde_json::json!({
-                        "level": "warn",
-                        "message": format!("spec fetch failed: {e}; falling back to synthetic"),
-                    }),
-                )
-                .await?;
-            return run_synthetic("contract_diff", job, callbacks, started, service_name).await;
+            return errored_with_reason(&job, callbacks, started, 2, e.reason, e.message).await;
         }
-    };
-
-    // Try JSON first, then fall back to YAML. The recorder spec format
-    // is open — both shapes show up in the wild.
-    let spec: serde_json::Value = match serde_json::from_str(&spec_text) {
-        Ok(v) => v,
-        Err(_) => match serde_yaml::from_str(&spec_text) {
-            Ok(v) => v,
-            Err(e) => {
-                callbacks
-                    .run_event(
-                        job.run_id,
-                        2,
-                        "log",
-                        serde_json::json!({
-                            "level": "warn",
-                            "message": format!("spec parse failed (not JSON or YAML): {e}; falling back to synthetic"),
-                        }),
-                    )
-                    .await?;
-                return run_synthetic("contract_diff", job, callbacks, started, service_name).await;
-            }
-        },
     };
 
     let endpoints = collect_endpoints(&spec);
@@ -188,15 +197,29 @@ async fn run_real_contract_diff(
         .await?;
 
     // Pull recent traffic so we can compare declared vs actually-hit
-    // endpoints. Empty/error → executor still emits the declared
-    // findings without drift markers.
+    // endpoints. No traffic → the declared findings carry no drift
+    // markers. A failed lookup errors the run: comparing against an
+    // empty list we could not fetch would report "no drift" falsely.
     let workspace_id = job
         .payload
         .get("workspace_id")
         .and_then(|v| v.as_str())
         .and_then(|s| uuid::Uuid::parse_str(s).ok());
     let hits = match workspace_id {
-        Some(wid) => callbacks.fetch_workspace_endpoint_hits(wid).await.unwrap_or_default(),
+        Some(wid) => match callbacks.fetch_workspace_endpoint_hits(wid).await {
+            Ok(hits) => hits,
+            Err(e) => {
+                return errored_with_reason(
+                    &job,
+                    callbacks,
+                    started,
+                    3,
+                    REASON_TRAFFIC_UNAVAILABLE,
+                    format!("workspace traffic lookup failed: {e}"),
+                )
+                .await;
+            }
+        },
         None => Vec::new(),
     };
     let hits_by_endpoint: std::collections::HashMap<(String, String), i64> = hits
@@ -356,6 +379,9 @@ async fn run_real_contract_diff(
     Ok(JobOutcome {
         status,
         runner_seconds: secs,
+        // One unit per declared endpoint checked plus one per undeclared
+        // endpoint found in traffic.
+        work_count: endpoints.len() as u64 + u64::from(undeclared_count),
         summary: Some(serde_json::json!({
             "executor_phase": "real_diff",
             "tracking_task": 8,
@@ -514,69 +540,6 @@ fn collect_endpoints(spec: &serde_json::Value) -> Vec<(String, String)> {
     out
 }
 
-/// Synthetic fallback — same shape the executor has shipped with so
-/// existing UIs and snapshots stay coherent.
-async fn run_synthetic(
-    kind: &str,
-    job: RunJob,
-    callbacks: &RegistryCallbacks,
-    started: Instant,
-    service_name: &str,
-) -> Result<JobOutcome> {
-    callbacks
-        .run_event(
-            job.run_id,
-            1,
-            "log",
-            serde_json::json!({
-                "level": "info",
-                "message": format!("Synthetic {} for service '{}'", kind, service_name),
-                "synthetic": true,
-                "tracking_task": 8,
-            }),
-        )
-        .await?;
-
-    let findings = [
-        ("non_breaking", "GET /users", "Added optional query param"),
-        ("cosmetic", "POST /users", "Description rewording"),
-    ];
-    let mut next_seq: u32 = 2;
-    for (i, (sev, endpoint, desc)) in findings.iter().enumerate() {
-        callbacks
-            .run_event(
-                job.run_id,
-                next_seq,
-                "diff_finding",
-                serde_json::json!({
-                    "index": i,
-                    "severity": sev,
-                    "endpoint": endpoint,
-                    "description": desc,
-                }),
-            )
-            .await?;
-        next_seq += 1;
-        tokio::time::sleep(std::time::Duration::from_millis(40)).await;
-    }
-
-    let elapsed = started.elapsed();
-    let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
-
-    Ok(JobOutcome {
-        status: JobStatus::Passed,
-        runner_seconds: secs,
-        summary: Some(serde_json::json!({
-            "executor_phase": "synthetic",
-            "tracking_task": 8,
-            "kind": kind,
-            "service_name": service_name,
-            "findings_count": findings.len(),
-            "wall_ms": elapsed.as_millis() as u64,
-        })),
-    })
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -665,6 +628,177 @@ mod tests {
         assert_eq!(body["org_id"], job.org_id.to_string());
         assert_eq!(body["workspace_id"], workspace.to_string());
         assert!(body.get("triggered_by_user_id").is_none());
+    }
+
+    use crate::executors::test_support::{job, reason, FakeHttp};
+    use crate::executors::{JobStatus, REASON_NO_WORK};
+
+    const VALID_SPEC: &str = r#"{"openapi":"3.0.0","info":{"title":"t","version":"1"},"paths":{"/users":{"get":{},"post":{}}}}"#;
+
+    fn loopback_client() -> TargetClient {
+        TargetClient::with_policy(
+            mockforge_bench::ssrf::Policy::for_test(),
+            std::time::Duration::from_secs(5),
+            "test",
+            0,
+        )
+        .expect("client builds")
+    }
+
+    /// Serves the spec routes used by the contract_diff tests.
+    async fn spec_server() -> FakeHttp {
+        FakeHttp::start(|line| {
+            if line.starts_with("GET /valid ") {
+                (200, VALID_SPEC.to_string())
+            } else if line.starts_with("GET /valid.yaml ") {
+                (200, "openapi: 3.0.0\npaths:\n  /a:\n    get: {}\n".to_string())
+            } else if line.starts_with("GET /empty-paths ") {
+                (200, r#"{"openapi":"3.0.0","paths":{}}"#.to_string())
+            } else if line.starts_with("GET /html ") {
+                (200, "<html><body>Sign in</body></html>".to_string())
+            } else if line.starts_with("GET /not-openapi ") {
+                (200, r#"{"hello":"world"}"#.to_string())
+            } else {
+                (404, r#"{"error":"not found"}"#.to_string())
+            }
+        })
+        .await
+    }
+
+    /// Run `contract_diff` against `spec_url` with a fake registry and
+    /// return the finalized outcome.
+    async fn diff(spec_url: &str, payload: serde_json::Value) -> JobOutcome {
+        let registry = FakeHttp::registry().await;
+        let callbacks = RegistryCallbacks::new(registry.base_url.clone(), "t".into());
+        let outcome = run_real_contract_diff(
+            job("contract_diff", payload),
+            &callbacks,
+            Instant::now(),
+            "svc",
+            spec_url,
+            &loopback_client(),
+        )
+        .await
+        .expect("executor returns an outcome");
+        outcome.finalize()
+    }
+
+    #[tokio::test]
+    async fn contract_diff_errors_when_spec_fetch_fails() {
+        // Bind then drop a listener so the port refuses connections.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.expect("bind");
+        let addr = listener.local_addr().expect("addr");
+        drop(listener);
+        let o = diff(&format!("http://{addr}/spec.json"), serde_json::json!({})).await;
+        assert_eq!(o.status, JobStatus::Errored);
+        assert_eq!(reason(&o).as_deref(), Some(REASON_SPEC_FETCH_FAILED));
+        assert_eq!(o.work_count, 0);
+    }
+
+    #[tokio::test]
+    async fn contract_diff_errors_on_spec_404() {
+        let spec = spec_server().await;
+        let o = diff(&format!("{}/missing", spec.base_url), serde_json::json!({})).await;
+        assert_eq!(o.status, JobStatus::Errored);
+        assert_eq!(reason(&o).as_deref(), Some(REASON_SPEC_HTTP_ERROR));
+        let error = o.summary.as_ref().and_then(|s| s["error"].as_str()).unwrap_or_default();
+        assert!(error.contains("404"), "error names the HTTP status: {error}");
+    }
+
+    #[tokio::test]
+    async fn contract_diff_errors_on_invalid_spec() {
+        let spec = spec_server().await;
+        for path in ["/html", "/not-openapi"] {
+            let o = diff(&format!("{}{path}", spec.base_url), serde_json::json!({})).await;
+            assert_eq!(o.status, JobStatus::Errored, "{path}");
+            assert_eq!(reason(&o).as_deref(), Some(REASON_SPEC_INVALID), "{path}");
+        }
+    }
+
+    #[tokio::test]
+    async fn contract_diff_rejected_url_errors() {
+        let registry = FakeHttp::registry().await;
+        let callbacks = RegistryCallbacks::new(registry.base_url.clone(), "t".into());
+        let strict = TargetClient::with_policy(
+            mockforge_bench::ssrf::Policy::strict(),
+            std::time::Duration::from_secs(5),
+            "test",
+            0,
+        )
+        .expect("client builds");
+        let o = run_real_contract_diff(
+            job("contract_diff", serde_json::json!({})),
+            &callbacks,
+            Instant::now(),
+            "svc",
+            "http://127.0.0.1:9/spec.json",
+            &strict,
+        )
+        .await
+        .expect("outcome")
+        .finalize();
+        assert_eq!(o.status, JobStatus::Errored);
+        assert_eq!(reason(&o).as_deref(), Some(REASON_SPEC_URL_REJECTED));
+    }
+
+    #[tokio::test]
+    async fn contract_diff_passes_with_real_spec_and_counts_endpoints() {
+        let spec = spec_server().await;
+        let o = diff(&format!("{}/valid", spec.base_url), serde_json::json!({})).await;
+        assert_eq!(o.status, JobStatus::Passed);
+        assert_eq!(o.work_count, 2);
+        assert_eq!(o.summary.as_ref().map(|s| &s["work_count"]), Some(&2.into()));
+
+        let o = diff(&format!("{}/valid.yaml", spec.base_url), serde_json::json!({})).await;
+        assert_eq!(o.status, JobStatus::Passed);
+        assert_eq!(o.work_count, 1);
+    }
+
+    #[tokio::test]
+    async fn contract_diff_with_no_endpoints_is_not_a_pass() {
+        let spec = spec_server().await;
+        let o = diff(&format!("{}/empty-paths", spec.base_url), serde_json::json!({})).await;
+        assert_eq!(o.status, JobStatus::Failed);
+        assert_eq!(reason(&o).as_deref(), Some(REASON_NO_WORK));
+    }
+
+    #[tokio::test]
+    async fn contract_diff_errors_when_traffic_lookup_fails() {
+        let spec = spec_server().await;
+        // Registry: callbacks succeed except the endpoint-hits lookup.
+        let registry = FakeHttp::start(|line| {
+            if line.contains("/endpoint-hits") {
+                (500, "{}".to_string())
+            } else {
+                (200, "{}".to_string())
+            }
+        })
+        .await;
+        let callbacks = RegistryCallbacks::new(registry.base_url.clone(), "t".into());
+        let payload = serde_json::json!({ "workspace_id": uuid::Uuid::new_v4().to_string() });
+        let o = run_real_contract_diff(
+            job("contract_diff", payload),
+            &callbacks,
+            Instant::now(),
+            "svc",
+            &format!("{}/valid", spec.base_url),
+            &loopback_client(),
+        )
+        .await
+        .expect("outcome")
+        .finalize();
+        assert_eq!(o.status, JobStatus::Errored);
+        assert_eq!(reason(&o).as_deref(), Some(REASON_TRAFFIC_UNAVAILABLE));
+    }
+
+    #[test]
+    fn parse_spec_requires_openapi_document() {
+        assert!(parse_spec(VALID_SPEC).is_ok());
+        assert!(parse_spec("swagger: '2.0'\npaths: {}\n").is_ok());
+        assert!(parse_spec("just some text").is_err(), "YAML scalar is not a spec");
+        assert!(parse_spec("[1, 2]").is_err());
+        assert!(parse_spec(r#"{"openapi":"3.0.0"}"#).is_err(), "paths required");
+        assert!(parse_spec(r#"{"paths":{}}"#).is_err(), "version field required");
     }
 
     #[test]
