@@ -137,13 +137,15 @@ pub async fn list_circuit_breakers(
     let deployment = authorize_deployment(&state, user_id, &headers, deployment_id).await?;
     let base_url = admin_base_url(&deployment);
     let url = format!("{base_url}/api/resilience/circuit-breakers");
-    Ok(Json(match proxy_get_vec::<CircuitBreakerStateResponse>(&url).await {
-        Ok(data) => ResilienceEnvelope::live(data),
-        Err(err) => {
-            tracing::warn!(%deployment_id, error = %err, "resilience proxy GET failed");
-            ResilienceEnvelope::unreachable()
-        }
-    }))
+    Ok(Json(
+        match proxy_get_vec::<CircuitBreakerStateResponse>(deployment.id, &url).await {
+            Ok(data) => ResilienceEnvelope::live(data),
+            Err(err) => {
+                tracing::warn!(%deployment_id, error = %err, "resilience proxy GET failed");
+                ResilienceEnvelope::unreachable()
+            }
+        },
+    ))
 }
 
 pub async fn list_bulkheads(
@@ -155,7 +157,7 @@ pub async fn list_bulkheads(
     let deployment = authorize_deployment(&state, user_id, &headers, deployment_id).await?;
     let base_url = admin_base_url(&deployment);
     let url = format!("{base_url}/api/resilience/bulkheads");
-    Ok(Json(match proxy_get_vec::<BulkheadStateResponse>(&url).await {
+    Ok(Json(match proxy_get_vec::<BulkheadStateResponse>(deployment.id, &url).await {
         Ok(data) => ResilienceEnvelope::live(data),
         Err(err) => {
             tracing::warn!(%deployment_id, error = %err, "resilience proxy GET failed");
@@ -173,7 +175,7 @@ pub async fn get_summary(
     let deployment = authorize_deployment(&state, user_id, &headers, deployment_id).await?;
     let base_url = admin_base_url(&deployment);
     let url = format!("{base_url}/api/resilience/dashboard/summary");
-    Ok(Json(match proxy_get_value(&url).await {
+    Ok(Json(match proxy_get_value(deployment.id, &url).await {
         Ok(mut body) => {
             // The hosted mock's summary endpoint returns the raw stats
             // object without a runtime_state tag; tag it here so the UI's
@@ -210,7 +212,7 @@ pub async fn reset_circuit_breaker(
         "{base_url}/api/resilience/circuit-breakers/{}/reset",
         urlencoding::encode(&endpoint),
     );
-    Ok(Json(match proxy_post_empty(&url).await {
+    Ok(Json(match proxy_post_empty(deployment.id, &url).await {
         Ok(()) => json!({ "accepted": true, "runtime_state": "live" }),
         Err(err) => {
             tracing::warn!(%deployment_id, %endpoint, error = %err, "resilience proxy POST reset failed");
@@ -233,7 +235,7 @@ pub async fn reset_bulkhead(
     let base_url = admin_base_url(&deployment);
     let url =
         format!("{base_url}/api/resilience/bulkheads/{}/reset", urlencoding::encode(&service),);
-    Ok(Json(match proxy_post_empty(&url).await {
+    Ok(Json(match proxy_post_empty(deployment.id, &url).await {
         Ok(()) => json!({ "accepted": true, "runtime_state": "live" }),
         Err(err) => {
             tracing::warn!(%deployment_id, %service, error = %err, "resilience proxy POST reset failed");
@@ -256,10 +258,14 @@ pub(crate) fn admin_base_url(deployment: &HostedMock) -> String {
 }
 
 /// GET a JSON list. 2xx + valid JSON → Ok; anything else → Err.
-async fn proxy_get_vec<T: for<'de> Deserialize<'de>>(url: &str) -> reqwest::Result<Vec<T>> {
-    reqwest::Client::builder()
-        .timeout(PROXY_TIMEOUT)
-        .build()?
+///
+/// Every proxy call carries the deployment's management token: the admin
+/// server requires credentials on `/api/resilience/*` (#1019).
+async fn proxy_get_vec<T: for<'de> Deserialize<'de>>(
+    deployment_id: Uuid,
+    url: &str,
+) -> reqwest::Result<Vec<T>> {
+    super::management_token::proxy_client(deployment_id, PROXY_TIMEOUT)?
         .get(url)
         .send()
         .await?
@@ -270,10 +276,8 @@ async fn proxy_get_vec<T: for<'de> Deserialize<'de>>(url: &str) -> reqwest::Resu
 
 /// GET an arbitrary JSON object (used for the summary endpoint, which has
 /// a fixed shape but the registry doesn't model it strongly).
-async fn proxy_get_value(url: &str) -> reqwest::Result<Value> {
-    reqwest::Client::builder()
-        .timeout(PROXY_TIMEOUT)
-        .build()?
+async fn proxy_get_value(deployment_id: Uuid, url: &str) -> reqwest::Result<Value> {
+    super::management_token::proxy_client(deployment_id, PROXY_TIMEOUT)?
         .get(url)
         .send()
         .await?
@@ -284,10 +288,8 @@ async fn proxy_get_value(url: &str) -> reqwest::Result<Value> {
 
 /// POST with no body, discard response. Used for reset endpoints; 2xx is
 /// the only signal we care about.
-async fn proxy_post_empty(url: &str) -> reqwest::Result<()> {
-    reqwest::Client::builder()
-        .timeout(PROXY_TIMEOUT)
-        .build()?
+async fn proxy_post_empty(deployment_id: Uuid, url: &str) -> reqwest::Result<()> {
+    super::management_token::proxy_client(deployment_id, PROXY_TIMEOUT)?
         .post(url)
         .send()
         .await?

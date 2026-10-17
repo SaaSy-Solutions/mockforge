@@ -43,6 +43,9 @@ services:
       # Admin UI configuration
       - MOCKFORGE_ADMIN_ENABLED=true
       - MOCKFORGE_ADMIN_PORT=9080
+      # The admin UI exposes request logs and config, so it refuses to start on a
+      # non-loopback address without credentials. Log in as admin with this password.
+      - MOCKFORGE_ADMIN_PASSWORD=${MOCKFORGE_ADMIN_PASSWORD:?set MOCKFORGE_ADMIN_PASSWORD (12+ characters) for the admin UI}
 
       # Development settings
       - RUST_BACKTRACE=1
