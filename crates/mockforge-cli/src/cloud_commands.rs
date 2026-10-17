@@ -653,10 +653,29 @@ async fn handle_test_run(
                 return Ok(());
             }
             "failed" | "cancelled" | "errored" => {
-                anyhow::bail!("Run {}", status);
+                anyhow::bail!("{}", run_failure_message(&status, &row));
             }
             _ => continue,
         }
+    }
+}
+
+/// Message for a run that finished without passing. Includes the
+/// runner's `summary.status_reason` and `summary.error` when present, so
+/// a `not_implemented` or zero-work run says why it did not pass.
+fn run_failure_message(status: &str, row: &serde_json::Value) -> String {
+    let summary = row.get("summary");
+    let field = |key: &str| {
+        summary
+            .and_then(|s| s.get(key))
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+    };
+    match (field("status_reason"), field("error")) {
+        (Some(reason), Some(error)) => format!("Run {status} ({reason}): {error}"),
+        (Some(reason), None) => format!("Run {status} ({reason})"),
+        (None, Some(error)) => format!("Run {status}: {error}"),
+        (None, None) => format!("Run {status}"),
     }
 }
 
@@ -2545,5 +2564,23 @@ mod tests {
             local_dir: None,
             service_url: "https://api.mockforge.dev".to_string(),
         };
+    }
+
+    #[test]
+    fn run_failure_message_includes_runner_reason() {
+        let row = serde_json::json!({
+            "status": "errored",
+            "summary": {
+                "status_reason": "not_implemented",
+                "error": "'unit' runs are not implemented by the cloud runner",
+            },
+        });
+        assert_eq!(
+            run_failure_message("errored", &row),
+            "Run errored (not_implemented): 'unit' runs are not implemented by the cloud runner"
+        );
+        let row = serde_json::json!({ "summary": { "status_reason": "no_work_executed" } });
+        assert_eq!(run_failure_message("failed", &row), "Run failed (no_work_executed)");
+        assert_eq!(run_failure_message("failed", &serde_json::json!({})), "Run failed");
     }
 }
