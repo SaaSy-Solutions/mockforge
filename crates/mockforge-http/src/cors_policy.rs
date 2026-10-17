@@ -11,6 +11,7 @@
 //!
 //! One malformed entry rejects the whole list (deny-all plus an error log)
 //! instead of widening it, so a typo can never turn into a wildcard.
+//! `mockforge serve` goes further and refuses to start on a malformed entry.
 
 use http::{HeaderValue, Method};
 use mockforge_core::config::HttpCorsConfig;

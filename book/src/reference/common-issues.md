@@ -222,8 +222,10 @@ Cross-origin access is denied until origins are configured. Configure under
 - `*`: any origin, never with credentials (`allow_credentials` is ignored);
 - `null`: the opaque `null` origin, only when listed.
 
-One malformed entry denies all cross-origin requests (an error is logged), so a
-typo cannot widen the policy.
+`mockforge serve` refuses to start when an entry is malformed and names the bad
+entry, so a typo can neither widen the policy nor silently deny every origin.
+(An embedded server built from the library denies all cross-origin requests
+and logs an error instead.)
 
 ```bash
 MOCKFORGE_CORS_ALLOWED_ORIGINS=localhost mockforge serve --spec api.yaml
