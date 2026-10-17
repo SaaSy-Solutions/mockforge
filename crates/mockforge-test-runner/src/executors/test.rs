@@ -5,26 +5,12 @@
 //! per-kind logic; this executor is the cloud worker that picks up the
 //! queued run and dispatches to those.
 //!
-//! ## Phase 2: synthetic mode
-//!
-//! Real per-kind dispatch (k6 / mockforge-bench / OWASP suite, etc.)
-//! lands incrementally. For now this executor runs in a *synthetic*
-//! mode: it streams a configurable number of fake "step_pass" events
-//! and returns `passed` with non-zero `runner_seconds`. That validates
-//! the full success-path lifecycle (queued → running → passed → meter
-//! incremented) end-to-end, which the previous stub did not — it
-//! reported `errored` and skipped the metering path.
-//!
-//! Synthetic mode is driven by the job's `payload`:
-//! - `payload.synthetic_steps` (u32, optional, default 3) — number of
-//!   step events to emit.
-//! - `payload.synthetic_step_ms` (u64, optional, default 100) — sleep
-//!   between steps. Mostly to make `runner_seconds` reflect realistic
-//!   walltime in tests.
-//!
-//! When a real test_suite config arrives (config.kind set, config.target
-//! pointing at a hosted-mock URL, etc.), the executor falls back to
-//! synthetic mode and logs that the real path isn't wired yet.
+//! Each kind runs for real only when the payload carries the inputs its
+//! executor needs (`use_cloud_api` + `spec`/`target_url`, a workflow
+//! with `steps[]`, or a `target_url`). Any other payload, and every
+//! `unit` run, finishes `errored` with `status_reason =
+//! "not_implemented"` (#1264). This executor used to stream fake
+//! `step_pass` events and report `passed` in that case.
 
 use async_trait::async_trait;
 use std::time::Instant;
@@ -41,7 +27,7 @@ use tokio::sync::mpsc;
 
 use crate::callbacks::RegistryCallbacks;
 use crate::error::Result;
-use crate::executors::{Executor, JobOutcome, JobStatus, RunJob};
+use crate::executors::{unsupported, Executor, JobOutcome, JobStatus, RunJob};
 use crate::target_client::{ssrf_policy, TargetClient};
 
 /// Executor for all five test_suites.kind values.
@@ -54,20 +40,6 @@ impl TestExecutor {
     /// bench/owasp.
     pub fn for_kind(kind: &'static str) -> Self {
         Self { kind }
-    }
-
-    /// How many synthetic steps does this job want? Capped to keep a
-    /// runaway test_suites.config from spamming the event log.
-    fn synthetic_step_count(payload: &serde_json::Value) -> u32 {
-        let raw = payload.get("synthetic_steps").and_then(|v| v.as_u64()).unwrap_or(3);
-        raw.clamp(1, 100) as u32
-    }
-
-    /// Inter-step delay. Capped so a payload can't pin a worker on a
-    /// synthetic job for hours.
-    fn synthetic_step_ms(payload: &serde_json::Value) -> u64 {
-        let raw = payload.get("synthetic_step_ms").and_then(|v| v.as_u64()).unwrap_or(100);
-        raw.min(2000)
     }
 }
 
@@ -88,7 +60,7 @@ impl Executor for TestExecutor {
         // against an external target. Requires the k6 binary on $PATH (the
         // runner Dockerfile installs it). When the payload doesn't opt in,
         // bench/owasp fall through to the lighter-weight reqwest paths
-        // below and conformance falls through to synthetic mode.
+        // below and other kinds finish as not_implemented.
         if let Some(reason) = crate::target_client::base_path_refusal(
             extract_string(&job.payload, "base_path").as_deref(),
         ) {
@@ -178,69 +150,20 @@ impl Executor for TestExecutor {
             }
         }
 
-        let steps = Self::synthetic_step_count(&job.payload);
-        let step_ms = Self::synthetic_step_ms(&job.payload);
+        unsupported(&job, callbacks, started, 1, unsupported_detail(self.kind)).await
+    }
+}
 
-        callbacks
-            .run_event(
-                job.run_id,
-                1,
-                "log",
-                serde_json::json!({
-                    "level": "info",
-                    "message": format!(
-                        "Synthetic test execution: kind='{}', steps={}, step_ms={}",
-                        self.kind, steps, step_ms,
-                    ),
-                    "synthetic": true,
-                    "tracking_task": 4,
-                }),
-            )
-            .await?;
-
-        // Stream step_start + step_pass for each synthetic step. Seq
-        // numbers continue from the log event above so the run_events
-        // table's UNIQUE(run_id, seq) is satisfied.
-        let mut next_seq: u32 = 2;
-        for i in 1..=steps {
-            callbacks
-                .run_event(
-                    job.run_id,
-                    next_seq,
-                    "step_start",
-                    serde_json::json!({ "step": i, "name": format!("synthetic-step-{i}") }),
-                )
-                .await?;
-            next_seq += 1;
-            tokio::time::sleep(std::time::Duration::from_millis(step_ms)).await;
-            callbacks
-                .run_event(
-                    job.run_id,
-                    next_seq,
-                    "step_pass",
-                    serde_json::json!({ "step": i, "duration_ms": step_ms }),
-                )
-                .await?;
-            next_seq += 1;
-        }
-
-        // Real wall-clock for the runner_seconds meter; round up so a
-        // short synthetic run still bills 1s and exercises the
-        // increment_runner_seconds code path.
-        let elapsed = started.elapsed();
-        let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
-
-        Ok(JobOutcome {
-            status: JobStatus::Passed,
-            runner_seconds: secs,
-            summary: Some(serde_json::json!({
-                "executor_phase": "synthetic",
-                "tracking_task": 4,
-                "kind": self.kind,
-                "steps_passed": steps,
-                "wall_ms": elapsed.as_millis() as u64,
-            })),
-        })
+/// Why a payload reached the end of [`TestExecutor::execute`] without a
+/// real path: names the inputs the kind's executor needs.
+fn unsupported_detail(kind: &str) -> &'static str {
+    match kind {
+        "unit" => "unit suites have no cloud executor",
+        "integration" => "the payload has no workflow steps (`steps[]`) to execute",
+        "conformance" => "conformance runs require `use_cloud_api: true` and `target_url`",
+        "bench" => "bench runs require `target_url` (or `use_cloud_api: true` with `spec`)",
+        "owasp" => "owasp runs require `target_url` (or `use_cloud_api: true` with `spec`)",
+        _ => "this kind requires `use_cloud_api: true` with an inline `spec`",
     }
 }
 
@@ -304,8 +227,9 @@ fn extract_string_vec(payload: &serde_json::Value, key: &str) -> Vec<String> {
 }
 
 /// Map a [`CloudRunArtifacts`] result to a `JobOutcome` and emit summary
-/// events. Status is `Passed` when no `summary.json` was produced (e.g.
-/// conformance native executor) or when k6 reported an error rate below 1%.
+/// events. Status is `Failed` when k6 reported an error rate of 1% or
+/// more. `work_count` is k6's request count, so a run that produced no
+/// `summary.json` is not reported as a pass (see `JobOutcome::finalize`).
 async fn finish_cloud_run(
     job_run_id: uuid::Uuid,
     callbacks: &RegistryCallbacks,
@@ -351,6 +275,7 @@ async fn finish_cloud_run(
     Ok(JobOutcome {
         status,
         runner_seconds: secs,
+        work_count: artifacts.k6_results.as_ref().map_or(0, |r| r.total_requests),
         summary: Some(serde_json::json!({
             "executor_phase": "cloud_api",
             "kind": kind,
@@ -389,6 +314,7 @@ async fn finish_cloud_error(
     Ok(JobOutcome {
         status: JobStatus::Errored,
         runner_seconds: (elapsed.as_secs_f64().ceil() as i32).max(1),
+        work_count: 0,
         summary: Some(serde_json::json!({
             "executor_phase": "cloud_api",
             "kind": kind,
@@ -406,7 +332,7 @@ async fn finish_cloud_error(
 /// The registry enqueues a suite's config as the payload itself
 /// (`{"setup": .., "steps": [..]}`); older callers nested it under
 /// `config`. Accept both, so a suite-triggered run executes its real steps
-/// instead of falling through to the synthetic executor.
+/// instead of finishing as not_implemented.
 fn integration_workflow(payload: &serde_json::Value) -> Option<&serde_json::Value> {
     let has_steps = |c: &serde_json::Value| {
         c.get("steps").and_then(|v| v.as_array()).is_some_and(|a| !a.is_empty())
@@ -437,6 +363,7 @@ async fn refuse_k6_run(
     Ok(JobOutcome {
         status: JobStatus::Errored,
         runner_seconds: (elapsed.as_secs_f64().ceil() as i32).max(1),
+        work_count: 0,
         summary: Some(serde_json::json!({
             "executor_phase": "k6_refused",
             "kind": kind,
@@ -845,6 +772,7 @@ async fn run_cloud_conformance(
             Ok(JobOutcome {
                 status,
                 runner_seconds: secs,
+                work_count: total_count,
                 summary: Some(serde_json::json!({
                     "executor_phase": "native_conformance",
                     "kind": "conformance",
@@ -1208,6 +1136,7 @@ async fn run_real_bench(
     Ok(JobOutcome {
         status,
         runner_seconds: secs,
+        work_count: total_ok + total_err,
         summary: Some(serde_json::json!({
             "executor_phase": "real_bench",
             "tracking_task": 4,
@@ -1280,6 +1209,7 @@ async fn run_real_owasp_scan(
             return Ok(JobOutcome {
                 status: JobStatus::Errored,
                 runner_seconds: (elapsed.as_secs_f64().ceil() as i32).max(1),
+                work_count: 0,
                 summary: Some(serde_json::json!({
                     "executor_phase": "real_owasp_scan",
                     "tracking_task": 4,
@@ -1378,6 +1308,7 @@ async fn run_real_owasp_scan(
     Ok(JobOutcome {
         status,
         runner_seconds: secs,
+        work_count: u64::from(passed + failed),
         summary: Some(serde_json::json!({
             "executor_phase": "real_owasp_scan",
             "tracking_task": 4,
@@ -1406,37 +1337,6 @@ mod tests {
     }
     use super::*;
     use serde_json::json;
-
-    #[test]
-    fn synthetic_step_count_default() {
-        assert_eq!(TestExecutor::synthetic_step_count(&json!({})), 3);
-        assert_eq!(TestExecutor::synthetic_step_count(&json!(null)), 3);
-    }
-
-    #[test]
-    fn synthetic_step_count_clamps_to_100() {
-        assert_eq!(TestExecutor::synthetic_step_count(&json!({ "synthetic_steps": 999 })), 100);
-    }
-
-    #[test]
-    fn synthetic_step_count_clamps_to_minimum_1() {
-        assert_eq!(TestExecutor::synthetic_step_count(&json!({ "synthetic_steps": 0 })), 1);
-    }
-
-    #[test]
-    fn synthetic_step_count_honors_intermediate() {
-        assert_eq!(TestExecutor::synthetic_step_count(&json!({ "synthetic_steps": 7 })), 7);
-    }
-
-    #[test]
-    fn synthetic_step_ms_caps_at_2000() {
-        assert_eq!(TestExecutor::synthetic_step_ms(&json!({ "synthetic_step_ms": 60_000 })), 2000);
-    }
-
-    #[test]
-    fn synthetic_step_ms_default() {
-        assert_eq!(TestExecutor::synthetic_step_ms(&json!({})), 100);
-    }
 
     #[test]
     fn uses_cloud_api_default_false() {

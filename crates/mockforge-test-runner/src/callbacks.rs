@@ -104,7 +104,7 @@ impl RegistryCallbacks {
 
     /// Pull the captured exchanges for a session so the replay
     /// executor can replay them. Empty vec means the session has no
-    /// members; the executor falls back to synthetic mode in that case.
+    /// members; the replay executor then errors with `no_captures`.
     pub async fn fetch_capture_exchanges(&self, session_id: Uuid) -> Result<Vec<CaptureExchange>> {
         let url = format!(
             "{}/api/v1/internal/capture-sessions/{session_id}/exchanges",

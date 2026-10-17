@@ -103,6 +103,7 @@ impl Dispatcher {
 
             match outcome {
                 Ok(o) => {
+                    let o = o.finalize();
                     if let Err(e) = callbacks.run_finished(run_id, &o).await {
                         error!(run_id = %run_id, error = %e, "run_finished callback failed");
                     }
@@ -113,7 +114,9 @@ impl Dispatcher {
                         status: JobStatus::Errored,
                         runner_seconds: 0,
                         summary: Some(serde_json::json!({ "error": e.to_string() })),
-                    };
+                        work_count: 0,
+                    }
+                    .finalize();
                     if let Err(e) = callbacks.run_finished(run_id, &outcome).await {
                         error!(run_id = %run_id, error = %e, "errored-finish callback also failed");
                     }
@@ -130,7 +133,9 @@ async fn report_unknown_kind(callbacks: &RegistryCallbacks, run_id: uuid::Uuid, 
         summary: Some(serde_json::json!({
             "error": format!("no executor registered for kind '{kind}'")
         })),
-    };
+        work_count: 0,
+    }
+    .finalize();
     if let Err(e) = callbacks.run_finished(run_id, &outcome).await {
         error!(run_id = %run_id, error = %e, "unknown-kind callback failed");
     }

@@ -10,6 +10,11 @@
 //!
 //! Both paths share the same fault-loop event shape so the UI's
 //! chaos timeline doesn't have to know which kind produced an event.
+//!
+//! Any other `target_kind`, a `target_ref` that is not a deployment id,
+//! or a failed toggle finishes the run `errored` with a
+//! `status_reason` (#1264). Those cases used to emit synthetic fault
+//! events and report `passed`.
 
 use async_trait::async_trait;
 use mockforge_chaos_proxy::{CampaignCounters, ChaosClient, ChaosDirective};
@@ -17,7 +22,7 @@ use std::time::Instant;
 
 use crate::callbacks::RegistryCallbacks;
 use crate::error::Result;
-use crate::executors::{Executor, JobOutcome, JobStatus, RunJob};
+use crate::executors::{errored_with_reason, unsupported, Executor, JobOutcome, JobStatus, RunJob};
 
 /// Executor for chaos campaigns.
 pub struct ChaosExecutor;
@@ -163,59 +168,62 @@ impl Executor for ChaosExecutor {
         }
 
         // For target_kind=hosted_mock, target_ref is the deployment_id.
-        // Try real chaos: enable on the deployment for the run, disable
-        // at the end. If the toggle call fails (deployment doesn't
-        // expose admin, network blip, etc.) we still emit synthetic
-        // events so the run produces a coherent outcome.
-        let real_chaos_target_id = if target_kind == "hosted_mock" {
-            uuid::Uuid::parse_str(&target_ref).ok()
-        } else {
-            None
+        // Enable chaos on the deployment for the run and disable it at
+        // the end. Any other target kind, an unparseable deployment id,
+        // or a failed toggle means no chaos reached a target, so the run
+        // errors instead of emitting synthetic fault events (#1264).
+        if target_kind != "hosted_mock" {
+            let mut outcome = unsupported(
+                &job,
+                callbacks,
+                started,
+                1,
+                &format!("target_kind '{target_kind}' has no chaos executor"),
+            )
+            .await?;
+            add_abort_reason(&mut outcome);
+            return Ok(outcome);
+        }
+        let Ok(deployment_id) = uuid::Uuid::parse_str(&target_ref) else {
+            let mut outcome = errored_with_reason(
+                &job,
+                callbacks,
+                started,
+                1,
+                "chaos_target_invalid",
+                format!("target_ref '{target_ref}' is not a hosted-mock deployment id"),
+            )
+            .await?;
+            add_abort_reason(&mut outcome);
+            return Ok(outcome);
         };
-        let real_chaos_enabled = if let Some(deployment_id) = real_chaos_target_id {
-            match callbacks.toggle_hosted_chaos(job.run_id, deployment_id, true).await {
-                Ok(()) => {
-                    callbacks
-                        .run_event(
-                            job.run_id,
-                            1,
-                            "log",
-                            serde_json::json!({
-                                "level": "info",
-                                "message": format!(
-                                    "Real chaos enabled on deployment {deployment_id}"
-                                ),
-                                "synthetic": false,
-                                "tracking_task": 7,
-                            }),
-                        )
-                        .await?;
-                    true
-                }
-                Err(e) => {
-                    tracing::warn!(error = %e, %deployment_id, "real chaos toggle failed; falling back to synthetic events");
-                    callbacks
-                        .run_event(
-                            job.run_id,
-                            1,
-                            "log",
-                            serde_json::json!({
-                                "level": "warn",
-                                "message": format!(
-                                    "real chaos toggle failed: {e}; emitting synthetic events"
-                                ),
-                                "synthetic": true,
-                                "tracking_task": 7,
-                            }),
-                        )
-                        .await?;
-                    false
-                }
-            }
-        } else {
-            false
-        };
-
+        if let Err(e) = callbacks.toggle_hosted_chaos(job.run_id, deployment_id, true).await {
+            tracing::warn!(error = %e, %deployment_id, "real chaos toggle failed");
+            let mut outcome = errored_with_reason(
+                &job,
+                callbacks,
+                started,
+                1,
+                "chaos_toggle_failed",
+                format!("enabling chaos on deployment {deployment_id} failed: {e}"),
+            )
+            .await?;
+            add_abort_reason(&mut outcome);
+            return Ok(outcome);
+        }
+        callbacks
+            .run_event(
+                job.run_id,
+                1,
+                "log",
+                serde_json::json!({
+                    "level": "info",
+                    "message": format!("Real chaos enabled on deployment {deployment_id}"),
+                    "synthetic": false,
+                    "tracking_task": 7,
+                }),
+            )
+            .await?;
         let fault_count = if using_real_config {
             real_faults.len() as u32
         } else {
@@ -231,11 +239,10 @@ impl Executor for ChaosExecutor {
                     "level": "info",
                     "message": format!(
                         "{}: target_kind='{}', target_ref='{}', faults={}",
-                        if using_real_config { "Chaos campaign (config-driven)" } else { "Synthetic chaos campaign" },
+                        if using_real_config { "Chaos campaign (config-driven)" } else { "Chaos campaign (default latency faults)" },
                         target_kind, target_ref, fault_count,
                     ),
-                    "synthetic": !using_real_config,
-                    "real_chaos_enabled": real_chaos_enabled,
+                    "real_chaos_enabled": true,
                     "tracking_task": 7,
                 }),
             )
@@ -244,6 +251,7 @@ impl Executor for ChaosExecutor {
         let mut next_seq: u32 = 3;
         let mut aborted = false;
         let mut abort_reason: Option<String> = None;
+        let mut faults_applied: u64 = 0;
         for i in 1..=fault_count {
             // Safety: respect max_duration_ms from safety_config.
             if let Some(max_ms) = safety_cap {
@@ -289,37 +297,32 @@ impl Executor for ChaosExecutor {
                 )
                 .await?;
             next_seq += 1;
+            faults_applied += 1;
         }
 
-        // Disable real chaos at the end of the run if we enabled it.
-        // Best-effort — failure to disable is logged but doesn't change
-        // the run's pass/fail status (the safety_config.max_duration_ms
-        // cap still bounds blast radius).
-        if real_chaos_enabled {
-            if let Some(deployment_id) = real_chaos_target_id {
-                if let Err(e) =
-                    callbacks.toggle_hosted_chaos(job.run_id, deployment_id, false).await
-                {
-                    tracing::error!(
-                        error = %e,
-                        %deployment_id,
-                        "failed to disable real chaos at end of run — investigate immediately",
-                    );
-                    callbacks
-                        .run_event(
-                            job.run_id,
-                            next_seq,
-                            "log",
-                            serde_json::json!({
-                                "level": "error",
-                                "message": format!(
-                                    "failed to disable real chaos at end of run: {e} — manual intervention required"
-                                ),
-                            }),
-                        )
-                        .await?;
-                }
-            }
+        // Disable real chaos at the end of the run. Best-effort —
+        // failure to disable is logged but doesn't change the run's
+        // pass/fail status (the safety_config.max_duration_ms cap still
+        // bounds blast radius).
+        if let Err(e) = callbacks.toggle_hosted_chaos(job.run_id, deployment_id, false).await {
+            tracing::error!(
+                error = %e,
+                %deployment_id,
+                "failed to disable real chaos at end of run — investigate immediately",
+            );
+            callbacks
+                .run_event(
+                    job.run_id,
+                    next_seq,
+                    "log",
+                    serde_json::json!({
+                        "level": "error",
+                        "message": format!(
+                            "failed to disable real chaos at end of run: {e} — manual intervention required"
+                        ),
+                    }),
+                )
+                .await?;
         }
 
         let elapsed = started.elapsed();
@@ -333,24 +336,30 @@ impl Executor for ChaosExecutor {
         Ok(JobOutcome {
             status,
             runner_seconds: secs,
+            // Fault windows run while chaos was enabled on the deployment.
+            work_count: faults_applied,
             summary: Some(serde_json::json!({
-                "executor_phase": if real_chaos_enabled {
-                    "real_hosted_mock"
-                } else if using_real_config {
-                    "config_driven"
-                } else {
-                    "synthetic"
-                },
+                "executor_phase": "real_hosted_mock",
                 "tracking_task": 7,
                 "target_kind": target_kind,
                 "target_ref": target_ref,
-                "real_chaos_enabled": real_chaos_enabled,
+                "real_chaos_enabled": true,
                 "fault_count": fault_count,
                 "aborted": aborted,
                 "abort_reason": abort_reason,
                 "wall_ms": elapsed.as_millis() as u64,
             })),
         })
+    }
+}
+
+/// Copy `summary.error` into `summary.abort_reason`, which the registry
+/// stores on the campaign's report row for the history tab.
+fn add_abort_reason(outcome: &mut JobOutcome) {
+    if let Some(summary) = outcome.summary.as_mut().and_then(|s| s.as_object_mut()) {
+        if let Some(error) = summary.get("error").cloned() {
+            summary.insert("abort_reason".into(), error);
+        }
     }
 }
 
@@ -391,6 +400,7 @@ async fn run_external_chaos(
         return Ok(JobOutcome {
             status: JobStatus::Errored,
             runner_seconds: (started.elapsed().as_secs_f64().ceil() as i32).max(1),
+            work_count: 0,
             summary: Some(serde_json::json!({
                 "executor_phase": "external_chaos_unauthorized",
                 "target_kind": "external",
@@ -416,6 +426,7 @@ async fn run_external_chaos(
         return Ok(JobOutcome {
             status: JobStatus::Errored,
             runner_seconds: (started.elapsed().as_secs_f64().ceil() as i32).max(1),
+            work_count: 0,
             summary: Some(serde_json::json!({
                 "executor_phase": "external_chaos_missing_target",
                 "target_kind": "external",
@@ -605,6 +616,7 @@ async fn run_external_chaos(
     Ok(JobOutcome {
         status,
         runner_seconds: secs,
+        work_count: u64::from(counters.probes_sent),
         summary: Some(serde_json::json!({
             "executor_phase": "real_external",
             "target_kind": "external",

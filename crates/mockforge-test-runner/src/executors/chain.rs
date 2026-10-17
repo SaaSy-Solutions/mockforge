@@ -10,8 +10,9 @@
 //!   * `kind == "chain"`
 //!   * `config.links` is a non-empty array
 //!
-//! Otherwise FlowExecutor falls back to its synthetic-pass mode so the
-//! UI still shows progress events for chains authored with no links yet.
+//! Otherwise the run finishes `errored` with `status_reason =
+//! "not_implemented"` (#1264). Links that fail to parse are dropped, and a
+//! chain that executes zero links is not reported as passed.
 
 use std::collections::HashMap;
 use std::time::Instant;
@@ -198,6 +199,7 @@ pub async fn run_chain(
     Ok(JobOutcome {
         status,
         runner_seconds: secs,
+        work_count: u64::from(total),
         summary: Some(serde_json::json!({
             "executor_phase": "real",
             "tracking_task": 354,
@@ -398,6 +400,27 @@ fn follow_indexes<'a>(
 
 #[cfg(test)]
 mod tests {
+
+    #[tokio::test]
+    async fn chain_whose_links_all_fail_to_parse_is_not_a_pass() {
+        use crate::executors::test_support::{job, reason, FakeHttp};
+        use crate::executors::REASON_NO_WORK;
+        let registry = FakeHttp::registry().await;
+        let callbacks = RegistryCallbacks::new(registry.base_url.clone(), "t".into());
+        let config = serde_json::json!({ "links": [{ "not_a_link": true }] });
+        let o = run_chain(
+            job("chain", serde_json::json!({ "config": config })),
+            &callbacks,
+            Instant::now(),
+            &config,
+        )
+        .await
+        .expect("outcome")
+        .finalize();
+        assert_eq!(o.work_count, 0);
+        assert_ne!(o.status, JobStatus::Passed);
+        assert_eq!(reason(&o).as_deref(), Some(REASON_NO_WORK));
+    }
     use super::*;
     use serde_json::json;
 
