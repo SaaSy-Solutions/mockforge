@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security
+
+- **[Cloud]** Registry migration `20250101000102` disables the seed accounts that `20250101000002` created with published passwords: `admin@mockforge.dev` / `admin123` (an admin) and `test@example.com` / `test123` (#1014; the earlier fix was closed but never reached main). Only rows that still carry a seed password hash are touched. Their password stops working, admin is cleared, refresh tokens are revoked, and the legacy API token and OAuth links are removed. Rows are disabled rather than deleted because organizations reference them with `ON DELETE RESTRICT`. It applies at the next registry boot. `make seed` is replaced by `make dev-seed`, which requires `MOCKFORGE_DEV_SEED=1` and a loopback database and prints a random password once.
+
 ## [0.3.236] - 2026-10-16
 
 ### Added

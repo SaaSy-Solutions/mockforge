@@ -344,6 +344,7 @@ jobs:
             --test hosted_mock_rls_routes_e2e \
             --test rls_join_coverage_e2e \
             --test cross_tenant_chaos_capture_e2e \
+            --test seed_credentials_neutralised \
             -- --ignored --nocapture --test-threads=1
 
       - name: Verify contract probe database claims
