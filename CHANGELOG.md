@@ -1,9 +1,5 @@
 ## [Unreleased]
 
-### Security
-
-- **[DevX]** CORS fails closed. With no configured origins (now the default), the HTTP mock server grants no cross-origin access. Before, it fell back to `Access-Control-Allow-Origin: *` when origins were unset, when any entry failed to parse, or when more than one was listed. Several exact origins now each work, a malformed entry denies all, `*` is never combined with credentials, and `localhost` enables an explicit dev mode. New `MOCKFORGE_CORS_ALLOWED_ORIGINS` sets the list. The admin UI no longer allows `Origin: null` by default and refuses `*` in `CORS_ALLOWED_ORIGINS`. Hosted mocks and the demo set `*` explicitly. **Upgrade note:** browser apps calling a self-hosted mock from another origin need `MOCKFORGE_CORS_ALLOWED_ORIGINS` (for example `localhost`) or `http.cors.allowed_origins`. (#1017)
-
 ## [0.3.236] - 2026-10-16
 
 ### Added
