@@ -235,7 +235,8 @@ npm install @mockforge/sdk
 
 **Python**:
 ```bash
-pip install mockforge-sdk
+# Not yet on PyPI; install from the repository
+pip install "mockforge-sdk @ git+https://github.com/SaaSy-Solutions/mockforge.git#subdirectory=sdk/python"
 ```
 
 **Go**:
