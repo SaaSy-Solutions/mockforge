@@ -41,7 +41,7 @@ Repeating the same token total and evidence reference succeeds without another
 charge or audit entry. A conflicting retry fails. A reservation in another
 organization is not accessible through the supplied organization ID.
 
-New platform calls use a database execution fence (migration107). Recovery
+New platform calls use a database execution fence (migration 108). Recovery
 acquires that same fence without waiting and rejects a still-running task.
 A pending call whose task has stopped can be reconciled with final authoritative
 provider usage evidence. A task racing recovery checks reservation state under
@@ -53,9 +53,9 @@ state or counters to bypass these controls.
 
 ### Legacy (unfenced) pending calls
 
-A pending reservation without `execution_fenced` predates migration 107 and is
+A pending reservation without `execution_fenced` predates migration 108 and is
 ineligible for online recovery. Released builds cannot create one: the
-reservations table (migration 96) and the fence (migration 107) ship and apply
+reservations table (migration 96) and the fence (migration 108) ship and apply
 together, and every admission inserts `execution_fenced = TRUE`. Only an
 environment that ran an unreleased intermediate build can hold such rows.
 

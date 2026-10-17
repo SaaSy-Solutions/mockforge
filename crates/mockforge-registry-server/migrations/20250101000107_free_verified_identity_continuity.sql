@@ -40,7 +40,7 @@ BEGIN
             RAISE EXCEPTION 'Verified identity allowance is already attached to an existing account'
                 USING ERRCODE='23514';
         END IF;
-        -- Deletion with outstanding calls is prohibited by migration102. Keep
+        -- Deletion with outstanding calls is prohibited by migration 103. Keep
         -- ledger IDs and reservation attribution intact, changing only ownership.
         FOR old_credit IN SELECT * FROM free_ai_credit_periods
             WHERE owner_user_id=previous_owner ORDER BY period_start FOR UPDATE LOOP

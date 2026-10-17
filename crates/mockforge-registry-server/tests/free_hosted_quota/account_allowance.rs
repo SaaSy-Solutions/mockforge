@@ -217,7 +217,7 @@ async fn shared_credit_migration_preserves_prior_free_usage_and_uncertain_budget
             .await
             .unwrap();
     }
-    sqlx::raw_sql(include_str!("../../migrations/20250101000102_free_account_ai_allowance.sql"))
+    sqlx::raw_sql(include_str!("../../migrations/20250101000103_free_account_ai_allowance.sql"))
         .execute(&mut *tx)
         .await
         .unwrap();
