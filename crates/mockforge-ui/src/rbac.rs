@@ -13,6 +13,8 @@ use mockforge_collab::models::UserRole;
 use mockforge_collab::permissions::{Permission, RolePermissions};
 use serde::{Deserialize, Serialize};
 
+use crate::admin_access::AdminAccessPolicy;
+
 fn is_truthy_env(name: &str) -> bool {
     matches!(
         std::env::var(name).ok().as_deref().map(str::to_ascii_lowercase).as_deref(),
@@ -133,7 +135,7 @@ impl AdminActionPermissions {
             }
 
             // Audit log access requires ManageSettings (sensitive)
-            "get_audit_logs" | "get_audit_stats" => {
+            "get_audit_logs" | "get_audit_stats" | "get_env" => {
                 vec![Permission::ManageSettings]
             }
 
@@ -281,52 +283,70 @@ pub fn get_default_user_context() -> Option<UserContext> {
     }
 }
 
-/// RBAC middleware to enforce permissions on admin endpoints
-pub async fn rbac_middleware(mut request: Request, next: Next) -> Result<Response, StatusCode> {
-    // Extract action name from request path and HTTP method
-    let path = request.uri().path();
-    let method = request.method().as_str();
-    let headers = request.headers();
-
-    // Skip RBAC for public routes.
-    // All GET requests to /__mockforge/* are read-only admin data — the admin server
-    // is already on a separate port that users explicitly enable with --admin, so
-    // requiring auth for read-only access is unnecessary and blocks tools like the TUI.
-    //
-    // /api/admin/registry/* is the SQLite-backed registry admin sub-router
-    // (crates/mockforge-ui/src/registry_admin.rs) which carries its own
-    // JWT-based auth layer — the rbac middleware would reject every request
-    // before it reached the registry_admin handlers. Bypass it wholesale.
-    //
-    // /api/resilience/* is the chaos circuit-breaker / bulkhead dashboard
-    // (mockforge_chaos::create_resilience_router). In cloud mode the
-    // registry's reqwest proxy reaches this over Fly 6PN private network
-    // (#468 Phase 3) without an admin token — port 9080 isn't exposed via
-    // any Fly public `[[services]]` entry, so the network boundary IS the
-    // auth boundary. Locally the admin server is opt-in via --admin, same
-    // as /__mockforge/*. Both GET (read state) and POST (reset) are exempt
-    // for the same reason: anyone who can reach 9080 is already on a
-    // trust boundary controlled by the operator.
-    let is_public_route = path == "/"
+/// Routes served to anyone: the SPA shell and its static assets, the login
+/// endpoints, the admin health and liveness probes, and the registry-admin sub-router,
+/// which carries its own JWT layer
+/// (`crates/mockforge-ui/src/registry_admin.rs`).
+///
+/// Matching is exact on the raw path. Anything not listed here needs
+/// credentials, so path variants (trailing or doubled slashes,
+/// percent-encoding, case) fall through to the authenticated branch.
+pub(crate) fn is_public_route(path: &str) -> bool {
+    // Dot segments, doubled slashes and percent-escapes never name a public
+    // file; refuse them rather than reason about how a handler resolves them.
+    if path.contains("..") || path.contains("//") || path.contains('%') {
+        return false;
+    }
+    path == "/"
         || path.starts_with("/assets/")
         || path == "/__mockforge/auth/login"
         || path == "/__mockforge/auth/refresh"
         || path == "/__mockforge/auth/logout"
         || path == "/__mockforge/health"
+        // Liveness answers status, version and uptime only, for probes.
+        || path == "/health/live"
+        || path == "/livez"
         || path.starts_with("/mockforge-")
         || path == "/manifest.json"
         || path == "/sw.js"
         || path == "/api-docs"
         || path.starts_with("/api/admin/registry/")
-        || path.starts_with("/api/resilience/")
-        || (method == "GET" && path.starts_with("/__mockforge/"));
+}
 
-    if is_public_route {
-        return Ok(next.run(request).await);
+/// The JWT in `?access_token=` on an SSE stream. `EventSource` cannot send
+/// an `Authorization` header, so the admin UI passes its token this way on
+/// `GET .../sse` only.
+fn sse_query_token<'a>(method: &str, path: &str, query: Option<&'a str>) -> Option<&'a str> {
+    if method != "GET" || !path.ends_with("/sse") {
+        return None;
     }
+    query?.split('&').find_map(|pair| pair.strip_prefix("access_token="))
+}
 
-    // Map route to action name
-    let action_name = match (method, path) {
+/// Who is making `request`, under `policy`, or `None` when anonymous
+fn authenticate(request: &Request, policy: &AdminAccessPolicy) -> Option<UserContext> {
+    let headers = request.headers();
+    if policy.management_token_matches(headers) {
+        return Some(UserContext {
+            user_id: "management-token".to_string(),
+            username: "management-token".to_string(),
+            role: UserRole::Admin,
+            email: None,
+        });
+    }
+    if !policy.accepts_jwt() {
+        return None;
+    }
+    if let Some(user) = extract_user_context(headers) {
+        return Some(user);
+    }
+    let uri = request.uri();
+    sse_query_token(request.method().as_str(), uri.path(), uri.query()).and_then(parse_jwt_token)
+}
+
+/// Map a request to the admin action whose permissions it needs
+pub(crate) fn action_for(method: &str, path: &str) -> &'static str {
+    match (method, path) {
         (_, p) if p.contains("/config/latency") => "update_latency",
         (_, p) if p.contains("/config/faults") => "update_faults",
         (_, p) if p.contains("/config/proxy") => "update_proxy",
@@ -336,34 +356,49 @@ pub async fn rbac_middleware(mut request: Request, next: Next) -> Result<Respons
         ("DELETE", p) if p.contains("/fixtures") => "delete_fixture",
         ("POST", p) if p.contains("/fixtures") && p.contains("/rename") => "rename_fixture",
         ("POST", p) if p.contains("/fixtures") && p.contains("/move") => "move_fixture",
-        ("GET", p) if p.contains("/audit/logs") => "get_audit_logs",
-        ("GET", p) if p.contains("/audit/stats") => "get_audit_stats",
-        ("GET", _) => "read", // Read operations
+        ("GET" | "HEAD", p) if p.contains("/audit/logs") => "get_audit_logs",
+        ("GET" | "HEAD", p) if p.contains("/audit/stats") => "get_audit_stats",
+        // Environment variables are operator settings, not mock data.
+        ("GET" | "HEAD", p) if p.starts_with("/__mockforge/env") => "get_env",
+        // Admin reads (dashboard, logs, recorder, chaos, ...) need a read
+        // permission, so viewers keep the dashboard they had before (#1019).
+        ("GET" | "HEAD", p) if p.starts_with("/__mockforge/") => "get_dashboard",
+        ("GET" | "HEAD", _) => "read", // Other reads
         _ => "unknown",
-    };
+    }
+}
 
-    // Extract user context from request
-    let user_context = extract_user_context(headers).or_else(get_default_user_context);
+/// RBAC middleware to enforce permissions on admin endpoints.
+///
+/// Every route that is not in [`is_public_route`] needs credentials, reads
+/// included (#1019). The only anonymous access is the loopback developer
+/// mode decided at bind time (see [`crate::admin_access`]).
+pub async fn rbac_middleware(mut request: Request, next: Next) -> Result<Response, StatusCode> {
+    let path = request.uri().path().to_string();
+    let method = request.method().as_str().to_string();
 
-    // If no user context and authentication is required, deny access
-    let user_context = match user_context {
+    if is_public_route(&path) {
+        return Ok(next.run(request).await);
+    }
+
+    let policy = request.extensions().get::<AdminAccessPolicy>().cloned().unwrap_or_default();
+
+    let user_context = match authenticate(&request, &policy) {
         Some(ctx) => ctx,
-        None => {
-            // For development: allow unauthenticated access if explicitly enabled
-            // In production, this should be disabled
-            if allow_unauthenticated_dev_access() {
-                // Use default admin context for development
-                get_default_user_context().unwrap_or_else(|| UserContext {
-                    user_id: "system".to_string(),
-                    username: "system".to_string(),
-                    role: UserRole::Admin,
-                    email: None,
-                })
-            } else {
-                return Err(StatusCode::UNAUTHORIZED);
+        None if policy.allows_anonymous_loopback_reads() => {
+            if policy.allows_anonymous_read(request.method(), request.uri(), request.headers()) {
+                return Ok(next.run(request).await);
+            }
+            // Loopback developer mode: the explicit dev escape hatch.
+            match get_default_user_context() {
+                Some(ctx) => ctx,
+                None => return Err(StatusCode::UNAUTHORIZED),
             }
         }
+        None => return Err(StatusCode::UNAUTHORIZED),
     };
+
+    let action_name = action_for(&method, &path);
 
     // Get required permissions for this action
     let required_permissions = AdminActionPermissions::get_required_permissions(action_name);
@@ -781,7 +816,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_rbac_middleware_allows_get_mockforge_api() {
+    async fn test_rbac_middleware_rejects_anonymous_get_mockforge_api() {
         use axum::routing::get;
         use axum::{body::Body, middleware::from_fn, Router};
         use tower::ServiceExt;
@@ -794,7 +829,7 @@ mod tests {
             .route("/__mockforge/dashboard", get(handler))
             .layer(from_fn(rbac_middleware));
 
-        // GET to /__mockforge/* should be allowed without auth
+        // GET to /__mockforge/* needs credentials like writes (#1019)
         let request = axum::http::Request::builder()
             .uri("/__mockforge/dashboard")
             .method(Method::GET)
@@ -802,7 +837,7 @@ mod tests {
             .unwrap();
 
         let response = app.oneshot(request).await.unwrap();
-        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 
     #[tokio::test]
@@ -846,6 +881,53 @@ mod tests {
         // Here we verify the logic exists
         for (_path, expected_action) in test_cases {
             assert!(!expected_action.is_empty());
+        }
+
+        assert_eq!(action_for("GET", "/__mockforge/logs"), "get_dashboard");
+        assert_eq!(action_for("HEAD", "/__mockforge/logs"), "get_dashboard");
+        assert_eq!(action_for("GET", "/__mockforge/env"), "get_env");
+        assert_eq!(action_for("GET", "/__mockforge/audit/logs"), "get_audit_logs");
+        assert_eq!(action_for("POST", "/__mockforge/env"), "unknown");
+        assert_eq!(
+            AdminActionPermissions::get_required_permissions("get_env"),
+            vec![Permission::ManageSettings]
+        );
+    }
+
+    #[test]
+    fn test_sse_query_token_only_on_sse_get() {
+        assert_eq!(
+            sse_query_token("GET", "/__mockforge/logs/sse", Some("access_token=abc")),
+            Some("abc")
+        );
+        assert_eq!(
+            sse_query_token("GET", "/__mockforge/logs/sse", Some("a=1&access_token=abc")),
+            Some("abc")
+        );
+        assert_eq!(sse_query_token("GET", "/__mockforge/logs", Some("access_token=abc")), None);
+        assert_eq!(
+            sse_query_token("POST", "/__mockforge/logs/sse", Some("access_token=abc")),
+            None
+        );
+        assert_eq!(sse_query_token("GET", "/__mockforge/logs/sse", None), None);
+    }
+
+    #[test]
+    fn test_public_routes_reject_traversal_variants() {
+        assert!(is_public_route("/assets/index.js"));
+        assert!(is_public_route("/__mockforge/health"));
+        for path in [
+            "/assets/../__mockforge/logs",
+            "/assets/..%2F__mockforge/logs",
+            "/assets//x",
+            "/mockforge-x/../__mockforge/logs",
+            "/__mockforge/health/",
+            "/__mockforge/Health",
+            "/__mockforge/%68ealth",
+            "/api/resilience/bulkheads",
+            "/__mockforge/logs",
+        ] {
+            assert!(!is_public_route(path), "{path} must not be public");
         }
     }
 

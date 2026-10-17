@@ -4,7 +4,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useSSE, useLogsSSE } from '../useSSE';
+import { useSSE, useLogsSSE, withSseAuth } from '../useSSE';
 
 // Mock EventSource
 //
@@ -209,5 +209,27 @@ describe('useLogsSSE', () => {
     await waitFor(() => {
       expect(result.current.readyState).toBeDefined();
     });
+  });
+});
+
+describe('withSseAuth', () => {
+  it('adds the session token to same-origin streams', () => {
+    expect(withSseAuth('/__mockforge/logs/sse', 'a.b.c')).toBe(
+      '/__mockforge/logs/sse?access_token=a.b.c',
+    );
+    expect(withSseAuth('/__mockforge/graph/sse?x=1', 'a b')).toBe(
+      '/__mockforge/graph/sse?x=1&access_token=a%20b',
+    );
+  });
+
+  it('leaves the URL alone without a token', () => {
+    expect(withSseAuth('/__mockforge/logs/sse', null)).toBe('/__mockforge/logs/sse');
+    expect(withSseAuth('/__mockforge/logs/sse', '')).toBe('/__mockforge/logs/sse');
+  });
+
+  it('never sends the token to another host', () => {
+    expect(withSseAuth('https://evil.example/sse', 'a.b.c')).toBe('https://evil.example/sse');
+    expect(withSseAuth('http://evil.example/sse', 'a.b.c')).toBe('http://evil.example/sse');
+    expect(withSseAuth('//evil.example/sse', 'a.b.c')).toBe('//evil.example/sse');
   });
 });

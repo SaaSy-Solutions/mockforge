@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Security
+
+- **[UI]** Admin server reads need the same credentials as writes. Request logs, recorder state, config and every other `GET /__mockforge/*` route answered anonymous requests (the #1019 fix was closed but never reached main). Bound to anything but loopback, the admin server now refuses to start without `MOCKFORGE_ADMIN_PASSWORD`, `MOCKFORGE_MANAGEMENT_TOKEN` or `JWT_SECRET`. On loopback with nothing configured, anonymous reads still work from the same machine (loopback `Host` required). The overrides API and `/api/resilience/*` are no longer exempt. The JWT fallback secret, previously a constant in the source, is random per process. Log and config responses redact credential headers and URL userinfo. The registry sends each hosted mock's management token on its private-network calls. (#1019)
+
 ## [0.3.236] - 2026-10-16
 
 ### Added

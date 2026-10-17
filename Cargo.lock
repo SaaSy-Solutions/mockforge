@@ -9326,6 +9326,7 @@ dependencies = [
  "serde_json",
  "serde_yaml",
  "sqlx",
+ "subtle",
  "sysinfo",
  "thiserror 2.0.18",
  "tokio",

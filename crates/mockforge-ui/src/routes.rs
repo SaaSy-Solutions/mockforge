@@ -873,7 +873,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_tui_get_endpoints_return_json_without_auth() {
+    async fn test_tui_get_endpoints_require_auth_and_return_json() {
         let router = make_test_router();
 
         let endpoints = vec![
@@ -886,8 +886,17 @@ mod tests {
         ];
 
         for endpoint in endpoints {
+            // Reads need credentials like writes do (#1019).
+            let (status, _, _) = send(router.clone(), "GET", endpoint, None, None).await;
+            assert_eq!(
+                status,
+                axum::http::StatusCode::UNAUTHORIZED,
+                "anonymous GET {} must be rejected",
+                endpoint
+            );
+
             let (status, content_type, body) =
-                send(router.clone(), "GET", endpoint, None, None).await;
+                send_authed(router.clone(), "GET", endpoint, None).await;
 
             assert_eq!(
                 status,
@@ -1016,7 +1025,7 @@ mod tests {
         let router = make_test_router();
 
         // Chaos: verify shape
-        let (_, _, body) = send(router.clone(), "GET", "/__mockforge/chaos", None, None).await;
+        let (_, _, body) = send_authed(router.clone(), "GET", "/__mockforge/chaos", None).await;
         let v: serde_json::Value = serde_json::from_str(&body).unwrap();
         let data = &v["data"];
         assert!(data.get("enabled").is_some(), "chaos missing 'enabled'");
@@ -1027,7 +1036,7 @@ mod tests {
 
         // Recorder: verify shape
         let (_, _, body) =
-            send(router.clone(), "GET", "/__mockforge/recorder/status", None, None).await;
+            send_authed(router.clone(), "GET", "/__mockforge/recorder/status", None).await;
         let v: serde_json::Value = serde_json::from_str(&body).unwrap();
         let data = &v["data"];
         assert!(data.get("recording").is_some(), "recorder missing 'recording'");
@@ -1035,12 +1044,13 @@ mod tests {
 
         // Federation: verify shape (empty array when not configured)
         let (_, _, body) =
-            send(router.clone(), "GET", "/__mockforge/federation/peers", None, None).await;
+            send_authed(router.clone(), "GET", "/__mockforge/federation/peers", None).await;
         let v: serde_json::Value = serde_json::from_str(&body).unwrap();
         assert!(v["data"].is_array(), "federation peers should be an array");
 
         // VBR: verify shape
-        let (_, _, body) = send(router.clone(), "GET", "/__mockforge/vbr/status", None, None).await;
+        let (_, _, body) =
+            send_authed(router.clone(), "GET", "/__mockforge/vbr/status", None).await;
         let v: serde_json::Value = serde_json::from_str(&body).unwrap();
         let data = &v["data"];
         assert!(data.get("enabled").is_some(), "vbr missing 'enabled'");
@@ -1049,7 +1059,7 @@ mod tests {
 
         // Predefined scenarios: verify shape
         let (_, _, body) =
-            send(router.clone(), "GET", "/__mockforge/chaos/scenarios/predefined", None, None)
+            send_authed(router.clone(), "GET", "/__mockforge/chaos/scenarios/predefined", None)
                 .await;
         let v: serde_json::Value = serde_json::from_str(&body).unwrap();
         assert!(v["success"].as_bool().unwrap(), "predefined scenarios not success");
