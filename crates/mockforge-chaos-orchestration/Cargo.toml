@@ -45,10 +45,10 @@ cron = "0.15"
 reqwest = { workspace = true }
 
 # Tracing
-mockforge-tracing = { version = "0.3.236", path = "../mockforge-tracing" }
+mockforge-tracing = { version = "0.3.237", path = "../mockforge-tracing" }
 
 # Recorder
-mockforge-recorder = { version = "0.3.236", path = "../mockforge-recorder" }
+mockforge-recorder = { version = "0.3.237", path = "../mockforge-recorder" }
 
 [dev-dependencies]
 tokio = { version = "1.48", features = ["macros", "rt-multi-thread", "test-util"] }

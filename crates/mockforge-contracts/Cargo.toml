@@ -15,7 +15,7 @@ categories = ["development-tools"]
 
 [dependencies]
 mockforge-foundation = { path = "../mockforge-foundation" }
-mockforge-openapi = { version = "0.3.236", path = "../mockforge-openapi" }
+mockforge-openapi = { version = "0.3.237", path = "../mockforge-openapi" }
 serde = { workspace = true }
 serde_json = { workspace = true }
 chrono = { workspace = true }
