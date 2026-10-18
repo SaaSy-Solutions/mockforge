@@ -73,7 +73,7 @@ reqwest = { workspace = true, features = ["multipart"] }
 tempfile = "3.27"
 rumqttc = { version = "0.25", optional = true }
 hex = { workspace = true }
-zip = "2.2"
+zip = "9.0.4"
 ring = "0.17"
 urlencoding = "2.1"
 colored = "2.2"
