@@ -143,10 +143,10 @@ For detailed use case examples and code samples, see [Ecosystem & Use Cases Guid
 
 All major features listed in this README are **implemented and functional in v1.0**, with the following clarification:
 
-- ✅ **Fully Implemented**: HTTP/REST, gRPC (with HTTP Bridge), WebSocket, GraphQL, AI-powered mocking (with data drift & event streams), Plugin system (WASM + remote loading), E2E encryption, Workspace sync, Data generation (RAG-powered), Admin UI (with SSE live logs, metrics, drag-and-drop fixtures), Admin UI role-based authentication (JWT login with Admin / Editor / Viewer roles enforced on mutating admin endpoints)
+- ✅ **Fully Implemented**: HTTP/REST, gRPC (with HTTP Bridge), WebSocket, GraphQL, AI-powered mocking (with data drift & event streams), Plugin system (WASM + remote loading), E2E encryption, Workspace sync, Data generation (RAG-powered; RAG documents persist with the file storage backend, while the database backend currently falls back to in-memory storage and vector-database backends are not built in yet), Admin UI (with SSE live logs, metrics, drag-and-drop fixtures), Admin UI role-based authentication (JWT login with Admin / Editor / Viewer roles enforced on mutating admin endpoints)
 - ⚠️ **Not yet in the local Admin UI**: OAuth / SSO login (SSO via OIDC and SAML is available in MockForge Cloud)
 
-All commands, options, and features documented in each protocol section (HTTP, gRPC, WebSocket, GraphQL, Plugins, Data Generation) have been verified to work as described.
+If a command, option or feature documented in a protocol section does not work as described, please [open an issue](https://github.com/SaaSy-Solutions/mockforge/issues).
 
 ### Key Differentiators
 
