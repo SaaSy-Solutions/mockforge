@@ -49,7 +49,7 @@ dirs = "5.0"
 reqwest = { version = "0.12", features = ["stream", "rustls-tls", "json"], default-features = false }
 
 # Archive extraction
-zip = "2.2"
+zip = "9.0.4"
 flate2 = "1.0"
 tar = "0.4"
 
