@@ -46,11 +46,8 @@ permissions:
 jobs:
   smoke:
     name: Smoke staging hosted mocks
-    # Per repo CI-cost policy: prefer self-hosted runners over GHA-hosted.
-    # #1000: GitHub-hosted, not the self-hosted pool. Pure HTTP checks with no
-    # Rust toolchain needed, and mockforge has only two self-hosted runners.
-    # The repo is public, so hosted minutes are free.
-    runs-on: ubuntu-latest
+    # Hetzner pool (#1191). Pure HTTP checks with no Rust toolchain needed.
+    runs-on: [self-hosted, linux, x64, rust]
     timeout-minutes: 25
 
     env:
