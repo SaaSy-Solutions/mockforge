@@ -97,7 +97,9 @@ impl Default for HttpConfig {
             openapi_spec: None,
             cors: Some(HttpCorsConfig {
                 enabled: true,
-                allowed_origins: vec!["*".to_string()],
+                // Fail closed: no cross-origin access until origins are configured,
+                // e.g. via MOCKFORGE_CORS_ALLOWED_ORIGINS (#1017).
+                allowed_origins: Vec::new(),
                 allowed_methods: vec![
                     "GET".to_string(),
                     "POST".to_string(),
@@ -107,7 +109,7 @@ impl Default for HttpConfig {
                     "OPTIONS".to_string(),
                 ],
                 allowed_headers: vec!["content-type".to_string(), "authorization".to_string()],
-                allow_credentials: false, // Must be false when using wildcard origin
+                allow_credentials: false,
             }),
             request_timeout_secs: 30,
             validation: Some(HttpValidationConfig {
