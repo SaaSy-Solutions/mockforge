@@ -2,7 +2,13 @@
 
 ## [Unreleased]
 
+### Changed
+
+- **[DevX]** Extract authentication middleware, token lifecycle and OAuth2/OIDC endpoints into `mockforge-auth`. Preserve HTTP authentication and OAuth2 handler import paths and shared state types; keep the risk-simulation implementation with its engine. (#635)
+
 ### Fixed
+
+- **[Auth]** Authenticated handlers can extract `AuthClaims` with Axum’s standard extractor; middleware now stores the raw claims as well as the legacy wrapper. Previously such handlers returned 500 after successful authentication. (#635)
 
 - **[Cloud]** Cloud test runs no longer get stuck in `running` when the registry rate-limits the runner. The runner's start, event and finish callbacks all come from one IP, so the per-client limit could return 429 to `/finish` and the run never ended. Internal callback routes now skip the rate limit when they carry the internal API token (requests without it are still limited), and the runner retries `/finish` on 429, 5xx and connection errors with backoff (6 attempts over about 30 s). (#1286)
 - **[Cloud]** The SQLite registry store (self-hosted registry admin) now rotates API tokens and lists tokens due for rotation, like the Postgres store. Before, rotation returned an error and the rotation reminder list was always empty. Both stores now generate `mfx_` tokens in one URL-safe format (32 random bytes, unpadded URL-safe base64), so new Postgres tokens no longer contain `+`, `/` or `=`. Existing tokens keep working. (#1266)

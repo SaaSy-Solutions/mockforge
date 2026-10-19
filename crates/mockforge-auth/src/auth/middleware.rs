@@ -111,9 +111,11 @@ pub async fn auth_middleware(
             emit_security_event(event).await;
 
             // Add claims to request extensions for downstream handlers
-            // Wrap in Extension for Axum extractor compatibility
+            // Axum extracts the raw type; retain the wrapper for existing
+            // consumers that read it directly from request extensions.
             use axum::extract::Extension;
             let mut req = req;
+            req.extensions_mut().insert(claims.clone());
             req.extensions_mut().insert(Extension(claims));
             next.run(req).await
         }
