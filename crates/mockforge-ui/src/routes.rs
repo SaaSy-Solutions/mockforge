@@ -74,29 +74,7 @@ pub fn create_admin_router(
     // Initialize user store for authentication
     let _user_store = init_global_user_store();
 
-    let cors = match std::env::var("CORS_ALLOWED_ORIGINS") {
-        Ok(origins) if !origins.is_empty() => {
-            let allowed_origins: Vec<_> =
-                origins.split(',').filter_map(|s| s.trim().parse().ok()).collect();
-            tracing::info!(
-                "Admin UI CORS configured with {} allowed origins",
-                allowed_origins.len()
-            );
-            CorsLayer::new()
-                .allow_origin(AllowOrigin::list(allowed_origins))
-                .allow_methods(Any)
-                .allow_headers(Any)
-        }
-        _ => {
-            tracing::info!("Admin UI CORS configured with strict same-origin policy");
-            CorsLayer::new()
-                .allow_origin(AllowOrigin::exact(
-                    "null".parse().expect("'null' is a valid header value"),
-                ))
-                .allow_methods(Any)
-                .allow_headers(Any)
-        }
-    };
+    let cors = admin_cors_layer(std::env::var("CORS_ALLOWED_ORIGINS").ok().as_deref());
 
     let state = AdminState::new(
         http_server_addr,
@@ -726,6 +704,109 @@ pub fn create_admin_router(
     router = router.layer(from_fn(rbac_middleware));
 
     router.layer(CompressionLayer::new()).layer(cors).with_state(state)
+}
+
+/// Admin UI CORS (#1017). The UI is served same-origin, so by default no
+/// cross-origin access is granted, including the opaque `null` origin.
+/// `CORS_ALLOWED_ORIGINS` lists exact origins (`null` only if listed). Any
+/// malformed entry, or `*`, denies all cross-origin access instead of widening it.
+fn admin_cors_layer(configured: Option<&str>) -> CorsLayer {
+    let base = CorsLayer::new().allow_methods(Any).allow_headers(Any);
+    let entries: Vec<String> = configured
+        .unwrap_or("")
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+    if entries.is_empty() {
+        tracing::info!("Admin UI CORS: same-origin only");
+        return base;
+    }
+    if entries.iter().any(|e| e == "*") {
+        tracing::error!("Admin UI CORS_ALLOWED_ORIGINS must not contain '*'; denying cross-origin");
+        return base;
+    }
+    let mut allowed = Vec::with_capacity(entries.len());
+    for entry in &entries {
+        match mockforge_http::cors_policy::normalize_origin(entry)
+            .ok()
+            .and_then(|o| o.parse::<axum::http::HeaderValue>().ok())
+        {
+            Some(v) => allowed.push(v),
+            None => {
+                tracing::error!(
+                    "Admin UI CORS_ALLOWED_ORIGINS has invalid origin {entry:?}; denying cross-origin"
+                );
+                return base;
+            }
+        }
+    }
+    tracing::info!("Admin UI CORS configured with {} allowed origins", allowed.len());
+    base.allow_origin(AllowOrigin::list(allowed))
+}
+
+#[cfg(test)]
+mod admin_cors_tests {
+    use super::admin_cors_layer;
+    use axum::body::Body;
+    use axum::http::{header, Request};
+    use axum::routing::get;
+    use axum::Router;
+    use tower::ServiceExt;
+
+    async fn acao(configured: Option<&str>, origin: &str) -> Option<String> {
+        let app = Router::new()
+            .route("/x", get(|| async { "ok" }))
+            .layer(admin_cors_layer(configured));
+        let res = app
+            .oneshot(
+                Request::builder()
+                    .uri("/x")
+                    .header(header::ORIGIN, origin)
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        res.headers()
+            .get(header::ACCESS_CONTROL_ALLOW_ORIGIN)
+            .map(|v| v.to_str().unwrap().to_string())
+    }
+
+    #[tokio::test]
+    async fn default_rejects_null_and_foreign_origins() {
+        assert_eq!(acao(None, "null").await, None);
+        assert_eq!(acao(None, "https://evil.example").await, None);
+        assert_eq!(acao(Some(""), "null").await, None);
+    }
+
+    #[tokio::test]
+    async fn configured_origins_are_allowed_and_others_rejected() {
+        let cfg = Some("https://app.mockforge.dev, https://mockforge.dev");
+        assert_eq!(
+            acao(cfg, "https://mockforge.dev").await.as_deref(),
+            Some("https://mockforge.dev")
+        );
+        assert_eq!(acao(cfg, "https://evil.example").await, None);
+        assert_eq!(acao(cfg, "null").await, None);
+    }
+
+    #[tokio::test]
+    async fn null_only_when_explicitly_listed() {
+        assert_eq!(acao(Some("null"), "null").await.as_deref(), Some("null"));
+    }
+
+    #[tokio::test]
+    async fn wildcard_or_malformed_entry_denies_all() {
+        for cfg in [
+            "*",
+            "https://ok.example,*",
+            "https://ok.example,not-an-origin",
+        ] {
+            assert_eq!(acao(Some(cfg), "https://ok.example").await, None, "{cfg}");
+            assert_eq!(acao(Some(cfg), "https://evil.example").await, None, "{cfg}");
+        }
+    }
 }
 
 #[cfg(test)]

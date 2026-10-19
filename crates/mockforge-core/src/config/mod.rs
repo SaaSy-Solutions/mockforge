@@ -542,6 +542,23 @@ pub fn apply_env_overrides(mut config: ServerConfig) -> ServerConfig {
         config.http.host = host;
     }
 
+    // Comma-separated CORS origins: exact `scheme://host[:port]` entries, `*`
+    // (no credentials) or `localhost` (dev mode). See mockforge-http's
+    // `cors_policy` (#1017).
+    if let Ok(origins) = std::env::var("MOCKFORGE_CORS_ALLOWED_ORIGINS") {
+        let origins: Vec<String> = origins
+            .split(',')
+            .map(|o| o.trim().to_string())
+            .filter(|o| !o.is_empty())
+            .collect();
+        let cors = config
+            .http
+            .cors
+            .get_or_insert_with(|| HttpConfig::default().cors.unwrap_or_default());
+        cors.enabled = true;
+        cors.allowed_origins = origins;
+    }
+
     // WebSocket server overrides
     if let Ok(port) = std::env::var("MOCKFORGE_WS_PORT") {
         if let Ok(port_num) = port.parse() {
@@ -1084,6 +1101,22 @@ pub async fn discover_config_file_all_formats() -> Result<std::path::PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn cors_defaults_closed_and_env_sets_origins() {
+        // Only this test touches MOCKFORGE_CORS_ALLOWED_ORIGINS.
+        let default_cors = HttpConfig::default().cors.unwrap_or_default();
+        assert!(default_cors.allowed_origins.is_empty(), "default must not be a wildcard");
+
+        std::env::set_var("MOCKFORGE_CORS_ALLOWED_ORIGINS", " https://a.example ,localhost,");
+        let mut config = ServerConfig::default();
+        config.http.cors = None;
+        let config = apply_env_overrides(config);
+        std::env::remove_var("MOCKFORGE_CORS_ALLOWED_ORIGINS");
+        let cors = config.http.cors.unwrap_or_default();
+        assert!(cors.enabled);
+        assert_eq!(cors.allowed_origins, vec!["https://a.example", "localhost"]);
+    }
 
     #[test]
     fn test_default_config() {

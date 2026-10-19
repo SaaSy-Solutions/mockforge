@@ -22,26 +22,38 @@ concurrency:
 jobs:
   smoke:
     name: Install and Package Smoke (Rust 1.96)
-    runs-on: ubuntu-latest
-    timeout-minutes: 60
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
+    # Two cold release builds at CARGO_BUILD_JOBS=2 on the shared Hetzner
+    # host overran 60 minutes on the first run after #1191.
+    timeout-minutes: 120
     env:
       RUSTUP_TOOLCHAIN: "1.96.0"
       CARGO_BUILD_JOBS: "2"
       CARGO_INCREMENTAL: "0"
       CARGO_PROFILE_RELEASE_DEBUG: "0"
     steps:
+      - name: Set per-runner CARGO_HOME on Hetzner
+        # Keep rustup/cargo state off the shared `actions` user's ~/.cargo (#1191).
+        if: runner.environment == 'self-hosted'
+        run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: Free runner disk space
+        if: runner.environment == 'github-hosted'
         run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
       - uses: ./.github/actions/rust-toolchain
         with:
           toolchain: ${{ env.RUSTUP_TOOLCHAIN }}
       - name: Install native build dependencies
+        if: runner.environment == 'github-hosted'
         run: |
           sudo apt-get update
           sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev
+      - name: Verify native build dependencies on Hetzner
+        if: runner.environment == 'self-hosted'
+        run: 'dpkg -s protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev > /dev/null 2>&1 || { echo "::error::Required system deps missing on self-hosted runner. Run on the runner host: sudo apt-get install -y protobuf-compiler libfontconfig1-dev libglib2.0-dev libgtk-3-dev libsoup2.4-dev libasound2-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev"; exit 1; }'
       - uses: Swatinem/rust-cache@v2
         with:
           env-vars: "CARGO_HOME"
