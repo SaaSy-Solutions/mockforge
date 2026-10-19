@@ -2,6 +2,8 @@
 
 ### Fixed
 
+- **[Contracts]** Package Intelligence’s database migrations inside its own crate so the published `database` feature builds without a sibling HTTP checkout. Preserve all historical migration filenames and SQL bytes for existing databases. (#632)
+
 - **[Cloud]** Cloud test runs no longer get stuck in `running` when the registry rate-limits the runner. The runner's start, event and finish callbacks all come from one IP, so the per-client limit could return 429 to `/finish` and the run never ended. Internal callback routes now skip the rate limit when they carry the internal API token (requests without it are still limited), and the runner retries `/finish` on 429, 5xx and connection errors with backoff (6 attempts over about 30 s). (#1286)
 - **[Cloud]** The SQLite registry store (self-hosted registry admin) now rotates API tokens and lists tokens due for rotation, like the Postgres store. Before, rotation returned an error and the rotation reminder list was always empty. Both stores now generate `mfx_` tokens in one URL-safe format (32 random bytes, unpadded URL-safe base64), so new Postgres tokens no longer contain `+`, `/` or `=`. Existing tokens keep working. (#1266)
 - **[Docs]** The README and `cloud-service/README.md` no longer claim a multi-region deployment or a 99.9% uptime SLA. Production runs in one region (US East) with no contractual SLA. The README now says which RAG storage backends persist: file storage does; the database backend falls back to memory, and vector databases are not built in. It also drops the line saying every documented feature was verified. (#1265)
