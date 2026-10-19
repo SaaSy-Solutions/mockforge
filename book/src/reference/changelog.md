@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **[Cloud]** Trial owners get an email three days before their Pro or Team trial ends. The registry now handles Stripe's `customer.subscription.trial_will_end` webhook and sends the reminder through the same email path as the other billing emails, honoring the owner's email-notification setting. It gives the end date and price, and says the plan continues if a payment method is on file and otherwise drops to Free. (#714)
+
 ### Fixed
 
 - **[Cloud]** The SQLite registry store (self-hosted registry admin) now rotates API tokens and lists tokens due for rotation, like the Postgres store. Before, rotation returned an error and the rotation reminder list was always empty. Both stores now generate `mfx_` tokens in one URL-safe format (32 random bytes, unpadded URL-safe base64), so new Postgres tokens no longer contain `+`, `/` or `=`. Existing tokens keep working. (#1266)
