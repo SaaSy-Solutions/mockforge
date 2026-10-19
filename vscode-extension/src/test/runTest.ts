@@ -1,3 +1,5 @@
+import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import { runTests } from '@vscode/test-electron';
 
@@ -9,12 +11,17 @@ import { runTests } from '@vscode/test-electron';
 async function main(): Promise<void> {
     const extensionDevelopmentPath = path.resolve(__dirname, '../../');
     const extensionTestsPath = path.resolve(__dirname, './suite/index');
+    // VS Code puts its IPC socket in the user-data dir. Under a CI checkout the
+    // default (.vscode-test/user-data) exceeds the 107-byte Unix socket path
+    // limit and VS Code exits before running tests, so use a short temp dir.
+    const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mfvsc-'));
     await runTests({
         version: '1.85.2',
         extensionDevelopmentPath,
         extensionTestsPath,
-        launchArgs: ['--disable-extensions', '--disable-workspace-trust'],
+        launchArgs: ['--disable-extensions', '--disable-workspace-trust', `--user-data-dir=${userDataDir}`],
     });
+    fs.rmSync(userDataDir, { recursive: true, force: true });
 }
 
 main().catch((err) => {
