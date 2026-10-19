@@ -20,6 +20,10 @@
 //! `environ`, ...); when it is not a regular file; or when it exceeds the size
 //! cap (`MOCKFORGE_TEMPLATE_FS_MAX_BYTES`, default 1 MiB).
 
+use cap_fs_ext::{
+    DirExt, FollowSymlinks, OpenOptionsFollowExt, OpenOptionsMaybeDirExt, OpenOptionsSyncExt,
+};
+use cap_std::fs::{Dir, OpenOptions};
 use std::fs::File;
 use std::io::Read;
 use std::path::{Component, Path, PathBuf};
@@ -141,6 +145,10 @@ fn has_drive_prefix(raw: &str) -> bool {
     bytes.len() >= 2 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':'
 }
 
+fn has_windows_path_syntax(raw: &str, windows_host: bool) -> bool {
+    raw.contains('\\') || has_drive_prefix(raw) || (windows_host && raw.contains(':'))
+}
+
 fn is_env_like(name: &str) -> bool {
     let lower = name.to_ascii_lowercase();
     lower == ".env"
@@ -163,6 +171,29 @@ fn is_denied(path: &Path, root: &Path) -> bool {
     })
 }
 
+/// Open a previously resolved path through pinned directory handles. A concurrent
+/// symlink replacement must not redirect the read after its policy checks.
+fn open_confined_file(root: &Path, resolved: &Path) -> Result<File, TemplateFsError> {
+    let relative = resolved.strip_prefix(root).map_err(|_| TemplateFsError::OutsideRoot)?;
+    let name = relative.file_name().ok_or(TemplateFsError::NotFound)?;
+    let mut directory = Dir::open_ambient_dir(root, cap_std::ambient_authority())
+        .map_err(|_| TemplateFsError::InvalidRoot)?;
+    if let Some(parent) = relative.parent() {
+        for component in parent.components() {
+            let Component::Normal(name) = component else {
+                return Err(TemplateFsError::OutsideRoot);
+            };
+            directory = directory.open_dir_nofollow(name).map_err(|_| TemplateFsError::Denied)?;
+        }
+    }
+    let mut options = OpenOptions::new();
+    options.read(true).follow(FollowSymlinks::No).nonblock(true).maybe_dir(true);
+    directory
+        .open_with(name, &options)
+        .map(|file| file.into_std())
+        .map_err(|_| TemplateFsError::Denied)
+}
+
 /// Read `raw` relative to `root`, enforcing every sandbox rule.
 pub fn read_file_in_root(root: &Path, raw: &str, max: u64) -> Result<String, TemplateFsError> {
     let raw = raw.trim();
@@ -175,7 +206,7 @@ pub fn read_file_in_root(root: &Path, raw: &str, max: u64) -> Result<String, Tem
     if has_percent_escape(raw) {
         return Err(TemplateFsError::Rejected("percent-encoding"));
     }
-    if raw.contains('\\') || has_drive_prefix(raw) {
+    if has_windows_path_syntax(raw, cfg!(windows)) {
         return Err(TemplateFsError::Rejected("Windows-style path"));
     }
     let requested = Path::new(raw);
@@ -211,7 +242,7 @@ pub fn read_file_in_root(root: &Path, raw: &str, max: u64) -> Result<String, Tem
         return Err(TemplateFsError::Denied);
     }
 
-    let file = File::open(&resolved).map_err(|_| TemplateFsError::NotFound)?;
+    let file = open_confined_file(&root, &resolved)?;
     let meta = file.metadata().map_err(|_| TemplateFsError::NotFound)?;
     if !meta.is_file() {
         return Err(TemplateFsError::NotFound);
@@ -245,6 +276,56 @@ mod tests {
         (dir, root)
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn replacing_resolved_file_with_an_escaping_symlink_is_rejected() {
+        let (temp, root) = fixture();
+        let root = root.canonicalize().unwrap();
+        let allowed = root.join("allowed.txt");
+        fs::write(&allowed, "allowed fixture").unwrap();
+        let resolved = allowed.canonicalize().unwrap();
+        let outside = temp.path().join("outside.txt");
+        fs::write(&outside, "outside fixture").unwrap();
+        fs::remove_file(&allowed).unwrap();
+        std::os::unix::fs::symlink(outside, allowed).unwrap();
+        assert!(open_confined_file(&root, &resolved).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn replacing_resolved_parent_with_an_escaping_symlink_is_rejected() {
+        let (temp, root) = fixture();
+        let root = root.canonicalize().unwrap();
+        let parent = root.join("parent");
+        fs::create_dir(&parent).unwrap();
+        let allowed = parent.join("file.txt");
+        fs::write(&allowed, "allowed fixture").unwrap();
+        let resolved = allowed.canonicalize().unwrap();
+        let outside = temp.path().join("outside");
+        fs::create_dir(&outside).unwrap();
+        fs::write(outside.join("file.txt"), "outside fixture").unwrap();
+        fs::rename(&parent, root.join("previous-parent")).unwrap();
+        std::os::unix::fs::symlink(outside, parent).unwrap();
+        assert!(open_confined_file(&root, &resolved).is_err());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fifo_is_rejected_without_waiting_for_a_writer() {
+        let (_temp, root) = fixture();
+        let fifo = root.join("fixture.pipe");
+        assert!(std::process::Command::new("mkfifo").arg(&fifo).status().unwrap().success());
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let worker = std::thread::spawn(move || {
+            let _ = sender.send(read_file_in_root(&root, "fixture.pipe", DEFAULT_MAX_BYTES));
+        });
+        let result = receiver
+            .recv_timeout(std::time::Duration::from_secs(2))
+            .expect("non-regular files must be refused without blocking");
+        assert_eq!(result, Err(TemplateFsError::NotFound));
+        worker.join().unwrap();
+    }
+
     #[test]
     fn legitimate_relative_file_is_read() {
         let (_dir, root) = fixture();
@@ -254,6 +335,7 @@ mod tests {
         assert_eq!(out, Ok(r#"{"id":1}"#.to_string()));
     }
 
+    #[cfg(unix)]
     #[test]
     fn absolute_path_inside_root_is_read() {
         let (_dir, root) = fixture();
@@ -278,6 +360,7 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
     #[test]
     fn absolute_path_outside_root_is_rejected() {
         let (dir, root) = fixture();
@@ -321,6 +404,7 @@ mod tests {
         );
     }
 
+    #[cfg(unix)]
     #[test]
     fn system_paths_are_denied() {
         let (_dir, root) = fixture();
@@ -410,6 +494,36 @@ mod tests {
                 "{p}"
             );
         }
+    }
+
+    #[test]
+    fn windows_alternate_stream_syntax_is_rejected_before_opening() {
+        for path in [
+            "fixtures/user.json:private",
+            ".env::$DATA",
+            "fixtures/.env:private",
+        ] {
+            assert!(has_windows_path_syntax(path, true), "{path}");
+            // Colons in POSIX filenames are ordinary bytes, not stream selectors.
+            assert!(!has_windows_path_syntax(path, false), "{path}");
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_tokens_use_portable_relative_paths() {
+        let (_dir, root) = fixture();
+        let absolute = root.canonicalize().unwrap().join("fixtures/user.json");
+        for path in [absolute.to_string_lossy().as_ref(), ".env::$DATA"] {
+            assert_eq!(
+                read_file_in_root(&root, path, DEFAULT_MAX_BYTES),
+                Err(TemplateFsError::Rejected("Windows-style path"))
+            );
+        }
+        assert_eq!(
+            read_file_in_root(&root, "fixtures/user.json", DEFAULT_MAX_BYTES),
+            Ok(r#"{"id":1}"#.to_string())
+        );
     }
 
     #[test]

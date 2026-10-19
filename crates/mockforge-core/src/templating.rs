@@ -557,6 +557,35 @@ fn replace_response_function(
 
 /// Replace encryption tokens in a template string
 fn replace_encryption_tokens(input: &str) -> String {
+    let password = std::env::var("MOCKFORGE_ENCRYPTION_KEY").ok();
+    replace_encryption_tokens_with(input, password.as_deref())
+}
+
+/// Salt for deriving the template key from `MOCKFORGE_ENCRYPTION_KEY`. It is
+/// fixed so `{{decrypt}}` derives the same key `{{encrypt}}` used; without it
+/// PBKDF2 picked a random salt per call and nothing could ever be decrypted.
+const TEMPLATE_KEY_SALT: &[u8] = b"mockforge-template-encryption-v1";
+
+/// Derive the fallback key used when the key store has no key for the
+/// requested id. There is deliberately no built-in password: without
+/// `MOCKFORGE_ENCRYPTION_KEY` the tokens fail instead of encrypting with a key
+/// published in the source (#1273).
+fn fallback_encryption_key(
+    password: Option<&str>,
+    algorithm: crate::encryption::EncryptionAlgorithm,
+) -> Result<crate::encryption::EncryptionKey, &'static str> {
+    let password = password.filter(|p| !p.trim().is_empty()).ok_or("no key configured")?;
+    crate::encryption::EncryptionKey::from_password_pbkdf2(
+        password,
+        Some(TEMPLATE_KEY_SALT),
+        algorithm,
+    )
+    .map_err(|_| "key creation failed")
+}
+
+fn replace_encryption_tokens_with(input: &str, password: Option<&str>) -> String {
+    use crate::encryption::EncryptionAlgorithm;
+
     // Key store is initialized at startup
     let key_store = init_key_store();
 
@@ -571,28 +600,12 @@ fn replace_encryption_tokens(input: &str) -> String {
             let key_id = caps.get(1).map(|m| m.as_str()).unwrap_or(default_key_id);
             let plaintext = caps.get(2).map(|m| m.as_str()).unwrap_or("");
 
-            match key_store.get_key(key_id) {
-                Some(key) => match key.encrypt(plaintext, None) {
-                    Ok(ciphertext) => ciphertext,
-                    Err(_) => "<encryption_error>".to_string(),
-                },
-                None => {
-                    // Create a default key if none exists
-                    let password = std::env::var("MOCKFORGE_ENCRYPTION_KEY")
-                        .unwrap_or_else(|_| "mockforge_default_encryption_key_2024".to_string());
-                    match crate::encryption::EncryptionKey::from_password_pbkdf2(
-                        &password,
-                        None,
-                        crate::encryption::EncryptionAlgorithm::Aes256Gcm,
-                    ) {
-                        Ok(key) => match key.encrypt(plaintext, None) {
-                            Ok(ciphertext) => ciphertext,
-                            Err(_) => "<encryption_error>".to_string(),
-                        },
-                        Err(_) => "<key_creation_error>".to_string(),
-                    }
-                }
-            }
+            let result = match key_store.get_key(key_id) {
+                Some(key) => key.encrypt(plaintext, None).map_err(|_| "encryption failed"),
+                None => fallback_encryption_key(password, EncryptionAlgorithm::Aes256Gcm)
+                    .and_then(|key| key.encrypt(plaintext, None).map_err(|_| "encryption failed")),
+            };
+            result.unwrap_or_else(|e| format!("<encryption_error: {e}>"))
         })
         .to_string();
 
@@ -602,31 +615,14 @@ fn replace_encryption_tokens(input: &str) -> String {
             let key_id = caps.get(1).map(|m| m.as_str()).unwrap_or(default_key_id);
             let plaintext = caps.get(2).map(|m| m.as_str()).unwrap_or("");
 
-            match key_store.get_key(key_id) {
-                Some(key) => {
-                    // Use ChaCha20-Poly1305 for secure() function
-                    match key.encrypt_chacha20(plaintext, None) {
-                        Ok(ciphertext) => ciphertext,
-                        Err(_) => "<encryption_error>".to_string(),
-                    }
-                }
-                None => {
-                    // Create a default key if none exists
-                    let password = std::env::var("MOCKFORGE_ENCRYPTION_KEY")
-                        .unwrap_or_else(|_| "mockforge_default_encryption_key_2024".to_string());
-                    match crate::encryption::EncryptionKey::from_password_pbkdf2(
-                        &password,
-                        None,
-                        crate::encryption::EncryptionAlgorithm::ChaCha20Poly1305,
-                    ) {
-                        Ok(key) => match key.encrypt_chacha20(plaintext, None) {
-                            Ok(ciphertext) => ciphertext,
-                            Err(_) => "<encryption_error>".to_string(),
-                        },
-                        Err(_) => "<key_creation_error>".to_string(),
-                    }
-                }
-            }
+            let result = match key_store.get_key(key_id) {
+                Some(key) => key.encrypt_chacha20(plaintext, None).map_err(|_| "encryption failed"),
+                None => fallback_encryption_key(password, EncryptionAlgorithm::ChaCha20Poly1305)
+                    .and_then(|key| {
+                        key.encrypt_chacha20(plaintext, None).map_err(|_| "encryption failed")
+                    }),
+            };
+            result.unwrap_or_else(|e| format!("<encryption_error: {e}>"))
         })
         .to_string();
 
@@ -636,28 +632,12 @@ fn replace_encryption_tokens(input: &str) -> String {
             let key_id = caps.get(1).map(|m| m.as_str()).unwrap_or(default_key_id);
             let ciphertext = caps.get(2).map(|m| m.as_str()).unwrap_or("");
 
-            match key_store.get_key(key_id) {
-                Some(key) => match key.decrypt(ciphertext, None) {
-                    Ok(plaintext) => plaintext,
-                    Err(_) => "<decryption_error>".to_string(),
-                },
-                None => {
-                    // Create a default key if none exists
-                    let password = std::env::var("MOCKFORGE_ENCRYPTION_KEY")
-                        .unwrap_or_else(|_| "mockforge_default_encryption_key_2024".to_string());
-                    match crate::encryption::EncryptionKey::from_password_pbkdf2(
-                        &password,
-                        None,
-                        crate::encryption::EncryptionAlgorithm::Aes256Gcm,
-                    ) {
-                        Ok(key) => match key.decrypt(ciphertext, None) {
-                            Ok(plaintext) => plaintext,
-                            Err(_) => "<decryption_error>".to_string(),
-                        },
-                        Err(_) => "<key_creation_error>".to_string(),
-                    }
-                }
-            }
+            let result = match key_store.get_key(key_id) {
+                Some(key) => key.decrypt(ciphertext, None).map_err(|_| "decryption failed"),
+                None => fallback_encryption_key(password, EncryptionAlgorithm::Aes256Gcm)
+                    .and_then(|key| key.decrypt(ciphertext, None).map_err(|_| "decryption failed")),
+            };
+            result.unwrap_or_else(|e| format!("<decryption_error: {e}>"))
         })
         .to_string();
 
@@ -742,6 +722,46 @@ fn replace_with_fallback(input: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // #1273: encrypt/secure/decrypt used to fall back to a password in the
+    // source. Without a configured key they must fail, never encrypt.
+    #[test]
+    fn test_encryption_tokens_fail_without_configured_key() {
+        for password in [None, Some(""), Some("   ")] {
+            let out = replace_encryption_tokens_with(
+                r#"{{encrypt "a"}}|{{secure "b"}}|{{decrypt "c"}}"#,
+                password,
+            );
+            assert_eq!(
+                out,
+                "<encryption_error: no key configured>|<encryption_error: no key configured>|\
+                 <decryption_error: no key configured>"
+            );
+        }
+    }
+
+    #[test]
+    fn test_encryption_tokens_round_trip_with_configured_key() {
+        use base64::Engine as _;
+        let password = Some("operator-chosen-secret");
+        let ciphertext = replace_encryption_tokens_with(r#"{{encrypt "hello"}}"#, password);
+        assert_ne!(ciphertext, "hello");
+        assert!(base64::engine::general_purpose::STANDARD.decode(&ciphertext).is_ok());
+        let decrypted =
+            replace_encryption_tokens_with(&format!(r#"{{{{decrypt "{ciphertext}"}}}}"#), password);
+        assert_eq!(decrypted, "hello");
+
+        // secure() uses ChaCha20-Poly1305 and also needs a configured key.
+        let secured = replace_encryption_tokens_with(r#"{{secure "test message"}}"#, password);
+        assert!(base64::engine::general_purpose::STANDARD.decode(&secured).is_ok());
+
+        // A different key cannot read it.
+        let wrong = replace_encryption_tokens_with(
+            &format!(r#"{{{{decrypt "{ciphertext}"}}}}"#),
+            Some("another-secret"),
+        );
+        assert_eq!(wrong, "<decryption_error: decryption failed>");
+    }
     use crate::request_chaining::{ChainContext, ChainResponse, ChainTemplatingContext};
     use serde_json::json;
 

@@ -509,9 +509,18 @@ links:
 Paths are resolved relative to the root. `..`, percent-encoded or Windows-style paths,
 symlinks that escape the root, `/proc`, `/sys`, `/dev`, `/etc` and env-like files
 (`.env`, `.env.*`, `*.env`, `.envrc`, `environ`) are refused. Files larger than
-`MOCKFORGE_TEMPLATE_FS_MAX_BYTES` (default 1 MiB) are refused.
+`MOCKFORGE_TEMPLATE_FS_MAX_BYTES` (default 1 MiB) are refused. Use portable relative
+paths with forward slashes on Windows; drive paths, UNC paths and alternate data
+streams are refused. POSIX absolute paths are allowed only within the root.
+
+After resolving an allowed path, MockForge opens its components through pinned
+directory handles without following replacement symlinks. Existing symlinks
+that resolve within the root remain supported. Opens are nonblocking before
+the regular-file check, so a named pipe cannot hold a template read waiting
+for a writer. The size limit also bounds the read if a file grows afterward.
 
 **Error handling:**
+
 - If the token is disabled: `<fs.readFile error: disabled (no fixtures root configured; set MOCKFORGE_TEMPLATE_FS_ROOT)>`
 - If the path is refused or missing: `<fs.readFile error: ...>` (e.g. `file not found`, `path is outside the fixtures root`)
 - If the path is empty: `<fs.readFile: empty path>`
