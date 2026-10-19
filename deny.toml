@@ -31,6 +31,9 @@ allow = [
     # inferno (flamegraph generation, mockforge-reporting) — OSI-approved,
     # FSF Free/Libre, weak-copyleft profile comparable to MPL-2.0.
     "CDDL-1.0",
+    # libbz2-rs-sys (bzip2 0.6, via zip 9 default features). Permissive
+    # BSD-style licence, the same terms as the original libbzip2.
+    "bzip2-1.0.6",
 ]
 confidence-threshold = 0.8
 

@@ -12,6 +12,9 @@ ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / '.github/workflows'
 LABELS = ['self-hosted', 'linux', 'x64', 'rust']
 ROUTE = '${{ (github.event_name != \'pull_request\' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(\'["self-hosted","linux","x64","rust"]\') || \'ubuntu-latest\' }}'
+HETZNER = '[self-hosted, linux, x64, rust]'
+DOCS_ROUTE = '${{ fromJSON((github.event_name == \'workflow_dispatch\' || (github.event_name == \'pull_request\' && github.event.pull_request.head.repo.full_name == github.repository)) && \'["self-hosted","linux","x64","rust"]\' || \'["ubuntu-latest"]\') }}'
+PLUGIN_MATRIX_ROUTE = '${{ matrix.os == \'ubuntu-latest\' && fromJSON(\'["self-hosted","linux","x64","rust"]\') || matrix.os }}'
 TARGETS = {
     'ci.yml': ['changes', 'test', 'ui-test', 'warning-gate',
                'warning-ratchet-preview', 'security-audit', 'msrv'],
@@ -162,29 +165,67 @@ class HetznerRoutingTest(unittest.TestCase):
                 if 'self-hosted' in route(block):
                     self.assertRegex(block, r'(?m)^    timeout-minutes: [1-9][0-9]*$', f'{filename}:{job_id}')
 
-    def test_sensitive_release_jobs_and_os_coverage_are_not_rerouted(self):
+    def test_release_and_publish_jobs_run_on_hetzner_except_other_os(self):
         self.assertEqual(route(jobs('release.yml')['release-windows']), 'windows-latest')
-        self.assertEqual(route(jobs('release.yml')['release']), 'ubuntu-latest')
+        for job_id in ('release', 'publish', 'helm'):
+            self.assertEqual(route(jobs('release.yml')[job_id]), HETZNER, job_id)
         plugin = jobs('plugin-publish.yml')
-        self.assertEqual(route(plugin['build']), '${{ matrix.os }}')
+        self.assertEqual(route(plugin['build']), PLUGIN_MATRIX_ROUTE)
         self.assertIn('os: [ubuntu-latest, macos-latest, windows-latest]', plugin['build'])
-        for name in ['npm', 'python', 'maven', 'nuget']:
-            self.assertEqual(route(jobs(f'{name}-publish-sdk.yml')['publish']), 'ubuntu-latest')
+        for name in ['go', 'npm', 'python', 'maven', 'nuget']:
+            self.assertEqual(route(jobs(f'{name}-publish-sdk.yml')['publish']), HETZNER, name)
 
-    def test_light_non_rust_jobs_stay_on_free_hosted_runners(self):
-        # Public repo: standard GitHub-hosted runners cost nothing, so text and
-        # manifest checks must not take Hetzner Rust capacity.
+    def test_pull_request_light_jobs_use_trusted_route(self):
+        # Fork PRs must never reach the shared Hetzner host (#1191).
         for filename, job_id in [('ci.yml', 'typos'), ('ci.yml', 'changelog-validation'),
                                  ('migration-guard.yml', 'check'),
                                  ('k8s-tests.yml', 'validate-manifests'),
                                  ('k8s-tests.yml', 'lint-helm-charts'),
-                                 ('k8s-tests.yml', 'cost-estimation')]:
+                                 ('k8s-tests.yml', 'cost-estimation'),
+                                 ('benchmarks.yml', 'benchmark'),
+                                 ('source-install-smoke.yml', 'smoke')]:
             with self.subTest(workflow=filename, job=job_id):
-                self.assertEqual(route(jobs(filename)[job_id]), 'ubuntu-latest')
+                self.assertEqual(route(jobs(filename)[job_id]), ROUTE)
 
-    def test_monitoring_and_isolated_benchmark_capacity_are_not_silently_degraded(self):
-        for filename, job_id in [('runner-health.yml', 'check'), ('production-smoke.yml', 'smoke'), ('benchmarks.yml', 'benchmark')]:
-            self.assertEqual(route(jobs(filename)[job_id]), 'ubuntu-latest')
+    def test_only_runner_health_monitor_stays_hosted(self):
+        self.assertEqual(route(jobs('runner-health.yml')['check']), 'ubuntu-latest')
+        self.assertEqual(route(jobs('production-smoke.yml')['smoke']), HETZNER)
+        smoke = (WORKFLOWS / 'production-smoke.yml').read_text()
+        self.assertIn('group: production-smoke\n  cancel-in-progress: false', smoke)
+
+    def test_every_job_selects_hetzner_or_an_audited_exception(self):
+        allowed = {HETZNER, ROUTE, DOCS_ROUTE}
+        exceptions = {('runner-health.yml', 'check'): 'ubuntu-latest',
+                      ('release.yml', 'release-windows'): 'windows-latest',
+                      ('plugin-publish.yml', 'build'): PLUGIN_MATRIX_ROUTE}
+        for wf in sorted(WORKFLOWS.glob('*.yml')):
+            for job_id, block in jobs(wf.name).items():
+                selector = re.search(r'^    runs-on: (.+)$', block, flags=re.M)
+                if selector is None:
+                    continue  # reusable-workflow caller
+                with self.subTest(workflow=wf.name, job=job_id):
+                    expected = exceptions.get((wf.name, job_id))
+                    if expected is not None:
+                        self.assertEqual(selector.group(1), expected)
+                    else:
+                        self.assertIn(selector.group(1), allowed)
+
+    def test_moved_rust_jobs_isolate_cargo_home_and_never_apt_install(self):
+        moved = {'benchmarks.yml': ['benchmark'], 'deploy-docs.yml': ['deploy'],
+                 'plugin-publish.yml': ['validate', 'security-scan', 'build', 'publish', 'dry-run'],
+                 'release.yml': ['release', 'publish'], 'source-install-smoke.yml': ['smoke']}
+        for filename, ids in moved.items():
+            for job_id in ids:
+                block = jobs(filename)[job_id]
+                with self.subTest(workflow=filename, job=job_id):
+                    first = re.split(r'(?=^\s+- (?:name|uses):)', block.split('steps:\n', 1)[1], flags=re.M)[1]
+                    self.assertIn('Set per-runner CARGO_HOME on Hetzner', first)
+                    self.assertIn("if: runner.environment == 'self-hosted'", first)
+                    self.assertIn('CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}', first)
+                    steps = re.split(r'(?=^\s+- (?:name|uses):)', block, flags=re.M)
+                    for step in steps:
+                        if re.search(r'^\s*(?:run: )?sudo (?:apt-get|rm)', step, flags=re.M):
+                            self.assertIn("if: runner.environment == 'github-hosted'", step)
 
     def test_registry_service_jobs_use_trusted_route_and_read_only_preflight(self):
         for job_id in ('registry-e2e', 'registry-e2e-rls'):
@@ -290,10 +331,6 @@ class HetznerRoutingTest(unittest.TestCase):
         self.assertIn('cargo-audit 0.22.2', preflight)
         self.assertIn('cargo-deny 0.20.2', preflight)
         self.assertNotIn('install', preflight)
-
-    def test_unrelated_sdk_and_source_smoke_routes_are_not_changed(self):
-        self.assertEqual(route(jobs('go-publish-sdk.yml')['publish']), 'ubuntu-latest')
-        self.assertEqual(route(jobs('source-install-smoke.yml')['smoke']), 'ubuntu-latest')
 
 
 

@@ -286,7 +286,10 @@ async fn stream_zip_file_to_store(
             if !entry.is_file() {
                 continue;
             }
-            let name = entry.name().to_string();
+            let Ok(name) = entry.name().map(|name| name.to_string()) else {
+                entry_skipped += 1;
+                continue;
+            };
             if !name.to_ascii_lowercase().ends_with(".json") {
                 continue;
             }
@@ -469,7 +472,14 @@ fn parse_bulk_zip_sync(bytes: &[u8]) -> anyhow::Result<Vec<OsvImportRecord>> {
         if !entry.is_file() {
             continue;
         }
-        let name = entry.name().to_string();
+        let name = match entry.name() {
+            Ok(name) => name.to_string(),
+            Err(e) => {
+                warn!("OSV sync: zip entry #{} name unreadable: {}", i, e);
+                skipped += 1;
+                continue;
+            }
+        };
         if !name.to_ascii_lowercase().ends_with(".json") {
             continue;
         }
@@ -580,7 +590,7 @@ mod tests {
     #[test]
     fn bulk_zip_parser_handles_mixed_entries() {
         use std::io::Write;
-        use zip::write::FileOptions;
+        use zip::write::SimpleFileOptions;
 
         // Build an in-memory zip with three entries: one valid advisory,
         // one invalid JSON, one non-JSON README. The parser should return
@@ -589,8 +599,8 @@ mod tests {
         {
             let cursor = std::io::Cursor::new(&mut zip_bytes);
             let mut writer = zip::ZipWriter::new(cursor);
-            let opts: FileOptions<'_, ()> =
-                FileOptions::default().compression_method(zip::CompressionMethod::Stored);
+            let opts =
+                SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
 
             writer.start_file("GHSA-good.json", opts).unwrap();
             writer

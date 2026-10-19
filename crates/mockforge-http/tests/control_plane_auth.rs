@@ -19,101 +19,20 @@ use mockforge_http::management_auth::{
 };
 use mockforge_http::{build_router_with_chains_and_multi_tenant, HealthManager};
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use tower::ServiceExt;
 
+#[path = "control_plane_auth/assembly.rs"]
+mod assembly;
+#[path = "control_plane_auth/discovery.rs"]
+mod discovery;
+#[path = "control_plane_auth/sources.rs"]
+mod sources;
+use assembly::{is_public_mount, manifest_dir, mount_calls, production_source, read};
+use discovery::{concrete, control_mounts, join, routes_in};
+use sources::router_fn_body;
+
 const TOKEN: &str = "mfm_0123456789abcdef0123456789abcdef0123456789abcdef";
-
-/// Routers merged or nested onto the data port that serve mock traffic or
-/// static assets, so they stay public. Each entry needs a reason.
-const PUBLIC_MOUNTS: &[(&str, &str)] = &[
-    ("openapi_router", "the user's OpenAPI mocks"),
-    ("spec_router", "the user's OpenAPI mocks"),
-    ("sse::sse_router", "mock server-sent events"),
-    ("file_server::file_serving_router", "mock file downloads"),
-    ("health::health_router_with_exclusions", "liveness and readiness; no config"),
-    ("oidc_router", "mock OIDC provider discovery and JWKS"),
-    ("oauth2_server_router", "mock OAuth2 authorization server"),
-    ("consent_router", "mock OAuth2 consent screen"),
-    ("mockforge_ws::router", "mock WebSocket endpoints"),
-    ("gql_router", "mock GraphQL endpoint"),
-    ("mockforge_http::llm_mock::router", "mock LLM API"),
-    ("mockforge_http::mcp_mock::router", "mock MCP server"),
-    (
-        "\"/__mockforge/coverage.html\"",
-        "static file in the reserved namespace; the outer gate requires the credential",
-    ),
-    ("\"/__mockforge/docs\"", "static docs page; it fetches the spec with the token"),
-];
-
-fn manifest_dir() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-}
-
-fn read(path: &Path) -> String {
-    std::fs::read_to_string(path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()))
-}
-
-/// Strip `#[cfg(test)]` modules and comment lines so only production
-/// assembly code is scanned.
-fn production_source(source: &str) -> String {
-    let cut = source.find("#[cfg(test)]\nmod tests").unwrap_or(source.len());
-    source[..cut]
-        .lines()
-        .filter(|line| !line.trim_start().starts_with("//"))
-        .collect::<Vec<_>>()
-        .join("\n")
-}
-
-/// The argument text of a call whose `(` is at `open`.
-fn call_args(source: &str, open: usize) -> &str {
-    let bytes = source.as_bytes();
-    let mut depth = 0usize;
-    for (i, &b) in bytes.iter().enumerate().skip(open) {
-        match b {
-            b'(' => depth += 1,
-            b')' => {
-                depth -= 1;
-                if depth == 0 {
-                    return &source[open + 1..i];
-                }
-            }
-            _ => {}
-        }
-    }
-    panic!("unbalanced call at byte {open}");
-}
-
-/// Every `.nest(`, `.nest_service(`, `.merge(` and `.route("/__mockforge…`
-/// call on the data-port app, with its arguments.
-fn mount_calls(source: &str) -> Vec<(String, String)> {
-    let mut calls = Vec::new();
-    for needle in [".nest(", ".nest_service(", ".merge("] {
-        let mut from = 0;
-        while let Some(pos) = source[from..].find(needle) {
-            let open = from + pos + needle.len() - 1;
-            calls.push((needle.to_string(), call_args(source, open).trim().to_string()));
-            from = open + 1;
-        }
-    }
-    let mut from = 0;
-    while let Some(pos) = source[from..].find(".route(\"/__mockforge") {
-        let open = from + pos + ".route".len();
-        calls.push((".route(".to_string(), call_args(source, open).trim().to_string()));
-        from = open + 1;
-    }
-    calls
-}
-
-fn is_public_mount(args: &str) -> bool {
-    PUBLIC_MOUNTS.iter().any(|(name, _)| {
-        args.starts_with(name)
-            || args
-                .split_once(',')
-                .is_some_and(|(first, rest)| first.trim() == *name || rest.trim().starts_with(name))
-    })
-}
 
 #[test]
 fn every_control_mount_is_protected() {
@@ -150,149 +69,6 @@ fn every_control_mount_is_protected() {
         unprotected.join("\n")
     );
     assert!(protected >= 40, "only {protected} protected mounts found; is the scan broken?");
-}
-
-/// `(mount prefix or "" for merge, router fn name)`
-/// for every mount that is not on the public list, protected or not, so an
-/// unprotected control router is probed (and fails) here too.
-fn control_mounts(lib: &str) -> Vec<(String, String)> {
-    let mut mounts = Vec::new();
-    for (call, args) in mount_calls(lib) {
-        if call == ".route(" || call == ".nest_service(" || is_public_mount(&args) {
-            continue;
-        }
-        let inner = match args.find("management_auth::protect(") {
-            Some(at) => &args[at + "management_auth::protect(".len()..],
-            None if call == ".nest(" => args.split_once(',').map_or("", |(_, rest)| rest.trim()),
-            None => args.as_str(),
-        };
-        let name: String = inner
-            .chars()
-            .take_while(|c| c.is_alphanumeric() || *c == '_' || *c == ':')
-            .collect();
-        let name = name.rsplit("::").next().unwrap_or(&name).to_string();
-        let prefix = if call == ".nest(" {
-            args.split('"').nth(1).unwrap_or_default().to_string()
-        } else {
-            String::new()
-        };
-        mounts.push((prefix, name));
-    }
-    mounts
-}
-
-/// Production source of every Rust file in the workspace's crates, read once
-fn workspace_sources() -> &'static Vec<(PathBuf, String)> {
-    static SOURCES: std::sync::OnceLock<Vec<(PathBuf, String)>> = std::sync::OnceLock::new();
-    SOURCES.get_or_init(|| {
-        fn walk(dir: &Path, out: &mut Vec<PathBuf>) {
-            for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
-                let path = entry.path();
-                let name = entry.file_name();
-                if path.is_dir() {
-                    if name != "target" && name != "node_modules" && name != "tests" {
-                        walk(&path, out);
-                    }
-                } else if path.extension().is_some_and(|e| e == "rs") {
-                    out.push(path);
-                }
-            }
-        }
-        let mut files = Vec::new();
-        // This crate first, so its definitions win over same-named ones elsewhere.
-        walk(&manifest_dir().join("src"), &mut files);
-        walk(&manifest_dir().join(".."), &mut files);
-        files
-            .into_iter()
-            .map(|f| {
-                let source = production_source(&read(&f));
-                (f, source)
-            })
-            .collect()
-    })
-}
-
-/// The body of `fn name`, looked up in this crate first, then the workspace
-fn router_fn_body(name: &str) -> Option<String> {
-    let needles = [format!("fn {name}("), format!("fn {name}<")];
-    for (_, source) in workspace_sources() {
-        let Some(start) = needles.iter().find_map(|n| source.find(n.as_str())) else {
-            continue;
-        };
-        let body_open = start + source[start..].find('{')?;
-        let mut depth = 0usize;
-        for (i, b) in source.bytes().enumerate().skip(body_open) {
-            match b {
-                b'{' => depth += 1,
-                b'}' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return Some(source[body_open..=i].to_string());
-                    }
-                }
-                _ => {}
-            }
-        }
-    }
-    None
-}
-
-/// `(method, path)` for every `.route("path", ...)` in `body`
-fn routes_in(body: &str) -> Vec<(Method, String)> {
-    let mut routes = Vec::new();
-    let mut from = 0;
-    while let Some(pos) = body[from..].find(".route(") {
-        let open = from + pos + ".route".len();
-        let args = call_args(body, open);
-        from = open + 1;
-        let Some(path) = args.split('"').nth(1) else {
-            continue;
-        };
-        let handler = &args[args.find(',').unwrap_or(0)..];
-        let mut methods = Vec::new();
-        for (token, method) in [
-            ("get(", Method::GET),
-            ("post(", Method::POST),
-            ("put(", Method::PUT),
-            ("patch(", Method::PATCH),
-            ("delete(", Method::DELETE),
-            ("any(", Method::POST),
-        ] {
-            let found = handler.match_indices(token).any(|(i, _)| {
-                i == 0
-                    || !handler.as_bytes()[i - 1].is_ascii_alphanumeric()
-                        && handler.as_bytes()[i - 1] != b'_'
-            });
-            if found {
-                methods.push(method);
-            }
-        }
-        for method in methods {
-            routes.push((method, path.to_string()));
-        }
-    }
-    routes
-}
-
-fn concrete(path: &str) -> String {
-    path.split('/')
-        .map(|seg| {
-            if seg.starts_with('{') || seg.starts_with(':') || seg.starts_with('*') {
-                "probe"
-            } else {
-                seg
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("/")
-}
-
-fn join(prefix: &str, path: &str) -> String {
-    match (prefix.is_empty(), path) {
-        (true, p) => p.to_string(),
-        (false, "/" | "") => prefix.to_string(),
-        (false, p) => format!("{prefix}{p}"),
-    }
 }
 
 async fn data_port_app() -> Router {
