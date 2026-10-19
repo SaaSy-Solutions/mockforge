@@ -123,7 +123,7 @@ mockforge bench-chunked \
 | `--chunk-interval-ms` | Pause between chunks (0 = back-to-back); the first chunk goes out with the headers |
 | `--rps` | Cap on request starts per second, per target (shared by its workers) |
 | `--cps` | New TCP/TLS connection per request, so connections/s = requests/s |
-| `--rounds` / `--repeat-until` | Re-run the whole pass N times / until a wall-clock duration elapses |
+| `--rounds` / `--repeat-until` | Re-run whole passes N times / stop starting passes after the wall-clock threshold; an active pass finishes |
 | `--keep-rounds` | Keep only the newest N `round_*` dirs during a campaign |
 | `--header` | Extra `Name: Value` header; may be repeated |
 | `--insecure` | Skip TLS certificate verification |
@@ -281,12 +281,12 @@ in-flight requests finish. For example, 26 attempts started during a
 `26 / 30 = 0.87` attempts/s. The console shows both:
 
 ```text
-  RPS (started):  0.87 req/s over the 30.0s load window
-  RPS (overall):  0.34 req/s over 76.3s, incl. in-flight drain
+  RPS (operation started): 0.87 req/s over the 30.0s load window
+  RPS (operation overall): 0.34 req/s over 76.3s, incl. this operation's in-flight drain
   Upload:         2.86 Mbps
 ```
 
-Use `RPS (started)` / `start_window_rps` to check a `--rps` cap. That is a window average,
+Use `RPS (operation started)` / `start_window_rps` to check a `--rps` cap. That is a window average,
 not proof of evenly spaced starts; verify start timestamps at the receiver
 or in a packet capture. Even a healthy target with 12.75-second uploads can
 report roughly `30 / (29 + 12.75) = 0.72` requests/s on a 30-second run.
@@ -331,6 +331,22 @@ whole pass. Workers of consecutive operations overlap for one request time,
 so up to twice `--concurrency` connections can be open briefly. Rounds of a
 `--repeat-until` campaign still run one after another, so each round ends
 with one drain.
+
+An operation's overall RPS still includes that operation's own drain when
+`--overlap-operations` is enabled. It does not describe the whole pass. For
+example, 30 requests over a 30-second window plus a 12-second drain report about
+0.71 RPS for each operation. With 505 overlapping operation windows, a target
+can nevertheless complete 15,150 requests in about 15,162 seconds: about
+0.9992 RPS overall for the pass. Read `pass_start_rps` / `pass_overall_rps` in
+the console's multi-target pass summary, or `start_window_rps` / `measured_rps`
+in each target of `chunked-multi-target-summary.json` or the round record's
+`pass.targets[]`. Summing operation elapsed times double-counts overlap.
+
+`--repeat-until` is checked **between complete passes**, not during a pass. A
+505-operation pass with 30-second windows lasts about 4 hours 13 minutes; a
+second pass started before a six-hour threshold may finish after about 8 hours
+25 minutes total. It is not a hard campaign deadline. `--request-timeout`
+bounds an individual request, not a pass or campaign.
 
 **Without `--rps`,** each worker sends requests back to back, so the steady
 rate is `concurrency / request time` (20 workers and 13.07 s uploads give

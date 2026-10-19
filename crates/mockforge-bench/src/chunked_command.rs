@@ -293,7 +293,7 @@ impl ChunkedCommand {
         outcomes.sort_by_key(|(i, _, _)| *i);
 
         println!();
-        println!("Multi-target chunked summary:");
+        println!("Multi-target chunked pass summary (all operations per target):");
         let mut all_ok = true;
         let mut rows = Vec::with_capacity(outcomes.len());
         for (i, run, res) in &outcomes {
@@ -304,7 +304,7 @@ impl ChunkedCommand {
                         all_ok = false;
                     }
                     println!(
-                        "  {:<10} {}  requests={} ok={} failed={} bytes={} start_rps={:.2} rps={:.2}{}",
+                        "  {:<10} {}  requests={} ok={} failed={} bytes={} pass_start_rps={:.2} pass_overall_rps={:.2}{}",
                         name,
                         run.url,
                         o.total_requests,
@@ -821,12 +821,12 @@ fn print_result(prefix: &str, label: &str, r: &ChunkedBenchResult) {
     }
     line(format!("  Bytes sent:     {}", r.bytes_sent));
     line(format!(
-        "  RPS (started):  {:.2} req/s over the {:.1}s load window",
+        "  RPS (operation started): {:.2} req/s over the {:.1}s load window",
         r.start_rate_per_sec,
         r.load_window.as_secs_f64()
     ));
     line(format!(
-        "  RPS (overall):  {:.2} req/s over {:.1}s, incl. in-flight drain",
+        "  RPS (operation overall): {:.2} req/s over {:.1}s, incl. this operation's in-flight drain",
         r.req_per_sec,
         r.elapsed.as_secs_f64()
     ));

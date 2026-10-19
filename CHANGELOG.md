@@ -2,6 +2,8 @@
 
 ### Fixed
 
+- **[DevX]** Label chunked-benchmark console rates as operation or whole-pass rates so overlapping operations do not make their individual drain-inclusive rates look like campaign throughput. Clarify that `--repeat-until` checks between complete passes and can exceed its threshold. JSON rate fields and scheduling behavior are unchanged. (#79)
+
 - **[Cloud]** The SQLite registry store (self-hosted registry admin) now rotates API tokens and lists tokens due for rotation, like the Postgres store. Before, rotation returned an error and the rotation reminder list was always empty. Both stores now generate `mfx_` tokens in one URL-safe format (32 random bytes, unpadded URL-safe base64), so new Postgres tokens no longer contain `+`, `/` or `=`. Existing tokens keep working. (#1266)
 - **[Docs]** The README and `cloud-service/README.md` no longer claim a multi-region deployment or a 99.9% uptime SLA. Production runs in one region (US East) with no contractual SLA. The README now says which RAG storage backends persist: file storage does; the database backend falls back to memory, and vector databases are not built in. It also drops the line saying every documented feature was verified. (#1265)
 - **[Cloud]** The cloud test runner never reports `passed` for a run that did no work. Stubbed job kinds (unit, behavioral clone, snapshots, scenario/orchestration/state-machine flows, verification suites) now finish `errored` with `not_implemented`; `contract_diff` and `replay` error out when their spec or captures are missing instead of passing; every outcome records `summary.work_count`, and a `passed` result with zero work becomes `failed` with `no_work_executed` (#1264).
