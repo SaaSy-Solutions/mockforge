@@ -214,9 +214,7 @@ impl RegistryCallbacks {
         #[cfg(test)]
         if let Some(state) = &self.test_state {
             if state.fail_capture_fetch {
-                return Err(crate::error::Error::Executor(
-                    "test capture fetch failure".to_string(),
-                ));
+                return Err(Error::Executor("test capture fetch failure".to_string()));
             }
             return Ok(state.capture_exchanges.clone());
         }
@@ -240,9 +238,7 @@ impl RegistryCallbacks {
         #[cfg(test)]
         if let Some(state) = &self.test_state {
             if state.fail_endpoint_hits_fetch {
-                return Err(crate::error::Error::Executor(
-                    "test endpoint-hits fetch failure".to_string(),
-                ));
+                return Err(Error::Executor("test endpoint-hits fetch failure".to_string()));
             }
             return Ok(Vec::new());
         }
@@ -387,7 +383,7 @@ impl RegistryCallbacks {
         #[cfg(test)]
         if let Some(state) = &self.test_state {
             if state.fail_chaos_toggle {
-                return Err(crate::error::Error::Executor("test chaos toggle failure".to_string()));
+                return Err(Error::Executor("test chaos toggle failure".to_string()));
             }
             return Ok(());
         }
