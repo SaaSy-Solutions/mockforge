@@ -1,3 +1,4 @@
+import { vi, describe, it, beforeEach, afterEach, expect, type Mock } from 'vitest';
 /**
  * Unit tests for RequestInterceptor
  */
@@ -6,14 +7,14 @@ import { RequestInterceptor } from '../core/RequestInterceptor';
 
 describe('RequestInterceptor', () => {
     let interceptor: RequestInterceptor;
-    let captureCallback: jest.Mock;
-    let originalFetch: jest.Mock;
+    let captureCallback: Mock;
+    let originalFetch: Mock;
 
     beforeEach(() => {
-        originalFetch = jest.fn();
+        originalFetch = vi.fn();
         global.fetch = originalFetch;
         interceptor = new RequestInterceptor();
-        captureCallback = jest.fn();
+        captureCallback = vi.fn();
     });
 
     afterEach(() => {

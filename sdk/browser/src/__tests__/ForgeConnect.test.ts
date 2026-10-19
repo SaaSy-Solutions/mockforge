@@ -1,3 +1,4 @@
+import { vi, describe, it, beforeEach, afterEach, expect, type Mock } from 'vitest';
 /**
  * Unit tests for ForgeConnect
  */
@@ -5,13 +6,13 @@
 import { ForgeConnect } from '../core/ForgeConnect';
 import { MockForgeClient } from '../core/MockForgeClient';
 
-jest.mock('../core/MockForgeClient');
+vi.mock('../core/MockForgeClient');
 
 describe('ForgeConnect', () => {
     let forgeConnect: ForgeConnect;
 
     beforeEach(() => {
-        global.fetch = jest.fn();
+        global.fetch = vi.fn();
         forgeConnect = new ForgeConnect({
             serverUrl: 'http://localhost:3000',
             mockMode: 'auto',
@@ -25,14 +26,14 @@ describe('ForgeConnect', () => {
     describe('initialize', () => {
         it('should connect to MockForge successfully', async () => {
             const mockClient = {
-                listMocks: jest.fn().mockResolvedValue([]),
-                listEnvironments: jest.fn().mockResolvedValue([]),
-                getActiveEnvironment: jest.fn().mockResolvedValue(null),
-                healthCheck: jest.fn().mockResolvedValue(true),
-                getBaseUrl: jest.fn().mockReturnValue('http://localhost:3000'),
+                listMocks: vi.fn().mockResolvedValue([]),
+                listEnvironments: vi.fn().mockResolvedValue([]),
+                getActiveEnvironment: vi.fn().mockResolvedValue(null),
+                healthCheck: vi.fn().mockResolvedValue(true),
+                getBaseUrl: vi.fn().mockReturnValue('http://localhost:3000'),
             };
 
-            (MockForgeClient as jest.Mock).mockImplementation(() => mockClient);
+            (MockForgeClient as Mock).mockImplementation(function () { return mockClient; });
 
             const result = await forgeConnect.initialize();
             expect(result).toBe(true);
@@ -41,13 +42,13 @@ describe('ForgeConnect', () => {
 
         it('should return false when connection fails', async () => {
             const mockClient = {
-                listMocks: jest.fn().mockResolvedValue([]),
-                listEnvironments: jest.fn().mockResolvedValue([]),
-                getActiveEnvironment: jest.fn().mockResolvedValue(null),
-                healthCheck: jest.fn().mockResolvedValue(false),
+                listMocks: vi.fn().mockResolvedValue([]),
+                listEnvironments: vi.fn().mockResolvedValue([]),
+                getActiveEnvironment: vi.fn().mockResolvedValue(null),
+                healthCheck: vi.fn().mockResolvedValue(false),
             };
 
-            (MockForgeClient as jest.Mock).mockImplementation(() => mockClient);
+            (MockForgeClient as Mock).mockImplementation(function () { return mockClient; });
 
             const result = await forgeConnect.initialize();
             expect(result).toBe(false);
@@ -57,11 +58,11 @@ describe('ForgeConnect', () => {
     describe('createMockFromRequest', () => {
         it('should create a mock from a captured request', async () => {
             const mockClient = {
-                listMocks: jest.fn().mockResolvedValue([]),
-                listEnvironments: jest.fn().mockResolvedValue([]),
-                getActiveEnvironment: jest.fn().mockResolvedValue(null),
-                healthCheck: jest.fn().mockResolvedValue(true),
-                createMock: jest.fn().mockResolvedValue({
+                listMocks: vi.fn().mockResolvedValue([]),
+                listEnvironments: vi.fn().mockResolvedValue([]),
+                getActiveEnvironment: vi.fn().mockResolvedValue(null),
+                healthCheck: vi.fn().mockResolvedValue(true),
+                createMock: vi.fn().mockResolvedValue({
                     id: 'mock-id',
                     name: 'GET /api/test',
                     method: 'GET',
@@ -70,7 +71,7 @@ describe('ForgeConnect', () => {
                 }),
             };
 
-            (MockForgeClient as jest.Mock).mockImplementation(() => mockClient);
+            (MockForgeClient as Mock).mockImplementation(function () { return mockClient; });
             await forgeConnect.initialize();
 
             const request = {

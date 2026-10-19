@@ -23,6 +23,48 @@ MAVEN_VERSION = "3.10.0"
 MAVEN_SHA512 = "908b1501bfb420bf7c8affb855534a9c407fd6099367bfb9f2f2dcb8e9799102bffb84518cde74c679bd76870247c6528683abdd620581bffa90f95d92d175aa"
 
 
+def ensure_maven(explicit, temp, env):
+    maven = str(explicit.resolve(strict=True)) if explicit else shutil.which("mvn", path=env["PATH"])
+    if not maven:
+        archive = temp / "maven.tar.gz"
+        url = f"https://archive.apache.org/dist/maven/maven-3/{MAVEN_VERSION}/binaries/apache-maven-{MAVEN_VERSION}-bin.tar.gz"
+        with urllib.request.urlopen(url, timeout=60) as response:
+            archive.write_bytes(response.read())
+        if hashlib.sha512(archive.read_bytes()).hexdigest() != MAVEN_SHA512:
+            raise SystemExit("Maven distribution checksum mismatch")
+        with tarfile.open(archive) as package:
+            if not all(member.name.startswith(f"apache-maven-{MAVEN_VERSION}/") for member in package.getmembers()):
+                raise SystemExit("Unexpected Maven archive paths")
+            package.extractall(temp, filter="data")
+        maven = str(temp / f"apache-maven-{MAVEN_VERSION}/bin/mvn")
+    return maven
+
+
+def exercise_browser(run, browser, wrapper, env, server_cwd):
+    browser_env = dict(env, MOCKFORGE_MANAGEMENT_TOKEN=secrets.token_hex(32))
+    child = subprocess.Popen([str(wrapper), "serve", "--http-port", "0"], cwd=server_cwd, env=browser_env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    ports = queue.Queue()
+
+    def read_ports():
+        for line in child.stdout:
+            for port in re.findall(r"HTTP server listening on https?://[^:/]+:(\d+)", line):
+                ports.put(int(port))
+
+    threading.Thread(target=read_ports, daemon=True).start()
+    try:
+        port = ports.get(timeout=20)
+        browser_env["MOCKFORGE_SERVER_URL"] = f"http://127.0.0.1:{port}"
+        run("browser-integration", ["npm", "run", "test:integration"], browser, browser_env)
+        run("browser-runtime", ["node", "tests/runtime.cjs", f"http://127.0.0.1:{port}"], browser, browser_env)
+    finally:
+        child.terminate()
+        try:
+            child.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            child.kill()
+            child.wait(timeout=5)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--binary", type=Path, required=True)
@@ -98,46 +140,16 @@ def main():
         go_output = run("go-tests", ["go", "test", "-v", "./...", "-timeout", "120s"], root / "sdk/go")
         if "--- PASS: TestDynamicMockRuntime" not in go_output:
             raise SystemExit("Go runtime control did not execute")
-        maven = str(args.maven.resolve(strict=True)) if args.maven else shutil.which("mvn", path=env["PATH"])
-        if not maven:
-            archive = temp / "maven.tar.gz"
-            url = f"https://archive.apache.org/dist/maven/maven-3/{MAVEN_VERSION}/binaries/apache-maven-{MAVEN_VERSION}-bin.tar.gz"
-            with urllib.request.urlopen(url, timeout=60) as response:
-                archive.write_bytes(response.read())
-            if hashlib.sha512(archive.read_bytes()).hexdigest() != MAVEN_SHA512:
-                raise SystemExit("Maven distribution checksum mismatch")
-            with tarfile.open(archive) as package:
-                if not all(member.name.startswith(f"apache-maven-{MAVEN_VERSION}/") for member in package.getmembers()):
-                    raise SystemExit("Unexpected Maven archive paths")
-                package.extractall(temp, filter="data")
-            maven = str(temp / f"apache-maven-{MAVEN_VERSION}/bin/mvn")
+        maven = ensure_maven(args.maven, temp, env)
         java_output = run("java-tests", [maven, "-B", "-ntp", "--settings", str(maven_settings), "--global-settings", str(maven_settings), "-Dmaven.repo.local=" + str(temp / "maven-repository"), "test"], root / "sdk/java")
         if "Running com.mockforge.sdk.MockServerTest" not in java_output:
             raise SystemExit("Java runtime controls did not execute")
         browser = root / "sdk/browser"
         run("browser-install", ["npm", "ci", "--ignore-scripts", "--registry", "https://registry.npmjs.org"], browser)
-        run("browser-tests", ["npm", "run", "test:unit", "--", "--runInBand"], browser)
+        run("browser-audit", ["npm", "run", "audit"], browser)
+        run("browser-tests", ["npm", "run", "test:unit"], browser)
         run("browser-build", ["npm", "run", "build"], browser)
-        browser_env = dict(env, MOCKFORGE_MANAGEMENT_TOKEN=secrets.token_hex(32))
-        child = subprocess.Popen([str(wrapper), "serve", "--http-port", "0"], cwd=server_cwd, env=browser_env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
-        ports = queue.Queue()
-
-        def read_ports():
-            for line in child.stdout:
-                for port in re.findall(r"HTTP server listening on https?://[^:/]+:(\d+)", line):
-                    ports.put(int(port))
-
-        threading.Thread(target=read_ports, daemon=True).start()
-        try:
-            port = ports.get(timeout=20)
-            run("browser-runtime", ["node", "tests/runtime.cjs", f"http://127.0.0.1:{port}"], browser, browser_env)
-        finally:
-            child.terminate()
-            try:
-                child.wait(timeout=10)
-            except subprocess.TimeoutExpired:
-                child.kill()
-                child.wait(timeout=5)
+        exercise_browser(run, browser, wrapper, env, server_cwd)
         report["complete"] = True
         report["all_passed"] = True
         save()

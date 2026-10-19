@@ -1,7 +1,9 @@
 const assert = require('node:assert/strict');
 const {MockForgeClient} = require('../dist/index.js');
 (async () => {
- const base=process.argv[2], client=new MockForgeClient(base, process.env.MOCKFORGE_MANAGEMENT_TOKEN);
+ const base=process.argv[2] || process.env.MOCKFORGE_SERVER_URL;
+ assert.ok(base, 'Supply an owned test server URL');
+ const client=new MockForgeClient(base, process.env.MOCKFORGE_MANAGEMENT_TOKEN);
  assert.equal(await client.healthCheck(),true);
  const created=await client.createMock({name:'SDK runtime control',method:'GET',path:'/sdk1281-browser',response:{body:{sdk:'browser'},headers:{'X-SDK-Control':'browser'}},status_code:202});
  assert.ok(created.id);

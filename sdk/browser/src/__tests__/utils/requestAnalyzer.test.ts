@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'vitest';
 /**
  * Unit tests for request analyzer utilities
  */

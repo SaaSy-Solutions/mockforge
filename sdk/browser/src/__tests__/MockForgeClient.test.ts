@@ -1,3 +1,4 @@
+import { describe, it, beforeEach, expect, type Mock } from 'vitest';
 /**
  * Unit tests for MockForgeClient
  */
@@ -10,12 +11,12 @@ describe('MockForgeClient', () => {
 
     beforeEach(() => {
         client = new MockForgeClient(baseUrl);
-        (global.fetch as jest.Mock).mockClear();
+        (global.fetch as Mock).mockClear();
     });
 
     describe('healthCheck', () => {
         it('should return true when health endpoint responds with 200', async () => {
-            (global.fetch as jest.Mock).mockResolvedValueOnce({
+            (global.fetch as Mock).mockResolvedValueOnce({
                 ok: true,
                 status: 200,
             });
@@ -31,7 +32,7 @@ describe('MockForgeClient', () => {
         });
 
         it('should return true when mocks endpoint responds with 200', async () => {
-            (global.fetch as jest.Mock)
+            (global.fetch as Mock)
                 .mockResolvedValueOnce({ ok: false, status: 404 })
                 .mockResolvedValueOnce({ ok: false, status: 404 })
                 .mockResolvedValueOnce({ ok: false, status: 404 })
@@ -46,7 +47,7 @@ describe('MockForgeClient', () => {
         });
 
         it('should return false when all endpoints fail', async () => {
-            (global.fetch as jest.Mock)
+            (global.fetch as Mock)
                 .mockRejectedValueOnce(new Error('Network error'))
                 .mockRejectedValueOnce(new Error('Network error'));
 
@@ -64,7 +65,7 @@ describe('MockForgeClient', () => {
                 response: { body: { message: 'test' } },
             };
 
-            (global.fetch as jest.Mock).mockResolvedValueOnce({
+            (global.fetch as Mock).mockResolvedValueOnce({
                 ok: true,
                 status: 200,
                 json: async () => ({ ...mock, id: 'mock-id' }),
@@ -92,7 +93,7 @@ describe('MockForgeClient', () => {
                 response: { body: {} },
             };
 
-            (global.fetch as jest.Mock).mockResolvedValueOnce({
+            (global.fetch as Mock).mockResolvedValueOnce({
                 ok: false,
                 status: 400,
                 statusText: 'Bad Request',
@@ -110,7 +111,7 @@ describe('MockForgeClient', () => {
                 { id: '2', name: 'Mock 2', method: 'POST', path: '/api/2', response: { body: {} } },
             ];
 
-            (global.fetch as jest.Mock).mockResolvedValueOnce({
+            (global.fetch as Mock).mockResolvedValueOnce({
                 ok: true,
                 status: 200,
                 json: async () => ({ mocks }),
@@ -123,7 +124,7 @@ describe('MockForgeClient', () => {
 
     describe('deleteMock', () => {
         it('should delete a mock successfully', async () => {
-            (global.fetch as jest.Mock).mockResolvedValueOnce({
+            (global.fetch as Mock).mockResolvedValueOnce({
                 ok: true,
                 status: 204,
             });
@@ -141,12 +142,12 @@ describe('MockForgeClient', () => {
 
 describe('MockForgeClient management token', () => {
     beforeEach(() => {
-        (global.fetch as jest.Mock).mockClear();
+        (global.fetch as Mock).mockClear();
     });
 
     it('sends X-MockForge-Management-Token on management requests when set', async () => {
         const client = new MockForgeClient('http://localhost:3000', 'k'.repeat(48));
-        (global.fetch as jest.Mock).mockResolvedValueOnce({
+        (global.fetch as Mock).mockResolvedValueOnce({
             ok: true,
             status: 200,
             json: async () => ({ id: 'm1' }),
@@ -154,13 +155,13 @@ describe('MockForgeClient management token', () => {
 
         await client.createMock({ method: 'GET', path: '/x', response: { body: {} } } as any);
 
-        const [, init] = (global.fetch as jest.Mock).mock.calls[0];
+        const [, init] = (global.fetch as Mock).mock.calls[0];
         expect(init.headers['X-MockForge-Management-Token']).toBe('k'.repeat(48));
     });
 
     it('omits the header when no token is configured', async () => {
         const client = new MockForgeClient('http://localhost:3000');
-        (global.fetch as jest.Mock).mockResolvedValueOnce({
+        (global.fetch as Mock).mockResolvedValueOnce({
             ok: true,
             status: 200,
             json: async () => [],
@@ -168,7 +169,7 @@ describe('MockForgeClient management token', () => {
 
         await client.listMocks();
 
-        const [, init] = (global.fetch as jest.Mock).mock.calls[0];
+        const [, init] = (global.fetch as Mock).mock.calls[0];
         expect(init.headers).not.toHaveProperty('X-MockForge-Management-Token');
     });
 });

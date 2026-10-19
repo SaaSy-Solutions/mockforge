@@ -2,19 +2,9 @@ package com.mockforge.sdk;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonParser;
 import okhttp3.*;
 
 import java.io.IOException;
-import java.io.BufferedReader;
-import java.io.InputStreamReader;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.List;
@@ -62,6 +52,7 @@ public class MockServer {
     private final List<ResponseStub> stubs = new ArrayList<>();
     private final OkHttpClient httpClient;
     private final String managementToken;
+    private final MockManagementClient management;
 
     /**
      * Create a new MockServer with the given configuration
@@ -82,6 +73,7 @@ public class MockServer {
                     .header(MANAGEMENT_TOKEN_HEADER, token)
                     .build()))
             .build();
+        this.management = new MockManagementClient(httpClient, host, () -> port, managementToken);
     }
 
     /**
@@ -153,72 +145,11 @@ public class MockServer {
 
         try {
             process = processBuilder.start();
-            readServerOutput(process);
-            waitForServer();
+            CliStartup.readServerOutput(process, () -> port, detected -> port = detected);
+            CliStartup.waitForServer(process, httpClient, host, () -> port, STARTUP_TIMEOUT_SECONDS, HEALTH_CHECK_INTERVAL_MS);
         } catch (IOException e) {
             throw MockServerException.serverStartFailed("Failed to start MockForge process", e);
         }
-    }
-
-    /** Drain process output and discover the HTTP port when the OS assigns it. */
-    private void readServerOutput(Process startedProcess) {
-        Thread reader = new Thread(() -> {
-            Pattern boundPort = Pattern.compile("HTTP server (?:listening on https?://[^:]+:|on port )(\\d+)");
-            try (BufferedReader output = new BufferedReader(new InputStreamReader(
-                    startedProcess.getInputStream(), StandardCharsets.UTF_8))) {
-                String line;
-                while ((line = output.readLine()) != null) {
-                    Matcher match = boundPort.matcher(line);
-                    if (match.find() && port == 0) {
-                        int detected = Integer.parseInt(match.group(1));
-                        if (detected > 0) port = detected;
-                    }
-                }
-            } catch (IOException ignored) {
-                // Process shutdown closes this stream; readiness has its own timeout.
-            }
-        }, "mockforge-output");
-        reader.setDaemon(true);
-        reader.start();
-    }
-
-    /**
-     * Wait for the server to be ready by polling the health endpoint
-     */
-    private void waitForServer() throws MockServerException {
-        long startTime = System.currentTimeMillis();
-        long timeout = TimeUnit.SECONDS.toMillis(STARTUP_TIMEOUT_SECONDS);
-
-        while (System.currentTimeMillis() - startTime < timeout) {
-            if (!process.isAlive()) {
-                throw MockServerException.serverStartFailed("MockForge exited before becoming ready", null);
-            }
-            if (port > 0) {
-                Request request = new Request.Builder()
-                    .url(String.format("http://%s:%d/health", host, port)).build();
-                try (Response response = httpClient.newCall(request).execute()) {
-                    if (response.isSuccessful()) return;
-                } catch (IOException ignored) {
-                    // The listener may not be ready yet.
-                }
-            }
-
-            try {
-                Thread.sleep(HEALTH_CHECK_INTERVAL_MS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw MockServerException.serverStartFailed("Interrupted while waiting for server", e);
-            }
-        }
-
-        // If we get here, server didn't start in time
-        if (process != null) {
-            process.destroyForcibly();
-        }
-        throw MockServerException.healthCheckTimeout(
-            (int) timeout,
-            port
-        );
     }
 
     /**
@@ -287,33 +218,8 @@ public class MockServer {
             throw MockServerException.invalidConfig("ResponseStub cannot be null");
         }
 
-        Map<String, Object> responseConfig = new HashMap<>();
-        responseConfig.put("body", stub.getBody());
-        responseConfig.put("headers", stub.getHeaders());
-        Map<String, Object> mock = new HashMap<>();
-        mock.put("method", stub.getMethod());
-        mock.put("path", stub.getPath());
-        mock.put("response", responseConfig);
-        mock.put("enabled", true);
-        mock.put("status_code", stub.getStatus());
-        if (stub.getLatencyMs() != null) mock.put("latency_ms", stub.getLatencyMs());
-        Request request = new Request.Builder().url(managementUrl("/mocks"))
-            .header(MANAGEMENT_TOKEN_HEADER, managementToken)
-            .post(RequestBody.create(GSON.toJson(mock), MediaType.get("application/json; charset=utf-8")))
-            .build();
-        try (Response response = httpClient.newCall(request).execute()) {
-            if (!response.isSuccessful()) {
-                throw MockServerException.adminApiError("create mock", "HTTP " + response.code(), null);
-            }
-        } catch (IOException error) {
-            throw MockServerException.adminApiError("create mock", "HTTP request failed", error);
-        }
+        management.create(stub);
         stubs.add(stub);
-    }
-
-    private HttpUrl managementUrl(String path) throws MockServerException {
-        if (port == 0) throw MockServerException.adminApiError("connect", "HTTP port is not available", null);
-        return HttpUrl.get(String.format("http://%s:%d/__mockforge/api%s", host, port, path));
     }
 
     /**
@@ -321,32 +227,8 @@ public class MockServer {
      * @throws IllegalStateException if the server cannot list or delete its mocks
      */
     public void clearStubs() {
-        try {
-            HttpUrl collection = managementUrl("/mocks");
-            Request list = new Request.Builder().url(collection).header(MANAGEMENT_TOKEN_HEADER, managementToken).get().build();
-            JsonArray mocks;
-            try (Response response = httpClient.newCall(list).execute()) {
-                if (!response.isSuccessful() || response.body() == null) {
-                    throw new IllegalStateException("Failed to list mocks: HTTP " + response.code());
-                }
-                mocks = JsonParser.parseString(response.body().string()).getAsJsonObject().getAsJsonArray("mocks");
-                if (mocks == null) throw new IllegalStateException("Mock list response has no mocks array");
-            }
-            for (JsonElement mock : mocks) {
-                String id = mock.getAsJsonObject().get("id").getAsString();
-                Request delete = new Request.Builder()
-                    .url(collection.newBuilder().addPathSegment(id).build())
-                    .header(MANAGEMENT_TOKEN_HEADER, managementToken).delete().build();
-                try (Response response = httpClient.newCall(delete).execute()) {
-                    if (!response.isSuccessful()) {
-                        throw new IllegalStateException("Failed to delete mock: HTTP " + response.code());
-                    }
-                }
-            }
-            stubs.clear();
-        } catch (IOException | MockServerException error) {
-            throw new IllegalStateException("Failed to clear mocks through HTTP management API", error);
-        }
+        management.clear();
+        stubs.clear();
     }
 
     /**
