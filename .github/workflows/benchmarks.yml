@@ -39,17 +39,22 @@ env:
 jobs:
   benchmark:
     name: Run Benchmarks
-    # A dedicated VM keeps other repository builds out of timing samples.
-    # Deliberate exception to the all-Hetzner policy (#1191): on the shared
-    # host, identical base and candidate code differed by up to 8% and failed
-    # the 5% gate.
-    runs-on: ubuntu-latest
+    # Hetzner pool (#1191). The host is shared with other repositories, so
+    # PRs compare base and candidate in adjacent ABBA pairs rather than against
+    # a stored baseline. Heavy load from a sibling job can still push a pair
+    # past REGRESSION_THRESHOLD; rerun before treating a lone failure as real.
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
     timeout-minutes: 45
     permissions:
       contents: write
       pull-requests: write
 
     steps:
+      - name: Set per-runner CARGO_HOME on Hetzner
+        # Keep rustup/cargo state off the shared `actions` user's ~/.cargo (#1191).
+        if: runner.environment == 'self-hosted'
+        run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
       - name: Checkout code
         uses: actions/checkout@v7
         with:
@@ -85,7 +90,7 @@ jobs:
       # the unprotected `bench-baseline` branch instead of committing it.
       # The copy committed on main is only a fallback for the first run.
       # Compare the immutable PR base with the candidate on this host in
-      # adjacent ABBA pairs on an isolated VM. A moving main baseline can compare a
+      # adjacent ABBA pairs. A moving main baseline can compare a
       # merged PR to itself, and shared-host load is not comparable over time.
       - name: Run paired base and candidate benchmarks
         if: github.event_name == 'pull_request'

@@ -182,13 +182,13 @@ class HetznerRoutingTest(unittest.TestCase):
                                  ('k8s-tests.yml', 'validate-manifests'),
                                  ('k8s-tests.yml', 'lint-helm-charts'),
                                  ('k8s-tests.yml', 'cost-estimation'),
+                                 ('benchmarks.yml', 'benchmark'),
                                  ('source-install-smoke.yml', 'smoke')]:
             with self.subTest(workflow=filename, job=job_id):
                 self.assertEqual(route(jobs(filename)[job_id]), ROUTE)
 
-    def test_runner_health_and_benchmarks_stay_hosted(self):
+    def test_only_runner_health_monitor_stays_hosted(self):
         self.assertEqual(route(jobs('runner-health.yml')['check']), 'ubuntu-latest')
-        self.assertEqual(route(jobs('benchmarks.yml')['benchmark']), 'ubuntu-latest')
         self.assertEqual(route(jobs('production-smoke.yml')['smoke']), HETZNER)
         smoke = (WORKFLOWS / 'production-smoke.yml').read_text()
         self.assertIn('group: production-smoke\n  cancel-in-progress: false', smoke)
@@ -196,7 +196,6 @@ class HetznerRoutingTest(unittest.TestCase):
     def test_every_job_selects_hetzner_or_an_audited_exception(self):
         allowed = {HETZNER, ROUTE, DOCS_ROUTE}
         exceptions = {('runner-health.yml', 'check'): 'ubuntu-latest',
-                      ('benchmarks.yml', 'benchmark'): 'ubuntu-latest',
                       ('release.yml', 'release-windows'): 'windows-latest',
                       ('plugin-publish.yml', 'build'): PLUGIN_MATRIX_ROUTE}
         for wf in sorted(WORKFLOWS.glob('*.yml')):
@@ -212,7 +211,7 @@ class HetznerRoutingTest(unittest.TestCase):
                         self.assertIn(selector.group(1), allowed)
 
     def test_moved_rust_jobs_isolate_cargo_home_and_never_apt_install(self):
-        moved = {'deploy-docs.yml': ['deploy'],
+        moved = {'benchmarks.yml': ['benchmark'], 'deploy-docs.yml': ['deploy'],
                  'plugin-publish.yml': ['validate', 'security-scan', 'build', 'publish', 'dry-run'],
                  'release.yml': ['release', 'publish'], 'source-install-smoke.yml': ['smoke']}
         for filename, ids in moved.items():
