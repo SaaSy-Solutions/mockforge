@@ -6,8 +6,8 @@ name: Self-hosted Runner Health
 # its 24h timeout and image publishing silently stalled (#1061).
 #
 # Runs on a GitHub-hosted runner so it can't be blocked by the pool it checks.
-# This is the one deliberate exception to the all-Hetzner policy (#1191), along
-# with fork-PR fallbacks and the Windows/macOS release and plugin builds.
+# One of the deliberate exceptions to the all-Hetzner policy (#1191), with
+# benchmarks (timing noise), fork-PR fallbacks and the Windows/macOS builds.
 # The runners API needs admin scope, so this watches the symptom instead:
 # queued jobs targeting the pool while none of its jobs are running. The runner host also runs a watchdog timer
 # (mockforge-runner-watchdog.timer) that starts enabled-but-stopped runners.
