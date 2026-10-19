@@ -577,6 +577,82 @@ pub(crate) async fn build_server_config_from_cli(serve_args: &ServeArgs) -> Serv
     config
 }
 
+/// Refuse to start when an HTTP CORS origin entry is malformed (#1017).
+///
+/// The CORS layer itself fails closed (a bad entry denies every origin), but
+/// a typo in `MOCKFORGE_CORS_ALLOWED_ORIGINS` or `http.cors.allowed_origins`
+/// should stop startup with a clear message instead of a quietly broken
+/// deployment that only logs an error.
+#[cfg(feature = "http")]
+pub(crate) fn validate_cors_origins(config: &ServerConfig) -> Result<(), String> {
+    let Some(cors) = config.http.cors.as_ref().filter(|c| c.enabled) else {
+        return Ok(());
+    };
+    mockforge_http::cors_policy::origin_policy(&cors.allowed_origins)
+        .map(|_| ())
+        .map_err(|e| {
+            format!(
+                "{e}. Fix MOCKFORGE_CORS_ALLOWED_ORIGINS (or http.cors.allowed_origins): \
+                 use exact scheme://host[:port] origins, `localhost`, `null` or `*`"
+            )
+        })
+}
+
+#[cfg(all(test, feature = "http"))]
+mod cors_startup_tests {
+    use super::*;
+
+    fn config_with_origins(origins: &[&str], enabled: bool) -> ServerConfig {
+        let mut config = ServerConfig::default();
+        let cors = config.http.cors.get_or_insert_with(Default::default);
+        cors.enabled = enabled;
+        cors.allowed_origins = origins.iter().map(|o| (*o).to_string()).collect();
+        config
+    }
+
+    #[test]
+    fn malformed_cors_origin_refuses_to_start() {
+        for bad in [
+            "example.com",
+            "ftp://example.com",
+            "https://example.com/path",
+            "https://*.example.com",
+        ] {
+            let config = config_with_origins(&["https://ok.example", bad], true);
+            let err = validate_cors_origins(&config)
+                .expect_err("a malformed CORS origin must stop startup");
+            assert!(err.contains(bad), "error names the bad entry {bad:?}: {err}");
+            assert!(
+                err.contains("MOCKFORGE_CORS_ALLOWED_ORIGINS"),
+                "error says what to fix: {err}"
+            );
+        }
+    }
+
+    #[test]
+    fn valid_or_absent_cors_origins_start() {
+        for origins in [
+            &[][..],
+            &["*"][..],
+            &["localhost"][..],
+            &["null"][..],
+            &["https://a.example", "http://b.example:8080/"][..],
+        ] {
+            let config = config_with_origins(origins, true);
+            assert!(validate_cors_origins(&config).is_ok(), "{origins:?} should be accepted");
+        }
+        let mut no_cors = ServerConfig::default();
+        no_cors.http.cors = None;
+        assert!(validate_cors_origins(&no_cors).is_ok());
+    }
+
+    #[test]
+    fn disabled_cors_is_not_validated() {
+        let config = config_with_origins(&["not an origin"], false);
+        assert!(validate_cors_origins(&config).is_ok());
+    }
+}
+
 pub(crate) fn ensure_ports_available(ports: &[(u16, &str)]) -> Result<(), String> {
     let mut unavailable_ports = Vec::new();
 
@@ -899,6 +975,8 @@ pub async fn handle_serve(
     // Merge configuration sources
     let mut config = build_server_config_from_cli(&serve_args).await;
     feature_selection::validate(&serve_args, &config)?;
+    #[cfg(feature = "http")]
+    validate_cors_origins(&config)?;
 
     // Validate only listeners present in this build. A standalone protocol
     // must not fail because another protocol's default port is occupied.

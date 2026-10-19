@@ -340,6 +340,7 @@ impl DeploymentOrchestrator {
         // and isn't published as a public Fly service, so it's reachable
         // only on `{app}.internal:9080` from sibling apps in the same org.
         env.insert("MOCKFORGE_ADMIN_ENABLED".to_string(), "true".to_string());
+        env.extend(hosted_mock_cors_env());
         env.extend(crate::handlers::management_token::env_entry(deployment.id));
         env.extend(crate::handlers::hosted_mock_overrides::overrides_env(deployment));
 
@@ -709,6 +710,7 @@ impl DeploymentOrchestrator {
         // Same admin-server enable rationale as `deploy_to_flyio` above —
         // gives the resilience proxy something to reach over 6PN.
         env.insert("MOCKFORGE_ADMIN_ENABLED".to_string(), "true".to_string());
+        env.extend(hosted_mock_cors_env());
         env.extend(crate::handlers::management_token::env_entry(deployment.id));
         env.extend(crate::handlers::hosted_mock_overrides::overrides_env(deployment));
         // Sentry error capture (#713) — same forwarding as `deploy_to_flyio`.
@@ -938,6 +940,14 @@ impl DeploymentOrchestrator {
     }
 }
 
+/// CORS origins for hosted mocks (#1017). The mock server now denies
+/// cross-origin requests unless origins are configured. Hosted mocks are public,
+/// credential-free APIs that tenants call from their own front-ends, so they keep
+/// the wildcard explicitly; the server never combines it with credentials.
+fn hosted_mock_cors_env() -> [(String, String); 1] {
+    [("MOCKFORGE_CORS_ALLOWED_ORIGINS".to_string(), "*".to_string())]
+}
+
 /// Forward Sentry config (#643/#664) into a hosted-mock's Fly machine env so
 /// tenant machines report errors to the same Sentry project as the registry
 /// server. `SENTRY_DSN` is required for capture (empty/unset disables it);
@@ -966,6 +976,12 @@ fn apply_sentry_env(env: &mut HashMap<String, String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hosted_mocks_configure_cors_origins_explicitly() {
+        let env: HashMap<_, _> = hosted_mock_cors_env().into_iter().collect();
+        assert_eq!(env.get("MOCKFORGE_CORS_ALLOWED_ORIGINS").map(String::as_str), Some("*"));
+    }
 
     #[test]
     fn sentry_env_forwarding_follows_dsn() {
