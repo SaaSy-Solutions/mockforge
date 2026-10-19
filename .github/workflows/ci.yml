@@ -779,9 +779,8 @@ jobs:
 
   typos:
     name: Spell Check
-    # Text check only: GitHub-hosted runners are free for this public repo,
-    # which keeps the Hetzner Rust pool for Rust work.
-    runs-on: ubuntu-latest
+    # Text check only; runs on the Hetzner pool like every other trusted job (#1191).
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
     steps:
     - name: Checkout repository
@@ -792,8 +791,8 @@ jobs:
 
   changelog-validation:
     name: Changelog Validation
-    # git diff + shell only; free GitHub-hosted runner (public repo).
-    runs-on: ubuntu-latest
+    # git diff + shell only; Hetzner pool (#1191).
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
     timeout-minutes: 15
     if: github.event_name == 'pull_request'
     steps:

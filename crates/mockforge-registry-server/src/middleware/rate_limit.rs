@@ -355,6 +355,15 @@ pub async fn rate_limit_middleware(
     request: Request,
     next: Next,
 ) -> Result<Response, Response> {
+    // Runner callbacks share one IP across every run the fleet executes, so a
+    // per-client bucket can 429 a `/finish` and strand the run in `running`
+    // (#1286). They skip the limit only with the internal token; anything
+    // else on these paths is still limited.
+    let internal_token = std::env::var("MOCKFORGE_INTERNAL_API_TOKEN").ok();
+    if is_authenticated_internal_call(request.uri().path(), &headers, internal_token.as_deref()) {
+        return Ok(next.run(request).await);
+    }
+
     // Get rate limit key (user_id or IP)
     let rate_limit_key = limiter.get_rate_limit_key(&headers);
 
@@ -371,6 +380,33 @@ pub async fn rate_limit_middleware(
     }
 
     Ok(next.run(request).await)
+}
+
+/// True for a request to an internal callback route (`/api/v1/internal/*`,
+/// `/api/internal/*`) whose bearer token equals the configured internal token.
+fn is_authenticated_internal_call(
+    path: &str,
+    headers: &HeaderMap,
+    configured: Option<&str>,
+) -> bool {
+    let Some(configured) = configured.filter(|t| !t.is_empty()) else {
+        return false;
+    };
+    if !(path.starts_with("/api/v1/internal/") || path.starts_with("/api/internal/")) {
+        return false;
+    }
+    headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.strip_prefix("Bearer "))
+        .is_some_and(|provided| constant_time_eq(provided.as_bytes(), configured.as_bytes()))
+}
+
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    a.iter().zip(b).fold(0u8, |diff, (x, y)| diff | (x ^ y)) == 0
 }
 
 /// Create a rate-limited response
@@ -391,6 +427,49 @@ fn rate_limited_response() -> impl IntoResponse {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn bearer(token: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers
+            .insert(axum::http::header::AUTHORIZATION, format!("Bearer {token}").parse().unwrap());
+        headers
+    }
+
+    #[test]
+    fn internal_callbacks_with_the_token_are_exempt() {
+        let finish = "/api/v1/internal/test-runs/5f0c/finish";
+        assert!(is_authenticated_internal_call(finish, &bearer("s3cret"), Some("s3cret")));
+        assert!(is_authenticated_internal_call(
+            "/api/internal/plugin-rotation-events",
+            &bearer("s3cret"),
+            Some("s3cret")
+        ));
+    }
+
+    #[test]
+    fn internal_paths_without_a_valid_token_stay_limited() {
+        let finish = "/api/v1/internal/test-runs/5f0c/finish";
+        assert!(!is_authenticated_internal_call(finish, &HeaderMap::new(), Some("s3cret")));
+        assert!(!is_authenticated_internal_call(finish, &bearer("wrong!"), Some("s3cret")));
+        assert!(!is_authenticated_internal_call(finish, &bearer("s3cre"), Some("s3cret")));
+        // An unset or empty configured token never matches, even an empty bearer.
+        assert!(!is_authenticated_internal_call(finish, &bearer(""), Some("")));
+        assert!(!is_authenticated_internal_call(finish, &bearer("s3cret"), None));
+    }
+
+    #[test]
+    fn the_internal_token_does_not_exempt_other_routes() {
+        for path in [
+            "/api/v1/auth/login",
+            "/api/v1/internalx/finish",
+            "/api/v1/plugins/search",
+        ] {
+            assert!(
+                !is_authenticated_internal_call(path, &bearer("s3cret"), Some("s3cret")),
+                "{path}"
+            );
+        }
+    }
 
     #[test]
     fn test_rate_limiter_creation() {
