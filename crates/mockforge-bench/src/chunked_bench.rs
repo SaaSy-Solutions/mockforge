@@ -29,6 +29,7 @@
 //!     rps: None,
 //!     no_keep_alive: false,
 //!     body: None,
+//!     request_timeout: None,
 //! }).await?;
 //! println!("{} req/s", result.req_per_sec);
 //! # Ok(()) }
@@ -79,12 +80,35 @@ pub struct ChunkedBenchConfig {
     /// document from [`build_json_body`]). When set, its length replaces
     /// `total_size_bytes` as the per-request body size.
     pub body: Option<Arc<Vec<u8>>>,
+    /// Deadline for one whole request: connect, the chunked upload, and the
+    /// response. A request that misses it counts as failed and timed out,
+    /// freeing its worker. `None` waits on OS TCP timeouts, which can hold
+    /// a worker for many minutes when packets are silently dropped.
+    pub request_timeout: Option<Duration>,
 }
+
+/// Cap on the TCP/TLS connect phase when a request timeout is set.
+const MAX_CONNECT_TIMEOUT: Duration = Duration::from_secs(30);
+/// Slack added to twice the minimum upload time for the default timeout.
+const REQUEST_TIMEOUT_MARGIN: Duration = Duration::from_secs(60);
 
 impl ChunkedBenchConfig {
     /// Bytes each request actually sends.
     fn body_len(&self) -> usize {
         self.body.as_ref().map_or(self.total_size_bytes, |b| b.len())
+    }
+
+    /// Shortest possible upload: the pauses between chunks, ignoring
+    /// network time.
+    pub fn min_upload_time(&self) -> Duration {
+        let chunks = self.body_len().div_ceil(self.chunk_size_bytes.max(1)) as u64;
+        Duration::from_millis(chunks.saturating_sub(1) * self.chunk_interval_ms)
+    }
+
+    /// Default request timeout: twice the minimum upload time plus a
+    /// minute, so healthy slow uploads and responses fit comfortably.
+    pub fn auto_request_timeout(&self) -> Duration {
+        self.min_upload_time() * 2 + REQUEST_TIMEOUT_MARGIN
     }
 }
 
@@ -191,6 +215,10 @@ pub struct ChunkedBenchResult {
     pub p95_ms: u64,
     pub p99_ms: u64,
     pub status_counts: HashMap<u16, u64>,
+    /// Failed attempts that hit `request_timeout` (a subset of `failed`).
+    pub timed_out: u64,
+    /// The request timeout this run used, if any.
+    pub request_timeout: Option<Duration>,
     /// First N captured non-2xx responses (status, body excerpt, Server
     /// header). Empty when every request succeeded.
     pub error_samples: Vec<ErrorSample>,
@@ -221,12 +249,16 @@ pub async fn run(cfg: ChunkedBenchConfig) -> anyhow::Result<ChunkedBenchResult> 
     if cfg.no_keep_alive {
         builder = builder.pool_max_idle_per_host(0);
     }
+    if let Some(timeout) = cfg.request_timeout {
+        builder = builder.connect_timeout(timeout.min(MAX_CONNECT_TIMEOUT));
+    }
     let client = builder.build()?;
     let pacer = cfg.rps.map(|n| Arc::new(Pacer::new(n)));
 
     let total_requests = Arc::new(AtomicU64::new(0));
     let successful = Arc::new(AtomicU64::new(0));
     let failed = Arc::new(AtomicU64::new(0));
+    let timed_out = Arc::new(AtomicU64::new(0));
     let bytes_sent = Arc::new(AtomicU64::new(0));
     let latencies: Arc<Mutex<Vec<u64>>> = Arc::new(Mutex::new(Vec::with_capacity(8192)));
     let status_counts: Arc<Mutex<HashMap<u16, u64>>> = Arc::new(Mutex::new(HashMap::new()));
@@ -242,6 +274,7 @@ pub async fn run(cfg: ChunkedBenchConfig) -> anyhow::Result<ChunkedBenchResult> 
         let total_requests = total_requests.clone();
         let successful = successful.clone();
         let failed = failed.clone();
+        let timed_out = timed_out.clone();
         let bytes_sent = bytes_sent.clone();
         let latencies = latencies.clone();
         let status_counts = status_counts.clone();
@@ -272,8 +305,13 @@ pub async fn run(cfg: ChunkedBenchConfig) -> anyhow::Result<ChunkedBenchResult> 
                             }
                         }
                     }
-                    Err(_e) => {
+                    Err(e) => {
                         failed.fetch_add(1, Ordering::Relaxed);
+                        if e.downcast_ref::<reqwest::Error>()
+                            .is_some_and(reqwest::Error::is_timeout)
+                        {
+                            timed_out.fetch_add(1, Ordering::Relaxed);
+                        }
                     }
                 }
                 total_requests.fetch_add(1, Ordering::Relaxed);
@@ -331,6 +369,8 @@ pub async fn run(cfg: ChunkedBenchConfig) -> anyhow::Result<ChunkedBenchResult> 
         p99_ms: p(0.99),
         latencies_ms: samples,
         status_counts: final_status_counts,
+        timed_out: timed_out.load(Ordering::Relaxed),
+        request_timeout: cfg.request_timeout,
         error_samples: final_error_samples,
     })
 }
@@ -385,6 +425,9 @@ async fn send_one_chunked_request(
     let body = reqwest::Body::wrap_stream(body_stream.boxed());
 
     let mut req = client.request(cfg.method.clone(), &cfg.target_url).body(body);
+    if let Some(timeout) = cfg.request_timeout {
+        req = req.timeout(timeout);
+    }
     for (k, v) in &cfg.headers {
         req = req.header(k, v);
     }
@@ -449,6 +492,7 @@ mod tests {
             rps: None,
             no_keep_alive: false,
             body: None,
+            request_timeout: None,
         };
         assert!(run(cfg).await.is_err());
     }
@@ -468,6 +512,7 @@ mod tests {
             rps: None,
             no_keep_alive: false,
             body: None,
+            request_timeout: None,
         };
         assert!(run(cfg).await.is_err());
     }
@@ -504,6 +549,7 @@ mod tests {
             rps: Some(5),
             no_keep_alive: true,
             body: None,
+            request_timeout: None,
         };
         let r = run(cfg).await.unwrap();
         // 1s at 5 rps = slots at 0, 200, 400, 600, 800ms. Unpaced, 8 workers
@@ -514,6 +560,60 @@ mod tests {
         assert_eq!(r.load_window, Duration::from_millis(1000));
         assert!((r.start_rate_per_sec - r.total_requests as f64).abs() < 1e-9);
         assert!(r.start_rate_per_sec <= 5.0 + 1e-9);
+    }
+
+    fn stalled_upload_cfg(url: String, request_timeout: Option<Duration>) -> ChunkedBenchConfig {
+        ChunkedBenchConfig {
+            target_url: url,
+            method: reqwest::Method::POST,
+            concurrency: 1,
+            duration: Duration::from_millis(200),
+            chunk_size_bytes: 64,
+            total_size_bytes: 256,
+            chunk_interval_ms: 0,
+            headers: HashMap::new(),
+            skip_tls_verify: false,
+            rps: None,
+            no_keep_alive: true,
+            body: None,
+            request_timeout,
+        }
+    }
+
+    #[tokio::test]
+    async fn request_timeout_frees_a_worker_stuck_on_a_silent_server() {
+        // Accepts and drains the upload but never responds, like a firewall
+        // that drops the reply.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}/upload", listener.local_addr().unwrap());
+        tokio::spawn(async move {
+            loop {
+                let (mut sock, _) = listener.accept().await.unwrap();
+                tokio::spawn(async move {
+                    let _ = tokio::io::copy(&mut sock, &mut tokio::io::sink()).await;
+                });
+            }
+        });
+
+        let started = Instant::now();
+        let r = run(stalled_upload_cfg(url, Some(Duration::from_millis(300)))).await.unwrap();
+        assert!(started.elapsed() < Duration::from_secs(5), "took {:?}", started.elapsed());
+        assert_eq!(r.total_requests, 1);
+        assert_eq!(r.failed, 1);
+        assert_eq!(r.timed_out, 1);
+    }
+
+    #[test]
+    fn auto_request_timeout_covers_the_minimum_upload_time() {
+        // Srikanth's settings: 1 MiB in 4 KiB chunks, 50 ms apart.
+        let mut cfg = stalled_upload_cfg(String::new(), None);
+        cfg.total_size_bytes = 1_048_576;
+        cfg.chunk_size_bytes = 4096;
+        cfg.chunk_interval_ms = 50;
+        assert_eq!(cfg.min_upload_time(), Duration::from_millis(12_750));
+        assert_eq!(cfg.auto_request_timeout(), Duration::from_millis(85_500));
+        cfg.chunk_interval_ms = 0;
+        assert_eq!(cfg.auto_request_timeout(), Duration::from_secs(60));
     }
 
     #[tokio::test]
@@ -531,6 +631,7 @@ mod tests {
             rps: Some(0),
             no_keep_alive: false,
             body: None,
+            request_timeout: None,
         };
         assert!(run(cfg).await.is_err());
     }
@@ -601,6 +702,7 @@ mod tests {
             rps: None,
             no_keep_alive: false,
             body: Some(Arc::new(body)),
+            request_timeout: None,
         };
         let r = run(cfg).await.unwrap();
         assert_eq!(r.failed, 0);

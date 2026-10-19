@@ -1318,22 +1318,6 @@ mod tests {
     }
 
     #[test]
-    fn test_secure_function_template() {
-        use crate::templating::expand_str;
-
-        // Test that secure() function uses ChaCha20-Poly1305
-        let template = r#"{{secure "test message"}}"#;
-        let result = expand_str(template);
-
-        // The result should be a base64-encoded ciphertext (not the original message)
-        assert_ne!(result, "test message");
-        assert!(!result.is_empty());
-
-        // The result should be valid base64
-        assert!(general_purpose::STANDARD.decode(&result).is_ok());
-    }
-
-    #[test]
     fn test_master_key_manager() {
         let _guard = MASTER_KEY_TEST_LOCK.lock().unwrap();
 

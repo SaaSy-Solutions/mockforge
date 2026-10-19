@@ -69,14 +69,19 @@ async fn test_multiple_servers_auto_port() {
 
 #[tokio::test]
 async fn test_explicit_port_overrides_auto() {
+    // A free port probed now, not a fixed one: CI runners share the host.
+    let explicit = std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|listener| listener.local_addr())
+        .expect("probe a free port")
+        .port();
     let server = Box::pin(MockServer::new()
         .auto_port()
-        .port(35000) // This should override auto_port
+        .port(explicit) // This should override auto_port
         .start())
     .await
     .expect("Failed to start server");
 
-    assert_eq!(server.port(), 35000);
+    assert_eq!(server.port(), explicit);
 
     Box::pin(server.stop()).await.expect("Failed to stop server");
 }

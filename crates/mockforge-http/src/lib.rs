@@ -209,6 +209,8 @@ pub mod consistency;
 pub mod contract_diff_api;
 /// Contract diff middleware for automatic request capture
 pub mod contract_diff_middleware;
+/// Fail-closed CORS origin policy (#1017)
+pub mod cors_policy;
 /// TCP-listener wrapper that bumps the global `record_accept()` counter,
 /// used by the dashboard sampler to derive connections-per-second.
 pub mod counting_listener;
@@ -374,7 +376,6 @@ use mockforge_openapi::openapi_routes::OpenApiRouteRegistry;
 use mockforge_openapi::openapi_routes::ValidationOptions;
 use mockforge_openapi::OpenApiSpec;
 use std::sync::Arc;
-use tower_http::cors::{Any, CorsLayer};
 
 #[cfg(feature = "data-faker")]
 use mockforge_data::provider::register_core_faker_provider;
@@ -504,125 +505,17 @@ pub async fn build_router(
     .await
 }
 
-/// Apply CORS middleware to the router based on configuration
+/// Apply CORS middleware to the router based on configuration.
+///
+/// Fails closed: see [`cors_policy`] (#1017).
 fn apply_cors_middleware(
     app: Router,
     cors_config: Option<mockforge_core::config::HttpCorsConfig>,
 ) -> Router {
-    use http::Method;
-    use tower_http::cors::AllowOrigin;
-
-    if let Some(config) = cors_config {
-        if !config.enabled {
-            return app;
-        }
-
-        let mut cors_layer = CorsLayer::new();
-        let is_wildcard_origin;
-
-        // Configure allowed origins
-        if config.allowed_origins.contains(&"*".to_string()) {
-            cors_layer = cors_layer.allow_origin(Any);
-            is_wildcard_origin = true;
-        } else if !config.allowed_origins.is_empty() {
-            // Try to parse each origin, fallback to permissive if parsing fails
-            let origins: Vec<_> = config
-                .allowed_origins
-                .iter()
-                .filter_map(|origin| {
-                    origin.parse::<http::HeaderValue>().ok().map(AllowOrigin::exact)
-                })
-                .collect();
-
-            if origins.is_empty() {
-                // If no valid origins, use permissive for development
-                warn!("No valid CORS origins configured, using permissive CORS");
-                cors_layer = cors_layer.allow_origin(Any);
-                is_wildcard_origin = true;
-            } else {
-                // Use the first origin as exact match (tower-http limitation)
-                // For multiple origins, we'd need a custom implementation
-                if origins.len() == 1 {
-                    cors_layer = cors_layer.allow_origin(origins[0].clone());
-                    is_wildcard_origin = false;
-                } else {
-                    // Multiple origins - use permissive for now
-                    warn!(
-                        "Multiple CORS origins configured, using permissive CORS. \
-                        Consider using '*' for all origins."
-                    );
-                    cors_layer = cors_layer.allow_origin(Any);
-                    is_wildcard_origin = true;
-                }
-            }
-        } else {
-            // No origins specified, use permissive for development
-            cors_layer = cors_layer.allow_origin(Any);
-            is_wildcard_origin = true;
-        }
-
-        // Configure allowed methods
-        if !config.allowed_methods.is_empty() {
-            let methods: Vec<Method> =
-                config.allowed_methods.iter().filter_map(|m| m.parse().ok()).collect();
-            if !methods.is_empty() {
-                cors_layer = cors_layer.allow_methods(methods);
-            }
-        } else {
-            // Default to common HTTP methods
-            cors_layer = cors_layer.allow_methods([
-                Method::GET,
-                Method::POST,
-                Method::PUT,
-                Method::DELETE,
-                Method::PATCH,
-                Method::OPTIONS,
-            ]);
-        }
-
-        // Configure allowed headers
-        if !config.allowed_headers.is_empty() {
-            let headers: Vec<_> = config
-                .allowed_headers
-                .iter()
-                .filter_map(|h| h.parse::<http::HeaderName>().ok())
-                .collect();
-            if !headers.is_empty() {
-                cors_layer = cors_layer.allow_headers(headers);
-            }
-        } else {
-            // Default headers
-            cors_layer =
-                cors_layer.allow_headers([http::header::CONTENT_TYPE, http::header::AUTHORIZATION]);
-        }
-
-        // Configure credentials - cannot allow credentials with wildcard origin
-        // Determine if credentials should be allowed
-        // Cannot allow credentials with wildcard origin per CORS spec
-        let should_allow_credentials = if is_wildcard_origin {
-            // Wildcard origin - credentials must be false
-            false
-        } else {
-            // Specific origins - use config value (defaults to false)
-            config.allow_credentials
-        };
-
-        cors_layer = cors_layer.allow_credentials(should_allow_credentials);
-
-        info!(
-            "CORS middleware enabled with configured settings (credentials: {})",
-            should_allow_credentials
-        );
-        app.layer(cors_layer)
-    } else {
-        // No CORS config provided - use permissive CORS for development
-        // Note: permissive() allows credentials, but since it uses wildcard origin,
-        // we need to disable credentials to avoid CORS spec violation
-        debug!("No CORS config provided, using permissive CORS for development");
-        // Create a permissive CORS layer but disable credentials to avoid CORS spec violation
-        // (cannot combine credentials with wildcard origin)
-        app.layer(CorsLayer::permissive().allow_credentials(false))
+    if cors_config.as_ref().is_some_and(|c| !c.enabled) {
+        return app;
     }
+    app.layer(cors_policy::build_cors_layer(cors_config.as_ref()))
 }
 
 /// Build the base HTTP router with multi-tenant workspace support

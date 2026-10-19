@@ -161,6 +161,12 @@ ELEVATED_ALLOWLIST = {
     "store/postgres.rs::find_sso_config_by_email_domain": "pre-auth SSO discovery by email domain, cross-org by definition",
     # ---- genuinely cross-tenant lookups -------------------------------------
     "handlers/tunnels.rs::subdomain_taken_by_any_org": "tunnel subdomains are globally unique across tenants",
+    # Publish-time ownership checks (#1239): marketplace names and the storage
+    # keys derived from them are global, so publish must see every org's row
+    # to refuse overwriting another tenant's artifact. The row is never
+    # returned to the caller.
+    "store/postgres.rs::find_scenario_by_name_any_org": "publish-time name-ownership check must see every org's scenario",
+    "store/postgres.rs::find_template_by_name_version_any_org": "publish-time name-ownership check must see every org's template",
     "handlers/scenario_promotions.rs::find_promotable_scenario": "reads another org's PUBLISHED marketplace scenario to promote it; visibility rule (own / public / non-yanked version) is in the SQL",
     # Marketplace rating aggregates: the reviewer is (by construction) usually
     # in a different org than the template/scenario owner; the stats are
