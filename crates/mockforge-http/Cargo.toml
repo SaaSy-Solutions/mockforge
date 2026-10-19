@@ -16,6 +16,7 @@ categories = ["development-tools::testing", "web-programming::http-server"]
 missing_docs = "deny"
 
 [dependencies]
+mockforge-auth = { version = "0.3.236", path = "../mockforge-auth" }
 axum = { workspace = true }
 http = "1.3"
 hyper = { workspace = true }

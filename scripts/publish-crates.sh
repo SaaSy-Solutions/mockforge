@@ -107,6 +107,7 @@ CRATES=(
   mockforge-bench
   mockforge-chaos
   mockforge-collab
+  mockforge-auth
   mockforge-http
   mockforge-k8s-operator
   mockforge-registry-server

@@ -10,6 +10,7 @@ members = [
     "crates/mockforge-scenarios",
 
     # Protocol implementations
+    "crates/mockforge-auth",
     "crates/mockforge-http",
     "crates/mockforge-grpc",
     "crates/mockforge-ws",
