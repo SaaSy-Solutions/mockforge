@@ -789,6 +789,23 @@ untrusted, expired or revoked is still rejected. (`--no-verify` is accepted
 as an alias of `--allow-unsigned`. It no longer skips verification of a
 signature that is present.)
 
+
+### Admin UI installation
+
+The admin installer verifies the plugin before validation or loading, using
+`MOCKFORGE_PLUGIN_TRUSTED_KEYS_FILE` or `~/.mockforge/trusted-keys.json` on the
+server. Configure publisher trust on the server; the install request cannot
+supply trusted keys.
+
+Unsigned plugins are rejected by default. For a plugin you built yourself,
+select **Allow unsigned plugin for local development** in the install dialog.
+The admin API exposes the same explicit `allow_unsigned: true` option.
+A malformed, modified, untrusted, revoked or expired signature is rejected even
+when unsigned plugins are allowed. `skip_validation` and `no_verify` are still
+rejected by the admin endpoint. Failed verification leaves an existing plugin
+registered, including when `force` was requested.
+
+
 ### Verifying a third-party plugin manually
 
 ```bash

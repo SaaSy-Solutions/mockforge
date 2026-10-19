@@ -214,7 +214,7 @@ impl PluginInstaller {
         }
 
         // Load the plugin
-        self.loader.load_plugin(&plugin_id).await?;
+        self.loader.load_plugin_from_path(&plugin_dir).await?;
 
         // Save metadata for future updates
         let version = manifest.info.version.to_string();
@@ -977,6 +977,34 @@ mod tests {
             let err = result.expect_err("install must be blocked");
             assert!(err.is_security_error(), "expected security error, got: {err}");
             assert!(err.to_string().contains(needle), "unexpected error: {err}");
+        }
+
+        #[tokio::test]
+        async fn valid_signature_loads_exact_directory_outside_search_roots() {
+            use mockforge_plugin_core::{PluginAuthor, PluginInfo, PluginManifest, PluginVersion};
+            let fx = fixture(|_, _| {});
+            let dir = TempDir::new().unwrap();
+            let manifest = PluginManifest::new(PluginInfo::new(
+                PluginId::new("exact-signed-fixture"),
+                PluginVersion::new(1, 0, 0),
+                "Exact signed fixture",
+                "Owned loadable fixture",
+                PluginAuthor::new("Fixture"),
+            ));
+            std::fs::write(
+                dir.path().join("plugin.yaml"),
+                serde_yaml::to_string(&manifest).unwrap(),
+            )
+            .unwrap();
+            std::fs::write(
+                dir.path().join("plugin.wasm"),
+                b"\0asm\x01\0\0\0\x05\x04\x01\x01\x01\x01\x07\x0a\x01\x06memory\x02\0",
+            )
+            .unwrap();
+            sign_plugin_ed25519(dir.path(), KEY_ID, &fx.private_key).unwrap();
+            let id = install(&fx, &dir, InstallOptions::default()).await.unwrap();
+            let loaded = fx.installer.loader.get_plugin(&id).await.unwrap();
+            assert_eq!(loaded.manifest.info.name, "Exact signed fixture");
         }
 
         #[tokio::test]

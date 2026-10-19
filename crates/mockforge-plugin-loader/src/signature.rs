@@ -8,7 +8,12 @@ use chrono::{DateTime, Utc};
 use ring::signature;
 use serde::{Deserialize, Serialize};
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+
+mod artifact;
+mod trust_store;
+pub use artifact::compute_artifact_payload;
+pub use trust_store::{resolve_trust_store_path, TrustStoreFile, TrustedKeyEntry};
 
 /// Signature algorithm types
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
@@ -109,194 +114,8 @@ impl PluginSignature {
 
 /// Whether a plugin directory carries a detached signature file.
 pub fn has_signature_file(plugin_dir: &Path) -> bool {
-    plugin_dir.join(SIGNATURE_FILE).exists()
-}
-
-/// Build the canonical bytes a v2 plugin signature covers.
-///
-/// Every regular file under `plugin_dir` is included except the
-/// top-level `plugin.sig`, so the manifest, the WASM module and any
-/// bundled assets are all bound to the signature. Files are ordered
-/// by their `/`-separated relative path. The payload is:
-///
-/// ```text
-/// "mockforge-plugin-signature-v2\0" || u64be(file_count)
-///   || for each file: u64be(len(path)) || path || u64be(len(content)) || sha256(content)
-/// ```
-///
-/// Length prefixes keep path/content boundaries unambiguous. Symlinks
-/// and non-UTF-8 paths are rejected rather than skipped, so nothing in
-/// the directory escapes the signature.
-pub fn compute_artifact_payload(plugin_dir: &Path) -> LoaderResult<Vec<u8>> {
-    if !plugin_dir.is_dir() {
-        return Err(PluginLoaderError::security(format!(
-            "Plugin path is not a directory: {}",
-            plugin_dir.display()
-        )));
-    }
-
-    let mut files: Vec<(String, PathBuf)> = Vec::new();
-    collect_files(plugin_dir, plugin_dir, &mut files)?;
-    files.retain(|(rel, _)| rel != SIGNATURE_FILE);
-    if files.is_empty() {
-        return Err(PluginLoaderError::security("Plugin directory contains no files to verify"));
-    }
-    files.sort_by(|a, b| a.0.cmp(&b.0));
-
-    let mut payload = Vec::with_capacity(ARTIFACT_PAYLOAD_DOMAIN.len() + files.len() * 96);
-    payload.extend_from_slice(ARTIFACT_PAYLOAD_DOMAIN);
-    payload.extend_from_slice(&(files.len() as u64).to_be_bytes());
-    for (rel, path) in &files {
-        let content = fs::read(path).map_err(|e| {
-            PluginLoaderError::security(format!("Failed to read {}: {}", path.display(), e))
-        })?;
-        let digest = ring::digest::digest(&ring::digest::SHA256, &content);
-        payload.extend_from_slice(&(rel.len() as u64).to_be_bytes());
-        payload.extend_from_slice(rel.as_bytes());
-        payload.extend_from_slice(&(content.len() as u64).to_be_bytes());
-        payload.extend_from_slice(digest.as_ref());
-    }
-    Ok(payload)
-}
-
-fn collect_files(root: &Path, dir: &Path, out: &mut Vec<(String, PathBuf)>) -> LoaderResult<()> {
-    let entries = fs::read_dir(dir).map_err(|e| {
-        PluginLoaderError::security(format!("Cannot read {}: {}", dir.display(), e))
-    })?;
-    for entry in entries {
-        let entry = entry.map_err(|e| {
-            PluginLoaderError::security(format!("Cannot read {}: {}", dir.display(), e))
-        })?;
-        let path = entry.path();
-        let file_type = fs::symlink_metadata(&path)
-            .map_err(|e| {
-                PluginLoaderError::security(format!("Cannot stat {}: {}", path.display(), e))
-            })?
-            .file_type();
-        if file_type.is_symlink() {
-            return Err(PluginLoaderError::security(format!(
-                "Signed plugins may not contain symlinks: {}",
-                path.display()
-            )));
-        }
-        if file_type.is_dir() {
-            collect_files(root, &path, out)?;
-        } else if file_type.is_file() {
-            let rel = path
-                .strip_prefix(root)
-                .map_err(|_| PluginLoaderError::security("Plugin file outside plugin directory"))?;
-            let mut parts = Vec::new();
-            for component in rel.components() {
-                let part = component.as_os_str().to_str().ok_or_else(|| {
-                    PluginLoaderError::security(format!(
-                        "Plugin file name is not valid UTF-8: {}",
-                        path.display()
-                    ))
-                })?;
-                parts.push(part);
-            }
-            out.push((parts.join("/"), path));
-        } else {
-            return Err(PluginLoaderError::security(format!(
-                "Unsupported file type in plugin directory: {}",
-                path.display()
-            )));
-        }
-    }
-    Ok(())
-}
-
-/// One entry in a [`TrustStoreFile`].
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TrustedKeyEntry {
-    /// Key ID referenced by `plugin.sig`
-    pub key_id: String,
-    /// Hex-encoded public key bytes (32 bytes for Ed25519)
-    pub public_key: String,
-    /// Signatures from this key are rejected at or after this instant
-    #[serde(default)]
-    pub expires_at: Option<DateTime<Utc>>,
-    /// Revoked keys are rejected even if also listed as trusted
-    #[serde(default)]
-    pub revoked: bool,
-}
-
-/// On-disk trust store for plugin signing keys.
-///
-/// ```json
-/// { "keys": [ { "key_id": "acme-2026", "public_key": "<hex>",
-///               "expires_at": "2027-01-01T00:00:00Z", "revoked": false } ] }
-/// ```
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
-pub struct TrustStoreFile {
-    /// Keys in the store
-    #[serde(default)]
-    pub keys: Vec<TrustedKeyEntry>,
-}
-
-impl TrustStoreFile {
-    /// Read and parse a trust store file.
-    pub fn load(path: &Path) -> LoaderResult<Self> {
-        let raw = fs::read_to_string(path).map_err(|e| {
-            PluginLoaderError::security(format!(
-                "Failed to read trust store {}: {}",
-                path.display(),
-                e
-            ))
-        })?;
-        serde_json::from_str(&raw).map_err(|e| {
-            PluginLoaderError::security(format!(
-                "Failed to parse trust store {}: {}",
-                path.display(),
-                e
-            ))
-        })
-    }
-
-    /// Add this store's keys to a loader configuration. Returns the
-    /// number of keys now trusted from this file.
-    pub fn apply_to(&self, config: &mut PluginLoaderConfig) -> LoaderResult<usize> {
-        let mut trusted = 0;
-        for entry in &self.keys {
-            if entry.revoked {
-                if !config.revoked_keys.contains(&entry.key_id) {
-                    config.revoked_keys.push(entry.key_id.clone());
-                }
-                continue;
-            }
-            let key = hex::decode(entry.public_key.trim()).map_err(|e| {
-                PluginLoaderError::security(format!(
-                    "Invalid public key hex for key '{}': {}",
-                    entry.key_id, e
-                ))
-            })?;
-            if !config.trusted_keys.contains(&entry.key_id) {
-                config.trusted_keys.push(entry.key_id.clone());
-            }
-            config.key_data.insert(entry.key_id.clone(), key);
-            if let Some(expires_at) = entry.expires_at {
-                config.key_expires_at.insert(entry.key_id.clone(), expires_at);
-            }
-            trusted += 1;
-        }
-        Ok(trusted)
-    }
-}
-
-/// Resolve the trust store path: an explicit path, else
-/// `MOCKFORGE_PLUGIN_TRUSTED_KEYS_FILE`, else
-/// `~/.mockforge/trusted-keys.json` when it exists.
-pub fn resolve_trust_store_path(explicit: Option<&Path>) -> Option<PathBuf> {
-    if let Some(path) = explicit {
-        return Some(path.to_path_buf());
-    }
-    if let Ok(path) = std::env::var(TRUST_STORE_ENV) {
-        if !path.trim().is_empty() {
-            return Some(PathBuf::from(shellexpand::tilde(path.trim()).as_ref()));
-        }
-    }
-    let default = PathBuf::from(shellexpand::tilde(DEFAULT_TRUST_STORE_PATH).as_ref());
-    default.exists().then_some(default)
+    !matches!(std::fs::symlink_metadata(plugin_dir.join(SIGNATURE_FILE)),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound)
 }
 
 /// Plugin signature verifier
@@ -332,7 +151,7 @@ impl<'a> SignatureVerifier<'a> {
         now: DateTime<Utc>,
     ) -> LoaderResult<()> {
         let sig_file = plugin_dir.join(SIGNATURE_FILE);
-        if !sig_file.exists() {
+        if !has_signature_file(plugin_dir) {
             if self.config.allow_unsigned {
                 tracing::warn!("No signature file found, but unsigned plugins are allowed");
                 return Ok(());
@@ -428,6 +247,22 @@ impl<'a> SignatureVerifier<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn dangling_signature_is_rejected_even_when_unsigned_plugins_are_allowed() {
+        let directory = tempfile::tempdir().unwrap();
+        std::os::unix::fs::symlink("missing-signature", directory.path().join(SIGNATURE_FILE))
+            .unwrap();
+        let config = PluginLoaderConfig {
+            allow_unsigned: true,
+            ..Default::default()
+        };
+        assert!(has_signature_file(directory.path()));
+        assert!(SignatureVerifier::new(&config)
+            .verify_plugin_signature(directory.path())
+            .is_err());
+    }
 
     #[test]
     fn test_signature_algorithm_serialization() {
