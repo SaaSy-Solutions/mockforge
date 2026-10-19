@@ -6,10 +6,12 @@
 //! `/api/v1/internal/*` and authenticate via a bearer token (mTLS will
 //! land later — see RunnerConfig::registry_internal_token).
 
+use std::time::Duration;
+
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::executors::JobOutcome;
 
 /// One captured exchange returned by the registry's internal
@@ -43,7 +45,13 @@ pub struct RegistryCallbacks {
     http: reqwest::Client,
     base_url: String,
     token: String,
+    /// First wait between `/finish` attempts; doubles each retry.
+    finish_retry_base: Duration,
 }
+
+/// Attempts at the `/finish` callback before giving up. With a 1s base the
+/// waits are 1, 2, 4, 8 and 16 seconds.
+const FINISH_ATTEMPTS: u32 = 6;
 
 impl RegistryCallbacks {
     /// Construct from runner config.
@@ -52,6 +60,7 @@ impl RegistryCallbacks {
             http: reqwest::Client::new(),
             base_url,
             token,
+            finish_retry_base: Duration::from_secs(1),
         }
     }
 
@@ -83,16 +92,40 @@ impl RegistryCallbacks {
 
     /// Mark a run as terminal (passed/failed/cancelled/errored) and
     /// report runner_seconds for billing.
+    ///
+    /// Retried on 429, 5xx and connection failures: a dropped finish leaves
+    /// the run in `running` forever (#1286). The registry side is idempotent,
+    /// so a retry after a lost response is harmless.
     pub async fn run_finished(&self, run_id: Uuid, outcome: &JobOutcome) -> Result<()> {
-        self.post(
-            &format!("/api/v1/internal/test-runs/{run_id}/finish"),
-            &FinishBody {
-                status: outcome.status.as_str(),
-                runner_seconds: outcome.runner_seconds,
-                summary: &outcome.summary,
-            },
-        )
-        .await
+        let path = format!("/api/v1/internal/test-runs/{run_id}/finish");
+        let body = FinishBody {
+            status: outcome.status.as_str(),
+            runner_seconds: outcome.runner_seconds,
+            summary: &outcome.summary,
+        };
+        let mut delay = self.finish_retry_base;
+        for attempt in 1.. {
+            match self.post(&path, &body).await {
+                Err(Error::Callback(e)) if attempt < FINISH_ATTEMPTS && is_transient(&e) => {
+                    tracing::warn!(
+                        run_id = %run_id,
+                        attempt,
+                        error = %e,
+                        "run_finished callback failed, retrying"
+                    );
+                    tokio::time::sleep(delay).await;
+                    delay *= 2;
+                }
+                result => return result,
+            }
+        }
+        unreachable!("the loop returns by the last attempt")
+    }
+
+    #[cfg(test)]
+    fn with_finish_retry_base(mut self, base: Duration) -> Self {
+        self.finish_retry_base = base;
+        self
     }
 
     async fn post<B: Serialize>(&self, path: &str, body: &B) -> Result<()> {
@@ -372,4 +405,102 @@ struct FinishBody<'a> {
     status: &'a str,
     runner_seconds: i32,
     summary: &'a Option<serde_json::Value>,
+}
+
+/// Rate limiting, a registry 5xx or a failed connection can clear on retry;
+/// any other 4xx will not.
+fn is_transient(e: &reqwest::Error) -> bool {
+    match e.status() {
+        Some(status) => {
+            status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error()
+        }
+        None => e.is_connect() || e.is_timeout() || e.is_request(),
+    }
+}
+
+#[cfg(test)]
+mod finish_retry_tests {
+    use super::*;
+    use crate::executors::{JobOutcome, JobStatus};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    /// Serve one canned status per connection and count the requests.
+    async fn serve(statuses: Vec<u16>) -> (String, tokio::task::JoinHandle<usize>) {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            for (served, status) in statuses.iter().enumerate() {
+                let Ok(Ok((mut socket, _))) =
+                    tokio::time::timeout(Duration::from_secs(2), listener.accept()).await
+                else {
+                    return served;
+                };
+                let mut request = Vec::new();
+                loop {
+                    let mut chunk = [0; 4096];
+                    let n = socket.read(&mut chunk).await.unwrap();
+                    request.extend_from_slice(&chunk[..n]);
+                    let text = String::from_utf8_lossy(&request);
+                    if let Some(end) = text.find("\r\n\r\n") {
+                        let length = text[..end]
+                            .lines()
+                            .find_map(|l| {
+                                let (k, v) = l.split_once(':')?;
+                                k.eq_ignore_ascii_case("content-length")
+                                    .then(|| v.trim().parse::<usize>().unwrap())
+                            })
+                            .unwrap_or(0);
+                        if request.len() >= end + 4 + length {
+                            assert!(text.starts_with("POST /api/v1/internal/test-runs/"));
+                            break;
+                        }
+                    }
+                    if n == 0 {
+                        break;
+                    }
+                }
+                let reply = format!(
+                    "HTTP/1.1 {status} X\r\nContent-Type: application/json\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{{}}"
+                );
+                socket.write_all(reply.as_bytes()).await.unwrap();
+            }
+            statuses.len()
+        });
+        (url, server)
+    }
+
+    fn outcome() -> JobOutcome {
+        JobOutcome {
+            status: JobStatus::Passed,
+            runner_seconds: 1,
+            summary: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn finish_retries_rate_limits_and_server_errors() {
+        let (url, server) = serve(vec![429, 503, 200]).await;
+        let callbacks = RegistryCallbacks::new(url, "t".into())
+            .with_finish_retry_base(Duration::from_millis(5));
+        callbacks.run_finished(Uuid::new_v4(), &outcome()).await.unwrap();
+        assert_eq!(server.await.unwrap(), 3);
+    }
+
+    #[tokio::test]
+    async fn finish_does_not_retry_a_client_error() {
+        let (url, server) = serve(vec![404, 200]).await;
+        let callbacks = RegistryCallbacks::new(url, "t".into())
+            .with_finish_retry_base(Duration::from_millis(5));
+        assert!(callbacks.run_finished(Uuid::new_v4(), &outcome()).await.is_err());
+        assert_eq!(server.await.unwrap(), 1);
+    }
+
+    #[tokio::test]
+    async fn finish_gives_up_after_the_last_attempt() {
+        let (url, server) = serve(vec![429; FINISH_ATTEMPTS as usize + 1]).await;
+        let callbacks = RegistryCallbacks::new(url, "t".into())
+            .with_finish_retry_base(Duration::from_millis(1));
+        assert!(callbacks.run_finished(Uuid::new_v4(), &outcome()).await.is_err());
+        assert_eq!(server.await.unwrap(), FINISH_ATTEMPTS as usize);
+    }
 }
