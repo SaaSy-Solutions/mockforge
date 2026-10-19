@@ -1,0 +1,85 @@
+name: Client packages
+
+# Type-check, build and test the editor and browser clients (#1282). None of
+# them had a runnable test command, so client changes (like a new auth
+# header) went unverified.
+
+on:
+  pull_request:
+    paths:
+      - 'browser-extension/**'
+      - 'vscode-extension/**'
+      - 'jetbrains-plugin/**'
+      - '.github/workflows/client-packages.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'browser-extension/**'
+      - 'vscode-extension/**'
+      - 'jetbrains-plugin/**'
+      - '.github/workflows/client-packages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: client-packages-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  browser-extension:
+    name: Browser extension (type-check + build)
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: browser-extension
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - run: npm ci --no-audit --no-fund
+      - run: npm test
+
+  vscode-extension:
+    name: VS Code extension (tests in VS Code 1.85.2)
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: vscode-extension
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - run: npm ci --no-audit --no-fund
+      - name: Check xvfb
+        run: |
+          command -v xvfb-run >/dev/null || { echo "::error::xvfb-run is required to run VS Code headless. On the runner host: sudo apt-get install -y xvfb"; exit 1; }
+      - run: xvfb-run -a npm test
+
+  jetbrains-plugin:
+    name: JetBrains plugin (test + buildPlugin)
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: jetbrains-plugin
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '17'
+      # buildPlugin loads the plugin in a headless IDE, which catches plugin.xml
+      # registration errors that unit tests do not.
+      - run: ./gradlew test buildPlugin --no-daemon --console=plain

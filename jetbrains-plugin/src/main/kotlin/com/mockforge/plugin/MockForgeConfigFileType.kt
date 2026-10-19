@@ -1,7 +1,6 @@
 package com.mockforge.plugin
 
 import com.intellij.openapi.fileTypes.LanguageFileType
-import com.intellij.openapi.fileTypes.ex.FileTypeIdentifiersByExtension
 import icons.MockForgeIcons
 import javax.swing.Icon
 

@@ -83,6 +83,12 @@ To use a custom URL, the extension will save it in storage after first successfu
 npm run build
 ```
 
+### Test
+
+```bash
+npm test   # type-check (tsc --noEmit), then build
+```
+
 ### Watch Mode
 
 ```bash
