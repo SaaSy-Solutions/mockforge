@@ -131,8 +131,13 @@ class PairedBenchmarkTest(unittest.TestCase):
         self.assertIn("CRITERION_DIR: paired-benchmarks/criterion", workflow)
         self.assertNotIn("- name: Fetch baseline", workflow)
         self.assertIn("REGRESSION_THRESHOLD: 5.0", workflow)
-        self.assertIn("runs-on: ubuntu-latest", workflow)
-        self.assertNotIn("runs-on: [self-hosted", workflow)
+        # Hetzner for trusted events, hosted for fork PRs (#1191).
+        self.assertIn(
+            "runs-on: ${{ (github.event_name != 'pull_request' || "
+            "github.event.pull_request.head.repo.full_name == github.repository) && "
+            "fromJSON('[\"self-hosted\",\"linux\",\"x64\",\"rust\"]') || 'ubuntu-latest' }}",
+            workflow,
+        )
 
 
 if __name__ == "__main__":
