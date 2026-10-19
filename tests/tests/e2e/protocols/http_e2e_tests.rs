@@ -32,15 +32,7 @@ async fn assert_json_response<T: serde::de::DeserializeOwned>(
     Ok(response.json().await?)
 }
 
-// NOTE: These tests assume a dynamic-mock-routing feature that isn't implemented:
-// POSTing to `/__mockforge/api/mocks` stores the mock in-memory but the HTTP
-// router only dispatches routes loaded from an OpenAPI spec at startup —
-// dynamic mocks never become live routes. Until that feature exists the
-// assertion `GET /api/users -> 200` cannot pass. Dynamic routing is available
-// in `mockforge-sdk::server` (see its `create_mock` handler) but not in the
-// production `mockforge serve` path. See also `tests/tests/component_integration.rs`
-// which uses the same endpoint and accepts any status by design.
-#[ignore = "requires dynamic mock routing in mockforge-http; see module note"]
+// Dynamic mocks are served by the HTTP management fallback. Exercise live CRUD.
 #[tokio::test]
 async fn test_http_basic_get() {
     // Start server with HTTP config
@@ -54,17 +46,17 @@ async fn test_http_basic_get() {
         .expect("Failed to start test server");
 
     let http_port = server.http_port();
-    let admin_port = http_port; // Management API (`/__mockforge/api/*`) lives on the HTTP server
+    let management_port = http_port; // Management API (`/__mockforge/api/*`) lives on the HTTP server
 
     // Create a stub via Admin API
     let client = Client::new();
     let stub_response = client
-        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", management_port))
         .json(&json!({
             "path": "/api/users",
             "method": "GET",
+            "status_code": 200,
             "response": {
-                "status": 200,
                 "body": [
                     {"id": 1, "name": "Alice"},
                     {"id": 2, "name": "Bob"}
@@ -93,11 +85,12 @@ async fn test_http_basic_get() {
     server.stop().expect("Failed to stop server");
 }
 
-#[ignore = "requires dynamic mock routing in mockforge-http; see module note"]
 #[tokio::test]
-async fn test_http_post_with_validation() {
+async fn test_http_post_stub_status() {
     let server = MockForgeServer::builder()
         .http_port(0)
+        .ws_port(0)
+        .grpc_port(0)
         .admin_port(0)
         .enable_admin(true)
         .health_timeout(Duration::from_secs(30))
@@ -106,17 +99,17 @@ async fn test_http_post_with_validation() {
         .expect("Failed to start test server");
 
     let http_port = server.http_port();
-    let admin_port = http_port;
+    let management_port = http_port;
 
     // Create POST stub
     let client = Client::new();
     let stub_response = client
-        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", management_port))
         .json(&json!({
             "path": "/api/users",
             "method": "POST",
+            "status_code": 201,
             "response": {
-                "status": 201,
                 "body": {
                     "id": 123,
                     "name": "Alice",
@@ -150,11 +143,12 @@ async fn test_http_post_with_validation() {
     server.stop().expect("Failed to stop server");
 }
 
-#[ignore = "requires dynamic mock routing in mockforge-http; see module note"]
 #[tokio::test]
 async fn test_http_dynamic_stub_creation() {
     let server = MockForgeServer::builder()
         .http_port(0)
+        .ws_port(0)
+        .grpc_port(0)
         .admin_port(0)
         .enable_admin(true)
         .health_timeout(Duration::from_secs(30))
@@ -163,17 +157,17 @@ async fn test_http_dynamic_stub_creation() {
         .expect("Failed to start test server");
 
     let http_port = server.http_port();
-    let admin_port = http_port;
+    let management_port = http_port;
     let client = Client::new();
 
     // Create stub via Admin API
     let stub_response = client
-        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", management_port))
         .json(&json!({
             "path": "/api/test",
             "method": "GET",
+            "status_code": 200,
             "response": {
-                "status": 200,
                 "body": {"message": "test"}
             }
         }))
@@ -198,11 +192,12 @@ async fn test_http_dynamic_stub_creation() {
     server.stop().expect("Failed to stop server");
 }
 
-#[ignore = "requires dynamic mock routing in mockforge-http; see module note"]
 #[tokio::test]
 async fn test_http_stub_update() {
     let server = MockForgeServer::builder()
         .http_port(0)
+        .ws_port(0)
+        .grpc_port(0)
         .admin_port(0)
         .enable_admin(true)
         .health_timeout(Duration::from_secs(30))
@@ -211,17 +206,17 @@ async fn test_http_stub_update() {
         .expect("Failed to start test server");
 
     let http_port = server.http_port();
-    let admin_port = http_port;
+    let management_port = http_port;
     let client = Client::new();
 
     // Create initial stub
     let create_response = client
-        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", management_port))
         .json(&json!({
             "path": "/api/update-test",
             "method": "GET",
+            "status_code": 200,
             "response": {
-                "status": 200,
                 "body": {"version": 1}
             }
         }))
@@ -236,12 +231,16 @@ async fn test_http_stub_update() {
 
     // Update stub
     let update_response = client
-        .put(format!("http://localhost:{}/__mockforge/api/mocks/{}", admin_port, stub_id))
+        .put(format!(
+            "http://localhost:{}/__mockforge/api/mocks/{}",
+            management_port, stub_id
+        ))
         .json(&json!({
+            "id": stub_id,
             "path": "/api/update-test",
             "method": "GET",
+            "status_code": 200,
             "response": {
-                "status": 200,
                 "body": {"version": 2}
             }
         }))
@@ -266,11 +265,12 @@ async fn test_http_stub_update() {
     server.stop().expect("Failed to stop server");
 }
 
-#[ignore = "requires dynamic mock routing in mockforge-http; see module note"]
 #[tokio::test]
 async fn test_http_stub_deletion() {
     let server = MockForgeServer::builder()
         .http_port(0)
+        .ws_port(0)
+        .grpc_port(0)
         .admin_port(0)
         .enable_admin(true)
         .health_timeout(Duration::from_secs(30))
@@ -279,17 +279,17 @@ async fn test_http_stub_deletion() {
         .expect("Failed to start test server");
 
     let http_port = server.http_port();
-    let admin_port = http_port;
+    let management_port = http_port;
     let client = Client::new();
 
     // Create stub
     let create_response = client
-        .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .post(format!("http://localhost:{}/__mockforge/api/mocks", management_port))
         .json(&json!({
             "path": "/api/delete-test",
             "method": "GET",
+            "status_code": 200,
             "response": {
-                "status": 200,
                 "body": {"message": "exists"}
             }
         }))
@@ -313,7 +313,10 @@ async fn test_http_stub_deletion() {
 
     // Delete stub
     let delete_response = client
-        .delete(format!("http://localhost:{}/__mockforge/api/mocks/{}", admin_port, stub_id))
+        .delete(format!(
+            "http://localhost:{}/__mockforge/api/mocks/{}",
+            management_port, stub_id
+        ))
         .send()
         .await
         .expect("Failed to delete stub");

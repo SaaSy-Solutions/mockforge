@@ -11,7 +11,7 @@ describe('ForgeConnect', () => {
     let forgeConnect: ForgeConnect;
 
     beforeEach(() => {
-        (global.fetch as jest.Mock).mockClear();
+        global.fetch = jest.fn();
         forgeConnect = new ForgeConnect({
             serverUrl: 'http://localhost:3000',
             mockMode: 'auto',
@@ -25,6 +25,9 @@ describe('ForgeConnect', () => {
     describe('initialize', () => {
         it('should connect to MockForge successfully', async () => {
             const mockClient = {
+                listMocks: jest.fn().mockResolvedValue([]),
+                listEnvironments: jest.fn().mockResolvedValue([]),
+                getActiveEnvironment: jest.fn().mockResolvedValue(null),
                 healthCheck: jest.fn().mockResolvedValue(true),
                 getBaseUrl: jest.fn().mockReturnValue('http://localhost:3000'),
             };
@@ -33,10 +36,14 @@ describe('ForgeConnect', () => {
 
             const result = await forgeConnect.initialize();
             expect(result).toBe(true);
+            expect(forgeConnect.getConnectionStatus()).toMatchObject({connected: true, url: 'http://localhost:3000'});
         });
 
         it('should return false when connection fails', async () => {
             const mockClient = {
+                listMocks: jest.fn().mockResolvedValue([]),
+                listEnvironments: jest.fn().mockResolvedValue([]),
+                getActiveEnvironment: jest.fn().mockResolvedValue(null),
                 healthCheck: jest.fn().mockResolvedValue(false),
             };
 
@@ -50,6 +57,9 @@ describe('ForgeConnect', () => {
     describe('createMockFromRequest', () => {
         it('should create a mock from a captured request', async () => {
             const mockClient = {
+                listMocks: jest.fn().mockResolvedValue([]),
+                listEnvironments: jest.fn().mockResolvedValue([]),
+                getActiveEnvironment: jest.fn().mockResolvedValue(null),
                 healthCheck: jest.fn().mockResolvedValue(true),
                 createMock: jest.fn().mockResolvedValue({
                     id: 'mock-id',
@@ -80,7 +90,8 @@ describe('ForgeConnect', () => {
         it('should return connection status', () => {
             const status = forgeConnect.getConnectionStatus();
             expect(status).toHaveProperty('connected');
-            expect(status).toHaveProperty('url');
+            expect(status.connected).toBe(false);
+            expect(status.url).toBeUndefined();
         });
     });
 });

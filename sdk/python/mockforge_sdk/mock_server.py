@@ -1,12 +1,24 @@
 """MockServer implementation"""
 
+import os
+import secrets
 import subprocess
 import time
 import requests
 from typing import Optional, Dict, Any, List
 from .types import MockServerConfig, ResponseStub, VerificationRequest, VerificationResult
-from .verification import VerificationCount, verify, verify_never, verify_at_least, verify_sequence, count
+from .verification import _auth_headers, VerificationCount, verify, verify_never, verify_at_least, verify_sequence, count
 from .errors import MockServerError
+
+
+def resolve_management_token(explicit: Optional[str] = None) -> str:
+    """Explicit token, else $MOCKFORGE_MANAGEMENT_TOKEN, else a random hex token."""
+    if explicit:
+        return explicit
+    from_env = os.environ.get("MOCKFORGE_MANAGEMENT_TOKEN")
+    if from_env:
+        return from_env
+    return secrets.token_hex(32)
 
 
 class MockServer:
@@ -21,6 +33,9 @@ class MockServer:
             host: Host to bind to (default: 127.0.0.1)
             config_file: Path to MockForge config file
             openapi_spec: Path to OpenAPI specification
+            management_token: Control-plane credential passed to the CLI as
+                MOCKFORGE_MANAGEMENT_TOKEN and sent as
+                X-MockForge-Management-Token (default: env var, else random)
         """
         self.config = MockServerConfig(**kwargs)
         self.process: Optional[subprocess.Popen] = None
@@ -28,6 +43,8 @@ class MockServer:
         self.host = self.config.host
         self.admin_port: Optional[int] = None
         self.stubs: List[ResponseStub] = []
+        self.management_token = resolve_management_token(self.config.management_token)
+        self._headers = _auth_headers(self.management_token)
 
     def start(self) -> "MockServer":
         """Start the mock server"""
@@ -54,6 +71,7 @@ class MockServer:
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,  # Enable text mode for string operations
+                env={**os.environ, "MOCKFORGE_MANAGEMENT_TOKEN": self.management_token},
             )
         except FileNotFoundError as e:
             raise MockServerError.cli_not_found(e)
@@ -62,8 +80,6 @@ class MockServer:
 
         # Start thread to parse stdout for port information
         import threading
-        stdout_buffer = []
-        stderr_buffer = []
 
         def read_stdout():
             """Read stdout and parse ports"""
@@ -71,8 +87,7 @@ class MockServer:
                 for line in iter(self.process.stdout.readline, ''):
                     if not line:
                         break
-                    stdout_buffer.append(line)
-                    self._parse_ports_from_output(''.join(stdout_buffer))
+                    self._parse_ports_from_output(line)
 
         def read_stderr():
             """Read stderr for error messages"""
@@ -80,15 +95,19 @@ class MockServer:
                 for line in iter(self.process.stderr.readline, ''):
                     if not line:
                         break
-                    stderr_buffer.append(line)
+                    self._parse_ports_from_output(line)
 
         stdout_thread = threading.Thread(target=read_stdout, daemon=True)
         stderr_thread = threading.Thread(target=read_stderr, daemon=True)
         stdout_thread.start()
         stderr_thread.start()
 
-        # Wait for server to start
-        self._wait_for_server()
+        # A failed start must not leave the subprocess running.
+        try:
+            self._wait_for_server()
+        except BaseException:
+            self.stop()
+            raise
 
         return self
 
@@ -96,61 +115,36 @@ class MockServer:
         """Parse port numbers from MockForge CLI output"""
         import re
 
-        # Parse HTTP server port
-        # Pattern: "📡 HTTP server listening on http://localhost:PORT" or "📡 HTTP server on port PORT"
-        http_port_match = re.search(
-            r'HTTP server (?:listening on http://[^:]+:|on port )(\d+)',
-            output
+        http_ports = re.findall(
+            r'HTTP server (?:listening on https?://[^:/]+:|on port )(\d+)', output
         )
-        if http_port_match and self.port == 0:
-            detected_port = int(http_port_match.group(1))
-            if detected_port > 0:
-                self.port = detected_port
-
-        # Parse Admin UI port
-        # Pattern: "🎛️ Admin UI listening on http://HOST:PORT" or "🎛️ Admin UI on port PORT"
-        admin_port_match = re.search(
-            r'Admin UI (?:listening on http://[^:]+:|on port )(\d+)',
-            output
+        bound = [int(port) for port in http_ports if int(port) > 0]
+        if self.port == 0 and bound:
+            self.port = bound[-1]
+        admin_ports = re.findall(
+            r'Admin UI (?:listening on https?://[^:/]+:|on port )(\d+)', output
         )
-        if admin_port_match and self.admin_port is None:
-            detected_admin_port = int(admin_port_match.group(1))
-            if detected_admin_port > 0:
-                self.admin_port = detected_admin_port
+        bound = [int(port) for port in admin_ports if int(port) > 0]
+        if self.admin_port is None and bound:
+            self.admin_port = bound[-1]
 
     def _wait_for_server(self, timeout: int = 12) -> None:
-        """Wait for the server to be ready"""
-        start_time = time.time()
-
-        # If port is 0, wait for it to be detected from stdout
-        port_detection_attempts = 0
-        max_port_detection_attempts = 20
-
-        while time.time() - start_time < timeout:
-            # If port is 0, wait for it to be detected from stdout
-            if self.port == 0 and port_detection_attempts < max_port_detection_attempts:
-                port_detection_attempts += 1
-                time.sleep(0.2)
-                continue
-
-            # If port is still 0 after detection attempts, raise standardized error
-            if self.port == 0:
-                raise MockServerError.port_detection_failed()
-
-            try:
-                response = requests.get(
-                    f"http://{self.host}:{self.port}/health",
-                    timeout=0.2
-                )
-                if response.status_code == 200:
-                    return
-            except requests.exceptions.RequestException:
-                time.sleep(0.2)
-
-        raise MockServerError.health_check_timeout(
-            int(timeout * 1000),  # Convert to milliseconds
-            self.port
-        )
+        """Wait for a bound HTTP port and a successful health response."""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if self.process is not None and self.process.poll() is not None:
+                raise MockServerError.server_start_failed("MockForge exited before becoming ready")
+            if self.port:
+                try:
+                    response = requests.get(f"{self.url()}/health", timeout=0.2)
+                    if response.status_code == 200:
+                        return
+                except requests.exceptions.RequestException:
+                    pass
+            time.sleep(0.1)
+        if not self.port:
+            raise MockServerError.port_detection_failed()
+        raise MockServerError.health_check_timeout(int(timeout), self.port)
 
     def stub_response(
         self,
@@ -181,62 +175,49 @@ class MockServer:
             latency_ms=latency_ms,
         )
 
+        if not self.port:
+            raise MockServerError.admin_api_error("create mock", "HTTP port is not available")
+        mock_config = {
+            "method": stub.method,
+            "path": stub.path,
+            "response": {"body": stub.body, "headers": stub.headers},
+            "enabled": True,
+            "status_code": stub.status,
+        }
+        if stub.latency_ms is not None:
+            mock_config["latency_ms"] = stub.latency_ms
+        try:
+            response = requests.post(
+                f"{self.url()}/__mockforge/api/mocks",
+                json=mock_config,
+                headers=self._headers,
+                timeout=5.0,
+            )
+            response.raise_for_status()
+        except requests.exceptions.RequestException as error:
+            raise MockServerError.admin_api_error("create mock", str(error), error) from error
         self.stubs.append(stub)
 
-        # If admin API is available, use it to add the stub dynamically
-        if self.admin_port:
-            try:
-                # Convert ResponseStub to MockConfig format expected by Admin API
-                mock_config = {
-                    "id": "",  # Empty ID - server will generate one
-                    "name": f"{stub.method} {stub.path}",  # Generate a name from method and path
-                    "method": stub.method,
-                    "path": stub.path,
-                    "response": {
-                        "body": stub.body,
-                        "headers": stub.headers if stub.headers else None,
-                    },
-                    "enabled": True,
-                    "latency_ms": stub.latency_ms,
-                    "status_code": stub.status if stub.status != 200 else None,
-                }
-                # Remove None values
-                mock_config = {k: v for k, v in mock_config.items() if v is not None}
-                if not mock_config["response"]["headers"]:
-                    del mock_config["response"]["headers"]
-
-                requests.post(
-                    f"http://{self.host}:{self.admin_port}/__mockforge/api/mocks",
-                    json=mock_config,
-                    timeout=1.0,
-                )
-            except requests.exceptions.RequestException:
-                pass  # Silently fail, stub is stored locally
-
     def clear_stubs(self) -> None:
-        """Clear all stubs"""
-        self.stubs.clear()
+        """Clear stubs through the HTTP management API, reporting failures."""
+        from urllib.parse import quote
 
-        if self.admin_port:
-            try:
-                # Get all mocks and delete them one by one
-                response = requests.get(
-                    f"http://{self.host}:{self.admin_port}/__mockforge/api/mocks",
-                    timeout=1.0,
+        if not self.port:
+            raise MockServerError.admin_api_error("clear mocks", "HTTP port is not available")
+        try:
+            response = requests.get(f"{self.url()}/__mockforge/api/mocks", headers=self._headers, timeout=5.0)
+            response.raise_for_status()
+            mocks = response.json()["mocks"]
+            for mock in mocks:
+                response = requests.delete(
+                    f"{self.url()}/__mockforge/api/mocks/{quote(str(mock['id']), safe='')}",
+                    headers=self._headers,
+                    timeout=5.0,
                 )
-                mocks = response.json().get("mocks", [])
-
-                # Delete each mock
-                for mock in mocks:
-                    try:
-                        requests.delete(
-                            f"http://{self.host}:{self.admin_port}/__mockforge/api/mocks/{mock['id']}",
-                            timeout=1.0,
-                        )
-                    except requests.exceptions.RequestException:
-                        pass  # Ignore individual delete errors
-            except requests.exceptions.RequestException:
-                pass
+                response.raise_for_status()
+        except (requests.exceptions.RequestException, ValueError, KeyError, TypeError) as error:
+            raise MockServerError.admin_api_error("clear mocks", str(error), error) from error
+        self.stubs.clear()
 
     def url(self) -> str:
         """Get the server URL"""
@@ -297,7 +278,7 @@ class MockServer:
             >>> result = server.verify(pattern, VerificationCount.exactly(3))
             >>> assert result.matched
         """
-        return verify(self.url(), pattern, expected)
+        return verify(self.url(), pattern, expected, management_token=self.management_token)
 
     def verify_never(self, pattern: VerificationRequest) -> VerificationResult:
         """
@@ -309,7 +290,7 @@ class MockServer:
         Returns:
             VerificationResult with verification outcome
         """
-        return verify_never(self.url(), pattern)
+        return verify_never(self.url(), pattern, management_token=self.management_token)
 
     def verify_at_least(
         self,
@@ -326,7 +307,7 @@ class MockServer:
         Returns:
             VerificationResult with verification outcome
         """
-        return verify_at_least(self.url(), pattern, min_count)
+        return verify_at_least(self.url(), pattern, min_count, management_token=self.management_token)
 
     def verify_sequence(
         self,
@@ -341,7 +322,7 @@ class MockServer:
         Returns:
             VerificationResult with verification outcome
         """
-        return verify_sequence(self.url(), patterns)
+        return verify_sequence(self.url(), patterns, management_token=self.management_token)
 
     def count_requests(self, pattern: VerificationRequest) -> int:
         """
@@ -353,4 +334,4 @@ class MockServer:
         Returns:
             Count of matching requests
         """
-        return count(self.url(), pattern)
+        return count(self.url(), pattern, management_token=self.management_token)

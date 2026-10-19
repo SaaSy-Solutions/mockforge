@@ -41,8 +41,8 @@ describe('requestAnalyzer', () => {
             headers.set('Authorization', 'Bearer token');
 
             const parsed = parseHeaders(headers);
-            expect(parsed['Content-Type']).toBe('application/json');
-            expect(parsed['Authorization']).toBe('Bearer token');
+            expect(parsed['content-type']).toBe('application/json');
+            expect(parsed['authorization']).toBe('Bearer token');
         });
 
         it('should parse record object', () => {

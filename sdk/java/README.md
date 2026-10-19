@@ -107,6 +107,9 @@ MockServerConfig config = MockServerConfig.builder()
 MockServer server = MockServer.start(config);
 ```
 
+`managementToken(...)` is optional: by default the SDK uses `$MOCKFORGE_MANAGEMENT_TOKEN`, else a
+random token, passes it to the CLI, and sends it as `X-MockForge-Management-Token` on every request.
+
 ### Stubbing with Options
 
 ```java
