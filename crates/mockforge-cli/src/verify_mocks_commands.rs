@@ -9,7 +9,6 @@
 //! Exit codes: 0 = faithful, 1 = drift detected (with `--fail-on-drift`),
 //! 2 = usage error.
 
-use openapiv3::ReferenceOr;
 use serde::Serialize;
 use serde_json::Value;
 use std::collections::{BTreeMap, HashMap};
@@ -37,8 +36,8 @@ pub(crate) struct VerifyMocksArgs {
     #[arg(short, long)]
     pub capture_db: PathBuf,
 
-    /// Maximum exchanges to evaluate (oldest first).
-    #[arg(long, default_value = "500")]
+    /// Maximum recent HTTP exchanges to evaluate (newest first).
+    #[arg(long, default_value = "500", value_parser = clap::value_parser!(i32).range(1..))]
     pub limit: i32,
 
     /// Exit with code 1 when any drift is found (CI gate).
@@ -105,35 +104,36 @@ pub(crate) async fn handle_verify_mocks_command(
     let registry = OpenApiRouteRegistry::new(openapi);
 
     // 2. Open the capture DB and pull HTTP exchanges.
-    let db = mockforge_recorder::RecorderDatabase::new(&capture_db)
+    let db = mockforge_recorder::RecorderDatabase::open_read_only(&capture_db)
         .await
         .map_err(|e| mockforge_core::Error::config(format!("cannot open capture db: {e}")))?;
-    let filter = mockforge_recorder::query::QueryFilter {
-        protocol: Some(mockforge_recorder::models::Protocol::Http),
-        ..Default::default()
-    };
-    let result = mockforge_recorder::query::execute_query(&db, filter)
+    let requests = db
+        .list_recent_for_protocol(mockforge_recorder::models::Protocol::Http, limit)
         .await
         .map_err(|e| mockforge_core::Error::config(format!("capture query failed: {e}")))?;
-    let exchanges: Vec<_> = result.exchanges.into_iter().take(limit as usize).collect();
+    let mut exchanges = Vec::with_capacity(requests.len());
+    for request in requests {
+        let response = db.get_response(&request.id).await.map_err(|e| {
+            mockforge_core::Error::config(format!("capture response lookup failed: {e}"))
+        })?;
+        exchanges.push(mockforge_recorder::models::RecordedExchange { request, response });
+    }
 
+    // An empty capture is not drift: report it, and with `--record` store a
+    // `no-traffic` verification so status surfaces it instead of a pass.
     if exchanges.is_empty() {
         println!(
             "No recorded traffic in {} — record some real traffic first (`mockforge record`).",
             capture_db.display()
         );
         if record {
-            let empty = DriftReport {
-                spec: spec.display().to_string(),
-                exchanges_checked: 0,
-                endpoints_with_drift: 0,
-                unmatched_real_paths: 0,
-                findings: Vec::new(),
-            };
-            record_result(&empty, &capture_db).await?;
+            record_result(&empty_capture_report(&spec), &capture_db).await?;
         }
         return Ok(());
     }
+    let response_spec = serde_json::to_value(&registry.spec().spec).map_err(|e| {
+        mockforge_core::Error::config(format!("cannot inspect response contract: {e}"))
+    })?;
 
     // 3. Evaluate each exchange.
     let mut findings: Vec<DriftFinding> = Vec::new();
@@ -147,6 +147,13 @@ pub(crate) async fn handle_verify_mocks_command(
         let Some((template, _path_params)) = match_template(&registry, &method, &concrete_path)
         else {
             unmatched_paths.insert(concrete_path.clone());
+            let endpoint = format!("{method} {concrete_path}");
+            findings.push(DriftFinding {
+                endpoint: endpoint.clone(),
+                kind: "undeclared-endpoint".into(),
+                detail: "recorded endpoint is absent from the source spec".into(),
+            });
+            drifted_endpoints.insert(endpoint, ());
             continue;
         };
 
@@ -183,9 +190,9 @@ pub(crate) async fn handle_verify_mocks_command(
             let decoded = decode_body(&response.body, &response.body_encoding);
             if let Some(detail) = check_response_drift(
                 &registry,
+                &response_spec,
                 &method,
                 &template,
-                concrete_path.as_str(),
                 status,
                 decoded.as_deref(),
             ) {
@@ -197,6 +204,15 @@ pub(crate) async fn handle_verify_mocks_command(
                 });
                 drifted_endpoints.insert(endpoint, ());
             }
+        } else {
+            let endpoint = format!("{method} {concrete_path}");
+            findings.push(DriftFinding {
+                endpoint: endpoint.clone(),
+                kind: "missing-response".into(),
+                detail: "recorded request has no response; response fidelity cannot be verified"
+                    .into(),
+            });
+            drifted_endpoints.insert(endpoint, ());
         }
     }
 
@@ -242,18 +258,23 @@ pub(crate) async fn handle_verify_mocks_command(
 }
 
 /// Keep `report` as the project's latest verification for `mockforge status`.
-async fn record_result(
+fn empty_capture_report(spec: &std::path::Path) -> DriftReport {
+    DriftReport {
+        spec: spec.display().to_string(),
+        exchanges_checked: 0,
+        endpoints_with_drift: 0,
+        unmatched_real_paths: 0,
+        findings: Vec::new(),
+    }
+}
+
+fn verification_record(
     report: &DriftReport,
     capture_db: &std::path::Path,
-) -> mockforge_core::Result<()> {
+) -> crate::status_commands::VerificationRecord {
     use crate::status_commands::{
-        project_root, VerificationFinding, VerificationOutcome, VerificationRecord,
-        VERIFICATION_FILE, VERIFICATION_SCHEMA_VERSION,
+        VerificationFinding, VerificationOutcome, VerificationRecord, VERIFICATION_SCHEMA_VERSION,
     };
-    let cwd = std::env::current_dir().map_err(|e| {
-        mockforge_core::Error::config(format!("cannot read the current directory: {e}"))
-    })?;
-    let path = project_root(&cwd).await.join(VERIFICATION_FILE);
     let outcome = if report.exchanges_checked == 0 {
         VerificationOutcome::NoTraffic
     } else if report.findings.is_empty() {
@@ -261,7 +282,7 @@ async fn record_result(
     } else {
         VerificationOutcome::Drift
     };
-    let value = VerificationRecord {
+    VerificationRecord {
         schema_version: VERIFICATION_SCHEMA_VERSION,
         recorded_at: chrono::Utc::now().to_rfc3339(),
         mockforge_version: env!("CARGO_PKG_VERSION").to_string(),
@@ -280,7 +301,19 @@ async fn record_result(
                 detail: f.detail.clone(),
             })
             .collect(),
-    };
+    }
+}
+
+async fn record_result(
+    report: &DriftReport,
+    capture_db: &std::path::Path,
+) -> mockforge_core::Result<()> {
+    use crate::status_commands::{project_root, VERIFICATION_FILE};
+    let cwd = std::env::current_dir().map_err(|e| {
+        mockforge_core::Error::config(format!("cannot read the current directory: {e}"))
+    })?;
+    let path = project_root(&cwd).await.join(VERIFICATION_FILE);
+    let value = verification_record(report, capture_db);
     let json = serde_json::to_string_pretty(&value)
         .map_err(|e| mockforge_core::Error::config(e.to_string()))?;
     if let Some(parent) = path.parent() {
@@ -393,42 +426,38 @@ fn segment_match(concrete: &str, template: &str) -> Option<HashMap<String, Strin
 /// drift.
 fn check_response_drift(
     registry: &OpenApiRouteRegistry,
+    spec: &Value,
     method: &str,
     template: &str,
-    _concrete_path: &str,
     status: u16,
     body: Option<&[u8]>,
 ) -> Option<String> {
     let route = registry.get_route(template, method)?;
     let responses = &route.operation.responses;
-    let declared_schema: Option<Value> = responses.responses.iter().find_map(|(code, r)| {
-        let matches_status = match code {
-            openapiv3::StatusCode::Code(c) => *c == status,
-            openapiv3::StatusCode::Range(start) => status >= *start && status < *start + 100,
-        };
-        if !matches_status {
-            return None;
+    let selected = responses
+        .responses
+        .get(&openapiv3::StatusCode::Code(status))
+        .or_else(|| responses.responses.get(&openapiv3::StatusCode::Range(status / 100)))
+        .or(responses.default.as_ref());
+    let Some(selected) = selected else {
+        return Some(format!("recorded response status {status} is not declared by the spec"));
+    };
+    let mut response = match serde_json::to_value(selected) {
+        Ok(value) => value,
+        Err(_) => return Some("could not inspect declared response".into()),
+    };
+    let mut references = std::collections::HashSet::new();
+    while let Some(reference) = response.get("$ref").and_then(Value::as_str) {
+        if references.len() >= 64 || !references.insert(reference.to_string()) {
+            return Some("cyclic or excessively nested response reference".into());
         }
-        let ReferenceOr::Item(response) = r else {
-            return None;
+        let Some(value) = reference.strip_prefix('#').and_then(|pointer| spec.pointer(pointer))
+        else {
+            return Some("declared response reference cannot be resolved locally".into());
         };
-        let media = response.content.get("application/json")?;
-        match &media.schema {
-            Some(ReferenceOr::Item(schema)) => serde_json::to_value(schema).ok(),
-            Some(ReferenceOr::Reference { reference }) => {
-                Some(serde_json::json!({ "$ref": reference }))
-            }
-            None => None,
-        }
-    });
-
-    let declared = declared_schema.or_else(|| {
-        (!responses.responses.is_empty() || responses.default.is_some()).then_some(Value::Null)
-    })?;
-    if declared.is_null() {
-        return None;
+        response = value.clone();
     }
-
+    let schema = response.pointer("/content/application~1json/schema")?;
     let Some(bytes) = body else {
         return Some(format!(
             "declared {status} response schema but the recorded response had no body"
@@ -439,8 +468,7 @@ fn check_response_drift(
             "declared JSON schema for {status} but the recorded response is not JSON"
         ));
     };
-
-    let merged = merge_components_into(declared, &registry.spec().spec);
+    let merged = merge_components_into(schema.clone(), &registry.spec().spec);
     let result =
         mockforge_openapi::openapi_routes::validation::validate_json_value(&body_json, &merged);
     if result.errors.is_empty() {
@@ -448,3 +476,6 @@ fn check_response_drift(
     }
     Some(result.errors.iter().map(|e| e.message.clone()).collect::<Vec<_>>().join("; "))
 }
+
+#[cfg(test)]
+mod tests;
