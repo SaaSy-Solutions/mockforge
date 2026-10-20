@@ -2,6 +2,8 @@
 
 ### Fixed
 
+- **[AI]** Preserve frozen array and scalar payloads with durable identity and integrity metadata. Publish immutable snapshots as complete bundles, retain legacy object snapshots, and reject missing hashes during verification. (#852)
+
 - **[AI]** Add the unreleased `mockforge ai bake` authoring workflow: generate a JSON response once and save a static JSON/YAML serve configuration for offline CI. Existing verified outputs are reused without provider calls; mismatched inputs and modified files fail instead of overwriting them. Sampling seeds are forwarded where supported. Explicit JSON `null` route bodies now remain `null` instead of becoming `{}` when configuration loads. (#852)
 - **[AI]** AI Studio mock and persona `GenerateOnceFreeze` calls now find and reuse snapshots by their recorded input identity, honor the configured snapshot directory, and verify payload integrity. First use no longer fails when the directory is missing. Snapshot identity includes workspace, model and effective seed, and concurrent publication preserves one completed snapshot. Live-provider sampling remains best effort. (#852)
 - **[Contracts]** Package Intelligence’s database migrations inside its own crate so the published `database` feature builds without a sibling HTTP checkout. Preserve all historical migration filenames and SQL bytes for existing databases. (#632)
