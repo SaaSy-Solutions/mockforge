@@ -4,6 +4,7 @@
 //! commands and routing them to appropriate handlers based on intent detection.
 
 use crate::ai_studio::budget_manager::{BudgetConfig, BudgetManager};
+use crate::ai_studio::config::{AiMode, DeterministicModeConfig};
 use crate::ai_studio::debug_analyzer::DebugRequest;
 use crate::intelligent_behavior::{
     config::IntelligentBehaviorConfig, llm_client::LlmClient, LlmUsage,
@@ -116,6 +117,9 @@ pub struct ChatOrchestrator {
 
     /// Budget manager for tracking usage
     budget_manager: BudgetManager,
+    /// Explicit authoring policy supplied by the caller.
+    ai_mode: Option<AiMode>,
+    deterministic_config: Option<DeterministicModeConfig>,
 }
 
 impl ChatOrchestrator {
@@ -128,7 +132,23 @@ impl ChatOrchestrator {
             llm_client,
             config,
             budget_manager,
+            ai_mode: None,
+            deterministic_config: None,
         }
+    }
+
+    /// Apply an explicit policy for mock and persona authoring.
+    /// Snapshot lookup happens before provider initialization. The caller owns
+    /// workspace configuration lookup and authorization; chat JSON cannot select
+    /// a filesystem directory or bypass hosted AI controls through this builder.
+    pub fn with_generation_policy(
+        mut self,
+        ai_mode: Option<AiMode>,
+        deterministic_config: Option<DeterministicModeConfig>,
+    ) -> Self {
+        self.ai_mode = ai_mode;
+        self.deterministic_config = deterministic_config;
+        self
     }
 
     /// Helper to calculate cost from usage
@@ -190,14 +210,13 @@ impl ChatOrchestrator {
             ChatIntent::GenerateMock => {
                 // Use MockGenerator to generate mock from message
                 use crate::ai_studio::nl_mock_generator::MockGenerator;
-                let generator = MockGenerator::new();
-                // For now, pass None for deterministic_config - it would need to be loaded from workspace config
+                let generator = MockGenerator::with_config(self.config.clone());
                 match generator
                     .generate(
                         &request.message,
                         request.workspace_id.as_deref(),
-                        None, // ai_mode - could be extracted from request if available
-                        None, // deterministic_config - would be loaded from workspace config
+                        self.ai_mode,
+                        self.deterministic_config.as_ref(),
                     )
                     .await
                 {
@@ -207,8 +226,10 @@ impl ChatOrchestrator {
                         let estimated_tokens =
                             (request.message.len() + result.message.len()) as u64 / 4;
                         let usage = LlmUsage::new(estimated_tokens / 2, estimated_tokens / 2);
-                        let (tokens, cost) = self
-                            .track_usage_with_feature(
+                        let (tokens, cost) = if result.replayed {
+                            (Some(0), Some(0.0))
+                        } else {
+                            self.track_usage_with_feature(
                                 request.org_id.as_deref(),
                                 &request.workspace_id.clone().unwrap_or_default(),
                                 request.user_id.as_deref(),
@@ -216,7 +237,9 @@ impl ChatOrchestrator {
                                 Some(crate::ai_studio::budget_manager::AiFeature::MockAi),
                             )
                             .await
-                            .unwrap_or((None, None));
+                            .unwrap_or((None, None))
+                        };
+
                         Ok(ChatResponse {
                             intent: ChatIntent::GenerateMock,
                             message: result.message,
@@ -296,20 +319,25 @@ impl ChatOrchestrator {
                 use crate::ai_studio::persona_generator::{
                     PersonaGenerationRequest, PersonaGenerator,
                 };
-                let generator = PersonaGenerator::new();
+                let generator = PersonaGenerator::with_config(self.config.clone());
                 let persona_request = PersonaGenerationRequest {
                     description: request.message.clone(),
                     base_persona_id: None,
                     workspace_id: request.workspace_id.clone(),
                 };
-                match generator.generate(&persona_request, None, None).await {
+                match generator
+                    .generate(&persona_request, self.ai_mode, self.deterministic_config.as_ref())
+                    .await
+                {
                     Ok(result) => {
                         // Estimate tokens (PersonaGenerator uses LLM internally)
                         let estimated_tokens =
                             (request.message.len() + result.message.len()) as u64 / 4;
                         let usage = LlmUsage::new(estimated_tokens / 2, estimated_tokens / 2);
-                        let (tokens, cost) = self
-                            .track_usage_with_feature(
+                        let (tokens, cost) = if result.replayed {
+                            (Some(0), Some(0.0))
+                        } else {
+                            self.track_usage_with_feature(
                                 request.org_id.as_deref(),
                                 &request.workspace_id.clone().unwrap_or_default(),
                                 request.user_id.as_deref(),
@@ -319,7 +347,9 @@ impl ChatOrchestrator {
                                 ),
                             )
                             .await
-                            .unwrap_or((None, None));
+                            .unwrap_or((None, None))
+                        };
+
                         Ok(ChatResponse {
                             intent: ChatIntent::GeneratePersona,
                             message: result.message,
