@@ -25,9 +25,14 @@ and disk headroom first; do not delete another job's build artifacts.
 The shared host at 91.107.206.8 had 70.8 GiB free during this audit. Its cleanup
 timer was active, and the service last completed successfully at 20:58:23 UTC.
 The retired `/etc/cron.hourly/cleanup-runner-tmp` entry was absent.
-The installed timer file specifies a 10-minute interval with a one-minute
-randomized delay; the maintained timer specifies 30 minutes and two minutes.
-This cadence drift was observed and left unchanged during the audit.
+The installed timer previously specified a 10-minute interval with a one-minute
+randomized delay. Its original unit was backed up under `/root/ci-backups`, the
+maintained timer passed `systemd-analyze verify`, and it was installed atomically.
+After reloading systemd and restarting only `runner-host-cleanup.timer`, live
+readback confirmed an active timer with `OnUnitActiveUSec=30min` and
+`RandomizedDelayUSec=2min`. Its SHA-256 now matches the maintained unit:
+`bf200ef0bf23d8b66c2d85c3565b141c48f55befb580ca2438b98d520f2be62e`.
+The cleanup script and service unit retained their verified hashes.
 
 The installed cleanup script SHA-256 is
 `7d8a9c8398a7c12fa8d53ece6a75d8d23acada5d9191199aa81a26f4dff6ad5b`.
@@ -43,8 +48,9 @@ under stale parent directories, genuinely idle workspaces, symlinks, failed or
 timed-out scans, active workers, process working directories, and a job starting
 during the scan. Ten additional local live/idle safety and scoped ownership
 recovery checks passed against a byte-identical copy of the installed script.
-The tests exercised extracted production sections; whole-host cleanup was not
-invoked, and runner services and active build artifacts were preserved.
+The tests exercised extracted production sections in owned fixtures. No
+whole-host cleanup command was run during the probes, and runner services and
+active build artifacts were preserved.
 
 Infrastructure revision
 [`19cb0ba2b1932a392f6d49b9517929fb0334984d`](https://github.com/SaaSy-Solutions/saas-platform/commit/19cb0ba2b1932a392f6d49b9517929fb0334984d)
@@ -52,11 +58,11 @@ has cleanup-script SHA-256
 `675157f43a4922edce5153c9816e0fa7f7ef5c1ffe5913613de1efd5393d2bdf`.
 The sole script-content difference adds a separate native-observer `/run`
 namespace sweep. Its rollout is separate from the verified #706 safeguards;
-no host script or unit was changed during this audit.
+the existing cleanup script and service were preserved while the timer unit was
+reconciled to the reviewed cadence.
 
 Issue #706 remains open for investigation of the original missing-artifact
-failure, timer-cadence reconciliation through the infrastructure-owned process,
-and verification of the restored-cache path in an actual CI run.
+failure and verification of the restored-cache path in an actual CI run.
 Installed guards and current headroom do not establish that historical cause,
 nor do they prove restored Rust caches are intact.
 
