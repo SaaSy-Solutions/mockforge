@@ -4,7 +4,7 @@ use super::{match_template, responses, OpenApiRouteRegistry, Value};
 use serde::Serialize;
 use std::{collections::BTreeMap, path::Path};
 
-mod files;
+pub(super) mod files;
 
 #[derive(Debug, Serialize)]
 pub(super) struct FixtureFinding {
