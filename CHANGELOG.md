@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Added
+
+- **[Data]** Add a feature-gated Qdrant RAG storage backend with persistent chunk upserts, server-side filtered vector search, paged document reads, native snapshots, health checks and real-server restart acceptance. Enable `mockforge-data/qdrant` to use `StorageFactory::create_vector_db`. (#717)
+
 ### Fixed
 
 - **[Cloud]** Cloud test runs no longer get stuck in `running` when the registry rate-limits the runner. The runner's start, event and finish callbacks all come from one IP, so the per-client limit could return 429 to `/finish` and the run never ended. Internal callback routes now skip the rate limit when they carry the internal API token (requests without it are still limited), and the runner retries `/finish` on 429, 5xx and connection errors with backoff (6 attempts over about 30 s). (#1286)
