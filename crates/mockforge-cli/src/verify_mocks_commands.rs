@@ -15,8 +15,11 @@ use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 
 use mockforge_openapi::openapi_routes::OpenApiRouteRegistry;
-use mockforge_openapi::schema_ref_resolver::merge_components_into;
 use mockforge_openapi::spec::OpenApiSpec;
+
+mod fixtures;
+use mockforge_contracts::response_validation as responses;
+use responses::check_response_drift;
 
 /// Verify mocks still match the real API (drift detection, #849).
 ///
@@ -33,12 +36,16 @@ pub(crate) struct VerifyMocksArgs {
 
     /// Recorder sqlite database holding real captured traffic
     /// (what `mockforge record` writes).
-    #[arg(short, long, required_unless_present = "mock_spec")]
+    #[arg(short, long, required_unless_present_any = ["mock_spec", "fixtures"])]
     pub capture_db: Option<PathBuf>,
 
     /// OpenAPI definition used to generate the mock; compare it with --spec.
-    #[arg(long, required_unless_present = "capture_db")]
+    #[arg(long, required_unless_present_any = ["capture_db", "fixtures"])]
     pub mock_spec: Option<PathBuf>,
+
+    /// HTTP replay fixture JSON file or directory; checks every fixture.
+    #[arg(long, required_unless_present_any = ["capture_db", "mock_spec"])]
+    pub fixtures: Option<PathBuf>,
 
     /// Maximum recent HTTP exchanges to evaluate (newest first).
     #[arg(long, default_value = "500", value_parser = clap::value_parser!(i32).range(1..))]
@@ -67,6 +74,8 @@ struct DriftReport {
     spec: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     definition: Option<mockforge_contracts::fidelity::FidelityReport>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    fixtures: Option<fixtures::FixtureReport>,
     exchanges_checked: usize,
     endpoints_with_drift: usize,
     unmatched_real_paths: usize,
@@ -80,6 +89,7 @@ pub(crate) async fn handle_verify_mocks_command(
         spec,
         capture_db,
         mock_spec,
+        fixtures,
         limit,
         fail_on_drift,
         output,
@@ -104,6 +114,11 @@ pub(crate) async fn handle_verify_mocks_command(
         mockforge_core::Error::config(format!("cannot inspect response contract: {e}"))
     })?;
 
+    let fixture_report = fixtures
+        .as_deref()
+        .map(|path| fixtures::verify(path, &registry, &response_spec))
+        .transpose()?;
+
     // 3. Evaluate each exchange.
     let mut findings: Vec<DriftFinding> = Vec::new();
     let mut drifted_endpoints: BTreeMap<String, ()> = BTreeMap::new();
@@ -119,6 +134,22 @@ pub(crate) async fn handle_verify_mocks_command(
                     route.change,
                     route.deltas.len()
                 ),
+            });
+            drifted_endpoints.insert(route.endpoint.clone(), ());
+        }
+    }
+
+    if let Some(report) = &fixture_report {
+        for route in report.routes.iter().filter(|r| !r.findings.is_empty()) {
+            findings.push(DriftFinding {
+                endpoint: route.endpoint.clone(),
+                kind: "fixture".into(),
+                detail: route
+                    .findings
+                    .iter()
+                    .map(|f| format!("{}: {}", f.kind, f.detail))
+                    .collect::<Vec<_>>()
+                    .join("; "),
             });
             drifted_endpoints.insert(route.endpoint.clone(), ());
         }
@@ -184,7 +215,7 @@ pub(crate) async fn handle_verify_mocks_command(
                 findings.push(DriftFinding {
                     endpoint: endpoint.clone(),
                     kind: "response-shape".into(),
-                    detail,
+                    detail: detail.detail,
                 });
                 drifted_endpoints.insert(endpoint, ());
             }
@@ -203,6 +234,7 @@ pub(crate) async fn handle_verify_mocks_command(
     let report = DriftReport {
         spec: spec.display().to_string(),
         definition,
+        fixtures: fixture_report,
         exchanges_checked: exchanges.len(),
         endpoints_with_drift: drifted_endpoints.len(),
         unmatched_real_paths: unmatched_paths.len(),
@@ -212,6 +244,9 @@ pub(crate) async fn handle_verify_mocks_command(
     // 4. Report.
     println!("\n=== mock fidelity / drift report ===");
     println!("exchanges checked      : {}", report.exchanges_checked);
+    if let Some(fixtures) = &report.fixtures {
+        println!("fixture files checked  : {}", fixtures.files_checked);
+    }
     println!("endpoints with drift   : {}", report.endpoints_with_drift);
     println!(
         "unmatched real paths   : {} (traffic to endpoints not in the spec)",
@@ -350,12 +385,14 @@ fn match_template(
     method: &str,
     concrete_path: &str,
 ) -> Option<(String, HashMap<String, String>)> {
-    registry.routes().iter().find_map(|route| {
-        if !route.method.eq_ignore_ascii_case(method) {
-            return None;
-        }
-        segment_match(concrete_path, &route.path).map(|params| (route.path.clone(), params))
-    })
+    registry.routes().iter()
+        .filter(|route| route.method.eq_ignore_ascii_case(method))
+        .filter_map(|route| segment_match(concrete_path, &route.path).map(|params| (route, params)))
+        // Like HTTP routing, prefer the first literal segment over a parameter.
+        // Registry iteration order must not determine the response contract.
+        .max_by_key(|(route, _)| route.path.split('/').map(|segment|
+            !(segment.starts_with('{') && segment.ends_with('}'))).collect::<Vec<_>>())
+        .map(|(route, params)| (route.path.clone(), params))
 }
 
 fn segment_match(concrete: &str, template: &str) -> Option<HashMap<String, String>> {
@@ -373,62 +410,6 @@ fn segment_match(concrete: &str, template: &str) -> Option<HashMap<String, Strin
         return None;
     }
     Some(params)
-}
-
-/// Response-side drift: validate the recorded body against the declared
-/// schema for the actual status code. Returns a human detail string on
-/// drift.
-fn check_response_drift(
-    registry: &OpenApiRouteRegistry,
-    spec: &Value,
-    method: &str,
-    template: &str,
-    status: u16,
-    body: Option<&[u8]>,
-) -> Option<String> {
-    let route = registry.get_route(template, method)?;
-    let responses = &route.operation.responses;
-    let selected = responses
-        .responses
-        .get(&openapiv3::StatusCode::Code(status))
-        .or_else(|| responses.responses.get(&openapiv3::StatusCode::Range(status / 100)))
-        .or(responses.default.as_ref());
-    let Some(selected) = selected else {
-        return Some(format!("recorded response status {status} is not declared by the spec"));
-    };
-    let mut response = match serde_json::to_value(selected) {
-        Ok(value) => value,
-        Err(_) => return Some("could not inspect declared response".into()),
-    };
-    let mut references = std::collections::HashSet::new();
-    while let Some(reference) = response.get("$ref").and_then(Value::as_str) {
-        if references.len() >= 64 || !references.insert(reference.to_string()) {
-            return Some("cyclic or excessively nested response reference".into());
-        }
-        let Some(value) = reference.strip_prefix('#').and_then(|pointer| spec.pointer(pointer))
-        else {
-            return Some("declared response reference cannot be resolved locally".into());
-        };
-        response = value.clone();
-    }
-    let schema = response.pointer("/content/application~1json/schema")?;
-    let Some(bytes) = body else {
-        return Some(format!(
-            "declared {status} response schema but the recorded response had no body"
-        ));
-    };
-    let Ok(body_json) = serde_json::from_slice::<Value>(bytes) else {
-        return Some(format!(
-            "declared JSON schema for {status} but the recorded response is not JSON"
-        ));
-    };
-    let merged = merge_components_into(schema.clone(), &registry.spec().spec);
-    let result =
-        mockforge_openapi::openapi_routes::validation::validate_json_value(&body_json, &merged);
-    if result.errors.is_empty() {
-        return None;
-    }
-    Some(result.errors.iter().map(|e| e.message.clone()).collect::<Vec<_>>().join("; "))
 }
 
 #[cfg(test)]

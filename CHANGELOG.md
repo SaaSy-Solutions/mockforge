@@ -2,10 +2,12 @@
 
 ### Added
 
+- **[Reality]** `verify-mocks --fixtures` checks a complete HTTP replay fixture set against its source OpenAPI definition, reporting missing and removed routes, invalid statuses, and field-level JSON response errors. It can run alongside mock-definition and recorder checks. Loading is read-only and rejects empty, malformed, symlinked or excessive fixture inputs. (#849)
 - **[Reality]** `verify-mocks --mock-spec` compares the OpenAPI definition used by a mock with its current source specification. Structured reports include added, removed and changed endpoints, field-level JSON-pointer deltas, and per-route fidelity status. Definition checks can run alone or alongside captured upstream traffic and use the existing `--fail-on-drift` CI gate. (#849)
 
 ### Fixed
 
+- **[Reality]** Fidelity checks prefer literal path segments over parameters, matching HTTP routing. Previously, registry iteration order could select a parameter route's schema for a literal endpoint, randomly passing invalid responses or failing valid ones. (#849)
 - **[Reality]** `verify-mocks --fail-on-drift` now fails on unknown endpoints, missing responses and undeclared statuses, and validates range/default/referenced response schemas. Empty captures fail, databases open read-only, and the positive `--limit` applies to recent HTTP records in SQL rather than silently stopping at 100 or being displaced by other protocols. (#849)
 - **[Cloud]** Cloud test runs no longer get stuck in `running` when the registry rate-limits the runner. The runner's start, event and finish callbacks all come from one IP, so the per-client limit could return 429 to `/finish` and the run never ended. Internal callback routes now skip the rate limit when they carry the internal API token (requests without it are still limited), and the runner retries `/finish` on 429, 5xx and connection errors with backoff (6 attempts over about 30 s). (#1286)
 - **[Cloud]** The SQLite registry store (self-hosted registry admin) now rotates API tokens and lists tokens due for rotation, like the Postgres store. Before, rotation returned an error and the rotation reminder list was always empty. Both stores now generate `mfx_` tokens in one URL-safe format (32 random bytes, unpadded URL-safe base64), so new Postgres tokens no longer contain `+`, `/` or `=`. Existing tokens keep working. (#1266)
