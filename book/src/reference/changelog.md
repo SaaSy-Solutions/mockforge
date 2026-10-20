@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **[Cloud]** Hosted mocks that use HTTP, WebSocket or GraphQL can run on Cloudflare Containers at `https://mocks.mockforge.dev/<org>/<slug>`. Each mock's container starts on its first request and sleeps after 10 minutes idle, so an unused mock costs nothing. The Worker applies the plan's body and requests-per-second caps and reports usage to the registry, which meters it as before. Enabled by setting `MOCKFORGE_CF_MOCKS_URL` and `MOCKFORGE_CF_MOCKS_EDGE_TOKEN`; other protocols and plugin-enabled mocks stay on Fly. Fly machines now stop when idle and start on the next connection. Redeploys use the same machine environment and protocol services as the first deploy (they used to drop protocol, log-ingest, tracing and upstream settings), deleting a running Fly machine no longer fails with 412, and the registry's `/mocks/<org>/<slug>` redirects Cloudflare-served mocks to their edge URL. (#1063)
+
 ### Fixed
 
 - **[Contracts]** Package Intelligence’s database migrations inside its own crate so the published `database` feature builds without a sibling HTTP checkout. Preserve all historical migration filenames and SQL bytes for existing databases. (#632)
