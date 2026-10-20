@@ -7,6 +7,7 @@
 
 ### Fixed
 
+- **[Reality]** `verify-mocks` enforces captured request contracts even when server validation is set to `off` or `warn`, route overrides disable checking, or shadow mode is enabled. The offline verifier uses an isolated strict registry policy; serving retains its configured behavior. (#849)
 - **[Reality]** Fidelity checks prefer literal path segments over parameters, matching HTTP routing. Previously, registry iteration order could select a parameter route's schema for a literal endpoint, randomly passing invalid responses or failing valid ones. (#849)
 - **[Reality]** `verify-mocks --fail-on-drift` now fails on unknown endpoints, missing responses and undeclared statuses, and validates range/default/referenced response schemas. Empty captures fail, databases open read-only, and the positive `--limit` applies to recent HTTP records in SQL rather than silently stopping at 100 or being displaced by other protocols. (#849)
 - **[Cloud]** Cloud test runs no longer get stuck in `running` when the registry rate-limits the runner. The runner's start, event and finish callbacks all come from one IP, so the per-client limit could return 429 to `/finish` and the run never ended. Internal callback routes now skip the rate limit when they carry the internal API token (requests without it are still limited), and the runner retries `/finish` on 429, 5xx and connection errors with backoff (6 attempts over about 30 s). (#1286)

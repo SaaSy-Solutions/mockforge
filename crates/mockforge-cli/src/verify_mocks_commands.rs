@@ -108,7 +108,7 @@ pub(crate) async fn handle_verify_mocks_command(
                 .map_err(mockforge_core::Error::config)
         })
         .transpose()?;
-    let registry = OpenApiRouteRegistry::new(openapi);
+    let registry = OpenApiRouteRegistry::new_for_contract_verification(openapi);
     let exchanges = load_fidelity_capture(capture_db.as_ref(), limit).await?;
     let response_spec = serde_json::to_value(&registry.spec().spec).map_err(|e| {
         mockforge_core::Error::config(format!("cannot inspect response contract: {e}"))
@@ -173,8 +173,7 @@ pub(crate) async fn handle_verify_mocks_command(
         };
 
         // Request-side validation through the same chain `serve` uses.
-        // This records into the shared conformance buffer too, which is a
-        // feature: CLI drift shows up in the TUI Conformance tab as well.
+        // CI checks enforce the contract independently of serve-time policy.
         let decoded_request = decode_body(&req.body, &req.body_encoding);
         let body_bytes: Option<&[u8]> = decoded_request.as_deref();
         if let Err((status, payload)) = registry.run_validation_with_recording_ex(
