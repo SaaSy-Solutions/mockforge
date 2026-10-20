@@ -21,7 +21,18 @@ pub(super) fn schema<'a>(
         ParameterSchemaOrContent::Schema(ReferenceOr::Reference { reference }) => {
             resolve(reference, spec).map(Some)
         }
-        ParameterSchemaOrContent::Content(_) => Ok(None),
+        ParameterSchemaOrContent::Content(content) => {
+            if content.len() != 1 {
+                return Err("Parameter content must declare exactly one media type".into());
+            }
+            let (media, value) = content.iter().next().expect("one media type");
+            if !is_json(media) {
+                return Err(
+                    "Unsupported parameter content media type; validation is unavailable".into()
+                );
+            }
+            value.schema.as_ref().map(|schema| inline(schema, spec)).transpose()
+        }
     }
 }
 
@@ -211,5 +222,47 @@ pub(super) fn validate(
         Ok(coerced)
     } else {
         Err((coerced, format!("Validation error: {}", errors.join("; "))))
+    }
+}
+
+fn is_json(media: &str) -> bool {
+    let media = media.split(';').next().unwrap_or(media).trim();
+    media.eq_ignore_ascii_case("application/json")
+        || media
+            .to_ascii_lowercase()
+            .strip_prefix("application/")
+            .is_some_and(|subtype| subtype.ends_with("+json"))
+}
+
+pub(super) fn validate_parameter_value(
+    value: &Value,
+    schema: Option<&Schema>,
+    data: &ParameterData,
+    spec: &OpenApiSpec,
+    style: Option<&str>,
+) -> Result<Value, (Value, String)> {
+    if matches!(data.format, ParameterSchemaOrContent::Content(_)) {
+        let Value::String(text) = value else {
+            return Err((
+                value.clone(),
+                "Validation error: JSON parameter must be serialized text".into(),
+            ));
+        };
+        let decoded: Value = serde_json::from_str(text)
+            .map_err(|_| (value.clone(), "Validation error: malformed JSON parameter".into()))?;
+        if let Some(schema) = schema {
+            let validator = build(schema, spec)
+                .map_err(|message| (decoded.clone(), format!("Validation error: {message}")))?;
+            let errors: Vec<_> =
+                validator.iter_errors(&decoded).map(|error| error.to_string()).collect();
+            if !errors.is_empty() {
+                return Err((decoded, format!("Validation error: {}", errors.join("; "))));
+            }
+        }
+        Ok(decoded)
+    } else if let Some(schema) = schema {
+        validate(value, schema, spec, style)
+    } else {
+        Ok(value.clone())
     }
 }
