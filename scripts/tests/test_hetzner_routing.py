@@ -13,7 +13,6 @@ WORKFLOWS = ROOT / '.github/workflows'
 LABELS = ['self-hosted', 'linux', 'x64', 'rust']
 ROUTE = '${{ (github.event_name != \'pull_request\' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON(\'["self-hosted","linux","x64","rust"]\') || \'ubuntu-latest\' }}'
 HETZNER = '[self-hosted, linux, x64, rust]'
-DOCS_ROUTE = '${{ fromJSON((github.event_name == \'workflow_dispatch\' || (github.event_name == \'pull_request\' && github.event.pull_request.head.repo.full_name == github.repository)) && \'["self-hosted","linux","x64","rust"]\' || \'["ubuntu-latest"]\') }}'
 PLUGIN_MATRIX_ROUTE = '${{ matrix.os == \'ubuntu-latest\' && fromJSON(\'["self-hosted","linux","x64","rust"]\') || matrix.os }}'
 TARGETS = {
     'ci.yml': ['changes', 'test', 'ui-test', 'warning-gate',
@@ -192,10 +191,34 @@ class HetznerRoutingTest(unittest.TestCase):
         self.assertEqual(route(jobs('production-smoke.yml')['smoke']), HETZNER)
         smoke = (WORKFLOWS / 'production-smoke.yml').read_text()
         self.assertIn('group: production-smoke\n  cancel-in-progress: false', smoke)
+        # Docs verification does not compile Rust. It used to take a rust-pool
+        # slot on every book edit. It stays GitHub-hosted, like runner-health.
+        self.assertEqual(route(jobs('docs-check.yml')['docs']), 'ubuntu-latest')
+
+    def test_docs_smoke_and_runner_health_stay_off_pull_request_flood(self):
+        docs = (WORKFLOWS / 'docs-check.yml').read_text()
+        paths = re.search(r'^    paths:\n(?P<body>(?:      - .*\n)+)', docs, flags=re.M).group('body')
+        for required in ("- 'book/**'", "- 'docs/**'", "- '*.md'", "- '*.markdown'",
+                         "- '**/*.md'", "- '**/*.markdown'"):
+            self.assertIn(required, paths)
+        self.assertNotIn('main.rs', paths)
+        self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", docs)
+        smoke = (WORKFLOWS / 'production-smoke.yml').read_text()
+        header = re.search(r'^on:\n(.*?)(?=^[A-Za-z#])', smoke, flags=re.M | re.S).group(1)
+        events = set(re.findall(r'^  ([\w_]+):', header, flags=re.M))
+        self.assertEqual(events, {'push', 'schedule', 'workflow_dispatch'})
+        self.assertIn('branches: [main]', header)
+        self.assertEqual(re.findall(r"cron: '([^']+)'", header), ['17 * * * *'])
+        health = (WORKFLOWS / 'runner-health.yml').read_text()
+        health_header = re.search(r'^on:\n(.*?)(?=^[A-Za-z#])', health, flags=re.M | re.S).group(1)
+        health_events = set(re.findall(r'^  ([\w_]+):', health_header, flags=re.M))
+        self.assertEqual(health_events, {'schedule', 'workflow_dispatch'})
+        self.assertEqual(re.findall(r"cron: '([^']+)'", health_header), ['47 * * * *'])
 
     def test_every_job_selects_hetzner_or_an_audited_exception(self):
-        allowed = {HETZNER, ROUTE, DOCS_ROUTE}
+        allowed = {HETZNER, ROUTE}
         exceptions = {('runner-health.yml', 'check'): 'ubuntu-latest',
+                      ('docs-check.yml', 'docs'): 'ubuntu-latest',
                       ('release.yml', 'release-windows'): 'windows-latest',
                       ('plugin-publish.yml', 'build'): PLUGIN_MATRIX_ROUTE}
         for wf in sorted(WORKFLOWS.glob('*.yml')):
