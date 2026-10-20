@@ -2,6 +2,7 @@
 
 ### Fixed
 
+- **[Security]** Raise Wasmtime and WASI to 36.0.19, including the patched Cranelift family, to address RUSTSEC-2026-0379 and RUSTSEC-2026-0380. Enforce the patched minimum in both plugin crate manifests.
 - **[Docs]** The workspace export/import guide and the configuration reference no longer call `mockforge workspace export`, `import` and `activate` unreleased; they ship in 0.3.236. (#1197)
 - **[Contracts]** Package Intelligence’s database migrations inside its own crate so the published `database` feature builds without a sibling HTTP checkout. Preserve all historical migration filenames and SQL bytes for existing databases. (#632)
 
