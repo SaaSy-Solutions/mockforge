@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Changed
+
+- **[UI]** Marketplace navigation and hosted workspace/token controls use the shared Tailwind/CVA controls and Lucide icons instead of MUI compatibility components. Marketplace routes expose native links and current-page state, workspace selection keeps explicit assignment, and control-token guidance covers management requests. (#722)
+
 ### Fixed
 
 - **[Cloud]** Cloud test runs no longer get stuck in `running` when the registry rate-limits the runner. The runner's start, event and finish callbacks all come from one IP, so the per-client limit could return 429 to `/finish` and the run never ended. Internal callback routes now skip the rate limit when they carry the internal API token (requests without it are still limited), and the runner retries `/finish` on 429, 5xx and connection errors with backoff (6 attempts over about 30 s). (#1286)

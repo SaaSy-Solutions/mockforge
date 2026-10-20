@@ -26,31 +26,31 @@ function renderWithRoute(initialPath: string) {
 describe('MarketplaceTabs', () => {
   it('renders Templates, Scenarios, and Plugins tabs', () => {
     renderWithRoute('/template-marketplace');
-    expect(screen.getByRole('tab', { name: /templates/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /scenarios/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /plugins/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /templates/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /scenarios/i })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /plugins/i })).toBeInTheDocument();
   });
 
   it('highlights the active tab based on current pathname', () => {
     renderWithRoute('/scenario-marketplace');
-    const scenariosTab = screen.getByRole('tab', { name: /scenarios/i });
-    expect(scenariosTab).toHaveAttribute('aria-selected', 'true');
+    const scenariosTab = screen.getByRole('link', { name: /scenarios/i });
+    expect(scenariosTab).toHaveAttribute('aria-current', 'page');
 
-    const templatesTab = screen.getByRole('tab', { name: /templates/i });
-    expect(templatesTab).toHaveAttribute('aria-selected', 'false');
+    const templatesTab = screen.getByRole('link', { name: /templates/i });
+    expect(templatesTab).not.toHaveAttribute('aria-current');
   });
 
   it('navigates to the tab target when clicked', () => {
     renderWithRoute('/template-marketplace');
     expect(screen.getByTestId('pathname')).toHaveTextContent('/template-marketplace');
 
-    fireEvent.click(screen.getByRole('tab', { name: /plugins/i }));
+    fireEvent.click(screen.getByRole('link', { name: /plugins/i }));
     expect(screen.getByTestId('pathname')).toHaveTextContent('/plugin-registry');
   });
 
-  it('falls back to Templates tab when pathname is unknown', () => {
+  it('does not claim an unrelated route is the current marketplace page', () => {
     renderWithRoute('/something-else');
-    const templatesTab = screen.getByRole('tab', { name: /templates/i });
-    expect(templatesTab).toHaveAttribute('aria-selected', 'true');
+    const templatesTab = screen.getByRole('link', { name: /templates/i });
+    expect(templatesTab).not.toHaveAttribute('aria-current');
   });
 });
