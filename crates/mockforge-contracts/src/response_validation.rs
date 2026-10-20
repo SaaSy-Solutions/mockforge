@@ -49,38 +49,10 @@ pub fn check_response_drift(
     status: u16,
     body: Option<&[u8]>,
 ) -> Option<ResponseDrift> {
-    let Some(route) = registry.get_route(template, method) else {
-        return Some(ResponseDrift::message(
-            "response route is absent from the source specification",
-        ));
+    let response = match response_definition(registry, spec, method, template, status) {
+        Ok(response) => response,
+        Err(drift) => return Some(drift),
     };
-    let responses = &route.operation.responses;
-    let selected = responses
-        .responses
-        .get(&openapiv3::StatusCode::Code(status))
-        .or_else(|| responses.responses.get(&openapiv3::StatusCode::Range(status / 100)))
-        .or(responses.default.as_ref());
-    let Some(selected) = selected else {
-        return Some(ResponseDrift::message(format!(
-            "recorded response status {status} is not declared by the spec"
-        )));
-    };
-    let Ok(mut response) = serde_json::to_value(selected) else {
-        return Some(ResponseDrift::message("could not inspect declared response"));
-    };
-    let mut references = std::collections::HashSet::new();
-    while let Some(reference) = response.get("$ref").and_then(Value::as_str) {
-        if references.len() >= 64 || !references.insert(reference.to_string()) {
-            return Some(ResponseDrift::message("cyclic or excessively nested response reference"));
-        }
-        let Some(value) = reference.strip_prefix('#').and_then(|pointer| spec.pointer(pointer))
-        else {
-            return Some(ResponseDrift::message(
-                "declared response reference cannot be resolved locally",
-            ));
-        };
-        response = value.clone();
-    }
     let schema = response.pointer("/content/application~1json/schema")?;
     let Some(bytes) = body else {
         return Some(ResponseDrift::message(format!(
@@ -111,6 +83,52 @@ pub fn check_response_drift(
             })
             .collect(),
     })
+}
+
+/// Resolve the source response declaration for a method, template and status.
+///
+/// Returns drift for an absent route/status or an unresolved/cyclic reference.
+/// Local references are resolved; this function performs no network requests.
+pub fn response_definition(
+    registry: &OpenApiRouteRegistry,
+    spec: &Value,
+    method: &str,
+    template: &str,
+    status: u16,
+) -> Result<Value, ResponseDrift> {
+    let Some(route) = registry.get_route(template, method) else {
+        return Err(ResponseDrift::message(
+            "response route is absent from the source specification",
+        ));
+    };
+    let responses = &route.operation.responses;
+    let selected = responses
+        .responses
+        .get(&openapiv3::StatusCode::Code(status))
+        .or_else(|| responses.responses.get(&openapiv3::StatusCode::Range(status / 100)))
+        .or(responses.default.as_ref());
+    let Some(selected) = selected else {
+        return Err(ResponseDrift::message(format!(
+            "recorded response status {status} is not declared by the spec"
+        )));
+    };
+    let Ok(mut response) = serde_json::to_value(selected) else {
+        return Err(ResponseDrift::message("could not inspect declared response"));
+    };
+    let mut references = std::collections::HashSet::new();
+    while let Some(reference) = response.get("$ref").and_then(Value::as_str) {
+        if references.len() >= 64 || !references.insert(reference.to_string()) {
+            return Err(ResponseDrift::message("cyclic or excessively nested response reference"));
+        }
+        let Some(value) = reference.strip_prefix('#').and_then(|pointer| spec.pointer(pointer))
+        else {
+            return Err(ResponseDrift::message(
+                "declared response reference cannot be resolved locally",
+            ));
+        };
+        response = value.clone();
+    }
+    Ok(response)
 }
 
 #[cfg(test)]

@@ -128,6 +128,41 @@ limited to 8 MiB, sets to 10,000 JSON files, and directory depth to 64. Symlinks
 and special files fail explicitly. This format can be combined with
 `--mock-spec` and `--capture-db`; each supplied input must pass its own checks.
 
+## Compare in the self-hosted Admin UI
+
+**Unreleased:** open **Contract Diff**, select **HTTP/REST**, and use **Mock fidelity**. Paste
+or load the mock's definition and its current source contract, then select
+**Compare fidelity**. OpenAPI and Swagger 2 definitions can be JSON or YAML.
+Each input is limited to 2 MiB.
+
+The route table shows definition status and added, removed or changed operations.
+**View details** opens field locations and their mock/source values. Routes are
+paginated, and details load on demand. Editing an input clears the previous
+result and cancels its pending comparison.
+
+To check observed upstream traffic, include a fresh **Flight Recorder** JSONL
+export or a JSON array of recorded request/response exchanges. The recorder's
+`/api/recorder/export/jsonl?limit=500` endpoint produces this format; use your
+configured recorder API address and authentication. Samples are limited to 500
+exchanges. The report shows the latest capture timestamp and checks HTTP request
+contracts and JSON responses against the source.
+
+The summary reports definition changes, sample drift, and incomplete sample coverage
+separately. Matching definitions do not turn a failed or unchecked sample green.
+Recorded sample status is separate from definition status:
+
+- **Verified**: the supplied exchanges passed the supported checks.
+- **Drift detected**: captured traffic violates the source or has no response.
+- **Not sampled**: no supplied HTTP exchange covered this route.
+- **Not verified**: sample media could not be checked by the JSON validator.
+
+The comparison does not contact the upstream, read server-side definition paths,
+or save uploaded definitions. Results describe the supplied inputs; they do not
+certify current production behavior. Oversized expansions and excessive report
+details return an error rather than a partial passing result. Use the CLI for
+larger comparisons. This panel is available in the self-hosted Admin UI; it is
+not a cloud registry feature yet.
+
 ## Use the result in CI
 
 With `--fail-on-drift`, detected drift returns exit code 1. Without that flag,
