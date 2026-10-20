@@ -74,3 +74,9 @@ sampling seed, so supplying one is rejected; omit it and freeze the first result
 The CI guarantee comes from serving the committed static data, not from asking
 the provider to regenerate it. See [seeded generation](system-generation.md#seeded-generation-852)
 for the library configuration and provider limitations.
+
+Reality presets are disabled in baked serve configurations so they cannot
+re-enable runtime MockAI or alter the intended static behavior. An existing
+fixture from an older development build that leaves Reality enabled is rejected
+on reuse; choose a new output path and rebake. Explicitly enabling a Reality
+preset when serving is an operator override outside this static CI workflow.

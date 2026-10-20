@@ -7,6 +7,7 @@ use axum::{
     extract::{Json, Query, State},
     http::StatusCode,
     response::Json as ResponseJson,
+    Extension,
 };
 use json_patch::{patch, Patch};
 use jsonptr::PointerBuf;
@@ -26,6 +27,7 @@ use crate::handlers::AdminState;
 use crate::models::ApiResponse;
 
 mod policy;
+pub use policy::AiAuthoringDefaults;
 
 /// Request for chat interaction
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -45,6 +47,7 @@ pub struct ChatRequestPayload {
 /// POST /api/v1/ai-studio/chat
 pub async fn chat(
     State(state): State<AdminState>,
+    defaults: Option<Extension<AiAuthoringDefaults>>,
     Json(request): Json<ChatRequestPayload>,
 ) -> Result<ResponseJson<ApiResponse<ChatResponse>>, StatusCode> {
     if request.message.trim().is_empty() {
@@ -89,7 +92,12 @@ pub async fn chat(
         return Err(StatusCode::BAD_REQUEST);
     }
     let workspace_id = request.workspace_id.clone().or_else(|| context_workspace.cloned());
-    let settings = policy::resolve(&state, workspace_id.as_deref()).await?;
+    let settings = policy::resolve(
+        &state,
+        workspace_id.as_deref(),
+        defaults.as_ref().map(|Extension(defaults)| defaults),
+    )
+    .await?;
     let orchestrator = ChatOrchestrator::new(settings.behavior)
         .with_generation_policy(settings.mode, settings.deterministic);
 
@@ -177,13 +185,19 @@ pub struct GenerateMockResponse {
 /// POST /api/v1/ai-studio/generate-mock
 pub async fn generate_mock(
     State(state): State<AdminState>,
+    defaults: Option<Extension<AiAuthoringDefaults>>,
     Json(request): Json<GenerateMockRequest>,
 ) -> Result<ResponseJson<ApiResponse<GenerateMockResponse>>, StatusCode> {
     if request.description.trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let settings = policy::resolve(&state, request.workspace_id.as_deref()).await?;
+    let settings = policy::resolve(
+        &state,
+        request.workspace_id.as_deref(),
+        defaults.as_ref().map(|Extension(defaults)| defaults),
+    )
+    .await?;
     let generator = MockGenerator::with_config(settings.behavior);
 
     match generator
@@ -312,13 +326,19 @@ pub struct GeneratePersonaRequest {
 /// POST /api/v1/ai-studio/generate-persona
 pub async fn generate_persona(
     State(state): State<AdminState>,
+    defaults: Option<Extension<AiAuthoringDefaults>>,
     Json(request): Json<GeneratePersonaRequest>,
 ) -> Result<ResponseJson<ApiResponse<PersonaGenerationResponse>>, StatusCode> {
     if request.description.trim().is_empty() {
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let settings = policy::resolve(&state, request.workspace_id.as_deref()).await?;
+    let settings = policy::resolve(
+        &state,
+        request.workspace_id.as_deref(),
+        defaults.as_ref().map(|Extension(defaults)| defaults),
+    )
+    .await?;
     let generator = PersonaGenerator::with_config(settings.behavior);
 
     let persona_request = PersonaGenerationRequest {

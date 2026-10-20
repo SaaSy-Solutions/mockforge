@@ -3337,6 +3337,13 @@ pub async fn handle_serve(
         let chaos_api_state_for_admin_clone = chaos_api_state_for_admin.clone();
         let latency_injector_for_admin_clone = latency_injector_for_admin.clone();
         let mockai_for_admin = mockai.clone();
+        let authoring_behavior_for_admin = config.mockai.intelligent_behavior.clone();
+        tracing::debug!(
+            configured_endpoint =
+                authoring_behavior_for_admin.behavior_model.api_endpoint.is_some(),
+            runtime_mockai = mockai.is_some(),
+            "Preparing admin authoring settings"
+        );
         let continuum_config_for_admin = config.reality_continuum.clone();
         let time_travel_manager_for_admin = time_travel_manager.clone();
 
@@ -3432,7 +3439,7 @@ pub async fn handle_serve(
                 let virtual_clock_for_continuum = Some(time_travel_manager_clone.clock());
 
                 tokio::select! {
-                    result = mockforge_ui::start_admin_server_notify(
+                    result = mockforge_ui::start_admin_server_notify_with_authoring(
                         addr,
                         http_addr,
                         ws_addr,
@@ -3451,6 +3458,7 @@ pub async fn handle_serve(
                         resilience_api_state.clone(),
                         Some(overrides.clone()),
                         Some(admin_bound_tx),
+                        Some(mockforge_ui::handlers::ai_studio::AiAuthoringDefaults::new(authoring_behavior_for_admin)),
                     ) => {
                         result.map_err(|e| format!("Admin UI server error: {}", e))
                     }

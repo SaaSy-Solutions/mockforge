@@ -48,6 +48,7 @@ fn all_json_values_survive_yaml_and_json_as_static_serve_routes() {
             assert_eq!(config.routes[0].response.body, Some(body));
             assert!(!config.http.response_template_expand);
             assert!(!config.mockai.enabled);
+            assert!(!config.reality.enabled);
         }
     }
 }
@@ -85,4 +86,17 @@ fn api_key_variable_name_and_output_location_do_not_change_identity() {
         document::identity(&first, "same prompt"),
         document::identity(&second, "same prompt")
     );
+}
+
+#[test]
+fn cached_bakes_cannot_reenable_reality_presets() {
+    let args = args(PathBuf::from("fixture.json"));
+    let mut config =
+        super::document::build(&args, serde_json::json!({"fixed":true}), "identity").unwrap();
+    config.as_object_mut().unwrap().remove("reality");
+    let manifest = config.as_object_mut().unwrap().remove("x-mockforge-ai-bake").unwrap();
+    let digest = super::document::hash(&config);
+    config["x-mockforge-ai-bake"] = manifest;
+    config["x-mockforge-ai-bake"]["config_sha256"] = serde_json::json!(digest);
+    assert!(super::document::verify(config, "identity").is_err());
 }
