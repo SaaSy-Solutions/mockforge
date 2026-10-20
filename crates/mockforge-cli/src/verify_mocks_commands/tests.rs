@@ -2,6 +2,19 @@ use super::*;
 use serde_json::json;
 
 #[test]
+fn recorded_cookie_parsing_matches_serving_without_folding_cookie_names() {
+    let headers = header_value_map(r#"{"cOoKiE":"theme=dark; mode=a=b; Theme=light; ignored"}"#);
+    assert_eq!(
+        cookie_value_map(&headers),
+        json!({"theme":"dark","mode":"a=b","Theme":"light"})
+            .as_object()
+            .unwrap()
+            .clone()
+    );
+    assert!(cookie_value_map(&header_value_map("{}")).is_empty());
+}
+
+#[test]
 fn recorded_query_parsing_matches_form_semantics_used_by_serving() {
     assert_eq!(
         query_map(Some("full+name=one+two&literal=%2B&encoded=one%20two&flag&empty=&escaped=a%26%3Db")),
