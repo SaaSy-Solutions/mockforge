@@ -68,8 +68,6 @@ ignore = [
     # fixed 0.23.46; the only 0.21 copy left is kube-client 0.87 in
     # mockforge-k8s-operator (the operator's client to the Kubernetes API).
     # Remove both once a kube major bump empties `cargo tree -i rustls@0.21.12` (#1232).
-    { id = "RUSTSEC-2026-0346", reason = "rustls 0.21 Debug impls expose session secrets — only via kube-client 0.87; no 0.21 fix; kube bump tracked in #1232" },
-    { id = "RUSTSEC-2026-0349", reason = "rustls 0.21 ServerHello downgrade — only via kube-client 0.87; no 0.21 fix; kube bump tracked in #1232" },
 
     # zip < 9.0.0 extract() follows symlinks / keeps SUID bits. Our own crates
     # use zip 9 and iterate entries with enclosed_name(); the only < 9 copy is

@@ -143,6 +143,7 @@ E2E_TESTS=(
   --test rls_coverage_e2e
   --test hosted_mock_rls_routes_e2e
   --test rls_join_coverage_e2e
+  --test query_token_e2e
   --test cross_tenant_chaos_capture_e2e
 )
 

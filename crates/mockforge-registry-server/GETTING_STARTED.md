@@ -31,15 +31,16 @@ This starts:
 # Install sqlx-cli (one-time)
 cargo install sqlx-cli --no-default-features --features postgres
 
-# Run migrations and seed data
-make seed
+# Run migrations, then create a local dev admin
+make dev-seed
 ```
 
 This creates:
 - Database schema (tables, indexes, triggers)
-- Test users:
-  - **Admin**: `admin@mockforge.dev` / `admin123`
-  - **Test User**: `test@example.com` / `test123`
+- A local dev admin, `dev-admin@mockforge.localhost`, with a **random password
+  printed once** by `dev-seed.sh`. Re-run `make dev-seed` to rotate it. The
+  script refuses to run without `MOCKFORGE_DEV_SEED=1` (the Make target sets
+  it) or against a non-loopback database.
 - Sample plugins:
   - `auth-jwt` (JWT authentication, 1.2K downloads, 4.8★)
   - `template-crypto` (Crypto templates, 892 downloads, 4.5★)
@@ -96,7 +97,7 @@ Key variables:
 make help        # Show all commands
 make dev         # Start infrastructure (DB + MinIO)
 make migrate     # Run database migrations
-make seed        # Run migrations + seed data
+make dev-seed    # Run migrations + create a local dev admin (random password)
 make run         # Run registry server
 make test        # Run tests
 make build       # Build release binary
@@ -149,8 +150,8 @@ export TOKEN="<your-jwt-token>"
 curl -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{
-    "email": "admin@mockforge.dev",
-    "password": "admin123"
+    "email": "dev-admin@mockforge.localhost",
+    "password": "<password printed by make dev-seed>"
   }' | jq
 ```
 
@@ -256,7 +257,7 @@ docker-compose ps
 docker-compose logs db
 
 # Reset database
-make clean dev seed
+make clean dev dev-seed
 ```
 
 ### Migration Errors
@@ -269,7 +270,7 @@ sqlx migrate info --database-url "postgres://postgres:password@localhost:5432/mo
 sqlx migrate revert --database-url "postgres://postgres:password@localhost:5432/mockforge_registry"
 
 # Re-run migrations
-make seed
+make migrate
 ```
 
 ### S3/MinIO Issues
@@ -307,7 +308,9 @@ curl http://localhost:9000/minio/health/live
 - **Implementation Guide**: `docs/PLUGIN_MARKETPLACE_IMPLEMENTATION.md`
 - **API Documentation**: See `src/routes.rs` for all endpoints
 - **Database Schema**: `migrations/20250101000001_init.sql`
-- **Example Data**: `migrations/20250101000002_seed_data.sql`
+- **Example Data**: `migrations/20250101000002_seed_data.sql` (its seed
+  accounts are disabled by `migrations/20250101000102_neutralise_seed_credentials.sql`;
+  use `make dev-seed` for a local login)
 
 ## Support
 
