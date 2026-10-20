@@ -104,6 +104,8 @@ fn router(state: AdminState) -> Router {
         .route("/chat", post(chat))
         .route("/mock", post(generate_mock))
         .route("/persona", post(generate_persona))
+        .route("/debug", post(debug_test))
+        .route("/debug-context", post(debug_analyze_with_context))
         .with_state(state)
 }
 
@@ -488,4 +490,114 @@ async fn live_mockai_config_overrides_startup_authoring_defaults() {
     assert_eq!(authoring.behavior.behavior_model.seed, Some(99));
     assert!(!authoring.behavior.enabled);
     assert!(state.mockai.is_none());
+}
+
+async fn debug_provider_reply(
+    State(requests): State<Arc<Mutex<Vec<Value>>>>,
+    Json(request): Json<Value>,
+) -> Json<Value> {
+    requests.lock().unwrap().push(request);
+    let body = json!({
+        "summary":"fixture root cause", "explanation":"fixture explanation",
+        "stack_trace":[], "contributing_factors":[], "suggested_fixes":[],
+        "confidence":1.0, "suggestions":[]
+    });
+    Json(json!({"choices":[{"message":{"content":body.to_string()}}]}))
+}
+
+fn debug_body(path: &str, workspace_id: Option<&str>) -> Value {
+    let key = if path == "/chat" {
+        "message"
+    } else {
+        "test_logs"
+    };
+    let mut body = json!({"workspace_id":workspace_id});
+    body[key] = json!("debug GET /users 500 test failure");
+    body
+}
+
+#[tokio::test]
+async fn debug_handlers_keep_provider_and_workspace_seed_with_runtime_on_or_off() {
+    for runtime_enabled in [true, false] {
+        let fixture = Fixture::new();
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let provider = Server::start(
+            Router::new()
+                .route("/generate", post(debug_provider_reply))
+                .with_state(requests.clone()),
+        )
+        .await;
+        let mut state = state(&fixture, format!("{}/generate", provider.url));
+        let defaults = AiAuthoringDefaults::new(
+            state.mockai.as_ref().unwrap().read().await.get_config().clone(),
+        );
+        if !runtime_enabled {
+            state.mockai = None;
+        }
+        let workspace = workspace(&state, &fixture, "json").await;
+        let api = Server::start(router(state).layer(axum::Extension(defaults))).await;
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(5))
+            .build()
+            .unwrap();
+        for path in ["/debug", "/debug-context", "/chat"] {
+            for (workspace_id, seed) in [(Some(workspace.id.as_str()), 42), (None, 7)] {
+                let before = requests.lock().unwrap().len();
+                let response = client
+                    .post(format!("{}{path}", api.url))
+                    .json(&debug_body(path, workspace_id))
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(response.status(), StatusCode::OK);
+                let body: Value = response.json().await.unwrap();
+                assert_eq!(body["success"], true, "{body}");
+                let data = if path == "/chat" {
+                    &body["data"]["data"]
+                } else {
+                    &body["data"]
+                };
+                assert_eq!(data["root_cause"], "fixture root cause", "{body}");
+                let requests = requests.lock().unwrap();
+                assert_eq!(requests.len() - before, 2, "{path}");
+                for request in &requests[before..] {
+                    assert_eq!(request["model"], "workspace-test-model");
+                    assert_eq!(request["seed"], seed);
+                }
+            }
+        }
+    }
+}
+
+#[tokio::test]
+async fn direct_debug_handlers_validate_workspace_before_provider_calls() {
+    let fixture = Fixture::new();
+    let requests = Arc::new(Mutex::new(Vec::new()));
+    let provider = Server::start(
+        Router::new()
+            .route("/generate", post(debug_provider_reply))
+            .with_state(requests.clone()),
+    )
+    .await;
+    let state = state(&fixture, format!("{}/generate", provider.url));
+    let api = Server::start(router(state)).await;
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(5))
+        .build()
+        .unwrap();
+    for path in ["/debug", "/debug-context"] {
+        for (id, expected) in [
+            ("../missing", StatusCode::BAD_REQUEST),
+            ("missing-workspace", StatusCode::NOT_FOUND),
+        ] {
+            let response = client
+                .post(format!("{}{path}", api.url))
+                .json(&debug_body(path, Some(id)))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), expected);
+        }
+    }
+    assert!(requests.lock().unwrap().is_empty());
 }

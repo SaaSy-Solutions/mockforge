@@ -2,6 +2,8 @@
 
 ### Fixed
 
+- **[AI]** Use the selected provider/model for direct and chat debugging instead of a default cloud client. Apply workspace validation and seed overrides to the debug endpoints, including when runtime MockAI is disabled.
+
 - **[AI]** Keep the chosen provider/model and seed when applying Reality presets. Baked fixtures disable presets and reject cached configurations that would re-enable them. (#852)
 
 - **[AI]** Retain the configured authoring provider/model when runtime MockAI is disabled. Pass trusted startup defaults separately so authenticated authoring and snapshot replay work without enabling AI for mock traffic. (#852)

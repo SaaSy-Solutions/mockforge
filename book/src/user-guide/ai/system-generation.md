@@ -396,6 +396,10 @@ Applications embedding the admin server can use
 admin-server startup functions retain their signatures and defaults. An active
 MockAI instance takes precedence so live configuration updates still apply.
 
+Debug analysis uses the same configured provider/model and workspace seed.
+Snapshot replay applies to mock and persona artifacts; debug analysis produces
+a fresh narrative.
+
 Missing workspaces return 404, malformed workspace files return 500, and invalid
 workspace IDs return 400 before any provider request. Chat uses its conversation's
 workspace when the request omits one and rejects a conflicting workspace ID.
