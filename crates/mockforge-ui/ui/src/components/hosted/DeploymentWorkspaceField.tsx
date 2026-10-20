@@ -1,5 +1,7 @@
 import { useEffect, useId, useState } from 'react';
-import { Alert, Box, Button, FormControl, InputLabel, MenuItem, Select, Typography } from '@mui/material';
+import { Button } from '../ui/button';
+import { Select } from '../ui/design-system/FormControls';
+import { Alert } from '../ui/design-system/Alert';
 import { fetchJsonWithErrorBody } from '@/services/api/client';
 
 interface WorkspaceOption { id: string; name: string }
@@ -46,32 +48,30 @@ export function DeploymentWorkspaceSelect({ value, onChange, disabled = false, o
   }, [orgId, attempt]);
 
   return (
-    <Box>
-      <FormControl fullWidth>
-        <InputLabel id={labelId}>Workspace (optional)</InputLabel>
-        <Select aria-labelledby={labelId} label="Workspace (optional)" value={value}
+    <div className="space-y-2">
+      <label htmlFor={labelId} className="block text-sm font-medium">Workspace (optional)</label>
+        <Select id={labelId} value={value}
           disabled={disabled || loading} onChange={event => onChange(event.target.value as string)}>
-          <MenuItem value="">No workspace</MenuItem>
+          <option value="">No workspace</option>
           {value && !workspaces.some(workspace => workspace.id === value) && (
-            <MenuItem value={value}>Current workspace</MenuItem>
+            <option value={value}>Current workspace</option>
           )}
           {workspaces.map(workspace => (
-            <MenuItem key={workspace.id} value={workspace.id}>{workspace.name}</MenuItem>
+            <option key={workspace.id} value={workspace.id}>{workspace.name}</option>
           ))}
         </Select>
-      </FormControl>
-      <Typography variant="caption" color="text.secondary" component="p">
+      <p className="text-xs text-muted-foreground">
         {loading ? 'Loading workspaces…' : 'Group future captures in this workspace for verification and alerts. Existing captures keep their workspace.'}
-      </Typography>
+      </p>
       {error && (
-        <Alert severity="warning">
+        <div role="alert"><Alert type="warning">
           {error}
-          <Button size="small" disabled={disabled} onClick={() => setAttempt(previous => previous + 1)}>
+          <Button type="button" variant="ghost" size="sm" className="ml-2" disabled={disabled} onClick={() => setAttempt(previous => previous + 1)}>
             Retry workspaces
           </Button>
-        </Alert>
+        </Alert></div>
       )}
-    </Box>
+    </div>
   );
 }
 
@@ -112,14 +112,14 @@ export function DeploymentWorkspaceEditor({ deploymentId, orgId, workspaceId, on
   };
 
   return (
-    <Box sx={{ my: 2 }}>
+    <div className="my-4 space-y-2">
       <DeploymentWorkspaceSelect value={value} orgId={orgId} disabled={saving}
         onChange={next => { setValue(next); setSaved(false); setError(null); }} />
-      <Button disabled={saving || value === (workspaceId ?? '')} onClick={save}>
+      <Button type="button" variant="outline" disabled={saving || value === (workspaceId ?? '')} onClick={save}>
         {saving ? 'Saving workspace…' : 'Save workspace'}
       </Button>
-      {error && <Alert severity="error">{error}</Alert>}
-      {saved && <Alert severity="success">Workspace saved</Alert>}
-    </Box>
+      {error && <div role="alert"><Alert type="error">{error}</Alert></div>}
+      {saved && <div role="status"><Alert type="success">Workspace saved</Alert></div>}
+    </div>
   );
 }
