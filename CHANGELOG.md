@@ -2,6 +2,7 @@
 
 ### Fixed
 
+- **[CI]** Add a guarded operator for superseded, partially cancelled CI runs stuck on an unassigned completion job. It preserves the fail-closed Rust completion verdict, tries ordinary cancellation first, and revalidates the live PR head and all job guards before force-cancellation. Current-head runs, forks and active workers are refused. (#1191)
 - **[Contracts]** Package Intelligence’s database migrations inside its own crate so the published `database` feature builds without a sibling HTTP checkout. Preserve all historical migration filenames and SQL bytes for existing databases. (#632)
 
 - **[Cloud]** Cloud test runs no longer get stuck in `running` when the registry rate-limits the runner. The runner's start, event and finish callbacks all come from one IP, so the per-client limit could return 429 to `/finish` and the run never ended. Internal callback routes now skip the rate limit when they carry the internal API token (requests without it are still limited), and the runner retries `/finish` on 429, 5xx and connection errors with backoff (6 attempts over about 30 s). (#1286)
