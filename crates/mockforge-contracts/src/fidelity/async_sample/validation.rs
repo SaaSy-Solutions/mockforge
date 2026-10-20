@@ -3,6 +3,10 @@ use super::{schema, AsyncMessage};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
+mod format;
+mod media;
+mod message;
+
 #[derive(Default)]
 pub(super) struct Outcome {
     pub findings: Vec<String>,
@@ -37,7 +41,7 @@ impl<'a> Checker<'a> {
         let mut unknown = Vec::new();
         let mut failures = Vec::new();
         for message in messages {
-            let outcome = self.message(message, record)?;
+            let outcome = message::check(self, message, record)?;
             if !outcome.findings.is_empty() {
                 failures.extend(outcome.findings);
             } else if !outcome.notes.is_empty() {
@@ -72,73 +76,6 @@ impl<'a> Checker<'a> {
         }
     }
 
-    fn message(&mut self, message: &Value, record: &AsyncMessage) -> Result<Outcome, String> {
-        let mut out = Outcome::default();
-        let payload_declaration = message.get("payload");
-        let schema = supported_schema(
-            payload_declaration,
-            message.get("schemaFormat").and_then(Value::as_str),
-            "Payload",
-            &mut out,
-        )?;
-        if let Some(headers) = supported_schema(message.get("headers"), None, "Headers", &mut out)?
-        {
-            if let Some(actual) = &record.headers {
-                self.check(headers, actual, "Message headers", &mut out)?;
-            } else {
-                out.notes.push("Message headers were not captured".into());
-            }
-        }
-        let Some(payload) = &record.payload else {
-            out.notes.push("Message payload was not captured".into());
-            return Ok(out);
-        };
-        let media = message.get("contentType").and_then(Value::as_str).or_else(|| {
-            record
-                .headers
-                .as_ref()
-                .and_then(|h| h.as_object())
-                .and_then(|h| h.iter().find(|(k, _)| k.eq_ignore_ascii_case("content-type")))
-                .and_then(|(_, v)| v.as_str())
-        });
-        let value =
-            match media.map(|s| s.split(';').next().unwrap_or(s).trim().to_ascii_lowercase()) {
-                Some(media)
-                    if media == "application/json"
-                        || media.starts_with("application/") && media.ends_with("+json") =>
-                {
-                    match serde_json::from_slice(payload) {
-                        Ok(value) => Some(value),
-                        Err(_) => {
-                            out.findings.push("Message payload is not valid JSON".into());
-                            None
-                        }
-                    }
-                }
-                Some(media) if media == "text/plain" => match std::str::from_utf8(payload) {
-                    Ok(text) => Some(Value::String(text.into())),
-                    Err(_) => {
-                        out.findings.push("Text message payload is not UTF-8".into());
-                        None
-                    }
-                },
-                _ => {
-                    out.notes.push(
-                    "Message content type is unspecified or not supported by the sample validator"
-                        .into(),
-                );
-                    None
-                }
-            };
-        if let (Some(schema), Some(value)) = (schema, value) {
-            self.check(schema, &value, "Message payload", &mut out)?;
-        }
-        if payload_declaration.is_none() {
-            out.notes.push("Message declares no payload schema to check".into());
-        }
-        Ok(out)
-    }
-
     fn check(
         &mut self,
         schema: &Value,
@@ -164,40 +101,5 @@ impl<'a> Checker<'a> {
             }
         }
         Ok(())
-    }
-}
-
-fn supported_format(format: &str) -> bool {
-    let format = format.to_ascii_lowercase().replace(' ', "");
-    format.starts_with("application/vnd.aai.asyncapi;version=2.")
-        || format.starts_with("application/vnd.aai.asyncapi;version=3.")
-        || format == "application/schema+json;version=draft-07"
-        || format == "application/schema+json;version=draft-07.0"
-}
-
-fn supported_schema<'a>(
-    raw: Option<&'a Value>,
-    default_format: Option<&str>,
-    label: &str,
-    outcome: &mut Outcome,
-) -> Result<Option<&'a Value>, String> {
-    let Some(raw) = raw else {
-        return Ok(None);
-    };
-    let (schema, format) = if let Some(format) = raw.get("schemaFormat") {
-        (
-            raw.get("schema").ok_or("Multi-format schema must declare its schema")?,
-            Some(format.as_str().ok_or("schemaFormat must be a string")?),
-        )
-    } else {
-        (raw, default_format)
-    };
-    if format.is_some_and(|format| !supported_format(format)) {
-        outcome
-            .notes
-            .push(format!("{label} schema format is not supported by the JSON-schema validator"));
-        Ok(None)
-    } else {
-        Ok(Some(schema))
     }
 }

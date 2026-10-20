@@ -1,5 +1,5 @@
-use super::*;
 use crate::fidelity::{compare_mock_spec, compare_mock_spec_with_budget};
+use serde_json::{json, Value};
 
 fn v2() -> Value {
     json!({"asyncapi":"2.6.0","info":{"title":"events","version":"1"},"defaultContentType":"application/json",

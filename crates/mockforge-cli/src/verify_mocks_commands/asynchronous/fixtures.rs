@@ -1,6 +1,10 @@
 //! Read every recorder-format fixture without applying a capture sample limit.
-use super::*;
+use super::{capture::check, Value};
 use crate::verify_mocks_commands::fixtures::files;
+use mockforge_contracts::fidelity::async_sample::AsyncSampleReport;
+use mockforge_core::{Error, Result};
+use serde::Serialize;
+use std::path::Path;
 
 #[derive(Serialize)]
 pub(super) struct Report {
