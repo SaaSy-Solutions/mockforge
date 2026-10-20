@@ -1,5 +1,5 @@
 use super::*;
-use axum::http::{HeaderValue, Method};
+use axum::http::{HeaderMap, HeaderValue, Method};
 
 #[test]
 fn test_parse_role_valid() {
