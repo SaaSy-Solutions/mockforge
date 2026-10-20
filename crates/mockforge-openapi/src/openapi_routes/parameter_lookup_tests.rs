@@ -15,13 +15,24 @@ fn parameter() -> openapiv3::ParameterData {
 
 fn check(values: &Map<String, Value>, location: &str, expected_valid: bool) {
     let parameter = parameter();
+    let spec = OpenApiSpec::from_json(
+        json!({"openapi":"3.0.3","info":{"title":"test","version":"1"},"paths":{}}),
+    )
+    .unwrap();
     let mut errors = Vec::new();
     let mut details = Vec::new();
-    validate_parameter(&parameter, values, location, true, &mut errors, &mut details);
+    validate_parameter(&parameter, values, location, true, &mut errors, &mut details, &spec);
     assert_eq!(errors.is_empty(), expected_valid);
     assert_eq!(details.is_empty(), expected_valid);
     let mut field_errors = Vec::new();
-    validate_parameter_detailed(&parameter, values, location, "parameter", &mut field_errors);
+    validate_parameter_detailed(
+        &parameter,
+        values,
+        location,
+        "parameter",
+        &mut field_errors,
+        &spec,
+    );
     assert_eq!(field_errors.is_empty(), expected_valid);
 }
 
