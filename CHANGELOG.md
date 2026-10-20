@@ -2,6 +2,8 @@
 
 ### Fixed
 
+- **[AI]** Forward persisted workspace seed and snapshot policies through local admin chat, mock and persona generation. Inherit the server provider/model, preserve policy on export/import, and reject missing or invalid workspaces before generation. (#852)
+
 - **[AI]** Keep configured provider/model and seed settings when chat generates mocks or personas. Allow library callers to supply snapshot policies and report zero new usage for verified snapshot replays. (#852)
 
 - **[AI]** Preserve frozen array and scalar payloads with durable identity and integrity metadata. Publish immutable snapshots as complete bundles, retain legacy object snapshots, and reject missing hashes during verification. (#852)
