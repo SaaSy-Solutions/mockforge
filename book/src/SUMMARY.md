@@ -55,6 +55,7 @@
 
 ## Testing & Resilience
 
+- [Mock Fidelity and Drift Detection](user-guide/mock-fidelity.md)
 - [Load Testing](user-guide/load-testing.md)
 - [WAF Testing](user-guide/waf-testing.md)
 - [Chaos Engineering](user-guide/chaos-engineering.md)

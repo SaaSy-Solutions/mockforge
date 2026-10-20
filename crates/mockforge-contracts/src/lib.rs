@@ -58,6 +58,7 @@ pub mod contract_drift;
 pub mod contract_validation;
 pub mod diff_types;
 pub mod error;
+pub mod fidelity;
 pub mod protocol;
 pub mod schema_diff;
 

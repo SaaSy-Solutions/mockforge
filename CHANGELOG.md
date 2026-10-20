@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Added
+
+- **[Reality]** `verify-mocks --mock-spec` compares the OpenAPI definition used by a mock with its current source specification. Structured reports include added, removed and changed endpoints, field-level JSON-pointer deltas, and per-route fidelity status. Definition checks can run alone or alongside captured upstream traffic and use the existing `--fail-on-drift` CI gate. (#849)
+
 ### Fixed
 
 - **[Reality]** `verify-mocks --fail-on-drift` now fails on unknown endpoints, missing responses and undeclared statuses, and validates range/default/referenced response schemas. Empty captures fail, databases open read-only, and the positive `--limit` applies to recent HTTP records in SQL rather than silently stopping at 100 or being displaced by other protocols. (#849)
