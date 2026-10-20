@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from '../ui/button';
 import { ModernBadge } from '../ui/design-system/Badge';
 import type { FidelityAssessment } from '../../services/api/fidelity';
+import { FidelityRouteDetails } from './FidelityRouteDetails';
 
 function Status({ status }: { status: string }) {
   const label = status === 'verified' ? 'Verified' : status === 'drift-detected' ? 'Drift detected'
@@ -25,22 +26,11 @@ export function FidelityResults({ report }: { report: FidelityAssessment }) {
         <tbody>{shown.map(endpoint => {
           const definition = definitions.get(endpoint);
           const sample = samples.get(endpoint);
-          const details = (definition?.deltas.length ?? 0) + (sample?.findings.length ?? 0) + (sample?.notes.length ?? 0);
           return <tr key={endpoint} className="border-b border-border align-top">
             <th scope="row" className="break-all p-2 font-mono text-xs font-normal">{endpoint}</th>
             <td className="p-2"><Status status={definition?.status ?? 'absent'} />{definition && definition.change !== 'unchanged' && <p className="mt-1 text-xs text-muted-foreground">{definition.change}</p>}</td>
             {report.sample && <td className="p-2"><Status status={sample?.status ?? 'not-sampled'} /><p className="mt-1 text-xs text-muted-foreground">{sample?.exchanges_checked ?? 0} exchanges</p></td>}
-            <td className="min-w-40 p-2">{details > 0 ? <>
-              <Button type="button" size="sm" variant="ghost" aria-expanded={open === endpoint} onClick={() => setOpen(open === endpoint ? null : endpoint)}>{open === endpoint ? 'Hide details' : 'View details'}</Button>
-              {open === endpoint && <div className="mt-2 max-w-xl space-y-3">
-                {definition?.deltas.map((delta, index) => <div key={`${delta.location}-${index}`}>
-                  <p className="break-all font-mono text-xs">{delta.location || 'Entire operation'} ({delta.change})</p>
-                  <pre className="mt-1 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-lg bg-muted p-2 text-xs">{JSON.stringify({ mock: delta.mock, source: delta.source }, null, 2)}</pre>
-                </div>)}
-                {sample?.findings.map((finding, i) => <p key={`finding-${i}`} className="break-words text-xs">{finding}</p>)}
-                {sample?.notes.map((note, i) => <p key={`note-${i}`} className="break-words text-xs">{note}</p>)}
-              </div>}
-            </> : <span className="text-muted-foreground">No differences</span>}</td>
+            <td className="min-w-40 p-2"><FidelityRouteDetails definition={definition} sample={sample} open={open === endpoint} onToggle={() => setOpen(open === endpoint ? null : endpoint)} /></td>
           </tr>;
         })}</tbody>
       </table>
