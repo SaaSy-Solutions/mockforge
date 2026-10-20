@@ -13,22 +13,26 @@ COMPARATOR = ROOT / ".github/scripts/compare-benchmarks.js"
 
 
 class BenchmarkGateTest(unittest.TestCase):
-    def compare(self, current_mean: int | None):
+    def compare(self, current_mean: int | None, base_samples=None, current_samples=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             baseline = root / "baseline"
             baseline.mkdir()
-            (baseline / "baseline.json").write_text(json.dumps({
-                "example": {"new": {"mean": 100}},
-            }))
+            base = {"mean": 100}
+            if base_samples is not None:
+                base = {"mean": sum(base_samples) / len(base_samples), "samples": base_samples}
+            (baseline / "baseline.json").write_text(json.dumps({"example": {"new": base}}))
             criterion = root / "criterion"
             if current_mean is not None:
                 estimates = criterion / "example/new/estimates.json"
                 estimates.parent.mkdir(parents=True)
-                estimates.write_text(json.dumps({
+                estimate = {
                     "mean": {"point_estimate": current_mean},
                     "std_dev": {"point_estimate": 1},
-                }))
+                }
+                if current_samples is not None:
+                    estimate["samples"] = current_samples
+                estimates.write_text(json.dumps(estimate))
             report = root / "report.md"
             result = subprocess.run(
                 ["node", str(COMPARATOR), "compare"],
@@ -55,6 +59,26 @@ class BenchmarkGateTest(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIn("**Regressions**: 1", report)
         self.assertIn("+20.00%", report)
+
+    def test_paired_mean_shift_within_overlapping_samples_is_stable(self):
+        # #1309: identical code, means 8% apart, but the samples overlap.
+        result, report = self.compare(108, base_samples=[95, 105], current_samples=[100, 116])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("**Regressions**: 0", report)
+
+    def test_paired_samples_separated_beyond_threshold_fail(self):
+        result, report = self.compare(120, base_samples=[99, 101], current_samples=[118, 122])
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("**Regressions**: 1", report)
+
+    def test_paired_samples_separated_by_less_than_threshold_are_stable(self):
+        result, _ = self.compare(105, base_samples=[100, 101], current_samples=[104, 106])
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_paired_improvement_needs_separation_too(self):
+        result, report = self.compare(80, base_samples=[99, 101], current_samples=[79, 81])
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("**Improvements**: 1", report)
 
     def test_comparison_error_fails(self):
         result, _ = self.compare(None)

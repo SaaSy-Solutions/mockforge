@@ -29,7 +29,7 @@ env:
 jobs:
   request:
     name: Classify plugin request
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     timeout-minutes: 5
     permissions:
       contents: read
@@ -51,7 +51,8 @@ jobs:
     name: Validate Plugin
     needs: request
     if: needs.request.outputs.requested == 'true'
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 90
     env:
       PLUGIN_PATH: ${{ needs.request.outputs.plugin_path }}
     outputs:
@@ -59,6 +60,11 @@ jobs:
       plugin_version: ${{ steps.manifest.outputs.version }}
 
     steps:
+      - name: Set per-runner CARGO_HOME on Hetzner
+        # Keep rustup/cargo state off the shared `actions` user's ~/.cargo (#1191).
+        if: runner.environment == 'self-hosted'
+        run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
       - name: Checkout code
         uses: actions/checkout@v7
 
@@ -91,12 +97,19 @@ jobs:
   security-scan:
     name: Security Scan
     needs: [request, validate]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: ${{ needs.request.outputs.plugin_path }}
 
     steps:
+      - name: Set per-runner CARGO_HOME on Hetzner
+        # Keep rustup/cargo state off the shared `actions` user's ~/.cargo (#1191).
+        if: runner.environment == 'self-hosted'
+        working-directory: ${{ github.workspace }}
+        run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
       - name: Checkout code
         uses: actions/checkout@v7
 
@@ -137,7 +150,8 @@ jobs:
     defaults:
       run:
         shell: bash
-    runs-on: ${{ matrix.os }}
+    runs-on: ${{ matrix.os == 'ubuntu-latest' && fromJSON('["self-hosted","linux","x64","rust"]') || matrix.os }}
+    timeout-minutes: 90
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
@@ -153,6 +167,11 @@ jobs:
             ext: dll
 
     steps:
+      - name: Set per-runner CARGO_HOME on Hetzner
+        # Keep rustup/cargo state off the shared `actions` user's ~/.cargo (#1191).
+        if: runner.environment == 'self-hosted'
+        run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
       - name: Checkout code
         uses: actions/checkout@v7
 
@@ -191,10 +210,16 @@ jobs:
     needs: [request, validate, build]
     env:
       PLUGIN_PATH: ${{ needs.request.outputs.plugin_path }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 90
     if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.dry_run)
 
     steps:
+      - name: Set per-runner CARGO_HOME on Hetzner
+        # Keep rustup/cargo state off the shared `actions` user's ~/.cargo (#1191).
+        if: runner.environment == 'self-hosted'
+        run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
       - name: Checkout code
         uses: actions/checkout@v7
 
@@ -248,10 +273,16 @@ jobs:
     needs: [request, validate, security-scan, build]
     env:
       PLUGIN_PATH: ${{ needs.request.outputs.plugin_path }}
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 90
     if: github.event_name == 'workflow_dispatch' && inputs.dry_run
 
     steps:
+      - name: Set per-runner CARGO_HOME on Hetzner
+        # Keep rustup/cargo state off the shared `actions` user's ~/.cargo (#1191).
+        if: runner.environment == 'self-hosted'
+        run: echo "CARGO_HOME=/tmp/cargo-mockforge-${{ runner.name }}" >> "$GITHUB_ENV"
+
       - name: Checkout code
         uses: actions/checkout@v7
 
@@ -279,7 +310,8 @@ jobs:
   notify:
     name: Notify
     needs: [publish]
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
+    timeout-minutes: 5
     if: always()
 
     steps:
