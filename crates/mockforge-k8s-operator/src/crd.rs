@@ -346,6 +346,23 @@ impl ChaosOrchestrationStatus {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use kube::CustomResourceExt;
+
+    // The derived CRDs must keep the names used by k8s/crd/ and carry a
+    // schema (guards kube/schemars upgrades, #1232).
+    #[test]
+    fn test_generated_crds_match_manifest_names() {
+        for (crd, name) in [
+            (ChaosOrchestration::crd(), "chaosorchestrations.mockforge.io"),
+            (ChaosScenario::crd(), "chaosscenarios.mockforge.io"),
+        ] {
+            assert_eq!(crd.metadata.name.as_deref(), Some(name));
+            let version = &crd.spec.versions[0];
+            assert_eq!(version.name, "v1");
+            assert!(version.schema.as_ref().and_then(|s| s.open_api_v3_schema.as_ref()).is_some());
+            serde_yaml::to_string(&crd).expect("CRD serializes");
+        }
+    }
 
     // OrchestrationPhase tests
     #[test]

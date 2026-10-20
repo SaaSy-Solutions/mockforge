@@ -19,9 +19,8 @@ concurrency:
 jobs:
   deploy:
     name: Build & Deploy to Cloudflare Pages
-    # Node + wrangler only; nothing here needs the 2-runner self-hosted Rust
-    # pool, where every main push used to queue behind hour-long load tests.
-    runs-on: ubuntu-latest
+    # Node + wrangler only; Hetzner pool (#1191).
+    runs-on: [self-hosted, linux, x64, rust]
     timeout-minutes: 20
 
     env:

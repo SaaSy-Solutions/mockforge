@@ -15,11 +15,12 @@ primary_region = "iad"
 [processes]
   app = "serve --spec /app/examples/scenarios/ecommerce-store/openapi.json --spec /app/examples/scenarios/weather-geo/openapi.json --spec /app/examples/scenarios/chat-api/openapi.json --admin"
 
-# The admin server is not published (only 3000 is), so keep it on loopback:
-# a non-loopback admin bind without credentials refuses to start (#1019), and
-# nothing outside the machine needs it.
+# The admin server is not published (only 3000 is), so keep it on loopback.
+# Non-loopback admin binds without credentials refuse to start (#1019).
+# Public demo mocks explicitly allow cross-origin calls without credentials (#1017).
 [env]
   MOCKFORGE_ADMIN_HOST = "127.0.0.1"
+  MOCKFORGE_CORS_ALLOWED_ORIGINS = "*"
 
 [http_service]
   internal_port = 3000

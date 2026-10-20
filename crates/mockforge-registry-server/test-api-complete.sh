@@ -4,6 +4,9 @@
 set -e
 
 BASE_URL="${REGISTRY_URL:-http://localhost:8080}"
+# Admin credentials come from `make dev-seed` (printed once); none are built in.
+: "${DEV_ADMIN_EMAIL:=dev-admin@mockforge.localhost}"
+: "${DEV_ADMIN_PASSWORD:?set DEV_ADMIN_PASSWORD to the password printed by make dev-seed}"
 BOLD='\033[1m'
 GREEN='\033[0;32m'
 BLUE='\033[0;34m'
@@ -83,10 +86,8 @@ echo -e "${GREEN}✓ User registered, token obtained${NC}"
 echo -e "\n${BLUE}8. Login with Admin User${NC}"
 ADMIN_LOGIN=$(curl -s -X POST "$BASE_URL/api/v1/auth/login" \
   -H "Content-Type: application/json" \
-  -d '{
-    "email": "admin@mockforge.dev",
-    "password": "admin123"
-  }')
+  -d "$(jq -n --arg email "$DEV_ADMIN_EMAIL" --arg password "$DEV_ADMIN_PASSWORD" \
+    '{email: $email, password: $password}')")
 
 echo "$ADMIN_LOGIN" | jq '{user_id, username}'
 ADMIN_TOKEN=$(echo "$ADMIN_LOGIN" | jq -r '.token')

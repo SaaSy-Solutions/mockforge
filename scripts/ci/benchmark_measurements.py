@@ -95,6 +95,14 @@ def aggregate(samples):
     if not samples or any(len(values) != 2 for values in samples.values()):
         raise ValueError("Every paired benchmark needs both measurements")
     return {
-        name: {"new": {"mean": sum(values) / len(values), "unit": "ns"}}
+        name: {
+            "new": {
+                "mean": sum(values) / len(values),
+                # Kept so the comparison can require base and head to separate,
+                # not just their means (#1309).
+                "samples": list(values),
+                "unit": "ns",
+            }
+        }
         for name, values in samples.items()
     }

@@ -1149,7 +1149,7 @@ pub async fn handle_scenario_command(command: ScenarioCommands) -> anyhow::Resul
 fn create_scenario_archive(
     package: &mockforge_scenarios::ScenarioPackage,
 ) -> anyhow::Result<(std::path::PathBuf, String, u64)> {
-    use zip::write::FileOptions;
+    use zip::write::SimpleFileOptions;
     use zip::ZipWriter;
 
     // Create temporary file for archive
@@ -1160,7 +1160,7 @@ fn create_scenario_archive(
     // Create ZIP archive
     let file = fs::File::create(&archive_path)?;
     let mut zip = ZipWriter::new(file);
-    let options = FileOptions::default()
+    let options = SimpleFileOptions::default()
         .compression_method(zip::CompressionMethod::Deflated)
         .unix_permissions(0o755);
 
@@ -1206,7 +1206,7 @@ fn add_directory_to_zip(
     zip: &mut zip::ZipWriter<fs::File>,
     base: &Path,
     dir: &Path,
-    options: zip::write::FileOptions<()>,
+    options: zip::write::SimpleFileOptions,
 ) -> anyhow::Result<()> {
     for entry in fs::read_dir(dir)? {
         let entry = entry?;
