@@ -6,6 +6,10 @@
 
 - **[Cloud]** Hosted mocks that use HTTP, WebSocket or GraphQL can run on Cloudflare Containers at `https://mocks.mockforge.dev/<org>/<slug>`. Each mock's container starts on its first request and sleeps after 10 minutes idle, so an unused mock costs nothing. The Worker applies the plan's body and requests-per-second caps and reports usage to the registry, which meters it as before. Enabled by setting `MOCKFORGE_CF_MOCKS_URL` and `MOCKFORGE_CF_MOCKS_EDGE_TOKEN`; other protocols and plugin-enabled mocks stay on Fly. Fly machines now stop when idle and start on the next connection. Redeploys use the same machine environment and protocol services as the first deploy (they used to drop protocol, log-ingest, tracing and upstream settings), deleting a running Fly machine no longer fails with 412, and the registry's `/mocks/<org>/<slug>` redirects Cloudflare-served mocks to their edge URL. (#1063)
 
+### Added
+
+- **[Cloud]** Trial owners get an email three days before their Pro or Team trial ends. The registry now handles Stripe's `customer.subscription.trial_will_end` webhook and sends the reminder through the same email path as the other billing emails, honoring the owner's email-notification setting. It gives the end date and price, and says the plan continues if a payment method is on file and otherwise drops to Free. (#714)
+
 ### Fixed
 
 - **[Docs]** The workspace export/import guide and the configuration reference no longer call `mockforge workspace export`, `import` and `activate` unreleased; they ship in 0.3.236. (#1197)
