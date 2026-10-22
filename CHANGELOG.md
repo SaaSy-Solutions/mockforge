@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Added
+
+- **[Data]** Add a feature-gated Qdrant RAG storage backend with persistent chunk upserts, server-side filtered vector search, paged document reads, native snapshots, health checks and real-server restart acceptance. Enable `mockforge-data/qdrant` to use `StorageFactory::create_vector_db`. (#717)
+
 ### Fixed
 
 - **[Docs]** The workspace export/import guide and the configuration reference no longer call `mockforge workspace export`, `import` and `activate` unreleased; they ship in 0.3.236. (#1197)
