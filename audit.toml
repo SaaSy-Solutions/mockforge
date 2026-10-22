@@ -141,4 +141,10 @@ ignore = [
     # The mock server is not this crate. 10.x is a breaking API jump with
     # no 5.x backport.
     { id = "RUSTSEC-2026-0271", reason = "suppaftp CRLF in client commands — test-only FTP client against our own mock server; fix is 10.x (breaking) with no 5.x backport" },
+    # rustls-webpki 0.102.8: may accept distrusted emSign intermediates. The
+    # 0.103 line is patched (lockfile now on 0.103.16). 0.102.x has no patched
+    # release; it remains only through rumqttc 0.25.1 (latest, mockforge-mqtt
+    # client) and async-nats 0.43 (registry-server). Remove once those move to
+    # rustls-webpki 0.103.
+    { id = "RUSTSEC-2026-0382", reason = "rustls-webpki 0.102.8 distrusted emSign intermediates; no patched 0.102.x, pulled by rumqttc 0.25.1 (latest) and async-nats 0.43; 0.103 copies are patched" },
 ]
