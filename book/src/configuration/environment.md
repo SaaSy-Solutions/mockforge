@@ -572,7 +572,7 @@ Both relax SSRF protection and must never be set in production. Each accepts
 
 For more detailed configuration options, see the [Configuration Files](files.md) documentation.
 
-### Local workspace transfer credentials (unreleased)
+### Local workspace transfer credentials (0.3.236+)
 
 `MOCKFORGE_ADMIN_TOKEN` supplies a local admin JWT to `workspace export` and
 `workspace import`; `--token-env` selects another caller variable. Token values
