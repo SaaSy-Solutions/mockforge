@@ -45,6 +45,23 @@ jobs:
     - name: Install Rust toolchain
       uses: ./.github/actions/rust-toolchain
 
+    - name: Inject PostHog key
+      # Project keys are public by design; unset leaves the placeholder, which
+      # keeps book/analytics.js inert.
+      env:
+        POSTHOG_KEY: ${{ secrets.POSTHOG_KEY }}
+      run: |
+        if [ -z "${POSTHOG_KEY}" ]; then
+          echo "POSTHOG_KEY is not set; docs analytics stay off."
+          exit 0
+        fi
+        if ! printf '%s' "${POSTHOG_KEY}" | grep -Eq '^phc_[A-Za-z0-9_-]+$'; then
+          echo "::error::POSTHOG_KEY must be a PostHog project key (phc_...)."
+          exit 1
+        fi
+        test "$(grep -c '"__POSTHOG_KEY__"' book/analytics.js)" = 1
+        sed -i "s/\"__POSTHOG_KEY__\"/\"${POSTHOG_KEY}\"/" book/analytics.js
+
     - name: Build book
       run: |
         cd book
