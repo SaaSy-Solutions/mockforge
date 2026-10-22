@@ -194,6 +194,21 @@ impl PaidFlowHelper {
         .to_string()
     }
 
+    /// Build a `customer.subscription.trial_will_end` event for `subscription_id`
+    /// whose trial ends in three days, the lead time Stripe uses.
+    fn trial_will_end_event(&self, subscription_id: &str) -> String {
+        let mut event: Value = serde_json::from_str(&self.subscription_event(
+            "customer.subscription.trial_will_end",
+            "trialing",
+            "price_test_pro",
+        ))
+        .expect("event JSON");
+        let object = &mut event["data"]["object"];
+        object["id"] = json!(subscription_id);
+        object["trial_end"] = json!(chrono::Utc::now().timestamp() + 3 * 86400);
+        event.to_string()
+    }
+
     /// Attempt to create a hosted-mock with gRPC enabled. Returns the HTTP
     /// status so the caller can assert allowed-vs-rejected per plan.
     async fn try_grpc_deploy(&self, slug: &str) -> (StatusCode, String) {
@@ -334,6 +349,18 @@ async fn test_paid_flow_e2e() {
     println!("Step 5: Pro org gRPC deploy (must succeed)");
     let (status, body) = h.try_grpc_deploy(&format!("paidflow-pro-{}", ts)).await;
     assert!(status.is_success(), "Pro gRPC deploy should succeed, got {}: {}", status, body);
+
+    // ─────────────────────────────────────────────────────────────────
+    // Step 5b: trial_will_end is acknowledged and leaves the plan alone
+    // (#714). It emails the owner when EMAIL_PROVIDER is configured; an
+    // unknown subscription is acknowledged too, so Stripe stops retrying.
+    // ─────────────────────────────────────────────────────────────────
+    println!("Step 5b: customer.subscription.trial_will_end");
+    let body = h.trial_will_end_event(&h.subscription_id.clone());
+    h.post_webhook(&body).await;
+    assert_eq!(h.fetch_plan().await, "pro", "trial_will_end must not change the plan");
+    let body = h.trial_will_end_event(&format!("sub_e2e_unknown_{}", ts));
+    h.post_webhook(&body).await;
 
     // ─────────────────────────────────────────────────────────────────
     // Step 6: Webhook cancels the subscription → back to Free
