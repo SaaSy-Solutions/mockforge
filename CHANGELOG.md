@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Added
+
+- **[Cloud]** Trial owners get an email three days before their Pro or Team trial ends. The registry now handles Stripe's `customer.subscription.trial_will_end` webhook and sends the reminder through the same email path as the other billing emails, honoring the owner's email-notification setting. It gives the end date and price, and says the plan continues if a payment method is on file and otherwise drops to Free. (#714)
+
 ### Fixed
 
 - **[Docs]** The workspace export/import guide and the configuration reference no longer call `mockforge workspace export`, `import` and `activate` unreleased; they ship in 0.3.236. (#1197)
