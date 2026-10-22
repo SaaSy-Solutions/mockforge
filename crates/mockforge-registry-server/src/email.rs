@@ -854,6 +854,107 @@ Privacy: https://mockforge.dev/privacy
         }
     }
 
+    /// Generate the reminder sent when Stripe reports a trial ends in about
+    /// three days (`customer.subscription.trial_will_end`, #714).
+    ///
+    /// Trials start without a card and are canceled if none is on file when
+    /// they end, so the copy covers both outcomes rather than guessing which
+    /// one applies.
+    pub fn generate_trial_ending(
+        username: &str,
+        email: &str,
+        plan: &str,
+        amount: Option<f64>,
+        trial_end: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> EmailMessage {
+        let when = trial_end
+            .map(|d| format!("on {}", d.format("%B %d, %Y")))
+            .unwrap_or_else(|| "in a few days".to_string());
+        let price = amount
+            .map(|a| format!("${:.2} per billing period", a))
+            .unwrap_or_else(|| "the plan price".to_string());
+        let continue_text = format!(
+            "If a payment method is on file, your {plan} plan continues and you'll be charged {price}."
+        );
+        let cancel_text = "If not, the subscription is canceled when the trial ends and your organization moves to the Free plan.";
+        let name = html_escape(username);
+
+        let html_body = format!(
+            r#"
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <style>
+        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; line-height: 1.6; color: #333; max-width: 600px; margin: 0 auto; padding: 20px; }}
+        .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 40px 20px; text-align: center; border-radius: 8px 8px 0 0; }}
+        .content {{ background: #ffffff; padding: 30px; border: 1px solid #e0e0e0; border-top: none; border-radius: 0 0 8px 8px; }}
+        .button {{ display: inline-block; padding: 12px 24px; background: #667eea; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0; }}
+        .info-box {{ background: #f8f9fa; border-left: 4px solid #667eea; padding: 15px; margin: 20px 0; }}
+        .footer {{ text-align: center; color: #666; font-size: 12px; margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0; }}
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Your trial ends soon</h1>
+    </div>
+    <div class="content">
+        <p>Hi {name},</p>
+        <p>Your MockForge Cloud <strong>{plan}</strong> trial ends {when}.</p>
+        <div class="info-box">
+            <p>{continue_text}</p>
+            <p>{cancel_text}</p>
+        </div>
+        <p style="text-align: center;">
+            <a href="https://app.mockforge.dev/billing" class="button">Manage Billing</a>
+        </p>
+        <p>If you have any questions about your subscription, please contact our support team.</p>
+        <p>Best regards,<br>The MockForge Team</p>
+    </div>
+    <div class="footer">
+        <p>© {year} MockForge. All rights reserved.</p>
+        <p><a href="https://mockforge.dev/terms">Terms of Service</a> | <a href="https://mockforge.dev/privacy">Privacy Policy</a></p>
+    </div>
+</body>
+</html>
+"#,
+            year = chrono::Utc::now().year()
+        );
+
+        let text_body = format!(
+            r#"
+Your trial ends soon
+
+Hi {username},
+
+Your MockForge Cloud {plan} trial ends {when}.
+
+{continue_text}
+{cancel_text}
+
+Manage billing: https://app.mockforge.dev/billing
+
+If you have any questions about your subscription, please contact our support team.
+
+Best regards,
+The MockForge Team
+
+© {year} MockForge. All rights reserved.
+Terms: https://mockforge.dev/terms
+Privacy: https://mockforge.dev/privacy
+"#,
+            year = chrono::Utc::now().year()
+        );
+
+        EmailMessage {
+            to: vec![email.to_string()],
+            subject: format!("Your MockForge Cloud {plan} trial ends {when}"),
+            html_body,
+            text_body,
+            ..Default::default()
+        }
+    }
+
     /// Generate usage-threshold warning email (e.g. crossed 75% or 90% of a
     /// metric limit on the current billing period).
     pub fn generate_usage_threshold_warning(
@@ -1493,6 +1594,22 @@ Privacy: https://mockforge.dev/privacy
     }
 }
 
+/// Escape text interpolated into an HTML email body.
+fn html_escape(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1893,6 +2010,52 @@ mod tests {
         assert!(email.html_body.contains("testuser"));
         assert!(email.html_body.contains("Pro"));
         assert!(email.html_body.contains("canceled"));
+    }
+
+    #[test]
+    fn test_generate_trial_ending_with_date_and_amount() {
+        use chrono::TimeZone;
+        let trial_end = chrono::Utc.with_ymd_and_hms(2026, 11, 3, 12, 0, 0).unwrap();
+        let email = EmailService::generate_trial_ending(
+            "testuser",
+            "test@example.com",
+            "Pro",
+            Some(29.0),
+            Some(trial_end),
+        );
+
+        assert_eq!(email.to, vec!["test@example.com".to_string()]);
+        assert_eq!(email.subject, "Your MockForge Cloud Pro trial ends on November 03, 2026");
+        for body in [&email.html_body, &email.text_body] {
+            assert!(body.contains("testuser"));
+            assert!(body.contains("trial ends on November 03, 2026"));
+            assert!(body.contains("charged $29.00 per billing period"));
+            assert!(body.contains("moves to the Free plan"));
+            assert!(body.contains("app.mockforge.dev/billing"));
+        }
+    }
+
+    #[test]
+    fn test_generate_trial_ending_without_date_or_amount() {
+        let email =
+            EmailService::generate_trial_ending("testuser", "test@example.com", "Team", None, None);
+
+        assert_eq!(email.subject, "Your MockForge Cloud Team trial ends in a few days");
+        assert!(email.text_body.contains("charged the plan price"));
+    }
+
+    #[test]
+    fn test_generate_trial_ending_escapes_username_in_html() {
+        let email = EmailService::generate_trial_ending(
+            "<a href=\"https://evil.example\">x</a>",
+            "test@example.com",
+            "Pro",
+            None,
+            None,
+        );
+
+        assert!(!email.html_body.contains("<a href=\"https://evil.example\">"));
+        assert!(email.html_body.contains("&lt;a href=&quot;https://evil.example&quot;&gt;"));
     }
 
     #[test]
