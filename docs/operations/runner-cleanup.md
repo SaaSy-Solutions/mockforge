@@ -20,26 +20,51 @@ reviewed revision and deploy only the host-owned files. Do not run cleanup or
 replace a timer merely to resolve a queued MockForge job. Check runner occupancy
 and disk headroom first; do not delete another job's build artifacts.
 
-## Read-only audit, October 11, 2026
+## Installed-guard verification, October 20, 2026
 
-The shared host at 91.107.206.8 had 99 GB free (66% used), an active cleanup timer,
-and a successful last cleanup invocation. The retired hourly target-cleanup
-script was absent. The installed host script includes the corrected worker
-pattern and a second guard for processes with their working directory inside a
-candidate workspace.
+The shared host at 91.107.206.8 had 70.8 GiB free during this audit. Its cleanup
+timer was active, and the service last completed successfully at 20:58:23 UTC.
+The retired `/etc/cron.hourly/cleanup-runner-tmp` entry was absent.
+The installed timer previously specified a 10-minute interval with a one-minute
+randomized delay. Its original unit was backed up under `/root/ci-backups`, the
+maintained timer passed `systemd-analyze verify`, and it was installed atomically.
+After reloading systemd and restarting only `runner-host-cleanup.timer`, live
+readback confirmed an active timer with `OnUnitActiveUSec=30min` and
+`RandomizedDelayUSec=2min`. Its SHA-256 now matches the maintained unit:
+`bf200ef0bf23d8b66c2d85c3565b141c48f55befb580ca2438b98d520f2be62e`.
+The cleanup script and service unit retained their verified hashes.
 
-A deployment gap remains: installed script SHA-256
-`3f73e506431bfbf50695713d092ace9498a60e86c9492dfa2d24d94a943c7834`
-differs from maintained source SHA-256
-`05296d0ac079ec2ff32839f3b801b5aaea18a290031b51f39c2e2804391a23fd`.
-The installed aggressive path still runs Docker system prune; the maintained
-source defers Docker garbage collection until runners are drained. No host
-cleanup or deployment was performed during this audit.
+The installed cleanup script SHA-256 is
+`7d8a9c8398a7c12fa8d53ece6a75d8d23acada5d9191199aa81a26f4dff6ad5b`.
+It exactly matches the infrastructure repository's reviewed revision
+[`6994906a70670e97da2c5b1a4784ae356f6394e9`](https://github.com/SaaSy-Solutions/saas-platform/blob/6994906a70670e97da2c5b1a4784ae356f6394e9/infrastructure/github-runners/host-shared/runner-host-cleanup.sh).
+That version already includes the corrected worker/cwd checks, the nested
+15-minute target-activity backstop requested in #706, and deferral of Docker
+garbage collection to drained-host maintenance.
 
-Issue #706 remains open for infrastructure deployment verification, the requested
-recent nested-activity backstop, and investigation of the original missing-artifact
-failure. Current headroom and worker guards do not establish the cause of that
-historical failure, nor do they prove restored Rust caches are intact.
+All 17 activity and cleanup-wiring checks passed against the installed script
+on the host using isolated, owned fixtures. These cover fresh nested artifacts
+under stale parent directories, genuinely idle workspaces, symlinks, failed or
+timed-out scans, active workers, process working directories, and a job starting
+during the scan. Ten additional local live/idle safety and scoped ownership
+recovery checks passed against a byte-identical copy of the installed script.
+The tests exercised extracted production sections in owned fixtures. No
+whole-host cleanup command was run during the probes, and runner services and
+active build artifacts were preserved.
+
+Infrastructure revision
+[`19cb0ba2b1932a392f6d49b9517929fb0334984d`](https://github.com/SaaSy-Solutions/saas-platform/commit/19cb0ba2b1932a392f6d49b9517929fb0334984d)
+has cleanup-script SHA-256
+`675157f43a4922edce5153c9816e0fa7f7ef5c1ffe5913613de1efd5393d2bdf`.
+The sole script-content difference adds a separate native-observer `/run`
+namespace sweep. Its rollout is separate from the verified #706 safeguards;
+the existing cleanup script and service were preserved while the timer unit was
+reconciled to the reviewed cadence.
+
+Issue #706 remains open for investigation of the original missing-artifact
+failure and verification of the restored-cache path in an actual CI run.
+Installed guards and current headroom do not establish that historical cause,
+nor do they prove restored Rust caches are intact.
 
 ## Integration cache readiness
 
