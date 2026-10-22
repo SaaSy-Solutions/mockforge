@@ -891,7 +891,7 @@ Failed to evaluate JS config: SyntaxError: ...
 
 Found a configuration issue or have suggestions? Please [open an issue](https://github.com/SaaSy-Solutions/mockforge/issues) or submit a PR!
 
-### Local workspace transfer credentials (unreleased)
+### Local workspace transfer credentials (0.3.236+)
 
 `MOCKFORGE_ADMIN_TOKEN` supplies a local admin JWT to `workspace export` and
 `workspace import`; `--token-env` selects another caller variable. Token values
