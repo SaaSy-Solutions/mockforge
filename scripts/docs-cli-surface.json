@@ -3475,12 +3475,13 @@
       "install": {
        "aliases": {},
        "flags": {
+        "--allow-unsigned": 0,
         "--checksum": 1,
         "--force": 0,
         "--help": 0,
         "--log-level": 1,
-        "--no-verify": 0,
         "--skip-validation": 0,
+        "--trusted-keys": 1,
         "-h": 0,
         "-v": 1
        },
@@ -3533,8 +3534,10 @@
        "aliases": {},
        "flags": {
         "--all": 0,
+        "--allow-unsigned": 0,
         "--help": 0,
         "--log-level": 1,
+        "--trusted-keys": 1,
         "-h": 0,
         "-v": 1
        },
