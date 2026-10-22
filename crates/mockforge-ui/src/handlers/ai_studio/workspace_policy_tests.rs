@@ -427,8 +427,7 @@ async fn authoring_defaults_work_with_runtime_mockai_disabled() {
         state.mockai = None;
         assert!(state.mockai.is_none());
         let workspace = workspace(&state, &fixture, "json").await;
-        let api =
-            Server::start(router(state.clone()).layer(axum::Extension(defaults.clone()))).await;
+        let api = Server::start(router(state.clone()).layer(Extension(defaults.clone()))).await;
         let client = reqwest::Client::new();
         let body = if path == "/chat" {
             json!({"message":message,"workspace_id":workspace.id})
@@ -454,7 +453,7 @@ async fn authoring_defaults_work_with_runtime_mockai_disabled() {
         }
         provider.task.abort();
         drop(api);
-        let restarted = Server::start(router(state.clone()).layer(axum::Extension(defaults))).await;
+        let restarted = Server::start(router(state.clone()).layer(Extension(defaults))).await;
         let second: Value = client
             .post(format!("{}{path}", restarted.url))
             .json(&body)
