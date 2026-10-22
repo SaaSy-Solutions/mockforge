@@ -115,6 +115,21 @@ async fn real_registry_limits_query_credentials_to_session_sse() {
         format!("/api/v1/workspaces/{id}/test-generation/jobs/{id}/stream"),
     ];
     for path in paths {
+        // A valid package-read token cannot read deployment streams, even
+        // alongside a privileged session cookie or query credential. Header
+        // precedence must preserve its restricted principal through both
+        // authentication and scope enforcement.
+        for (cookie, query) in [
+            (None, None),
+            (Some(f.session.as_str()), None),
+            (None, Some(f.session.as_str())),
+        ] {
+            assert_eq!(
+                f.status(&path, Some(f.api_token.as_str()), cookie, query).await,
+                StatusCode::FORBIDDEN,
+                "restricted API token on {path}"
+            );
+        }
         // Missing owned fixture resources produce 400 after authentication;
         // never read a successful SSE body, which intentionally stays open.
         for (header, cookie, query) in [

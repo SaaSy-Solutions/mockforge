@@ -15,6 +15,7 @@ pub mod rls_org_scope;
 // `scope_check` now lives in mockforge-registry-core. Re-exported so
 // existing `crate::middleware::scope_check::*` paths keep working.
 pub use mockforge_registry_core::scope_check;
+pub mod token_scope;
 pub mod trusted_proxy;
 
 use axum::{
@@ -35,6 +36,7 @@ pub use org_context::{resolve_org_context, OrgContext};
 pub use rate_limit::rate_limit_middleware;
 pub use rls_org_scope::rls_org_scope_middleware;
 pub use scope_check::{AuthType, ScopedAuth};
+pub use token_scope::token_scope_middleware;
 
 /// JSON error response for authentication failures
 fn auth_error_response(message: &str, hint: &str) -> Response {
