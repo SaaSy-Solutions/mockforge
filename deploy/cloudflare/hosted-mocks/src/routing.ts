@@ -62,23 +62,3 @@ export function constantTimeEqual(a: string, b: string): boolean {
 	for (let i = 0; i < x.length; i++) diff |= x[i] ^ y[i];
 	return diff === 0;
 }
-
-/** Fixed one-second window, matching the registry proxy's per-deployment cap. */
-export class SecondWindow {
-	private second = -1;
-	private count = 0;
-
-	constructor(private readonly limit: number) {}
-
-	/** Records a request at `nowMs`; false when the second's budget is spent. */
-	allow(nowMs: number): boolean {
-		const second = Math.floor(nowMs / 1000);
-		if (second !== this.second) {
-			this.second = second;
-			this.count = 0;
-		}
-		if (this.count >= this.limit) return false;
-		this.count++;
-		return true;
-	}
-}
