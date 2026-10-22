@@ -87,10 +87,16 @@ class FixtureIsolationTests(unittest.TestCase):
             "rls_coverage_e2e", "hosted_mock_rls_routes_e2e", "rls_join_coverage_e2e",
             "cross_tenant_chaos_capture_e2e",
         }
-        base = original.union({"hosted_capture_workspaces_e2e", "diff_finding_incident_e2e"})
+        # Scope containment must run on both database roles. The baseline also
+        # exercises seed-credential neutralization added on main.
+        common = original.union({"token_scope_e2e"})
+        base = common.union({
+            "hosted_capture_workspaces_e2e", "diff_finding_incident_e2e",
+            "seed_credentials_neutralised",
+        })
         self.assertEqual(set(re.findall(r"--test ([a-z0-9_]+)", step_script("Run E2E tests"))), base)
         array = RLS.split("E2E_TESTS=(", 1)[1].split(")", 1)[0]
-        self.assertEqual(set(re.findall(r"--test ([a-z0-9_]+)", array)), original)
+        self.assertEqual(set(re.findall(r"--test ([a-z0-9_]+)", array)), common)
         self.assertIn("workers::contract_probe::postgres_tests::due_claims_serialize_and_failed_timestamp_rolls_back_run", WORKFLOW)
         self.assertIn("-- --ignored --nocapture --test-threads=1", WORKFLOW)
         self.assertIn("--no-fail-fast", RLS)
