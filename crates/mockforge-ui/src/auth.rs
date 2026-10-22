@@ -93,11 +93,43 @@ fn get_jwt_secret_bytes() -> Result<Vec<u8>, jsonwebtoken::errors::Error> {
         return Ok(dev_secret.into_bytes());
     }
 
-    // Fallback: auto-generate a secret so `--admin` works out of the box
-    tracing::info!(
-        "Using auto-generated JWT secret for admin UI. Set JWT_SECRET for production use."
-    );
-    Ok("mockforge-auto-jwt-secret-for-admin-ui-1234".as_bytes().to_vec())
+    // Fallback: a random per-process secret so `--admin` works out of the
+    // box. It used to be a constant in this file, which let anyone forge an
+    // admin token (#1019). Tokens now stop working when the server restarts.
+    Ok(process_jwt_secret().to_vec())
+}
+
+/// A random secret generated once per process
+fn process_jwt_secret() -> &'static [u8; 32] {
+    static SECRET: std::sync::OnceLock<[u8; 32]> = std::sync::OnceLock::new();
+    SECRET.get_or_init(|| {
+        use rand::RngCore;
+        let mut secret = [0u8; 32];
+        rand::rng().fill_bytes(&mut secret);
+        tracing::info!(
+            "Using a per-process random JWT secret for the admin UI. Set JWT_SECRET to \
+             keep sessions across restarts."
+        );
+        secret
+    })
+}
+
+/// A user created at startup: username, password, role, email
+type SeedUser = (String, String, UserRole, Option<String>);
+
+/// The operator-configured admin login, when `MOCKFORGE_ADMIN_PASSWORD` is
+/// long enough (`crate::admin_access`)
+fn configured_admin_login() -> Option<(String, String)> {
+    use crate::admin_access::{ADMIN_PASSWORD_ENV, ADMIN_USERNAME_ENV, MIN_ADMIN_PASSWORD_LEN};
+    let password = std::env::var(ADMIN_PASSWORD_ENV)
+        .ok()
+        .filter(|p| p.len() >= MIN_ADMIN_PASSWORD_LEN)?;
+    let username = std::env::var(ADMIN_USERNAME_ENV)
+        .ok()
+        .map(|u| u.trim().to_string())
+        .filter(|u| !u.is_empty())
+        .unwrap_or_else(|| "admin".to_string());
+    Some((username, password))
 }
 
 pub fn validate_auth_config_on_startup() -> Result<(), String> {
@@ -316,14 +348,28 @@ impl UserStore {
             password_policy,
         };
 
-        if should_seed_default_users() {
-            // Development-only seeded users for local testing
-            let default_users = vec![
-                ("admin", "admin123", UserRole::Admin, "admin@mockforge.dev"),
-                ("viewer", "viewer123", UserRole::Viewer, "viewer@mockforge.dev"),
-                ("editor", "editor123", UserRole::Editor, "editor@mockforge.dev"),
-            ];
+        // An operator-configured admin login replaces the demo users, whose
+        // passwords are public (#1019).
+        let seed_users: Option<Vec<SeedUser>> =
+            if let Some((username, password)) = configured_admin_login() {
+                Some(vec![(username, password, UserRole::Admin, None)])
+            } else if should_seed_default_users() {
+                // Development-only seeded users for local testing
+                Some(
+                    [
+                        ("admin", "admin123", UserRole::Admin, "admin@mockforge.dev"),
+                        ("viewer", "viewer123", UserRole::Viewer, "viewer@mockforge.dev"),
+                        ("editor", "editor123", UserRole::Editor, "editor@mockforge.dev"),
+                    ]
+                    .into_iter()
+                    .map(|(u, p, r, e)| (u.to_string(), p.to_string(), r, Some(e.to_string())))
+                    .collect(),
+                )
+            } else {
+                None
+            };
 
+        if let Some(default_users) = seed_users {
             let store_clone = store.clone();
             // These in-memory development seeds perform CPU-bound hashing.
             // Keep it off Tokio's workers: runtime shutdown otherwise waits for
@@ -334,15 +380,15 @@ impl UserStore {
                 .spawn(move || {
                     let mut users = store_clone.users.blocking_write();
                     for (username, password, role, email) in default_users {
-                        if let Ok(password_hash) = hash(password, DEFAULT_COST) {
+                        if let Ok(password_hash) = hash(&password, DEFAULT_COST) {
                             let user = User {
                                 id: format!("{}-001", username),
-                                username: username.to_string(),
+                                username: username.clone(),
                                 password_hash,
                                 role,
-                                email: Some(email.to_string()),
+                                email,
                             };
-                            users.insert(username.to_string(), user);
+                            users.insert(username, user);
                         } else {
                             tracing::error!("Failed to hash password for user: {}", username);
                         }
@@ -693,6 +739,15 @@ pub fn claims_to_user_context(claims: &Claims) -> UserContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn process_jwt_secret_is_random_and_stable() {
+        // The fallback used to be a constant in this file (#1019).
+        let secret = process_jwt_secret();
+        assert_ne!(&secret[..], b"mockforge-auto-jwt-secret-for-admin-ui-1234".as_slice());
+        assert_ne!(secret, &[0u8; 32]);
+        assert_eq!(secret, process_jwt_secret());
+    }
 
     #[tokio::test]
     async fn test_user_store_creation() {

@@ -140,7 +140,8 @@ pub async fn put_overrides(
 
 async fn push_to_runtime(deployment: &HostedMock, rules: &[OverrideRule]) -> RuntimeSync {
     let url = format!("{}/__mockforge/overrides", admin_base_url(deployment));
-    let client = match reqwest::Client::builder().timeout(PUSH_TIMEOUT).build() {
+    // The admin server requires the deployment's management token (#1019).
+    let client = match super::management_token::proxy_client(deployment.id, PUSH_TIMEOUT) {
         Ok(client) => client,
         Err(e) => {
             tracing::warn!(error = %e, "override push client build failed");
