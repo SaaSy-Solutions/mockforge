@@ -6,6 +6,10 @@
 
 - **[Cloud]** Trial owners get an email three days before their Pro or Team trial ends. The registry now handles Stripe's `customer.subscription.trial_will_end` webhook and sends the reminder through the same email path as the other billing emails, honoring the owner's email-notification setting. It gives the end date and price, and says the plan continues if a payment method is on file and otherwise drops to Free. (#714)
 
+### Changed
+
+- **[DevX]** `bench-chunked` labels each `--spec` operation's `RPS (started)` and `RPS (overall)` lines `(this operation only)`, so they are not read as the rate for the whole pass. The multi-target summary now prints `load_window=` and `elapsed=` next to `start_rps` and `rps`, and a single `--target` run with `--spec` prints the same figures on a `Pass summary (all operations):` line. The campaign banner says that `--repeat-until` is checked before each pass, so a running pass finishes. (#79)
+
 ### Fixed
 
 - **[Reality]** MQTT publish and last-will delivery no longer hold broker-wide locks while waiting on subscriber queues, or acquire topic and client locks in the opposite order to new connections. This prevents concurrent CONNECT/publish deadlocks and lets new clients connect while a subscriber is backpressured. (#715)
