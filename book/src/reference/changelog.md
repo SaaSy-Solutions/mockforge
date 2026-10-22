@@ -2,8 +2,14 @@
 
 ## [Unreleased]
 
+### Added
+
+- **[Cloud]** Trial owners get an email three days before their Pro or Team trial ends. The registry now handles Stripe's `customer.subscription.trial_will_end` webhook and sends the reminder through the same email path as the other billing emails, honoring the owner's email-notification setting. It gives the end date and price, and says the plan continues if a payment method is on file and otherwise drops to Free. (#714)
+
 ### Fixed
 
+- **[DevX]** Add a guarded operator for superseded, partially cancelled CI runs stuck on an unassigned completion job. It preserves the fail-closed Rust completion verdict, tries ordinary cancellation first, and revalidates the live PR head and all job guards before force-cancellation. Current-head runs, forks and active workers are refused. (#1191)
+- **[Docs]** The workspace export/import guide and the configuration reference no longer call `mockforge workspace export`, `import` and `activate` unreleased; they ship in 0.3.236. (#1197)
 - **[Contracts]** Package Intelligence’s database migrations inside its own crate so the published `database` feature builds without a sibling HTTP checkout. Preserve all historical migration filenames and SQL bytes for existing databases. (#632)
 
 - **[Cloud]** Cloud test runs no longer get stuck in `running` when the registry rate-limits the runner. The runner's start, event and finish callbacks all come from one IP, so the per-client limit could return 429 to `/finish` and the run never ended. Internal callback routes now skip the rate limit when they carry the internal API token (requests without it are still limited), and the runner retries `/finish` on 429, 5xx and connection errors with backoff (6 attempts over about 30 s). (#1286)
@@ -13,6 +19,7 @@
 
 ### Security
 
+- **[DevX]** Raise Wasmtime and WASI to 36.0.19, including the patched Cranelift family, to address RUSTSEC-2026-0379 and RUSTSEC-2026-0380. Enforce the patched minimum in both plugin crate manifests. Update rustls-webpki to 0.103.16 and webpki-roots and webpki-root-certs to 1.0.10 (RUSTSEC-2026-0382, -0381, -0383). rustls-webpki 0.102.8 has no patched release and is still pulled in by rumqttc 0.25.1 and async-nats 0.43, so RUSTSEC-2026-0382 is ignored for that copy in `audit.toml` until they upgrade.
 - **[DevX]** `{{encrypt}}`, `{{secure}}` and `{{decrypt}}` no longer fall back to a password written in the source (`mockforge_default_encryption_key_2024`). With no key-store key and no `MOCKFORGE_ENCRYPTION_KEY`, they output `<encryption_error: no key configured>` or `<decryption_error: no key configured>`. The key derived from `MOCKFORGE_ENCRYPTION_KEY` now uses a fixed salt, so `{{decrypt}}` can read what `{{encrypt}}` produced. Before, PBKDF2 used a new random salt on every call and decryption always failed. The uncompiled `token_resolvers.rs`, `plugin_integration.rs` and `integration_demo.rs` are removed from mockforge-core. (#1273)
 - **[DevX]** `mockforge-k8s-operator` moves to kube 4.2, k8s-openapi 0.28 and schemars 1. kube 0.87 was the last dependency on rustls 0.21, which has no patched release for RUSTSEC-2026-0346 (Debug output exposes session secrets) or RUSTSEC-2026-0349 (ServerHello downgrade). The workspace no longer builds rustls 0.21, and both advisories are no longer ignored in `audit.toml`. The CRD manifests in `k8s/crd/` are unchanged. (#1232)
 - **[Cloud]** Upgrade `zip` to 9.0.4 in mockforge-cli, plugin-loader, plugin-cli, scenarios and registry-server (RUSTSEC-2026-0367/0368/0369). MockForge's own archive handling already avoided `extract()` and checked `enclosed_name()`; entry names that cannot be decoded are now skipped. The desktop app's auto-updater still bundles zip 4.6.1, which only unpacks signature-verified MockForge updates.
