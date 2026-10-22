@@ -77,7 +77,12 @@ def run(root, base_sha, output):
                 estimates = results / name / "new" / "estimates.json"
                 estimates.parent.mkdir(parents=True, exist_ok=True)
                 timing = (
-                    json.dumps({"mean": {"point_estimate": value["new"]["mean"]}})
+                    json.dumps(
+                        {
+                            "mean": {"point_estimate": value["new"]["mean"]},
+                            "samples": value["new"]["samples"],
+                        }
+                    )
                     + "\n"
                 )
                 estimates.write_text(timing)
