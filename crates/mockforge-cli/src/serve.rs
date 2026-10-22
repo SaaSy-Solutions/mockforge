@@ -907,7 +907,7 @@ pub async fn handle_serve(
     let spec = if serve_args.spec.is_empty() {
         if let Ok(config_json) = std::env::var("MOCKFORGE_CONFIG") {
             // MOCKFORGE_CONFIG contains the OpenAPI spec as JSON
-            let spec_dir = std::path::Path::new("/tmp/mockforge-specs");
+            let spec_dir = Path::new("/tmp/mockforge-specs");
             let _ = tokio::fs::create_dir_all(spec_dir).await;
             let spec_path = spec_dir.join("spec.json");
             match tokio::fs::write(&spec_path, config_json.as_bytes()).await {
@@ -925,7 +925,7 @@ pub async fn handle_serve(
                 tracing::info!("Downloading spec from URL: {}", spec_url);
                 match reqwest::get(&spec_url).await {
                     Ok(response) if response.status().is_success() => {
-                        let spec_dir = std::path::Path::new("/tmp/mockforge-specs");
+                        let spec_dir = Path::new("/tmp/mockforge-specs");
                         let _ = tokio::fs::create_dir_all(spec_dir).await;
                         let spec_path = spec_dir.join("spec.json");
                         match response.bytes().await {
@@ -3078,7 +3078,7 @@ pub async fn handle_serve(
                             );
 
                             // Update deployment metadata with tunnel URL
-                            let metadata_path = std::path::Path::new(".mockforge/deployment.json");
+                            let metadata_path = Path::new(".mockforge/deployment.json");
                             if metadata_path.exists() {
                                 if let Ok(metadata_content) = std::fs::read_to_string(metadata_path)
                                 {
