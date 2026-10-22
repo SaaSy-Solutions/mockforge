@@ -18,7 +18,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 use crate::{
-    deployment::{cloudflare, orchestrator::hosted_mock_runtime_env, router},
+    deployment::{cloudflare, machine_config::hosted_mock_runtime_env, router},
     error::{ApiError, ApiResult},
     handlers::internal_test_runs::require_internal_auth,
     models::{DeploymentStatus, HostedMock, UsageCounter},
