@@ -217,6 +217,33 @@ impl DeploymentOrchestrator {
         Ok(())
     }
 
+    /// Redeploy on the backend the deployment already uses. Fly deployments
+    /// stay on Fly; a Cloudflare deployment that gained a raw-TCP protocol
+    /// moves to Fly and its container is stopped.
+    async fn redeploy_on_backend(&self, deployment: &HostedMock) -> Result<()> {
+        if !cloudflare::is_cloudflare(deployment) {
+            return match self.flyio_client {
+                Some(ref flyio_client) => self.redeploy_to_flyio(flyio_client, deployment).await,
+                None => self.deploy_to_multitenant_router(deployment).await,
+            };
+        }
+        if let Some(cf) = self.cloudflare_for(deployment).await {
+            return self.deploy_to_cloudflare(cf, deployment).await;
+        }
+        let flyio_client = self.flyio_client.as_ref().ok_or_else(|| {
+            anyhow::anyhow!(
+                "deployment needs a protocol Cloudflare cannot serve and Fly is not configured"
+            )
+        })?;
+        self.deploy_to_flyio(flyio_client, deployment).await?;
+        if let Some(cf) = self.cloudflare.as_ref() {
+            if let Err(e) = cf.destroy(deployment).await {
+                warn!("Failed to stop Cloudflare container for {}: {:#}", deployment.id, e);
+            }
+        }
+        Ok(())
+    }
+
     /// Serve a deployment from Cloudflare Containers. Nothing is provisioned up
     /// front: the Worker starts the container on the first request with the
     /// environment from [`hosted_mock_runtime_env`]. Restarting here makes a
@@ -470,34 +497,7 @@ impl DeploymentOrchestrator {
             .await
             .context("Failed to create deployment log")?;
 
-        let cloudflare = self.cloudflare_for(deployment).await;
-        if cloudflare::is_cloudflare(deployment) {
-            match (cloudflare, &self.flyio_client) {
-                (Some(cf), _) => self.deploy_to_cloudflare(cf, deployment).await?,
-                // A newly enabled protocol needs raw TCP: move the mock to Fly
-                // and stop its Cloudflare container.
-                (None, Some(flyio_client)) => {
-                    self.deploy_to_flyio(flyio_client, deployment).await?;
-                    if let Some(cf) = self.cloudflare.as_ref() {
-                        if let Err(e) = cf.destroy(deployment).await {
-                            warn!(
-                                "Failed to stop Cloudflare container for {}: {:#}",
-                                deployment.id, e
-                            );
-                        }
-                    }
-                }
-                (None, None) => anyhow::bail!(
-                    "deployment needs a protocol Cloudflare cannot serve and Fly is not configured"
-                ),
-            }
-        } else if let Some(ref flyio_client) = self.flyio_client {
-            // Fly deployments stay on Fly when redeployed.
-            self.redeploy_to_flyio(flyio_client, deployment).await?;
-        } else {
-            // For multitenant router, just restart
-            self.deploy_to_multitenant_router(deployment).await?;
-        }
+        self.redeploy_on_backend(deployment).await?;
 
         HostedMock::update_status(pool, deployment.id, DeploymentStatus::Active, None)
             .await

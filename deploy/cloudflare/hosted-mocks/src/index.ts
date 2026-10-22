@@ -12,7 +12,7 @@
  * with the shared edge token when a mock is redeployed, stopped or deleted.
  */
 import { Container, getContainer } from "@cloudflare/containers";
-import { constantTimeEqual, parseRoute, SecondWindow } from "./routing";
+import { type AdminAction, constantTimeEqual, parseRoute, SecondWindow } from "./routing";
 
 export interface Env {
 	HOSTED_MOCK: DurableObjectNamespace<HostedMock>;
@@ -45,35 +45,49 @@ interface Runtime {
 
 export default {
 	async fetch(request: Request, env: Env): Promise<Response> {
-		const url = new URL(request.url);
-		const route = parseRoute(url.pathname);
+		const route = parseRoute(new URL(request.url).pathname);
 		if (!route) return json(404, { error: "not_found" });
-
 		const stub = getContainer(env.HOSTED_MOCK, `${route.org}/${route.slug}`);
-
-		if (route.kind === "admin") {
-			const token = request.headers.get(EDGE_TOKEN_HEADER) ?? "";
-			if (request.method !== "POST" || !constantTimeEqual(token, env.EDGE_TOKEN ?? "")) {
-				return json(403, { error: "forbidden" });
-			}
-			return stub.fetch(
-				new Request("https://edge/admin", {
-					method: "POST",
-					headers: { [H_OP]: route.action, [H_ORG]: route.org, [H_SLUG]: route.slug },
-				}),
-			);
-		}
-
-		// Forward with the mock's own path, dropping any edge-control headers a
-		// client tried to set.
-		const target = new URL(route.rest + url.search, "https://edge");
-		const headers = new Headers(request.headers);
-		for (const name of [H_ORG, H_SLUG, H_OP, EDGE_TOKEN_HEADER]) headers.delete(name);
-		headers.set(H_ORG, route.org);
-		headers.set(H_SLUG, route.slug);
-		return stub.fetch(new Request(target, new Request(request, { headers })));
+		return route.kind === "admin"
+			? forwardAdmin(request, env, stub, route)
+			: forwardToMock(request, stub, route);
 	},
 } satisfies ExportedHandler<Env>;
+
+type Stub = DurableObjectStub<HostedMock>;
+
+/** Registry-only restart/destroy, authorised by the shared edge token. */
+function forwardAdmin(
+	request: Request,
+	env: Env,
+	stub: Stub,
+	route: { org: string; slug: string; action: AdminAction },
+): Promise<Response> | Response {
+	const token = request.headers.get(EDGE_TOKEN_HEADER) ?? "";
+	if (request.method !== "POST" || !constantTimeEqual(token, env.EDGE_TOKEN ?? "")) {
+		return json(403, { error: "forbidden" });
+	}
+	return stub.fetch(
+		new Request("https://edge/admin", {
+			method: "POST",
+			headers: { [H_OP]: route.action, [H_ORG]: route.org, [H_SLUG]: route.slug },
+		}),
+	);
+}
+
+/** Forward with the mock's own path, dropping any edge-control headers a client set. */
+function forwardToMock(
+	request: Request,
+	stub: Stub,
+	route: { org: string; slug: string; rest: string },
+): Promise<Response> {
+	const target = new URL(route.rest + new URL(request.url).search, "https://edge");
+	const headers = new Headers(request.headers);
+	for (const name of [H_ORG, H_SLUG, H_OP, EDGE_TOKEN_HEADER]) headers.delete(name);
+	headers.set(H_ORG, route.org);
+	headers.set(H_SLUG, route.slug);
+	return stub.fetch(new Request(target, new Request(request, { headers })));
+}
 
 export class HostedMock extends Container<Env> {
 	defaultPort = 3000;
@@ -92,38 +106,48 @@ export class HostedMock extends Container<Env> {
 		if (!org || !slug) return json(400, { error: "bad_request" });
 
 		const op = request.headers.get(H_OP);
-		if (op === "restart" || op === "destroy") {
-			await this.flushUsage();
-			this.runtime = null;
-			this.window = null;
-			if (this.ctx.container?.running) await this.destroy();
-			return json(200, { ok: true, action: op });
-		}
+		if (op === "restart" || op === "destroy") return this.reset(op);
 
 		const runtime = await this.loadRuntime(org, slug);
 		if (!runtime) return json(404, { error: "mock_not_found" });
-		if (runtime.blocked) return json(429, { error: "usage_limit_exceeded" });
+		const rejected = this.admit(request, runtime);
+		if (rejected) return rejected;
 
+		await this.ensureRunning(runtime);
+		const forwarded = new Request(request);
+		for (const name of [H_ORG, H_SLUG]) forwarded.headers.delete(name);
+		const response = await this.containerFetch(forwarded, this.defaultPort);
+		this.recordUsage(response);
+		return response;
+	}
+
+	/** Stop the container and forget its runtime, so the next request reloads it. */
+	private async reset(op: AdminAction): Promise<Response> {
+		await this.flushUsage();
+		this.runtime = null;
+		this.window = null;
+		if (this.ctx.container?.running) await this.destroy();
+		return json(200, { ok: true, action: op });
+	}
+
+	/** The registry proxy's limits: quota ceiling, body cap, requests per second. */
+	private admit(request: Request, runtime: Runtime): Response | null {
+		if (runtime.blocked) return json(429, { error: "usage_limit_exceeded" });
 		const declared = Number(request.headers.get("content-length") ?? "0");
 		if (declared > runtime.limits.max_body_bytes) return json(413, { error: "payload_too_large" });
 		if (!this.window?.allow(Date.now())) {
 			return json(429, { error: "rate_limited" }, { "retry-after": "1" });
 		}
+		return null;
+	}
 
-		if (!this.ctx.container?.running) {
-			await this.startAndWaitForPorts({
-				startOptions: { envVars: runtime.env },
-				cancellationOptions: { portReadyTimeoutMS: 60_000 },
-			});
-			await this.waitUntilServing();
-		}
-
-		const forwarded = new Request(request);
-		for (const name of [H_ORG, H_SLUG]) forwarded.headers.delete(name);
-		const response = await this.containerFetch(forwarded, this.defaultPort);
-
-		this.recordUsage(response);
-		return response;
+	private async ensureRunning(runtime: Runtime): Promise<void> {
+		if (this.ctx.container?.running) return;
+		await this.startAndWaitForPorts({
+			startOptions: { envVars: runtime.env },
+			cancellationOptions: { portReadyTimeoutMS: 60_000 },
+		});
+		await this.waitUntilServing();
 	}
 
 	override async onStop(): Promise<void> {
