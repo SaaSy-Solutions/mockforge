@@ -91,12 +91,11 @@ fn api_key_variable_name_and_output_location_do_not_change_identity() {
 #[test]
 fn cached_bakes_cannot_reenable_reality_presets() {
     let args = args(PathBuf::from("fixture.json"));
-    let mut config =
-        super::document::build(&args, serde_json::json!({"fixed":true}), "identity").unwrap();
+    let mut config = document::build(&args, serde_json::json!({"fixed":true}), "identity").unwrap();
     config.as_object_mut().unwrap().remove("reality");
     let manifest = config.as_object_mut().unwrap().remove("x-mockforge-ai-bake").unwrap();
-    let digest = super::document::hash(&config);
+    let digest = document::hash(&config);
     config["x-mockforge-ai-bake"] = manifest;
     config["x-mockforge-ai-bake"]["config_sha256"] = serde_json::json!(digest);
-    assert!(super::document::verify(config, "identity").is_err());
+    assert!(document::verify(config, "identity").is_err());
 }
