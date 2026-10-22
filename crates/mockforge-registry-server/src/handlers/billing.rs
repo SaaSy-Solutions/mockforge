@@ -613,6 +613,12 @@ pub async fn stripe_webhook(
                 handle_subscription_event(pool, &subscription, &state.config).await?;
             }
         }
+        EventType::CustomerSubscriptionTrialWillEnd => {
+            // Stripe sends this three days before a trial ends (#714)
+            if let EventObject::Subscription(subscription) = event.data.object {
+                handle_trial_will_end(pool, &subscription).await?;
+            }
+        }
         EventType::CustomerSubscriptionDeleted => {
             // Handle subscription cancellation
             if let EventObject::Subscription(subscription) = event.data.object {
@@ -943,6 +949,65 @@ async fn handle_subscription_deleted(
             }
         }
     }
+
+    Ok(())
+}
+
+/// Email the org owner that their trial ends soon (#714).
+///
+/// A subscription we have no record of is logged and acknowledged rather than
+/// failed: a retry would not create the record, and Stripe would keep
+/// redelivering a reminder nobody can receive.
+async fn handle_trial_will_end(
+    pool: &sqlx::PgPool,
+    subscription: &stripe::Subscription,
+) -> Result<(), ApiError> {
+    let stripe_sub_id = subscription.id.to_string();
+    let Some(record) = Subscription::find_by_stripe_subscription_id(pool, &stripe_sub_id)
+        .await
+        .map_err(ApiError::Database)?
+    else {
+        tracing::warn!("trial_will_end for unknown subscription {}", stripe_sub_id);
+        return Ok(());
+    };
+
+    let (email_addr, username, email_notifications) =
+        get_org_owner_email(pool, record.org_id).await?;
+    tracing::info!("Trial ending soon: org_id={}", record.org_id);
+    if !email_notifications {
+        return Ok(());
+    }
+    let Ok(email_service) = EmailService::from_env() else {
+        return Ok(());
+    };
+
+    let org = Organization::find_by_id(pool, record.org_id)
+        .await
+        .map_err(ApiError::Database)?
+        .ok_or_else(|| ApiError::InvalidRequest("Organization not found".to_string()))?;
+    let amount = subscription
+        .items
+        .data
+        .first()
+        .and_then(|item| item.price.as_ref())
+        .and_then(|price| price.unit_amount)
+        .map(|cents| cents as f64 / 100.0);
+    let trial_end = subscription
+        .trial_end
+        .and_then(|ts| chrono::DateTime::<chrono::Utc>::from_timestamp(ts, 0));
+
+    let plan_name = match org.plan() {
+        Plan::Free => "Free",
+        Plan::Pro => "Pro",
+        Plan::Team => "Team",
+    };
+    let email_msg =
+        EmailService::generate_trial_ending(&username, &email_addr, plan_name, amount, trial_end);
+    tokio::spawn(async move {
+        if let Err(e) = email_service.send(email_msg).await {
+            tracing::warn!("Failed to send trial ending email: {}", e);
+        }
+    });
 
     Ok(())
 }

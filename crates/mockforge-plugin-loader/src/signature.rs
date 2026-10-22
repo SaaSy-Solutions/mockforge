@@ -114,7 +114,7 @@ impl PluginSignature {
 
 /// Whether a plugin directory carries a detached signature file.
 pub fn has_signature_file(plugin_dir: &Path) -> bool {
-    !matches!(std::fs::symlink_metadata(plugin_dir.join(SIGNATURE_FILE)),
+    !matches!(fs::symlink_metadata(plugin_dir.join(SIGNATURE_FILE)),
         Err(error) if error.kind() == std::io::ErrorKind::NotFound)
 }
 
