@@ -1,6 +1,6 @@
 //! Provider configuration and support checks; credentials remain in memory.
 use super::{
-    args::{self, BakeArgs, Provider},
+    args::{BakeArgs, Provider},
     Result,
 };
 use mockforge_core::intelligent_behavior::config::BehaviorModelConfig;
@@ -34,7 +34,7 @@ pub(super) fn config(args: &BakeArgs) -> Result<BehaviorModelConfig> {
             std::env::var(name)
                 .map_err(|_| "The requested API-key environment variable is not set")?,
         )
-    } else if args.provider == args::Provider::OpenaiCompatible {
+    } else if args.provider == Provider::OpenaiCompatible {
         std::env::var("OPENAI_API_KEY").ok()
     } else {
         None
