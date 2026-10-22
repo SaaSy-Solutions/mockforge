@@ -11,8 +11,9 @@ use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use crate::deployment::cloudflare::{self, CloudflareMocks};
+use crate::deployment::fly_services::fly_services;
 use crate::deployment::flyio::{FlyioCheck, FlyioClient, FlyioMachineConfig, FlyioRegistryAuth};
-use crate::deployment::machine_config::{fly_services, hosted_mock_runtime_env};
+use crate::deployment::machine_config::hosted_mock_runtime_env;
 use crate::models::{DeploymentLog, DeploymentStatus, HostedMock, HostedMockPlugin};
 
 /// Default OCI image for plugin-disabled hosted-mocks. Same as the

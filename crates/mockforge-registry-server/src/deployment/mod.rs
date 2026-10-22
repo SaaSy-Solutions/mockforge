@@ -4,6 +4,7 @@
 
 pub mod cleanup;
 pub mod cloudflare;
+pub mod fly_services;
 pub mod flyio;
 pub mod health_check;
 pub mod machine_config;

@@ -4,12 +4,11 @@
  * registry proxy's limits, and reports usage back.
  */
 import { Container } from "@cloudflare/containers";
+import { waitUntilServing } from "./health";
+import { admit, SecondWindow } from "./limits";
 import { fetchRuntime, UsageMeter } from "./registry";
-import { type AdminAction, SecondWindow } from "./routing";
+import type { AdminAction } from "./routing";
 import { type Env, H_OP, H_ORG, H_SLUG, json, type Runtime } from "./shared";
-
-/** How long a cold start may take before the request fails. */
-const HEALTH_TIMEOUT_MS = 60_000;
 
 export class HostedMock extends Container<Env> {
 	defaultPort = 3000;
@@ -30,7 +29,7 @@ export class HostedMock extends Container<Env> {
 
 		const runtime = await this.loadRuntime(org, slug);
 		if (!runtime) return json(404, { error: "mock_not_found" });
-		const rejected = this.admit(request, runtime);
+		const rejected = admit(request, runtime, this.window, Date.now());
 		if (rejected) return rejected;
 
 		await this.ensureRunning(runtime);
@@ -56,17 +55,6 @@ export class HostedMock extends Container<Env> {
 		return json(200, { ok: true, action: op });
 	}
 
-	/** The registry proxy's limits: quota ceiling, body cap, requests per second. */
-	private admit(request: Request, runtime: Runtime): Response | null {
-		if (runtime.blocked) return json(429, { error: "usage_limit_exceeded" });
-		const declared = Number(request.headers.get("content-length") ?? "0");
-		if (declared > runtime.limits.max_body_bytes) return json(413, { error: "payload_too_large" });
-		if (!this.window?.allow(Date.now())) {
-			return json(429, { error: "rate_limited" }, { "retry-after": "1" });
-		}
-		return null;
-	}
-
 	private async loadRuntime(org: string, slug: string): Promise<Runtime | null> {
 		if (this.runtime) return this.runtime;
 		const runtime = await fetchRuntime(this.env, org, slug);
@@ -83,32 +71,7 @@ export class HostedMock extends Container<Env> {
 			startOptions: { envVars: runtime.env },
 			cancellationOptions: { portReadyTimeoutMS: 60_000 },
 		});
-		await this.waitUntilServing();
-	}
-
-	/**
-	 * The port accepts connections before MockForge has loaded the spec, so a
-	 * cold request forwarded right away fails. Wait for the mock's own
-	 * liveness endpoint instead.
-	 */
-	private async waitUntilServing(): Promise<void> {
-		const port = this.ctx.container!.getTcpPort(this.defaultPort);
-		const deadline = Date.now() + HEALTH_TIMEOUT_MS;
-		let lastError: unknown;
-		while (Date.now() < deadline) {
-			try {
-				const res = await port.fetch("http://container/health/live", {
-					signal: AbortSignal.timeout(2_000),
-				});
-				await res.body?.cancel();
-				if (res.ok) return;
-				lastError = new Error(`health check returned ${res.status}`);
-			} catch (error) {
-				lastError = error;
-			}
-			await scheduler.wait(200);
-		}
-		throw new Error("hosted mock did not become healthy", { cause: lastError });
+		await waitUntilServing(this.ctx.container!.getTcpPort(this.defaultPort));
 	}
 
 	private async flushUsage(): Promise<void> {

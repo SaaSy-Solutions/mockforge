@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { constantTimeEqual, parseRoute, SecondWindow } from "../src/routing";
+import { SecondWindow } from "../src/limits";
+import { constantTimeEqual, parseRoute } from "../src/routing";
 
 const ORG = "7f4c2a1e-3b5d-4e6f-8a9b-0c1d2e3f4a5b";
 
