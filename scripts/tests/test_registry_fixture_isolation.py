@@ -85,7 +85,7 @@ class FixtureIsolationTests(unittest.TestCase):
             "cloud_verification_e2e", "cloud_ai_contract_diff_e2e", "cloud_conformance_e2e",
             "paid_flow_e2e", "hosted_mock_overrides_e2e", "audit_integrity_e2e",
             "rls_coverage_e2e", "hosted_mock_rls_routes_e2e", "rls_join_coverage_e2e",
-            "cross_tenant_chaos_capture_e2e",
+            "cross_tenant_chaos_capture_e2e", "query_token_e2e",
         }
         # Scope containment must run on both database roles. The baseline also
         # exercises seed-credential neutralization added on main.
