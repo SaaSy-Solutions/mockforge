@@ -7,6 +7,7 @@ on:
       - 'book/**'
       - '.github/workflows/deploy-docs.yml'
       - '.github/actions/setup-mdbook/**'
+      - 'scripts/generate_docs_sitemap.py'
   workflow_dispatch:
 
 # Grant GITHUB_TOKEN the permissions required to make a Pages deployment
@@ -47,6 +48,9 @@ jobs:
       run: |
         cd book
         mdbook build
+
+    - name: Generate sitemap.xml
+      run: python3 scripts/generate_docs_sitemap.py --book-dir book --base-url https://docs.mockforge.dev/
 
     - name: Setup Pages
       uses: actions/configure-pages@v6

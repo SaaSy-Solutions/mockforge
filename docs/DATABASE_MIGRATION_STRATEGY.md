@@ -487,3 +487,13 @@ For migration issues or questions:
 - Check migration logs: `fly logs --app mockforge-registry`
 - Review migration history: `sqlx migrate info --database-url $DATABASE_URL`
 - Contact: devops@mockforge.dev
+
+## Intelligence package ownership
+
+Intelligence embeds migrations from its own `migrations/` directory. Published
+crates cannot resolve a workspace sibling path such as `../mockforge-http`.
+The seven historical HTTP SQL files remain unchanged under the append-only
+policy; their byte-identical copies are packaged with Intelligence. New
+Intelligence migrations belong in the Intelligence directory. Do not edit,
+rename or remove historical migrations, or reset an existing database's
+`_sqlx_migrations` table to accommodate this packaging correction.
