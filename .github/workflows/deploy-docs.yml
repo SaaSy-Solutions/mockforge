@@ -92,7 +92,7 @@ jobs:
   # live docs sitemap after a successful production deploy. Best-effort: a
   # failure here never fails the deploy.
   indexnow:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, x64, rust]
     needs: deploy
     if: github.ref == 'refs/heads/main'
     continue-on-error: true
