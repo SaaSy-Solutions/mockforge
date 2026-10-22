@@ -717,6 +717,32 @@ pub async fn delete_organization(
         ));
     }
 
+    // Completed provider cleanup must precede the organization's cascading
+    // delete. The database trigger repeats this check under the parent-row
+    // lock, covering concurrent admission and direct store callers too.
+    let unfinished_hosted = crate::store::with_org_context(
+        state.db.runtime_pool(),
+        org_id,
+        |tx| {
+            Box::pin(async move {
+                sqlx::query_scalar::<_, bool>(
+                    "SELECT EXISTS(SELECT 1 FROM hosted_mocks WHERE org_id = $1 AND (capacity_reserved OR deleted_at IS NULL))",
+                )
+                .bind(org_id)
+                .fetch_one(&mut **tx)
+                .await
+                .map_err(Into::into)
+            })
+        },
+    )
+    .await?;
+    if unfinished_hosted {
+        return Err(ApiError::Conflict(
+            "Delete hosted deployments and wait for cleanup before deleting the organization."
+                .into(),
+        ));
+    }
+
     // Record audit event before deletion
     let ip_address = headers
         .get("x-forwarded-for")

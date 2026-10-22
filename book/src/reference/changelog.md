@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+### Added
+
+- **[Cloud]** Share Free hosted capacity, monthly request limits and platform AI credits across a verified owner’s organizations. Preserve spent allowances through account recreation, bound deleted identity retention, retain uncertain provider budgets, and require audited usage evidence plus execution fences for stopped-call recovery. Keep provider execution connections separate from API requests. (#834, #868) The Privacy Policy and DPA disclose OpenAI as the platform AI sub-processor, with processing beginning no earlier than November 14, 2026.
+
 ### Fixed
 
 - **[Docs]** The workspace export/import guide and the configuration reference no longer call `mockforge workspace export`, `import` and `activate` unreleased; they ship in 0.3.236. (#1197)

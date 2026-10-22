@@ -24,13 +24,13 @@ This Privacy Policy explains how **SaaSy Solutions LLC** ("we", "us") collects, 
 
 Where the GDPR applies, our legal bases are performance of our contract with you, our legitimate interests in operating and securing the Service, compliance with legal obligations, and your consent where we ask for it.
 
-We do not sell or rent personal data, and we do not use Customer Content to train machine-learning models. MockForge Cloud does not send Customer Content to third-party AI or LLM providers; AI features use only a provider key you supply yourself.
+We do not sell or rent personal data, and we do not use Customer Content to train machine-learning models. From November 14, 2026, AI features that run on MockForge's platform AI allowance send your prompt and the specification, fixture or other content you include with it to OpenAI, our AI sub-processor, to generate the response. If you configure your own provider key, those requests go to that provider instead, at your direction, and do not use the platform allowance.
 
 ## 3. Sharing
 
 We share personal data only:
 
-- with the sub-processors listed in Section 7 of our [Data Processing Agreement](/legal/dpa), which host, store, secure, bill for and send email from the Service on our behalf under contractual confidentiality and security obligations;
+- with the sub-processors listed in Section 7 of our [Data Processing Agreement](/legal/dpa), which host, store, secure, bill for, send email from and generate platform AI responses for the Service on our behalf under contractual confidentiality and security obligations;
 - with other members of your organization, as your organization's settings allow;
 - with AI or other third-party providers you configure yourself (for example, your own API keys), at your direction;
 - when required by law or to protect the rights, safety and security of our users, the public or us;
@@ -45,6 +45,7 @@ MockForge Cloud is hosted in the United States. If you access it from outside th
 - Account and Customer Content: kept while your account is active and deleted within 30 days of account deletion (backups age out within 90 days).
 - Request logs and diagnostic data: generally kept for up to 90 days.
 - Billing records: kept as long as tax and accounting law requires.
+- Free allowance abuse prevention: a private salted digest of verified email identities and quota accounting survives account deletion to prevent resetting a spent monthly allowance. Deleted-account identity bindings are eligible for deletion after 35 days and are removed by a daily cleanup, normally within 36 days. These digests are pseudonymous personal data; they are not exposed to other accounts. Verified email aliases remain bound while the account is active.
 - Security and audit logs: records of security-relevant events (the event type, timestamp, IP address, user agent, and pseudonymous identifiers such as internal account, organization or invitation IDs) are kept for 400 days from the event and then deleted automatically. They do not record your email address or username; a failed sign-in for an email address that has no account is recorded with a keyed hash of that address, not the address itself. We keep these logs after you delete your account, for security, fraud prevention and to comply with legal obligations (GDPR Art. 17(3)(b) and (e)). Once your account is deleted, they are no longer linked to your account details.
 
 ## 6. Security

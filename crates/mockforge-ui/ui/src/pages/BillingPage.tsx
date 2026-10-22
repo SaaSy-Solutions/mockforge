@@ -783,10 +783,18 @@ export function BillingPage() {
                     1GB storage
                   </li>
                   <li className="flex items-center">
-                    <XCircle className="w-4 h-4 mr-2 text-muted-foreground" />
-                    BYOK only for AI
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-success-500" />
+                    1 hosted HTTP mock
+                  </li>
+                  <li className="flex items-center">
+                    <CheckCircle2 className="w-4 h-4 mr-2 text-success-500" />
+                    5K platform AI tokens/month; BYOK supported
                   </li>
                 </ul>
+                <p className="text-xs text-muted-foreground">
+                  Hosted capacity and monthly allowances are shared across your Free
+                  organizations. Verify your email to deploy a mock or use platform AI.
+                </p>
                 {subscription.plan === 'free' ? (
                   <Button disabled className="w-full">Current Plan</Button>
                 ) : (

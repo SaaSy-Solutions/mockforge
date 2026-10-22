@@ -175,6 +175,8 @@ mockforge-federation = { version = "0.3.236", path = "../mockforge-federation" }
 mockforge-scenarios = { version = "0.3.236", path = "../mockforge-scenarios" }
 mockforge-plugin-registry = { version = "0.3.236", path = "../mockforge-plugin-registry" }
 mockforge-observability = { version = "0.3.236", path = "../mockforge-observability", default-features = false, features = ["sysinfo", "log-shipper"] }
+mockforge-http = { version = "0.3.236", path = "../mockforge-http" }
+mockforge-openapi = { version = "0.3.236", path = "../mockforge-openapi" }
 # SSRF guard reused at the trigger_run handler — primary enforcement
 # before runs hit the Redis queue. The runner-side guard in
 # mockforge_bench::cloud_api is defense-in-depth.

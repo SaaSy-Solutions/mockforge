@@ -46,7 +46,9 @@ const Banner: React.FC = () => {
                 <div className="flex-1">
                     {q.provider === 'disabled'
                         ? 'AI is not available on this plan. Add a BYOK key in Settings or upgrade to Pro/Team.'
-                        : 'Monthly AI quota exhausted. Upgrade your plan or add a BYOK key for unlimited usage.'}
+                        : q.deny_reason ?? ((q.tokens_reserved_this_period ?? 0) > 0
+                            ? 'AI credits are reserved by outstanding calls. Wait for settlement or add a BYOK key.'
+                            : 'Monthly AI quota exhausted. Upgrade your plan or add a BYOK key.')}
                 </div>
                 <UsageDigest q={q} />
             </div>
@@ -87,11 +89,13 @@ const ProviderBadge: React.FC<{ provider: AiQuotaResponse['provider'] }> = ({ pr
 
 const UsageDigest: React.FC<{ q: AiQuotaResponse }> = ({ q }) => {
     const unlimited = q.tokens_limit === -1;
+    const reserved = q.tokens_reserved_this_period ?? 0;
     return (
         <span className="text-xs font-mono whitespace-nowrap">
             {q.tokens_used_this_period.toLocaleString()}
             {' / '}
             {unlimited ? '∞' : q.tokens_limit.toLocaleString()} tokens
+            {reserved > 0 ? ` · ${reserved.toLocaleString()} reserved` : null}
         </span>
     );
 };
