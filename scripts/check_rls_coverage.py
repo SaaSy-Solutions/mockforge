@@ -200,6 +200,7 @@ ELEVATED_ALLOWLIST = {
     "handlers/billing.rs::handle_subscription_deleted": "Stripe webhook: no user, org resolved from the signed payload",
     "handlers/billing.rs::handle_payment_succeeded": "Stripe webhook: no user, org resolved from the signed payload",
     "handlers/billing.rs::handle_payment_failed": "Stripe webhook: no user, org resolved from the signed payload",
+    "handlers/billing.rs::handle_trial_will_end": "Stripe webhook: no user, org resolved from the signed payload",
 }
 
 # Expressions that mean "this statement runs on the request-path (runtime) pool".
