@@ -1,9 +1,8 @@
 # Local workspace export and import
 
-Published 0.3.233 has no `workspace sync`, export, or import command. Earlier
-versions of this page incorrectly described a proposed sync CLI as available.
-The export/import implementation described below is unreleased and remains
-under acceptance testing for #1197, as part of #850.
+`mockforge workspace export`, `import` and `activate` ship in 0.3.236 and later.
+There is no `workspace sync` command; earlier versions of this page described a
+proposed sync CLI that was never built.
 
 ## Commands
 
