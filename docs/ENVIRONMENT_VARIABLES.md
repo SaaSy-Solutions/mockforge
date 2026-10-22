@@ -117,6 +117,8 @@ These variables configure the MockForge Plugin Registry server.
 | `MOCKFORGE_BASE_URL` | None | MockForge API base URL |
 | `FLYIO_API_TOKEN` | None | Fly.io API token for deployments |
 | `FLYIO_ORG_SLUG` | None | Fly.io organization slug |
+| `MOCKFORGE_CF_MOCKS_URL` | None | Public base of the hosted-mocks Worker (e.g. `https://mocks.mockforge.dev`). With `MOCKFORGE_CF_MOCKS_EDGE_TOKEN`, HTTP/WebSocket/GraphQL hosted mocks without plugins run on Cloudflare Containers; others stay on Fly. See `deploy/cloudflare/hosted-mocks/README.md` |
+| `MOCKFORGE_CF_MOCKS_EDGE_TOKEN` | None | Shared secret the registry sends to the hosted-mocks Worker's admin endpoints; must equal the Worker's `EDGE_TOKEN` |
 | `MOCKFORGE_DOCKER_IMAGE` | None | Docker image for deployments |
 
 ---
