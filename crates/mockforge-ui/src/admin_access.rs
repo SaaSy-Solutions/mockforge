@@ -13,7 +13,8 @@
 //!   `X-MockForge-Management-Token` or `Authorization: Bearer`. The registry
 //!   sets it on every hosted mock and sends it on its private-network calls.
 //! - `MOCKFORGE_ADMIN_PASSWORD` (with optional `MOCKFORGE_ADMIN_USERNAME`,
-//!   default `admin`): the admin UI login, replacing the built-in demo users.
+//!   default `admin`): the admin UI login. It is the only login the admin UI
+//!   ever creates; there are no built-in users (#1016).
 //! - `JWT_SECRET`: the operator signs admin JWTs themselves.
 
 use std::fmt;

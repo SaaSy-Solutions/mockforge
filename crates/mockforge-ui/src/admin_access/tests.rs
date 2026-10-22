@@ -70,10 +70,10 @@ fn non_loopback_with_dev_bypass_refuses_even_with_credentials() {
 }
 
 #[test]
-fn non_loopback_token_only_refuses_demo_user_jwts() {
+fn non_loopback_token_only_refuses_jwts() {
     let policy = policy_for_bind(addr("[::]:9080"), &token_env()).expect("token configured");
     assert!(!policy.allows_anonymous_loopback_reads());
-    assert!(!policy.accepts_jwt(), "demo-user JWTs must not open a reachable server");
+    assert!(!policy.accepts_jwt(), "no JWT can be legitimate without a login or secret");
 }
 
 #[test]

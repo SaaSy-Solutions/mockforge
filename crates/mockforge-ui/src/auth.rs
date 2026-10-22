@@ -27,6 +27,7 @@ use crate::models::ApiResponse;
 use crate::rbac::UserContext;
 use mockforge_collab::models::UserRole;
 
+mod initial_users;
 mod password_policy;
 pub use password_policy::{PasswordPolicy, PasswordValidationError};
 
@@ -57,14 +58,6 @@ fn is_dev_auth_enabled() -> bool {
     cfg!(test) || is_truthy_env("MOCKFORGE_ENABLE_DEV_AUTH")
 }
 
-fn should_seed_default_users() -> bool {
-    // Seed users in dev environment with dev auth enabled, OR when no production auth is configured
-    // (so `--admin` works out of the box with default credentials)
-    let explicit_dev = is_development_environment() && is_dev_auth_enabled();
-    let no_production_auth = !is_development_environment() && std::env::var("JWT_SECRET").is_err();
-    (explicit_dev || no_production_auth) && !is_truthy_env("MOCKFORGE_DISABLE_DEV_SEED_USERS")
-}
-
 fn get_jwt_secret_bytes() -> Result<Vec<u8>, jsonwebtoken::errors::Error> {
     if cfg!(test) {
         return Ok(b"test-jwt-secret-which-is-long-enough".to_vec());
@@ -85,12 +78,14 @@ fn get_jwt_secret_bytes() -> Result<Vec<u8>, jsonwebtoken::errors::Error> {
     }
 
     if is_development_environment() && is_dev_auth_enabled() {
-        let dev_secret = std::env::var("MOCKFORGE_DEV_JWT_SECRET")
-            .unwrap_or_else(|_| "mockforge-dev-only-secret-change-me-12345".to_string());
-        tracing::warn!(
-            "Using development JWT secret fallback. Set JWT_SECRET for production-like testing."
-        );
-        return Ok(dev_secret.into_bytes());
+        // No constant fallback: a secret in the source lets anyone forge an
+        // admin token (#1016).
+        if let Ok(dev_secret) = std::env::var("MOCKFORGE_DEV_JWT_SECRET") {
+            tracing::warn!(
+                "Using MOCKFORGE_DEV_JWT_SECRET. Set JWT_SECRET for production-like testing."
+            );
+            return Ok(dev_secret.into_bytes());
+        }
     }
 
     // Fallback: a random per-process secret so `--admin` works out of the
@@ -112,24 +107,6 @@ fn process_jwt_secret() -> &'static [u8; 32] {
         );
         secret
     })
-}
-
-/// A user created at startup: username, password, role, email
-type SeedUser = (String, String, UserRole, Option<String>);
-
-/// The operator-configured admin login, when `MOCKFORGE_ADMIN_PASSWORD` is
-/// long enough (`crate::admin_access`)
-fn configured_admin_login() -> Option<(String, String)> {
-    use crate::admin_access::{ADMIN_PASSWORD_ENV, ADMIN_USERNAME_ENV, MIN_ADMIN_PASSWORD_LEN};
-    let password = std::env::var(ADMIN_PASSWORD_ENV)
-        .ok()
-        .filter(|p| p.len() >= MIN_ADMIN_PASSWORD_LEN)?;
-    let username = std::env::var(ADMIN_USERNAME_ENV)
-        .ok()
-        .map(|u| u.trim().to_string())
-        .filter(|u| !u.is_empty())
-        .unwrap_or_else(|| "admin".to_string());
-    Some((username, password))
 }
 
 pub fn validate_auth_config_on_startup() -> Result<(), String> {
@@ -348,56 +325,7 @@ impl UserStore {
             password_policy,
         };
 
-        // An operator-configured admin login replaces the demo users, whose
-        // passwords are public (#1019).
-        let seed_users: Option<Vec<SeedUser>> =
-            if let Some((username, password)) = configured_admin_login() {
-                Some(vec![(username, password, UserRole::Admin, None)])
-            } else if should_seed_default_users() {
-                // Development-only seeded users for local testing
-                Some(
-                    [
-                        ("admin", "admin123", UserRole::Admin, "admin@mockforge.dev"),
-                        ("viewer", "viewer123", UserRole::Viewer, "viewer@mockforge.dev"),
-                        ("editor", "editor123", UserRole::Editor, "editor@mockforge.dev"),
-                    ]
-                    .into_iter()
-                    .map(|(u, p, r, e)| (u.to_string(), p.to_string(), r, Some(e.to_string())))
-                    .collect(),
-                )
-            } else {
-                None
-            };
-
-        if let Some(default_users) = seed_users {
-            let store_clone = store.clone();
-            // These in-memory development seeds perform CPU-bound hashing.
-            // Keep it off Tokio's workers: runtime shutdown otherwise waits for
-            // an uninterruptible async task even after SIGTERM has been handled.
-            // The detached thread exits after this one-time initialization.
-            if let Err(error) = std::thread::Builder::new()
-                .name("mockforge-dev-auth-seed".to_string())
-                .spawn(move || {
-                    let mut users = store_clone.users.blocking_write();
-                    for (username, password, role, email) in default_users {
-                        if let Ok(password_hash) = hash(&password, DEFAULT_COST) {
-                            let user = User {
-                                id: format!("{}-001", username),
-                                username: username.clone(),
-                                password_hash,
-                                role,
-                                email,
-                            };
-                            users.insert(username, user);
-                        } else {
-                            tracing::error!("Failed to hash password for user: {}", username);
-                        }
-                    }
-                })
-            {
-                tracing::error!(%error, "Failed to start development user initialization");
-            }
-        }
+        initial_users::initialize(&store.users);
 
         store
     }
@@ -740,6 +668,32 @@ pub fn claims_to_user_context(claims: &Claims) -> UserContext {
 mod tests {
     use super::*;
 
+    /// The demo logins that used to be built in, and must never return
+    const PUBLISHED_DEMO_LOGINS: [(&str, &str); 3] = [
+        ("admin", "admin123"),
+        ("viewer", "viewer123"),
+        ("editor", "editor123"),
+    ];
+    const ADMIN_PW: &str = "Fixture-P4ss-One!";
+    const EDITOR_PW: &str = "Fixture-P4ss-Two!";
+    const VIEWER_PW: &str = "Fixture-P4ss-Six!";
+
+    /// A store with one user per role, created the way an operator would
+    async fn fixture_store() -> UserStore {
+        let store = UserStore::new();
+        for (username, password, role) in [
+            ("admin", ADMIN_PW, UserRole::Admin),
+            ("editor", EDITOR_PW, UserRole::Editor),
+            ("viewer", VIEWER_PW, UserRole::Viewer),
+        ] {
+            store
+                .create_user(username.to_string(), password.to_string(), role, None)
+                .await
+                .expect("fixture user is new and meets the password policy");
+        }
+        store
+    }
+
     #[test]
     fn process_jwt_secret_is_random_and_stable() {
         // The fallback used to be a constant in this file (#1019).
@@ -750,31 +704,39 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_user_store_creation() {
-        let store = UserStore::new();
-        // Wait a bit for async initialization
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-
-        // Verify default users exist
-        let result = store.authenticate("admin", "admin123").await;
-        assert!(result.is_ok(), "Admin user should exist");
+    async fn new_store_has_no_built_in_users() {
+        // The test process sets no MOCKFORGE_ADMIN_PASSWORD, so nothing is
+        // seeded and no hashing thread is started (#1016).
+        for store in [UserStore::new(), UserStore::default()] {
+            assert!(store.users.read().await.is_empty());
+            for (username, password) in PUBLISHED_DEMO_LOGINS {
+                let result = store.authenticate(username, password).await;
+                assert_eq!(result.unwrap_err(), "Invalid username or password");
+            }
+        }
     }
 
-    #[tokio::test]
-    async fn test_user_store_default() {
-        let store = UserStore::default();
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
-
-        let result = store.authenticate("admin", "admin123").await;
-        assert!(result.is_ok());
+    #[test]
+    fn source_contains_no_demo_passwords() {
+        // Guard against the demo users coming back in a later edit.
+        let source = include_str!("auth.rs");
+        let initial_users = include_str!("auth/initial_users.rs");
+        let production = format!(
+            "{}\n{}",
+            &source[..source.find("\nmod tests {").expect("tests module")],
+            &initial_users[..initial_users.find("\nmod tests {").expect("startup policy tests")]
+        );
+        for (_, password) in PUBLISHED_DEMO_LOGINS {
+            assert!(!production.contains(&format!("\"{password}\"")), "{password}");
+        }
+        assert!(!production.contains("mockforge-dev-only-secret-change-me-12345"));
     }
 
     #[tokio::test]
     async fn test_authenticate_success() {
-        let store = UserStore::new();
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        let store = fixture_store().await;
 
-        let result = store.authenticate("admin", "admin123").await;
+        let result = store.authenticate("admin", ADMIN_PW).await;
         assert!(result.is_ok());
 
         let user = result.unwrap();
@@ -784,8 +746,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_authenticate_wrong_password() {
-        let store = UserStore::new();
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        let store = fixture_store().await;
 
         let result = store.authenticate("admin", "wrongpassword").await;
         assert!(result.is_err());
@@ -794,8 +755,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_authenticate_nonexistent_user() {
-        let store = UserStore::new();
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        let store = fixture_store().await;
 
         let result = store.authenticate("nonexistent", "password").await;
         assert!(result.is_err());
@@ -804,8 +764,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_rate_limiting() {
-        let store = UserStore::new();
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        let store = fixture_store().await;
 
         // Try to login with wrong password many times
         for _ in 0..5 {
@@ -825,8 +784,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_account_lockout_after_failures() {
-        let store = UserStore::new();
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        let store = fixture_store().await;
 
         // Try to login with wrong password 5 times
         for _ in 0..5 {
@@ -834,7 +792,7 @@ mod tests {
         }
 
         // Account should now be locked
-        let result = store.authenticate("editor", "editor123").await;
+        let result = store.authenticate("editor", EDITOR_PW).await;
         assert!(result.is_err());
         let error = result.unwrap_err();
         assert!(
@@ -846,8 +804,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_account_lockout_reset_on_success() {
-        let store = UserStore::new();
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        let store = fixture_store().await;
 
         // Try wrong password a few times
         for _ in 0..2 {
@@ -855,7 +812,7 @@ mod tests {
         }
 
         // Successful login should reset counter
-        let result = store.authenticate("viewer", "viewer123").await;
+        let result = store.authenticate("viewer", VIEWER_PW).await;
         assert!(result.is_ok());
 
         // Should be able to attempt again without hitting lockout
@@ -871,8 +828,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_user_success() {
-        let store = UserStore::new();
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        let store = fixture_store().await;
 
         let result = store
             .create_user(
@@ -896,8 +852,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_create_user_duplicate_username() {
-        let store = UserStore::new();
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        let store = fixture_store().await;
 
         let result = store
             .create_user("admin".to_string(), "NewP@ssw0rd123".to_string(), UserRole::Editor, None)
@@ -909,11 +864,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_user_by_id() {
-        let store = UserStore::new();
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        let store = fixture_store().await;
 
         // Authenticate to get user ID
-        let auth_result = store.authenticate("admin", "admin123").await.unwrap();
+        let auth_result = store.authenticate("admin", ADMIN_PW).await.unwrap();
         let user_id = auth_result.id.clone();
 
         // Get user by ID
@@ -927,8 +881,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_user_by_id_not_found() {
-        let store = UserStore::new();
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        let store = fixture_store().await;
 
         let result = store.get_user_by_id("nonexistent-id").await;
         assert!(result.is_none());
@@ -1243,30 +1196,20 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_all_default_users_exist() {
-        let store = UserStore::new();
-        tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+    async fn test_all_fixture_users_exist() {
+        let store = fixture_store().await;
 
-        // Test admin
-        let result = store.authenticate("admin", "admin123").await;
-        assert!(result.is_ok());
+        let result = store.authenticate("admin", ADMIN_PW).await;
         assert!(matches!(result.unwrap().role, UserRole::Admin));
-
-        // Test viewer
-        let result = store.authenticate("viewer", "viewer123").await;
-        assert!(result.is_ok());
+        let result = store.authenticate("viewer", VIEWER_PW).await;
         assert!(matches!(result.unwrap().role, UserRole::Viewer));
-
-        // Test editor
-        let result = store.authenticate("editor", "editor123").await;
-        assert!(result.is_ok());
+        let result = store.authenticate("editor", EDITOR_PW).await;
         assert!(matches!(result.unwrap().role, UserRole::Editor));
     }
 
     #[tokio::test]
     async fn test_concurrent_authentication_attempts() {
-        let store = Arc::new(UserStore::new());
-        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+        let store = Arc::new(fixture_store().await);
 
         let mut handles = vec![];
 
@@ -1275,9 +1218,9 @@ mod tests {
             let store_clone = store.clone();
             let handle = tokio::spawn(async move {
                 if i % 2 == 0 {
-                    store_clone.authenticate("admin", "admin123").await
+                    store_clone.authenticate("admin", ADMIN_PW).await
                 } else {
-                    store_clone.authenticate("viewer", "viewer123").await
+                    store_clone.authenticate("viewer", VIEWER_PW).await
                 }
             });
             handles.push(handle);
