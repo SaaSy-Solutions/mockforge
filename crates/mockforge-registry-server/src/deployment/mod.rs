@@ -6,6 +6,7 @@ pub mod cleanup;
 pub mod cloudflare;
 pub mod flyio;
 pub mod health_check;
+pub mod machine_config;
 pub mod metrics;
 pub mod orchestrator;
 pub mod router;
