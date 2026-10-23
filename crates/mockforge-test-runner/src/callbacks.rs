@@ -168,7 +168,7 @@ impl RegistryCallbacks {
         let path = format!("/api/v1/internal/test-runs/{run_id}/finish");
         let body = FinishBody {
             status: outcome.status.as_str(),
-            runner_seconds: outcome.runner_seconds,
+            runner_seconds: outcome.billable_runner_seconds(),
             summary: &outcome.summary,
         };
         let mut delay = self.finish_retry_base;

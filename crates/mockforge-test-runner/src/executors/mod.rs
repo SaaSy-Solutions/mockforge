@@ -51,6 +51,16 @@ pub struct JobOutcome {
     pub summary: Option<serde_json::Value>,
 }
 
+impl JobOutcome {
+    /// Seconds eligible for billing. Infrastructure errors never consume usage.
+    pub fn billable_runner_seconds(&self) -> i32 {
+        match self.status {
+            JobStatus::Errored => 0,
+            _ => self.runner_seconds,
+        }
+    }
+}
+
 /// Subset of test_runs.status values an executor can produce. `queued`
 /// and `running` aren't terminal so the executor never returns them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -139,6 +149,20 @@ impl ExecutorRegistry {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn errored_outcomes_never_consume_runner_seconds() {
+        let mut outcome = JobOutcome {
+            status: JobStatus::Errored,
+            runner_seconds: 37,
+            summary: None,
+        };
+        assert_eq!(outcome.billable_runner_seconds(), 0);
+        for status in [JobStatus::Passed, JobStatus::Failed, JobStatus::Cancelled] {
+            outcome.status = status;
+            assert_eq!(outcome.billable_runner_seconds(), 37);
+        }
+    }
 
     #[test]
     fn job_status_as_str_round_trips() {

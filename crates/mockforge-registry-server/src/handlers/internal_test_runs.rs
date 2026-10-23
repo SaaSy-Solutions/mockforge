@@ -220,6 +220,13 @@ pub struct FinishBody {
     pub summary: Option<serde_json::Value>,
 }
 
+fn billable_runner_seconds(status: &str, reported_seconds: i32) -> i32 {
+    match status {
+        "errored" => 0,
+        _ => reported_seconds,
+    }
+}
+
 /// `POST /api/v1/internal/test-runs/{id}/finish`
 ///
 /// Marks the run terminal (idempotent — already-terminal rows are not
@@ -242,11 +249,15 @@ pub async fn run_finished(
         return Err(ApiError::InvalidRequest("runner_seconds must be non-negative".into()));
     }
 
+    // Older workers may report elapsed time for a refused or errored run.
+    // Enforce billing eligibility here as well as in the current worker.
+    let runner_seconds = billable_runner_seconds(&body.status, body.runner_seconds);
+
     let run = TestRun::mark_finished(
         state.db.pool(),
         id,
         &body.status,
-        body.runner_seconds,
+        runner_seconds,
         body.summary.as_ref(),
     )
     .await
@@ -256,13 +267,13 @@ pub async fn run_finished(
         // Bill the org for runner-seconds. Note we read org_id from
         // the test_runs row (set at queue-time), not from the request
         // — the runner can't lie about which org to charge.
-        if body.runner_seconds > 0 {
+        if runner_seconds > 0 {
             // Owner pool: internal shared-token runner callback, no user org
             // context (#1087 elevated path).
             UsageCounter::increment_runner_seconds(
                 &mut *state.db.pool().acquire().await?,
                 run.org_id,
-                body.runner_seconds as i64,
+                runner_seconds as i64,
             )
             .await
             .map_err(ApiError::Database)?;
@@ -1056,6 +1067,14 @@ struct ContractStabilityRow {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn errored_callbacks_never_consume_runner_seconds() {
+        assert_eq!(billable_runner_seconds("errored", 37), 0);
+        assert_eq!(billable_runner_seconds("passed", 37), 37);
+        assert_eq!(billable_runner_seconds("failed", 37), 37);
+        assert_eq!(billable_runner_seconds("cancelled", 37), 37);
+    }
 
     #[test]
     fn ct_eq_returns_true_for_equal() {
