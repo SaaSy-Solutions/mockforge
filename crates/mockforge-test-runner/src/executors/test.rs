@@ -54,18 +54,23 @@ impl Executor for TestExecutor {
         // against an external target. Requires the k6 binary on $PATH (the
         // runner Dockerfile installs it). Bench and OWASP can instead use
         // their native HTTP paths when a target URL is supplied.
-        if let Some(reason) = crate::target_client::base_path_refusal(
+        let refusal = crate::target_client::base_path_refusal(
             extract_string(&job.payload, "base_path").as_deref(),
-        ) {
+        )
+        .or_else(|| {
+            uses_cloud_api(&job.payload)
+                .then(|| {
+                    crate::target_client::k6_refusal(
+                        self.kind,
+                        mockforge_bench::executor::k6_egress_proxy(),
+                    )
+                })
+                .flatten()
+        });
+        if let Some(reason) = refusal {
             return refuse_k6_run(job, callbacks, started, self.kind, reason).await;
         }
         if uses_cloud_api(&job.payload) {
-            if let Some(reason) = crate::target_client::k6_refusal(
-                self.kind,
-                mockforge_bench::executor::k6_egress_proxy(),
-            ) {
-                return refuse_k6_run(job, callbacks, started, self.kind, reason).await;
-            }
             return run_cloud_test(self.kind, job, callbacks, started).await;
         }
 
@@ -967,6 +972,25 @@ async fn run_cloud_crud_flow(
     }
 }
 
+type BenchWorkerResult = (Vec<u128>, u64, u64);
+
+/// Fail the run on a lost worker; dropping JoinSet also aborts remaining workers.
+async fn collect_bench_results(
+    mut workers: tokio::task::JoinSet<BenchWorkerResult>,
+) -> Result<BenchWorkerResult> {
+    let mut latencies = Vec::new();
+    let mut total_ok = 0;
+    let mut total_err = 0;
+    while let Some(result) = workers.join_next().await {
+        let (samples, ok, err) =
+            result.map_err(|error| Error::Executor(format!("bench worker failed: {error}")))?;
+        latencies.extend(samples);
+        total_ok += ok;
+        total_err += err;
+    }
+    Ok((latencies, total_ok, total_err))
+}
+
 /// Reqwest-based load runner for kind=bench. Hammers the target with
 /// `concurrency` parallel workers for `duration_secs` (both clamped to
 /// safe defaults) and reports p50/p95/p99 latencies + error rate.
@@ -1015,11 +1039,11 @@ async fn run_real_bench(
 
     let target = target_url.to_string();
     let deadline = Instant::now() + std::time::Duration::from_secs(duration_secs);
-    let mut handles = Vec::with_capacity(concurrency as usize);
+    let mut workers = tokio::task::JoinSet::new();
     for _ in 0..concurrency {
         let client = client.clone();
         let target = target.clone();
-        handles.push(tokio::spawn(async move {
+        workers.spawn(async move {
             let mut latencies_ns: Vec<u128> = Vec::new();
             let mut ok = 0u64;
             let mut err = 0u64;
@@ -1042,19 +1066,10 @@ async fn run_real_bench(
                 latencies_ns.push(started.elapsed().as_nanos());
             }
             (latencies_ns, ok, err)
-        }));
+        });
     }
 
-    let mut all_latencies: Vec<u128> = Vec::new();
-    let mut total_ok = 0u64;
-    let mut total_err = 0u64;
-    for h in handles {
-        if let Ok((lats, ok, err)) = h.await {
-            all_latencies.extend(lats);
-            total_ok += ok;
-            total_err += err;
-        }
-    }
+    let (mut all_latencies, total_ok, total_err) = collect_bench_results(workers).await?;
 
     all_latencies.sort_unstable();
     let total_requests = (total_ok + total_err) as f64;
@@ -1322,6 +1337,35 @@ mod tests {
             kind: kind.to_string(),
             payload,
         }
+    }
+
+    #[tokio::test]
+    async fn bench_worker_results_preserve_all_samples_and_counts() {
+        let mut workers = tokio::task::JoinSet::new();
+        workers.spawn(async { (vec![10], 1, 0) });
+        workers.spawn(async { (vec![20, 30], 1, 1) });
+        let (mut latencies, ok, errors) = collect_bench_results(workers).await.unwrap();
+        latencies.sort_unstable();
+        assert_eq!(latencies, vec![10, 20, 30]);
+        assert_eq!((ok, errors), (2, 1));
+    }
+
+    #[tokio::test]
+    async fn lost_bench_worker_errors_and_aborts_remaining_work() {
+        let mut workers = tokio::task::JoinSet::new();
+        let (alive, dropped) = tokio::sync::oneshot::channel::<()>();
+        workers.spawn(async move {
+            let _guard = alive;
+            std::future::pending::<BenchWorkerResult>().await
+        });
+        let aborted = workers.spawn(std::future::pending::<BenchWorkerResult>());
+        aborted.abort();
+        let error = collect_bench_results(workers).await.expect_err("lost worker must fail");
+        assert!(error.to_string().contains("bench worker failed:"));
+        let remaining = tokio::time::timeout(std::time::Duration::from_secs(1), dropped)
+            .await
+            .expect("remaining worker must be stopped");
+        assert!(remaining.is_err(), "remaining worker guard must be dropped");
     }
 
     #[test]
