@@ -395,36 +395,30 @@ impl SessionManager {
 
         // Forward to every current subscriber, matching the regular
         // PUBLISH path's QoS rules.
-        let topics = self.topics.read().await;
-        let subscribers = topics.match_topic(&will.topic);
-        let active = self.active_clients.read().await;
-        for sub in subscribers {
-            if sub.client_id == client_id {
-                continue; // Don't send back to the dead client
-            }
-            if let Some(c) = active.get(&sub.client_id) {
-                let delivery_qos = std::cmp::min(will.qos as u8, sub.qos);
-                let delivery_qos = QoS::try_from(delivery_qos).unwrap_or(QoS::AtMostOnce);
-                let packet = Packet::Publish(PublishPacket {
-                    dup: false,
-                    qos: delivery_qos,
-                    retain: false, // not a retained delivery — live forwarding
-                    topic: will.topic.clone(),
-                    packet_id: None,
-                    payload: will.message.clone(),
-                });
-                if c.sender.send(packet).await.is_ok() {
-                    if let Some(metrics) = &self.metrics {
-                        metrics.record_delivery();
-                    }
-                    crate::recording::record_delivery(
-                        &sub.client_id,
-                        &will.topic,
-                        delivery_qos as u8,
-                        false,
-                        &will.message,
-                    );
+        for (subscriber_id, subscription_qos, sender) in
+            self.delivery_targets(client_id, &will.topic).await
+        {
+            let delivery_qos = std::cmp::min(will.qos as u8, subscription_qos);
+            let delivery_qos = QoS::try_from(delivery_qos).unwrap_or(QoS::AtMostOnce);
+            let packet = Packet::Publish(PublishPacket {
+                dup: false,
+                qos: delivery_qos,
+                retain: false, // not a retained delivery — live forwarding
+                topic: will.topic.clone(),
+                packet_id: None,
+                payload: will.message.clone(),
+            });
+            if sender.send(packet).await.is_ok() {
+                if let Some(metrics) = &self.metrics {
+                    metrics.record_delivery();
                 }
+                crate::recording::record_delivery(
+                    &subscriber_id,
+                    &will.topic,
+                    delivery_qos as u8,
+                    false,
+                    &will.message,
+                );
             }
         }
     }
@@ -574,55 +568,71 @@ impl SessionManager {
             }
         }
 
-        // Find matching subscribers
-        let topics = self.topics.read().await;
-        let subscribers = topics.match_topic(&publish.topic);
+        // Snapshot recipients before awaiting any subscriber's queue.
+        for (subscriber_id, subscription_qos, sender) in
+            self.delivery_targets(publisher_id, &publish.topic).await
+        {
+            // Determine delivery QoS (minimum of publish and subscription QoS)
+            let delivery_qos = std::cmp::min(publish.qos as u8, subscription_qos);
+            let delivery_qos = QoS::try_from(delivery_qos).unwrap_or(QoS::AtMostOnce);
 
-        // Deliver to each subscriber
-        let active = self.active_clients.read().await;
-        for sub in subscribers {
-            if sub.client_id == publisher_id {
-                continue; // Don't send to self
-            }
+            // Leave `packet_id = None` for QoS > 0 forwards — the writer
+            // task picks up `is_none()` and calls `assign_packet_id`
+            // against the subscriber's session. A previous version set
+            // this to `Some(0)` expecting the writer to overwrite it,
+            // but the writer only fills `is_none()`, so the PUBLISH
+            // shipped with packet_id=0 on the wire, which MQTT spec
+            // forbids for QoS > 0 (librdkafka/rumqttc clients reject
+            // with "Packet id Zero" and drop the connection).
+            let packet = Packet::Publish(PublishPacket {
+                dup: false,
+                qos: delivery_qos,
+                retain: false, // Only first delivery can have retain
+                topic: publish.topic.clone(),
+                packet_id: None,
+                payload: publish.payload.clone(),
+            });
 
-            if let Some(client) = active.get(&sub.client_id) {
-                // Determine delivery QoS (minimum of publish and subscription QoS)
-                let delivery_qos = std::cmp::min(publish.qos as u8, sub.qos);
-                let delivery_qos = QoS::try_from(delivery_qos).unwrap_or(QoS::AtMostOnce);
-
-                // Leave `packet_id = None` for QoS > 0 forwards — the writer
-                // task picks up `is_none()` and calls `assign_packet_id`
-                // against the subscriber's session. A previous version set
-                // this to `Some(0)` expecting the writer to overwrite it,
-                // but the writer only fills `is_none()`, so the PUBLISH
-                // shipped with packet_id=0 on the wire, which MQTT spec
-                // forbids for QoS > 0 (librdkafka/rumqttc clients reject
-                // with "Packet id Zero" and drop the connection).
-                let packet = Packet::Publish(PublishPacket {
-                    dup: false,
-                    qos: delivery_qos,
-                    retain: false, // Only first delivery can have retain
-                    topic: publish.topic.clone(),
-                    packet_id: None,
-                    payload: publish.payload.clone(),
-                });
-
-                if client.sender.send(packet).await.is_ok() {
-                    if let Some(metrics) = &self.metrics {
-                        metrics.record_delivery();
-                    }
-                    // #715 — record the delivery side of the exchange.
-                    crate::recording::record_delivery(
-                        &sub.client_id,
-                        &publish.topic,
-                        delivery_qos as u8,
-                        false,
-                        &publish.payload,
-                    );
-                    debug!("Delivered message to {} on topic {}", sub.client_id, publish.topic);
+            if sender.send(packet).await.is_ok() {
+                if let Some(metrics) = &self.metrics {
+                    metrics.record_delivery();
                 }
+                // #715 — record the delivery side of the exchange.
+                crate::recording::record_delivery(
+                    &subscriber_id,
+                    &publish.topic,
+                    delivery_qos as u8,
+                    false,
+                    &publish.payload,
+                );
+                debug!("Delivered message to {} on topic {}", subscriber_id, publish.topic);
             }
         }
+    }
+
+    /// Copy routing and sender state with separate lock lifetimes. CONNECT,
+    /// SUBSCRIBE and DISCONNECT take the client lock before the topic lock;
+    /// delivery must not hold the topic lock while waiting for clients, or
+    /// hold either lock across a backpressured channel send.
+    async fn delivery_targets(
+        &self,
+        publisher_id: &str,
+        topic: &str,
+    ) -> Vec<(String, u8, ClientSender)> {
+        let subscribers: Vec<_> = {
+            let topics = self.topics.read().await;
+            topics
+                .match_topic(topic)
+                .into_iter()
+                .filter(|sub| sub.client_id != publisher_id)
+                .map(|sub| (sub.client_id.clone(), sub.qos))
+                .collect()
+        };
+        let active = self.active_clients.read().await;
+        subscribers
+            .into_iter()
+            .filter_map(|(id, qos)| active.get(&id).map(|client| (id, qos, client.sender.clone())))
+            .collect()
     }
 
     /// Handle PUBACK from client
@@ -1173,3 +1183,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod concurrency_tests;
