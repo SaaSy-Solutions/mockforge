@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- **[Reality]** Fidelity checks treat omitted or empty root server lists as the OpenAPI default `/`, preventing false drift between equivalent Swagger/OpenAPI definitions while retaining real server changes and route overrides. Recorded CLI query parameters now use the serving parser, including form spaces (`+`), encoded literal plus signs and empty values. (#849)
 - **[Reality]** `verify-mocks` enforces captured request contracts even when server validation is set to `off` or `warn`, route overrides disable checking, or shadow mode is enabled. The offline verifier uses an isolated strict registry policy; serving retains its configured behavior. (#849)
 - **[Reality]** Fidelity checks prefer literal path segments over parameters, matching HTTP routing. Previously, registry iteration order could select a parameter route's schema for a literal endpoint, randomly passing invalid responses or failing valid ones. (#849)
 - **[Reality]** `verify-mocks --fail-on-drift` now fails on unknown endpoints, missing responses and undeclared statuses, and validates range/default/referenced response schemas. Empty captures fail, databases open read-only, and the positive `--limit` applies to recent HTTP records in SQL rather than silently stopping at 100 or being displaced by other protocols. (#849)
