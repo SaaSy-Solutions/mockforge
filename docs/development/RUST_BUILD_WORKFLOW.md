@@ -51,6 +51,10 @@ make clippy-focused PACKAGE=mockforge-core
 make dev PACKAGE=mockforge-core
 ```
 
+A long-running `scripts/dev/cargo run` retains admission for the entire server
+lifetime, not just compilation. Prefer the existing managed executable build/start
+workflow for persistent services; do not park a server in a build slot.
+
 Run one watcher per task. Every watcher event acquires admission anew; an idle
 watcher holds no slot. Run focused tests and Clippy explicitly when appropriate.
 Do not run routine `cargo clean`, `cargo update`, release builds, overlapping
@@ -73,7 +77,7 @@ Behavior tests use fake Cargo and scope executables and real filesystem locks:
 python3 -m unittest discover -s scripts/tests -p test_dev_cargo.py -v
 ```
 
-Required CI and application features remain unchanged. Revert this PR to roll
+Required CI and application features remain enforced. Revert this PR to roll
 back launcher routing; preserve target artifacts and source work. Do not delete
 caches or worktrees. Do not silently bypass the launcher when resource admission
 fails; report the missing user-systemd prerequisite.
@@ -92,8 +96,15 @@ application performance improvement or representative benchmark. No application
 Rust, production profiles, CI gates, dependencies, or compiler flags changed.
 
 Existing CI optimization PRs #1354, #1350, and #1385 were inspected for overlap;
-this change leaves their workflows and source-freshness policies untouched.
+this change preserves their runner routing and source-freshness policies. The
+existing lightweight scope-detection job also runs the twelve launcher regressions;
+no duplicate workflow or extra application compilation is added.
 Legacy scripts (including the standalone RLS gate) and tool installation commands
 still invoke Cargo directly. Their required validation remains intact, but their
 callers must arrange reviewed admission; this PR does not claim complete global
 interception or measured adoption by every agent process.
+
+A cross-repository smoke also ran all three adapters alongside the existing SaaSy
+admission wrapper, using isolated runtime locks, real kernel scopes, and fake
+Cargo workers. Four workers exited successfully with observed peak admitted
+concurrency two. This proves protocol interoperability, not application throughput.
