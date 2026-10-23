@@ -369,9 +369,32 @@ config:
 `generate_once_freeze` requests replay even with auto-freeze disabled. The
 workspace seed overrides the server seed; omitting it inherits the server seed
 or `MOCKFORGE_AI_SEED`. Provider/model settings come from the server's configured
-MockAI instance. This workspace policy does not store API keys. With no workspace
+MockAI instance, or its trusted authoring defaults when runtime MockAI is disabled. This workspace policy does not store API keys. With no workspace
 mode override, the server's AI mode applies. Snapshot settings and mode survive
 workspace save/reload and the legacy workspace export/import path.
+
+The CLI forwards `mockai.intelligent_behavior` settings to authoring even with
+`mockai.enabled: false`. This keeps the chosen local/provider model available to
+authenticated authoring endpoints without enabling runtime AI for mock requests.
+Disable Reality presets when selecting individual subsystem settings:
+
+```yaml
+reality:
+  enabled: false
+mockai:
+  enabled: false
+  intelligent_behavior:
+    enabled: false
+    behavior_model:
+      llm_provider: ollama
+      model: llama3.2
+      seed: 42
+```
+
+Applications embedding the admin server can use
+`start_admin_server_notify_with_authoring` with `AiAuthoringDefaults`. Existing
+admin-server startup functions retain their signatures and defaults. An active
+MockAI instance takes precedence so live configuration updates still apply.
 
 Missing workspaces return 404, malformed workspace files return 500, and invalid
 workspace IDs return 400 before any provider request. Chat uses its conversation's
