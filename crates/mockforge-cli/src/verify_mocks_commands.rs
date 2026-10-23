@@ -17,6 +17,7 @@ use std::path::PathBuf;
 use mockforge_openapi::openapi_routes::OpenApiRouteRegistry;
 use mockforge_openapi::spec::OpenApiSpec;
 
+mod asynchronous;
 mod fixtures;
 use mockforge_contracts::http_route_match::match_template;
 use mockforge_contracts::response_validation as responses;
@@ -30,7 +31,7 @@ use responses::check_response_drift;
 /// responses whose status isn't declared.
 #[derive(clap::Args, Debug)]
 pub(crate) struct VerifyMocksArgs {
-    /// Path to the OpenAPI spec the mocks are generated from
+    /// Path to the OpenAPI or AsyncAPI 2/3 source specification
     /// (3.x natively; Swagger 2.0 is up-converted automatically).
     #[arg(short, long)]
     pub spec: PathBuf,
@@ -40,15 +41,15 @@ pub(crate) struct VerifyMocksArgs {
     #[arg(short, long, required_unless_present_any = ["mock_spec", "fixtures"])]
     pub capture_db: Option<PathBuf>,
 
-    /// OpenAPI definition used to generate the mock; compare it with --spec.
+    /// OpenAPI or AsyncAPI definition used to generate the mock; compare with --spec.
     #[arg(long, required_unless_present_any = ["capture_db", "fixtures"])]
     pub mock_spec: Option<PathBuf>,
 
-    /// HTTP replay fixture JSON file or directory; checks every fixture.
+    /// HTTP replay or AsyncAPI recorder JSON fixture file/directory; checks every fixture.
     #[arg(long, required_unless_present_any = ["capture_db", "mock_spec"])]
     pub fixtures: Option<PathBuf>,
 
-    /// Maximum recent HTTP exchanges to evaluate (newest first).
+    /// Maximum recent HTTP exchanges or asynchronous message events (newest first).
     #[arg(long, default_value = "500", value_parser = clap::value_parser!(i32).range(1..))]
     pub limit: i32,
 
@@ -86,6 +87,10 @@ struct DriftReport {
 pub(crate) async fn handle_verify_mocks_command(
     args: VerifyMocksArgs,
 ) -> mockforge_core::Result<()> {
+    let raw = load_fidelity_document(&args.spec)?;
+    if raw.get("asyncapi").is_some() {
+        return asynchronous::handle(args, raw).await;
+    }
     let VerifyMocksArgs {
         spec,
         capture_db,
@@ -96,7 +101,8 @@ pub(crate) async fn handle_verify_mocks_command(
         output,
     } = args;
 
-    let openapi = load_fidelity_spec(&spec)?;
+    let openapi =
+        OpenApiSpec::from_json(raw).map_err(|e| mockforge_core::Error::config(e.to_string()))?;
     let definition = mock_spec
         .as_ref()
         .map(|path| {
@@ -278,6 +284,11 @@ pub(crate) async fn handle_verify_mocks_command(
 // --- helpers -------------------------------------------------------------
 
 fn load_fidelity_spec(spec: &PathBuf) -> mockforge_core::Result<OpenApiSpec> {
+    OpenApiSpec::from_json(load_fidelity_document(spec)?)
+        .map_err(|e| mockforge_core::Error::config(e.to_string()))
+}
+
+fn load_fidelity_document(spec: &PathBuf) -> mockforge_core::Result<Value> {
     let raw = std::fs::read_to_string(spec).map_err(|e| {
         mockforge_core::Error::config(format!("cannot read {}: {e}", spec.display()))
     })?;
@@ -291,7 +302,7 @@ fn load_fidelity_spec(spec: &PathBuf) -> mockforge_core::Result<OpenApiSpec> {
             mockforge_import::import::swagger2_convert::convert_swagger2_to_openapi3(&spec_value)
                 .map_err(mockforge_core::Error::config)?;
     }
-    OpenApiSpec::from_json(spec_value).map_err(|e| mockforge_core::Error::config(e.to_string()))
+    Ok(spec_value)
 }
 
 async fn load_fidelity_capture(
