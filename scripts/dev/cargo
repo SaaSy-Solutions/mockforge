@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
 """Local Cargo admission. Does not alter compiler flags, features, or CI policy."""
 
-import fcntl
 import hashlib
 import json
 import os
 from pathlib import Path
 import signal
-import stat
 import subprocess
 import sys
 import time
+
+from rust_build_policy import Session, classify, default_policy
 
 READ_COMMANDS = {
     "fmt",
@@ -47,52 +47,14 @@ BUILD_COMMANDS = {
 ROOT = Path(__file__).resolve().parents[2]
 
 
-def private_directory(path):
-    path.mkdir(mode=0o700, parents=True, exist_ok=True)
-    info = path.lstat()
-    if (
-        not stat.S_ISDIR(info.st_mode)
-        or info.st_uid != os.getuid()
-        or info.st_mode & 0o077
-    ):
-        raise ValueError(
-            f"Admission directory must be owned, private and not a symlink: {path}"
-        )
-
-
-def acquire_slot(directory):
-    private_directory(directory)
-    started = time.monotonic()
-    while True:
-        for number in (1, 2):
-            fd = os.open(
-                directory / f"slot-{number}",
-                os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW,
-                0o600,
-            )
-            info = os.fstat(fd)
-            if (
-                not stat.S_ISREG(info.st_mode)
-                or info.st_uid != os.getuid()
-                or info.st_mode & 0o022
-                or info.st_nlink != 1
-            ):
-                os.close(fd)
-                raise ValueError("Unsafe admission slot file")
-            try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                return fd, time.monotonic() - started
-            except BlockingIOError:
-                os.close(fd)
-        time.sleep(0.1)
-
-
 def command_arguments(arguments):
     index = 1 if arguments and arguments[0].startswith("+") else 0
     return arguments[index] if len(arguments) > index else "", arguments[index + 1 :]
 
 
-def build_environment(arguments):
+def build_environment(arguments, limits=None):
+    limits = limits or default_policy()["classes"][classify(arguments)]
+    maximum_jobs = limits["jobs"]
     env = os.environ.copy()
     if not Path.cwd().resolve().is_relative_to(ROOT):
         raise ValueError("Run local Cargo inside this worktree")
@@ -110,9 +72,11 @@ def build_environment(arguments):
     if target.is_symlink():
         raise ValueError("Worktree target must not be a symlink")
     env["CARGO_TARGET_DIR"] = str(target)
-    jobs = int(env.get("CARGO_BUILD_JOBS", "2"))
-    if not 1 <= jobs <= 2:
-        raise ValueError("CARGO_BUILD_JOBS must be 1 or 2")
+    jobs = int(env.get("CARGO_BUILD_JOBS", str(maximum_jobs)))
+    if not 1 <= jobs <= maximum_jobs:
+        raise ValueError(
+            f"CARGO_BUILD_JOBS must be 1..{maximum_jobs} for this workload"
+        )
     env["CARGO_BUILD_JOBS"] = str(jobs)
     _, tail = command_arguments(arguments)
     for i, arg in enumerate(tail):
@@ -143,21 +107,23 @@ def build_environment(arguments):
             value = arg.split("=", 1)[1]
         elif arg.startswith("-j"):
             value = arg[2:]
-        if value is not None and (not value.isdigit() or not 1 <= int(value) <= 2):
-            raise ValueError("Cargo --jobs must be 1 or 2")
+        if value is not None and (
+            not value.isdigit() or not 1 <= int(value) <= maximum_jobs
+        ):
+            raise ValueError(
+                f"Cargo --jobs must be 1..{maximum_jobs} for this workload"
+            )
     return env
 
 
-def scope_command(arguments):
+def scope_command(arguments, session):
     return [
         "systemd-run",
         "--user",
         "--scope",
         "--quiet",
         "--collect",
-        "--property=MemoryMax=12G",
-        "--property=MemorySwapMax=0",
-        "--property=CPUQuota=200%",
+        *(f"--property={value}" for value in session.properties()),
         "--",
         sys.executable,
         str(Path(__file__).resolve()),
@@ -166,7 +132,7 @@ def scope_command(arguments):
     ]
 
 
-def verify_scope():
+def verify_scope(limits):
     entry = next(
         line[3:]
         for line in Path("/proc/self/cgroup").read_text().splitlines()
@@ -178,10 +144,10 @@ def verify_scope():
     quota, period = (group / "cpu.max").read_text().split()
     if (
         memory == "max"
-        or int(memory) > 12 * 1024**3
+        or int(memory) > limits["memory_mib"] * 1024**2
         or swap != "0"
         or quota == "max"
-        or int(quota) > 2 * int(period)
+        or int(quota) * 100 > limits["cpu_percent"] * int(period)
     ):
         raise ValueError("Compilation requires the bounded user systemd scope")
 
@@ -190,7 +156,6 @@ def run(arguments):
     inside = bool(arguments and arguments[0] == "--inside-scope")
     if inside:
         arguments = arguments[1:]
-        verify_scope()
     command, _ = command_arguments(arguments)
     if command in READ_COMMANDS or not arguments:
         return subprocess.call(["cargo", *arguments])
@@ -198,13 +163,18 @@ def run(arguments):
         raise ValueError(
             "Unsupported Cargo entry point; put the build command immediately after cargo or +toolchain"
         )
-    env = build_environment(arguments)
-    if not inside:
-        return subprocess.call(scope_command(arguments), env=env)
-    runtime = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
-    if not runtime.is_absolute():
-        raise ValueError("XDG_RUNTIME_DIR must be absolute")
-    slot, wait = acquire_slot(runtime / "saasy-dev-cargo-admission")
+    with Session(arguments) as session:
+        env = build_environment(arguments, session.limits)
+        if not inside:
+            return subprocess.call(
+                scope_command(arguments, session), env=env, pass_fds=session.descriptors
+            )
+        verify_scope(session.limits)
+        wait = session.acquire()
+        return admitted_run(arguments, command, env, session, wait)
+
+
+def admitted_run(arguments, command, env, session, wait):
     started = time.monotonic()
     child = None
     old_handlers = {}
@@ -219,7 +189,10 @@ def run(arguments):
         for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
             old_handlers[sig] = signal.signal(sig, forward)
         child = subprocess.Popen(
-            ["cargo", *arguments], env=env, start_new_session=True, pass_fds=(slot,)
+            ["cargo", *arguments],
+            env=env,
+            start_new_session=True,
+            pass_fds=session.descriptors,
         )
         status = child.wait()
         return 128 - status if status < 0 else status
@@ -232,6 +205,7 @@ def run(arguments):
         print(
             json.dumps(
                 {
+                    **session.event(),
                     "cargo_command": command,
                     "worktree": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16],
                     "admission_seconds": round(wait, 3),
@@ -247,7 +221,6 @@ def run(arguments):
             ),
             file=sys.stderr,
         )
-        os.close(slot)
         for sig, handler in old_handlers.items():
             signal.signal(sig, handler)
 

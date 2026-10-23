@@ -5,6 +5,7 @@ import importlib.machinery
 import importlib.util
 import os
 import signal
+import sys
 import time
 from pathlib import Path
 import subprocess
@@ -13,6 +14,7 @@ import unittest
 from unittest.mock import patch
 
 LAUNCHER = Path(__file__).resolve().parents[1] / "dev" / "cargo"
+sys.path.insert(0, str(LAUNCHER.parent))
 loader = importlib.machinery.SourceFileLoader("dev_cargo", str(LAUNCHER))
 spec = importlib.util.spec_from_loader(loader.name, loader)
 policy = importlib.util.module_from_spec(spec)
@@ -21,8 +23,14 @@ loader.exec_module(policy)
 
 class DevelopmentCargoTests(unittest.TestCase):
     def test_scope_enforces_bounds(self):
-        command = policy.scope_command(["+stable", "test", "-p", "example"])
-        self.assertIn("--property=MemoryMax=12G", command)
+        with (
+            tempfile.TemporaryDirectory() as directory,
+            policy.Session(["test", "-p", "example"], Path(directory)) as session,
+        ):
+            command = policy.scope_command(
+                ["+stable", "test", "-p", "example"], session
+            )
+        self.assertIn("--property=MemoryMax=12288M", command)
         self.assertIn("--property=MemorySwapMax=0", command)
         self.assertIn("--property=CPUQuota=200%", command)
         self.assertEqual(
@@ -101,21 +109,24 @@ class DevelopmentCargoTests(unittest.TestCase):
     def test_second_shared_slot_when_first_busy(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "admission"
-            first, _ = policy.acquire_slot(root)
-            second, _ = policy.acquire_slot(root)
-            self.assertTrue((root / "slot-2").exists())
-            self.assertFalse((root / "slot-3").exists())
-            os.close(first)
-            os.close(second)
-            again, _ = policy.acquire_slot(root)
-            os.close(again)
+            with (
+                policy.Session(["check"], root) as first,
+                policy.Session(["check"], root) as second,
+            ):
+                first.acquire()
+                second.acquire()
+                self.assertTrue((root / "slot-2").exists())
+                self.assertFalse((root / "slot-3").exists())
+            with policy.Session(["check"], root) as again:
+                again.acquire()
 
     def test_unsafe_lock_directory_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "unsafe"
-            path.mkdir(mode=0o755)
+            path.mkdir(mode=0o777)
+            path.chmod(0o777)
             with self.assertRaises(ValueError):
-                policy.acquire_slot(path)
+                policy.Session(["check"], path)
 
     def test_child_failure_preserved_and_wait_reported(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -133,7 +144,7 @@ class DevelopmentCargoTests(unittest.TestCase):
                 path.write_text(body)
                 path.chmod(0o700)
             env = {"PATH": f"{root}:/usr/bin:/bin", "XDG_RUNTIME_DIR": str(runtime)}
-            program = f"import runpy; p=runpy.run_path({str(LAUNCHER)!r}); p['run'].__globals__['verify_scope']=lambda:None; raise SystemExit(p['run'](['--inside-scope','check','-p','fake']))"
+            program = f"import sys,runpy; sys.path.insert(0,{str(LAUNCHER.parent)!r}); p=runpy.run_path({str(LAUNCHER)!r}); p['run'].__globals__['verify_scope']=lambda limits:None; raise SystemExit(p['run'](['--inside-scope','check','-p','fake']))"
             result = subprocess.run(
                 ["/usr/bin/python3", "-c", program],
                 env=env,
@@ -163,7 +174,7 @@ class DevelopmentCargoTests(unittest.TestCase):
                 "#!/usr/bin/python3\nimport os,time\nfrom pathlib import Path\nPath(os.environ['READY']).write_text(str(os.getpid()))\ntime.sleep(30)\n"
             )
             cargo.chmod(0o700)
-            program = f"import runpy; p=runpy.run_path({str(LAUNCHER)!r}); p['run'].__globals__['verify_scope']=lambda:None; raise SystemExit(p['run'](['--inside-scope','check']))"
+            program = f"import sys,runpy; sys.path.insert(0,{str(LAUNCHER.parent)!r}); p=runpy.run_path({str(LAUNCHER)!r}); p['run'].__globals__['verify_scope']=lambda limits:None; raise SystemExit(p['run'](['--inside-scope','check']))"
             env = {
                 "PATH": f"{root}:/usr/bin:/bin",
                 "XDG_RUNTIME_DIR": str(runtime),
@@ -192,12 +203,50 @@ class DevelopmentCargoTests(unittest.TestCase):
                         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
                 finally:
                     os.close(fd)
+                policy_fd = os.open(
+                    runtime / "saasy-dev-cargo-admission" / "policy.lock", os.O_RDWR
+                )
+                try:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(policy_fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                finally:
+                    os.close(policy_fd)
             finally:
                 if compiler_pid is not None:
                     os.kill(compiler_pid, signal.SIGTERM)
                 if parent.poll() is None:
                     parent.kill()
                 parent.wait()
+
+    def test_reviewed_class_limits_allow_more_than_two_jobs(self):
+        limits = {"memory_mib": 8192, "cpu_percent": 400, "jobs": 4}
+        with patch.dict(os.environ, {}, clear=True):
+            env = policy.build_environment(["test", "-p", "leaf", "-j4"], limits)
+            self.assertEqual(env["CARGO_BUILD_JOBS"], "4")
+            with self.assertRaises(ValueError):
+                policy.build_environment(["test", "-p", "leaf", "-j5"], limits)
+
+    def test_dynamic_scope_verification(self):
+        limits = {"memory_mib": 8192, "cpu_percent": 400, "jobs": 4}
+        values = {
+            "cgroup": "0::/test.scope",
+            "memory.max": str(8192 * 1024**2),
+            "memory.swap.max": "0",
+            "cpu.max": "400000 100000",
+        }
+
+        def read(path, *args, **kwargs):
+            return values[path.name]
+
+        with patch.object(Path, "read_text", read):
+            policy.verify_scope(limits)
+            values["cpu.max"] = "500000 100000"
+            with self.assertRaises(ValueError):
+                policy.verify_scope(limits)
+            values["cpu.max"] = "400000 100000"
+            values["memory.max"] = str(12288 * 1024**2)
+            with self.assertRaises(ValueError):
+                policy.verify_scope(limits)
 
     def test_scoped_hook_routes_through_launcher(self):
         source = (LAUNCHER.parents[1] / "precommit" / "clippy_scoped.py").read_text()

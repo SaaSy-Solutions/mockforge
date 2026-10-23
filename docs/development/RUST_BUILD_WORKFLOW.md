@@ -25,14 +25,59 @@ arguments, incremental compilation, wrappers, toolchain selection, and SQLx mode
 Cargo itself continues to invalidate artifacts when inputs change. Never execute
 an artifact borrowed from another checkout as proof of current source behavior.
 
-Compilation commands share two host admission slots with participating SaaSy,
-Aether, CodeDig, and Hive launchers. Locks are private, user-owned files under
-`${XDG_RUNTIME_DIR:-/run/user/<uid>}/saasy-dev-cargo-admission`; slot 3 is reserved.
-The launcher waits without starting compilation, then holds its lock through the
-child lifetime. User systemd scopes bound each admitted invocation to two CPU
-cores, 12 GiB memory, no swap, and at most two Cargo jobs. Missing scope support
-fails closed. These are provisional safety limits, not a measured throughput
-optimum. Twenty agents do not imply twenty simultaneous compilations.
+Compilation commands share one versioned host policy with participating SaaSy,
+Aether, CodeDig, and Hive launchers. User-owned state is under
+`${XDG_RUNTIME_DIR:-/run/user/<uid>}/saasy-dev-cargo-admission`. Every cooperating
+client reads the same policy snapshot; environment variables cannot independently
+increase host capacity. The fallback currently permits two simultaneous commands,
+12 GiB memory, two CPU cores and two Cargo jobs per invocation on this host, with
+zero reserved check slots. These are provisional safety defaults, not a measured
+throughput optimum. They remain adjustable: do not equate twenty agents with a
+requirement for twenty simultaneous builds, or conclude that two builds is fastest.
+
+The shared module classifies focused checks/Clippy, targeted tests, executables,
+workspace-wide validation, and release/custom-profile builds separately. Each
+class has configurable memory, CPU quota, and Cargo job limits. Broad feature
+sets are classified conservatively. A configured check reservation lets focused
+compiler feedback proceed while heavy work waits; reservation is disabled by the
+fallback until a reviewed workload experiment justifies it. Total capacity is
+1–8; worst-case concurrent class limits must fit finite host CPU/memory budgets.
+No-swap scopes remain mandatory. Unsupported or malformed policies fail closed.
+
+A policy lease covers both queued and active commands. Scope construction and
+kernel verification use that snapshot; compiler children inherit policy and slot
+leases, including if their launcher is killed. An update refuses to proceed while
+any cooperating request is queued/active, or a known legacy slot is held. This is
+not safe rolling compatibility with old clients: an old launcher could start after
+the update and ignore the new capacity or class reservation. Drain and upgrade
+**all participating worktrees and repositories**, including old SaaSy launchers,
+before changing policy; do not allow mixed clients to resume. No global process
+interception or revocation of old launchers is claimed.
+
+### Review and change host policy
+
+```bash
+python3 scripts/dev/rust_build_policy.py show
+python3 scripts/dev/rust_build_policy.py example > /absolute/owned/policy-candidate.json
+# Review and edit the complete candidate, drain all active/queued build callers,
+# and verify every participating worktree uses this versioned contract.
+python3 scripts/dev/rust_build_policy.py apply /absolute/owned/policy-candidate.json
+```
+
+The `apply` command changes user runtime admission state only, without installing
+a daemon, touching compiler flags, clearing targets, or editing global WSL/shell
+configuration. It takes an exclusive policy lease and probes legacy slots before
+an atomic update; active or queued work causes refusal. Do not work around a
+refusal by deleting locks. Runtime state may disappear at logout/reboot: keep the
+reviewed candidate in backed-up project documentation and explicitly reapply it
+when all clients are quiescent. All four modules must remain byte-identical.
+
+An experiment may compare capacity one, two, and four, class CPU/jobs, and a check
+reservation, provided aggregate budgets validate and actual resource conditions
+permit it. Measure successful relevant validations per hour, admission and
+execution latency, failures/timeouts, and useful-feedback tail latency. Choose
+using representative data; fake-worker concurrency tests prove enforcement only.
+No new application benchmark or optimal-concurrency claim is included here.
 
 No installation or global Cargo interception is performed. Python 3.9+, Linux
 `flock`, and a working user systemd manager are required. Start from this worktree
@@ -65,7 +110,9 @@ same launcher and retains all existing feature checks and fail-closed selection.
 
 The launcher emits one JSON summary to stderr per admitted invocation: command
 name, hashed worktree identity, admission wait, child execution duration, and exit
-status. Execution includes scope startup and is not isolated compiler CPU time.
+status, workload class, effective policy fingerprint, capacity/reservation, and
+class limits. Execution starts after admission inside the scope and excludes
+scope startup; it is not isolated compiler CPU time.
 It does not report unchanged checks as compiler-cache hits or log environment
 values, arbitrary command arguments, or secrets. Failed commands retain failure
 status. Admission wait is not compilation time. No representative before/after
@@ -75,6 +122,7 @@ Behavior tests use fake Cargo and scope executables and real filesystem locks:
 
 ```bash
 python3 -m unittest discover -s scripts/tests -p test_dev_cargo.py -v
+python3 -m unittest discover -s scripts/tests -p test_rust_build_policy.py -v
 ```
 
 Required CI and application features remain enforced. Revert this PR to roll
@@ -97,7 +145,7 @@ Rust, production profiles, CI gates, dependencies, or compiler flags changed.
 
 Existing CI optimization PRs #1354, #1350, and #1385 were inspected for overlap;
 this change preserves their runner routing and source-freshness policies. The
-existing lightweight scope-detection job also runs the twelve launcher regressions;
+existing lightweight scope-detection job also runs the launcher and shared-policy regressions;
 no duplicate workflow or extra application compilation is added.
 Legacy scripts (including the standalone RLS gate) and tool installation commands
 still invoke Cargo directly. Their required validation remains intact, but their
@@ -108,3 +156,15 @@ A cross-repository smoke also ran all three adapters alongside the existing SaaS
 admission wrapper, using isolated runtime locks, real kernel scopes, and fake
 Cargo workers. Four workers exited successfully with observed peak admitted
 concurrency two. This proves protocol interoperability, not application throughput.
+
+### Configurable policy validation (October 23, 2026)
+
+Fourteen adapter tests and eleven shared-contract tests pass. Idle subprocesses
+verify capacity one/two/four and reserved-check progress while a heavy request
+waits. Tests also cover active/queued/legacy update refusals, malformed policies,
+finite aggregate budgets, workload classes and aliases/custom profiles, dynamic
+CPU/memory verification, class jobs above two, and inherited policy/slot leases
+after launcher death. The initial October 22 fixture measurements above describe
+the former fallback smoke only; they do not measure this policy change or establish
+which configuration maximizes useful validations per hour. No application compile
+or host policy update was performed during this correction.

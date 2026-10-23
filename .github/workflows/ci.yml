@@ -67,7 +67,9 @@ jobs:
           command -v bash >/dev/null || { echo "::error::Bash is required for security tool ownership regressions."; exit 1; }
           python3 scripts/tests/test_owned_security_tools.py
       - name: Verify local Cargo isolation and admission behavior
-        run: python3 -m unittest discover -s scripts/tests -p test_dev_cargo.py -v
+        run: |
+          python3 -m unittest discover -s scripts/tests -p test_dev_cargo.py -v
+          python3 -m unittest discover -s scripts/tests -p test_rust_build_policy.py -v
       - name: Determine whether non-docs files changed
         id: filter
         env:
