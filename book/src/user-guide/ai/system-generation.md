@@ -309,6 +309,24 @@ the payload. Missing provenance, missing hashes and changed payloads fail
 verification. Plain legacy files without an integrity hash must be frozen again
 before they can be treated as verified snapshots.
 
+Applications using the library chat orchestrator can pass the same policy
+explicitly (unreleased):
+
+```rust,ignore
+use mockforge_core::ai_studio::ChatOrchestrator;
+
+let orchestrator = ChatOrchestrator::new(behavior)
+    .with_generation_policy(Some(AiMode::GenerateOnceFreeze), Some(snapshots));
+let response = orchestrator.process(&chat_request).await?;
+```
+
+Mock and persona chat generation use the orchestrator's provider/model and seed.
+A verified snapshot can be replayed with the provider offline; the chat response
+reports zero new tokens and cost for that replay. Direct generator results expose
+`replayed` so applications can distinguish cache reuse from a provider call. The
+HTTP admin chat handler still needs to load and forward workspace policies; this
+library builder does not change that handler or hosted billing controls.
+
 This freezes the generated specification or persona, including any examples
 already present. It does not turn schema-driven random response generation into
 fixed response examples. For byte-identical HTTP assertions, commit explicit
