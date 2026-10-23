@@ -6,8 +6,13 @@
 
 - **[Cloud]** Trial owners get an email three days before their Pro or Team trial ends. The registry now handles Stripe's `customer.subscription.trial_will_end` webhook and sends the reminder through the same email path as the other billing emails, honoring the owner's email-notification setting. It gives the end date and price, and says the plan continues if a payment method is on file and otherwise drops to Free. (#714)
 
+### Changed
+
+- **[DevX]** `bench-chunked` labels each `--spec` operation's `RPS (started)` and `RPS (overall)` lines `(this operation only)`, so they are not read as the rate for the whole pass. The multi-target summary now prints `load_window=` and `elapsed=` next to `start_rps` and `rps`, and a single `--target` run with `--spec` prints the same figures on a `Pass summary (all operations):` line. The campaign banner says that `--repeat-until` is checked before each pass, so a running pass finishes. (#79)
+
 ### Fixed
 
+- **[Reality]** MQTT publish and last-will delivery no longer hold broker-wide locks while waiting on subscriber queues, or acquire topic and client locks in the opposite order to new connections. This prevents concurrent CONNECT/publish deadlocks and lets new clients connect while a subscriber is backpressured. (#715)
 - **[DevX]** The editor and browser clients build and test again, and CI now runs them (`Client packages` workflow). The JetBrains plugin never compiled against its target IDE and could not have loaded: it depended on a TOML plugin ID that does not exist, its config file type had no language, and its scenario generator was registered as a menu action instead of an intention. It now builds, passes `./gradlew test buildPlugin`, and ships a Gradle wrapper. The VS Code extension has the test runner `npm test` pointed at, with tests that activate it in VS Code 1.85.2 and check every contributed command is registered. The browser extension type-checks clean, and it now captures request headers: they were read from `onBeforeRequest`, which never includes them. (#1282)
 - **[Docs]** The workspace export/import guide and the configuration reference no longer call `mockforge workspace export`, `import` and `activate` unreleased; they ship in 0.3.236. (#1197)
 - **[Contracts]** Package Intelligence’s database migrations inside its own crate so the published `database` feature builds without a sibling HTTP checkout. Preserve all historical migration filenames and SQL bytes for existing databases. (#632)
