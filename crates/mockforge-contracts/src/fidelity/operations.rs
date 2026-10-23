@@ -8,12 +8,15 @@ const METHODS: [&str; 8] = [
     "get", "put", "post", "delete", "options", "head", "patch", "trace",
 ];
 
-pub(super) fn operations(document: &Value) -> Result<BTreeMap<String, Value>, String> {
+pub(super) fn operations(
+    document: &Value,
+    max_bytes: usize,
+) -> Result<BTreeMap<String, Value>, String> {
     let paths = document
         .get("paths")
         .and_then(Value::as_object)
         .ok_or_else(|| "definition must contain an OpenAPI paths object".to_string())?;
-    let mut projection = Projection::new(document);
+    let mut projection = Projection::new(document, max_bytes);
     let mut out = BTreeMap::new();
     for (path, item) in paths {
         if !path.starts_with('/') {

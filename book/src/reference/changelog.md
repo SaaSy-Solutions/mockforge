@@ -2,6 +2,7 @@
 
 ### Added
 
+- **[Reality]** The self-hosted Admin UI adds a Mock fidelity panel in Contract Diff for comparing mock/source OpenAPI definitions and optional Flight Recorder HTTP samples. Authenticated comparisons report per-route definition deltas, sample drift, and incomplete coverage, with bounded inputs and paginated details. (#849)
 - **[Reality]** `verify-mocks --fixtures` checks a complete HTTP replay fixture set against its source OpenAPI definition, reporting missing and removed routes, invalid statuses, and field-level JSON response errors. It can run alongside mock-definition and recorder checks. Loading is read-only and rejects empty, malformed, symlinked or excessive fixture inputs. (#849)
 - **[Reality]** `verify-mocks --mock-spec` compares the OpenAPI definition used by a mock with its current source specification. Structured reports include added, removed and changed endpoints, field-level JSON-pointer deltas, and per-route fidelity status. Definition checks can run alone or alongside captured upstream traffic and use the existing `--fail-on-drift` CI gate. (#849)
 - **[Cloud]** Trial owners get an email three days before their Pro or Team trial ends. The registry now handles Stripe's `customer.subscription.trial_will_end` webhook and sends the reminder through the same email path as the other billing emails, honoring the owner's email-notification setting. It gives the end date and price, and says the plan continues if a payment method is on file and otherwise drops to Free. (#714)
