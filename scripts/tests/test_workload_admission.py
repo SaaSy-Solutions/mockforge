@@ -163,13 +163,19 @@ class WorkloadAdmission(unittest.TestCase):
             with self.configured(args) as session:
                 self.assertEqual(session.admission_class, "HEAVY_BUILD")
 
-    def test_environment_target_or_profile_overrides_cannot_rewarm_into_light(self):
+    def test_environment_compiler_mode_overrides_cannot_rewarm_into_light(self):
         self.seed()
         for override in (
             {"CARGO_BUILD_TARGET": "aarch64-unknown-linux-gnu"},
             {"CARGO_BUILD_TARGET": ""},
             {"CARGO_PROFILE_DEV_OPT_LEVEL": "3"},
             {"CARGO_PROFILE_TEST_DEBUG": ""},
+            {"RUSTFLAGS": "-C opt-level=3"},
+            {"RUSTFLAGS": ""},
+            {"CARGO_ENCODED_RUSTFLAGS": "-C\x1fopt-level=3"},
+            {"CARGO_BUILD_RUSTFLAGS": "-C opt-level=3"},
+            {"CARGO_INCREMENTAL": "0"},
+            {"CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS": "-C opt-level=3"},
         ):
             environment = dict(self.environment, **override)
             with self.subTest(override=override):
