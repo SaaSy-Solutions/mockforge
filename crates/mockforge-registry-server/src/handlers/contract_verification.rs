@@ -220,10 +220,7 @@ pub async fn list_diff_findings(
 
 /// `POST /api/v1/monitored-services/{id}/diff`
 ///
-/// Triggers a contract diff run. Same lifecycle pattern as #4 test runs:
-/// pushes a test_runs row + Redis job with kind='contract_diff'. The
-/// runner-side ContractExecutor synthesizes findings until real impl
-/// (ai_contract_diff pipeline) lands.
+/// Triggers a contract diff run through the shared test-run lifecycle.
 pub async fn trigger_diff_run(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
@@ -232,6 +229,11 @@ pub async fn trigger_diff_run(
 ) -> ApiResult<Json<TestRun>> {
     // `org_id` is the service's workspace org, verified against the caller.
     let (svc, org_id) = load_authorized_service(&state, user_id, &headers, id).await?;
+    if !svc.has_openapi_spec() {
+        return Err(ApiError::InvalidRequest(
+            "monitored service must have an OpenAPI spec URL or inline spec".into(),
+        ));
+    }
 
     let svc_id = svc.id;
     let run = with_org_context(state.db.runtime_pool(), org_id, |tx| {
@@ -253,7 +255,7 @@ pub async fn trigger_diff_run(
     })
     .await?;
 
-    let spec_url = match svc.openapi_spec_url.as_deref() {
+    let spec_url = match svc.openapi_spec_url() {
         Some(url) => Some(
             state
                 .storage
@@ -273,6 +275,7 @@ pub async fn trigger_diff_run(
                 "service_name": svc.name,
                 "base_url": svc.base_url,
                 "openapi_spec_url": spec_url,
+                "openapi_spec_inline": svc.openapi_spec_inline,
                 "traffic_source": svc.traffic_source,
                 "workspace_id": svc.workspace_id,
             }),
