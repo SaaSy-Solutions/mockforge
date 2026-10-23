@@ -11,6 +11,7 @@ import fcntl
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import stat
 import subprocess
@@ -112,38 +113,68 @@ def validate(value):
         ):
             raise ValueError(f"Worst-case concurrent {field} exceeds {budget}")
     if value["schema_version"] == 2:
-        integer(
-            value["minimum_available_mib"], 128, memory_budget, "minimum_available_mib"
-        )
-        rules = value["light_checks"]
-        if not isinstance(rules, list) or len(rules) > 64:
-            raise ValueError("light_checks must be a bounded list of measured recipes")
-        for rule in rules:
-            if not isinstance(rule, dict) or set(rule) != {
-                "repository",
-                "arguments",
-                "evidence",
-            }:
-                raise ValueError("Malformed measured recipe")
-            if not all(
-                isinstance(rule[k], str) and 1 <= len(rule[k]) <= 512
-                for k in ("repository", "evidence")
-            ):
-                raise ValueError(
-                    "Recipe requires repository identity and measurement evidence"
-                )
-            args = rule["arguments"]
-            if (
-                not isinstance(args, list)
-                or not 3 <= len(args) <= 32
-                or not all(isinstance(a, str) and 0 < len(a) <= 256 for a in args)
-                or args[0] != "check"
-                or classify(args) != "check"
-            ):
-                raise ValueError(
-                    "Only explicit targeted check recipes can be lightweight"
-                )
+        validate_recipes(value, memory_budget)
     return value
+
+
+def validate_recipes(value, memory_budget):
+    integer(value["minimum_available_mib"], 128, memory_budget, "minimum_available_mib")
+    rules = value["light_checks"]
+    if not isinstance(rules, list) or len(rules) > 64:
+        raise ValueError("light_checks must be a bounded list of measured recipes")
+    for rule in rules:
+        if not isinstance(rule, dict) or set(rule) != {
+            "repository",
+            "arguments",
+            "evidence",
+        }:
+            raise ValueError("Malformed measured recipe")
+        if not all(
+            isinstance(rule[k], str) and 1 <= len(rule[k]) <= 512
+            for k in ("repository", "evidence")
+        ):
+            raise ValueError(
+                "Recipe requires repository identity and measurement evidence"
+            )
+        args = rule["arguments"]
+        if (
+            not isinstance(args, list)
+            or not 3 <= len(args) <= 32
+            or not all(isinstance(a, str) and 0 < len(a) <= 256 for a in args)
+            or args[:2] != ["check", "-p"]
+            or not re.fullmatch(r"[A-Za-z0-9_-]+", args[2])
+            or "--lib" not in args
+            or any(
+                a
+                in {
+                    "-p",
+                    "--package",
+                    "--all-targets",
+                    "--bins",
+                    "--tests",
+                    "--examples",
+                    "--benches",
+                    "--bin",
+                    "--test",
+                    "--example",
+                    "--bench",
+                    "--target",
+                }
+                or a.startswith(
+                    (
+                        "--package=",
+                        "--target=",
+                        "--bin=",
+                        "--test=",
+                        "--example=",
+                        "--bench=",
+                    )
+                )
+                for a in args[3:]
+            )
+            or classify(args) != "check"
+        ):
+            raise ValueError("Only explicit targeted check recipes can be lightweight")
 
 
 def classify(arguments):
@@ -399,6 +430,8 @@ class Session(AbstractContextManager):
         private_directory(self.directory)
         self.policy_fd = open_lock(self.directory / "policy.lock")
         self.slot_fd = None
+        self.slot_number = None
+        self.pressure_wait_seconds = 0.0
         self.ticket_fd = None
         self.ticket_path = None
         self.receipt = None
@@ -506,7 +539,10 @@ class Session(AbstractContextManager):
             )
         finally:
             if temporary is not None:
-                os.unlink(temporary)
+                try:
+                    os.unlink(temporary)
+                except OSError:
+                    pass
 
     def _remove_ticket(self):
         if self.ticket_path is not None:
@@ -533,6 +569,7 @@ class Session(AbstractContextManager):
             fcntl.flock(self.ticket_fd, fcntl.LOCK_EX)
             os.write(self.ticket_fd, json.dumps(self.admission_class).encode())
         while self.slot_fd is None:
+            iteration_started = time.monotonic()
             with queue_guard(self.directory):
                 waiting = live_waiters(queue)
                 enough_memory = available_memory_mib() >= self.policy.get(
@@ -553,10 +590,13 @@ class Session(AbstractContextManager):
                         os.close(fd)
                     else:
                         self.slot_fd = fd
+                        self.slot_number = number
                         self._remove_ticket()
                         break
             if self.slot_fd is None:
                 time.sleep(0.1)
+            if not enough_memory:
+                self.pressure_wait_seconds += time.monotonic() - iteration_started
         return time.monotonic() - started
 
     def event(self):
@@ -564,6 +604,8 @@ class Session(AbstractContextManager):
             "policy_sha256": self.fingerprint,
             "workload_class": self.workload,
             "admission_class": self.admission_class,
+            "admission_slot": self.slot_number,
+            "pressure_wait_seconds": self.pressure_wait_seconds,
             "classification_reason": self.classification_reason,
             "minimum_available_mib": self.policy.get("minimum_available_mib", 0),
             "max_concurrent": self.policy["max_concurrent"],

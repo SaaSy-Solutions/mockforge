@@ -138,6 +138,7 @@ Behavior tests use fake Cargo and scope executables and real filesystem locks:
 ```bash
 python3 -m unittest discover -s scripts/tests -p test_dev_cargo.py -v
 python3 -m unittest discover -s scripts/tests -p test_rust_build_policy.py -v
+python3 -m unittest discover -s scripts/tests -p test_workload_admission.py -v
 ```
 
 Required CI and application features remain enforced. Revert this PR to roll
@@ -199,3 +200,7 @@ Keep the prior reviewed configuration for rollback; update only while quiescent.
 Do not globally intercept Cargo, delete lock state, or alter WSL limits. Observe
 admission and execution latency, failed validations, memory/CPU/I/O pressure and
 interactive responsiveness before increasing capacity or broadening light recipes.
+
+The warm-target receipt is admission evidence only. It does not certify source
+provenance, successful tests, runtime behavior or permission to skip validation.
+The scheduling update adds no compiler flags or alternative artifact targets.
