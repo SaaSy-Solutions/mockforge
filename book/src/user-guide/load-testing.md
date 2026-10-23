@@ -291,6 +291,29 @@ not proof of evenly spaced starts; verify start timestamps at the receiver
 or in a packet capture. Even a healthy target with 12.75-second uploads can
 report roughly `30 / (29 + 12.75) = 0.72` requests/s on a 30-second run.
 
+With `--spec`, every operation prints its own block, and those lines end in
+`(this operation only)`. They are not the rate for the whole pass. With
+`--overlap-operations` the next operation starts while the previous one's
+last uploads finish, so the pass takes the sum of the load windows plus one
+final drain, not the sum of the per-operation times. The pass summary at the
+end of each pass gives the aggregate, with the inputs used to compute it:
+
+```text
+Multi-target chunked summary (whole pass per target, all operations):
+  target_1   https://10.0.0.1:443  requests=15150 ok=15150 failed=0 bytes=15885926400 start_rps=1.00 rps=1.00 load_window=15150.0s elapsed=15162.1s
+```
+
+Here `start_rps = requests / load_window = 15150 / 15150.0` and
+`rps = requests / elapsed = 15150 / 15162.1 = 0.9992`. The same values, unrounded,
+are `start_window_rps`, `measured_rps`, `load_window_seconds` and
+`elapsed_seconds` in `chunked-multi-target-summary.json` and in each
+`round-summaries/round_*.json`. A single `--target` run with `--spec` prints
+the same figures on a `Pass summary (all operations):` line.
+
+`--repeat-until` is checked before each new pass. A pass that is already
+running when the time is reached still finishes, so a campaign can run past
+`--repeat-until` by up to one pass.
+
 To investigate:
 
 1. Run one longer operation (for example, `--duration 300s`) without campaign

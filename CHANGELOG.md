@@ -4,14 +4,17 @@
 
 - **[Cloud]** Trial owners get an email three days before their Pro or Team trial ends. The registry now handles Stripe's `customer.subscription.trial_will_end` webhook and sends the reminder through the same email path as the other billing emails, honoring the owner's email-notification setting. It gives the end date and price, and says the plan continues if a payment method is on file and otherwise drops to Free. (#714)
 
+### Changed
+
+- **[DevX]** `bench-chunked` labels each `--spec` operation's `RPS (started)` and `RPS (overall)` lines `(this operation only)`, so they are not read as the rate for the whole pass. The multi-target summary now prints `load_window=` and `elapsed=` next to `start_rps` and `rps`, and a single `--target` run with `--spec` prints the same figures on a `Pass summary (all operations):` line. The campaign banner says that `--repeat-until` is checked before each pass, so a running pass finishes. (#79)
+
 ### Fixed
 
 - **[AI]** Keep configured provider/model and seed settings when chat generates mocks or personas. Allow library callers to supply snapshot policies and report zero new usage for verified snapshot replays. (#852)
-
 - **[AI]** Preserve frozen array and scalar payloads with durable identity and integrity metadata. Publish immutable snapshots as complete bundles, retain legacy object snapshots, and reject missing hashes during verification. (#852)
-
 - **[AI]** Add the unreleased `mockforge ai bake` authoring workflow: generate a JSON response once and save a static JSON/YAML serve configuration for offline CI. Existing verified outputs are reused without provider calls; mismatched inputs and modified files fail instead of overwriting them. Sampling seeds are forwarded where supported. Explicit JSON `null` route bodies now remain `null` instead of becoming `{}` when configuration loads. (#852)
 - **[AI]** AI Studio mock and persona `GenerateOnceFreeze` calls now find and reuse snapshots by their recorded input identity, honor the configured snapshot directory, and verify payload integrity. First use no longer fails when the directory is missing. Snapshot identity includes workspace, model and effective seed, and concurrent publication preserves one completed snapshot. Live-provider sampling remains best effort. (#852)
+- **[Reality]** MQTT publish and last-will delivery no longer hold broker-wide locks while waiting on subscriber queues, or acquire topic and client locks in the opposite order to new connections. This prevents concurrent CONNECT/publish deadlocks and lets new clients connect while a subscriber is backpressured. (#715)
 - **[Docs]** The workspace export/import guide and the configuration reference no longer call `mockforge workspace export`, `import` and `activate` unreleased; they ship in 0.3.236. (#1197)
 - **[Contracts]** Package Intelligence’s database migrations inside its own crate so the published `database` feature builds without a sibling HTTP checkout. Preserve all historical migration filenames and SQL bytes for existing databases. (#632)
 
