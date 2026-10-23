@@ -57,6 +57,11 @@ Recorded query strings use the same form parser as HTTP serving: `+` means a
 space, `%2B` means a literal plus sign, and a parameter without `=` has an empty
 value.
 
+Declared cookie parameters are read from the recorded `Cookie` header. Header
+names are case-insensitive; cookie names retain their case, as they do during
+HTTP serving. Missing required cookies or values that violate their schema
+produce request drift.
+
 You can also validate a recorder database containing real upstream traffic:
 
 ```bash
