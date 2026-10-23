@@ -299,6 +299,16 @@ the identity and payload hash remain for lookup and integrity checking.
 Modified payloads cause an error rather than a silent regeneration. Concurrent
 publishers return the same completed snapshot without replacing it.
 
+New immutable snapshots live in a `.bundle` directory containing the payload.
+Keep the entire directory in version control. Existing object snapshots saved as
+single JSON/YAML files remain readable. The library's `ArtifactFreezer` also
+supports arrays, strings, numbers, booleans and null without wrapping or changing
+the payload type. These values keep their provenance and payload hash in a hidden
+sibling file named `.<payload filename>.frozen-metadata`; commit that file with
+the payload. Missing provenance, missing hashes and changed payloads fail
+verification. Plain legacy files without an integrity hash must be frozen again
+before they can be treated as verified snapshots.
+
 This freezes the generated specification or persona, including any examples
 already present. It does not turn schema-driven random response generation into
 fixed response examples. For byte-identical HTTP assertions, commit explicit
