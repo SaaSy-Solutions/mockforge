@@ -561,8 +561,11 @@ required fields, enum values and parameters do not count as drift.
 #### Options
 
 - `--spec <path>` (required): OpenAPI spec the mocks were generated from (3.x natively; Swagger 2.0 is up-converted automatically).
-- `--capture-db <path>`: recorder SQLite database holding captured traffic (what `mockforge serve --recorder` writes; the default path is `./mockforge-recordings.db`). Required unless `--mock-spec` is supplied.
-- `--mock-spec <path>`: OpenAPI definition used by the mock, compared against the current source in `--spec`. Required unless `--capture-db` is supplied. May be combined with captured traffic.
+- `--capture-db <path>`: recorder SQLite database holding captured traffic (what `mockforge serve --recorder` writes; the default path is `./mockforge-recordings.db`).
+- `--mock-spec <path>`: OpenAPI definition used by the mock, compared against the current source in `--spec`.
+- `--fixtures <path>`: HTTP replay fixture JSON file or directory. Checks every selected fixture's route, status and JSON response schema, and reports source operations with no fixture. See the [fixture format and scope](../user-guide/mock-fidelity.md#validate-an-http-replay-fixture-set).
+
+Supply at least one of `--capture-db`, `--mock-spec` or `--fixtures`. They can be combined.
 - `--limit <n>`: maximum recent HTTP exchanges to evaluate, newest first (positive integer; default `500`). Other protocols do not consume this limit.
 - `--fail-on-drift`: exit with code 1 when any drift is found — use as a CI gate.
 - `--output <path>`: write the structured drift report as JSON.
