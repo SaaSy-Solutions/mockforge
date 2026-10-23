@@ -78,11 +78,36 @@ def build_environment(arguments, limits=None):
             f"CARGO_BUILD_JOBS must be 1..{maximum_jobs} for this workload"
         )
     env["CARGO_BUILD_JOBS"] = str(jobs)
+    validate_cargo_arguments(arguments, maximum_jobs)
+    return env
+
+
+def validate_manifest(arguments, index):
+    arg = arguments[index]
+    if "=" not in arg and index + 1 >= len(arguments):
+        raise ValueError("--manifest-path requires a value")
+    selected = arg.split("=", 1)[1] if "=" in arg else arguments[index + 1]
+    if not Path(selected).resolve().is_relative_to(ROOT):
+        raise ValueError("Manifest must belong to this worktree")
+
+
+def job_count(arguments, index):
+    arg = arguments[index]
+    if arg in ("-j", "--jobs"):
+        return arguments[index + 1] if index + 1 < len(arguments) else ""
+    if arg.startswith("--jobs="):
+        return arg.split("=", 1)[1]
+    if arg.startswith("-j"):
+        return arg[2:]
+    return None
+
+
+def validate_cargo_arguments(arguments, maximum_jobs):
     _, tail = command_arguments(arguments)
     for i, arg in enumerate(tail):
         if arg == "--":
             break  # Test/executable arguments are not Cargo options.
-        if arg == "-C" or arg.startswith("-C"):
+        if arg.startswith("-C"):
             raise ValueError(
                 "Cargo directory changes are unsupported; use the worktree cwd"
             )
@@ -91,29 +116,18 @@ def build_environment(arguments, limits=None):
                 "Use checked-in Cargo configuration; --config overrides are not supported locally"
             )
         if arg == "--manifest-path" or arg.startswith("--manifest-path="):
-            if "=" not in arg and i + 1 >= len(tail):
-                raise ValueError("--manifest-path requires a value")
-            selected_manifest = arg.split("=", 1)[1] if "=" in arg else tail[i + 1]
-            if not Path(selected_manifest).resolve().is_relative_to(ROOT):
-                raise ValueError("Manifest must belong to this worktree")
+            validate_manifest(tail, i)
         if arg == "--target-dir" or arg.startswith("--target-dir="):
             raise ValueError(
                 "Use the worktree target; --target-dir is not supported locally"
             )
-        value = None
-        if arg in ("-j", "--jobs"):
-            value = tail[i + 1] if i + 1 < len(tail) else ""
-        elif arg.startswith("--jobs="):
-            value = arg.split("=", 1)[1]
-        elif arg.startswith("-j"):
-            value = arg[2:]
+        value = job_count(tail, i)
         if value is not None and (
             not value.isdigit() or not 1 <= int(value) <= maximum_jobs
         ):
             raise ValueError(
                 f"Cargo --jobs must be 1..{maximum_jobs} for this workload"
             )
-    return env
 
 
 def scope_command(arguments, session):
