@@ -163,6 +163,27 @@ class WorkloadAdmission(unittest.TestCase):
             with self.configured(args) as session:
                 self.assertEqual(session.admission_class, "HEAVY_BUILD")
 
+    def test_environment_target_or_profile_overrides_cannot_rewarm_into_light(self):
+        self.seed()
+        for override in (
+            {"CARGO_BUILD_TARGET": "aarch64-unknown-linux-gnu"},
+            {"CARGO_BUILD_TARGET": ""},
+            {"CARGO_PROFILE_DEV_OPT_LEVEL": "3"},
+            {"CARGO_PROFILE_TEST_DEBUG": ""},
+        ):
+            environment = dict(self.environment, **override)
+            with self.subTest(override=override):
+                with self.configured(environment=environment) as session:
+                    self.assertEqual(session.admission_class, "STANDARD_CHECK")
+                    self.assertIn("Unmeasured", session.classification_reason)
+                    session.acquire()
+                    session.record_success()
+                    self.assertIsNone(session.receipt)
+                with self.configured(environment=environment) as session:
+                    self.assertEqual(session.admission_class, "STANDARD_CHECK")
+        with self.configured() as session:
+            self.assertEqual(session.admission_class, "LIGHT_CHECK")
+
     def test_lock_flags_toolchain_target_and_receipt_expiry_invalidate_warmth(self):
         self.seed()
         with self.configured(

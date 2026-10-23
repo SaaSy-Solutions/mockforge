@@ -127,6 +127,11 @@ class WarmEvidence:
         self, directory, policy, arguments, repository, worktree, target, environment
     ):
         light = False
+        if "CARGO_BUILD_TARGET" in environment or any(
+            name.startswith("CARGO_PROFILE_") for name in environment
+        ):
+            # A separate fingerprint does not qualify an unmeasured configuration.
+            return False, "Unmeasured Cargo target or profile override"
         recipe = {
             "repository": repository,
             "arguments": recipe_arguments(arguments),
