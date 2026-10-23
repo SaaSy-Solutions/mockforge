@@ -44,13 +44,30 @@ def default_policy():
         "minimum_available_mib": min(16384, max(256, memory // 3)),
         "light_checks": [
             {
-                "repository": "SaaSy-Solutions/aether",
-                "arguments": ["check", "-p", "founderos-proto", "--lib"],
-                "evidence": (
-                    "saas-platform/docs/development/"
-                    "rust-build-performance-2026-10-22/SSD_RECALIBRATION.md"
-                ),
+                "repository": "SaaSy-Solutions/" + repository,
+                "arguments": ["check", "-p", package, "--lib"],
+                "evidence": "saas-platform/docs/development/rust-build-performance-2026-10-22/"
+                + evidence,
             }
+            for repository, package, evidence in (
+                ("aether", "founderos-proto", "SSD_RECALIBRATION.md"),
+                (
+                    "saas-platform",
+                    "platform-events-core",
+                    "LIGHTWEIGHT_RECIPE_QUALIFICATION.md",
+                ),
+                ("aether", "founderos-core", "LIGHTWEIGHT_RECIPE_QUALIFICATION.md"),
+                (
+                    "codedig",
+                    "codedig-change-kind",
+                    "LIGHTWEIGHT_RECIPE_QUALIFICATION.md",
+                ),
+                (
+                    "mockforge",
+                    "mockforge-platform-signing",
+                    "LIGHTWEIGHT_RECIPE_QUALIFICATION.md",
+                ),
+            )
         ],
         "memory_budget_mib": memory,
         "cpu_budget_percent": cpu,

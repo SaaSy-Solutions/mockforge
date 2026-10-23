@@ -184,6 +184,11 @@ resource admission, supported commands, and validation tiers. Do not run routine
 commands; they are not the default after a small edit. Required CI, security,
 tenant-isolation, feature, and runtime checks remain mandatory.
 
+The measured native default-feature library recipe is
+`scripts/dev/cargo check -p mockforge-platform-signing --lib`, after compatible
+successful warm-target validation. Optional AWS features and broader commands
+remain ordinary. Warm receipt eligibility never replaces focused tests.
+
 ## Development Guidelines
 
 ### Rust Conventions

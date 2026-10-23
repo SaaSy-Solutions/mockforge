@@ -42,9 +42,18 @@ warm-target receipt. A targeted `cargo check` alone never qualifies. Unknown or
 broader checks are `STANDARD_CHECK`; linked tests, executable/release builds and
 dependency-heavy validation are `HEAVY_BUILD`. Standard checks and heavy builds
 share the two ordinary slots on the initial policy; eligible light checks may use
-all four. There is currently **no measured Mockforge light-check recipe**: its
-checks conservatively use ordinary capacity. Do not add an allowlist entry based
-solely on the command name or another repository's benchmark.
+all four. Mockforge's measured native default-feature library recipe is
+`scripts/dev/cargo check -p mockforge-platform-signing --lib`. Cold targets use
+ordinary admission until successful compatible validation records warmth.
+Optional AWS features, other features/targets and broader checks remain ordinary.
+Do not extend qualification from the package name alone.
+
+Explicit environment overrides for target, profile, Rust flags or incremental
+mode use ordinary admission even after success. Compiler/toolchain and checked-in
+Cargo configuration changes require requalification; a new fingerprint alone is
+not measurement approval.
+
+See [recipe qualification](https://github.com/SaaSy-Solutions/saas-platform/blob/rclanan/rust-local-controls/docs/development/rust-build-performance-2026-10-22/LIGHTWEIGHT_RECIPE_QUALIFICATION.md) for measured source-edit and concurrent-check evidence.
 
 A shared queue admits older eligible requests first while allowing reserved
 capacity to serve light checks when ordinary slots are occupied. Cancellation and

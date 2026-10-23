@@ -131,6 +131,22 @@ class WorkloadAdmission(unittest.TestCase):
             session.acquire()
             session.record_success()
 
+    def test_default_measured_recipes_are_exact_and_native_library_only(self):
+        recipes = policy.default_policy()["light_checks"]
+        selected = {(rule["repository"], tuple(rule["arguments"])) for rule in recipes}
+        expected = {
+            ("SaaSy-Solutions/" + repo, ("check", "-p", package, "--lib"))
+            for repo, package in (
+                ("aether", "founderos-proto"),
+                ("aether", "founderos-core"),
+                ("saas-platform", "platform-events-core"),
+                ("codedig", "codedig-change-kind"),
+                ("mockforge", "mockforge-platform-signing"),
+            )
+        }
+        self.assertEqual(selected, expected)
+        self.assertTrue(all(rule["evidence"].endswith(".md") for rule in recipes))
+
     def test_only_successful_admitted_compatible_warm_recipe_is_light(self):
         with self.configured() as session:
             session.record_success()  # Unadmitted outer scope is not proof.

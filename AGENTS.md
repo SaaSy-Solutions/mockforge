@@ -21,3 +21,8 @@ edits. Run one focused watcher; never share mutable targets across worktrees.
 The launcher shares existing host admission slots with other participating
 repositories; do not substitute another coordinator or silently bypass admission.
 No global Cargo interception or shell provisioning is required.
+
+The measured native default-feature library recipe is
+`scripts/dev/cargo check -p mockforge-platform-signing --lib`, after compatible
+successful warm-target validation. Optional AWS features and broader commands
+remain ordinary. Warm receipt eligibility never replaces focused tests.
