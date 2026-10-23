@@ -180,7 +180,7 @@ const XRayPanel: React.FC = () => {
                         Current State
                     </h2>
                     <div style={{ display: 'grid', gap: '8px' }}>
-                        <StateRow label="Workspace" value={state.workspace_id} />
+                        <StateRow label="Workspace" value={state.workspace_id ?? 'None'} />
                         <StateRow
                             label="Scenario"
                             value={state.scenario || 'None'}
