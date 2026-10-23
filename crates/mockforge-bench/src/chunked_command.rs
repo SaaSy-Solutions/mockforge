@@ -179,7 +179,7 @@ impl ChunkedCommand {
 
         match self.repeat_until {
             Some(until) => println!(
-                "Campaign: re-running every pass until {}s of wall clock (or --rounds {})",
+                "Campaign: starting new passes until {}s of wall clock (or --rounds {}); checked before each pass, so a pass already running finishes",
                 until.as_secs(),
                 self.rounds.map(|n| n.to_string()).unwrap_or_else(|| "unlimited".into())
             ),
@@ -239,6 +239,19 @@ impl ChunkedCommand {
                     output: output.to_path_buf(),
                 };
                 let o = self.run_target(&run).await?;
+                if self.spec.is_some() {
+                    println!();
+                    println!(
+                        "Pass summary (all operations): requests={} ok={} failed={} start_rps={:.2} rps={:.2} load_window={:.1}s elapsed={:.1}s",
+                        o.total_requests,
+                        o.successful,
+                        o.failed,
+                        per_second(o.total_requests as f64, o.load_window),
+                        per_second(o.total_requests as f64, o.elapsed),
+                        o.load_window.as_secs_f64(),
+                        o.elapsed.as_secs_f64(),
+                    );
+                }
                 let summary = serde_json::json!({
                     "url": target,
                     "total_requests": o.total_requests,
@@ -293,7 +306,7 @@ impl ChunkedCommand {
         outcomes.sort_by_key(|(i, _, _)| *i);
 
         println!();
-        println!("Multi-target chunked summary:");
+        println!("Multi-target chunked summary (whole pass per target, all operations):");
         let mut all_ok = true;
         let mut rows = Vec::with_capacity(outcomes.len());
         for (i, run, res) in &outcomes {
@@ -304,7 +317,7 @@ impl ChunkedCommand {
                         all_ok = false;
                     }
                     println!(
-                        "  {:<10} {}  requests={} ok={} failed={} bytes={} start_rps={:.2} rps={:.2}{}",
+                        "  {:<10} {}  requests={} ok={} failed={} bytes={} start_rps={:.2} rps={:.2} load_window={:.1}s elapsed={:.1}s{}",
                         name,
                         run.url,
                         o.total_requests,
@@ -313,6 +326,8 @@ impl ChunkedCommand {
                         o.bytes_sent,
                         per_second(o.total_requests as f64, o.load_window),
                         per_second(o.total_requests as f64, o.elapsed),
+                        o.load_window.as_secs_f64(),
+                        o.elapsed.as_secs_f64(),
                         if o.run_failed {
                             "  (some operations failed to run)"
                         } else {
@@ -469,6 +484,7 @@ impl ChunkedCommand {
                 &t.url
             },
             &r,
+            false,
         );
         let mut outcome = TargetOutcome::default();
         outcome.absorb(&r);
@@ -627,7 +643,7 @@ impl ChunkedCommand {
             };
             match result {
                 Ok(r) => {
-                    print_result(p, label, &r);
+                    print_result(p, label, &r, true);
                     outcome.absorb(&r);
                     if self.export_requests {
                         export_records.push(export_record(
@@ -798,9 +814,11 @@ fn merge_json(mut base: serde_json::Value, extra: serde_json::Value) -> serde_js
     base
 }
 
-/// Print one result block. The block is built first and printed with one
-/// call so parallel targets don't interleave their lines.
-fn print_result(prefix: &str, label: &str, r: &ChunkedBenchResult) {
+/// Format one result block. It is built as one string and printed with one
+/// call so parallel targets don't interleave their lines. `per_operation`
+/// marks the block as one spec operation, so its rates aren't mistaken for
+/// the whole pass (#79).
+fn format_result(prefix: &str, label: &str, r: &ChunkedBenchResult, per_operation: bool) -> String {
     let mut out = String::new();
     let mut line = |s: String| {
         out.push_str(prefix);
@@ -820,15 +838,22 @@ fn print_result(prefix: &str, label: &str, r: &ChunkedBenchResult) {
         _ => line(format!("  Failed:         {}", r.failed)),
     }
     line(format!("  Bytes sent:     {}", r.bytes_sent));
+    let scope = if per_operation {
+        " (this operation only)"
+    } else {
+        ""
+    };
     line(format!(
-        "  RPS (started):  {:.2} req/s over the {:.1}s load window",
+        "  RPS (started):  {:.2} req/s over the {:.1}s load window{}",
         r.start_rate_per_sec,
-        r.load_window.as_secs_f64()
+        r.load_window.as_secs_f64(),
+        scope
     ));
     line(format!(
-        "  RPS (overall):  {:.2} req/s over {:.1}s, incl. in-flight drain",
+        "  RPS (overall):  {:.2} req/s over {:.1}s, incl. in-flight drain{}",
         r.req_per_sec,
-        r.elapsed.as_secs_f64()
+        r.elapsed.as_secs_f64(),
+        scope
     ));
     line(format!("  Upload:         {:.2} Mbps", r.upload_mbps));
     line(format!(
@@ -866,7 +891,11 @@ fn print_result(prefix: &str, label: &str, r: &ChunkedBenchResult) {
             );
         }
     }
-    print!("{out}");
+    out
+}
+
+fn print_result(prefix: &str, label: &str, r: &ChunkedBenchResult, per_operation: bool) {
+    print!("{}", format_result(prefix, label, r, per_operation));
 }
 
 #[cfg(test)]
@@ -1284,5 +1313,46 @@ mod tests {
         let mut c = cmd(Some("http://127.0.0.1:1"), None);
         c.rounds = Some(0);
         assert!(c.execute().await.is_err());
+    }
+
+    fn op_result() -> ChunkedBenchResult {
+        ChunkedBenchResult {
+            total_requests: 30,
+            successful: 30,
+            failed: 0,
+            bytes_sent: 30 * 1_048_576,
+            elapsed: Duration::from_millis(42_100),
+            req_per_sec: 30.0 / 42.1,
+            load_window: Duration::from_secs(30),
+            start_rate_per_sec: 1.0,
+            upload_mbps: 6.0,
+            latencies_ms: vec![12_000; 30],
+            avg_latency_ms: 12_000.0,
+            p50_ms: 12_000,
+            p95_ms: 12_000,
+            p99_ms: 12_000,
+            status_counts: HashMap::from([(200, 30)]),
+            timed_out: 0,
+            request_timeout: None,
+            error_samples: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn per_operation_rates_say_they_cover_one_operation() {
+        let out = format_result("", "POST /upload", &op_result(), true);
+        assert!(out.contains(
+            "  RPS (started):  1.00 req/s over the 30.0s load window (this operation only)"
+        ));
+        assert!(out.contains(
+            "  RPS (overall):  0.71 req/s over 42.1s, incl. in-flight drain (this operation only)"
+        ));
+    }
+
+    #[test]
+    fn single_run_rates_keep_the_plain_labels() {
+        let out = format_result("", "single-target", &op_result(), false);
+        assert!(out.contains("  RPS (started):  1.00 req/s over the 30.0s load window\n"));
+        assert!(out.contains("  RPS (overall):  0.71 req/s over 42.1s, incl. in-flight drain\n"));
     }
 }
