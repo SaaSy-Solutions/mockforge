@@ -1,0 +1,247 @@
+#!/usr/bin/env python3
+"""Local Cargo admission. Does not alter compiler flags, features, or CI policy."""
+
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import signal
+import stat
+import subprocess
+import sys
+import time
+
+READ_COMMANDS = {
+    "fmt",
+    "metadata",
+    "tree",
+    "audit",
+    "deny",
+    "version",
+    "--version",
+    "-V",
+    "help",
+    "--help",
+    "-h",
+    "locate-project",
+    "read-manifest",
+    "pkgid",
+    "search",
+    "fetch",
+}
+BUILD_COMMANDS = {
+    "install",
+    "build",
+    "check",
+    "test",
+    "clippy",
+    "run",
+    "bench",
+    "doc",
+    "rustc",
+    "rustdoc",
+    "llvm-cov",
+    "mutants",
+}
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def private_directory(path):
+    path.mkdir(mode=0o700, parents=True, exist_ok=True)
+    info = path.lstat()
+    if (
+        not stat.S_ISDIR(info.st_mode)
+        or info.st_uid != os.getuid()
+        or info.st_mode & 0o077
+    ):
+        raise ValueError(
+            f"Admission directory must be owned, private and not a symlink: {path}"
+        )
+
+
+def acquire_slot(directory):
+    private_directory(directory)
+    started = time.monotonic()
+    while True:
+        for number in (1, 2):
+            fd = os.open(
+                directory / f"slot-{number}",
+                os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW,
+                0o600,
+            )
+            info = os.fstat(fd)
+            if (
+                not stat.S_ISREG(info.st_mode)
+                or info.st_uid != os.getuid()
+                or info.st_mode & 0o022
+            ):
+                os.close(fd)
+                raise ValueError("Unsafe admission slot file")
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                return fd, time.monotonic() - started
+            except BlockingIOError:
+                os.close(fd)
+        time.sleep(0.1)
+
+
+def command_arguments(arguments):
+    index = 1 if arguments and arguments[0].startswith("+") else 0
+    return arguments[index] if len(arguments) > index else "", arguments[index + 1 :]
+
+
+def build_environment(arguments):
+    env = os.environ.copy()
+    target = ROOT / "target"
+    # A common external target may contain another checkout's mutable artifacts.
+    selected = env.get("CARGO_TARGET_DIR", str(target))
+    if Path(selected).resolve() != target.resolve():
+        raise ValueError(
+            "Local builds require this worktree target; unset CARGO_TARGET_DIR"
+        )
+    if target.is_symlink():
+        raise ValueError("Worktree target must not be a symlink")
+    env["CARGO_TARGET_DIR"] = str(target)
+    jobs = int(env.get("CARGO_BUILD_JOBS", "2"))
+    if not 1 <= jobs <= 2:
+        raise ValueError("CARGO_BUILD_JOBS must be 1 or 2")
+    env["CARGO_BUILD_JOBS"] = str(jobs)
+    _, tail = command_arguments(arguments)
+    for i, arg in enumerate(tail):
+        if arg == "--":
+            break  # Test/executable arguments are not Cargo options.
+        if arg == "--config" or arg.startswith("--config="):
+            raise ValueError(
+                "Use checked-in Cargo configuration; --config overrides are not supported locally"
+            )
+        if arg == "--manifest-path" or arg.startswith("--manifest-path="):
+            selected_manifest = arg.split("=", 1)[1] if "=" in arg else tail[i + 1]
+            if not Path(selected_manifest).resolve().is_relative_to(ROOT):
+                raise ValueError("Manifest must belong to this worktree")
+        if arg == "--target-dir" or arg.startswith("--target-dir="):
+            raise ValueError(
+                "Use the worktree target; --target-dir is not supported locally"
+            )
+        value = None
+        if arg in ("-j", "--jobs"):
+            value = tail[i + 1] if i + 1 < len(tail) else ""
+        elif arg.startswith("--jobs="):
+            value = arg.split("=", 1)[1]
+        elif arg.startswith("-j"):
+            value = arg[2:]
+        if value is not None and (not value.isdigit() or not 1 <= int(value) <= 2):
+            raise ValueError("Cargo --jobs must be 1 or 2")
+    return env
+
+
+def scope_command(arguments):
+    return [
+        "systemd-run",
+        "--user",
+        "--scope",
+        "--quiet",
+        "--collect",
+        "--property=MemoryMax=12G",
+        "--property=MemorySwapMax=0",
+        "--property=CPUQuota=200%",
+        "--",
+        sys.executable,
+        str(Path(__file__).resolve()),
+        "--inside-scope",
+        *arguments,
+    ]
+
+
+def verify_scope():
+    entry = next(
+        line[3:]
+        for line in Path("/proc/self/cgroup").read_text().splitlines()
+        if line.startswith("0::")
+    )
+    group = Path("/sys/fs/cgroup") / entry.lstrip("/")
+    memory = (group / "memory.max").read_text().strip()
+    swap = (group / "memory.swap.max").read_text().strip()
+    quota, period = (group / "cpu.max").read_text().split()
+    if (
+        memory == "max"
+        or int(memory) > 12 * 1024**3
+        or swap != "0"
+        or quota == "max"
+        or int(quota) > 2 * int(period)
+    ):
+        raise ValueError("Compilation requires the bounded user systemd scope")
+
+
+def run(arguments):
+    inside = bool(arguments and arguments[0] == "--inside-scope")
+    if inside:
+        arguments = arguments[1:]
+        verify_scope()
+    command, _ = command_arguments(arguments)
+    if command in READ_COMMANDS or not arguments:
+        return subprocess.call(["cargo", *arguments])
+    if command not in BUILD_COMMANDS:
+        raise ValueError(
+            "Unsupported Cargo entry point; put the build command immediately after cargo or +toolchain"
+        )
+    env = build_environment(arguments)
+    if not inside:
+        return subprocess.call(scope_command(arguments), env=env)
+    runtime = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
+    slot, wait = acquire_slot(runtime / "saasy-dev-cargo-admission")
+    started = time.monotonic()
+    child = None
+    old_handlers = {}
+
+    def forward(signum, _frame):
+        if child is not None:
+            os.killpg(child.pid, signum)
+        else:
+            raise KeyboardInterrupt
+
+    try:
+        for sig in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
+            old_handlers[sig] = signal.signal(sig, forward)
+        child = subprocess.Popen(
+            ["cargo", *arguments], env=env, start_new_session=True, pass_fds=(slot,)
+        )
+        status = child.wait()
+        return 128 - status if status < 0 else status
+    finally:
+        if child is not None and child.poll() is None:
+            os.killpg(child.pid, signal.SIGTERM)
+            child.wait()
+        elapsed = time.monotonic() - started
+        # No environment, flags, command arguments, or credentials are logged.
+        print(
+            json.dumps(
+                {
+                    "cargo_command": command,
+                    "worktree": hashlib.sha256(str(ROOT).encode()).hexdigest()[:16],
+                    "admission_seconds": round(wait, 3),
+                    "execution_seconds": round(elapsed, 3),
+                    "exit_status": (
+                        128 - child.returncode
+                        if child.returncode < 0
+                        else child.returncode
+                    )
+                    if child is not None and child.returncode is not None
+                    else None,
+                }
+            ),
+            file=sys.stderr,
+        )
+        os.close(slot)
+        for sig, handler in old_handlers.items():
+            signal.signal(sig, handler)
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(run(sys.argv[1:]))
+    except (ValueError, OSError) as error:
+        print(f"dev cargo: {error}", file=sys.stderr)
+        sys.exit(2)
+    except KeyboardInterrupt:
+        sys.exit(130)
