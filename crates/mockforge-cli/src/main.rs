@@ -6,6 +6,7 @@ use std::path::PathBuf;
 #[cfg(feature = "http")]
 use tokio::net::TcpListener;
 
+mod ai_bake_commands;
 mod ai_commands;
 #[cfg(feature = "amqp")]
 mod amqp_commands;
@@ -1175,6 +1176,12 @@ enum Commands {
     TestAi {
         #[command(subcommand)]
         ai_command: ai_commands::AiTestCommands,
+    },
+
+    /// Generate once and bake static AI response fixtures for offline CI
+    Ai {
+        #[command(subcommand)]
+        ai_command: ai_bake_commands::AiCommands,
     },
 
     /// Plugin management
@@ -2850,6 +2857,7 @@ fn cli_command_name(cmd: &Commands) -> &'static str {
         #[cfg(feature = "amqp")]
         Commands::Amqp { .. } => "amqp",
         Commands::Data { .. } => "data",
+        Commands::Ai { .. } => "ai",
         Commands::Admin { .. } => "admin",
         Commands::Sync { .. } => "sync",
         Commands::Quick { .. } => "quick",
@@ -3284,6 +3292,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         Commands::TestAi { ai_command } => {
             ai_commands::handle_test_ai(ai_command).await?;
+        }
+        Commands::Ai { ai_command } => {
+            ai_bake_commands::handle(ai_command).await?;
         }
 
         Commands::Plugin { plugin_command } => {

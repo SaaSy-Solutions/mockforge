@@ -306,6 +306,10 @@ response data and disable or pin runtime templates, clocks and stateful behavior
 
 ### Seeded Generation (#852)
 
+For the public authoring and offline CI workflow, see
+[Bake AI responses for offline CI](baked-fixtures.md). It freezes actual response
+data, including arrays and scalar values, into a static serve configuration.
+
 `deterministic_mode` freezes AI output *after* generation. For
 repeatability *during* generation, use a sampling seed. Provider support
 and runtime changes can still affect the generated output:
