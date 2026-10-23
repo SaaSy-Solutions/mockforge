@@ -74,6 +74,15 @@ external parameter schema references fail explicitly; parameter validation does
 not fetch network resources or external files. Integer wire values retain
 64-bit precision.
 
+Parameters declared with `content: application/json` (or an `application/*+json`
+media type) are decoded as JSON before schema validation. JSON types are
+preserved: the serialized string `"2"` does not satisfy an integer schema, while
+`2` does. Malformed JSON fails even when the media declaration has no schema.
+Local component aliases and nested references are checked without fetching
+external resources. Unsupported parameter media types fail explicitly rather
+than silently passing; these failures do not establish that the recorded value
+itself violates that media type's contract.
+
 You can also validate a recorder database containing real upstream traffic:
 
 ```bash
