@@ -105,26 +105,6 @@ def validate(value):
 def classify(arguments):
     args = list(arguments)
     args = args[: args.index("--")] if "--" in args else args
-    profiles = []
-    for index, arg in enumerate(args):
-        if arg.startswith("--profile="):
-            profiles.append(arg.split("=", 1)[1])
-        elif arg == "--profile":
-            profiles.append(args[index + 1] if index + 1 < len(args) else "unknown")
-    if (
-        "--release" in args
-        or "-r" in args
-        or any(p not in {"dev", "test"} for p in profiles)
-    ):
-        return "release"
-    if any(a in {"--workspace", "--all", "--all-features"} for a in args):
-        return "workspace"
-    package = any(
-        a in {"-p", "--package"}
-        or a.startswith("--package=")
-        or (a.startswith("-p") and len(a) > 2)
-        for a in args
-    )
     verb = next(
         (
             a
@@ -148,14 +128,33 @@ def classify(arguments):
         ),
         "",
     )
+    profiles = []
+    for index, arg in enumerate(args):
+        if arg.startswith("--profile="):
+            profiles.append(arg.split("=", 1)[1])
+        elif arg == "--profile":
+            profiles.append(args[index + 1] if index + 1 < len(args) else "unknown")
+    if (
+        "--release" in args
+        or "-r" in args
+        or verb == "bench"
+        or any(p not in {"dev", "test"} for p in profiles)
+    ):
+        return "release"
+    if any(a in {"--workspace", "--all", "--all-features"} for a in args):
+        return "workspace"
+    package = any(
+        a in {"-p", "--package"}
+        or a.startswith("--package=")
+        or (a.startswith("-p") and len(a) > 2)
+        for a in args
+    )
     if not package:
         return "workspace"
     if verb in {"check", "c", "clippy"}:
         return "check"
     if verb in {"test", "t"}:
         return "targeted-test"
-    if verb == "bench":
-        return "release"
     return "executable"
 
 

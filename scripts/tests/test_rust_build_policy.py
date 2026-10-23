@@ -110,6 +110,8 @@ class SharedBuildPolicyTests(unittest.TestCase):
             (["test", "-p", "leaf", "--all-features"], "workspace"),
             (["build", "-p", "leaf", "--release"], "release"),
             (["bench", "-p", "leaf"], "release"),
+            (["bench"], "release"),
+            (["bench", "--workspace"], "release"),
         ]
         for arguments, expected in cases:
             with self.subTest(arguments=arguments):
