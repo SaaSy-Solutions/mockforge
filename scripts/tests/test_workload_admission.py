@@ -275,6 +275,13 @@ class WorkloadAdmission(unittest.TestCase):
             reserved.wait(timeout=3)
             self.assertIsNotNone(ready(newer))
 
+    def test_nonregular_queue_input_fails_without_blocking(self):
+        queue = self.runtime / "queue"
+        policy.private_directory(queue)
+        os.mkfifo(queue / "invalid-ticket")
+        with self.assertRaisesRegex(ValueError, "Unsafe queue ticket"):
+            policy.live_waiters(queue)
+
     def test_dead_waiter_does_not_block_later_requests(self):
         heavy = ["build", "-p", "other"]
         with ExitStack() as stack:

@@ -273,7 +273,7 @@ def open_lock(path):
 def read_policy(directory):
     path = directory / "policy.json"
     try:
-        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
     except FileNotFoundError:
         return validate(default_policy())
     with os.fdopen(fd) as stream:
@@ -317,7 +317,7 @@ def live_waiters(directory):
     result = []
     for path in sorted(directory.iterdir()):
         try:
-            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
         except FileNotFoundError:
             continue
         with os.fdopen(fd) as stream:

@@ -205,7 +205,7 @@ The warm-target receipt is admission evidence only. It does not certify source
 provenance, successful tests, runtime behavior or permission to skip validation.
 The scheduling update adds no compiler flags or alternative artifact targets.
 
-The workload-aware update passes 16 adapter regressions and 21 shared-policy
+The workload-aware update passes 16 adapter regressions and 22 shared-policy
 regressions, including reserved-capacity progress, compatible warmth evidence,
 FIFO slot selection and surviving-child leases after launcher SIGKILL. Eighteen
 existing Hetzner routing tests also pass. The existing lightweight CI job runs
