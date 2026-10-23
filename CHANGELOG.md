@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- **[Cloud]** Path-based hosted-mock URLs work below the mock's root. `/mocks/{org}/{slug}/<path>` returned HTTP 500 "Wrong number of path arguments" for every sub-path, so only `/mocks/{org}/{slug}` itself was reachable. Sub-paths and query strings now proxy to the deployment, and a trailing slash (`/mocks/{org}/{slug}/`) serves the mock's root instead of 404. (#1280)
 - **[Reality]** MQTT publish and last-will delivery no longer hold broker-wide locks while waiting on subscriber queues, or acquire topic and client locks in the opposite order to new connections. This prevents concurrent CONNECT/publish deadlocks and lets new clients connect while a subscriber is backpressured. (#715)
 - **[Docs]** The workspace export/import guide and the configuration reference no longer call `mockforge workspace export`, `import` and `activate` unreleased; they ship in 0.3.236. (#1197)
 - **[Contracts]** Package Intelligence’s database migrations inside its own crate so the published `database` feature builds without a sibling HTTP checkout. Preserve all historical migration filenames and SQL bytes for existing databases. (#632)
