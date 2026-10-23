@@ -14,6 +14,7 @@ pub mod generation;
 #[doc(hidden)]
 pub mod registry;
 pub mod validation;
+mod validation_policy;
 
 use crate::response::AiGenerator;
 use crate::response_rewriter::{OverrideHook, OverrideRequest, ResponseRewriter};
@@ -48,6 +49,8 @@ pub struct OpenApiRouteRegistry {
     routes: Vec<OpenApiRoute>,
     /// Validation options
     options: ValidationOptions,
+    /// Whether request validation follows serve-time overrides and shadow mode.
+    honor_serve_validation_policy: bool,
     /// Custom fixture loader (optional)
     custom_fixture_loader: Option<Arc<crate::custom_fixture::CustomFixtureLoader>>,
     /// Override rules applied to every generated response (optional)
@@ -231,9 +234,25 @@ impl OpenApiRouteRegistry {
             spec,
             routes,
             options,
+            honor_serve_validation_policy: true,
             custom_fixture_loader: None,
             overrides: None,
         }
+    }
+
+    /// Construct a registry for offline contract checks and CI gates.
+    ///
+    /// Always enforces request contracts with aggregated errors and status 400,
+    /// independently of server validation modes, route overrides, skip prefixes,
+    /// status overrides and shadow mode. Does not change process environment.
+    pub fn new_for_contract_verification(spec: OpenApiSpec) -> Self {
+        let options = ValidationOptions {
+            validation_status: Some(400),
+            ..Default::default()
+        };
+        let mut registry = Self::new_with_options(spec, options);
+        registry.honor_serve_validation_policy = false;
+        registry
     }
 
     /// Construct with explicit options
@@ -254,6 +273,7 @@ impl OpenApiRouteRegistry {
             spec,
             routes,
             options,
+            honor_serve_validation_policy: true,
             custom_fixture_loader: None,
             overrides: None,
         }
@@ -283,6 +303,7 @@ impl OpenApiRouteRegistry {
             spec: self.spec.clone(),
             routes: self.routes.clone(),
             options: self.options.clone(),
+            honor_serve_validation_policy: self.honor_serve_validation_policy,
             custom_fixture_loader: self.custom_fixture_loader.clone(),
             overrides: self.overrides.clone(),
         }
@@ -1394,7 +1415,9 @@ impl OpenApiRouteRegistry {
         // proceeds to synthesise a normal 2xx response. Lets a proxy
         // replay run flow through non-blocking while capturing every
         // violation.
-        if mockforge_foundation::unknown_paths::shadow_mode_enabled() {
+        if self.honor_serve_validation_policy
+            && mockforge_foundation::unknown_paths::shadow_mode_enabled()
+        {
             return Ok(());
         }
 
@@ -1454,48 +1477,9 @@ impl OpenApiRouteRegistry {
         body: Option<&Value>,
         body_present: bool,
     ) -> Result<()> {
-        // Skip validation for any configured admin prefixes
-        for pref in &self.options.admin_skip_prefixes {
-            if !pref.is_empty() && path.starts_with(pref) {
-                return Ok(());
-            }
-        }
-        // Runtime env overrides
-        let env_mode = std::env::var("MOCKFORGE_REQUEST_VALIDATION").ok().map(|v| {
-            match v.to_ascii_lowercase().as_str() {
-                "off" | "disable" | "disabled" => ValidationMode::Disabled,
-                "warn" | "warning" => ValidationMode::Warn,
-                _ => ValidationMode::Enforce,
-            }
-        });
-        let aggregate = std::env::var("MOCKFORGE_AGGREGATE_ERRORS")
-            .ok()
-            .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-            .unwrap_or(self.options.aggregate_errors);
-        // Per-route runtime overrides via JSON env var
-        let env_overrides: Option<Map<String, Value>> =
-            std::env::var("MOCKFORGE_VALIDATION_OVERRIDES_JSON")
-                .ok()
-                .and_then(|s| serde_json::from_str::<Value>(&s).ok())
-                .and_then(|v| v.as_object().cloned());
-        // Response validation is handled in HTTP layer now
-        let mut effective_mode = env_mode.unwrap_or(self.options.request_mode.clone());
-        // Apply runtime overrides first if present
-        if let Some(map) = &env_overrides {
-            if let Some(v) = map.get(&format!("{} {}", method, path)) {
-                if let Some(m) = v.as_str() {
-                    effective_mode = match m {
-                        "off" => ValidationMode::Disabled,
-                        "warn" => ValidationMode::Warn,
-                        _ => ValidationMode::Enforce,
-                    };
-                }
-            }
-        }
-        // Then static options overrides
-        if let Some(override_mode) = self.options.overrides.get(&format!("{} {}", method, path)) {
-            effective_mode = override_mode.clone();
-        }
+        let Some((aggregate, effective_mode)) = self.request_validation_policy(path, method) else {
+            return Ok(());
+        };
         if matches!(effective_mode, ValidationMode::Disabled) {
             return Ok(());
         }

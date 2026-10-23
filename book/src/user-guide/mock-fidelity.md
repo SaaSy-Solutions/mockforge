@@ -73,6 +73,12 @@ missing responses, undeclared statuses and schema violations fail the check.
 Response validation selects an exact status declaration before a status range
 or default response, resolving local response references before validation.
 
+Captured request checks enforce the contract independently of serve-time
+validation settings. `MOCKFORGE_REQUEST_VALIDATION`, per-route validation
+overrides, skip prefixes, aggregate-error settings, validation-status overrides
+and `MOCKFORGE_SHADOW_MODE` cannot turn an invalid capture into a passing check.
+This policy does not change the environment or the behavior of running servers.
+
 Supply both `--mock-spec` and `--capture-db` to include definition and captured
 traffic checks in one report. An empty or missing capture still fails when a
 matching mock definition is also supplied.
