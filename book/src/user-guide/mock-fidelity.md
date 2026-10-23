@@ -62,6 +62,11 @@ names are case-insensitive; cookie names retain their case, as they do during
 HTTP serving. Missing required cookies or values that violate their schema
 produce request drift.
 
+HTTP header parameter names are matched without ASCII case differences in both
+standard and detailed conformance errors. For example, a captured `x-trace`
+satisfies a declared `X-Trace`. Required presence and value constraints still
+apply. Query and path parameter names remain case-sensitive.
+
 You can also validate a recorder database containing real upstream traffic:
 
 ```bash

@@ -13,6 +13,7 @@
 
 ### Fixed
 
+- **[Reality]** Request conformance checks match HTTP header names without ASCII case differences in normal and detailed validation. A captured `x-trace` now satisfies a declared `X-Trace`; missing headers and invalid values still fail, while cookie, query and path parameter names remain case-sensitive. (#849)
 - **[Reality]** `verify-mocks` reads declared cookie parameters from recorded `Cookie` headers using serving's case and delimiter rules. Previously, even a valid captured cookie was treated as missing. Missing or invalid required cookies still report request drift. (#849)
 - **[Reality]** Fidelity checks treat omitted or empty root server lists as the OpenAPI default `/`, preventing false drift between equivalent Swagger/OpenAPI definitions while retaining real server changes and route overrides. Recorded CLI query parameters now use the serving parser, including form spaces (`+`), encoded literal plus signs and empty values. (#849)
 - **[Reality]** `verify-mocks` enforces captured request contracts even when server validation is set to `off` or `warn`, route overrides disable checking, or shadow mode is enabled. The offline verifier uses an isolated strict registry policy; serving retains its configured behavior. (#849)
