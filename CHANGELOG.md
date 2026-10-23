@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- **[AI]** Forward persisted workspace seed and snapshot policies through local admin chat, mock and persona generation. Inherit the server provider/model, preserve policy on export/import, and reject missing or invalid workspaces before generation. (#852)
 - **[AI]** Keep configured provider/model and seed settings when chat generates mocks or personas. Allow library callers to supply snapshot policies and report zero new usage for verified snapshot replays. (#852)
 - **[AI]** Preserve frozen array and scalar payloads with durable identity and integrity metadata. Publish immutable snapshots as complete bundles, retain legacy object snapshots, and reject missing hashes during verification. (#852)
 - **[AI]** Add the unreleased `mockforge ai bake` authoring workflow: generate a JSON response once and save a static JSON/YAML serve configuration for offline CI. Existing verified outputs are reused without provider calls; mismatched inputs and modified files fail instead of overwriting them. Sampling seeds are forwarded where supported. Explicit JSON `null` route bodies now remain `null` instead of becoming `{}` when configuration loads. (#852)

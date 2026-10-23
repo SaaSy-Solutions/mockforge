@@ -257,7 +257,7 @@ ai:
 
 When enabled with auto-freeze, the generated artifacts are saved as YAML/JSON.
 Saving each generation does not by itself prevent another provider call.
-The admin chat path currently does not forward these workspace settings.
+The local admin generation handlers load the persisted workspace policy described below (unreleased fix).
 
 #### Generate once and replay a snapshot (unreleased fix)
 
@@ -324,8 +324,60 @@ Mock and persona chat generation use the orchestrator's provider/model and seed.
 A verified snapshot can be replayed with the provider offline; the chat response
 reports zero new tokens and cost for that replay. Direct generator results expose
 `replayed` so applications can distinguish cache reuse from a provider call. The
-HTTP admin chat handler still needs to load and forward workspace policies; this
-library builder does not change that handler or hosted billing controls.
+local admin HTTP handlers use the same policy from persisted workspace settings.
+Hosted billing controls remain separate.
+
+#### Persisted workspace policy for local admin generation (unreleased)
+
+The local/self-hosted admin chat, mock and persona generation handlers accept a
+`workspace_id` and share the workspace API's live registry. Set a policy with
+`PUT /__mockforge/workspaces/<workspace_id>`:
+
+```json
+{
+  "ai_mode": "generate_once_freeze",
+  "ai_generation": {
+    "seed": 42,
+    "deterministic_mode": {
+      "freeze_format": "json",
+      "freeze_directory": "fixtures/ai",
+      "track_metadata": false
+    }
+  }
+}
+```
+
+Omitted fields retain existing overrides; explicit `null` removes an override.
+Disabled workspaces return 403 without generation. Live registry policy takes
+precedence. For a workspace absent from that registry, the handlers fall back to
+a persisted local workspace file. By default these files are in
+`./workspaces/<workspace_id>.yaml`. Add the following inside that workspace's
+`config` section:
+
+```yaml
+config:
+  ai_mode: generate_once_freeze
+  ai_generation:
+    seed: 42
+    deterministic_mode:
+      enabled: false
+      freeze_format: json
+      freeze_directory: fixtures/ai
+      track_metadata: false
+```
+
+`generate_once_freeze` requests replay even with auto-freeze disabled. The
+workspace seed overrides the server seed; omitting it inherits the server seed
+or `MOCKFORGE_AI_SEED`. Provider/model settings come from the server's configured
+MockAI instance. This workspace policy does not store API keys. With no workspace
+mode override, the server's AI mode applies. Snapshot settings and mode survive
+workspace save/reload and the legacy workspace export/import path.
+
+Missing workspaces return 404, malformed workspace files return 500, and invalid
+workspace IDs return 400 before any provider request. Chat uses its conversation's
+workspace when the request omits one and rejects a conflicting workspace ID.
+These local admin routes are separate from the hosted registry's metered AI
+pipeline; this change does not activate hosted platform credentials.
 
 This freezes the generated specification or persona, including any examples
 already present. It does not turn schema-driven random response generation into
