@@ -48,8 +48,8 @@ def configuration(slots=2, reserve=0):
 def worker(directory, arguments):
     program = """import importlib.util,json,sys
 spec=importlib.util.spec_from_file_location('policy',sys.argv[1]); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
-m.host_budgets=lambda:(65536,800)
-m.available_memory_mib=lambda:65536
+sys.modules["rust_policy_config"].host_budgets=lambda:(65536,800)
+sys.modules["rust_policy_runtime"].available_memory_mib=lambda:65536
 with m.Session(json.loads(sys.argv[3]),m.Path(sys.argv[2])) as session:
  session.acquire(); print('admitted',flush=True); sys.stdin.read(1)
 """
@@ -93,7 +93,9 @@ class SharedBuildPolicyTests(unittest.TestCase):
     def setUp(self):
         # These idle-process tests exercise contract semantics on even tiny CI
         # hosts; no child performs CPU or memory work at these synthetic budgets.
-        self.budgets = patch.object(contract, "host_budgets", return_value=(65536, 800))
+        self.budgets = patch.object(
+            sys.modules["rust_policy_config"], "host_budgets", return_value=(65536, 800)
+        )
         self.budgets.start()
         self.addCleanup(self.budgets.stop)
         self.temporary = tempfile.TemporaryDirectory()

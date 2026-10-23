@@ -37,8 +37,8 @@ def worker(directory, context, arguments=ARGS, memory_file=None):
     code = """import importlib.util,json,os,sys
 from pathlib import Path
 s=importlib.util.spec_from_file_location('p',sys.argv[1]);p=importlib.util.module_from_spec(s);s.loader.exec_module(p)
-p.host_budgets=lambda:(65536,800)
-p.available_memory_mib=lambda:int(Path(sys.argv[5]).read_text()) if sys.argv[5] else 65536
+sys.modules["rust_policy_config"].host_budgets=lambda:(65536,800)
+sys.modules["rust_policy_runtime"].available_memory_mib=lambda:int(Path(sys.argv[5]).read_text()) if sys.argv[5] else 65536
 c=json.loads(sys.argv[3]); c['environment']=dict(os.environ,RUSTC=c.pop('compiler'))
 with p.Session(json.loads(sys.argv[4]),Path(sys.argv[2])) as a:
  a.configure(**c); wait=a.acquire();print(json.dumps(dict(a.event(),wait=wait)),flush=True);sys.stdin.read(1)
@@ -99,10 +99,16 @@ class WorkloadAdmission(unittest.TestCase):
             target=str(self.target),
             compiler=str(self.compiler),
         )
-        self.budgets = patch.object(policy, "host_budgets", return_value=(65536, 800))
+        self.budgets = patch.object(
+            sys.modules["rust_policy_config"], "host_budgets", return_value=(65536, 800)
+        )
         self.budgets.start()
         self.addCleanup(self.budgets.stop)
-        self.memory = patch.object(policy, "available_memory_mib", return_value=65536)
+        self.memory = patch.object(
+            sys.modules["rust_policy_runtime"],
+            "available_memory_mib",
+            return_value=65536,
+        )
         self.memory.start()
         self.addCleanup(self.memory.stop)
         policy.apply_policy(policy.default_policy(), self.runtime)
@@ -307,7 +313,7 @@ class WorkloadAdmission(unittest.TestCase):
         code = """import importlib.util,json,subprocess,sys,time
 from pathlib import Path
 s=importlib.util.spec_from_file_location('p',sys.argv[1]);p=importlib.util.module_from_spec(s);s.loader.exec_module(p)
-p.host_budgets=lambda:(65536,800);p.available_memory_mib=lambda:65536
+sys.modules["rust_policy_config"].host_budgets=lambda:(65536,800);sys.modules["rust_policy_runtime"].available_memory_mib=lambda:65536
 with p.Session(['build','-p','other'],Path(sys.argv[2])) as a:
  a.acquire()
  child="import pathlib,sys,time; p=pathlib.Path(sys.argv[1]); end=time.monotonic()+10; exec('while not p.exists() and time.monotonic()<end: time.sleep(.02)')"
