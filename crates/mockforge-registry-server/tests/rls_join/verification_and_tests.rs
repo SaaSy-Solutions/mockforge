@@ -35,6 +35,13 @@ async fn monitored_services_round_trip_and_cross_tenant() {
                     "name": "orders-api",
                     "base_url": "https://example.com",
                     "traffic_source": "probe",
+                    "openapi_spec_inline": {
+                        "openapi": "3.0.3",
+                        "info": { "title": "orders fixture", "version": "1" },
+                        "paths": {
+                            "/orders": { "get": { "responses": { "200": { "description": "ok" } } } }
+                        }
+                    },
                 }),
             )
             .await,
@@ -62,6 +69,24 @@ async fn monitored_services_round_trip_and_cross_tenant() {
             .await,
     );
     str_field("trigger diff run", &run, "id");
+
+    let missing_spec = ok(
+        "create service without a specification",
+        owner
+            .post(&list_path, json!({ "name": "missing-spec", "base_url": "https://example.com", "traffic_source": "probe" }))
+            .await,
+    );
+    let missing_spec_id = str_field("service without spec", &missing_spec, "id");
+    client_err(
+        "cannot queue a contract diff without a specification",
+        owner
+            .post(&format!("/api/v1/monitored-services/{missing_spec_id}/diff"), json!({}))
+            .await,
+    );
+    ok(
+        "delete service without spec",
+        owner.delete(&format!("/api/v1/monitored-services/{missing_spec_id}")).await,
+    );
 
     // Unknown diff run ids read as 4xx (no 5xx from an unbound join).
     let missing = uuid::Uuid::new_v4();
@@ -219,10 +244,17 @@ async fn test_suites_schedules_runs_round_trip_and_cross_tenant() {
     let ws = create_workspace(&owner, &format!("ts-{}", unique())).await;
     let suites_path = format!("/api/v1/workspaces/{ws}/test-suites");
 
+    client_err(
+        "cannot create a suite for an unavailable executor",
+        owner
+            .post(&suites_path, json!({ "name": "unsupported", "kind": "unit", "config": {} }))
+            .await,
+    );
+
     let suite = ok(
         "create suite",
         owner
-            .post(&suites_path, json!({ "name": "smoke", "kind": "unit", "config": {} }))
+            .post(&suites_path, json!({ "name": "smoke", "kind": "integration", "config": {} }))
             .await,
     );
     let suite_id = str_field("create suite", &suite, "id");
@@ -230,7 +262,7 @@ async fn test_suites_schedules_runs_round_trip_and_cross_tenant() {
     assert_contains("list suites", &list_ids(&owner, "list suites", &suites_path).await, &suite_id);
     assert_contains(
         "list suites ?kind",
-        &list_ids(&owner, "list suites kind", &format!("{suites_path}?kind=unit")).await,
+        &list_ids(&owner, "list suites kind", &format!("{suites_path}?kind=integration")).await,
         &suite_id,
     );
     ok("get suite", owner.get(&suite_path).await);
@@ -351,7 +383,7 @@ async fn test_run_deletion_statuses_and_cascade() {
         owner
             .post(
                 &format!("/api/v1/workspaces/{ws}/test-suites"),
-                json!({"name": "delete fixture", "kind": "unit", "config": {}}),
+                json!({"name": "delete fixture", "kind": "integration", "config": {}}),
             )
             .await,
     );

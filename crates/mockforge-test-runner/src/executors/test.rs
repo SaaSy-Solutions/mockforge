@@ -128,26 +128,18 @@ async fn run_native_test(
 fn validate_test_config(kind: &str, payload: &serde_json::Value) -> Result<()> {
     let cloud_spec = uses_cloud_api(payload) && extract_spec_bytes(payload).is_some();
     let target_url = extract_target_url(payload).is_some();
-    let reason = match kind {
-        "integration" if integration_workflow(payload).is_none() => {
-            Some("integration requires non-empty `steps`")
+    let missing = match kind {
+        "integration" => integration_workflow(payload).is_none().then_some("non-empty `steps`"),
+        "conformance" => (!uses_cloud_api(payload)).then_some("`use_cloud_api: true`"),
+        "bench" | "owasp" => (!target_url && !cloud_spec)
+            .then_some("`target_url`, or `use_cloud_api: true` with `spec`"),
+        "security" | "wafbench" | "crud_flow" => {
+            (!cloud_spec).then_some("`use_cloud_api: true` with `spec`")
         }
-        "conformance" if !uses_cloud_api(payload) => {
-            Some("conformance requires `use_cloud_api: true`")
-        }
-        "bench" if !target_url && !cloud_spec => {
-            Some("bench requires `target_url`, or `use_cloud_api: true` with `spec`")
-        }
-        "owasp" if !target_url && !cloud_spec => {
-            Some("owasp requires `target_url`, or `use_cloud_api: true` with `spec`")
-        }
-        "security" if !cloud_spec => Some("security requires `use_cloud_api: true` with `spec`"),
-        "wafbench" if !cloud_spec => Some("wafbench requires `use_cloud_api: true` with `spec`"),
-        "crud_flow" if !cloud_spec => Some("crud_flow requires `use_cloud_api: true` with `spec`"),
         _ => None,
     };
-    match reason {
-        Some(reason) => Err(Error::Executor(reason.to_string())),
+    match missing {
+        Some(required) => Err(Error::Executor(format!("{kind} requires {required}"))),
         None => Ok(()),
     }
 }
@@ -518,6 +510,91 @@ async fn run_cloud_owasp(
     }
 }
 
+/// Build conformance settings while preserving category and header parsing.
+fn cloud_conformance_config(payload: &serde_json::Value, target_url: &str) -> ConformanceConfig {
+    let categories = extract_string(payload, "conformance_categories")
+        .map(|s| s.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect());
+
+    let custom_headers: Vec<(String, String)> = extract_string_vec(payload, "conformance_headers")
+        .into_iter()
+        .filter_map(|raw| {
+            let (k, v) = raw.split_once(':')?;
+            Some((k.trim().to_string(), v.trim().to_string()))
+        })
+        .collect();
+
+    ConformanceConfig {
+        target_url: target_url.to_owned(),
+        api_key: extract_string(payload, "conformance_api_key"),
+        basic_auth: extract_string(payload, "conformance_basic_auth"),
+        skip_tls_verify: payload.get("skip_tls_verify").and_then(|v| v.as_bool()).unwrap_or(false),
+        categories,
+        base_path: extract_string(payload, "base_path"),
+        custom_headers,
+        output_dir: None,
+        all_operations: payload
+            .get("conformance_all_operations")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        custom_checks_file: None,
+        request_delay_ms: payload.get("conformance_delay_ms").and_then(|v| v.as_u64()).unwrap_or(0),
+        custom_filter: None,
+        export_requests: false,
+        validate_requests: false,
+    }
+}
+
+fn cloud_conformance_executor(
+    payload: &serde_json::Value,
+    target_url: &str,
+) -> mockforge_bench::Result<NativeConformanceExecutor> {
+    let config = cloud_conformance_config(payload, target_url);
+    let custom = extract_string(payload, "custom_checks_yaml")
+        .map(|yaml| {
+            serde_yaml::from_str::<CustomConformanceConfig>(&yaml).map_err(|error| {
+                mockforge_bench::error::BenchError::Other(format!(
+                    "custom_checks_yaml parse failed: {error}"
+                ))
+            })
+        })
+        .transpose()?;
+    let executor = NativeConformanceExecutor::with_ssrf_guard(config, Some(ssrf_policy()))?
+        .with_reference_checks();
+    match custom {
+        Some(config) => executor.with_custom_checks_from_config(config),
+        None => Ok(executor),
+    }
+}
+
+fn conformance_progress_event(
+    progress: ConformanceProgress,
+) -> Option<(&'static str, serde_json::Value)> {
+    let event = match progress {
+        ConformanceProgress::Started { total_checks } => (
+            "started",
+            serde_json::json!({ "type": "started", "total_checks": total_checks }),
+        ),
+        ConformanceProgress::CheckCompleted {
+            name,
+            passed,
+            checks_done,
+        } => (
+            "check_completed",
+            serde_json::json!({
+                "type": "check_completed",
+                "name": name,
+                "passed": passed,
+                "checks_done": checks_done,
+            }),
+        ),
+        ConformanceProgress::Finished => return None, // emitted with the final report
+        ConformanceProgress::Error { message } => {
+            ("error", serde_json::json!({ "type": "error", "message": message }))
+        }
+    };
+    Some(event)
+}
+
 /// Drive an OpenAPI 3.0.0 conformance run via the native conformance
 /// executor in `mockforge_bench::conformance::executor`, streaming
 /// per-check progress through the callbacks channel so the cloud UI can
@@ -585,105 +662,9 @@ async fn run_cloud_conformance(
         )
         .await?;
 
-    let categories = extract_string(&job.payload, "conformance_categories")
-        .map(|s| s.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect());
-
-    let custom_headers: Vec<(String, String)> =
-        extract_string_vec(&job.payload, "conformance_headers")
-            .into_iter()
-            .filter_map(|raw| {
-                let (k, v) = raw.split_once(':')?;
-                Some((k.trim().to_string(), v.trim().to_string()))
-            })
-            .collect();
-
-    let config = ConformanceConfig {
-        target_url: target_url.clone(),
-        api_key: extract_string(&job.payload, "conformance_api_key"),
-        basic_auth: extract_string(&job.payload, "conformance_basic_auth"),
-        skip_tls_verify: job
-            .payload
-            .get("skip_tls_verify")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false),
-        categories,
-        base_path: extract_string(&job.payload, "base_path"),
-        custom_headers,
-        output_dir: None,
-        all_operations: job
-            .payload
-            .get("conformance_all_operations")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false),
-        custom_checks_file: None,
-        request_delay_ms: job
-            .payload
-            .get("conformance_delay_ms")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0),
-        custom_filter: None,
-        export_requests: false,
-        validate_requests: false,
-    };
-
-    // Parse the optional inline custom-checks YAML before we
-    // construct the executor — if the user supplied malformed YAML
-    // we want to error fast, not run the reference checks and then
-    // surface a confusing parse failure mid-run. The YAML schema is
-    // purely declarative (status/headers/body-field validators), so
-    // no sandbox is needed server-side.
-    let custom_checks_config = match extract_string(&job.payload, "custom_checks_yaml") {
-        Some(yaml) => match serde_yaml::from_str::<CustomConformanceConfig>(&yaml) {
-            Ok(cfg) => Some(cfg),
-            Err(e) => {
-                return finish_cloud_error(
-                    job.run_id,
-                    callbacks,
-                    started,
-                    "conformance",
-                    &target_url,
-                    2,
-                    mockforge_bench::error::BenchError::Other(format!(
-                        "custom_checks_yaml parse failed: {e}"
-                    )),
-                )
-                .await;
-            }
-        },
-        None => None,
-    };
-
-    // Construct the executor in reference-checks mode, optionally
-    // chaining the user's declarative custom checks on top. Both are
-    // additive — reference checks always run; custom checks extend
-    // the list when provided. Spec-driven checks would require
-    // parsing the OpenAPI spec into `AnnotatedOperation`s — deferred
-    // to a follow-up so the first cloud iteration matches the local
-    // "no spec, just probe the reference endpoints" UX which is what
-    // the page form exposes.
-    let executor = match NativeConformanceExecutor::with_ssrf_guard(config, Some(ssrf_policy())) {
-        Ok(e) => {
-            let e = e.with_reference_checks();
-            match custom_checks_config {
-                Some(cfg) => match e.with_custom_checks_from_config(cfg) {
-                    Ok(e) => e,
-                    Err(err) => {
-                        return finish_cloud_error(
-                            job.run_id,
-                            callbacks,
-                            started,
-                            "conformance",
-                            &target_url,
-                            2,
-                            err,
-                        )
-                        .await
-                    }
-                },
-                None => e,
-            }
-        }
-        Err(e) => {
+    let executor = match cloud_conformance_executor(&job.payload, &target_url) {
+        Ok(executor) => executor,
+        Err(error) => {
             return finish_cloud_error(
                 job.run_id,
                 callbacks,
@@ -691,9 +672,9 @@ async fn run_cloud_conformance(
                 "conformance",
                 &target_url,
                 2,
-                e,
+                error,
             )
-            .await
+            .await;
         }
     };
 
@@ -702,28 +683,8 @@ async fn run_cloud_conformance(
 
     let mut seq: u32 = 2;
     while let Some(progress) = rx.recv().await {
-        let (event_type, payload) = match progress {
-            ConformanceProgress::Started { total_checks } => (
-                "started",
-                serde_json::json!({ "type": "started", "total_checks": total_checks }),
-            ),
-            ConformanceProgress::CheckCompleted {
-                name,
-                passed,
-                checks_done,
-            } => (
-                "check_completed",
-                serde_json::json!({
-                    "type": "check_completed",
-                    "name": name,
-                    "passed": passed,
-                    "checks_done": checks_done,
-                }),
-            ),
-            ConformanceProgress::Finished => continue, // emitted below with the report
-            ConformanceProgress::Error { message } => {
-                ("error", serde_json::json!({ "type": "error", "message": message }))
-            }
+        let Some((event_type, payload)) = conformance_progress_event(progress) else {
+            continue;
         };
         callbacks.run_event(job.run_id, seq, event_type, payload).await?;
         seq += 1;
@@ -1360,6 +1321,38 @@ mod tests {
             source_id: uuid::Uuid::new_v4(),
             kind: kind.to_string(),
             payload,
+        }
+    }
+
+    #[test]
+    fn cloud_conformance_configuration_preserves_filters_and_headers() {
+        let config = cloud_conformance_config(
+            &json!({
+                "conformance_categories": " Parameters, , Security ",
+                "conformance_headers": [" X-Fixture : one:two ", "invalid"],
+                "conformance_delay_ms": 17,
+                "conformance_all_operations": true,
+                "base_path": "/fixture",
+            }),
+            "https://example.com",
+        );
+        assert_eq!(config.target_url, "https://example.com");
+        assert_eq!(config.categories, Some(vec!["Parameters".to_string(), "Security".to_string()]));
+        assert_eq!(config.custom_headers, vec![("X-Fixture".to_string(), "one:two".to_string())]);
+        assert_eq!(config.request_delay_ms, 17);
+        assert!(config.all_operations);
+        assert_eq!(config.base_path.as_deref(), Some("/fixture"));
+    }
+
+    #[test]
+    fn malformed_custom_conformance_checks_fail_before_executor_construction() {
+        let result = cloud_conformance_executor(
+            &json!({"custom_checks_yaml": "[invalid"}),
+            "https://example.com",
+        );
+        match result {
+            Err(error) => assert!(error.to_string().contains("custom_checks_yaml parse failed:")),
+            Ok(_) => panic!("malformed custom checks must be rejected"),
         }
     }
 
