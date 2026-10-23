@@ -11,7 +11,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 LAUNCHER = Path(__file__).resolve().parents[1] / "dev" / "cargo"
 sys.path.insert(0, str(LAUNCHER.parent))
@@ -22,6 +22,48 @@ loader.exec_module(policy)
 
 
 class DevelopmentCargoTests(unittest.TestCase):
+    def test_session_bound_to_effective_target_before_scope(self):
+        session = MagicMock()
+        session.limits = {"memory_mib": 12288, "cpu_percent": 200, "jobs": 2}
+        session.descriptors = ()
+        session.__enter__.return_value = session
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch.object(policy, "Session", return_value=session),
+            patch.object(policy.subprocess, "call", return_value=0),
+            patch.object(policy, "scope_command", return_value=["fake-scope"]),
+        ):
+            self.assertEqual(policy.run(["check", "-p", "mockforge-core"]), 0)
+        configured = session.configure.call_args.kwargs
+        self.assertEqual(configured["repository"], "SaaSy-Solutions/mockforge")
+        self.assertEqual(configured["worktree"], policy.ROOT)
+        self.assertEqual(configured["target"], policy.ROOT / "target")
+        self.assertEqual(
+            configured["environment"]["CARGO_TARGET_DIR"],
+            str(policy.ROOT / "target"),
+        )
+        session.record_success.assert_not_called()  # Outer scope is not Cargo.
+        session.acquire.assert_not_called()
+
+    def test_only_successful_admitted_child_records_warmth(self):
+        for code in (0, 7, -signal.SIGTERM):
+            with self.subTest(status=code):
+                child = MagicMock()
+                child.wait.return_value = code
+                child.poll.return_value = code
+                child.returncode = code
+                session = MagicMock()
+                session.event.return_value = {}
+                session.descriptors = ()
+                with (
+                    patch.object(policy.subprocess, "Popen", return_value=child),
+                    patch.object(policy.signal, "signal"),
+                    patch.object(policy, "print"),
+                ):
+                    actual = policy.admitted_run(["check"], "check", {}, session, 0)
+                self.assertEqual(actual, 128 - code if code < 0 else code)
+                self.assertEqual(session.record_success.call_count, int(code == 0))
+
     def test_scope_enforces_bounds(self):
         with (
             tempfile.TemporaryDirectory() as directory,

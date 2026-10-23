@@ -29,20 +29,35 @@ Compilation commands share one versioned host policy with participating SaaSy,
 Aether, CodeDig, and Hive launchers. User-owned state is under
 `${XDG_RUNTIME_DIR:-/run/user/<uid>}/saasy-dev-cargo-admission`. Every cooperating
 client reads the same policy snapshot; environment variables cannot independently
-increase host capacity. The fallback currently permits two simultaneous commands,
-12 GiB memory, two CPU cores and two Cargo jobs per invocation on this host, with
-zero reserved check slots. These are provisional safety defaults, not a measured
-throughput optimum. They remain adjustable: do not equate twenty agents with a
-requirement for twenty simultaneous builds, or conclude that two builds is fastest.
+increase host capacity. On a capable host the versioned fallback provides four
+aggregate slots, with two reserved for measured, eligible lightweight checks.
+Every command retains 12 GiB memory, no swap, 200% CPU quota and two Cargo jobs.
+Four slots mean at most 48 GiB and 800% CPU in aggregate, not four checks plus two
+heavy builds. Smaller hosts reduce capacity to fit visible resources.
 
-The shared module classifies focused checks/Clippy, targeted tests, executables,
-workspace-wide validation, and release/custom-profile builds separately. Each
-class has configurable memory, CPU quota, and Cargo job limits. Broad feature
-sets are classified conservatively. A configured check reservation lets focused
-compiler feedback proceed while heavy work waits; reservation is disabled by the
-fallback until a reviewed workload experiment justifies it. Total capacity is
-1–8; worst-case concurrent class limits must fit finite host CPU/memory budgets.
-No-swap scopes remain mandatory. Unsupported or malformed policies fail closed.
+Admission classes are separate from Cargo operation classes and their resource
+limits. `LIGHT_CHECK` requires an explicit reviewed repository/package/command
+recipe, compatible features/profile/targets/compiler inputs, and a successful
+warm-target receipt. A targeted `cargo check` alone never qualifies. Unknown or
+broader checks are `STANDARD_CHECK`; linked tests, executable/release builds and
+dependency-heavy validation are `HEAVY_BUILD`. Standard checks and heavy builds
+share the two ordinary slots on the initial policy; eligible light checks may use
+all four. There is currently **no measured Mockforge light-check recipe**: its
+checks conservatively use ordinary capacity. Do not add an allowlist entry based
+solely on the command name or another repository's benchmark.
+
+A shared queue admits older eligible requests first while allowing reserved
+capacity to serve light checks when ordinary slots are occupied. Cancellation and
+process death release leases; descendants keep their inherited admission leases
+until exit. Queue waiting and execution remain separately observable. Fairness
+covers participating launchers only, not direct Cargo or old clients. There is no
+preemption: finite progress assumes admitted commands finish and resource pressure
+clears. No completion deadline can be guaranteed for a hung child.
+
+Total capacity, reservations, class limits and reviewed light recipes remain
+configurable within finite host CPU/memory budgets. The initial reservation is a
+provisional policy, not a demonstrated optimum for mixed workloads. No-swap
+scopes remain mandatory. Unsupported or malformed policies fail closed.
 
 A policy lease covers both queued and active commands. Scope construction and
 kernel verification use that snapshot; compiler children inherit policy and slot
@@ -110,8 +125,8 @@ same launcher and retains all existing feature checks and fail-closed selection.
 
 The launcher emits one JSON summary to stderr per admitted invocation: command
 name, hashed worktree identity, admission wait, child execution duration, and exit
-status, workload class, effective policy fingerprint, capacity/reservation, and
-class limits. Execution starts after admission inside the scope and excludes
+status, operation class, admission class, classification reason, effective policy
+fingerprint, capacity/reservation, and class limits. Execution starts after admission inside the scope and excludes
 scope startup; it is not isolated compiler CPU time.
 It does not report unchanged checks as compiler-cache hits or log environment
 values, arbitrary command arguments, or secrets. Failed commands retain failure
@@ -168,3 +183,19 @@ after launcher death. The initial October 22 fixture measurements above describe
 the former fallback smoke only; they do not measure this policy change or establish
 which configuration maximizes useful validations per hour. No application compile
 or host policy update was performed during this correction.
+
+### Workload-aware policy update
+
+The canonical SSD measurements and evidence are in SaaS Platform's
+`docs/development/rust-build-performance-2026-10-22/SSD_RECALIBRATION.md` (PR #12852),
+not in this repository. Four warm Aether shared-edit checks completed in median
+6.76 seconds at four-way concurrency versus 12.24 seconds at two-way concurrency.
+These measurements support eligible warm checks, not Mockforge heavy builds,
+actual agent idle time, mixed-workload fairness performance, or a platform-wide
+speedup. Increasing CPU quota did not repeatably help that measured workload.
+
+Before applying policy, drain and upgrade every participating launcher/worktree.
+Keep the prior reviewed configuration for rollback; update only while quiescent.
+Do not globally intercept Cargo, delete lock state, or alter WSL limits. Observe
+admission and execution latency, failed validations, memory/CPU/I/O pressure and
+interactive responsiveness before increasing capacity or broadening light recipes.

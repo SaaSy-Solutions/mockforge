@@ -179,6 +179,12 @@ def run(arguments):
         )
     with Session(arguments) as session:
         env = build_environment(arguments, session.limits)
+        session.configure(
+            repository="SaaSy-Solutions/mockforge",
+            worktree=ROOT,
+            target=Path(env["CARGO_TARGET_DIR"]),
+            environment=env,
+        )
         if not inside:
             return subprocess.call(
                 scope_command(arguments, session), env=env, pass_fds=session.descriptors
@@ -209,6 +215,8 @@ def admitted_run(arguments, command, env, session, wait):
             pass_fds=session.descriptors,
         )
         status = child.wait()
+        if status == 0:
+            session.record_success()
         return 128 - status if status < 0 else status
     finally:
         if child is not None and child.poll() is None:

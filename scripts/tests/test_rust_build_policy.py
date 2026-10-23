@@ -29,6 +29,10 @@ spec.loader.exec_module(contract)
 
 def configuration(slots=2, reserve=0):
     policy = contract.default_policy()
+    # Class/configuration unit tests exercise legacy input separately from v2 scheduling.
+    policy["schema_version"] = 1
+    policy.pop("light_checks")
+    policy.pop("minimum_available_mib")
     policy.update(
         max_concurrent=slots,
         reserved_checks=reserve,
@@ -45,6 +49,7 @@ def worker(directory, arguments):
     program = """import importlib.util,json,sys
 spec=importlib.util.spec_from_file_location('policy',sys.argv[1]); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 m.host_budgets=lambda:(65536,800)
+m.available_memory_mib=lambda:65536
 with m.Session(json.loads(sys.argv[3]),m.Path(sys.argv[2])) as session:
  session.acquire(); print('admitted',flush=True); sys.stdin.read(1)
 """
@@ -97,8 +102,8 @@ class SharedBuildPolicyTests(unittest.TestCase):
 
     def test_default_is_provisional_and_valid(self):
         value = contract.validate(contract.default_policy())
-        self.assertLessEqual(value["max_concurrent"], 2)
-        self.assertEqual(value["reserved_checks"], 0)
+        self.assertEqual(value["max_concurrent"], 4)
+        self.assertEqual(value["reserved_checks"], 2)
 
     def test_classification_for_five_workloads(self):
         cases = [
@@ -164,19 +169,16 @@ class SharedBuildPolicyTests(unittest.TestCase):
                     active[0].wait(timeout=3)
                     self.assertTrue(admitted(queued))
 
-    def test_reserved_check_progress_while_heavy_waits(self):
+    def test_unknown_check_does_not_bypass_heavy_without_warm_evidence(self):
         contract.apply_policy(configuration(2, 1), self.directory)
         with worker(self.directory, ["build", "-p", "leaf"]) as heavy:
             self.assertTrue(admitted(heavy))
-            with worker(self.directory, ["test", "-p", "leaf"]) as queued:
-                self.assertFalse(admitted(queued, 0.2))
-                with worker(self.directory, ["check", "-p", "leaf"]) as feedback:
-                    self.assertTrue(admitted(feedback))
-                    self.assertFalse(admitted(queued, 0.1))
+            with worker(self.directory, ["check", "-p", "leaf"]) as feedback:
+                self.assertFalse(admitted(feedback, 0.2))
                 heavy.stdin.write("x")
                 heavy.stdin.flush()
                 heavy.wait(timeout=3)
-                self.assertTrue(admitted(queued))
+                self.assertTrue(admitted(feedback))
 
     def test_active_lease_refuses_update(self):
         contract.apply_policy(configuration(), self.directory)
