@@ -543,9 +543,11 @@ mockforge verify-mocks --spec openapi.json --capture-db recorder.sqlite
 
 - `--spec <path>` (required): OpenAPI spec the mocks were generated from (3.x natively; Swagger 2.0 is up-converted automatically).
 - `--capture-db <path>` (required): recorder SQLite database holding captured traffic (what `mockforge serve --recorder` writes; the default path is `./mockforge-recordings.db`).
-- `--limit <n>`: maximum exchanges to evaluate, oldest first (default `500`).
+- `--limit <n>`: maximum recent HTTP exchanges to evaluate, newest first (positive integer; default `500`). Other protocols do not consume this limit.
 - `--fail-on-drift`: exit with code 1 when any drift is found — use as a CI gate.
 - `--output <path>`: write the structured drift report as JSON.
+
+Capture databases are opened read-only and must already exist. Empty HTTP captures fail rather than report a passing check. Unknown endpoints, missing responses, undeclared statuses and JSON-schema violations count as drift. Exact status declarations take precedence over status ranges and the default response; local response references are resolved before schema validation.
 
 ### `sync` - Workspace Synchronization Daemon
 

@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- **[Reality]** `verify-mocks --fail-on-drift` now fails on unknown endpoints, missing responses and undeclared statuses, and validates range/default/referenced response schemas. Empty captures fail, databases open read-only, and the positive `--limit` applies to recent HTTP records in SQL rather than silently stopping at 100 or being displaced by other protocols. (#849)
 - **[Reality]** MQTT publish and last-will delivery no longer hold broker-wide locks while waiting on subscriber queues, or acquire topic and client locks in the opposite order to new connections. This prevents concurrent CONNECT/publish deadlocks and lets new clients connect while a subscriber is backpressured. (#715)
 - **[Docs]** The workspace export/import guide and the configuration reference no longer call `mockforge workspace export`, `import` and `activate` unreleased; they ship in 0.3.236. (#1197)
 - **[Contracts]** Package Intelligence’s database migrations inside its own crate so the published `database` feature builds without a sibling HTTP checkout. Preserve all historical migration filenames and SQL bytes for existing databases. (#632)
