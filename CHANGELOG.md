@@ -7,10 +7,13 @@
 - **[Reality]** `verify-mocks --mock-spec` compares the OpenAPI definition used by a mock with its current source specification. Structured reports include added, removed and changed endpoints, field-level JSON-pointer deltas, and per-route fidelity status. Definition checks can run alone or alongside captured upstream traffic and use the existing `--fail-on-drift` CI gate. (#849)
 - **[Cloud]** Trial owners get an email three days before their Pro or Team trial ends. The registry now handles Stripe's `customer.subscription.trial_will_end` webhook and sends the reminder through the same email path as the other billing emails, honoring the owner's email-notification setting. It gives the end date and price, and says the plan continues if a payment method is on file and otherwise drops to Free. (#714)
 
+### Changed
+
+- **[DevX]** `bench-chunked` labels each `--spec` operation's `RPS (started)` and `RPS (overall)` lines `(this operation only)`, so they are not read as the rate for the whole pass. The multi-target summary now prints `load_window=` and `elapsed=` next to `start_rps` and `rps`, and a single `--target` run with `--spec` prints the same figures on a `Pass summary (all operations):` line. The campaign banner says that `--repeat-until` is checked before each pass, so a running pass finishes. (#79)
+
 ### Fixed
 
 - **[Reality]** JSON-content request parameters are decoded and checked against their schemas instead of silently passing validation. JSON types stay distinct, local component references are resolved, malformed JSON fails even without a schema, and unsupported parameter media types fail explicitly. (#849)
-
 - **[Reality]** Request parameter `schema` references are checked in normal, style-aware and detailed validation instead of silently passing. Local aliases, nested and recursive components retain their schema context; referenced arrays and deep-object values are coerced by declared type, and integer parameters retain 64-bit precision. Unresolved/cyclic references fail explicitly, and parameter validation does not fetch external resources. (#849)
 - **[Reality]** Request conformance checks match HTTP header names without ASCII case differences in normal and detailed validation. A captured `x-trace` now satisfies a declared `X-Trace`; missing headers and invalid values still fail, while cookie, query and path parameter names remain case-sensitive. (#849)
 - **[Reality]** `verify-mocks` reads declared cookie parameters from recorded `Cookie` headers using serving's case and delimiter rules. Previously, even a valid captured cookie was treated as missing. Missing or invalid required cookies still report request drift. (#849)
@@ -18,6 +21,7 @@
 - **[Reality]** `verify-mocks` enforces captured request contracts even when server validation is set to `off` or `warn`, route overrides disable checking, or shadow mode is enabled. The offline verifier uses an isolated strict registry policy; serving retains its configured behavior. (#849)
 - **[Reality]** Fidelity checks prefer literal path segments over parameters, matching HTTP routing. Previously, registry iteration order could select a parameter route's schema for a literal endpoint, randomly passing invalid responses or failing valid ones. (#849)
 - **[Reality]** `verify-mocks --fail-on-drift` now fails on unknown endpoints, missing responses and undeclared statuses, and validates range/default/referenced response schemas. Empty captures fail, databases open read-only, and the positive `--limit` applies to recent HTTP records in SQL rather than silently stopping at 100 or being displaced by other protocols. (#849)
+- **[Reality]** MQTT publish and last-will delivery no longer hold broker-wide locks while waiting on subscriber queues, or acquire topic and client locks in the opposite order to new connections. This prevents concurrent CONNECT/publish deadlocks and lets new clients connect while a subscriber is backpressured. (#715)
 - **[Docs]** The workspace export/import guide and the configuration reference no longer call `mockforge workspace export`, `import` and `activate` unreleased; they ship in 0.3.236. (#1197)
 - **[Contracts]** Package Intelligence’s database migrations inside its own crate so the published `database` feature builds without a sibling HTTP checkout. Preserve all historical migration filenames and SQL bytes for existing databases. (#632)
 
