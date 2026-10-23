@@ -1,70 +1,64 @@
-//! Contract diff / verification / fitness executor (#8 / Phase 2).
-//! Handles `contract_diff | verification_suite | fitness_evaluation`.
+//! Contract diff executor (#8 / Phase 2).
 //!
-//! Real-fetch mode (kind=contract_diff): when the queue payload includes
-//! `openapi_spec_url`, the executor fetches the spec, parses it,
-//! enumerates declared endpoints, and emits one event per endpoint plus
-//! summary stats. It does NOT yet diff against live traffic — that
-//! requires the `mockforge-ai-contract-diff` pipeline (separate crate
-//! that doesn't exist yet) for the AI-assisted scoring.
-//!
-//! Synthetic-pass mode: when the spec URL is missing or the fetch
-//! fails the executor falls back to emitting a couple of synthetic
-//! findings so the UI's severity-grouped view still has data to render.
+//! A contract-diff payload supplies either `openapi_spec_url` or
+//! `openapi_spec_inline`. The executor parses the spec, enumerates declared
+//! endpoints, and emits one event per endpoint plus summary stats.
 
 use async_trait::async_trait;
 use std::time::Instant;
 
 use crate::callbacks::{ContractDriftEndpoint, ContractDriftScoreRequest, RegistryCallbacks};
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::executors::{Executor, JobOutcome, JobStatus, RunJob};
 
-/// Executor for the three contract-/fitness-related kinds.
-pub struct ContractExecutor {
-    kind: &'static str,
-}
+/// Executor for contract-diff runs.
+pub struct ContractExecutor;
 
-impl ContractExecutor {
-    /// Construct for `contract_diff`, `verification_suite`, or
-    /// `fitness_evaluation`.
-    pub fn for_kind(kind: &'static str) -> Self {
-        Self { kind }
-    }
+enum ContractSpecInput {
+    Url(String),
+    Inline(serde_json::Value),
 }
 
 #[async_trait]
 impl Executor for ContractExecutor {
     fn kind(&self) -> &'static str {
-        self.kind
+        "contract_diff"
     }
 
     async fn execute(&self, job: RunJob, callbacks: &RegistryCallbacks) -> Result<JobOutcome> {
-        let started = Instant::now();
-        callbacks.run_started(job.run_id).await?;
-
         let service_name = job
             .payload
             .get("service_name")
             .and_then(|v| v.as_str())
             .unwrap_or("(unspecified)")
             .to_string();
-        let spec_url =
-            job.payload.get("openapi_spec_url").and_then(|v| v.as_str()).map(String::from);
+        let spec_input = contract_spec_input(&job.payload)?;
 
-        // Real-fetch only applies to contract_diff. The other kinds
-        // (verification_suite, fitness_evaluation) need their own
-        // executor logic and stay synthetic for now.
-        if self.kind == "contract_diff" {
-            if let Some(url) = spec_url.as_deref() {
-                if !url.is_empty() {
-                    return run_real_contract_diff(job, callbacks, started, &service_name, url)
-                        .await;
-                }
-            }
-        }
-
-        run_synthetic(self.kind, job, callbacks, started, &service_name).await
+        let started = Instant::now();
+        callbacks.run_started(job.run_id).await?;
+        run_real_contract_diff(job, callbacks, started, &service_name, spec_input).await
     }
+}
+
+fn contract_spec_input(payload: &serde_json::Value) -> Result<ContractSpecInput> {
+    if let Some(url) = payload
+        .get("openapi_spec_url")
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        return Ok(ContractSpecInput::Url(url.to_owned()));
+    }
+
+    if let Some(inline) = payload.get("openapi_spec_inline").filter(|value| !value.is_null()) {
+        if !inline.as_str().is_some_and(|value| value.trim().is_empty()) {
+            return Ok(ContractSpecInput::Inline(inline.clone()));
+        }
+    }
+
+    Err(Error::Executor(
+        "contract_diff requires `openapi_spec_url` or `openapi_spec_inline`".into(),
+    ))
 }
 
 async fn run_real_contract_diff(
@@ -72,107 +66,74 @@ async fn run_real_contract_diff(
     callbacks: &RegistryCallbacks,
     started: Instant,
     service_name: &str,
-    spec_url: &str,
+    spec_input: ContractSpecInput,
 ) -> Result<JobOutcome> {
-    callbacks
-        .run_event(
-            job.run_id,
-            1,
-            "log",
-            serde_json::json!({
-                "level": "info",
-                "message": format!("Fetching OpenAPI spec: {spec_url}"),
-                "synthetic": false,
-                "tracking_task": 8,
-            }),
-        )
-        .await?;
-
-    let client = crate::target_client::TargetClient::new(
-        std::time::Duration::from_secs(30),
-        "mockforge-contract-diff/1.0",
-    )?;
-    let request = client.get(spec_url).map_err(|e| {
-        crate::error::Error::Executor(format!("openapi_spec_url rejected by SSRF guard: {e}"))
-    })?;
-
-    let spec_text = match request.send().await {
-        Ok(resp) => {
-            let status = resp.status();
-            match resp.text().await {
-                Ok(t) if status.is_success() => t,
-                Ok(_body) => {
-                    callbacks
-                        .run_event(
-                            job.run_id,
-                            2,
-                            "log",
-                            serde_json::json!({
-                                "level": "warn",
-                                "message": format!("spec fetch returned HTTP {}; falling back to synthetic", status),
-                            }),
-                        )
-                        .await?;
-                    return run_synthetic("contract_diff", job, callbacks, started, service_name)
-                        .await;
-                }
-                Err(e) => {
-                    callbacks
-                        .run_event(
-                            job.run_id,
-                            2,
-                            "log",
-                            serde_json::json!({
-                                "level": "warn",
-                                "message": format!("spec body read failed: {e}; falling back to synthetic"),
-                            }),
-                        )
-                        .await?;
-                    return run_synthetic("contract_diff", job, callbacks, started, service_name)
-                        .await;
-                }
-            }
-        }
-        Err(e) => {
+    let (spec_text, spec_url, spec_source) = match spec_input {
+        ContractSpecInput::Url(spec_url) => {
             callbacks
                 .run_event(
                     job.run_id,
-                    2,
+                    1,
                     "log",
                     serde_json::json!({
-                        "level": "warn",
-                        "message": format!("spec fetch failed: {e}; falling back to synthetic"),
+                        "level": "info",
+                        "message": format!("Fetching OpenAPI spec: {spec_url}"),
+                        "tracking_task": 8,
                     }),
                 )
                 .await?;
-            return run_synthetic("contract_diff", job, callbacks, started, service_name).await;
+
+            let client = crate::target_client::TargetClient::new(
+                std::time::Duration::from_secs(30),
+                "mockforge-contract-diff/1.0",
+            )?;
+            let request = client.get(&spec_url).map_err(|error| {
+                Error::Executor(format!("openapi_spec_url rejected by SSRF guard: {error}"))
+            })?;
+            let response = request.send().await.map_err(|error| {
+                Error::Executor(format!(
+                    "contract_diff failed to fetch `openapi_spec_url`: {error}"
+                ))
+            })?;
+            let status = response.status();
+            if !status.is_success() {
+                return Err(Error::Executor(format!(
+                    "contract_diff spec fetch returned HTTP {status}"
+                )));
+            }
+            let spec_text = response.text().await.map_err(|error| {
+                Error::Executor(format!("contract_diff failed to read the spec body: {error}"))
+            })?;
+            (spec_text, Some(spec_url), "url")
+        }
+        ContractSpecInput::Inline(inline) => {
+            callbacks
+                .run_event(
+                    job.run_id,
+                    1,
+                    "log",
+                    serde_json::json!({
+                        "level": "info",
+                        "message": "Parsing inline OpenAPI spec",
+                        "tracking_task": 8,
+                    }),
+                )
+                .await?;
+            let spec_text = match inline {
+                serde_json::Value::String(text) => text,
+                value => serde_json::to_string(&value).map_err(|error| {
+                    Error::Executor(format!(
+                        "contract_diff could not serialize `openapi_spec_inline`: {error}"
+                    ))
+                })?,
+            };
+            (spec_text, None, "inline")
         }
     };
 
-    // Try JSON first, then fall back to YAML. The recorder spec format
-    // is open — both shapes show up in the wild.
-    let spec: serde_json::Value = match serde_json::from_str(&spec_text) {
-        Ok(v) => v,
-        Err(_) => match serde_yaml::from_str(&spec_text) {
-            Ok(v) => v,
-            Err(e) => {
-                callbacks
-                    .run_event(
-                        job.run_id,
-                        2,
-                        "log",
-                        serde_json::json!({
-                            "level": "warn",
-                            "message": format!("spec parse failed (not JSON or YAML): {e}; falling back to synthetic"),
-                        }),
-                    )
-                    .await?;
-                return run_synthetic("contract_diff", job, callbacks, started, service_name).await;
-            }
-        },
-    };
+    let spec = parse_contract_spec(&spec_text)?;
 
-    let endpoints = collect_endpoints(&spec);
+    let endpoints = required_endpoints(&spec)?;
 
     callbacks
         .run_event(
@@ -187,18 +148,13 @@ async fn run_real_contract_diff(
         )
         .await?;
 
-    // Pull recent traffic so we can compare declared vs actually-hit
-    // endpoints. Empty/error → executor still emits the declared
-    // findings without drift markers.
+    // Pull recent traffic so we can compare declared vs actually-hit endpoints.
     let workspace_id = job
         .payload
         .get("workspace_id")
         .and_then(|v| v.as_str())
         .and_then(|s| uuid::Uuid::parse_str(s).ok());
-    let hits = match workspace_id {
-        Some(wid) => callbacks.fetch_workspace_endpoint_hits(wid).await.unwrap_or_default(),
-        None => Vec::new(),
-    };
+    let hits = fetch_endpoint_hits(callbacks, workspace_id).await?;
     let hits_by_endpoint: std::collections::HashMap<(String, String), i64> = hits
         .iter()
         .map(|h| ((h.method.to_uppercase(), h.path.clone()), h.hits))
@@ -362,6 +318,7 @@ async fn run_real_contract_diff(
             "kind": "contract_diff",
             "service_name": service_name,
             "spec_url": spec_url,
+            "spec_source": spec_source,
             "endpoint_count": endpoints.len(),
             "traffic_endpoint_count": hits_by_endpoint.len(),
             "declared_count": declared_count,
@@ -372,6 +329,16 @@ async fn run_real_contract_diff(
             "wall_ms": elapsed.as_millis() as u64,
         })),
     })
+}
+
+fn parse_contract_spec(spec_text: &str) -> Result<serde_json::Value> {
+    serde_json::from_str(spec_text)
+        .or_else(|_| serde_yaml::from_str(spec_text))
+        .map_err(|error| {
+            Error::Executor(format!(
+                "contract_diff could not parse the spec as JSON or YAML: {error}"
+            ))
+        })
 }
 
 /// Did the suite config opt into AI drift scoring? Stored on the
@@ -514,67 +481,32 @@ fn collect_endpoints(spec: &serde_json::Value) -> Vec<(String, String)> {
     out
 }
 
-/// Synthetic fallback — same shape the executor has shipped with so
-/// existing UIs and snapshots stay coherent.
-async fn run_synthetic(
-    kind: &str,
-    job: RunJob,
-    callbacks: &RegistryCallbacks,
-    started: Instant,
-    service_name: &str,
-) -> Result<JobOutcome> {
-    callbacks
-        .run_event(
-            job.run_id,
-            1,
-            "log",
-            serde_json::json!({
-                "level": "info",
-                "message": format!("Synthetic {} for service '{}'", kind, service_name),
-                "synthetic": true,
-                "tracking_task": 8,
-            }),
-        )
-        .await?;
-
-    let findings = [
-        ("non_breaking", "GET /users", "Added optional query param"),
-        ("cosmetic", "POST /users", "Description rewording"),
-    ];
-    let mut next_seq: u32 = 2;
-    for (i, (sev, endpoint, desc)) in findings.iter().enumerate() {
-        callbacks
-            .run_event(
-                job.run_id,
-                next_seq,
-                "diff_finding",
-                serde_json::json!({
-                    "index": i,
-                    "severity": sev,
-                    "endpoint": endpoint,
-                    "description": desc,
-                }),
-            )
-            .await?;
-        next_seq += 1;
-        tokio::time::sleep(std::time::Duration::from_millis(40)).await;
+fn required_endpoints(spec: &serde_json::Value) -> Result<Vec<(String, String)>> {
+    let endpoints = collect_endpoints(spec);
+    if endpoints.is_empty() {
+        Err(Error::Executor(
+            "contract_diff spec contains zero endpoints under `paths`".into(),
+        ))
+    } else {
+        Ok(endpoints)
     }
+}
 
-    let elapsed = started.elapsed();
-    let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
-
-    Ok(JobOutcome {
-        status: JobStatus::Passed,
-        runner_seconds: secs,
-        summary: Some(serde_json::json!({
-            "executor_phase": "synthetic",
-            "tracking_task": 8,
-            "kind": kind,
-            "service_name": service_name,
-            "findings_count": findings.len(),
-            "wall_ms": elapsed.as_millis() as u64,
-        })),
-    })
+async fn fetch_endpoint_hits(
+    callbacks: &RegistryCallbacks,
+    workspace_id: Option<uuid::Uuid>,
+) -> Result<Vec<crate::callbacks::EndpointHit>> {
+    match workspace_id {
+        Some(workspace_id) => callbacks
+            .fetch_workspace_endpoint_hits(workspace_id)
+            .await
+            .map_err(|error| {
+                Error::Executor(format!(
+                    "contract_diff failed to fetch endpoint traffic for workspace {workspace_id}: {error}"
+                ))
+            }),
+        None => Ok(Vec::new()),
+    }
 }
 
 #[cfg(test)]
@@ -582,57 +514,96 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn ai_callback_uses_job_identity_instead_of_user_authored_payload() {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let callbacks = RegistryCallbacks::new(
-            format!("http://{}", listener.local_addr().unwrap()),
-            "synthetic-internal-fixture".into(),
+    async fn missing_spec_is_an_executor_error() {
+        let callbacks = RegistryCallbacks::for_test();
+        let job = RunJob {
+            run_id: uuid::Uuid::new_v4(),
+            org_id: uuid::Uuid::new_v4(),
+            source_id: uuid::Uuid::new_v4(),
+            kind: "contract_diff".to_string(),
+            payload: serde_json::json!({}),
+        };
+        let result = ContractExecutor.execute(job, &callbacks).await;
+        assert!(
+            matches!(result, Err(Error::Executor(ref message)) if message == "contract_diff requires `openapi_spec_url` or `openapi_spec_inline`"),
+            "missing spec must error, got {result:?}"
         );
-        let server = tokio::spawn(async move {
-            let mut scoring = None;
-            for index in 0..2 {
-                let (mut socket, _) = listener.accept().await.unwrap();
-                let mut bytes = Vec::new();
-                let (start, length) = loop {
-                    let mut chunk = [0; 1024];
-                    let count = socket.read(&mut chunk).await.unwrap();
-                    assert!(count > 0 && bytes.len() + count <= 16384);
-                    bytes.extend_from_slice(&chunk[..count]);
-                    if let Some(end) = bytes.windows(4).position(|v| v == b"\r\n\r\n") {
-                        let headers = std::str::from_utf8(&bytes[..end]).unwrap();
-                        let length = headers
-                            .lines()
-                            .find_map(|line| {
-                                let (name, value) = line.split_once(':')?;
-                                name.eq_ignore_ascii_case("content-length")
-                                    .then(|| value.trim().parse::<usize>().unwrap())
-                            })
-                            .unwrap();
-                        break (end + 4, length);
-                    }
-                };
-                while bytes.len() < start + length {
-                    let mut chunk = [0; 1024];
-                    let count = socket.read(&mut chunk).await.unwrap();
-                    assert!(count > 0 && bytes.len() + count <= 16384);
-                    bytes.extend_from_slice(&chunk[..count]);
+    }
+
+    #[tokio::test]
+    async fn inline_spec_executes_without_a_url() {
+        let callbacks = RegistryCallbacks::for_test();
+        let job = RunJob {
+            run_id: uuid::Uuid::new_v4(),
+            org_id: uuid::Uuid::new_v4(),
+            source_id: uuid::Uuid::new_v4(),
+            kind: "contract_diff".to_string(),
+            payload: serde_json::json!({
+                "service_name": "inline service",
+                "openapi_spec_inline": {
+                    "openapi": "3.0.0",
+                    "paths": {"/health": {"get": {}}}
                 }
-                let body = if index == 0 {
-                    assert!(bytes.starts_with(b"POST /api/v1/internal/contract-diff/score "));
-                    scoring = Some(
-                        serde_json::from_slice::<serde_json::Value>(&bytes[start..start + length])
-                            .unwrap(),
-                    );
-                    r#"{"findings":[],"tokens_used":17,"provider":"platform","no_traffic":false}"#
-                } else {
-                    "{}"
-                };
-                let response = format!("HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}", body.len(), body);
-                socket.write_all(response.as_bytes()).await.unwrap();
-            }
-            scoring.unwrap()
-        });
+            }),
+        };
+
+        let outcome = ContractExecutor.execute(job, &callbacks).await.unwrap();
+
+        assert_eq!(outcome.status, JobStatus::Passed);
+        let summary = outcome.summary.unwrap();
+        assert_eq!(summary["endpoint_count"], 1);
+        assert_eq!(summary["spec_source"], "inline");
+        assert!(summary["spec_url"].is_null());
+    }
+
+    #[tokio::test]
+    async fn rejected_spec_url_is_an_executor_error() {
+        let callbacks = RegistryCallbacks::for_test();
+        let job = RunJob {
+            run_id: uuid::Uuid::new_v4(),
+            org_id: uuid::Uuid::new_v4(),
+            source_id: uuid::Uuid::new_v4(),
+            kind: "contract_diff".to_string(),
+            payload: serde_json::json!({"openapi_spec_url": "http://127.0.0.1/spec.json"}),
+        };
+        let result = ContractExecutor.execute(job, &callbacks).await;
+        assert!(
+            matches!(result, Err(Error::Executor(ref message)) if message.contains("openapi_spec_url rejected")),
+            "rejected spec URL must error, got {result:?}"
+        );
+    }
+
+    #[test]
+    fn spec_with_zero_endpoints_is_zero_work() {
+        let spec = serde_json::json!({"openapi": "3.0.0", "paths": {}});
+        assert!(
+            matches!(required_endpoints(&spec), Err(Error::Executor(message)) if message.contains("zero endpoints"))
+        );
+    }
+
+    #[test]
+    fn inline_and_fetched_text_use_the_same_json_or_yaml_parser() {
+        let json =
+            parse_contract_spec(r#"{"openapi":"3.0.0","paths":{"/json":{"get":{}}}}"#).unwrap();
+        let yaml = parse_contract_spec("openapi: 3.0.0\npaths:\n  /yaml:\n    post: {}\n").unwrap();
+
+        assert_eq!(required_endpoints(&json).unwrap(), vec![("GET".into(), "/json".into())]);
+        assert_eq!(required_endpoints(&yaml).unwrap(), vec![("POST".into(), "/yaml".into())]);
+    }
+
+    #[tokio::test]
+    async fn endpoint_hits_fetch_failure_is_an_executor_error() {
+        let callbacks = RegistryCallbacks::for_test_failing_endpoint_hits_fetch();
+        let workspace_id = uuid::Uuid::new_v4();
+        let result = fetch_endpoint_hits(&callbacks, Some(workspace_id)).await;
+        assert!(
+            matches!(result, Err(Error::Executor(ref message)) if message.contains("failed to fetch endpoint traffic") && message.contains(&workspace_id.to_string()))
+        );
+    }
+
+    #[tokio::test]
+    async fn ai_callback_uses_job_identity_instead_of_user_authored_payload() {
+        let callbacks = RegistryCallbacks::for_test();
         let job = RunJob {
             run_id: uuid::Uuid::new_v4(),
             org_id: uuid::Uuid::new_v4(),
@@ -657,14 +628,33 @@ mod tests {
         )
         .await
         .unwrap();
-        let body = tokio::time::timeout(std::time::Duration::from_secs(5), server)
-            .await
-            .unwrap()
-            .unwrap();
+        let body = callbacks.contract_score_requests().pop().unwrap();
         assert_eq!(body["run_id"], job.run_id.to_string());
         assert_eq!(body["org_id"], job.org_id.to_string());
         assert_eq!(body["workspace_id"], workspace.to_string());
         assert!(body.get("triggered_by_user_id").is_none());
+
+        let wire_callbacks = RegistryCallbacks::new(
+            "https://registry.example.test".into(),
+            "internal-test-token".into(),
+        );
+        let request = wire_callbacks
+            .contract_drift_score_request(&ContractDriftScoreRequest {
+                run_id: job.run_id,
+                org_id: job.org_id,
+                workspace_id: workspace,
+                spec_excerpt: "openapi: 3.0.0".into(),
+                endpoints: Vec::new(),
+                max_samples_per_endpoint: None,
+            })
+            .unwrap();
+        assert_eq!(request.method(), reqwest::Method::POST);
+        assert_eq!(request.url().path(), "/api/v1/internal/contract-diff/score");
+        assert_eq!(request.headers()[reqwest::header::AUTHORIZATION], "Bearer internal-test-token");
+        let wire_body: serde_json::Value =
+            serde_json::from_slice(request.body().and_then(reqwest::Body::as_bytes).unwrap())
+                .unwrap();
+        assert_eq!(wire_body, body);
     }
 
     #[test]

@@ -7,12 +7,8 @@
  * is clone-model-centric rather than scenario-centric.
  *
  * Differs from CloudRecorderPage (which focuses on session management):
- *   - Live SSE streaming of training and replay test_run events.
- *   - Clone-model timeline view (training progress, runner seconds, metrics).
- *   - Preview banner: the registry's CloneTrainExecutor + ReplayExecutor
- *     still synthesize events until real workers ship (per
- *     `handlers/captures.rs:235-238`), so any queued runs produce simulated
- *     output.
+ *   - Live SSE streaming for existing clone runs and new replay runs.
+ *   - Clone-model timeline view (status, runner seconds, metrics).
  */
 import React, { useEffect, useRef, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -60,8 +56,6 @@ export const CloudBehavioralCloningPage: React.FC = () => {
 const CloudView: React.FC = () => {
   const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
   const queryClient = useQueryClient();
-  const [trainTarget, setTrainTarget] = useState<CaptureSession | null>(null);
-  const [trainName, setTrainName] = useState('');
   const [replayTarget, setReplayTarget] = useState<CaptureSession | null>(null);
   const [replayUrl, setReplayUrl] = useState('');
   const [actionMessage, setActionMessage] = useState<string | null>(null);
@@ -83,39 +77,10 @@ const CloudView: React.FC = () => {
     refetchInterval: 10_000,
   });
 
-  const trainMutation = useMutation({
-    mutationFn: () =>
-      cloudRecorderApi.trainClone(trainTarget!.id, { name: trainName }),
-    onSuccess: async (clone) => {
-      setActionMessage(
-        `Training queued — clone ${clone.id.slice(0, 8)} (${clone.status}).`,
-      );
-      setTrainTarget(null);
-      setTrainName('');
-      queryClient.invalidateQueries({
-        queryKey: ['cloud', 'bc', 'clones', workspaceId],
-      });
-      // Resolve the test_run that the train endpoint enqueued (suite_id = clone.id)
-      // so we can attach the live SSE stream.
-      try {
-        const runs = await cloudTestRunsApi.listSuiteRuns(clone.id, 1);
-        const run = runs[0];
-        if (run) {
-          setStreamSourceRunId(run.id);
-          setStreamLabel(`Training ${clone.name}`);
-        }
-      } catch (err) {
-        // Stream is best-effort; the clone status still updates via polling.
-        console.warn('Failed to fetch training run id for streaming', err);
-      }
-    },
-    onError: (err: Error) => setActionMessage(`Train failed: ${err.message}`),
-  });
-
   const replayMutation = useMutation({
     mutationFn: () =>
       cloudRecorderApi.replaySession(replayTarget!.id, {
-        target_url: replayUrl || undefined,
+        target_url: replayUrl.trim(),
       }),
     onSuccess: (run) => {
       setActionMessage(`Replay queued — run ${run.id.slice(0, 8)}.`);
@@ -173,10 +138,8 @@ const CloudView: React.FC = () => {
             Behavioral Cloning
           </h1>
           <p className="text-gray-600 dark:text-gray-400 max-w-3xl">
-            Train deterministic replay clones from grouped capture sessions.
-            Equivalent of the local Flows / Scenarios workflow against the
-            cloud's <code>capture-sessions</code> + <code>clone-models</code>{' '}
-            primitives.
+            Inspect existing behavioral clone models and replay grouped capture
+            sessions against a target.
           </p>
         </div>
         <div className="flex gap-2">
@@ -200,10 +163,9 @@ const CloudView: React.FC = () => {
       <div className="mb-6 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-300 p-4 rounded-lg flex items-start gap-3">
         <AlertTriangle className="w-5 h-5 flex-shrink-0 mt-0.5" />
         <div className="text-sm">
-          <strong>Preview:</strong> The registry's clone training and replay
-          executors currently emit simulated per-capture events. Status transitions, runner seconds, and event streams
-          are simulated — useful for wiring UI and webhooks today, not for
-          recording production behavior.
+          <strong>Behavioral clone training isn't available yet.</strong>{' '}
+          Existing clone models remain available to inspect, and capture-session
+          replay remains available below.
         </div>
       </div>
 
@@ -227,7 +189,7 @@ const CloudView: React.FC = () => {
             No clone models yet
           </h3>
           <p className="text-gray-500 dark:text-gray-400 text-sm">
-            Pick a capture session below and queue a training run.
+            No existing clone models are available in this workspace.
           </p>
         </div>
       ) : (
@@ -272,7 +234,7 @@ const CloudView: React.FC = () => {
         <a href="/cloud-recorder" className="text-cyan-600 hover:underline">
           Cloud Recorder
         </a>{' '}
-        page. From here, train a clone or replay a session against a target.
+        page. Replay remains available; behavioral clone training isn't available yet.
       </p>
       {sessions.length === 0 && !sessionsQuery.isLoading ? (
         <div className="bg-gray-50 dark:bg-gray-900/50 rounded-lg p-6 text-sm text-gray-500 dark:text-gray-400 italic">
@@ -294,28 +256,12 @@ const CloudView: React.FC = () => {
                 <SessionRow
                   key={s.id}
                   session={s}
-                  onTrain={() => {
-                    setTrainTarget(s);
-                    setTrainName(`${s.name}-clone`);
-                  }}
                   onReplay={() => setReplayTarget(s)}
                 />
               ))}
             </tbody>
           </table>
         </div>
-      )}
-
-      {trainTarget && (
-        <TrainModal
-          session={trainTarget}
-          name={trainName}
-          setName={setTrainName}
-          onClose={() => setTrainTarget(null)}
-          onSubmit={() => trainMutation.mutate()}
-          submitting={trainMutation.isPending}
-          error={trainMutation.error ? (trainMutation.error as Error).message : null}
-        />
       )}
 
       {replayTarget && (
@@ -403,9 +349,8 @@ const CloneRow: React.FC<{
 
 const SessionRow: React.FC<{
   session: CaptureSession;
-  onTrain: () => void;
   onReplay: () => void;
-}> = ({ session, onTrain, onReplay }) => (
+}> = ({ session, onReplay }) => (
   <tr className="hover:bg-gray-50 dark:hover:bg-gray-800/50">
     <td className="px-6 py-4">
       <div className="font-medium text-gray-900 dark:text-gray-100">{session.name}</div>
@@ -425,66 +370,15 @@ const SessionRow: React.FC<{
         <PlayCircle className="w-4 h-4" />
       </button>
       <button
-        onClick={onTrain}
-        className="p-2 text-purple-600 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg"
-        title="Train behavioral clone"
+        disabled
+        className="p-2 text-gray-400 rounded-lg cursor-not-allowed"
+        title="Behavioral clone training isn't available yet"
+        aria-label="Behavioral clone training isn't available yet"
       >
         <Brain className="w-4 h-4" />
       </button>
     </td>
   </tr>
-);
-
-const TrainModal: React.FC<{
-  session: CaptureSession;
-  name: string;
-  setName: (s: string) => void;
-  onClose: () => void;
-  onSubmit: () => void;
-  submitting: boolean;
-  error: string | null;
-}> = ({ session, name, setName, onClose, onSubmit, submitting, error }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl max-w-md w-full border border-gray-200 dark:border-gray-700">
-      <div className="p-6 border-b border-gray-200 dark:border-gray-700">
-        <h2 className="text-xl font-semibold flex items-center gap-2">
-          <Brain className="w-5 h-5 text-purple-500" />
-          Train Clone from "{session.name}"
-        </h2>
-        <p className="text-xs text-gray-500 mt-1">
-          Enqueues a behavioral_clone test_run; live events stream in the side
-          drawer. Plan limit <code className="font-mono">max_clone_models</code>{' '}
-          applies.
-        </p>
-      </div>
-      <div className="p-6 space-y-4">
-        {error && (
-          <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400 p-3 rounded text-sm">
-            {error}
-          </div>
-        )}
-        <input
-          type="text"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Clone model name"
-          className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-purple-500"
-        />
-      </div>
-      <div className="p-6 border-t border-gray-200 dark:border-gray-700 flex justify-end gap-3">
-        <button onClick={onClose} className="px-4 py-2">
-          Cancel
-        </button>
-        <button
-          onClick={onSubmit}
-          disabled={!name || submitting}
-          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg disabled:opacity-50"
-        >
-          {submitting ? 'Queueing…' : 'Train Clone'}
-        </button>
-      </div>
-    </div>
-  </div>
 );
 
 const ReplayModal: React.FC<{
@@ -504,8 +398,7 @@ const ReplayModal: React.FC<{
           Replay "{session.name}"
         </h2>
         <p className="text-xs text-gray-500 mt-1">
-          Triggers a replay test_run. Synthetic mode (no target URL) emits
-          fabricated per-capture events.
+          Replays every captured exchange against the target URL.
         </p>
       </div>
       <div className="p-6 space-y-4">
@@ -515,12 +408,12 @@ const ReplayModal: React.FC<{
           </div>
         )}
         <div className="space-y-2">
-          <label className="block text-sm font-medium">Target URL (optional)</label>
+          <label className="block text-sm font-medium">Target URL</label>
           <input
             type="url"
             value={url}
             onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://api.example.com (defaults to synthetic mode)"
+            placeholder="https://api.example.com"
             className="w-full px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-600 rounded-lg outline-none focus:ring-2 focus:ring-ring/30 font-mono text-xs"
           />
         </div>
@@ -531,7 +424,7 @@ const ReplayModal: React.FC<{
         </button>
         <button
           onClick={onSubmit}
-          disabled={submitting}
+          disabled={submitting || !url.trim()}
           className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50"
         >
           {submitting ? 'Queueing…' : 'Trigger Replay'}

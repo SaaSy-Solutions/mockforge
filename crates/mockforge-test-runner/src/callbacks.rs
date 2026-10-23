@@ -11,6 +11,9 @@ use std::time::Duration;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+#[cfg(test)]
+use std::sync::{Arc, Mutex};
+
 use crate::error::{Error, Result};
 use crate::executors::JobOutcome;
 
@@ -47,6 +50,18 @@ pub struct RegistryCallbacks {
     token: String,
     /// First wait between `/finish` attempts; doubles each retry.
     finish_retry_base: Duration,
+    #[cfg(test)]
+    test_state: Option<Arc<TestCallbackState>>,
+}
+
+#[cfg(test)]
+#[derive(Default)]
+struct TestCallbackState {
+    capture_exchanges: Vec<CaptureExchange>,
+    fail_capture_fetch: bool,
+    fail_endpoint_hits_fetch: bool,
+    fail_chaos_toggle: bool,
+    contract_score_requests: Mutex<Vec<serde_json::Value>>,
 }
 
 /// Attempts at the `/finish` callback before giving up. With a 1s base the
@@ -61,7 +76,60 @@ impl RegistryCallbacks {
             base_url,
             token,
             finish_retry_base: Duration::from_secs(1),
+            #[cfg(test)]
+            test_state: None,
         }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn for_test() -> Self {
+        Self::for_test_state(TestCallbackState::default())
+    }
+
+    #[cfg(test)]
+    pub(crate) fn for_test_failing_capture_fetch() -> Self {
+        Self::for_test_state(TestCallbackState {
+            fail_capture_fetch: true,
+            ..TestCallbackState::default()
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn for_test_failing_chaos_toggle() -> Self {
+        Self::for_test_state(TestCallbackState {
+            fail_chaos_toggle: true,
+            ..TestCallbackState::default()
+        })
+    }
+
+    #[cfg(test)]
+    pub(crate) fn for_test_failing_endpoint_hits_fetch() -> Self {
+        Self::for_test_state(TestCallbackState {
+            fail_endpoint_hits_fetch: true,
+            ..TestCallbackState::default()
+        })
+    }
+
+    #[cfg(test)]
+    fn for_test_state(state: TestCallbackState) -> Self {
+        Self {
+            http: reqwest::Client::new(),
+            base_url: String::new(),
+            token: String::new(),
+            finish_retry_base: Duration::from_secs(1),
+            test_state: Some(Arc::new(state)),
+        }
+    }
+
+    #[cfg(test)]
+    pub(crate) fn contract_score_requests(&self) -> Vec<serde_json::Value> {
+        self.test_state
+            .as_ref()
+            .unwrap()
+            .contract_score_requests
+            .lock()
+            .unwrap()
+            .clone()
     }
 
     /// Mark a run as `running` (registry-side `mark_running`).
@@ -129,6 +197,10 @@ impl RegistryCallbacks {
     }
 
     async fn post<B: Serialize>(&self, path: &str, body: &B) -> Result<()> {
+        #[cfg(test)]
+        if self.test_state.is_some() {
+            return Ok(());
+        }
         let url = format!("{}{path}", self.base_url.trim_end_matches('/'));
         let resp = self.http.post(&url).bearer_auth(&self.token).json(body).send().await?;
         resp.error_for_status()?;
@@ -137,8 +209,15 @@ impl RegistryCallbacks {
 
     /// Pull the captured exchanges for a session so the replay
     /// executor can replay them. Empty vec means the session has no
-    /// members; the executor falls back to synthetic mode in that case.
+    /// members; callers decide whether an empty capture set is valid.
     pub async fn fetch_capture_exchanges(&self, session_id: Uuid) -> Result<Vec<CaptureExchange>> {
+        #[cfg(test)]
+        if let Some(state) = &self.test_state {
+            if state.fail_capture_fetch {
+                return Err(Error::Executor("test capture fetch failure".to_string()));
+            }
+            return Ok(state.capture_exchanges.clone());
+        }
         let url = format!(
             "{}/api/v1/internal/capture-sessions/{session_id}/exchanges",
             self.base_url.trim_end_matches('/'),
@@ -156,6 +235,13 @@ impl RegistryCallbacks {
         &self,
         workspace_id: Uuid,
     ) -> Result<Vec<EndpointHit>> {
+        #[cfg(test)]
+        if let Some(state) = &self.test_state {
+            if state.fail_endpoint_hits_fetch {
+                return Err(Error::Executor("test endpoint-hits fetch failure".to_string()));
+            }
+            return Ok(Vec::new());
+        }
         let url = format!(
             "{}/api/v1/internal/workspaces/{workspace_id}/endpoint-hits",
             self.base_url.trim_end_matches('/'),
@@ -178,12 +264,34 @@ impl RegistryCallbacks {
         &self,
         body: &ContractDriftScoreRequest,
     ) -> Result<ContractDriftScoreResponse> {
-        let url =
-            format!("{}/api/v1/internal/contract-diff/score", self.base_url.trim_end_matches('/'),);
-        let resp = self.http.post(&url).bearer_auth(&self.token).json(body).send().await?;
+        #[cfg(test)]
+        if let Some(state) = &self.test_state {
+            state
+                .contract_score_requests
+                .lock()
+                .unwrap()
+                .push(serde_json::to_value(body).unwrap());
+            return Ok(ContractDriftScoreResponse {
+                findings: Vec::new(),
+                tokens_used: 17,
+                provider: "test".to_string(),
+                no_traffic: false,
+            });
+        }
+        let request = self.contract_drift_score_request(body)?;
+        let resp = self.http.execute(request).await?;
         let resp = resp.error_for_status()?;
         let payload: ContractDriftScoreResponse = resp.json().await?;
         Ok(payload)
+    }
+
+    pub(crate) fn contract_drift_score_request(
+        &self,
+        body: &ContractDriftScoreRequest,
+    ) -> Result<reqwest::Request> {
+        let url =
+            format!("{}/api/v1/internal/contract-diff/score", self.base_url.trim_end_matches('/'),);
+        Ok(self.http.post(&url).bearer_auth(&self.token).json(body).build()?)
     }
 
     /// Fetch a fitness function definition (id, name, kind, config)
@@ -272,6 +380,13 @@ impl RegistryCallbacks {
         deployment_id: Uuid,
         enabled: bool,
     ) -> Result<()> {
+        #[cfg(test)]
+        if let Some(state) = &self.test_state {
+            if state.fail_chaos_toggle {
+                return Err(Error::Executor("test chaos toggle failure".to_string()));
+            }
+            return Ok(());
+        }
         let url = format!(
             "{}/api/v1/internal/hosted-mocks/{deployment_id}/chaos",
             self.base_url.trim_end_matches('/'),

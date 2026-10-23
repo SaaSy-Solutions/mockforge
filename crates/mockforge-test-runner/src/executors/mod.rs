@@ -2,28 +2,17 @@
 //! executor registered for its `kind` and reports the outcome back via
 //! `RegistryCallbacks`.
 //!
-//! Phase 1 layout: every executor is a stub that immediately reports
-//! `errored` with a "not implemented" message. Slices owning each task
-//! fill in real logic without blocking each other:
-//!
-//! - `test`           — #4 unit/integration/conformance/bench/owasp
-//! - `chaos`          — #7 chaos_campaign
-//! - `clone_train`    — #6 behavioral_clone
-//! - `snapshot`       — #10 snapshot_capture / snapshot_restore
-//! - `contract`       — #8 contract_diff / verification_suite / fitness_evaluation
-//! - `flow`           — #9 scenario / orchestration / state_machine / chain
-//! - `replay`         — #6 replay
+//! Only kinds backed by real work are registered. Unknown or unfinished
+//! kinds are rejected by the dispatcher instead of reporting a successful
+//! run without executing checks.
 
 pub mod chain;
 pub mod chaos;
-pub mod clone_train;
 pub mod contract;
 pub mod fitness;
-pub mod flow;
 pub mod integration;
 pub mod replay;
 pub mod smoke;
-pub mod snapshot;
 pub mod test;
 
 use async_trait::async_trait;
@@ -103,9 +92,7 @@ pub trait Executor: Send + Sync {
     async fn execute(&self, job: RunJob, callbacks: &RegistryCallbacks) -> Result<JobOutcome>;
 }
 
-/// Maps `kind` strings to executors. Multiple kinds can share an impl
-/// (e.g. all of unit/integration/conformance/bench/owasp use the
-/// `TestExecutor`).
+/// Maps `kind` strings to executors. Multiple kinds can share an impl.
 pub struct ExecutorRegistry {
     by_kind: HashMap<&'static str, Box<dyn Executor>>,
 }
@@ -114,12 +101,8 @@ impl Default for ExecutorRegistry {
     fn default() -> Self {
         let mut by_kind: HashMap<&'static str, Box<dyn Executor>> = HashMap::new();
 
-        // Test execution suite (#4) — kinds that share the TestExecutor
-        // impl. The cloud_api path (run_cloud_*) handles bench/owasp/
-        // conformance/security/wafbench/crud_flow when payloads opt in;
-        // unit/integration fall through to synthetic mode.
+        // Test execution suite (#4) — kinds that share the TestExecutor.
         for k in [
-            "unit",
             "integration",
             "conformance",
             "bench",
@@ -132,34 +115,9 @@ impl Default for ExecutorRegistry {
         }
 
         by_kind.insert("chaos_campaign", Box::new(chaos::ChaosExecutor));
-        by_kind.insert("behavioral_clone", Box::new(clone_train::CloneTrainExecutor));
-        by_kind.insert(
-            "snapshot_capture",
-            Box::new(snapshot::SnapshotExecutor::for_kind("snapshot_capture")),
-        );
-        by_kind.insert(
-            "snapshot_restore",
-            Box::new(snapshot::SnapshotExecutor::for_kind("snapshot_restore")),
-        );
-        by_kind.insert(
-            "contract_diff",
-            Box::new(contract::ContractExecutor::for_kind("contract_diff")),
-        );
-        by_kind.insert(
-            "verification_suite",
-            Box::new(contract::ContractExecutor::for_kind("verification_suite")),
-        );
-        // fitness_evaluation has its own executor now (#355). The
-        // ContractExecutor's synthetic fallback for this kind has been
-        // retired — FitnessExecutor fetches the function definition,
-        // dispatches on `kind` (latency_threshold, error_rate, etc.),
-        // and queries the matching data source via internal callbacks.
+        by_kind.insert("contract_diff", Box::new(contract::ContractExecutor));
         by_kind.insert("fitness_evaluation", Box::new(fitness::FitnessExecutor));
-
-        for k in ["scenario", "orchestration", "state_machine", "chain"] {
-            by_kind.insert(k, Box::new(flow::FlowExecutor::for_kind(k)));
-        }
-
+        by_kind.insert("chain", Box::new(chain::ChainExecutor));
         by_kind.insert("replay", Box::new(replay::ReplayExecutor));
         by_kind.insert("smoke", Box::new(smoke::SmokeTestExecutor));
 
@@ -196,10 +154,9 @@ mod tests {
     }
 
     #[test]
-    fn registry_covers_every_documented_kind() {
+    fn registry_covers_runnable_kinds() {
         let reg = ExecutorRegistry::default();
         let kinds = [
-            "unit",
             "integration",
             "conformance",
             "bench",
@@ -208,21 +165,34 @@ mod tests {
             "wafbench",
             "crud_flow",
             "chaos_campaign",
-            "behavioral_clone",
-            "snapshot_capture",
-            "snapshot_restore",
             "contract_diff",
-            "verification_suite",
             "fitness_evaluation",
-            "scenario",
-            "orchestration",
-            "state_machine",
             "chain",
             "replay",
             "smoke",
         ];
         for k in kinds {
             reg.lookup(k).unwrap_or_else(|_| panic!("missing executor for kind {k}"));
+        }
+    }
+
+    #[test]
+    fn registry_rejects_kinds_without_real_executors() {
+        let reg = ExecutorRegistry::default();
+        for kind in [
+            "unit",
+            "behavioral_clone",
+            "snapshot_capture",
+            "snapshot_restore",
+            "verification_suite",
+            "scenario",
+            "orchestration",
+            "state_machine",
+        ] {
+            assert!(
+                matches!(reg.lookup(kind), Err(Error::UnknownKind(rejected)) if rejected == kind),
+                "{kind} must not be registered"
+            );
         }
     }
 
@@ -236,5 +206,37 @@ mod tests {
             Err(other) => panic!("expected UnknownKind, got {other:?}"),
             Ok(_) => panic!("expected UnknownKind"),
         }
+    }
+
+    #[test]
+    fn registered_kinds_match_registry_runnable_kinds() {
+        let registry_source = include_str!("../../../mockforge-registry-server/src/run_queue.rs");
+        let declaration = registry_source
+            .split_once("pub const RUNNABLE_TEST_RUN_KINDS")
+            .expect("registry runnable-kind const must exist")
+            .1;
+        let array = declaration
+            .split_once("= &[")
+            .expect("runnable-kind const must be a slice")
+            .1
+            .split_once("];")
+            .expect("runnable-kind const must end with ];")
+            .0;
+        let expected: std::collections::BTreeSet<String> = array
+            .split(',')
+            .filter_map(|entry| {
+                let entry = entry.trim();
+                entry
+                    .strip_prefix('"')
+                    .and_then(|value| value.strip_suffix('"'))
+                    .map(str::to_string)
+            })
+            .collect();
+        let actual: std::collections::BTreeSet<String> = ExecutorRegistry::default()
+            .by_kind
+            .keys()
+            .map(|kind| (*kind).to_string())
+            .collect();
+        assert_eq!(actual, expected, "runner and registry runnable kinds drifted");
     }
 }
