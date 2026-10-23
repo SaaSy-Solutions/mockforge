@@ -204,3 +204,11 @@ interactive responsiveness before increasing capacity or broadening light recipe
 The warm-target receipt is admission evidence only. It does not certify source
 provenance, successful tests, runtime behavior or permission to skip validation.
 The scheduling update adds no compiler flags or alternative artifact targets.
+
+The workload-aware update passes 16 adapter regressions and 21 shared-policy
+regressions, including reserved-capacity progress, compatible warmth evidence,
+FIFO slot selection and surviving-child leases after launcher SIGKILL. Eighteen
+existing Hetzner routing tests also pass. The existing lightweight CI job runs
+both shared suites; these process tests do not establish mixed-workload throughput.
+Telemetry includes admission class/reason and acquired slot; available-memory
+pressure waiting is a subset of total admission waiting, never extra execution.

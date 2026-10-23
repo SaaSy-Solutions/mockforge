@@ -361,6 +361,26 @@ def warmth_fingerprint(arguments, repository, worktree, target, environment):
         paths.extend(parent / ".cargo" / name for name in ("config", "config.toml"))
     home = Path(environment.get("CARGO_HOME", str(Path.home() / ".cargo")))
     paths.extend(home / name for name in ("config", "config.toml"))
+    manifests = subprocess.check_output(
+        [
+            "git",
+            "-C",
+            str(worktree),
+            "ls-files",
+            "--cached",
+            "--others",
+            "--exclude-standard",
+            "-z",
+            "--",
+            "Cargo.toml",
+            "**/Cargo.toml",
+        ],
+        text=True,
+        timeout=5,
+    ).split("\0")
+    if len(manifests) > 4096:
+        raise ValueError("Manifest inventory too large for lightweight classification")
+    paths.extend(worktree / name for name in manifests if name)
     compiler = subprocess.check_output(
         [environment.get("RUSTC", "rustc"), "-Vv"],
         env=environment,

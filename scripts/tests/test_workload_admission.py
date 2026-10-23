@@ -83,6 +83,8 @@ class WorkloadAdmission(unittest.TestCase):
         self.worktree = self.root / "worktree"
         self.worktree.mkdir()
         (self.worktree / "Cargo.lock").write_text("fixture lock")
+        (self.worktree / "Cargo.toml").write_text("fixture manifest")
+        subprocess.run(["git", "init", "--quiet", str(self.worktree)], check=True)
         self.target = self.root / "target"
         (self.target / "debug/.fingerprint/example").mkdir(parents=True)
         self.compiler = self.root / "compiler"
@@ -161,10 +163,16 @@ class WorkloadAdmission(unittest.TestCase):
             environment=dict(self.environment, RUSTFLAGS="-C debuginfo=0")
         ) as session:
             self.assertEqual(session.admission_class, "STANDARD_CHECK")
+        (self.worktree / "Cargo.toml").write_text("changed manifest features")
+        with self.configured() as session:
+            self.assertEqual(session.admission_class, "STANDARD_CHECK")
+        (self.worktree / "Cargo.toml").write_text("fixture manifest")
         (self.worktree / "Cargo.lock").write_text("changed dependency versions")
         with self.configured() as session:
             self.assertEqual(session.admission_class, "STANDARD_CHECK")
         (self.worktree / "Cargo.lock").write_text("fixture lock")
+        (self.worktree / "Cargo.toml").write_text("fixture manifest")
+        subprocess.run(["git", "init", "--quiet", str(self.worktree)], check=True)
         self.compiler.write_text(
             "#!" + sys.executable + '\nprint("new fixture rustc")\n'
         )
@@ -286,6 +294,47 @@ class WorkloadAdmission(unittest.TestCase):
             active[0].stdin.flush()
             active[0].wait(timeout=3)
             self.assertIsNotNone(ready(later))
+
+    def test_inherited_child_keeps_slot_after_launcher_death(self):
+        release = self.root / "release-child"
+        code = """import importlib.util,json,subprocess,sys,time
+from pathlib import Path
+s=importlib.util.spec_from_file_location('p',sys.argv[1]);p=importlib.util.module_from_spec(s);s.loader.exec_module(p)
+p.host_budgets=lambda:(65536,800);p.available_memory_mib=lambda:65536
+with p.Session(['build','-p','other'],Path(sys.argv[2])) as a:
+ a.acquire()
+ child="import pathlib,sys,time; p=pathlib.Path(sys.argv[1]); end=time.monotonic()+10; exec('while not p.exists() and time.monotonic()<end: time.sleep(.02)')"
+ subprocess.Popen([sys.executable,'-c',child,sys.argv[3]],pass_fds=a.descriptors)
+ print('child holds descriptors',flush=True);time.sleep(10)
+"""
+        parent = subprocess.Popen(
+            [sys.executable, "-c", code, str(MODULE), str(self.runtime), str(release)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        try:
+            self.assertTrue(select.select([parent.stdout], [], [], 3)[0])
+            self.assertEqual(
+                parent.stdout.readline().strip(), "child holds descriptors"
+            )
+            parent.kill()
+            parent.wait(timeout=3)
+            with worker(self.runtime, self.context, ["build", "-p", "other"]) as second:
+                self.assertIsNotNone(ready(second))
+                with worker(
+                    self.runtime, self.context, ["build", "-p", "other"]
+                ) as queued:
+                    self.assertIsNone(ready(queued, 0.2))
+                    with self.assertRaisesRegex(ValueError, "Drain"):
+                        policy.apply_policy(policy.default_policy(), self.runtime)
+                    release.touch()
+                    self.assertIsNotNone(ready(queued))
+        finally:
+            release.touch()
+            if parent.poll() is None:
+                parent.kill()
+            parent.communicate(timeout=3)
 
     def test_memory_pressure_waits_without_reserving_a_slot_then_recovers(self):
         memory = self.root / "memory"
