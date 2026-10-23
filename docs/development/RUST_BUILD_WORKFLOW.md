@@ -80,7 +80,7 @@ fails; report the missing user-systemd prerequisite.
 
 ### Initial validation (October 22, 2026)
 
-Eleven launcher behavior tests pass, including a killed-launcher regression that
+Twelve launcher behavior tests pass, including a killed-launcher regression that
 proves a surviving child retains its lock. A dependency-free, session-owned Rust
 fixture under `target/dev-cargo-smoke-20261022` also executed one real unit test
 successfully twice. Its build script asserted actual kernel limits:

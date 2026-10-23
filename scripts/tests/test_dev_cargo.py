@@ -48,7 +48,10 @@ class DevelopmentCargoTests(unittest.TestCase):
         ):
             targets = []
             for name in ("first", "second"):
-                with patch.object(policy, "ROOT", Path(directory) / name):
+                with (
+                    patch.object(policy, "ROOT", Path(directory) / name),
+                    patch.object(Path, "cwd", return_value=Path(directory) / name),
+                ):
                     targets.append(
                         policy.build_environment(["check"])["CARGO_TARGET_DIR"]
                     )
@@ -68,11 +71,26 @@ class DevelopmentCargoTests(unittest.TestCase):
                 ["test", "--jobs=0"],
                 ["build", "--target-dir=/tmp/shared"],
                 ["check", "--config", "build.jobs=8"],
+                ["check", "-C/tmp"],
+                ["check", "--manifest-path"],
                 ["check", "--manifest-path=/tmp/Cargo.toml"],
             ):
                 with self.subTest(args=args), self.assertRaises(ValueError):
                     policy.build_environment(args)
         with patch.dict(os.environ, {"CARGO_TARGET_DIR": "/tmp/shared"}, clear=True):
+            with self.assertRaises(ValueError):
+                policy.build_environment(["check"])
+
+    def test_refuse_other_checkout_and_target_alias(self):
+        with (
+            patch.dict(os.environ, {}, clear=True),
+            patch.object(Path, "cwd", return_value=Path("/tmp")),
+        ):
+            with self.assertRaises(ValueError):
+                policy.build_environment(["check"])
+        with patch.dict(
+            os.environ, {"CARGO_BUILD_TARGET_DIR": "/tmp/shared"}, clear=True
+        ):
             with self.assertRaises(ValueError):
                 policy.build_environment(["check"])
 

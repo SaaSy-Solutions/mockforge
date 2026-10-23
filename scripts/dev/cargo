@@ -75,6 +75,7 @@ def acquire_slot(directory):
                 not stat.S_ISREG(info.st_mode)
                 or info.st_uid != os.getuid()
                 or info.st_mode & 0o022
+                or info.st_nlink != 1
             ):
                 os.close(fd)
                 raise ValueError("Unsafe admission slot file")
@@ -93,6 +94,12 @@ def command_arguments(arguments):
 
 def build_environment(arguments):
     env = os.environ.copy()
+    if not Path.cwd().resolve().is_relative_to(ROOT):
+        raise ValueError("Run local Cargo inside this worktree")
+    if env.get("CARGO_BUILD_TARGET_DIR"):
+        raise ValueError(
+            "Unset CARGO_BUILD_TARGET_DIR; use the isolated worktree target"
+        )
     target = ROOT / "target"
     # A common external target may contain another checkout's mutable artifacts.
     selected = env.get("CARGO_TARGET_DIR", str(target))
@@ -111,11 +118,17 @@ def build_environment(arguments):
     for i, arg in enumerate(tail):
         if arg == "--":
             break  # Test/executable arguments are not Cargo options.
+        if arg == "-C" or arg.startswith("-C"):
+            raise ValueError(
+                "Cargo directory changes are unsupported; use the worktree cwd"
+            )
         if arg == "--config" or arg.startswith("--config="):
             raise ValueError(
                 "Use checked-in Cargo configuration; --config overrides are not supported locally"
             )
         if arg == "--manifest-path" or arg.startswith("--manifest-path="):
+            if "=" not in arg and i + 1 >= len(tail):
+                raise ValueError("--manifest-path requires a value")
             selected_manifest = arg.split("=", 1)[1] if "=" in arg else tail[i + 1]
             if not Path(selected_manifest).resolve().is_relative_to(ROOT):
                 raise ValueError("Manifest must belong to this worktree")
@@ -189,6 +202,8 @@ def run(arguments):
     if not inside:
         return subprocess.call(scope_command(arguments), env=env)
     runtime = Path(os.environ.get("XDG_RUNTIME_DIR", f"/run/user/{os.getuid()}"))
+    if not runtime.is_absolute():
+        raise ValueError("XDG_RUNTIME_DIR must be absolute")
     slot, wait = acquire_slot(runtime / "saasy-dev-cargo-admission")
     started = time.monotonic()
     child = None
