@@ -5535,6 +5535,7 @@
       "--help": 0,
       "--limit": 1,
       "--log-level": 1,
+      "--mock-spec": 1,
       "--output": 1,
       "--spec": 1,
       "-c": 1,
