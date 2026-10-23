@@ -5,6 +5,7 @@
  */
 
 import React, { useState } from 'react';
+import { bytesToBase64 } from '@/utils/binaryEncoding';
 import { apiErrorMessage } from '@/utils/errorHandling';
 import { getAuthToken } from '@/services/tokenStorage';
 import {
@@ -114,9 +115,7 @@ export const PublishTemplateModal: React.FC<PublishTemplateModalProps> = ({
 
       // Read and encode package file
       const fileBuffer = await packageFile.arrayBuffer();
-      const base64Package = btoa(
-        String.fromCharCode(...new Uint8Array(fileBuffer))
-      );
+      const base64Package = bytesToBase64(new Uint8Array(fileBuffer));
 
       // Calculate checksum
       const checksum = await calculateChecksum(fileBuffer);

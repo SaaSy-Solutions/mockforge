@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Box, Button, IconButton, Tooltip, Typography } from '@mui/material';
-import { ContentCopy as CopyIcon, Key as KeyIcon } from '@mui/icons-material';
+import { Copy, KeyRound } from 'lucide-react';
+import { Button } from '../ui/button';
 import { fetchJsonWithErrorBody } from '@/services/api/client';
 
 interface ManagementToken {
@@ -9,9 +9,8 @@ interface ManagementToken {
 }
 
 /**
- * Reveals a hosted mock's management token. Control-plane writes on the mock
- * (creating mocks, chaos, time travel, recorder) need it in the
- * X-MockForge-Management-Token header; reads and the mocked API itself do not.
+ * Reveals the credential used to manage a hosted mock from an external client.
+ * Send it in the returned header when calling MockForge control routes.
  */
 export function ManagementTokenField({ deploymentId }: { deploymentId: string }) {
   const [value, setValue] = useState<ManagementToken | null>(null);
@@ -43,38 +42,28 @@ export function ManagementTokenField({ deploymentId }: { deploymentId: string })
   };
 
   return (
-    <Box>
-      <Typography variant="caption" color="text.secondary">
-        Management token
-      </Typography>
+    <div className="space-y-1">
+      <p className="text-xs text-muted-foreground">Management token</p>
       {value ? (
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <Typography variant="body2" sx={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
-            {value.token}
-          </Typography>
-          <Tooltip title={copied ? 'Copied' : 'Copy'}>
-            <IconButton size="small" aria-label="Copy management token" onClick={copy}>
-              <CopyIcon fontSize="small" />
-            </IconButton>
-          </Tooltip>
-        </Box>
-      ) : (
-        <Box>
-          <Button size="small" startIcon={<KeyIcon />} onClick={reveal}>
-            Reveal
+        <div className="flex min-w-0 items-start gap-2">
+          <code className="min-w-0 break-all text-sm">{value.token}</code>
+          <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0"
+            title={copied ? 'Copied' : 'Copy'} aria-label="Copy management token" onClick={copy}>
+            <Copy className="h-4 w-4" aria-hidden="true" />
           </Button>
-        </Box>
+          <span role="status" className="sr-only">{copied ? 'Management token copied' : ''}</span>
+        </div>
+      ) : (
+        <Button type="button" variant="ghost" size="sm" className="gap-2" onClick={reveal}>
+          <KeyRound className="h-4 w-4" aria-hidden="true" />Reveal
+        </Button>
       )}
-      <Typography variant="caption" color="text.secondary" component="p">
+      <p className="text-xs text-muted-foreground">
         {value
-          ? `Send as ${value.header} on writes to /__mockforge/* and other MockForge control routes. Reads and your mocked API don't need it.`
+          ? `Send as ${value.header} on requests to /__mockforge/* and other MockForge control routes.`
           : 'Needed to change this mock through its management API from curl or your own client.'}
-      </Typography>
-      {error && (
-        <Typography variant="caption" color="error">
-          {error}
-        </Typography>
-      )}
-    </Box>
+      </p>
+      {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
+    </div>
   );
 }
