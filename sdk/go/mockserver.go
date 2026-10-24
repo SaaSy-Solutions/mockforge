@@ -95,6 +95,11 @@ func (m *MockServer) ManagementToken() string {
 	return m.managementToken
 }
 
+// refuseManagementRedirect prevents control-plane credentials from reaching another endpoint.
+func refuseManagementRedirect(_ *http.Request, _ []*http.Request) error {
+	return http.ErrUseLastResponse
+}
+
 // controlRequest performs a control-plane request carrying the management token.
 func (m *MockServer) controlRequest(method, url string, body []byte) (*http.Response, error) {
 	var reader io.Reader
@@ -109,7 +114,9 @@ func (m *MockServer) controlRequest(method, url string, body []byte) (*http.Resp
 		req.Header.Set("Content-Type", "application/json")
 	}
 	req.Header.Set(ManagementTokenHeader, m.managementToken)
-	return http.DefaultClient.Do(req)
+	client := *http.DefaultClient
+	client.CheckRedirect = refuseManagementRedirect
+	return client.Do(req)
 }
 
 // Start starts the mock server
@@ -323,7 +330,7 @@ func (m *MockServer) managementRequest(method, path string, body io.Reader) (*ht
 		request.Header.Set("Content-Type", "application/json")
 	}
 	request.Header.Set(ManagementTokenHeader, m.managementToken)
-	client := &http.Client{Timeout: 5 * time.Second}
+	client := &http.Client{Timeout: 5 * time.Second, CheckRedirect: refuseManagementRedirect}
 	response, err := client.Do(request)
 	if err != nil {
 		return nil, err

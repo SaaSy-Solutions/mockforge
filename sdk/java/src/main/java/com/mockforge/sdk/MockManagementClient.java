@@ -17,7 +17,7 @@ final class MockManagementClient {
     private final String managementToken;
 
     MockManagementClient(OkHttpClient httpClient, String host, IntSupplier currentPort, String managementToken) {
-        this.httpClient = httpClient;
+        this.httpClient = httpClient.newBuilder().followRedirects(false).followSslRedirects(false).build();
         this.host = host;
         this.currentPort = currentPort;
         this.managementToken = managementToken;

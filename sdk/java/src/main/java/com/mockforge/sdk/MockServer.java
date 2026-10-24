@@ -66,6 +66,8 @@ public class MockServer {
         final String token = this.managementToken;
         // Every request this client makes carries the management credential.
         this.httpClient = new OkHttpClient.Builder()
+            .followRedirects(false)
+            .followSslRedirects(false)
             .connectTimeout(1, TimeUnit.SECONDS)
             .readTimeout(1, TimeUnit.SECONDS)
             .addInterceptor(chain -> chain.proceed(

@@ -7,7 +7,7 @@ import time
 import requests
 from typing import Optional, Dict, Any, List
 from .types import MockServerConfig, ResponseStub, VerificationRequest, VerificationResult
-from .verification import _auth_headers, VerificationCount, verify, verify_never, verify_at_least, verify_sequence, count
+from .verification import _auth_headers, _raise_management_status, VerificationCount, verify, verify_never, verify_at_least, verify_sequence, count
 from .errors import MockServerError
 
 
@@ -192,8 +192,9 @@ class MockServer:
                 json=mock_config,
                 headers=self._headers,
                 timeout=5.0,
+                allow_redirects=False,
             )
-            response.raise_for_status()
+            _raise_management_status(response)
         except requests.exceptions.RequestException as error:
             raise MockServerError.admin_api_error("create mock", str(error), error) from error
         self.stubs.append(stub)
@@ -205,16 +206,17 @@ class MockServer:
         if not self.port:
             raise MockServerError.admin_api_error("clear mocks", "HTTP port is not available")
         try:
-            response = requests.get(f"{self.url()}/__mockforge/api/mocks", headers=self._headers, timeout=5.0)
-            response.raise_for_status()
+            response = requests.get(f"{self.url()}/__mockforge/api/mocks", headers=self._headers, timeout=5.0, allow_redirects=False)
+            _raise_management_status(response)
             mocks = response.json()["mocks"]
             for mock in mocks:
                 response = requests.delete(
                     f"{self.url()}/__mockforge/api/mocks/{quote(str(mock['id']), safe='')}",
                     headers=self._headers,
                     timeout=5.0,
+                    allow_redirects=False,
                 )
-                response.raise_for_status()
+                _raise_management_status(response)
         except (requests.exceptions.RequestException, ValueError, KeyError, TypeError) as error:
             raise MockServerError.admin_api_error("clear mocks", str(error), error) from error
         self.stubs.clear()
