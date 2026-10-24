@@ -13,6 +13,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/security_rule_test_pack.py"
+sys.path.insert(0, str(SCRIPT.parent))
 spec = importlib.util.spec_from_file_location("pack", SCRIPT)
 pack = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(pack)

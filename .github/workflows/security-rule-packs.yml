@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'scripts/security_rule_test_pack.py'
+      - 'scripts/security_rule_pack_*.py'
       - 'scripts/tests/test_security_rule_test_pack.py'
       - 'examples/security-rule-packs/**'
       - '.github/workflows/security-rule-packs.yml'

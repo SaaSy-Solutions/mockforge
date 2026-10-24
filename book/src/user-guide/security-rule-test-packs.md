@@ -95,8 +95,8 @@ requests, not a user-supplied payload or broad CVE catalog.
 
 ```bash
 python3 scripts/tests/test_security_rule_test_pack.py
-ruff check scripts/security_rule_test_pack.py scripts/tests/test_security_rule_test_pack.py
-ruff format --check scripts/security_rule_test_pack.py scripts/tests/test_security_rule_test_pack.py
+ruff check scripts/security_rule*.py scripts/tests/test_security_rule_test_pack.py
+ruff format --check scripts/security_rule*.py scripts/tests/test_security_rule_test_pack.py
 ```
 
 The tests own real loopback proxy/recorder servers and exercise the CLI and JSON
