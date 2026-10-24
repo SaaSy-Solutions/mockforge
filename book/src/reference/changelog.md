@@ -4,6 +4,8 @@
 
 ### Added
 
+- **[DevX]** Add a paginated issue-discussion exporter (searchable offline HTML, Markdown and JSON), a vendor-referenced CVE traffic lab guide, and bounded Next.js/Camel transport canaries with a real-client/server smoke test. The examples establish request delivery, not exploit reproduction. (#79)
+
 - **[Cloud]** Trial owners get an email three days before their Pro or Team trial ends. The registry now handles Stripe's `customer.subscription.trial_will_end` webhook and sends the reminder through the same email path as the other billing emails, honoring the owner's email-notification setting. It gives the end date and price, and says the plan continues if a payment method is on file and otherwise drops to Free. (#714)
 
 ### Changed
