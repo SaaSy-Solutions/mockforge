@@ -149,3 +149,34 @@ fn inherited_security_compares_the_referenced_scheme_and_scope_sets() {
     source["components"]["securitySchemes"].as_object_mut().unwrap().clear();
     assert!(compare_mock_spec(&mock, &source).is_err());
 }
+
+#[test]
+fn server_variable_names_that_match_metadata_keys_preserve_their_contract() {
+    for name in [
+        "description",
+        "summary",
+        "example",
+        "examples",
+        "operationId",
+        "tags",
+    ] {
+        let mut mock = spec(json!({"type":"string"}));
+        mock["servers"] = json!([{
+            "url": format!("https://{{{name}}}.example.invalid"),
+            "variables": {name: {"default":"before", "enum":["before","after"]}}
+        }]);
+        let mut source = mock.clone();
+        source["servers"][0]["variables"][name]["default"] = json!("after");
+        assert_eq!(
+            compare_mock_spec(&mock, &source).unwrap().routes_with_drift,
+            1,
+            "server variable {name} is a named contract, not documentation"
+        );
+        source = mock.clone();
+        source["servers"][0]["variables"][name]["enum"] = json!(["before"]);
+        assert_eq!(compare_mock_spec(&mock, &source).unwrap().routes_with_drift, 1);
+        source = mock.clone();
+        source["servers"][0]["variables"][name]["description"] = json!("documentation only");
+        assert_eq!(compare_mock_spec(&mock, &source).unwrap().routes_with_drift, 0);
+    }
+}
