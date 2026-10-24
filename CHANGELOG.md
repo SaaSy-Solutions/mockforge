@@ -2,6 +2,8 @@
 
 ### Added
 
+- **[DevX]** Preview Security Rule Test Packs with bounded safe Next.js/Camel transport canaries, benign controls, explicit status assertions and correlated origin reports. Runtime/patch evidence remains unverified; mixed-case Camel headers are unsupported. (#79)
+
 - **[Cloud]** Trial owners get an email three days before their Pro or Team trial ends. The registry now handles Stripe's `customer.subscription.trial_will_end` webhook and sends the reminder through the same email path as the other billing emails, honoring the owner's email-notification setting. It gives the end date and price, and says the plan continues if a payment method is on file and otherwise drops to Free. (#714)
 
 ### Changed
