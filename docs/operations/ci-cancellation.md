@@ -81,17 +81,22 @@ runner labels or trusted routing.
 
 1. Preserve active workers and their existing timeouts. Recheck current jobs,
    runner assignment, filesystem capacity and the PR head before any retry.
-2. After a worker slot and disk headroom permit, rerun only #1350's failed Rust
-   job and its required dependents. Refresh the database job ID first:
+2. After a worker slot and disk headroom permit, rerun only a failed Rust job
+   **on the current #1350 head** and its required dependents. If a new commit has
+   already started replacement CI, wait for that run instead. The historical
+   disk-full run must not be rerun after the PR head changes. Refresh the head,
+   run source SHA and database job ID first:
 
    ```bash
-   gh run view 39791120339 --repo SaaSy-Solutions/mockforge --json jobs \
-     --jq '.jobs[] | select(.name == "Rust default checks") | {name, databaseId}'
-   gh run rerun 39791120339 --repo SaaSy-Solutions/mockforge --job JOB_DATABASE_ID
+   gh pr view 1350 --repo SaaSy-Solutions/mockforge --json headRefOid
+   gh run view CURRENT_RUN_ID --repo SaaSy-Solutions/mockforge --json headSha,jobs
+   gh run rerun CURRENT_RUN_ID --repo SaaSy-Solutions/mockforge --job JOB_DATABASE_ID
    ```
 
-   Do not reset the whole workflow or launch duplicate heavy runs. A queued retry
-   or accepted request is not a passing validation result.
+   Execute the last command only after the run SHA matches the live PR head and
+   the selected job has actually failed. Do not reset the whole workflow or launch
+   duplicate heavy runs. A queued retry or accepted request is not a passing
+   validation result.
 3. Let #1388's normal scope job release its real Security Audit job. If the
    registry PR lane skips by its existing filter and E2E execution is required,
    dispatch exactly once on the freshly verified branch, then verify that the
