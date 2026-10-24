@@ -85,7 +85,7 @@ google-cloud-storage = { version = "1.12", optional = true }
 bytes = { workspace = true, optional = true }
 
 # AWS S3 support (optional)
-aws-sdk-s3 = { version = "1", optional = true, default-features = false, features = ["sigv4a", "http-1x", "default-https-client", "rt-tokio"] }
+aws-sdk-s3 = { version = "1", optional = true, default-features = false, features = ["http-1x", "default-https-client", "rt-tokio"] }
 aws-config = { version = "1", optional = true }
 
 [dev-dependencies]
