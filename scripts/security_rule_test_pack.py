@@ -1,11 +1,11 @@
 """Bounded, harmless HTTP security-rule canaries; Python 3.10+, standard library."""
 
 import argparse
-from security_rule_pack_config import CASES, load_pack
+from functools import partial
+from security_rule_pack_evidence import observe, classify
+from security_rule_pack_config import load_pack
 from security_rule_pack_transport import recorder, request, target_url
-import http.client
 import json
-import time
 import uuid
 from pathlib import Path
 
@@ -14,32 +14,16 @@ def run(cases, url, observations, lock, timeout=2, window=0.1):
     results = []
     run_id = uuid.uuid4().hex
 
-    def deliver(name):
-        token = run_id + "-" + uuid.uuid4().hex
-        path, headers = CASES[name]
-        path += ("&" if "?" in path else "?") + "__mockforge_correlation=" + token
-        headers = {**headers, "X-Mockforge-Correlation": token}
-        try:
-            status = request(url, path, headers, timeout)
-            error = None
-        except (OSError, http.client.HTTPException) as exc:
-            status, error = None, type(exc).__name__
-        time.sleep(window)
-        with lock:
-            records = list(observations.get(token, []))
-        # Require exact request path, one observation, and matching probe headers.
-        valid = len(records) == 1 and records[0]["path"] == path
-        if valid:
-            valid = all(
-                [
-                    value
-                    for key, value in records[0]["headers"]
-                    if key.lower() == k.lower()
-                ]
-                == [v]
-                for k, v in headers.items()
-            )
-        return status, error, records, valid, token
+    deliver = partial(
+        observe,
+        run_id=run_id,
+        url=url,
+        observations=observations,
+        lock=lock,
+        timeout=timeout,
+        window=window,
+        send=request,
+    )
 
     for case in cases:
         name = case["id"]
@@ -84,28 +68,7 @@ def run(cases, url, observations, lock, timeout=2, window=0.1):
                 "observations": after[2],
             },
         )
-        if error or (records and not valid):
-            result["reason"] = (
-                error or "origin correlation or flanking control unavailable"
-            )
-        elif status != case["status"]:
-            result.update(
-                rule_behavior="fail", reason="explicit status assertion mismatch"
-            )
-        elif not healthy:
-            result["reason"] = (
-                "flanking controls could not corroborate origin reachability"
-            )
-        elif case["origin"] == "seen" and not records:
-            result["reason"] = "expected origin observation missing"
-        elif case["origin"] == "absent" and records:
-            result.update(
-                rule_behavior="fail", reason="rejected response still reached origin"
-            )
-        else:
-            result.update(
-                rule_behavior="pass", reason="status and bounded origin assertion agree"
-            )
+        result.update(classify(case, status, error, records, valid, healthy))
         results.append(result)
     return {
         "schema_version": 1,

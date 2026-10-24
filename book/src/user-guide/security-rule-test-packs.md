@@ -35,7 +35,7 @@ queries and fragments in target URLs are rejected. HTTPS uses certificate
 verification. There are no redirects, retries, callbacks, command payloads,
 runtime exploits, or automatic probes of discovered hosts. Only the five fixed
 supported cases are sent, with one benign control before and after each: **15
-requests maximum**, each with a default two-second timeout (maximum five), a
+requests maximum**, each with a default two-second socket timeout (maximum five), a
 4 KiB response read limit, and a default 0.1-second observation window (0.01–1).
 The recorder returns fixed JSON, stores correlated headers/path in memory, and
 is closed on exit. Keep the dedicated route isolated; report headers are test

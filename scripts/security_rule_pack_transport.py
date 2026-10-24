@@ -13,8 +13,8 @@ def target_url(value, allow_external=False):
     if (
         url.scheme not in ("http", "https")
         or not url.hostname
-        or url.username
-        or url.password
+        or url.username is not None
+        or url.password is not None
         or url.path not in ("", "/")
         or url.query
         or url.fragment
