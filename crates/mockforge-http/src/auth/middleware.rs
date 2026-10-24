@@ -124,11 +124,9 @@ pub async fn auth_middleware(
             let event = SecurityEvent::new(SecurityEventType::AuthFailure, None, None)
                 .with_actor(EventActor {
                     user_id: None,
-                    username: auth_header
-                        .as_ref()
-                        .and_then(|h| h.strip_prefix("Bearer "))
-                        .or_else(|| auth_header.as_ref().and_then(|h| h.strip_prefix("Basic ")))
-                        .map(|s| s.to_string()),
+                    // Submitted credentials are not a verified identity, including Basic's
+                    // reversible base64 payload. Never attach them to security events.
+                    username: None,
                     ip_address: ip_address.clone(),
                     user_agent: user_agent.clone(),
                 })

@@ -133,6 +133,7 @@ amqp = ["mockforge-amqp"]
 chaos = []
 
 [dev-dependencies]
+tracing-subscriber = { workspace = true }
 tokio = { version = "1.52", features = ["macros", "rt-multi-thread"] }
 reqwest = { workspace = true }
 tempfile = "3"
