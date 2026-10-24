@@ -126,11 +126,19 @@ mockforge bench --target http://127.0.0.1:3000 \
   --output cve-direct
 ```
 
-The starter expects `200` for all four requests when sent directly to the mock.
-For an LB run, make a separate copy and set each probe's `expected` status to
-your intended policy, keeping the normal control's success status. Point
-`--target` at that lab virtual service, then confirm the specific headers and
-query strings in LB logs or a lab packet capture. The CLI may also issue a
+The starter returns `200` for all four requests when sent directly to the mock.
+For an LB run, point `--target` at the lab virtual service and confirm the
+specific headers and query strings in LB logs or a lab packet capture.
+
+**Expected-status limitation:** the traffic file's `expected` field classifies
+cases in the traffic breakdown. In the current verbatim benchmark path, those
+statuses are not carried into the generated request templates; the ordinary
+benchmark still checks for a 2xx response and a nonempty body. Changing a probe
+to `expected: 403` does not make a 403 response pass, and an intentional LB block
+can appear as a benchmark error. Use custom conformance checks with
+`expected_status: 403` (and a separate successful normal control), or independently
+assert the observed status and correlate it with the LB rule log. Do not use the
+traffic-breakdown classification as a security-regression verdict. The CLI may also issue a
 mock-server discovery probe before the test; count it separately from the four cases.
 
 **Header-name casing matters for Camel.** In the tested k6 2.3.0 HTTP/1.1 run,
