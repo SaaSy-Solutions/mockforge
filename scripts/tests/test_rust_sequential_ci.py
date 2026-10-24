@@ -58,6 +58,15 @@ def display_name(expression, event, head):
 
 
 class SequentialRustTest(unittest.TestCase):
+    def test_superseded_completion_operator_guards(self):
+        # The normal changes job already runs this suite. Keep the queue
+        # recovery operator covered without adding another runner job.
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "scripts/tests/test_cancel_superseded_completion.py")],
+            cwd=ROOT, env={"PATH": os.defpath}, text=True, capture_output=True, check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
     def regression_step(self):
         return block("changes").split("      - name: Verify Rust lane and required-context routing\n", 1)[1].split("\n      - name:", 1)[0]
 
