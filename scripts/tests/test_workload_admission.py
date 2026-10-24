@@ -39,7 +39,7 @@ from pathlib import Path
 s=importlib.util.spec_from_file_location('p',sys.argv[1]);p=importlib.util.module_from_spec(s);s.loader.exec_module(p)
 sys.modules["rust_policy_config"].host_budgets=lambda:(65536,800)
 sys.modules["rust_policy_runtime"].available_memory_mib=lambda:int(Path(sys.argv[5]).read_text()) if sys.argv[5] else 65536
-c=json.loads(sys.argv[3]); c['environment']=dict(os.environ,RUSTC=c.pop('compiler'))
+c=json.loads(sys.argv[3])
 with p.Session(json.loads(sys.argv[4]),Path(sys.argv[2])) as a:
  a.configure(**c); wait=a.acquire();print(json.dumps(dict(a.event(),wait=wait)),flush=True);sys.stdin.read(1)
 """
@@ -92,12 +92,16 @@ class WorkloadAdmission(unittest.TestCase):
             "#!" + sys.executable + '\nprint("fixture rustc version")\n'
         )
         self.compiler.chmod(0o700)
-        self.environment = dict(os.environ, RUSTC=str(self.compiler))
+        self.environment = {
+            "PATH": os.defpath,
+            "CARGO_HOME": str(self.worktree / "fixture-cargo-home"),
+            "RUSTC": str(self.compiler),
+        }
         self.context = dict(
             repository=REPOSITORY,
             worktree=str(self.worktree),
             target=str(self.target),
-            compiler=str(self.compiler),
+            environment=self.environment,
         )
         self.budgets = patch.object(
             sys.modules["rust_policy_config"], "host_budgets", return_value=(65536, 800)
