@@ -1,7 +1,7 @@
 # Security Rule Test Packs (preview)
 
-Test a small set of security rules with safe, fixed HTTP canaries and benign
-look-alikes. The Python standard-library client sends serial GET requests through
+Test a small set of security rules with safe, fixed HTTP canaries and similar
+benign requests. The Python standard-library client sends serial GET requests through
 an explicitly supplied load balancer to a harmless recording origin. It reports
 the expected and observed status, origin observations, and rule verdict per case.
 It does not start Next.js, Camel, or any vulnerable application.
