@@ -621,6 +621,15 @@ jobs:
     - name: Run license and source compliance check
       run: cargo deny check licenses sources bans
 
+    - name: Verify patched SigV4a signer and production S3 SDK compatibility
+      env:
+        CARGO_BUILD_JOBS: "2"
+        CARGO_TARGET_DIR: ${{ runner.temp }}/mockforge-sigv4a-${{ github.run_id }}-${{ github.run_attempt }}
+      run: |
+        python3 scripts/tests/test_sigv4a_container_inputs.py
+        cargo test --locked --manifest-path vendor/aws-sigv4/Cargo.toml --all-features --lib --test crypto_dependencies --test sigv4a_mrap
+        cargo test --locked --manifest-path scripts/security/sigv4a-sdk-tests/Cargo.toml
+
     # The previous `cargo clippy --workspace --all-features ... || true` step
     # used to live here. It ran for 3-5 minutes per CI run but always exited
     # 0 because of the trailing `|| true`, so it never blocked anything and

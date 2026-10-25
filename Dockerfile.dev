@@ -17,6 +17,7 @@ WORKDIR /app
 
 # Copy dependency files first for better layer caching
 COPY Cargo.toml ./
+COPY vendor/aws-sigv4 ./vendor/aws-sigv4/
 
 # Copy the crates directory
 COPY crates/ ./crates/

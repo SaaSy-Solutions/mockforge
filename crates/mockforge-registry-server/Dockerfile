@@ -4,6 +4,7 @@ WORKDIR /app
 
 # Copy workspace files
 COPY Cargo.toml Cargo.lock ./
+COPY vendor/aws-sigv4 ./vendor/aws-sigv4/
 COPY crates ./crates
 
 # Build registry server + the dedicated plugin scanner binary. The scanner
