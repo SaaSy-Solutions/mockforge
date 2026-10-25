@@ -10,6 +10,9 @@ mod commands;
 mod templates;
 mod utils;
 
+#[cfg(test)]
+mod test_cwd;
+
 #[derive(Parser)]
 #[command(name = "mockforge-plugin")]
 #[command(about = "MockForge Plugin Development Tool")]
