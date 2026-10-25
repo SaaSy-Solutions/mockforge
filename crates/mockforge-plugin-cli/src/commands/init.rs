@@ -76,6 +76,7 @@ resource_limits:
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_cwd::TestCwd;
     use tempfile::TempDir;
 
     #[test]
@@ -144,17 +145,13 @@ mod tests {
     #[tokio::test]
     async fn test_init_manifest_default_path() {
         let temp_dir = TempDir::new().unwrap();
-        let original_dir = std::env::current_dir().unwrap();
-
-        std::env::set_current_dir(&temp_dir).unwrap();
+        let _cwd = TestCwd::enter(temp_dir.path()).await;
 
         let result = init_manifest("template", None).await;
         assert!(result.is_ok());
 
         let default_path = temp_dir.path().join("plugin.yaml");
         assert!(default_path.exists());
-
-        std::env::set_current_dir(original_dir).unwrap();
     }
 
     #[tokio::test]
