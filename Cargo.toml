@@ -93,6 +93,8 @@ members = [
     "tests",
 ]
 resolver = "2"
+# The vendored AWS signer retains its standalone upstream security tests.
+exclude = ["vendor/aws-sigv4"]
 
 # Workspace-wide package metadata
 [workspace.package]
@@ -239,3 +241,8 @@ cargo-release = "0.25"
 cargo-audit = "0.18"
 cargo-llvm-cov = "0.6"
 criterion = { version = "0.5", features = ["html_reports"] }
+
+[patch.crates-io]
+# Temporary upstream security patch: smithy-lang/smithy-rs#4958.
+# Preserve SigV4a/MRAP support while requiring the patched bigint implementation.
+aws-sigv4 = { path = "vendor/aws-sigv4" }

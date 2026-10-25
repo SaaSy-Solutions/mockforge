@@ -1,0 +1,7 @@
+{
+  "version": "1.6.3",
+  "checksum_sha256": "9d:3d:48:35:5c:b8:6b:15:cc:bb:38:b8:bc:6b:87:50:0c:82:4e:e4:ed:8c:bc:10:a9:61:b4:35:24:2b:5e:16",
+  "crate_url": "https://crates.io/api/v1/crates/aws-sigv4/1.6.3/download",
+  "upstream_patch": "https://github.com/smithy-lang/smithy-rs/pull/4958",
+  "patch_revision": "5c1c4bca2ea7af97496e077c9f1a718eaac64bf8"
+}
