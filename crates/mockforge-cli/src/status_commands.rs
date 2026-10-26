@@ -370,16 +370,26 @@ mod tests {
         }
     }
 
+    /// A directory whose parents discovery reaches all lie inside a fresh
+    /// temporary directory, so a config another test leaves in the shared
+    /// temporary directory cannot be found.
+    fn isolated() -> (tempfile::TempDir, PathBuf) {
+        let base = tempfile::tempdir().unwrap();
+        let dir = base.path().join("a/b/c/d/e/project");
+        std::fs::create_dir_all(&dir).unwrap();
+        (base, dir)
+    }
+
     #[tokio::test]
     async fn a_directory_without_config_reports_none_and_writes_nothing() {
-        let dir = tempfile::tempdir().unwrap();
-        let status = read_status(dir.path(), Duration::from_millis(200)).await;
+        let (_base, dir) = isolated();
+        let status = read_status(&dir, Duration::from_millis(200)).await;
         assert_eq!(status.schema_version, 1);
         assert!(status.config.is_none());
         assert!(status.http.is_none());
         assert!(status.server.is_none());
         assert!(status.verification.is_none());
-        assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+        assert_eq!(std::fs::read_dir(&dir).unwrap().count(), 0);
     }
 
     #[tokio::test]
@@ -498,12 +508,17 @@ mod tests {
 
     #[tokio::test]
     async fn a_verification_of_another_schema_version_is_not_read() {
-        let dir = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(dir.path().join(".mockforge/reports")).unwrap();
-        let mut future = record(VerificationOutcome::Faithful);
-        future.schema_version = 2;
-        std::fs::write(dir.path().join(VERIFICATION_FILE), serde_json::to_string(&future).unwrap())
-            .unwrap();
-        assert!(read_status(dir.path(), Duration::from_millis(200)).await.verification.is_none());
+        let (_base, dir) = isolated();
+        std::fs::create_dir_all(dir.join(".mockforge/reports")).unwrap();
+        let mut record = record(VerificationOutcome::Faithful);
+        let write = |value: &VerificationRecord| {
+            std::fs::write(dir.join(VERIFICATION_FILE), serde_json::to_string(value).unwrap())
+                .unwrap()
+        };
+        write(&record);
+        assert!(read_status(&dir, Duration::from_millis(200)).await.verification.is_some());
+        record.schema_version = 2;
+        write(&record);
+        assert!(read_status(&dir, Duration::from_millis(200)).await.verification.is_none());
     }
 }
