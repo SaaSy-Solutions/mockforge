@@ -10,6 +10,7 @@
 
 ### Fixed
 
+- **[DevX]** Add a guarded operator for superseded, partially cancelled CI runs stuck on an unassigned completion job. It preserves the fail-closed Rust completion verdict, tries ordinary cancellation first, and revalidates the live PR head and all job guards before force-cancellation. Current-head runs, forks and active workers are refused. (#1191)
 - **[Reality]** MQTT publish and last-will delivery no longer hold broker-wide locks while waiting on subscriber queues, or acquire topic and client locks in the opposite order to new connections. This prevents concurrent CONNECT/publish deadlocks and lets new clients connect while a subscriber is backpressured. (#715)
 - **[Docs]** The workspace export/import guide and the configuration reference no longer call `mockforge workspace export`, `import` and `activate` unreleased; they ship in 0.3.236. (#1197)
 - **[Contracts]** Package Intelligence’s database migrations inside its own crate so the published `database` feature builds without a sibling HTTP checkout. Preserve all historical migration filenames and SQL bytes for existing databases. (#632)
