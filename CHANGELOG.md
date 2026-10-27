@@ -3,6 +3,7 @@
 ### Added
 
 - **[DevX]** Preview Security Rule Test Packs with bounded safe Next.js/Camel transport canaries, benign controls, explicit status assertions and correlated origin reports. Runtime/patch evidence remains unverified; mixed-case Camel headers are unsupported. (#79)
+- **[DevX]** `mockforge status [--dir <path>] [--format json]` reports a project's MockForge state without starting or writing anything: the configuration file `serve` would use, the HTTP port and spec it declares, whether a MockForge server answers there (through the management API, which a spec's own `/health` cannot shadow), and the last recorded `verify-mocks` result. The JSON form is a versioned document (`schema_version` 1) for editors and agent hosts such as Aether. `verify-mocks --record` keeps a run's result in `.mockforge/reports/verify-mocks.json` for it. (#1420)
 
 - **[Cloud]** Trial owners get an email three days before their Pro or Team trial ends. The registry now handles Stripe's `customer.subscription.trial_will_end` webhook and sends the reminder through the same email path as the other billing emails, honoring the owner's email-notification setting. It gives the end date and price, and says the plan continues if a payment method is on file and otherwise drops to Free. (#714)
 
@@ -12,6 +13,7 @@
 
 ### Fixed
 
+- **[DevX]** Add a guarded operator for superseded, partially cancelled CI runs stuck on an unassigned completion job. It preserves the fail-closed Rust completion verdict, tries ordinary cancellation first, and revalidates the live PR head and all job guards before force-cancellation. Current-head runs, forks and active workers are refused. (#1191)
 - **[Reality]** MQTT publish and last-will delivery no longer hold broker-wide locks while waiting on subscriber queues, or acquire topic and client locks in the opposite order to new connections. This prevents concurrent CONNECT/publish deadlocks and lets new clients connect while a subscriber is backpressured. (#715)
 - **[Docs]** The workspace export/import guide and the configuration reference no longer call `mockforge workspace export`, `import` and `activate` unreleased; they ship in 0.3.236. (#1197)
 - **[Contracts]** Package Intelligence’s database migrations inside its own crate so the published `database` feature builds without a sibling HTTP checkout. Preserve all historical migration filenames and SQL bytes for existing databases. (#632)
