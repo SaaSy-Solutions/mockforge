@@ -4,6 +4,7 @@
 
 ### Added
 
+- **[DevX]** CVE monitor and remediation tips for the rule packs: `cve_pack_monitor.py` tracks CISA KEV (actively-exploited CVEs), triages to WAF-actionable CWEs, and writes a candidate pack per CVE enriched with tips aggregated and deduped from NVD, OSV, EPSS and KEV (upgrade-to version, exploitation probability, ransomware use, CISA due date); `cve_pack.py tips <CVE>` prints the same. An optional provider-agnostic `--drafter-cmd` proposes each signature, but the profile schema is the trust boundary — a draft that is not inert marker-only is flagged for review, never run. (#79)
 - **[DevX]** Per-CVE Rule Packs: author a small profile (route, signature header/param names with inert marker values, benign controls, expected block status) and `cve_pack.py` scaffolds it, emits a MockForge mock of the guarded route, and runs the signature plus controls through a supplied load balancer to assert the rule blocks the signature and allows benign traffic. Reuses the Security Rule Test Packs transport; marker-only values mean a profile cannot carry a payload, and runtime/patch evidence stays unverified. (#79)
 - **[DevX]** Preview Security Rule Test Packs with bounded safe Next.js/Camel transport canaries, benign controls, explicit status assertions and correlated origin reports. Runtime/patch evidence remains unverified; mixed-case Camel headers are unsupported. (#79)
 

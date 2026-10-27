@@ -141,6 +141,17 @@ def cve_ok(value):
     return bool(CVE_ID.match(value))
 
 
+def _tips(args):
+    # Lazy import so the core run/new/server path needs no feed access.
+    from cve_pack_enrich import tips
+    from cve_pack_feeds import Fetcher
+
+    if not cve_ok(args.cve):
+        raise ValueError("cve must look like CVE-YYYY-NNNN")
+    print(json.dumps(tips(args.cve, fetcher=Fetcher(timeout=args.timeout)), indent=2))
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -164,6 +175,13 @@ def main(argv=None):
     p_run.add_argument("--timeout", type=float, default=2)
     p_run.add_argument("--observation-window", type=float, default=0.1)
     p_run.set_defaults(func=_run)
+
+    p_tips = sub.add_parser(
+        "tips", help="print remediation tips for a CVE (upgrade target, urgency)"
+    )
+    p_tips.add_argument("cve")
+    p_tips.add_argument("--timeout", type=float, default=20)
+    p_tips.set_defaults(func=_tips)
 
     args = parser.parse_args(argv)
     try:
