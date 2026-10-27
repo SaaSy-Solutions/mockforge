@@ -1,5 +1,8 @@
 # Load Testing
 
+For a searchable copy of the long-running issue discussion and a source-backed
+CVE traffic lab guide, see [Issue #79 Reference](issue-79-reference.md).
+
 MockForge ships first-class load-testing tools that work against any HTTP API
 — your real backend, a MockForge mock, or a hosted test environment. Two
 commands, two purposes:
