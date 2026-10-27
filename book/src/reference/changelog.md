@@ -4,6 +4,7 @@
 
 ### Added
 
+- **[DevX]** Per-CVE Rule Packs: author a small profile (route, signature header/param names with inert marker values, benign controls, expected block status) and `cve_pack.py` scaffolds it, emits a MockForge mock of the guarded route, and runs the signature plus controls through a supplied load balancer to assert the rule blocks the signature and allows benign traffic. Reuses the Security Rule Test Packs transport; marker-only values mean a profile cannot carry a payload, and runtime/patch evidence stays unverified. (#79)
 - **[DevX]** Preview Security Rule Test Packs with bounded safe Next.js/Camel transport canaries, benign controls, explicit status assertions and correlated origin reports. Runtime/patch evidence remains unverified; mixed-case Camel headers are unsupported. (#79)
 
 - **[Cloud]** Trial owners get an email three days before their Pro or Team trial ends. The registry now handles Stripe's `customer.subscription.trial_will_end` webhook and sends the reminder through the same email path as the other billing emails, honoring the owner's email-notification setting. It gives the end date and price, and says the plan continues if a payment method is on file and otherwise drops to Free. (#714)
