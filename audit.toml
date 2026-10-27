@@ -147,4 +147,17 @@ ignore = [
     # client) and async-nats 0.43 (registry-server). Remove once those move to
     # rustls-webpki 0.103.
     { id = "RUSTSEC-2026-0382", reason = "rustls-webpki 0.102.8 distrusted emSign intermediates; no patched 0.102.x, pulled by rumqttc 0.25.1 (latest) and async-nats 0.43; 0.103 copies are patched" },
+    # zstd / zstd-safe stream-reuse data leak and uninitialized-memory
+    # advisories (published 2026-10; fixed in zstd >=0.14.3 / zstd-safe
+    # >=8.2.0, which also moves zstd-sys to 2.1.2). The request/proxy path
+    # (async-compression in mockforge-proxy/http) is bumped to the patched
+    # zstd 0.14.3 / zstd-safe 8.2.0. The copies that remain are zstd 0.13.3 /
+    # zstd-safe 7.2.4, which have no in-line patch and are pinned by
+    # wasmtime 36.x's internal cache (the same pin as the wasmtime-36 group
+    # above, and not the request path) plus mockforge-kafka. Clears with the
+    # wasmtime major bump; a mockforge-kafka zstd 0.14 bump is a tracked
+    # follow-up.
+    { id = "RUSTSEC-2026-0391", reason = "zstd stream-reuse data leak — request-path copy bumped to zstd 0.14.3; remaining 0.13.3 is wasmtime 36.x cache + mockforge-kafka, no 0.13 patch; clears with the wasmtime major bump" },
+    { id = "RUSTSEC-2026-0398", reason = "zstd-safe Seekable::decompress OOB Vec length — request-path copy bumped to zstd-safe 8.2.0; remaining 7.2.4 is wasmtime 36.x cache + mockforge-kafka, no 7.x patch; clears with the wasmtime major bump" },
+    { id = "RUSTSEC-2026-0403", reason = "zstd-safe uninitialized memory on legacy-frame decompression failure — request-path copy bumped to zstd-safe 8.2.0; remaining 7.2.4 is wasmtime 36.x cache + mockforge-kafka, no 7.x patch; clears with the wasmtime major bump" },
 ]
