@@ -2,6 +2,7 @@
 
 ### Added
 
+- **[DevX]** Preview Security Rule Test Packs with bounded safe Next.js/Camel transport canaries, benign controls, explicit status assertions and correlated origin reports. Runtime/patch evidence remains unverified; mixed-case Camel headers are unsupported. (#79)
 - **[DevX]** Add a paginated issue-discussion exporter (searchable offline HTML, Markdown and JSON), a vendor-referenced CVE traffic lab guide, and bounded Next.js/Camel transport canaries with a real-client/server smoke test. The examples establish request delivery, not exploit reproduction. (#79)
 - **[DevX]** `mockforge status [--dir <path>] [--format json]` reports a project's MockForge state without starting or writing anything: the configuration file `serve` would use, the HTTP port and spec it declares, whether a MockForge server answers there (through the management API, which a spec's own `/health` cannot shadow), and the last recorded `verify-mocks` result. The JSON form is a versioned document (`schema_version` 1) for editors and agent hosts such as Aether. `verify-mocks --record` keeps a run's result in `.mockforge/reports/verify-mocks.json` for it. (#1420)
 

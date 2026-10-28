@@ -56,6 +56,7 @@
 ## Testing & Resilience
 
 - [Load Testing](user-guide/load-testing.md)
+  - [Security Rule Test Packs](user-guide/security-rule-test-packs.md)
   - [Issue #79: Offline Discussion and CVE Labs](user-guide/issue-79-reference.md)
 - [WAF Testing](user-guide/waf-testing.md)
 - [Chaos Engineering](user-guide/chaos-engineering.md)
