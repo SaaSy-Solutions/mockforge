@@ -15,4 +15,8 @@ ignore = [
     # `cargo audit` runs.
     "RUSTSEC-2026-0194",
     "RUSTSEC-2026-0195",
+    # zstd/zstd-safe 2026-10 advisories; see root audit.toml for the reason.
+    "RUSTSEC-2026-0391",
+    "RUSTSEC-2026-0398",
+    "RUSTSEC-2026-0403",
 ]
