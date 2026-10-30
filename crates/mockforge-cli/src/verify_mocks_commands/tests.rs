@@ -1,6 +1,19 @@
 use super::*;
 use serde_json::json;
 
+#[test]
+fn recorded_query_parsing_matches_form_semantics_used_by_serving() {
+    assert_eq!(
+        query_map(Some("full+name=one+two&literal=%2B&encoded=one%20two&flag&empty=&escaped=a%26%3Db")),
+        json!({"full name":"one two","literal":"+","encoded":"one two","flag":"","empty":"","escaped":"a&=b"})
+            .as_object()
+            .unwrap()
+            .clone()
+    );
+    assert!(query_map(None).is_empty());
+    assert!(query_map(Some("")).is_empty());
+}
+
 fn schema() -> Value {
     json!({"description":"OK","content":{"application/json":{"schema":{
         "type":"object","required":["id"],"properties":{"id":{"type":"integer"}}

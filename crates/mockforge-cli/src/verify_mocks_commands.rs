@@ -449,18 +449,11 @@ fn to_value_map(map: &HashMap<String, String>) -> serde_json::Map<String, Value>
 }
 
 fn query_map(query: Option<&str>) -> serde_json::Map<String, Value> {
-    let mut out = serde_json::Map::new();
-    if let Some(q) = query {
-        for pair in q.split('&') {
-            let mut kv = pair.splitn(2, '=');
-            if let (Some(k), Some(v)) = (kv.next(), kv.next()) {
-                if let (Ok(k), Ok(v)) = (urlencoding::decode(k), urlencoding::decode(v)) {
-                    out.insert(k.into_owned(), Value::String(v.into_owned()));
-                }
-            }
-        }
-    }
-    out
+    // Match the parser used by the HTTP validation middleware, including form
+    // spaces, encoded literal plus signs, and parameters without an '='.
+    url::form_urlencoded::parse(query.unwrap_or_default().as_bytes())
+        .map(|(key, value)| (key.into_owned(), Value::String(value.into_owned())))
+        .collect()
 }
 
 fn header_value_map(headers_json: &str) -> serde_json::Map<String, Value> {

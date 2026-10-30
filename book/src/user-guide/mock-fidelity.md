@@ -47,9 +47,15 @@ constraints, request bodies, responses, inherited parameters and referenced
 authentication schemes. Local references and recursive schemas are resolved.
 Documentation text and the ordering of parameters, enum values and required
 fields do not cause drift. Missing or external references, cyclic reference
-aliases and excessive expansion fail explicitly.
+aliases and excessive expansion fail explicitly. Omitted or empty root server
+lists match the explicit default URL `/`. Path and operation server overrides
+remain effective, and changes to non-default server URLs still produce drift.
 
 ## Check captured upstream traffic
+
+Recorded query strings use the same form parser as HTTP serving: `+` means a
+space, `%2B` means a literal plus sign, and a parameter without `=` has an empty
+value.
 
 You can also validate a recorder database containing real upstream traffic:
 
