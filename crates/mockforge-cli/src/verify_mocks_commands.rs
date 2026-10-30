@@ -33,8 +33,12 @@ pub(crate) struct VerifyMocksArgs {
 
     /// Recorder sqlite database holding real captured traffic
     /// (what `mockforge record` writes).
-    #[arg(short, long)]
-    pub capture_db: PathBuf,
+    #[arg(short, long, required_unless_present = "mock_spec")]
+    pub capture_db: Option<PathBuf>,
+
+    /// OpenAPI definition used to generate the mock; compare it with --spec.
+    #[arg(long, required_unless_present = "capture_db")]
+    pub mock_spec: Option<PathBuf>,
 
     /// Maximum recent HTTP exchanges to evaluate (newest first).
     #[arg(long, default_value = "500", value_parser = clap::value_parser!(i32).range(1..))]
@@ -67,6 +71,8 @@ struct DriftFinding {
 #[derive(Debug, Serialize)]
 struct DriftReport {
     spec: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    definition: Option<mockforge_contracts::fidelity::FidelityReport>,
     exchanges_checked: usize,
     endpoints_with_drift: usize,
     unmatched_real_paths: usize,
@@ -79,57 +85,43 @@ pub(crate) async fn handle_verify_mocks_command(
     let VerifyMocksArgs {
         spec,
         capture_db,
+        mock_spec,
         limit,
         fail_on_drift,
         output,
         record,
     } = args;
 
-    // 1. Load + parse the spec (Swagger 2.0 auto-up-converted).
-    let raw = std::fs::read_to_string(&spec).map_err(|e| {
-        mockforge_core::Error::config(format!("cannot read {}: {e}", spec.display()))
-    })?;
-    let mut spec_value: Value = serde_json::from_str(&raw)
-        .or_else(|_| serde_yaml::from_str(&raw))
-        .map_err(|e| {
-            mockforge_core::Error::config(format!("cannot parse {}: {e}", spec.display()))
-        })?;
-    if spec_value.get("swagger").and_then(Value::as_str) == Some("2.0") {
-        spec_value =
-            mockforge_import::import::swagger2_convert::convert_swagger2_to_openapi3(&spec_value)
-                .map_err(mockforge_core::Error::config)?;
-    }
-    let openapi = OpenApiSpec::from_json(spec_value)
-        .map_err(|e| mockforge_core::Error::config(e.to_string()))?;
+    let openapi = load_fidelity_spec(&spec)?;
+    let definition = mock_spec
+        .as_ref()
+        .map(|path| {
+            let mock = load_fidelity_spec(path)?;
+            let mock = serde_json::to_value(&mock.spec)
+                .map_err(|e| mockforge_core::Error::config(e.to_string()))?;
+            let source = serde_json::to_value(&openapi.spec)
+                .map_err(|e| mockforge_core::Error::config(e.to_string()))?;
+            mockforge_contracts::fidelity::compare_mock_spec(&mock, &source)
+                .map_err(mockforge_core::Error::config)
+        })
+        .transpose()?;
     let registry = OpenApiRouteRegistry::new(openapi);
-
-    // 2. Open the capture DB and pull HTTP exchanges.
-    let db = mockforge_recorder::RecorderDatabase::open_read_only(&capture_db)
-        .await
-        .map_err(|e| mockforge_core::Error::config(format!("cannot open capture db: {e}")))?;
-    let requests = db
-        .list_recent_for_protocol(mockforge_recorder::models::Protocol::Http, limit)
-        .await
-        .map_err(|e| mockforge_core::Error::config(format!("capture query failed: {e}")))?;
-    let mut exchanges = Vec::with_capacity(requests.len());
-    for request in requests {
-        let response = db.get_response(&request.id).await.map_err(|e| {
-            mockforge_core::Error::config(format!("capture response lookup failed: {e}"))
-        })?;
-        exchanges.push(mockforge_recorder::models::RecordedExchange { request, response });
-    }
+    let exchanges = load_fidelity_capture(capture_db.as_ref(), limit).await?;
 
     // An empty capture is not drift: report it, and with `--record` store a
-    // `no-traffic` verification so status surfaces it instead of a pass.
-    if exchanges.is_empty() {
+    // `no-traffic` verification so status surfaces it instead of a pass. A
+    // definition comparison (`--mock-spec`) still runs and is reported below.
+    if let (Some(capture_db), true) = (capture_db.as_ref(), exchanges.is_empty()) {
         println!(
             "No recorded traffic in {} — record some real traffic first (`mockforge record`).",
             capture_db.display()
         );
-        if record {
-            record_result(&empty_capture_report(&spec), &capture_db).await?;
+        if definition.is_none() {
+            if record {
+                record_result(&empty_capture_report(&spec), Some(capture_db.as_path())).await?;
+            }
+            return Ok(());
         }
-        return Ok(());
     }
     let response_spec = serde_json::to_value(&registry.spec().spec).map_err(|e| {
         mockforge_core::Error::config(format!("cannot inspect response contract: {e}"))
@@ -139,6 +131,21 @@ pub(crate) async fn handle_verify_mocks_command(
     let mut findings: Vec<DriftFinding> = Vec::new();
     let mut drifted_endpoints: BTreeMap<String, ()> = BTreeMap::new();
     let mut unmatched_paths: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+
+    if let Some(report) = &definition {
+        for route in report.routes.iter().filter(|r| !r.deltas.is_empty()) {
+            findings.push(DriftFinding {
+                endpoint: route.endpoint.clone(),
+                kind: "definition".into(),
+                detail: format!(
+                    "{} endpoint definition; {} field delta(s)",
+                    route.change,
+                    route.deltas.len()
+                ),
+            });
+            drifted_endpoints.insert(route.endpoint.clone(), ());
+        }
+    }
 
     for exchange in &exchanges {
         let req = &exchange.request;
@@ -218,6 +225,7 @@ pub(crate) async fn handle_verify_mocks_command(
 
     let report = DriftReport {
         spec: spec.display().to_string(),
+        definition,
         exchanges_checked: exchanges.len(),
         endpoints_with_drift: drifted_endpoints.len(),
         unmatched_real_paths: unmatched_paths.len(),
@@ -244,7 +252,7 @@ pub(crate) async fn handle_verify_mocks_command(
         println!("structured report written to {}", out.display());
     }
     if record {
-        record_result(&report, &capture_db).await?;
+        record_result(&report, capture_db.as_deref()).await?;
     }
 
     if fail_on_drift && !report.findings.is_empty() {
@@ -261,6 +269,7 @@ pub(crate) async fn handle_verify_mocks_command(
 fn empty_capture_report(spec: &std::path::Path) -> DriftReport {
     DriftReport {
         spec: spec.display().to_string(),
+        definition: None,
         exchanges_checked: 0,
         endpoints_with_drift: 0,
         unmatched_real_paths: 0,
@@ -270,24 +279,25 @@ fn empty_capture_report(spec: &std::path::Path) -> DriftReport {
 
 fn verification_record(
     report: &DriftReport,
-    capture_db: &std::path::Path,
+    capture_db: Option<&std::path::Path>,
 ) -> crate::status_commands::VerificationRecord {
     use crate::status_commands::{
         VerificationFinding, VerificationOutcome, VerificationRecord, VERIFICATION_SCHEMA_VERSION,
     };
-    let outcome = if report.exchanges_checked == 0 {
-        VerificationOutcome::NoTraffic
-    } else if report.findings.is_empty() {
-        VerificationOutcome::Faithful
-    } else {
+    // Definition drift found without traffic is still drift.
+    let outcome = if !report.findings.is_empty() {
         VerificationOutcome::Drift
+    } else if report.exchanges_checked == 0 {
+        VerificationOutcome::NoTraffic
+    } else {
+        VerificationOutcome::Faithful
     };
     VerificationRecord {
         schema_version: VERIFICATION_SCHEMA_VERSION,
         recorded_at: chrono::Utc::now().to_rfc3339(),
         mockforge_version: env!("CARGO_PKG_VERSION").to_string(),
         spec: report.spec.clone(),
-        capture_db: capture_db.display().to_string(),
+        capture_db: capture_db.map(|p| p.display().to_string()).unwrap_or_default(),
         outcome,
         exchanges_checked: report.exchanges_checked,
         endpoints_with_drift: report.endpoints_with_drift,
@@ -306,7 +316,7 @@ fn verification_record(
 
 async fn record_result(
     report: &DriftReport,
-    capture_db: &std::path::Path,
+    capture_db: Option<&std::path::Path>,
 ) -> mockforge_core::Result<()> {
     use crate::status_commands::{project_root, VERIFICATION_FILE};
     let cwd = std::env::current_dir().map_err(|e| {
@@ -332,6 +342,47 @@ async fn record_result(
 }
 
 // --- helpers -------------------------------------------------------------
+
+fn load_fidelity_spec(spec: &PathBuf) -> mockforge_core::Result<OpenApiSpec> {
+    let raw = std::fs::read_to_string(spec).map_err(|e| {
+        mockforge_core::Error::config(format!("cannot read {}: {e}", spec.display()))
+    })?;
+    let mut spec_value: Value = serde_json::from_str(&raw)
+        .or_else(|_| serde_yaml::from_str(&raw))
+        .map_err(|e| {
+            mockforge_core::Error::config(format!("cannot parse {}: {e}", spec.display()))
+        })?;
+    if spec_value.get("swagger").and_then(Value::as_str) == Some("2.0") {
+        spec_value =
+            mockforge_import::import::swagger2_convert::convert_swagger2_to_openapi3(&spec_value)
+                .map_err(mockforge_core::Error::config)?;
+    }
+    OpenApiSpec::from_json(spec_value).map_err(|e| mockforge_core::Error::config(e.to_string()))
+}
+
+async fn load_fidelity_capture(
+    capture_db: Option<&PathBuf>,
+    limit: i32,
+) -> mockforge_core::Result<Vec<mockforge_recorder::models::RecordedExchange>> {
+    let Some(capture_db) = capture_db else {
+        return Ok(Vec::new());
+    };
+    let db = mockforge_recorder::RecorderDatabase::open_read_only(capture_db)
+        .await
+        .map_err(|e| mockforge_core::Error::config(format!("cannot open capture db: {e}")))?;
+    let requests = db
+        .list_recent_for_protocol(mockforge_recorder::models::Protocol::Http, limit)
+        .await
+        .map_err(|e| mockforge_core::Error::config(format!("capture query failed: {e}")))?;
+    let mut exchanges = Vec::with_capacity(requests.len());
+    for request in requests {
+        let response = db.get_response(&request.id).await.map_err(|e| {
+            mockforge_core::Error::config(format!("capture response lookup failed: {e}"))
+        })?;
+        exchanges.push(mockforge_recorder::models::RecordedExchange { request, response });
+    }
+    Ok(exchanges)
+}
 
 fn strip_query(path: &str) -> String {
     path.split('?').next().unwrap_or(path).to_string()

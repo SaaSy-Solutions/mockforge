@@ -539,10 +539,30 @@ longer match how clients actually call them.
 mockforge verify-mocks --spec openapi.json --capture-db recorder.sqlite
 ```
 
+To compare the OpenAPI definition used to generate an existing mock against
+its current source specification, use `--mock-spec`. Both inputs can be supplied
+to check definitions and captured traffic together:
+
+```bash
+mockforge verify-mocks --spec upstream-current.yaml --mock-spec mock-generated-from.yaml \
+  --fail-on-drift --output fidelity.json
+```
+
+The JSON report's `definition.routes` includes every method/path with a
+`verified` or `drift-detected` status. Its `change` is `added`, `removed`,
+`changed`, or `unchanged`, from the mock to the source. Each delta includes a
+JSON-pointer `location` and the corresponding `mock` and `source` values.
+Changes to nested schema types, properties, required fields, constraints,
+parameters, request bodies and responses are reported. Local references are
+resolved, including recursive schemas. Unresolved/external references and
+excessive expansion fail explicitly. Documentation text and the ordering of
+required fields, enum values and parameters do not count as drift.
+
 #### Options
 
 - `--spec <path>` (required): OpenAPI spec the mocks were generated from (3.x natively; Swagger 2.0 is up-converted automatically).
-- `--capture-db <path>` (required): recorder SQLite database holding captured traffic (what `mockforge serve --recorder` writes; the default path is `./mockforge-recordings.db`).
+- `--capture-db <path>`: recorder SQLite database holding captured traffic (what `mockforge serve --recorder` writes; the default path is `./mockforge-recordings.db`). Required unless `--mock-spec` is supplied.
+- `--mock-spec <path>`: OpenAPI definition used by the mock, compared against the current source in `--spec`. Required unless `--capture-db` is supplied. May be combined with captured traffic.
 - `--limit <n>`: maximum recent HTTP exchanges to evaluate, newest first (positive integer; default `500`). Other protocols do not consume this limit.
 - `--fail-on-drift`: exit with code 1 when any drift is found — use as a CI gate.
 - `--output <path>`: write the structured drift report as JSON.
@@ -608,6 +628,8 @@ existing one cannot be loaded, and then `http`, `admin` and `server` are null.
 breaks readers raises `schema_version`.
 
 Capture databases are opened read-only and must already exist. An empty HTTP capture is not drift: the command reports that no traffic was recorded and exits successfully, and with `--record` it stores a `no_traffic` verification. Unknown endpoints, missing responses, undeclared statuses and JSON-schema violations count as drift. Exact status declarations take precedence over status ranges and the default response; local response references are resolved before schema validation.
+
+Capture databases are opened read-only and must already exist. Empty HTTP captures fail rather than report a passing check. Unknown endpoints, missing responses, undeclared statuses and JSON-schema violations count as drift. Exact status declarations take precedence over status ranges and the default response; local response references are resolved before schema validation.
 
 ### `sync` - Workspace Synchronization Daemon
 

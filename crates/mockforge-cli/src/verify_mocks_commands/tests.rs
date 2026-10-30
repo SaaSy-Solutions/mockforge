@@ -81,9 +81,25 @@ fn limit_rejects_zero_and_negative_values() {
 }
 
 #[test]
+fn requires_evidence_and_accepts_definition_capture_or_both() {
+    use clap::Args;
+    let command = || VerifyMocksArgs::augment_args(clap::Command::new("verify"));
+    assert!(command().try_get_matches_from(["verify", "--spec", "source.json"]).is_err());
+    for flags in [
+        vec!["--mock-spec", "mock.json"],
+        vec!["--capture-db", "capture.sqlite"],
+        vec!["--mock-spec", "mock.json", "--capture-db", "capture.sqlite"],
+    ] {
+        let mut args = vec!["verify", "--spec", "source.json"];
+        args.extend(flags);
+        assert!(command().try_get_matches_from(args).is_ok());
+    }
+}
+
+#[test]
 fn empty_capture_records_no_traffic_verification() {
     let report = empty_capture_report(std::path::Path::new("api.json"));
-    let record = verification_record(&report, std::path::Path::new("record.sqlite"));
+    let record = verification_record(&report, Some(std::path::Path::new("record.sqlite")));
     assert_eq!(record.outcome, crate::status_commands::VerificationOutcome::NoTraffic);
     assert_eq!(record.exchanges_checked, 0);
     assert!(record.findings.is_empty());
@@ -100,7 +116,8 @@ async fn empty_capture_succeeds_even_with_fail_on_drift() {
     drop(mockforge_recorder::RecorderDatabase::new(&capture_db).await.unwrap());
     let args = VerifyMocksArgs {
         spec,
-        capture_db,
+        capture_db: Some(capture_db),
+        mock_spec: None,
         limit: 500,
         fail_on_drift: true,
         output: None,
