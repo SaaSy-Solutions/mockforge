@@ -13,8 +13,6 @@
 ### Changed
 
 - **[DevX]** `bench-chunked` labels each `--spec` operation's `RPS (started)` and `RPS (overall)` lines `(this operation only)`, so they are not read as the rate for the whole pass. The multi-target summary now prints `load_window=` and `elapsed=` next to `start_rps` and `rps`, and a single `--target` run with `--spec` prints the same figures on a `Pass summary (all operations):` line. The campaign banner says that `--repeat-until` is checked before each pass, so a running pass finishes. (#79)
-### Changed
-
 - **[UI]** Marketplace navigation and hosted workspace/token controls use the shared Tailwind/CVA controls and Lucide icons instead of MUI compatibility components. Marketplace routes expose native links and current-page state, workspace selection keeps explicit assignment, and control-token guidance covers management requests. (#722)
 
 ### Fixed
