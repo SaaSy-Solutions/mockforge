@@ -1,0 +1,14 @@
+[package]
+name = "mockforge-sigv4a-sdk-regression"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[workspace]
+
+[dependencies]
+aws-sdk-s3 = { version = "=1.124.0", default-features = false, features = ["sigv4a", "http-1x", "default-https-client", "rt-tokio"] }
+tokio = { version = "1", features = ["macros", "rt"] }
+
+[patch.crates-io]
+aws-sigv4 = { path = "../../../vendor/aws-sigv4" }
