@@ -34,6 +34,10 @@ use assembly::{manifest_dir, production_source, read};
 use discovery::{concrete, control_mounts, join, routes_in};
 use sources::router_fn_body;
 
+/// Upper bound for one probe, so a handler that never answers fails the
+/// test with its route instead of stalling the CI job until it times out.
+const RESPONSE_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
 const TOKEN: &str = "mfm_0123456789abcdef0123456789abcdef0123456789abcdef";
 
 async fn data_port_app() -> Router {
@@ -81,9 +85,31 @@ async fn send(
         req = req.header("content-type", "application/json");
         Body::from("{}")
     };
-    let response = app.clone().oneshot(req.body(body).unwrap()).await.unwrap();
+    let response =
+        tokio::time::timeout(RESPONSE_TIMEOUT, app.clone().oneshot(req.body(body).unwrap()))
+            .await
+            .unwrap_or_else(|_| {
+                panic!("{method} {path} did not answer within {RESPONSE_TIMEOUT:?}")
+            })
+            .unwrap();
     let status = response.status().as_u16();
-    let bytes = axum::body::to_bytes(response.into_body(), 1 << 20).await.unwrap_or_default();
+    // Event streams (for example the MQTT message stream) never end; the
+    // status is all the probe needs, and reading the body would hang.
+    let streaming = response
+        .headers()
+        .get("content-type")
+        .and_then(|v| v.to_str().ok())
+        .is_some_and(|v| v.starts_with("text/event-stream"));
+    if streaming {
+        return (status, "<event stream>".to_string());
+    }
+    let bytes =
+        tokio::time::timeout(RESPONSE_TIMEOUT, axum::body::to_bytes(response.into_body(), 1 << 20))
+            .await
+            .unwrap_or_else(|_| {
+                panic!("{method} {path} body did not finish within {RESPONSE_TIMEOUT:?}")
+            })
+            .unwrap_or_default();
     (status, String::from_utf8_lossy(&bytes).into_owned())
 }
 
