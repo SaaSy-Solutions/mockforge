@@ -62,6 +62,7 @@ mod shutdown;
 #[allow(dead_code)]
 mod smtp_commands;
 mod snapshot_commands;
+mod status_commands;
 #[allow(dead_code)]
 mod template_commands;
 #[allow(dead_code)]
@@ -1142,6 +1143,19 @@ enum Commands {
     #[cfg(feature = "recorder")]
     #[command(verbatim_doc_comment)]
     VerifyMocks(verify_mocks_commands::VerifyMocksArgs),
+
+    /// Show a project's MockForge state without changing anything
+    ///
+    /// Discovers the configuration file as `serve` does, then reports the
+    /// HTTP port and spec it declares, whether a server answers on that
+    /// port, and the last `verify-mocks --record` result. `--format json`
+    /// prints one versioned document for tools.
+    ///
+    /// Examples:
+    ///   mockforge status
+    ///   mockforge status --dir ./services/api --format json
+    #[command(verbatim_doc_comment)]
+    Status(status_commands::StatusArgs),
 
     /// API governance and safety features
     ///
@@ -2861,6 +2875,7 @@ fn cli_command_name(cmd: &Commands) -> &'static str {
         Commands::Schema { .. } => "schema",
         Commands::DevSetup { .. } => "dev-setup",
         Commands::Config { .. } => "config",
+        Commands::Status(_) => "status",
         _ => "other",
     }
 }
@@ -2884,7 +2899,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // corrupts the protocol stream. Skip logging init entirely for this
     // subcommand so the stream carries JSON-RPC frames only.
     let is_mcp = matches!(cli.command, Commands::Mcp);
-    if !is_mcp {
+    // `status --format json` prints one JSON document on stdout, nothing else.
+    let quiet = is_mcp
+        || matches!(&cli.command, Commands::Status(args) if args.format == status_commands::StatusFormat::Json);
+    if !quiet {
         let initial_logging_config = mockforge_observability::LoggingConfig {
             level: cli.log_level.clone(),
             json_format: false, // Will be overridden by config file if present
@@ -3271,6 +3289,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
 
         Commands::Mcp => {
             mcp_server::run().await?;
+        }
+        Commands::Status(args) => {
+            status_commands::handle_status_command(args).await?;
         }
 
         Commands::ContractDiff { diff_command } => {
