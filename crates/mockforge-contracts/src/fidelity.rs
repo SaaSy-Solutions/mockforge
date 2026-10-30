@@ -59,8 +59,18 @@ pub struct FidelityReport {
 /// Local references are resolved, including recursive schemas; unsupported or
 /// missing references and excessive expansion return an error, never a pass.
 pub fn compare_mock_spec(mock: &Value, source: &Value) -> Result<FidelityReport, String> {
-    let mock_routes = operations(mock)?;
-    let source_routes = operations(source)?;
+    compare_mock_spec_with_budget(mock, source, usize::MAX)
+}
+
+/// Compare with a per-document expansion byte budget for interactive consumers.
+/// Exceeding the budget returns an error instead of a partial fidelity report.
+pub fn compare_mock_spec_with_budget(
+    mock: &Value,
+    source: &Value,
+    max_bytes: usize,
+) -> Result<FidelityReport, String> {
+    let mock_routes = operations(mock, max_bytes)?;
+    let source_routes = operations(source, max_bytes)?;
     if mock_routes.is_empty() && source_routes.is_empty() {
         return Err("neither definition contains an HTTP operation to compare".into());
     }

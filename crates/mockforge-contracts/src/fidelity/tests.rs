@@ -149,3 +149,10 @@ fn inherited_security_compares_the_referenced_scheme_and_scope_sets() {
     source["components"]["securitySchemes"].as_object_mut().unwrap().clear();
     assert!(compare_mock_spec(&mock, &source).is_err());
 }
+
+#[test]
+fn interactive_expansion_budget_rejects_large_values_without_restricting_cli_comparison() {
+    let document = spec(json!({"type":"string","default":"large".repeat(500)}));
+    assert!(compare_mock_spec_with_budget(&document, &document, 1024).is_err());
+    assert_eq!(compare_mock_spec(&document, &document).unwrap().routes_with_drift, 0);
+}
