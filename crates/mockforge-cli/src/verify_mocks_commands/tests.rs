@@ -95,3 +95,33 @@ fn requires_evidence_and_accepts_definition_capture_or_both() {
         assert!(command().try_get_matches_from(args).is_ok());
     }
 }
+
+#[test]
+fn empty_capture_records_no_traffic_verification() {
+    let report = empty_capture_report(std::path::Path::new("api.json"));
+    let record = verification_record(&report, Some(std::path::Path::new("record.sqlite")));
+    assert_eq!(record.outcome, crate::status_commands::VerificationOutcome::NoTraffic);
+    assert_eq!(record.exchanges_checked, 0);
+    assert!(record.findings.is_empty());
+    assert_eq!(record.spec, "api.json");
+}
+
+#[tokio::test]
+async fn empty_capture_succeeds_even_with_fail_on_drift() {
+    let dir = tempfile::tempdir().unwrap();
+    let spec = dir.path().join("api.json");
+    std::fs::write(&spec, r#"{"openapi":"3.0.0","info":{"title":"t","version":"1"},"paths":{}}"#)
+        .unwrap();
+    let capture_db = dir.path().join("record.sqlite");
+    drop(mockforge_recorder::RecorderDatabase::new(&capture_db).await.unwrap());
+    let args = VerifyMocksArgs {
+        spec,
+        capture_db: Some(capture_db),
+        mock_spec: None,
+        limit: 500,
+        fail_on_drift: true,
+        output: None,
+        record: false,
+    };
+    handle_verify_mocks_command(args).await.unwrap();
+}
