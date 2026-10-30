@@ -6,11 +6,9 @@ traffic test can establish. Advisory references were checked on **2026-10-24**.
 
 ## Save every comment and search offline
 
-From a checkout of the branch containing this guide, with Python 3.11+ and
-[GitHub CLI](https://cli.github.com/) installed:
+From a checkout of `main`, with Python 3.11+:
 
 ```bash
-gh auth status
 python3 scripts/export_github_issue.py --repo SaaSy-Solutions/mockforge \
   --issue 79 --output-dir issue-79-export
 ```
@@ -39,8 +37,12 @@ count fails instead of silently creating a partial discussion. The export is a
 point-in-time copy, not an atomic GitHub backup: later edits and deletions are
 not recoverable. Reactions, timeline events, linked PR discussions, and binary
 attachment contents are outside the export; their original URLs remain in the
-comment text. A public repository can still require `gh` authentication for API
-access or rate limits. Keep exports of private repositories private.
+comment text. If `gh` is installed, the exporter uses its authentication. Otherwise,
+it reads the GitHub REST API directly, with no extra Python packages. Public
+issues need no token unless GitHub rate-limits the request. Set `GH_TOKEN` or
+`GITHUB_TOKEN` for authenticated REST access, or install
+[GitHub CLI](https://cli.github.com/) and run `gh auth login`. Keep exports of
+private repositories private.
 
 ## CVE reference and required application behavior
 

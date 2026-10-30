@@ -143,6 +143,14 @@ def validate(profile):
         raise ProfileError("route must be an absolute path with no query or '..'")
     if ".." in profile["route"]:
         raise ProfileError("route must not contain '..'")
+    if (
+        profile["title"] == "One-line description of the guarded weakness"
+        or "https://vendor.example/advisory" in refs
+        or profile["route"] == "/the/guarded/route"
+    ):
+        raise ProfileError(
+            "unfinished template: replace title, references, route and signature from the advisory; new does not simulate a CVE"
+        )
     controls = profile["controls"]
     if not isinstance(controls, list) or not 1 <= len(controls) <= MAX_CONTROLS:
         raise ProfileError(f"controls must list 1..{MAX_CONTROLS} benign cases")
