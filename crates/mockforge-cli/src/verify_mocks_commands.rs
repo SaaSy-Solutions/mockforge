@@ -48,6 +48,12 @@ pub(crate) struct VerifyMocksArgs {
     /// Write the structured drift report as JSON here.
     #[arg(short, long)]
     pub output: Option<PathBuf>,
+
+    /// Keep this run's result as the project's latest verification
+    /// (`.mockforge/reports/verify-mocks.json` beside the project's config
+    /// file), where `mockforge status` reports it.
+    #[arg(long)]
+    pub record: bool,
 }
 
 /// One aggregated drift finding for an endpoint.
@@ -77,6 +83,7 @@ pub(crate) async fn handle_verify_mocks_command(
         limit,
         fail_on_drift,
         output,
+        record,
     } = args;
 
     // 1. Load + parse the spec (Swagger 2.0 auto-up-converted).
@@ -115,6 +122,16 @@ pub(crate) async fn handle_verify_mocks_command(
             "No recorded traffic in {} — record some real traffic first (`mockforge record`).",
             capture_db.display()
         );
+        if record {
+            let empty = DriftReport {
+                spec: spec.display().to_string(),
+                exchanges_checked: 0,
+                endpoints_with_drift: 0,
+                unmatched_real_paths: 0,
+                findings: Vec::new(),
+            };
+            record_result(&empty, &capture_db).await?;
+        }
         return Ok(());
     }
 
@@ -210,6 +227,9 @@ pub(crate) async fn handle_verify_mocks_command(
             .map_err(|e| mockforge_core::Error::config(format!("cannot write {out:?}: {e}")))?;
         println!("structured report written to {}", out.display());
     }
+    if record {
+        record_result(&report, &capture_db).await?;
+    }
 
     if fail_on_drift && !report.findings.is_empty() {
         eprintln!(
@@ -218,6 +238,63 @@ pub(crate) async fn handle_verify_mocks_command(
         );
         std::process::exit(1);
     }
+    Ok(())
+}
+
+/// Keep `report` as the project's latest verification for `mockforge status`.
+async fn record_result(
+    report: &DriftReport,
+    capture_db: &std::path::Path,
+) -> mockforge_core::Result<()> {
+    use crate::status_commands::{
+        project_root, VerificationFinding, VerificationOutcome, VerificationRecord,
+        VERIFICATION_FILE, VERIFICATION_SCHEMA_VERSION,
+    };
+    let cwd = std::env::current_dir().map_err(|e| {
+        mockforge_core::Error::config(format!("cannot read the current directory: {e}"))
+    })?;
+    let path = project_root(&cwd).await.join(VERIFICATION_FILE);
+    let outcome = if report.exchanges_checked == 0 {
+        VerificationOutcome::NoTraffic
+    } else if report.findings.is_empty() {
+        VerificationOutcome::Faithful
+    } else {
+        VerificationOutcome::Drift
+    };
+    let value = VerificationRecord {
+        schema_version: VERIFICATION_SCHEMA_VERSION,
+        recorded_at: chrono::Utc::now().to_rfc3339(),
+        mockforge_version: env!("CARGO_PKG_VERSION").to_string(),
+        spec: report.spec.clone(),
+        capture_db: capture_db.display().to_string(),
+        outcome,
+        exchanges_checked: report.exchanges_checked,
+        endpoints_with_drift: report.endpoints_with_drift,
+        unmatched_real_paths: report.unmatched_real_paths,
+        findings: report
+            .findings
+            .iter()
+            .map(|f| VerificationFinding {
+                endpoint: f.endpoint.clone(),
+                kind: f.kind.clone(),
+                detail: f.detail.clone(),
+            })
+            .collect(),
+    };
+    let json = serde_json::to_string_pretty(&value)
+        .map_err(|e| mockforge_core::Error::config(e.to_string()))?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| {
+            mockforge_core::Error::config(format!("cannot create {}: {e}", parent.display()))
+        })?;
+    }
+    let partial = path.with_extension("json.partial");
+    std::fs::write(&partial, json)
+        .and_then(|()| std::fs::rename(&partial, &path))
+        .map_err(|e| {
+            mockforge_core::Error::config(format!("cannot write {}: {e}", path.display()))
+        })?;
+    println!("verification recorded in {}", path.display());
     Ok(())
 }
 
