@@ -59,6 +59,12 @@ pub(crate) struct VerifyMocksArgs {
     /// Write the structured drift report as JSON here.
     #[arg(short, long)]
     pub output: Option<PathBuf>,
+
+    /// Keep this run's result as the project's latest verification
+    /// (`.mockforge/reports/verify-mocks.json` beside the project's config
+    /// file), where `mockforge status` reports it.
+    #[arg(long)]
+    pub record: bool,
 }
 
 /// One aggregated drift finding for an endpoint.
@@ -94,6 +100,7 @@ pub(crate) async fn handle_verify_mocks_command(
         limit,
         fail_on_drift,
         output,
+        record,
     } = args;
 
     let openapi = load_fidelity_spec(&spec)?;
@@ -111,6 +118,23 @@ pub(crate) async fn handle_verify_mocks_command(
         .transpose()?;
     let registry = OpenApiRouteRegistry::new_for_contract_verification(openapi);
     let exchanges = load_fidelity_capture(capture_db.as_ref(), limit).await?;
+
+    // An empty capture is not drift: report it, and with `--record` store a
+    // `no-traffic` verification so status surfaces it instead of a pass. A
+    // definition comparison (`--mock-spec`) or fixture check (`--fixtures`)
+    // still runs and is reported below.
+    if let (Some(capture_db), true) = (capture_db.as_ref(), exchanges.is_empty()) {
+        println!(
+            "No recorded traffic in {} — record some real traffic first (`mockforge record`).",
+            capture_db.display()
+        );
+        if definition.is_none() && fixtures.is_none() {
+            if record {
+                record_result(&empty_capture_report(&spec), Some(capture_db.as_path())).await?;
+            }
+            return Ok(());
+        }
+    }
     let response_spec = serde_json::to_value(&registry.spec().spec).map_err(|e| {
         mockforge_core::Error::config(format!("cannot inspect response contract: {e}"))
     })?;
@@ -264,6 +288,9 @@ pub(crate) async fn handle_verify_mocks_command(
             .map_err(|e| mockforge_core::Error::config(format!("cannot write {out:?}: {e}")))?;
         println!("structured report written to {}", out.display());
     }
+    if record {
+        record_result(&report, capture_db.as_deref()).await?;
+    }
 
     if fail_on_drift && !report.findings.is_empty() {
         eprintln!(
@@ -272,6 +299,83 @@ pub(crate) async fn handle_verify_mocks_command(
         );
         std::process::exit(1);
     }
+    Ok(())
+}
+
+/// Keep `report` as the project's latest verification for `mockforge status`.
+fn empty_capture_report(spec: &std::path::Path) -> DriftReport {
+    DriftReport {
+        spec: spec.display().to_string(),
+        definition: None,
+        fixtures: None,
+        exchanges_checked: 0,
+        endpoints_with_drift: 0,
+        unmatched_real_paths: 0,
+        findings: Vec::new(),
+    }
+}
+
+fn verification_record(
+    report: &DriftReport,
+    capture_db: Option<&std::path::Path>,
+) -> crate::status_commands::VerificationRecord {
+    use crate::status_commands::{
+        VerificationFinding, VerificationOutcome, VerificationRecord, VERIFICATION_SCHEMA_VERSION,
+    };
+    // Definition drift found without traffic is still drift.
+    let outcome = if !report.findings.is_empty() {
+        VerificationOutcome::Drift
+    } else if report.exchanges_checked == 0 {
+        VerificationOutcome::NoTraffic
+    } else {
+        VerificationOutcome::Faithful
+    };
+    VerificationRecord {
+        schema_version: VERIFICATION_SCHEMA_VERSION,
+        recorded_at: chrono::Utc::now().to_rfc3339(),
+        mockforge_version: env!("CARGO_PKG_VERSION").to_string(),
+        spec: report.spec.clone(),
+        capture_db: capture_db.map(|p| p.display().to_string()).unwrap_or_default(),
+        outcome,
+        exchanges_checked: report.exchanges_checked,
+        endpoints_with_drift: report.endpoints_with_drift,
+        unmatched_real_paths: report.unmatched_real_paths,
+        findings: report
+            .findings
+            .iter()
+            .map(|f| VerificationFinding {
+                endpoint: f.endpoint.clone(),
+                kind: f.kind.clone(),
+                detail: f.detail.clone(),
+            })
+            .collect(),
+    }
+}
+
+async fn record_result(
+    report: &DriftReport,
+    capture_db: Option<&std::path::Path>,
+) -> mockforge_core::Result<()> {
+    use crate::status_commands::{project_root, VERIFICATION_FILE};
+    let cwd = std::env::current_dir().map_err(|e| {
+        mockforge_core::Error::config(format!("cannot read the current directory: {e}"))
+    })?;
+    let path = project_root(&cwd).await.join(VERIFICATION_FILE);
+    let value = verification_record(report, capture_db);
+    let json = serde_json::to_string_pretty(&value)
+        .map_err(|e| mockforge_core::Error::config(e.to_string()))?;
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| {
+            mockforge_core::Error::config(format!("cannot create {}: {e}", parent.display()))
+        })?;
+    }
+    let partial = path.with_extension("json.partial");
+    std::fs::write(&partial, json)
+        .and_then(|()| std::fs::rename(&partial, &path))
+        .map_err(|e| {
+            mockforge_core::Error::config(format!("cannot write {}: {e}", path.display()))
+        })?;
+    println!("verification recorded in {}", path.display());
     Ok(())
 }
 
@@ -314,11 +418,6 @@ async fn load_fidelity_capture(
             mockforge_core::Error::config(format!("capture response lookup failed: {e}"))
         })?;
         exchanges.push(mockforge_recorder::models::RecordedExchange { request, response });
-    }
-    if exchanges.is_empty() {
-        return Err(mockforge_core::Error::config(
-            "No recorded HTTP traffic to validate; capture real traffic first".to_string(),
-        ));
     }
     Ok(exchanges)
 }
