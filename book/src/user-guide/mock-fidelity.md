@@ -67,6 +67,13 @@ standard and detailed conformance errors. For example, a captured `x-trace`
 satisfies a declared `X-Trace`. Required presence and value constraints still
 apply. Query and path parameter names remain case-sensitive.
 
+Parameter `schema` references resolve against local components in normal and
+detailed checks, including aliases, nested objects, arrays and deep-object
+queries. Invalid referenced values produce request drift. Missing, cyclic or
+external parameter schema references fail explicitly; parameter validation does
+not fetch network resources or external files. Integer wire values retain
+64-bit precision.
+
 You can also validate a recorder database containing real upstream traffic:
 
 ```bash
