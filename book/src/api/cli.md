@@ -569,6 +569,68 @@ Supply at least one of `--capture-db`, `--mock-spec` or `--fixtures`. They can b
 - `--limit <n>`: maximum recent HTTP exchanges to evaluate, newest first (positive integer; default `500`). Other protocols do not consume this limit.
 - `--fail-on-drift`: exit with code 1 when any drift is found — use as a CI gate.
 - `--output <path>`: write the structured drift report as JSON.
+- `--record`: keep this run's result as the project's latest verification, in
+  `.mockforge/reports/verify-mocks.json` beside the project's configuration
+  file (or in the current directory without one). `mockforge status` reports
+  it. A run with no recorded traffic is kept with outcome `no_traffic`.
+
+### `status` - Project State, Read Only
+
+Report a project's MockForge state without starting or writing anything:
+which configuration file `serve` would use (discovered from the directory
+exactly as `serve` does), the HTTP port and OpenAPI spec it declares, whether
+a MockForge server answers on that port, and the last `verify-mocks --record`
+result.
+
+```bash
+mockforge status
+mockforge status --dir ./services/api --format json
+```
+
+#### Options
+
+- `--dir <path>`: the project directory (default: the current directory).
+- `--format text|json`: `json` prints one document and nothing else on stdout.
+- `--timeout-ms <n>`: how long to wait for the server (default `1000`).
+
+The server probe asks the management API (`GET /__mockforge/api/health`), which
+a spec's own `/health` route cannot shadow, then reads uptime from
+`/__mockforge/api/stats` and the version from `/__mockforge/api/config`. The
+probe uses the declared port; a server started with `--http-port` elsewhere is
+not found. `0.0.0.0` and `::` are probed on `127.0.0.1`.
+
+The JSON document (`schema_version` 1):
+
+```json
+{
+  "schema_version": 1,
+  "version": "0.3.237",
+  "dir": "/abs/project",
+  "config": { "path": "/abs/project/mockforge.yaml", "error": null },
+  "http": { "enabled": true, "host": "0.0.0.0", "port": 3000, "openapi_spec": "./examples/openapi.json" },
+  "admin": { "enabled": true, "port": 9080 },
+  "server": {
+    "url": "http://127.0.0.1:3000/__mockforge/api/health",
+    "reachable": true, "status": "healthy", "version": "0.3.237",
+    "uptime_seconds": 12, "error": null
+  },
+  "verification": {
+    "schema_version": 1, "recorded_at": "2026-10-26T10:30:43Z",
+    "mockforge_version": "0.3.237", "spec": "examples/openapi.json",
+    "capture_db": "captures.db", "outcome": "faithful",
+    "exchanges_checked": 8, "endpoints_with_drift": 0,
+    "unmatched_real_paths": 4, "findings": []
+  }
+}
+```
+
+`config` is null when no configuration file exists; `config.error` names why an
+existing one cannot be loaded, and then `http`, `admin` and `server` are null.
+`server` is null when HTTP is disabled. `verification.outcome` is `faithful`,
+`drift` or `no_traffic`. Fields may be added within schema 1; a change that
+breaks readers raises `schema_version`.
+
+Capture databases are opened read-only and must already exist. An empty HTTP capture is not drift: the command reports that no traffic was recorded and exits successfully, and with `--record` it stores a `no_traffic` verification. Unknown endpoints, missing responses, undeclared statuses and JSON-schema violations count as drift. Exact status declarations take precedence over status ranges and the default response; local response references are resolved before schema validation.
 
 Capture databases are opened read-only and must already exist. Empty HTTP captures fail rather than report a passing check. Unknown endpoints, missing responses, undeclared statuses and JSON-schema violations count as drift. Exact status declarations take precedence over status ranges and the default response; local response references are resolved before schema validation.
 
