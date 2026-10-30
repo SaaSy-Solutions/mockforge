@@ -19,7 +19,7 @@ categories.workspace = true
 
 [dependencies]
 # Orchestration crate (for analytics types used by recommendations/advanced_analytics)
-mockforge-chaos-orchestration = { version = "0.3.236", path = "../mockforge-chaos-orchestration" }
+mockforge-chaos-orchestration = { version = "0.3.237", path = "../mockforge-chaos-orchestration" }
 
 # Async runtime
 tokio = { workspace = true }

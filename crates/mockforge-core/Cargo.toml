@@ -87,8 +87,8 @@ tokio-rustls = "0.26"
 rustls = { version = "0.23", features = ["ring"] }
 rustls-pemfile = "2"
 webpki-roots = "0.26"
-mockforge-data = { version = "0.3.236", path = "../mockforge-data", optional = true }
-mockforge-openapi = { version = "0.3.236", path = "../mockforge-openapi" }
+mockforge-data = { version = "0.3.237", path = "../mockforge-data", optional = true }
+mockforge-openapi = { version = "0.3.237", path = "../mockforge-openapi" }
 
 [dev-dependencies]
 tempfile = { workspace = true }
@@ -96,7 +96,7 @@ tokio = { workspace = true, features = ["macros", "test-util"] }
 tower = { workspace = true }
 criterion = { workspace = true }
 proptest = "1.11.0"
-mockforge-template-expansion = { version = "0.3.236", path = "../mockforge-template-expansion" }
+mockforge-template-expansion = { version = "0.3.237", path = "../mockforge-template-expansion" }
 rcgen = "0.13"
 # Note: mockforge-cli dev-dependency removed to avoid circular dependency during publishing
 

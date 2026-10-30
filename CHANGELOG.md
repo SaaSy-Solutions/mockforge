@@ -1,5 +1,7 @@
 ## [Unreleased]
 
+## [0.3.237] - 2026-10-30
+
 ### Added
 
 - **[DevX]** `mockforge tools export --output-dir <new-directory>` exports the discussion exporter, CVE tools, Python modules, and Next.js example bundled in the crates.io CLI. A source checkout is no longer required. (#79)
