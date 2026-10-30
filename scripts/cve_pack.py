@@ -14,6 +14,7 @@ that a target is actually vulnerable or patched (that stays unverified).
 """
 
 import argparse
+import http.client
 import json
 import uuid
 from functools import partial
@@ -116,6 +117,95 @@ def _run(args):
     return 0 if all(r["rule_behavior"] == "pass" for r in report["results"]) else 1
 
 
+# Access-denied codes a WAF/CDN returns to block a request (vs 404/400/5xx,
+# which are ambiguous: a missing route or a generic error, not a rule block).
+DENY_CODES = {401, 403, 406, 429, 451, 501}
+
+
+def _send(url, path, headers, timeout):
+    try:
+        return request(url, path, headers, timeout), None
+    except (OSError, http.client.HTTPException) as exc:
+        return None, type(exc).__name__
+
+
+def probe(profile, url, timeout=5):
+    """Send the signature + controls straight at a site and judge the signature
+    RELATIVE to the benign controls. Use when you do NOT control the origin
+    (a CDN/WAF in front of a third party), so recorder correlation is
+    impossible: this reports what the front end did, not origin reachability.
+
+    'blocked' means the signature got an access-denied status while a benign
+    control was allowed. A 404/400/5xx is 'inconclusive', not a block, so a
+    missing route is never mistaken for a rule firing."""
+    results = []
+    control_ok = False
+    for cid, path, headers, expect, kind in cases(profile):
+        if kind != "control":
+            continue
+        status, error = _send(url, path, headers, timeout)
+        allowed = status is not None and status < 400
+        control_ok = control_ok or allowed
+        results.append(
+            {
+                "id": cid,
+                "kind": "control",
+                "status": status,
+                "front_end": "allowed" if allowed else "unexpected",
+                "reason": error or f"front end returned {status}",
+            }
+        )
+    sid, spath, sheaders, _, _ = next(c for c in cases(profile) if c[4] == "signature")
+    status, error = _send(url, spath, sheaders, timeout)
+    if error:
+        verdict, reason = "inconclusive", error
+    elif not control_ok:
+        verdict, reason = (
+            "inconclusive",
+            "no benign control was allowed; cannot baseline",
+        )
+    elif status in DENY_CODES:
+        verdict, reason = "blocked", f"signature denied ({status}) while benign allowed"
+    elif status < 400:
+        verdict, reason = "not-blocked", f"signature passed ({status})"
+    else:
+        verdict, reason = "inconclusive", f"ambiguous status {status} (not a deny code)"
+    results.insert(
+        0,
+        {
+            "id": sid,
+            "kind": "signature",
+            "status": status,
+            "front_end": verdict,
+            "reason": reason,
+        },
+    )
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "cve": profile["cve"],
+        "target": url.geturl(),
+        "mode": "probe",
+        "scope": "front-end response only; origin reachability not correlated, no patch proof",
+        "results": results,
+    }
+
+
+def _probe(args):
+    profile = load(args.profile)
+    url = target_url(args.target, args.allow_external_target)
+    if not 0 < args.timeout <= 10:
+        raise ValueError("timeout must be >0 and <=10")
+    report = probe(profile, url, args.timeout)
+    Path(args.report).write_text(json.dumps(report, indent=2) + "\n")
+    for r in report["results"]:
+        print(f"{r['id']} [{r['kind']}]: {r['front_end']} ({r['reason']})")
+    sig = next(r for r in report["results"] if r["kind"] == "signature")
+    controls_ok = all(
+        r["front_end"] == "allowed" for r in report["results"] if r["kind"] == "control"
+    )
+    return 0 if sig["front_end"] == "blocked" and controls_ok else 1
+
+
 def _server(args):
     # Pass the raw profile; to_openapi validates it (load() would normalize first).
     print(json.dumps(to_openapi(json.loads(Path(args.profile).read_text())), indent=2))
@@ -141,6 +231,17 @@ def cve_ok(value):
     return bool(CVE_ID.match(value))
 
 
+def _tips(args):
+    # Lazy import so the core run/new/server path needs no feed access.
+    from cve_pack_enrich import tips
+    from cve_pack_feeds import Fetcher
+
+    if not cve_ok(args.cve):
+        raise ValueError("cve must look like CVE-YYYY-NNNN")
+    print(json.dumps(tips(args.cve, fetcher=Fetcher(timeout=args.timeout)), indent=2))
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -164,6 +265,25 @@ def main(argv=None):
     p_run.add_argument("--timeout", type=float, default=2)
     p_run.add_argument("--observation-window", type=float, default=0.1)
     p_run.set_defaults(func=_run)
+
+    p_probe = sub.add_parser(
+        "probe",
+        help="send the signature at a site you do NOT control (CDN/WAF) and "
+        "report the front end's response; no origin correlation",
+    )
+    p_probe.add_argument("profile")
+    p_probe.add_argument("--target", required=True, help="the site/CDN/WAF URL")
+    p_probe.add_argument("--report", required=True)
+    p_probe.add_argument("--allow-external-target", action="store_true")
+    p_probe.add_argument("--timeout", type=float, default=5)
+    p_probe.set_defaults(func=_probe)
+
+    p_tips = sub.add_parser(
+        "tips", help="print remediation tips for a CVE (upgrade target, urgency)"
+    )
+    p_tips.add_argument("cve")
+    p_tips.add_argument("--timeout", type=float, default=20)
+    p_tips.set_defaults(func=_tips)
 
     args = parser.parse_args(argv)
     try:
