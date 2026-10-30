@@ -4481,6 +4481,22 @@
      },
      "variadic": false
     },
+    "status": {
+     "aliases": {},
+     "flags": {
+      "--dir": 1,
+      "--format": 1,
+      "--help": 0,
+      "--log-level": 1,
+      "--timeout-ms": 1,
+      "-d": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {},
+     "variadic": false
+    },
     "suggest": {
      "aliases": {},
      "flags": {
