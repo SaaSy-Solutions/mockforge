@@ -1,0 +1,25 @@
+name: Issue reference tools
+
+on:
+  pull_request:
+    paths:
+      - 'scripts/export_github_issue.py'
+      - 'scripts/tests/test_export_github_issue.py'
+      - 'scripts/tests/test_cve_lab.py'
+      - 'examples/cve-lab/**'
+      - '.github/workflows/issue-reference.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline:
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - name: Export pagination, provenance and rendering regressions
+        run: python3 scripts/tests/test_export_github_issue.py
+      - name: Receiver fixture contract (live CLI test is opt-in locally)
+        run: python3 scripts/tests/test_cve_lab.py
