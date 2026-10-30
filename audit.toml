@@ -147,4 +147,56 @@ ignore = [
     # client) and async-nats 0.43 (registry-server). Remove once those move to
     # rustls-webpki 0.103.
     { id = "RUSTSEC-2026-0382", reason = "rustls-webpki 0.102.8 distrusted emSign intermediates; no patched 0.102.x, pulled by rumqttc 0.25.1 (latest) and async-nats 0.43; 0.103 copies are patched" },
+    # zstd / zstd-safe stream-reuse data leak and uninitialized-memory
+    # advisories (published 2026-10; fixed in zstd >=0.14.3 / zstd-safe
+    # >=8.2.0, which also moves zstd-sys to 2.1.2). The request/proxy path
+    # (async-compression in mockforge-proxy/http) is bumped to the patched
+    # zstd 0.14.3 / zstd-safe 8.2.0. The copies that remain are zstd 0.13.3 /
+    # zstd-safe 7.2.4, which have no in-line patch and are pinned by
+    # wasmtime 36.x's internal cache (the same pin as the wasmtime-36 group
+    # above, and not the request path) plus mockforge-kafka. Clears with the
+    # wasmtime major bump; a mockforge-kafka zstd 0.14 bump is a tracked
+    # follow-up.
+    { id = "RUSTSEC-2026-0391", reason = "zstd stream-reuse data leak — request-path copy bumped to zstd 0.14.3; remaining 0.13.3 is wasmtime 36.x cache + mockforge-kafka, no 0.13 patch; clears with the wasmtime major bump" },
+    { id = "RUSTSEC-2026-0398", reason = "zstd-safe Seekable::decompress OOB Vec length — request-path copy bumped to zstd-safe 8.2.0; remaining 7.2.4 is wasmtime 36.x cache + mockforge-kafka, no 7.x patch; clears with the wasmtime major bump" },
+    { id = "RUSTSEC-2026-0403", reason = "zstd-safe uninitialized memory on legacy-frame decompression failure — request-path copy bumped to zstd-safe 8.2.0; remaining 7.2.4 is wasmtime 36.x cache + mockforge-kafka, no 7.x patch; clears with the wasmtime major bump" },
+
+    # --- 2026-10-29 RustSec DB batch (fix/rustsec-audit-batch-20261029). Patch-
+    # bumped pulldown-cmark 0.13.5, libz-sys 1.1.31 and event-listener 5.4.2 to
+    # clear RUSTSEC-2026-0414/0418/0221; the rest below have no in-line fix
+    # (unmaintained, a major bump the dependent doesn't allow yet, or the
+    # wasmtime-36.x-pinned zstd-safe 7.2.4 copy).
+    { id = "RUSTSEC-2026-0395", reason = "zstd-safe use-after-free (CParameter::StableInBuffer) — only the wasmtime-36.x-pinned 7.2.4 copy; the request-path copy is 8.2.0; clears with the wasmtime major bump" },
+    { id = "RUSTSEC-2026-0396", reason = "zstd-safe Seekable NULL/OOB seek table — wasmtime-36.x-pinned 7.2.4 copy only; request path is 8.2.0; clears with the wasmtime major bump" },
+    { id = "RUSTSEC-2026-0397", reason = "zstd-safe OutBuffer::around_pos uninitialized memory — wasmtime-36.x-pinned 7.2.4 copy only; request path is 8.2.0" },
+    { id = "RUSTSEC-2026-0399", reason = "zstd-safe use-after-free via init_using_cdict — wasmtime-36.x-pinned 7.2.4 copy only; request path is 8.2.0" },
+    { id = "RUSTSEC-2026-0400", reason = "zstd-safe use-after-free of a dictionary after a one-shot call — wasmtime-36.x-pinned 7.2.4 copy only; request path is 8.2.0" },
+    { id = "RUSTSEC-2026-0401", reason = "zstd-safe OOB read in train_from_buffer on sample-size overflow — wasmtime-36.x-pinned 7.2.4 copy only; request path is 8.2.0" },
+    { id = "RUSTSEC-2026-0402", reason = "zstd-safe heap overflow in CCtx::try_clone (multithreaded) — wasmtime-36.x-pinned 7.2.4 copy only; request path is 8.2.0" },
+    { id = "RUSTSEC-2026-0404", reason = "zstd-safe double free in DCtx::try_clone — wasmtime-36.x-pinned 7.2.4 copy only; request path is 8.2.0" },
+    { id = "RUSTSEC-2026-0405", reason = "zstd-safe OOB read with out-of-range InBuffer::pos — wasmtime-36.x-pinned 7.2.4 copy only; request path is 8.2.0" },
+    { id = "RUSTSEC-2026-0406", reason = "zstd-safe use-after-free changing a multithreaded context — wasmtime-36.x-pinned 7.2.4 copy only; request path is 8.2.0" },
+    { id = "RUSTSEC-2024-0429", reason = "glib VariantStrIter Iterator unsoundness — fix is glib 0.20 (major); 0.18.5 is pinned transitively, no in-line patch" },
+    { id = "RUSTSEC-2026-0002", reason = "lru IterMut stacked-borrows violation — fixed 0.16.3 (the 0.16.4 copy is already past it); the remaining 0.12.5 copy has no 0.12 patch; transitive" },
+    { id = "RUSTSEC-2026-0253", reason = "lru LruCache::pop use-after-free — fix is lru 0.18.2 (major bump); the 0.12.5/0.16.4 copies are pinned transitively" },
+    { id = "RUSTSEC-2026-0008", reason = "git2 Buf deref UB — fix git2 0.20.4/0.21 (major); 0.19.0 pinned transitively" },
+    { id = "RUSTSEC-2026-0183", reason = "git2 Remote::list UB — fix git2 0.21 (major); 0.19.0 pinned transitively" },
+    { id = "RUSTSEC-2026-0184", reason = "git2 BlameHunk Signature UB — fix git2 0.21 (major); 0.19.0 pinned transitively" },
+    { id = "RUSTSEC-2026-0097", reason = "rand custom-logger unsoundness — only the rand 0.7.3 copy is affected and has no 0.7 patch; the 0.8/0.9/0.10 copies in the tree are already fixed; transitive" },
+    { id = "RUSTSEC-2021-0145", reason = "atty potential unaligned read (unmaintained) — transitive; no fix; low risk, clears when dependents drop atty" },
+    { id = "RUSTSEC-2024-0375", reason = "atty unmaintained — transitive; no fix" },
+    { id = "RUSTSEC-2024-0384", reason = "instant unmaintained — transitive (wasm time shim); no fix" },
+    { id = "RUSTSEC-2024-0436", reason = "paste unmaintained — build-time proc-macro, transitive; no fix" },
+    { id = "RUSTSEC-2024-0449", reason = "unsafe-libyaml unmaintained — transitive via serde_yaml; no fix" },
+    { id = "RUSTSEC-2025-0057", reason = "fxhash unmaintained — transitive; no fix" },
+    { id = "RUSTSEC-2025-0119", reason = "number_prefix unmaintained — transitive; no fix" },
+    { id = "RUSTSEC-2025-0123", reason = "opentelemetry-jaeger unmaintained — optional tracing export; no fix" },
+    { id = "RUSTSEC-2025-0134", reason = "rustls-pemfile unmaintained — transitive; no fix" },
+    { id = "RUSTSEC-2025-0141", reason = "bincode unmaintained — transitive; no fix" },
+    { id = "RUSTSEC-2026-0173", reason = "proc-macro-error2 unmaintained — build-time proc-macro, transitive; no fix" },
+    { id = "RUSTSEC-2026-0174", reason = "http-types Authorization/WwwAuthenticate ASCII-invariant — unmaintained, no fix; transitive, not on an untrusted-auth-parse path in mockforge" },
+    { id = "RUSTSEC-2026-0192", reason = "ttf-parser unmaintained — transitive (PDF/report fonts); no fix" },
+    { id = "RUSTSEC-2026-0370", reason = "zvariant unmaintained — transitive via zbus; no fix" },
+    { id = "RUSTSEC-2026-0371", reason = "zbus_names unmaintained — transitive via zbus; no fix" },
+    { id = "RUSTSEC-2026-0372", reason = "zvariant_derive unmaintained — transitive via zbus; no fix" },
 ]
