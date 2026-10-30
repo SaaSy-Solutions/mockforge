@@ -1,30 +1,9 @@
 //! Test execution suite executor (#4 / Phases 3-4).
 //!
-//! Handles `unit | integration | conformance | bench | owasp` kinds. The
-//! existing `mockforge-bench` and `mockforge-test` crates own the actual
+//! Handles `integration | conformance | bench | owasp | security | wafbench |
+//! crud_flow` kinds. The existing `mockforge-bench` and `mockforge-test` crates own the actual
 //! per-kind logic; this executor is the cloud worker that picks up the
 //! queued run and dispatches to those.
-//!
-//! ## Phase 2: synthetic mode
-//!
-//! Real per-kind dispatch (k6 / mockforge-bench / OWASP suite, etc.)
-//! lands incrementally. For now this executor runs in a *synthetic*
-//! mode: it streams a configurable number of fake "step_pass" events
-//! and returns `passed` with non-zero `runner_seconds`. That validates
-//! the full success-path lifecycle (queued → running → passed → meter
-//! incremented) end-to-end, which the previous stub did not — it
-//! reported `errored` and skipped the metering path.
-//!
-//! Synthetic mode is driven by the job's `payload`:
-//! - `payload.synthetic_steps` (u32, optional, default 3) — number of
-//!   step events to emit.
-//! - `payload.synthetic_step_ms` (u64, optional, default 100) — sleep
-//!   between steps. Mostly to make `runner_seconds` reflect realistic
-//!   walltime in tests.
-//!
-//! When a real test_suite config arrives (config.kind set, config.target
-//! pointing at a hosted-mock URL, etc.), the executor falls back to
-//! synthetic mode and logs that the real path isn't wired yet.
 
 use async_trait::async_trait;
 use std::time::Instant;
@@ -36,38 +15,24 @@ use mockforge_bench::cloud_api::{
 use mockforge_bench::conformance::custom::CustomConformanceConfig;
 use mockforge_bench::conformance::executor::{ConformanceProgress, NativeConformanceExecutor};
 use mockforge_bench::conformance::generator::ConformanceConfig;
+use mockforge_bench::executor::K6Results;
 use mockforge_bench::ssrf::validate_target_url;
 use tokio::sync::mpsc;
 
 use crate::callbacks::RegistryCallbacks;
-use crate::error::Result;
+use crate::error::{Error, Result};
 use crate::executors::{Executor, JobOutcome, JobStatus, RunJob};
 use crate::target_client::{ssrf_policy, TargetClient};
 
-/// Executor for all five test_suites.kind values.
+/// Executor for the runnable test-suite kinds.
 pub struct TestExecutor {
     kind: &'static str,
 }
 
 impl TestExecutor {
-    /// Construct the executor for one of unit/integration/conformance/
-    /// bench/owasp.
+    /// Construct the executor for a supported test-suite kind.
     pub fn for_kind(kind: &'static str) -> Self {
         Self { kind }
-    }
-
-    /// How many synthetic steps does this job want? Capped to keep a
-    /// runaway test_suites.config from spamming the event log.
-    fn synthetic_step_count(payload: &serde_json::Value) -> u32 {
-        let raw = payload.get("synthetic_steps").and_then(|v| v.as_u64()).unwrap_or(3);
-        raw.clamp(1, 100) as u32
-    }
-
-    /// Inter-step delay. Capped so a payload can't pin a worker on a
-    /// synthetic job for hours.
-    fn synthetic_step_ms(payload: &serde_json::Value) -> u64 {
-        let raw = payload.get("synthetic_step_ms").and_then(|v| v.as_u64()).unwrap_or(100);
-        raw.min(2000)
     }
 }
 
@@ -78,6 +43,7 @@ impl Executor for TestExecutor {
     }
 
     async fn execute(&self, job: RunJob, callbacks: &RegistryCallbacks) -> Result<JobOutcome> {
+        validate_test_config(self.kind, &job.payload)?;
         let started = Instant::now();
         callbacks.run_started(job.run_id).await?;
 
@@ -86,161 +52,100 @@ impl Executor for TestExecutor {
         // mockforge_bench::cloud_api wrappers — same logic as the local
         // `mockforge-cli bench` command, just driven from the cloud worker
         // against an external target. Requires the k6 binary on $PATH (the
-        // runner Dockerfile installs it). When the payload doesn't opt in,
-        // bench/owasp fall through to the lighter-weight reqwest paths
-        // below and conformance falls through to synthetic mode.
-        if let Some(reason) = crate::target_client::base_path_refusal(
+        // runner Dockerfile installs it). Bench and OWASP can instead use
+        // their native HTTP paths when a target URL is supplied.
+        let refusal = crate::target_client::base_path_refusal(
             extract_string(&job.payload, "base_path").as_deref(),
-        ) {
+        )
+        .or_else(|| {
+            uses_cloud_api(&job.payload)
+                .then(|| {
+                    crate::target_client::k6_refusal(
+                        self.kind,
+                        mockforge_bench::executor::k6_egress_proxy(),
+                    )
+                })
+                .flatten()
+        });
+        if let Some(reason) = refusal {
             return refuse_k6_run(job, callbacks, started, self.kind, reason).await;
         }
         if uses_cloud_api(&job.payload) {
-            if let Some(reason) = crate::target_client::k6_refusal(
-                self.kind,
-                mockforge_bench::executor::k6_egress_proxy(),
-            ) {
-                return refuse_k6_run(job, callbacks, started, self.kind, reason).await;
-            }
-            match self.kind {
-                "conformance" => {
-                    return run_cloud_conformance(job, callbacks, started).await;
-                }
-                "bench" => {
-                    if let Some(spec) = extract_spec_bytes(&job.payload) {
-                        return run_cloud_bench(job, callbacks, started, spec).await;
-                    }
-                }
-                "owasp" => {
-                    if let Some(spec) = extract_spec_bytes(&job.payload) {
-                        return run_cloud_owasp(job, callbacks, started, spec).await;
-                    }
-                }
-                "security" => {
-                    if let Some(spec) = extract_spec_bytes(&job.payload) {
-                        return run_cloud_security(job, callbacks, started, spec).await;
-                    }
-                }
-                "wafbench" => {
-                    if let Some(spec) = extract_spec_bytes(&job.payload) {
-                        return run_cloud_wafbench(job, callbacks, started, spec).await;
-                    }
-                }
-                "crud_flow" => {
-                    if let Some(spec) = extract_spec_bytes(&job.payload) {
-                        return run_cloud_crud_flow(job, callbacks, started, spec).await;
-                    }
-                }
-                _ => {}
-            }
+            return run_cloud_test(self.kind, job, callbacks, started).await;
         }
 
-        // OWASP kind has a real path when payload.target_url is set —
-        // scan response headers for the standard security-header set.
-        // No external scanner needed; this is a header-presence check
-        // (level-1 OWASP ASVS) that catches the most common
-        // misconfigurations (missing CSP, no HSTS, etc.).
-        if self.kind == "owasp" {
-            let target_url =
-                job.payload.get("target_url").and_then(|v| v.as_str()).map(String::from);
-            if let Some(target) = target_url {
-                if !target.is_empty() {
-                    return run_real_owasp_scan(job, callbacks, started, &target).await;
-                }
+        run_native_test(self.kind, job, callbacks, started).await
+    }
+}
+
+/// Select a cloud executor once, sharing inline-spec extraction across kinds.
+/// Bench and OWASP retain their native fallback when no inline spec is supplied.
+async fn run_cloud_test(
+    kind: &str,
+    job: RunJob,
+    callbacks: &RegistryCallbacks,
+    started: Instant,
+) -> Result<JobOutcome> {
+    match (kind, extract_spec_bytes(&job.payload)) {
+        ("conformance", _) => run_cloud_conformance(job, callbacks, started).await,
+        ("bench", Some(spec)) => run_cloud_bench(job, callbacks, started, spec).await,
+        ("owasp", Some(spec)) => run_cloud_owasp(job, callbacks, started, spec).await,
+        ("security", Some(spec)) => run_cloud_security(job, callbacks, started, spec).await,
+        ("wafbench", Some(spec)) => run_cloud_wafbench(job, callbacks, started, spec).await,
+        ("crud_flow", Some(spec)) => run_cloud_crud_flow(job, callbacks, started, spec).await,
+        _ => run_native_test(kind, job, callbacks, started).await,
+    }
+}
+
+/// Run only an executor that can perform real work against its configured target.
+async fn run_native_test(
+    kind: &str,
+    job: RunJob,
+    callbacks: &RegistryCallbacks,
+    started: Instant,
+) -> Result<JobOutcome> {
+    match kind {
+        "owasp" => {
+            if let Some(target) = extract_target_url(&job.payload) {
+                return run_real_owasp_scan(job, callbacks, started, &target).await;
             }
         }
-
-        // Integration kind has a real path when the suite config carries
-        // a workflow with `setup.base_url` + `steps[]`. Each step is
-        // executed as a real HTTP request with assertions + extracts;
-        // see integration.rs (#356).
-        if self.kind == "integration" {
-            let workflow_config = integration_workflow(&job.payload).cloned();
-            if let Some(config) = workflow_config {
+        "integration" => {
+            if let Some(config) = integration_workflow(&job.payload).cloned() {
                 return crate::executors::integration::run_integration(
                     job, callbacks, started, &config,
                 )
                 .await;
             }
         }
-
-        // Bench kind has a real path when payload.target_url is set —
-        // hammers the target with concurrent requests and computes
-        // p50 / p95 / p99 latencies + error rate. No external load tool
-        // needed; for k6/wrk/-style heavy benchmarks the operator can
-        // still wire up a separate executor in a follow-up slice.
-        if self.kind == "bench" {
-            let target_url =
-                job.payload.get("target_url").and_then(|v| v.as_str()).map(String::from);
-            if let Some(target) = target_url {
-                if !target.is_empty() {
-                    return run_real_bench(job, callbacks, started, &target).await;
-                }
+        "bench" => {
+            if let Some(target) = extract_target_url(&job.payload) {
+                return run_real_bench(job, callbacks, started, &target).await;
             }
         }
+        _ => {}
+    }
+    Err(Error::Executor(format!(
+        "{kind} configuration did not select an executable path"
+    )))
+}
 
-        let steps = Self::synthetic_step_count(&job.payload);
-        let step_ms = Self::synthetic_step_ms(&job.payload);
-
-        callbacks
-            .run_event(
-                job.run_id,
-                1,
-                "log",
-                serde_json::json!({
-                    "level": "info",
-                    "message": format!(
-                        "Synthetic test execution: kind='{}', steps={}, step_ms={}",
-                        self.kind, steps, step_ms,
-                    ),
-                    "synthetic": true,
-                    "tracking_task": 4,
-                }),
-            )
-            .await?;
-
-        // Stream step_start + step_pass for each synthetic step. Seq
-        // numbers continue from the log event above so the run_events
-        // table's UNIQUE(run_id, seq) is satisfied.
-        let mut next_seq: u32 = 2;
-        for i in 1..=steps {
-            callbacks
-                .run_event(
-                    job.run_id,
-                    next_seq,
-                    "step_start",
-                    serde_json::json!({ "step": i, "name": format!("synthetic-step-{i}") }),
-                )
-                .await?;
-            next_seq += 1;
-            tokio::time::sleep(std::time::Duration::from_millis(step_ms)).await;
-            callbacks
-                .run_event(
-                    job.run_id,
-                    next_seq,
-                    "step_pass",
-                    serde_json::json!({ "step": i, "duration_ms": step_ms }),
-                )
-                .await?;
-            next_seq += 1;
+fn validate_test_config(kind: &str, payload: &serde_json::Value) -> Result<()> {
+    let cloud_spec = uses_cloud_api(payload) && extract_spec_bytes(payload).is_some();
+    let target_url = extract_target_url(payload).is_some();
+    let missing = match kind {
+        "integration" => integration_workflow(payload).is_none().then_some("non-empty `steps`"),
+        "conformance" => (!uses_cloud_api(payload)).then_some("`use_cloud_api: true`"),
+        "bench" | "owasp" => (!target_url && !cloud_spec)
+            .then_some("`target_url`, or `use_cloud_api: true` with `spec`"),
+        "security" | "wafbench" | "crud_flow" => {
+            (!cloud_spec).then_some("`use_cloud_api: true` with `spec`")
         }
-
-        // Real wall-clock for the runner_seconds meter; round up so a
-        // short synthetic run still bills 1s and exercises the
-        // increment_runner_seconds code path.
-        let elapsed = started.elapsed();
-        let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
-
-        Ok(JobOutcome {
-            status: JobStatus::Passed,
-            runner_seconds: secs,
-            summary: Some(serde_json::json!({
-                "executor_phase": "synthetic",
-                "tracking_task": 4,
-                "kind": self.kind,
-                "steps_passed": steps,
-                "wall_ms": elapsed.as_millis() as u64,
-            })),
-        })
+        _ => None,
+    };
+    match missing {
+        Some(required) => Err(Error::Executor(format!("{kind} requires {required}"))),
+        None => Ok(()),
     }
 }
 
@@ -304,8 +209,8 @@ fn extract_string_vec(payload: &serde_json::Value, key: &str) -> Vec<String> {
 }
 
 /// Map a [`CloudRunArtifacts`] result to a `JobOutcome` and emit summary
-/// events. Status is `Passed` when no `summary.json` was produced (e.g.
-/// conformance native executor) or when k6 reported an error rate below 1%.
+/// events. A k6 run is only valid when `summary.json` was parsed and at
+/// least one request completed.
 async fn finish_cloud_run(
     job_run_id: uuid::Uuid,
     callbacks: &RegistryCallbacks,
@@ -315,39 +220,39 @@ async fn finish_cloud_run(
     artifacts: CloudRunArtifacts,
     next_seq: u32,
 ) -> Result<JobOutcome> {
+    let results = artifacts.k6_results.as_ref().ok_or_else(|| {
+        Error::Executor(format!(
+            "{kind} did not produce a parseable summary.json; no checks can be verified"
+        ))
+    })?;
+    if results.total_requests == 0 {
+        return Err(Error::Executor(format!(
+            "{kind} completed zero requests; no checks were executed"
+        )));
+    }
+    let reported_findings = (kind == "owasp").then_some(results.owasp_findings);
+
     // Emit a metric event with the structured summary so the SSE stream
     // shows the run results live without consumers having to fetch
     // artifacts.
-    let summary_json = artifacts
-        .k6_results
-        .as_ref()
-        .map(|r| {
-            serde_json::json!({
-                "name": format!("{kind}_summary"),
-                "total_requests": r.total_requests,
-                "failed_requests": r.failed_requests,
-                "error_rate_pct": r.error_rate(),
-                "rps": r.rps,
-                "p95_ms": r.p95_duration_ms,
-                "p99_ms": r.p99_duration_ms,
-                "vus_max": r.vus_max,
-            })
-        })
-        .unwrap_or_else(|| {
-            serde_json::json!({
-                "name": format!("{kind}_summary"),
-                "artifacts": artifacts.files.keys().collect::<Vec<_>>(),
-            })
-        });
+    let summary_json = serde_json::json!({
+        "name": format!("{kind}_summary"),
+        "total_requests": results.total_requests,
+        "failed_requests": results.failed_requests,
+        "error_rate_pct": results.error_rate(),
+        "rps": results.rps,
+        "p95_ms": results.p95_duration_ms,
+        "p99_ms": results.p99_duration_ms,
+        "vus_max": results.vus_max,
+        "reported_findings": reported_findings,
+    });
 
     callbacks.run_event(job_run_id, next_seq, "metric", summary_json).await?;
 
     let elapsed = started.elapsed();
     let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
-    let status = match artifacts.k6_results.as_ref() {
-        Some(r) if r.error_rate() >= 1.0 => JobStatus::Failed,
-        _ => JobStatus::Passed,
-    };
+    let status = cloud_status(kind, results)?;
+    let artifact_files = artifacts.files.keys().cloned().collect::<Vec<_>>();
     Ok(JobOutcome {
         status,
         runner_seconds: secs,
@@ -355,10 +260,30 @@ async fn finish_cloud_run(
             "executor_phase": "cloud_api",
             "kind": kind,
             "target_url": target_url,
-            "artifact_files": artifacts.files.keys().collect::<Vec<_>>(),
+            "artifact_files": artifact_files,
             "k6_results": artifacts.k6_results,
+            "reported_findings": reported_findings,
             "wall_ms": elapsed.as_millis() as u64,
         })),
+    })
+}
+
+fn cloud_status(kind: &str, results: &K6Results) -> Result<JobStatus> {
+    if kind == "owasp" {
+        if results.failed_requests >= results.total_requests {
+            return Err(Error::Executor(
+                "owasp got no HTTP response below 500 from the target; no probe could be evaluated"
+                    .to_string(),
+            ));
+        }
+        if results.owasp_findings > 0 {
+            return Ok(JobStatus::Failed);
+        }
+    }
+    Ok(if results.error_rate() >= 1.0 {
+        JobStatus::Failed
+    } else {
+        JobStatus::Passed
     })
 }
 
@@ -406,7 +331,7 @@ async fn finish_cloud_error(
 /// The registry enqueues a suite's config as the payload itself
 /// (`{"setup": .., "steps": [..]}`); older callers nested it under
 /// `config`. Accept both, so a suite-triggered run executes its real steps
-/// instead of falling through to the synthetic executor.
+/// instead of entering an executor without enough information to run.
 fn integration_workflow(payload: &serde_json::Value) -> Option<&serde_json::Value> {
     let has_steps = |c: &serde_json::Value| {
         c.get("steps").and_then(|v| v.as_array()).is_some_and(|a| !a.is_empty())
@@ -590,6 +515,91 @@ async fn run_cloud_owasp(
     }
 }
 
+/// Build conformance settings while preserving category and header parsing.
+fn cloud_conformance_config(payload: &serde_json::Value, target_url: &str) -> ConformanceConfig {
+    let categories = extract_string(payload, "conformance_categories")
+        .map(|s| s.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect());
+
+    let custom_headers: Vec<(String, String)> = extract_string_vec(payload, "conformance_headers")
+        .into_iter()
+        .filter_map(|raw| {
+            let (k, v) = raw.split_once(':')?;
+            Some((k.trim().to_string(), v.trim().to_string()))
+        })
+        .collect();
+
+    ConformanceConfig {
+        target_url: target_url.to_owned(),
+        api_key: extract_string(payload, "conformance_api_key"),
+        basic_auth: extract_string(payload, "conformance_basic_auth"),
+        skip_tls_verify: payload.get("skip_tls_verify").and_then(|v| v.as_bool()).unwrap_or(false),
+        categories,
+        base_path: extract_string(payload, "base_path"),
+        custom_headers,
+        output_dir: None,
+        all_operations: payload
+            .get("conformance_all_operations")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
+        custom_checks_file: None,
+        request_delay_ms: payload.get("conformance_delay_ms").and_then(|v| v.as_u64()).unwrap_or(0),
+        custom_filter: None,
+        export_requests: false,
+        validate_requests: false,
+    }
+}
+
+fn cloud_conformance_executor(
+    payload: &serde_json::Value,
+    target_url: &str,
+) -> mockforge_bench::Result<NativeConformanceExecutor> {
+    let config = cloud_conformance_config(payload, target_url);
+    let custom = extract_string(payload, "custom_checks_yaml")
+        .map(|yaml| {
+            serde_yaml::from_str::<CustomConformanceConfig>(&yaml).map_err(|error| {
+                mockforge_bench::error::BenchError::Other(format!(
+                    "custom_checks_yaml parse failed: {error}"
+                ))
+            })
+        })
+        .transpose()?;
+    let executor = NativeConformanceExecutor::with_ssrf_guard(config, Some(ssrf_policy()))?
+        .with_reference_checks();
+    match custom {
+        Some(config) => executor.with_custom_checks_from_config(config),
+        None => Ok(executor),
+    }
+}
+
+fn conformance_progress_event(
+    progress: ConformanceProgress,
+) -> Option<(&'static str, serde_json::Value)> {
+    let event = match progress {
+        ConformanceProgress::Started { total_checks } => (
+            "started",
+            serde_json::json!({ "type": "started", "total_checks": total_checks }),
+        ),
+        ConformanceProgress::CheckCompleted {
+            name,
+            passed,
+            checks_done,
+        } => (
+            "check_completed",
+            serde_json::json!({
+                "type": "check_completed",
+                "name": name,
+                "passed": passed,
+                "checks_done": checks_done,
+            }),
+        ),
+        ConformanceProgress::Finished => return None, // emitted with the final report
+        ConformanceProgress::Error { message } => {
+            ("error", serde_json::json!({ "type": "error", "message": message }))
+        }
+    };
+    Some(event)
+}
+
 /// Drive an OpenAPI 3.0.0 conformance run via the native conformance
 /// executor in `mockforge_bench::conformance::executor`, streaming
 /// per-check progress through the callbacks channel so the cloud UI can
@@ -657,105 +667,9 @@ async fn run_cloud_conformance(
         )
         .await?;
 
-    let categories = extract_string(&job.payload, "conformance_categories")
-        .map(|s| s.split(',').map(|p| p.trim().to_string()).filter(|p| !p.is_empty()).collect());
-
-    let custom_headers: Vec<(String, String)> =
-        extract_string_vec(&job.payload, "conformance_headers")
-            .into_iter()
-            .filter_map(|raw| {
-                let (k, v) = raw.split_once(':')?;
-                Some((k.trim().to_string(), v.trim().to_string()))
-            })
-            .collect();
-
-    let config = ConformanceConfig {
-        target_url: target_url.clone(),
-        api_key: extract_string(&job.payload, "conformance_api_key"),
-        basic_auth: extract_string(&job.payload, "conformance_basic_auth"),
-        skip_tls_verify: job
-            .payload
-            .get("skip_tls_verify")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false),
-        categories,
-        base_path: extract_string(&job.payload, "base_path"),
-        custom_headers,
-        output_dir: None,
-        all_operations: job
-            .payload
-            .get("conformance_all_operations")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false),
-        custom_checks_file: None,
-        request_delay_ms: job
-            .payload
-            .get("conformance_delay_ms")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0),
-        custom_filter: None,
-        export_requests: false,
-        validate_requests: false,
-    };
-
-    // Parse the optional inline custom-checks YAML before we
-    // construct the executor — if the user supplied malformed YAML
-    // we want to error fast, not run the reference checks and then
-    // surface a confusing parse failure mid-run. The YAML schema is
-    // purely declarative (status/headers/body-field validators), so
-    // no sandbox is needed server-side.
-    let custom_checks_config = match extract_string(&job.payload, "custom_checks_yaml") {
-        Some(yaml) => match serde_yaml::from_str::<CustomConformanceConfig>(&yaml) {
-            Ok(cfg) => Some(cfg),
-            Err(e) => {
-                return finish_cloud_error(
-                    job.run_id,
-                    callbacks,
-                    started,
-                    "conformance",
-                    &target_url,
-                    2,
-                    mockforge_bench::error::BenchError::Other(format!(
-                        "custom_checks_yaml parse failed: {e}"
-                    )),
-                )
-                .await;
-            }
-        },
-        None => None,
-    };
-
-    // Construct the executor in reference-checks mode, optionally
-    // chaining the user's declarative custom checks on top. Both are
-    // additive — reference checks always run; custom checks extend
-    // the list when provided. Spec-driven checks would require
-    // parsing the OpenAPI spec into `AnnotatedOperation`s — deferred
-    // to a follow-up so the first cloud iteration matches the local
-    // "no spec, just probe the reference endpoints" UX which is what
-    // the page form exposes.
-    let executor = match NativeConformanceExecutor::with_ssrf_guard(config, Some(ssrf_policy())) {
-        Ok(e) => {
-            let e = e.with_reference_checks();
-            match custom_checks_config {
-                Some(cfg) => match e.with_custom_checks_from_config(cfg) {
-                    Ok(e) => e,
-                    Err(err) => {
-                        return finish_cloud_error(
-                            job.run_id,
-                            callbacks,
-                            started,
-                            "conformance",
-                            &target_url,
-                            2,
-                            err,
-                        )
-                        .await
-                    }
-                },
-                None => e,
-            }
-        }
-        Err(e) => {
+    let executor = match cloud_conformance_executor(&job.payload, &target_url) {
+        Ok(executor) => executor,
+        Err(error) => {
             return finish_cloud_error(
                 job.run_id,
                 callbacks,
@@ -763,9 +677,9 @@ async fn run_cloud_conformance(
                 "conformance",
                 &target_url,
                 2,
-                e,
+                error,
             )
-            .await
+            .await;
         }
     };
 
@@ -774,28 +688,8 @@ async fn run_cloud_conformance(
 
     let mut seq: u32 = 2;
     while let Some(progress) = rx.recv().await {
-        let (event_type, payload) = match progress {
-            ConformanceProgress::Started { total_checks } => (
-                "started",
-                serde_json::json!({ "type": "started", "total_checks": total_checks }),
-            ),
-            ConformanceProgress::CheckCompleted {
-                name,
-                passed,
-                checks_done,
-            } => (
-                "check_completed",
-                serde_json::json!({
-                    "type": "check_completed",
-                    "name": name,
-                    "passed": passed,
-                    "checks_done": checks_done,
-                }),
-            ),
-            ConformanceProgress::Finished => continue, // emitted below with the report
-            ConformanceProgress::Error { message } => {
-                ("error", serde_json::json!({ "type": "error", "message": message }))
-            }
+        let Some((event_type, payload)) = conformance_progress_event(progress) else {
+            continue;
         };
         callbacks.run_event(job.run_id, seq, event_type, payload).await?;
         seq += 1;
@@ -803,7 +697,7 @@ async fn run_cloud_conformance(
 
     let report_result = exec_task
         .await
-        .map_err(|e| crate::error::Error::Executor(format!("conformance task panicked: {e}")))?;
+        .map_err(|e| Error::Executor(format!("conformance task panicked: {e}")))?;
 
     match report_result {
         Ok(report) => {
@@ -837,11 +731,7 @@ async fn run_cloud_conformance(
                 .and_then(|s| s.get("total_checks"))
                 .and_then(|v| v.as_u64())
                 .unwrap_or(0);
-            let status = if failed_count == 0 {
-                JobStatus::Passed
-            } else {
-                JobStatus::Failed
-            };
+            let status = conformance_status(total_count, failed_count)?;
             Ok(JobOutcome {
                 status,
                 runner_seconds: secs,
@@ -860,6 +750,20 @@ async fn run_cloud_conformance(
             finish_cloud_error(job.run_id, callbacks, started, "conformance", &target_url, seq, e)
                 .await
         }
+    }
+}
+
+fn conformance_status(total_checks: u64, failed_checks: u64) -> Result<JobStatus> {
+    if total_checks == 0 {
+        return Err(Error::Executor(
+            "conformance completed with zero checks; configure at least one applicable check"
+                .to_string(),
+        ));
+    }
+    if failed_checks == 0 {
+        Ok(JobStatus::Passed)
+    } else {
+        Ok(JobStatus::Failed)
     }
 }
 
@@ -1068,6 +972,25 @@ async fn run_cloud_crud_flow(
     }
 }
 
+type BenchWorkerResult = (Vec<u128>, u64, u64);
+
+/// Fail the run on a lost worker; dropping JoinSet also aborts remaining workers.
+async fn collect_bench_results(
+    mut workers: tokio::task::JoinSet<BenchWorkerResult>,
+) -> Result<BenchWorkerResult> {
+    let mut latencies = Vec::new();
+    let mut total_ok = 0;
+    let mut total_err = 0;
+    while let Some(result) = workers.join_next().await {
+        let (samples, ok, err) =
+            result.map_err(|error| Error::Executor(format!("bench worker failed: {error}")))?;
+        latencies.extend(samples);
+        total_ok += ok;
+        total_err += err;
+    }
+    Ok((latencies, total_ok, total_err))
+}
+
 /// Reqwest-based load runner for kind=bench. Hammers the target with
 /// `concurrency` parallel workers for `duration_secs` (both clamped to
 /// safe defaults) and reports p50/p95/p99 latencies + error rate.
@@ -1104,24 +1027,23 @@ async fn run_real_bench(
                 "message": format!(
                     "Bench against {target_url} — concurrency={concurrency}, duration={duration_secs}s",
                 ),
-                "synthetic": false,
                 "tracking_task": 4,
             }),
         )
         .await?;
 
     let client = TargetClient::new(std::time::Duration::from_secs(10), "mockforge-bench/1.0")?;
-    client.check(target_url).map_err(|e| {
-        crate::error::Error::Executor(format!("target_url rejected by SSRF guard: {e}"))
-    })?;
+    client
+        .check(target_url)
+        .map_err(|e| Error::Executor(format!("target_url rejected by SSRF guard: {e}")))?;
 
     let target = target_url.to_string();
     let deadline = Instant::now() + std::time::Duration::from_secs(duration_secs);
-    let mut handles = Vec::with_capacity(concurrency as usize);
+    let mut workers = tokio::task::JoinSet::new();
     for _ in 0..concurrency {
         let client = client.clone();
         let target = target.clone();
-        handles.push(tokio::spawn(async move {
+        workers.spawn(async move {
             let mut latencies_ns: Vec<u128> = Vec::new();
             let mut ok = 0u64;
             let mut err = 0u64;
@@ -1144,19 +1066,10 @@ async fn run_real_bench(
                 latencies_ns.push(started.elapsed().as_nanos());
             }
             (latencies_ns, ok, err)
-        }));
+        });
     }
 
-    let mut all_latencies: Vec<u128> = Vec::new();
-    let mut total_ok = 0u64;
-    let mut total_err = 0u64;
-    for h in handles {
-        if let Ok((lats, ok, err)) = h.await {
-            all_latencies.extend(lats);
-            total_ok += ok;
-            total_err += err;
-        }
-    }
+    let (mut all_latencies, total_ok, total_err) = collect_bench_results(workers).await?;
 
     all_latencies.sort_unstable();
     let total_requests = (total_ok + total_err) as f64;
@@ -1177,6 +1090,10 @@ async fn run_real_bench(
         0.0
     };
 
+    let elapsed = started.elapsed();
+    let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
+    let status = bench_status(total_ok + total_err, error_rate_pct, p95)?;
+
     callbacks
         .run_event(
             job.run_id,
@@ -1194,17 +1111,6 @@ async fn run_real_bench(
             }),
         )
         .await?;
-
-    let elapsed = started.elapsed();
-    let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
-    // Pass when error rate is < 1% AND p95 < 1000ms. Tighter SLOs are
-    // a follow-up — the suite config could carry user-defined
-    // thresholds.
-    let status = if error_rate_pct < 1.0 && p95 < 1000.0 {
-        JobStatus::Passed
-    } else {
-        JobStatus::Failed
-    };
     Ok(JobOutcome {
         status,
         runner_seconds: secs,
@@ -1227,6 +1133,19 @@ async fn run_real_bench(
     })
 }
 
+fn bench_status(total_requests: u64, error_rate_pct: f64, p95_ms: f64) -> Result<JobStatus> {
+    if total_requests == 0 {
+        return Err(Error::Executor(
+            "bench completed zero requests; no checks were executed".to_string(),
+        ));
+    }
+    if error_rate_pct < 1.0 && p95_ms < 1000.0 {
+        Ok(JobStatus::Passed)
+    } else {
+        Ok(JobStatus::Failed)
+    }
+}
+
 /// OWASP ASVS level-1 header-presence scan. Fetches the target URL and
 /// reports per-header pass/fail for the standard security headers most
 /// services should ship.
@@ -1244,7 +1163,6 @@ async fn run_real_owasp_scan(
             serde_json::json!({
                 "level": "info",
                 "message": format!("OWASP header scan against {target_url}"),
-                "synthetic": false,
                 "tracking_task": 4,
             }),
         )
@@ -1369,11 +1287,7 @@ async fn run_real_owasp_scan(
 
     let elapsed = started.elapsed();
     let secs = (elapsed.as_secs_f64().ceil() as i32).max(1);
-    let status = if failed == 0 {
-        JobStatus::Passed
-    } else {
-        JobStatus::Failed
-    };
+    let status = owasp_header_status(failed);
 
     Ok(JobOutcome {
         status,
@@ -1392,6 +1306,14 @@ async fn run_real_owasp_scan(
     })
 }
 
+fn owasp_header_status(failed: u32) -> JobStatus {
+    if failed == 0 {
+        JobStatus::Passed
+    } else {
+        JobStatus::Failed
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -1407,35 +1329,209 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    #[test]
-    fn synthetic_step_count_default() {
-        assert_eq!(TestExecutor::synthetic_step_count(&json!({})), 3);
-        assert_eq!(TestExecutor::synthetic_step_count(&json!(null)), 3);
+    fn job(kind: &str, payload: serde_json::Value) -> RunJob {
+        RunJob {
+            run_id: uuid::Uuid::new_v4(),
+            org_id: uuid::Uuid::new_v4(),
+            source_id: uuid::Uuid::new_v4(),
+            kind: kind.to_string(),
+            payload,
+        }
+    }
+
+    #[tokio::test]
+    async fn bench_worker_results_preserve_all_samples_and_counts() {
+        let mut workers = tokio::task::JoinSet::new();
+        workers.spawn(async { (vec![10], 1, 0) });
+        workers.spawn(async { (vec![20, 30], 1, 1) });
+        let (mut latencies, ok, errors) = collect_bench_results(workers).await.unwrap();
+        latencies.sort_unstable();
+        assert_eq!(latencies, vec![10, 20, 30]);
+        assert_eq!((ok, errors), (2, 1));
+    }
+
+    #[tokio::test]
+    async fn lost_bench_worker_errors_and_aborts_remaining_work() {
+        let mut workers = tokio::task::JoinSet::new();
+        let (alive, dropped) = tokio::sync::oneshot::channel::<()>();
+        workers.spawn(async move {
+            let _guard = alive;
+            std::future::pending::<BenchWorkerResult>().await
+        });
+        let aborted = workers.spawn(std::future::pending::<BenchWorkerResult>());
+        aborted.abort();
+        let error = collect_bench_results(workers).await.expect_err("lost worker must fail");
+        assert!(error.to_string().contains("bench worker failed:"));
+        let remaining = tokio::time::timeout(std::time::Duration::from_secs(1), dropped)
+            .await
+            .expect("remaining worker must be stopped");
+        assert!(remaining.is_err(), "remaining worker guard must be dropped");
     }
 
     #[test]
-    fn synthetic_step_count_clamps_to_100() {
-        assert_eq!(TestExecutor::synthetic_step_count(&json!({ "synthetic_steps": 999 })), 100);
+    fn cloud_conformance_configuration_preserves_filters_and_headers() {
+        let config = cloud_conformance_config(
+            &json!({
+                "conformance_categories": " Parameters, , Security ",
+                "conformance_headers": [" X-Fixture : one:two ", "invalid"],
+                "conformance_delay_ms": 17,
+                "conformance_all_operations": true,
+                "base_path": "/fixture",
+            }),
+            "https://example.com",
+        );
+        assert_eq!(config.target_url, "https://example.com");
+        assert_eq!(config.categories, Some(vec!["Parameters".to_string(), "Security".to_string()]));
+        assert_eq!(config.custom_headers, vec![("X-Fixture".to_string(), "one:two".to_string())]);
+        assert_eq!(config.request_delay_ms, 17);
+        assert!(config.all_operations);
+        assert_eq!(config.base_path.as_deref(), Some("/fixture"));
     }
 
     #[test]
-    fn synthetic_step_count_clamps_to_minimum_1() {
-        assert_eq!(TestExecutor::synthetic_step_count(&json!({ "synthetic_steps": 0 })), 1);
+    fn malformed_custom_conformance_checks_fail_before_executor_construction() {
+        let result = cloud_conformance_executor(
+            &json!({"custom_checks_yaml": "[invalid"}),
+            "https://example.com",
+        );
+        match result {
+            Err(error) => assert!(error.to_string().contains("custom_checks_yaml parse failed:")),
+            Ok(_) => panic!("malformed custom checks must be rejected"),
+        }
+    }
+
+    #[tokio::test]
+    async fn missing_real_execution_config_is_an_executor_error() {
+        let callbacks = RegistryCallbacks::for_test();
+        let cases = [
+            ("integration", json!({}), "integration requires non-empty `steps`"),
+            ("conformance", json!({}), "conformance requires `use_cloud_api: true`"),
+            (
+                "bench",
+                json!({}),
+                "bench requires `target_url`, or `use_cloud_api: true` with `spec`",
+            ),
+            (
+                "owasp",
+                json!({}),
+                "owasp requires `target_url`, or `use_cloud_api: true` with `spec`",
+            ),
+            (
+                "security",
+                json!({"target_url": "https://example.com"}),
+                "security requires `use_cloud_api: true` with `spec`",
+            ),
+            (
+                "wafbench",
+                json!({"target_url": "https://example.com"}),
+                "wafbench requires `use_cloud_api: true` with `spec`",
+            ),
+            (
+                "crud_flow",
+                json!({"target_url": "https://example.com"}),
+                "crud_flow requires `use_cloud_api: true` with `spec`",
+            ),
+        ];
+
+        for (kind, payload, expected) in cases {
+            let result = TestExecutor::for_kind(kind).execute(job(kind, payload), &callbacks).await;
+            match result {
+                Err(Error::Executor(message)) => assert_eq!(message, expected, "kind={kind}"),
+                Err(other) => panic!("kind={kind}: expected executor error, got {other:?}"),
+                Ok(outcome) => {
+                    panic!("kind={kind}: missing config must not return {:?}", outcome.status)
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn cloud_run_without_k6_results_is_an_executor_error() {
+        let callbacks = RegistryCallbacks::for_test();
+        let result = finish_cloud_run(
+            uuid::Uuid::new_v4(),
+            &callbacks,
+            Instant::now(),
+            "bench",
+            "https://example.com",
+            CloudRunArtifacts::default(),
+            1,
+        )
+        .await;
+        assert!(
+            matches!(result, Err(Error::Executor(ref message)) if message.contains("summary.json")),
+            "missing k6 results must error, got {result:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn cloud_owasp_findings_fail_the_run() {
+        let callbacks = RegistryCallbacks::for_test();
+        let artifacts = CloudRunArtifacts::from_files(std::collections::HashMap::from([(
+            "summary.json".to_string(),
+            br#"{"metrics":{"http_reqs":{"values":{"count":1,"rate":1.0}},"http_req_failed":{"values":{"passes":0}},"owasp_findings":{"values":{"count":2}}}}"#.to_vec(),
+        )]));
+
+        let outcome = finish_cloud_run(
+            uuid::Uuid::new_v4(),
+            &callbacks,
+            Instant::now(),
+            "owasp",
+            "https://example.com",
+            artifacts,
+            1,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(outcome.status, JobStatus::Failed);
+        assert_eq!(outcome.summary.unwrap()["reported_findings"], 2);
+    }
+
+    fn k6(total: u64, failed: u64, findings: u64) -> K6Results {
+        K6Results {
+            total_requests: total,
+            failed_requests: failed,
+            owasp_findings: findings,
+            ..K6Results::default()
+        }
     }
 
     #[test]
-    fn synthetic_step_count_honors_intermediate() {
-        assert_eq!(TestExecutor::synthetic_step_count(&json!({ "synthetic_steps": 7 })), 7);
+    fn owasp_status_follows_findings_not_rejected_probes() {
+        assert_eq!(cloud_status("owasp", &k6(20, 0, 0)).unwrap(), JobStatus::Passed);
+        assert_eq!(cloud_status("owasp", &k6(20, 0, 3)).unwrap(), JobStatus::Failed);
+        assert_eq!(cloud_status("owasp", &k6(20, 5, 0)).unwrap(), JobStatus::Failed);
+        assert!(matches!(
+            cloud_status("owasp", &k6(20, 20, 0)),
+            Err(Error::Executor(message)) if message.contains("no HTTP response below 500")
+        ));
     }
 
     #[test]
-    fn synthetic_step_ms_caps_at_2000() {
-        assert_eq!(TestExecutor::synthetic_step_ms(&json!({ "synthetic_step_ms": 60_000 })), 2000);
+    fn non_owasp_cloud_status_uses_error_rate() {
+        assert_eq!(cloud_status("bench", &k6(200, 1, 0)).unwrap(), JobStatus::Passed);
+        assert_eq!(cloud_status("bench", &k6(100, 1, 0)).unwrap(), JobStatus::Failed);
     }
 
     #[test]
-    fn synthetic_step_ms_default() {
-        assert_eq!(TestExecutor::synthetic_step_ms(&json!({})), 100);
+    fn zero_request_bench_is_an_executor_error() {
+        assert!(
+            matches!(bench_status(0, 0.0, 0.0), Err(Error::Executor(message)) if message.contains("zero requests"))
+        );
+    }
+
+    #[test]
+    fn zero_check_conformance_is_an_executor_error() {
+        assert!(
+            matches!(conformance_status(0, 0), Err(Error::Executor(message)) if message.contains("zero checks"))
+        );
+    }
+
+    #[test]
+    fn native_owasp_findings_fail_the_run() {
+        assert_eq!(owasp_header_status(0), JobStatus::Passed);
+        assert_eq!(owasp_header_status(1), JobStatus::Failed);
     }
 
     #[test]

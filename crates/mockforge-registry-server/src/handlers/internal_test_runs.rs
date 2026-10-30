@@ -220,6 +220,13 @@ pub struct FinishBody {
     pub summary: Option<serde_json::Value>,
 }
 
+fn billable_runner_seconds(status: &str, reported_seconds: i32) -> i32 {
+    match status {
+        "errored" => 0,
+        _ => reported_seconds,
+    }
+}
+
 /// `POST /api/v1/internal/test-runs/{id}/finish`
 ///
 /// Marks the run terminal (idempotent — already-terminal rows are not
@@ -242,11 +249,15 @@ pub async fn run_finished(
         return Err(ApiError::InvalidRequest("runner_seconds must be non-negative".into()));
     }
 
+    // Older workers may report elapsed time for a refused or errored run.
+    // Enforce billing eligibility here as well as in the current worker.
+    let runner_seconds = billable_runner_seconds(&body.status, body.runner_seconds);
+
     let run = TestRun::mark_finished(
         state.db.pool(),
         id,
         &body.status,
-        body.runner_seconds,
+        runner_seconds,
         body.summary.as_ref(),
     )
     .await
@@ -256,13 +267,13 @@ pub async fn run_finished(
         // Bill the org for runner-seconds. Note we read org_id from
         // the test_runs row (set at queue-time), not from the request
         // — the runner can't lie about which org to charge.
-        if body.runner_seconds > 0 {
+        if runner_seconds > 0 {
             // Owner pool: internal shared-token runner callback, no user org
             // context (#1087 elevated path).
             UsageCounter::increment_runner_seconds(
                 &mut *state.db.pool().acquire().await?,
                 run.org_id,
-                body.runner_seconds as i64,
+                runner_seconds as i64,
             )
             .await
             .map_err(ApiError::Database)?;
@@ -312,34 +323,44 @@ async fn mirror_kind_status(
     match run.kind.as_str() {
         "snapshot_capture" => {
             if run.status == "passed" {
-                let storage_url = summary
-                    .and_then(|s| s.get("storage_url"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("synthetic://snapshot");
-                let size_bytes =
-                    summary.and_then(|s| s.get("size_bytes")).and_then(|v| v.as_i64()).unwrap_or(0);
-                let manifest = summary.cloned().unwrap_or_else(|| serde_json::json!({}));
-                Snapshot::mark_ready(pool, run.suite_id, storage_url, size_bytes, &manifest)
-                    .await?;
+                if let Some(storage_url) = real_artifact_url(summary, "storage_url") {
+                    let size_bytes = summary
+                        .and_then(|s| s.get("size_bytes"))
+                        .and_then(|v| v.as_i64())
+                        .unwrap_or(0);
+                    let manifest = summary.cloned().unwrap_or_else(|| serde_json::json!({}));
+                    Snapshot::mark_ready(pool, run.suite_id, storage_url, size_bytes, &manifest)
+                        .await?;
+                } else {
+                    tracing::warn!(
+                        run_id = %run.id,
+                        snapshot_id = %run.suite_id,
+                        "passed snapshot run supplied no real storage artifact; leaving snapshot unchanged",
+                    );
+                }
             } else {
                 Snapshot::mark_failed(pool, run.suite_id).await?;
             }
         }
         "behavioral_clone" => {
             if run.status == "passed" {
-                let artifact_url = summary
-                    .and_then(|s| s.get("artifact_url"))
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("synthetic://clone-model");
-                let metrics = summary.cloned().unwrap_or_else(|| serde_json::json!({}));
-                CloneModel::mark_ready(
-                    pool,
-                    run.suite_id,
-                    artifact_url,
-                    &metrics,
-                    run.runner_seconds.unwrap_or(0),
-                )
-                .await?;
+                if let Some(artifact_url) = real_artifact_url(summary, "artifact_url") {
+                    let metrics = summary.cloned().unwrap_or_else(|| serde_json::json!({}));
+                    CloneModel::mark_ready(
+                        pool,
+                        run.suite_id,
+                        artifact_url,
+                        &metrics,
+                        run.runner_seconds.unwrap_or(0),
+                    )
+                    .await?;
+                } else {
+                    tracing::warn!(
+                        run_id = %run.id,
+                        clone_model_id = %run.suite_id,
+                        "passed clone-training run supplied no real model artifact; leaving model unchanged",
+                    );
+                }
             } else {
                 CloneModel::mark_failed(pool, run.suite_id).await?;
             }
@@ -584,6 +605,14 @@ async fn mirror_kind_status(
         _ => {}
     }
     Ok(())
+}
+
+fn real_artifact_url<'a>(summary: Option<&'a serde_json::Value>, key: &str) -> Option<&'a str> {
+    summary
+        .and_then(|value| value.get(key))
+        .and_then(|value| value.as_str())
+        .map(str::trim)
+        .filter(|url| !url.is_empty() && !url.to_ascii_lowercase().starts_with("synthetic://"))
 }
 
 /// Wire-format row returned by the capture-exchanges endpoint. Pulls
@@ -1040,6 +1069,14 @@ mod tests {
     use super::*;
 
     #[test]
+    fn errored_callbacks_never_consume_runner_seconds() {
+        assert_eq!(billable_runner_seconds("errored", 37), 0);
+        assert_eq!(billable_runner_seconds("passed", 37), 37);
+        assert_eq!(billable_runner_seconds("failed", 37), 37);
+        assert_eq!(billable_runner_seconds("cancelled", 37), 37);
+    }
+
+    #[test]
     fn ct_eq_returns_true_for_equal() {
         assert!(constant_time_eq(b"abc", b"abc"));
         assert!(constant_time_eq(b"", b""));
@@ -1050,5 +1087,24 @@ mod tests {
         assert!(!constant_time_eq(b"abc", b"abd"));
         assert!(!constant_time_eq(b"abc", b"ab"));
         assert!(!constant_time_eq(b"abc", b"abcd"));
+    }
+
+    #[test]
+    fn only_real_artifact_urls_can_mark_resources_ready() {
+        let real = serde_json::json!({"artifact_url": "https://objects.example/model.bin"});
+        assert_eq!(
+            real_artifact_url(Some(&real), "artifact_url"),
+            Some("https://objects.example/model.bin")
+        );
+
+        for summary in [
+            None,
+            Some(serde_json::json!({})),
+            Some(serde_json::json!({"artifact_url": ""})),
+            Some(serde_json::json!({"artifact_url": "synthetic://clone-model"})),
+            Some(serde_json::json!({"artifact_url": "SYNTHETIC://clone-model"})),
+        ] {
+            assert_eq!(real_artifact_url(summary.as_ref(), "artifact_url"), None);
+        }
     }
 }

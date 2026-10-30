@@ -35,7 +35,7 @@ async fn rls_join_flows_and_versions() {
         "create flow",
         a.post(
             &flows_a,
-            json!({ "kind": "scenario", "name": "Checkout", "config": { "steps": [1] } }),
+            json!({ "kind": "chain", "name": "Checkout", "config": { "steps": [1] } }),
         )
         .await,
     );
@@ -46,8 +46,8 @@ async fn rls_join_flows_and_versions() {
     // List (with and without the kind filter).
     assert_contains("list flows", &list_ids(&a, "list flows", &flows_a).await, &flow_id);
     assert_contains(
-        "list flows ?kind=scenario",
-        &list_ids(&a, "list flows kind", &format!("{flows_a}?kind=scenario")).await,
+        "list flows ?kind=chain",
+        &list_ids(&a, "list flows kind", &format!("{flows_a}?kind=chain")).await,
         &flow_id,
     );
 
@@ -85,6 +85,19 @@ async fn rls_join_flows_and_versions() {
         a.post(&format!("/api/v1/flows/{flow_id}/runs"), json!({})).await,
     );
     assert_eq!(str_field("trigger flow run", &run, "suite_id"), flow_id);
+
+    // Existing scenario flows remain editable, but cannot queue placeholder work.
+    let legacy = ok(
+        "create non-runnable scenario flow",
+        a.post(&flows_a, json!({ "kind": "scenario", "name": "Legacy scenario", "config": {} }))
+            .await,
+    );
+    let legacy_id = str_field("scenario flow", &legacy, "id");
+    client_err(
+        "scenario flow cannot queue a synthetic run",
+        a.post(&format!("/api/v1/flows/{legacy_id}/runs"), json!({})).await,
+    );
+    ok("delete scenario fixture", a.delete(&format!("/api/v1/flows/{legacy_id}")).await);
 
     // Graph lists the flow as a node.
     let graph = ok("graph", a.get(&format!("/api/v1/workspaces/{ws_a}/graph")).await);
