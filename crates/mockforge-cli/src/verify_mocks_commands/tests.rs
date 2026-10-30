@@ -94,11 +94,8 @@ fn empty_capture_records_no_traffic_verification() {
 async fn empty_capture_succeeds_even_with_fail_on_drift() {
     let dir = tempfile::tempdir().unwrap();
     let spec = dir.path().join("api.json");
-    std::fs::write(
-        &spec,
-        r#"{"openapi":"3.0.0","info":{"title":"t","version":"1"},"paths":{}}"#,
-    )
-    .unwrap();
+    std::fs::write(&spec, r#"{"openapi":"3.0.0","info":{"title":"t","version":"1"},"paths":{}}"#)
+        .unwrap();
     let capture_db = dir.path().join("record.sqlite");
     drop(mockforge_recorder::RecorderDatabase::new(&capture_db).await.unwrap());
     let args = VerifyMocksArgs {
