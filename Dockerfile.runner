@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 COPY Cargo.toml Cargo.lock ./
+COPY vendor/aws-sigv4 ./vendor/aws-sigv4/
 
 # Trim workspace members not needed for the runner build (these
 # directories aren't copied into the Docker context). Kept in sync

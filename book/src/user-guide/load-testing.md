@@ -1,5 +1,8 @@
 # Load Testing
 
+For a searchable copy of the long-running issue discussion and a source-backed
+CVE traffic lab guide, see [Issue #79 Reference](issue-79-reference.md).
+
 MockForge ships first-class load-testing tools that work against any HTTP API
 — your real backend, a MockForge mock, or a hosted test environment. Two
 commands, two purposes:
@@ -452,3 +455,6 @@ mockforge bench --spec api.yaml \
 - [Reference: load testing guide](https://github.com/SaaSy-Solutions/mockforge/blob/main/docs/LOAD_TESTING_GUIDE.md)
 - [Chaos Engineering](./chaos-engineering.md) — pair load tests with fault injection
 - [k6 Documentation](https://k6.io/docs/) — k6 itself
+
+For safe, bounded rule canaries with exact response assertions and correlated
+origin observations, see [Security Rule Test Packs](security-rule-test-packs.md).
