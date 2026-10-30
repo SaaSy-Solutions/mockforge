@@ -224,6 +224,7 @@ export class MockForgeClient {
 
         const response = await fetch(url, {
             ...options,
+            redirect: 'error',
             headers: {
                 'Accept': 'application/json',
                 ...this.authHeaders(),

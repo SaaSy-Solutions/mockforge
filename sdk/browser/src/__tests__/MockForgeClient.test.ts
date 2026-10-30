@@ -14,6 +14,17 @@ describe('MockForgeClient', () => {
         (global.fetch as Mock).mockClear();
     });
 
+    it('refuses management redirects even when a caller requests following them', async () => {
+        (global.fetch as Mock).mockResolvedValueOnce({ ok: true, status: 200 });
+        client.setManagementToken('synthetic-redirect-only');
+        await (client as unknown as { request: (path: string, options: RequestInit) => Promise<Response> })
+            .request('/__mockforge/api/mocks', { redirect: 'follow' });
+        expect(global.fetch).toHaveBeenCalledWith(
+            `${baseUrl}/__mockforge/api/mocks`,
+            expect.objectContaining({ redirect: 'error' })
+        );
+    });
+
     describe('healthCheck', () => {
         it('should return true when health endpoint responds with 200', async () => {
             (global.fetch as Mock).mockResolvedValueOnce({
