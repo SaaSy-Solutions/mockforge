@@ -1445,6 +1445,57 @@ mod tests {
         }
     }
 
+    /// Valid cloud k6 configs are refused (errored, never passed) when the
+    /// runner has no k6 egress proxy, while a cloud config that does no work
+    /// is still rejected as a configuration error before any refusal.
+    #[tokio::test]
+    async fn k6_refusal_and_no_work_rejection_combine() {
+        assert!(
+            mockforge_bench::executor::k6_egress_proxy().is_none(),
+            "tests assume no k6 egress proxy is configured"
+        );
+        let callbacks = RegistryCallbacks::for_test();
+        let spec = r#"{"openapi":"3.0.0","info":{"title":"t","version":"1"},"paths":{}}"#;
+        for kind in ["bench", "owasp", "security", "wafbench", "crud_flow"] {
+            let payload = json!({
+                "use_cloud_api": true,
+                "spec": spec,
+                "target_url": "https://example.com",
+            });
+            let outcome = TestExecutor::for_kind(kind)
+                .execute(job(kind, payload), &callbacks)
+                .await
+                .unwrap_or_else(|e| panic!("kind={kind}: refusal must not error: {e:?}"));
+            assert!(matches!(outcome.status, JobStatus::Errored), "kind={kind}");
+            let summary = outcome.summary.expect("refusal summary");
+            assert_eq!(summary["executor_phase"], "k6_refused", "kind={kind}");
+            assert_eq!(summary["kind"], kind);
+        }
+
+        for kind in ["security", "wafbench", "crud_flow"] {
+            let payload = json!({"use_cloud_api": true, "target_url": "https://example.com"});
+            let result = TestExecutor::for_kind(kind).execute(job(kind, payload), &callbacks).await;
+            assert!(
+                matches!(result, Err(Error::Executor(ref m)) if m == &format!("{kind} requires `use_cloud_api: true` with `spec`")),
+                "kind={kind}: cloud config without spec must be a config error, got {result:?}"
+            );
+        }
+    }
+
+    /// An unsafe base_path is refused before any native or cloud dispatch,
+    /// and the refusal is errored rather than passed.
+    #[tokio::test]
+    async fn unsafe_base_path_is_refused_not_passed() {
+        let callbacks = RegistryCallbacks::for_test();
+        let payload = json!({"target_url": "https://example.com", "base_path": "@localhost:6565"});
+        let outcome = TestExecutor::for_kind("bench")
+            .execute(job("bench", payload), &callbacks)
+            .await
+            .expect("refusal is an outcome");
+        assert!(matches!(outcome.status, JobStatus::Errored));
+        assert_eq!(outcome.summary.expect("summary")["executor_phase"], "k6_refused");
+    }
+
     #[tokio::test]
     async fn cloud_run_without_k6_results_is_an_executor_error() {
         let callbacks = RegistryCallbacks::for_test();
