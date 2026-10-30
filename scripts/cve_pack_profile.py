@@ -143,10 +143,12 @@ def validate(profile):
         raise ProfileError("route must be an absolute path with no query or '..'")
     if ".." in profile["route"]:
         raise ProfileError("route must not contain '..'")
+    signature = _signature(profile["signature"])
     if (
         profile["title"] == "One-line description of the guarded weakness"
         or "https://vendor.example/advisory" in refs
         or profile["route"] == "/the/guarded/route"
+        or "x-example-signature-header" in signature["headers"]
     ):
         raise ProfileError(
             "unfinished template: replace title, references, route and signature from the advisory; new does not simulate a CVE"
@@ -168,7 +170,7 @@ def validate(profile):
         "title": profile["title"],
         "references": list(refs),
         "route": profile["route"],
-        "signature": _signature(profile["signature"]),
+        "signature": signature,
         "expect": _expect(profile["expect"], blocked=True),
         "controls": norm_controls,
     }

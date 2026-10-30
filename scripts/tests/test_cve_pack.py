@@ -226,6 +226,17 @@ class CliTests(unittest.TestCase):
                 self.assertEqual(raised.exception.code, 2)
             self.assertFalse((Path(d) / "report.json").exists())
 
+    def test_placeholder_signature_cannot_be_used_with_completed_metadata(self):
+        profile = dict(
+            cve_pack.SKELETON,
+            cve="CVE-2026-109618",
+            title="Reviewed title",
+            references=["https://example.com/advisory"],
+            route="/test",
+        )
+        with self.assertRaisesRegex(cpp.ProfileError, "unfinished template"):
+            cpp.validate(profile)
+
     def test_new_writes_skeleton(self):
         with tempfile.TemporaryDirectory() as d:
             out = Path(d) / "p.json"
