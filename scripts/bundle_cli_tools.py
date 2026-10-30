@@ -10,11 +10,26 @@ OUTPUT = ROOT / "crates/mockforge-cli/src/bundled_tools.json"
 
 
 def bundle():
-    paths = [ROOT / "scripts/export_github_issue.py"]
+    paths = [
+        ROOT / "scripts/export_github_issue.py",
+        ROOT / "scripts/security_rule_test_pack.py",
+    ]
     paths += sorted((ROOT / "scripts").glob("cve_pack*.py"))
     paths += sorted((ROOT / "scripts").glob("security_rule_pack_*.py"))
-    paths += sorted((ROOT / "examples/cve-packs").rglob("*.json"))
-    paths += [ROOT / "book/src/user-guide/cve-packs.md"]
+    for directory in ("cve-packs", "cve-lab", "security-rule-packs"):
+        paths += sorted(
+            p
+            for p in (ROOT / "examples" / directory).rglob("*")
+            if p.is_file() and p.suffix in {".json", ".yaml", ".md"}
+        )
+    paths += [
+        ROOT / "book/src/user-guide" / name
+        for name in (
+            "cve-packs.md",
+            "issue-79-reference.md",
+            "security-rule-test-packs.md",
+        )
+    ]
     files = {str(p.relative_to(ROOT)): p.read_text(encoding="utf-8") for p in paths}
     files["README.md"] = (
         "# MockForge discussion and CVE tools\n\n"
