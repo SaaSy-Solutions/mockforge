@@ -3,6 +3,10 @@
 #[derive(Clone, Copy)]
 pub(super) enum Context {
     Contract,
+    AsyncContract,
+    AsyncContracts,
+    Bindings,
+    Binding,
     Schema,
     Contracts,
     Schemas,
@@ -12,6 +16,21 @@ pub(super) enum Context {
 impl Context {
     pub(super) fn child(self, key: &str) -> Option<Self> {
         match self {
+            Self::AsyncContracts => Some(Self::AsyncContract),
+            Self::Bindings => Some(Self::Binding),
+            Self::Binding => Some(match key {
+                "query" | "headers" | "key" | "groupId" | "clientId" => Self::Schema,
+                _ => Self::Literal,
+            }),
+            Self::AsyncContract => match key {
+                "description" | "title" | "summary" | "externalDocs" | "example" | "examples"
+                | "operationId" | "tags" => None,
+                "payload" | "headers" | "schema" => Some(Self::Schema),
+                "messages" | "parameters" => Some(Self::AsyncContracts),
+                "bindings" => Some(Self::Bindings),
+                "security" => Some(Self::Literal),
+                _ => Some(Self::AsyncContract),
+            },
             Self::Contracts => Some(Self::Contract),
             Self::Schemas => Some(Self::Schema),
             Self::Literal => Some(Self::Literal),

@@ -475,6 +475,18 @@ impl RecorderDatabase {
         ).bind(protocol.as_str()).bind(limit).fetch_all(&self.pool).await?)
     }
 
+    /// Read recent broker/WebSocket message events, filtering protocol and
+    /// operation in SQL before applying the requested limit. Connection/control
+    /// records and unrelated HTTP traffic cannot displace message samples.
+    pub async fn list_recent_async_messages(&self, limit: i32) -> Result<Vec<RecordedRequest>> {
+        if limit <= 0 {
+            return Ok(Vec::new());
+        }
+        Ok(sqlx::query_as::<_, RecordedRequest>(
+            "SELECT id, protocol, timestamp, method, path, query_params, headers, body, body_encoding, client_ip, trace_id, span_id, duration_ms, status_code, tags FROM requests WHERE (protocol IN ('mqtt','amqp') AND LOWER(method) IN ('publish','deliver')) OR (protocol='kafka' AND LOWER(method) IN ('produce','consume')) OR (protocol='websocket' AND LOWER(method) IN ('inbound','outbound')) ORDER BY timestamp DESC, id DESC LIMIT ?"
+        ).bind(limit).fetch_all(&self.pool).await?)
+    }
+
     /// Delete old requests
     pub async fn delete_older_than(&self, days: i64) -> Result<u64> {
         let result = sqlx::query(
