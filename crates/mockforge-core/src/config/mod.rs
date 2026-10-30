@@ -1059,7 +1059,13 @@ pub async fn load_config_auto<P: AsRef<Path>>(path: P) -> Result<ServerConfig> {
 pub async fn discover_config_file_all_formats() -> Result<std::path::PathBuf> {
     let current_dir = std::env::current_dir()
         .map_err(|e| Error::config(format!("Failed to get current directory: {}", e)))?;
+    discover_config_file_from(&current_dir).await
+}
 
+/// The configuration file `serve` would use when started in `start`: the
+/// first known name in `start`, then in each of up to 5 parent directories.
+pub async fn discover_config_file_from(start: &Path) -> Result<std::path::PathBuf> {
+    let current_dir = start.to_path_buf();
     let config_names = vec![
         "mockforge.config.ts",
         "mockforge.config.js",
