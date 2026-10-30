@@ -6,7 +6,14 @@ traffic test can establish. Advisory references were checked on **2026-10-24**.
 
 ## Save every comment and search offline
 
-From a checkout of `main`, with Python 3.11+:
+With Python 3.11+ and a CLI version that includes `tools export`:
+
+```bash
+mockforge tools export --output-dir mockforge-tools
+cd mockforge-tools
+```
+
+The following command works in that directory or in a source checkout:
 
 ```bash
 python3 scripts/export_github_issue.py --repo SaaSy-Solutions/mockforge \

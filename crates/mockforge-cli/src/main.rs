@@ -67,6 +67,7 @@ mod status_commands;
 mod template_commands;
 #[allow(dead_code)]
 mod time_commands;
+mod tools_commands;
 #[cfg(feature = "tunnel")]
 mod tunnel_commands;
 #[cfg(feature = "vbr")]
@@ -681,6 +682,12 @@ struct ServeCliArgs {
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
 enum Commands {
+    /// Export the bundled discussion exporter and CVE rule tools
+    Tools {
+        #[command(subcommand)]
+        command: tools_commands::ToolsCommands,
+    },
+
     /// Start mock servers (HTTP, WebSocket, gRPC)
     ///
     /// Examples:
@@ -2876,6 +2883,7 @@ fn cli_command_name(cmd: &Commands) -> &'static str {
         Commands::DevSetup { .. } => "dev-setup",
         Commands::Config { .. } => "config",
         Commands::Status(_) => "status",
+        Commands::Tools { .. } => "tools",
         _ => "other",
     }
 }
@@ -2883,6 +2891,9 @@ fn cli_command_name(cmd: &Commands) -> &'static str {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cli = Cli::parse();
+    if let Commands::Tools { command } = cli.command {
+        return tools_commands::handle(command).map_err(Into::into);
+    }
 
     // Initialize Sentry first so panics and errors during the rest of startup
     // are captured. No-op at runtime when SENTRY_DSN is unset, so it's safe
@@ -2955,6 +2966,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     .await;
 
     match cli.command {
+        Commands::Tools { .. } => unreachable!("tools handled before service initialization"),
         Commands::Serve(args) => {
             // Issue #79 round 15 — `--shadow` is a thin alias for the
             // env var the server reads at request time. Set it before

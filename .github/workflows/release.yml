@@ -84,10 +84,16 @@ jobs:
     - name: Build mockforge binary with all protocols
       run: cargo build --bin mockforge --features all-protocols
 
+    - name: Check bundled CLI tools
+      run: python3 scripts/bundle_cli_tools.py --check
+
     - name: Run tests
       run: cargo test --workspace --release
     - name: Build release binaries
       run: cargo build --workspace --release
+    - name: Verify bundled tools from release binary
+      run: python3 scripts/verify_installed_tools.py --binary target/release/mockforge
+
     - name: sccache stats
       if: always()
       run: sccache --show-stats 2>/dev/null || echo "sccache was not used in this run"
@@ -226,6 +232,13 @@ jobs:
       run: |
         chmod +x scripts/publish-crates.sh
         scripts/publish-crates.sh
+
+    - name: Verify installation from crates.io
+      run: |
+        version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')
+        install_root=$(mktemp -d "${RUNNER_TEMP}/mockforge-installed.XXXXXXXX")
+        cargo install mockforge-cli --version "=$version" --locked --root "$install_root"
+        python3 scripts/verify_installed_tools.py --binary "$install_root/bin/mockforge"
 
   # Docker image publishing lives in .github/workflows/docker-build.yml
   # (multi-arch push to ghcr.io/saasy-solutions/mockforge on every push to
