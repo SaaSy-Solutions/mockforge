@@ -203,6 +203,24 @@ async fn real_tokens_enforce_scopes_sessions_orgs_revocation_and_expiry() {
 
     // The same user owns both organizations: a role check alone cannot explain this denial.
     let other = f.new_org().await;
+    for credential in [&reader, &all] {
+        let (status, listed) =
+            f.request(credential, Method::GET, "/api/v1/organizations", None, None).await;
+        assert_eq!(status, StatusCode::OK, "PAT organization inventory failed");
+        let listed = listed.as_array().expect("organization list must be an array");
+        assert_eq!(listed.len(), 1, "PAT must not list a sibling organization");
+        assert_eq!(listed[0]["id"].as_str(), Some(f.org.as_str()));
+    }
+    let (status, listed) =
+        f.request(&f.session, Method::GET, "/api/v1/organizations", None, None).await;
+    assert_eq!(status, StatusCode::OK, "session organization inventory failed");
+    let listed = listed.as_array().expect("organization list must be an array");
+    for expected in [&f.org, &other] {
+        assert!(
+            listed.iter().any(|org| org["id"].as_str() == Some(expected.as_str())),
+            "interactive session must retain its organization inventory"
+        );
+    }
     let (status, body) = f
         .request(&deployer, Method::GET, "/api/v1/hosted-mocks", Some(&other), None)
         .await;
