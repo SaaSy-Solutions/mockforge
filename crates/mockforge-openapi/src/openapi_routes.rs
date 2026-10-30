@@ -3091,6 +3091,25 @@ fn generate_enhanced_422_response(
     })
 }
 
+/// HTTP header names are ASCII case-insensitive; other parameter names are not.
+/// Prefer the exact spelling so serving's preselected header map stays fast.
+fn parameter_value<'a>(
+    params_map: &'a Map<String, Value>,
+    name: &str,
+    location: &str,
+) -> Option<&'a Value> {
+    params_map.get(name).or_else(|| {
+        if location == "header" {
+            params_map
+                .iter()
+                .find(|(key, _)| key.eq_ignore_ascii_case(name))
+                .map(|(_, value)| value)
+        } else {
+            None
+        }
+    })
+}
+
 /// Helper function to validate a parameter
 fn validate_parameter(
     parameter_data: &openapiv3::ParameterData,
@@ -3100,7 +3119,7 @@ fn validate_parameter(
     errors: &mut Vec<String>,
     details: &mut Vec<Value>,
 ) {
-    match params_map.get(&parameter_data.name) {
+    match parameter_value(params_map, &parameter_data.name, prefix) {
         Some(v) => {
             if let ParameterSchemaOrContent::Schema(s) = &parameter_data.format {
                 if let Some(schema) = s.as_item() {
@@ -3186,7 +3205,7 @@ fn validate_parameter_detailed(
     value_type: &str,
     field_errors: &mut Vec<Value>,
 ) {
-    match params_map.get(&parameter_data.name) {
+    match parameter_value(params_map, &parameter_data.name, location) {
         Some(value) => {
             if let ParameterSchemaOrContent::Schema(schema) = &parameter_data.format {
                 // Collect detailed validation errors for this parameter
@@ -3302,6 +3321,9 @@ pub fn create_registry_from_json(json: Value) -> Result<OpenApiRouteRegistry> {
     spec.validate()?;
     Ok(OpenApiRouteRegistry::new(spec))
 }
+
+#[cfg(test)]
+mod parameter_lookup_tests;
 
 #[cfg(test)]
 mod tests {
