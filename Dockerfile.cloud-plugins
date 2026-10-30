@@ -47,6 +47,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 COPY Cargo.toml Cargo.lock ./
+COPY vendor/aws-sigv4 ./vendor/aws-sigv4/
 # Strip the same workspace members the main Dockerfile strips —
 # they don't contribute to the runtime binaries.
 RUN sed -i '/\s*"test_openapi_demo"\s*,\?\s*$/d' Cargo.toml && \
