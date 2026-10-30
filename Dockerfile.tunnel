@@ -23,6 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /build
 
 COPY Cargo.toml Cargo.lock ./
+COPY vendor/aws-sigv4 ./vendor/aws-sigv4/
 
 # Drop workspace members whose directories aren't in the Docker context
 # (matches the .dockerignore filter list). Same trick the registry
