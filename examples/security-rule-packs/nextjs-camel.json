@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "normal-control",
+      "status": 200,
+      "origin": "seen"
+    },
+    {
+      "id": "nextjs-benign",
+      "status": 200,
+      "origin": "seen"
+    },
+    {
+      "id": "nextjs-header",
+      "status": 403,
+      "origin": "absent"
+    },
+    {
+      "id": "camel-benign",
+      "status": 200,
+      "origin": "seen"
+    },
+    {
+      "id": "camel-parameter",
+      "status": 403,
+      "origin": "absent"
+    },
+    {
+      "id": "camel-header",
+      "status": 403,
+      "origin": "absent"
+    }
+  ]
+}
