@@ -1,17 +1,22 @@
 name: Production Smoke Test
 
 # Runs end-to-end against the hosted registry API (api.mockforge.dev, Ashburn)
-# every 15 minutes. Catches regressions that ship past release.yml's gates and
-# surface only when real customers hit them.
+# on every push to main, hourly, and on manual dispatch. Not on pull requests.
+# Catches regressions that ship past release.yml's gates and surface only when
+# real customers hit them.
 #
 # Each run exercises: health → register → login → list hosted-mocks → billing/subscription.
 # If any step fails, the workflow opens a GitHub issue (deduped by title) so it
 # pages whoever's watching notifications.
 
 on:
+  push:
+    branches: [main]
   schedule:
-    # Every 15 minutes.
-    - cron: '*/15 * * * *'
+    # Hourly, offset from the runner-health scan. A */15 cron kept one of
+    # these jobs parked on the two-runner pool at all times (#1000). Pushes
+    # to main cover the deploy window; this cron covers the quiet hours.
+    - cron: '17 * * * *'
   workflow_dispatch: {}
 
 # Only one smoke at a time. Never cancel: on the shared Hetzner pool a
@@ -211,7 +216,7 @@ jobs:
               detail.slice(0, 4000),
               '```',
               ``,
-              `_This is an automated production-smoke alert. The smoke workflow runs every 15 minutes against \`api.mockforge.dev\`. If this is the first occurrence today, expect the workflow to retry shortly — close this issue when the next run passes._`,
+              `_This is an automated production-smoke alert. The smoke workflow runs hourly and on every push to main against \`api.mockforge.dev\`. If this is the first occurrence today, expect the workflow to retry shortly — close this issue when the next run passes._`,
             ].join('\n');
 
             if (dup) {

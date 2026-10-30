@@ -42,6 +42,7 @@ WORKDIR /app
 
 # Copy the workspace configuration files
 COPY Cargo.toml Cargo.lock ./
+COPY vendor/aws-sigv4 ./vendor/aws-sigv4/
 
 # Remove test_openapi_demo, tests, and desktop-app from workspace members for Docker build
 # Handle both quoted and unquoted formats, with/without trailing commas
