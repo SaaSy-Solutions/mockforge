@@ -85,14 +85,6 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
     }
   };
 
-  const handleDemoLogin = (role: 'admin' | 'viewer') => {
-    const demoCredentials = {
-      admin: { username: 'admin', email: '', password: 'admin123' },
-      viewer: { username: 'viewer', email: '', password: 'viewer123' },
-    };
-    setCredentials({ ...credentials, ...demoCredentials[role] });
-  };
-
   /**
    * Handle the SSO email discovery flow.
    * 1. Call GET /api/v1/sso/discover?email=<email>
@@ -394,42 +386,10 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
           )}
 
           {!isCloud && (
-            <>
-              <div className="relative">
-                <div className="absolute inset-0 flex items-center">
-                  <span className="w-full border-t" />
-                </div>
-                <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-card px-2 text-muted-foreground">Demo Accounts</span>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => handleDemoLogin('admin')}
-                  className="w-full"
-                >
-                  Demo Admin
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={() => handleDemoLogin('viewer')}
-                  className="w-full"
-                >
-                  Demo Viewer
-                </Button>
-              </div>
-
-              <div className="text-xs text-muted-foreground text-center space-y-2">
-                <div>
-                  <strong>Admin:</strong> admin / admin123 (Full access)
-                </div>
-                <div>
-                  <strong>Viewer:</strong> viewer / viewer123 (Read-only)
-                </div>
-              </div>
-            </>
+            <p className="text-xs text-muted-foreground text-center">
+              Sign in with the admin password set in <code>MOCKFORGE_ADMIN_PASSWORD</code>{' '}
+              (username <code>MOCKFORGE_ADMIN_USERNAME</code>, default <code>admin</code>).
+            </p>
           )}
         </div>
 

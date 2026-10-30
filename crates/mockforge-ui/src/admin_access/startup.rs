@@ -103,9 +103,8 @@ pub fn policy_for_bind(addr: SocketAddr, env: &AdminAuthEnv) -> Result<AdminAcce
              MOCKFORGE_ADMIN_HOST."
         ));
     }
-    // The built-in demo users (admin/admin123) exist only when neither an
-    // admin password nor a JWT secret is configured. Their tokens must not
-    // open a network-reachable server, so JWTs are refused in that case.
+    // With only a management token there is no admin login and no operator
+    // JWT secret, so no admin UI JWT can be legitimate: refuse them.
     let accept_jwt = env.admin_password || env.jwt_secret;
     Ok(AdminAccessPolicy::authenticated(accept_jwt, env.management_token.clone()))
 }
