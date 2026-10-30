@@ -247,5 +247,67 @@ class CliTests(unittest.TestCase):
             self.assertTrue(json.loads(report.read_text())["results"])
 
 
+@contextmanager
+def waf(blocks_signature, always=None):
+    """A front end that 403s the signature header when blocks_signature, else
+    200 — or always returns `always`. No origin forwarding."""
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            if always is not None:
+                code = always
+            else:
+                suspicious = self.headers.get(SIG_HEADER) is not None
+                code = 403 if (blocks_signature and suspicious) else 200
+            self.send_response(code)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_port}"
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
+
+
+class ProbeTests(unittest.TestCase):
+    def test_probe_reports_blocked_without_origin_correlation(self):
+        prof = cpp.validate(good())
+        with waf(blocks_signature=True) as target:
+            report = cve_pack.probe(prof, cve_pack.target_url(target), timeout=1)
+        self.assertEqual(report["mode"], "probe")
+        sig = next(r for r in report["results"] if r["kind"] == "signature")
+        self.assertEqual(sig["front_end"], "blocked")
+        self.assertTrue(
+            all(
+                r["front_end"] == "allowed"
+                for r in report["results"]
+                if r["kind"] == "control"
+            )
+        )
+
+    def test_probe_not_blocked_when_front_end_allows(self):
+        prof = cpp.validate(good())
+        with waf(blocks_signature=False) as target:
+            report = cve_pack.probe(prof, cve_pack.target_url(target), timeout=1)
+        sig = next(r for r in report["results"] if r["kind"] == "signature")
+        self.assertEqual(sig["front_end"], "not-blocked")
+
+    def test_probe_404_is_not_mistaken_for_a_block(self):
+        prof = cpp.validate(good())
+        with waf(blocks_signature=False, always=404) as target:
+            report = cve_pack.probe(prof, cve_pack.target_url(target), timeout=1)
+        sig = next(r for r in report["results"] if r["kind"] == "signature")
+        # benign also 404 -> no baseline -> inconclusive, never "blocked"
+        self.assertEqual(sig["front_end"], "inconclusive")
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=1)
