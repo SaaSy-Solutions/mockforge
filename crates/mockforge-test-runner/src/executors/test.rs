@@ -1475,9 +1475,10 @@ mod tests {
         for kind in ["security", "wafbench", "crud_flow"] {
             let payload = json!({"use_cloud_api": true, "target_url": "https://example.com"});
             let result = TestExecutor::for_kind(kind).execute(job(kind, payload), &callbacks).await;
-            assert!(
-                matches!(result, Err(Error::Executor(ref m)) if m == &format!("{kind} requires `use_cloud_api: true` with `spec`")),
-                "kind={kind}: cloud config without spec must be a config error, got {result:?}"
+            assert_eq!(
+                executor_message(result),
+                format!("{kind} requires `use_cloud_api: true` with `spec`"),
+                "kind={kind}: cloud config without spec must be a config error"
             );
         }
     }
@@ -1509,10 +1510,8 @@ mod tests {
             1,
         )
         .await;
-        assert!(
-            matches!(result, Err(Error::Executor(ref message)) if message.contains("summary.json")),
-            "missing k6 results must error, got {result:?}"
-        );
+        let message = executor_message(result);
+        assert!(message.contains("summary.json"), "missing k6 results must error, got {message}");
     }
 
     #[tokio::test]
@@ -1539,6 +1538,15 @@ mod tests {
         assert_eq!(outcome.summary.unwrap()["reported_findings"], 2);
     }
 
+    /// Unwrap the message of an executor error, panicking with the actual
+    /// result otherwise so a regression shows what was returned instead.
+    fn executor_message<T: std::fmt::Debug>(result: Result<T>) -> String {
+        match result {
+            Err(Error::Executor(message)) => message,
+            other => panic!("expected an executor error, got {other:?}"),
+        }
+    }
+
     fn k6(total: u64, failed: u64, findings: u64) -> K6Results {
         K6Results {
             total_requests: total,
@@ -1553,10 +1561,8 @@ mod tests {
         assert_eq!(cloud_status("owasp", &k6(20, 0, 0)).unwrap(), JobStatus::Passed);
         assert_eq!(cloud_status("owasp", &k6(20, 0, 3)).unwrap(), JobStatus::Failed);
         assert_eq!(cloud_status("owasp", &k6(20, 5, 0)).unwrap(), JobStatus::Failed);
-        assert!(matches!(
-            cloud_status("owasp", &k6(20, 20, 0)),
-            Err(Error::Executor(message)) if message.contains("no HTTP response below 500")
-        ));
+        let message = executor_message(cloud_status("owasp", &k6(20, 20, 0)));
+        assert!(message.contains("no HTTP response below 500"), "{message}");
     }
 
     #[test]
@@ -1567,16 +1573,14 @@ mod tests {
 
     #[test]
     fn zero_request_bench_is_an_executor_error() {
-        assert!(
-            matches!(bench_status(0, 0.0, 0.0), Err(Error::Executor(message)) if message.contains("zero requests"))
-        );
+        let message = executor_message(bench_status(0, 0.0, 0.0));
+        assert!(message.contains("zero requests"), "{message}");
     }
 
     #[test]
     fn zero_check_conformance_is_an_executor_error() {
-        assert!(
-            matches!(conformance_status(0, 0), Err(Error::Executor(message)) if message.contains("zero checks"))
-        );
+        let message = executor_message(conformance_status(0, 0));
+        assert!(message.contains("zero checks"), "{message}");
     }
 
     #[test]
