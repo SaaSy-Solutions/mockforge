@@ -46,6 +46,8 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - name: Test registry dependency scope
+        run: python3 scripts/tests/test_registry_security_scope.py
       - name: Determine whether registry files changed
         id: filter
         env:
@@ -65,7 +67,7 @@ jobs:
           while IFS= read -r f; do
             [ -z "$f" ] && continue
             case "$f" in
-              crates/mockforge-registry-server/*|crates/mockforge-registry-core/*|docker-compose.e2e.yml|docker-compose.rls-gate.yml|.github/workflows/registry-e2e.yml) registry=true ;;
+              Cargo.toml|Cargo.lock|vendor/aws-sigv4/*|crates/mockforge-registry-server/*|crates/mockforge-registry-core/*|docker-compose.e2e.yml|docker-compose.rls-gate.yml|.github/workflows/registry-e2e.yml) registry=true ;;
             esac
           done <<< "$files"
           echo "Registry E2E required: registry=$registry"
