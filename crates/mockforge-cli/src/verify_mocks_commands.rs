@@ -201,13 +201,14 @@ pub(crate) async fn handle_verify_mocks_command(
         // CI checks enforce the contract independently of serve-time policy.
         let decoded_request = decode_body(&req.body, &req.body_encoding);
         let body_bytes: Option<&[u8]> = decoded_request.as_deref();
+        let headers = header_value_map(&req.headers);
         if let Err((status, payload)) = registry.run_validation_with_recording_ex(
             &template,
             &method,
             &to_value_map(&extract_path_params(&concrete_path, &template)),
             &query_map(req.query_params.as_deref()),
-            &header_value_map(&req.headers),
-            &Default::default(),
+            &headers,
+            &cookie_value_map(&headers),
             body_json(body_bytes).as_ref(),
             body_present(body_bytes),
         ) {
@@ -458,6 +459,18 @@ fn query_map(query: Option<&str>) -> serde_json::Map<String, Value> {
 
 fn header_value_map(headers_json: &str) -> serde_json::Map<String, Value> {
     serde_json::from_str::<serde_json::Map<String, Value>>(headers_json).unwrap_or_default()
+}
+
+fn cookie_value_map(headers: &serde_json::Map<String, Value>) -> serde_json::Map<String, Value> {
+    headers
+        .iter()
+        .find(|(name, _)| name.eq_ignore_ascii_case("cookie"))
+        .and_then(|(_, value)| value.as_str())
+        .unwrap_or_default()
+        .split(';')
+        .filter_map(|part| part.trim().split_once('='))
+        .map(|(name, value)| (name.to_string(), Value::String(value.to_string())))
+        .collect()
 }
 
 fn extract_path_params(concrete: &str, template: &str) -> HashMap<String, String> {
