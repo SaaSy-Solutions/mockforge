@@ -60,6 +60,7 @@ pub mod diff_types;
 pub mod error;
 pub mod fidelity;
 pub mod protocol;
+pub mod response_validation;
 pub mod schema_diff;
 
 pub use error::{ContractError, Result};

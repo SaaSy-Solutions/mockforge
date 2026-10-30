@@ -77,6 +77,51 @@ Supply both `--mock-spec` and `--capture-db` to include definition and captured
 traffic checks in one report. An empty or missing capture still fails when a
 matching mock definition is also supplied.
 
+## Validate an HTTP replay fixture set
+
+The unreleased `--fixtures` mode reads MockForge's existing HTTP replay fixture
+format. Pass one JSON fixture, a directory of fixtures, or a fixture root with
+an `http` subdirectory:
+
+```bash
+mockforge verify-mocks --spec upstream-current.yaml --fixtures ./fixtures \
+  --fail-on-drift --output fixture-fidelity.json
+```
+
+Every JSON fixture in the selected HTTP subtree is checked. `--limit` only
+limits recorder database exchanges; it does not truncate fixture checks.
+The fixture set is treated as complete: source operations with no fixture are
+reported as `added`, fixture routes absent from the source as `removed`, and
+invalid fixture responses as `changed`.
+
+The `fixtures` report includes `files_checked`, a `validation_scope`, and
+per-route status, source filenames and findings. Response-schema findings retain
+field names, messages and expected/actual values. Replay fixtures store a request
+fingerprint and response, so this mode validates routes, statuses and JSON
+response bodies. It cannot validate the original request body or establish that
+a live upstream still returns the fixture's response.
+
+A fixture file has this shape:
+
+```json
+{
+  "fingerprint": {
+    "method": "GET", "path": "/items", "query": "",
+    "headers": {}, "body_hash": null
+  },
+  "timestamp": "2026-10-20T00:00:00Z",
+  "status_code": 200,
+  "response_headers": {"content-type": "application/json"},
+  "response_body": "{\"id\":1}",
+  "metadata": {}
+}
+```
+
+Loading is read-only. Missing, empty or malformed fixture sets fail; files are
+limited to 8 MiB, sets to 10,000 JSON files, and directory depth to 64. Symlinks
+and special files fail explicitly. This format can be combined with
+`--mock-spec` and `--capture-db`; each supplied input must pass its own checks.
+
 ## Use the result in CI
 
 With `--fail-on-drift`, detected drift returns exit code 1. Without that flag,
@@ -88,8 +133,8 @@ A route's `definition` status describes the compared OpenAPI definitions.
 Captured-traffic findings are reported separately in `findings`. Inspect both
 when combining the two modes. Matching definitions alone do not establish that
 a live upstream behaves correctly, and a passing sample covers only the
-exchanges checked. This command does not yet load arbitrary fixture directories
-or AsyncAPI documents.
+exchanges checked. Fixture input accepts the HTTP replay format above; other
+fixture formats and AsyncAPI documents are not supported yet.
 
 See the [CLI reference](../api/cli.md#verify-mocks---mock-fidelity--drift-detection)
 for all options.

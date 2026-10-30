@@ -5548,6 +5548,7 @@
      "flags": {
       "--capture-db": 1,
       "--fail-on-drift": 0,
+      "--fixtures": 1,
       "--help": 0,
       "--limit": 1,
       "--log-level": 1,

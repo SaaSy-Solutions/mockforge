@@ -6,7 +6,12 @@ fn schema() -> Value {
         "type":"object","required":["id"],"properties":{"id":{"type":"integer"}}
     }}}})
 }
-fn check(responses: Value, components: Value, status: u16, body: &[u8]) -> Option<String> {
+fn check(
+    responses: Value,
+    components: Value,
+    status: u16,
+    body: &[u8],
+) -> Option<responses::ResponseDrift> {
     let spec = json!({"openapi":"3.0.3","info":{"title":"fixture","version":"1"},
         "paths":{"/items":{"get":{"responses":responses}}},"components":components});
     let registry = OpenApiRouteRegistry::new(OpenApiSpec::from_json(spec.clone()).unwrap());
@@ -87,6 +92,15 @@ fn requires_evidence_and_accepts_definition_capture_or_both() {
     assert!(command().try_get_matches_from(["verify", "--spec", "source.json"]).is_err());
     for flags in [
         vec!["--mock-spec", "mock.json"],
+        vec!["--fixtures", "fixtures"],
+        vec![
+            "--fixtures",
+            "fixtures",
+            "--capture-db",
+            "capture.sqlite",
+            "--mock-spec",
+            "mock.json",
+        ],
         vec!["--capture-db", "capture.sqlite"],
         vec!["--mock-spec", "mock.json", "--capture-db", "capture.sqlite"],
     ] {
@@ -94,6 +108,21 @@ fn requires_evidence_and_accepts_definition_capture_or_both() {
         args.extend(flags);
         assert!(command().try_get_matches_from(args).is_ok());
     }
+}
+
+#[test]
+fn literal_paths_take_precedence_and_parameter_paths_keep_their_bindings() {
+    let spec = json!({"openapi":"3.0.3","info":{"title":"precedence","version":"1"},"paths":{
+        "/items/{id}":{"get":{"responses":{"200":{"description":"parameter"}}}},
+        "/items/~special":{"get":{"responses":{"200":{"description":"literal"}}}}
+    }});
+    let registry = OpenApiRouteRegistry::new(OpenApiSpec::from_json(spec).unwrap());
+    let (template, params) = match_template(&registry, "GET", "/items/~special").unwrap();
+    assert_eq!(template, "/items/~special");
+    assert!(params.is_empty());
+    let (template, params) = match_template(&registry, "GET", "/items/other").unwrap();
+    assert_eq!(template, "/items/{id}");
+    assert_eq!(params.get("id").unwrap(), "other");
 }
 
 #[test]
@@ -118,6 +147,7 @@ async fn empty_capture_succeeds_even_with_fail_on_drift() {
         spec,
         capture_db: Some(capture_db),
         mock_spec: None,
+        fixtures: None,
         limit: 500,
         fail_on_drift: true,
         output: None,
