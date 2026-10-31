@@ -1,5 +1,9 @@
 ## [Unreleased]
 
+### Changed
+
+- **[DevX]** Extract authentication middleware, token lifecycle and OAuth2/OIDC endpoints into `mockforge-auth`. Preserve HTTP authentication and OAuth2 handler import paths and shared state types; keep the risk-simulation implementation with its engine. (#635)
+
 ### Added
 
 - **[Reality]** AsyncAPI 2/3 fidelity compares channel and directional operation contracts, including payload/header schemas, bindings, server/security references and traits. CLI and authenticated admin comparisons can check recorder message samples; the CLI also checks complete recorder-JSON fixture sets. Recorded MQTT, Kafka, AMQP and WebSocket messages use protocol-aware direction, exact JSON/text schema validation and explicit unverified outcomes when capture or format support is incomplete. Capture reads remain read-only and filter message events before the limit. (#849)
@@ -9,6 +13,7 @@
 
 ### Fixed
 
+- **[Auth]** Authenticated handlers can extract `AuthClaims` with Axum’s standard extractor; middleware stores raw claims and the legacy wrapper while preserving credential-safe security events. (#635)
 - **[Security]** Admin database upgrades preserve the shipped SQLx migration checksum and remove only unchanged built-in accounts in a new migration. Operator credentials and unrelated sessions are retained. (#1016)
 - **[AI]** Use the selected provider/model for direct and chat debugging instead of a default cloud client. Apply workspace validation and seed overrides to the debug endpoints, including when runtime MockAI is disabled.
 - **[AI]** Keep the chosen provider/model and seed when applying Reality presets. Baked fixtures disable presets and reject cached configurations that would re-enable them. (#852)

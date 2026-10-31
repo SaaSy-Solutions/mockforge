@@ -249,3 +249,22 @@ impl Default for RiskEngine {
         Self::new(RiskEngineConfig::default())
     }
 }
+
+#[async_trait::async_trait]
+impl mockforge_intelligence::handlers::risk_simulation::RiskSimulationEngine for RiskEngine {
+    async fn set_simulated_risk(&self, user_id: String, score: Option<f64>) {
+        RiskEngine::set_simulated_risk(self, user_id, score).await;
+    }
+
+    async fn set_simulated_factors(&self, user_id: String, factors: HashMap<String, f64>) {
+        RiskEngine::set_simulated_factors(self, user_id, factors).await;
+    }
+
+    async fn clear_simulated_risk(&self, user_id: &str) {
+        RiskEngine::clear_simulated_risk(self, user_id).await;
+    }
+
+    async fn assess_risk(&self, user_id: &str, factors: &HashMap<String, f64>) -> RiskAssessment {
+        RiskEngine::assess_risk(self, user_id, factors).await
+    }
+}
