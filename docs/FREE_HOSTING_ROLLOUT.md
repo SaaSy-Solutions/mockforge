@@ -26,8 +26,9 @@ confirmed. Do not promise an immediate hard cap for a previously paid external
 deployment during this transition. Watch the downgrade-stop warnings and resolve
 provider configuration failures before completing a rollout.
 
-Stopping preserves deployment configuration. Restoring a paid subscription permits
-restart; a Free customer can create a local mock after the old slot is released.
+Stopping preserves deployment configuration and its capacity reservation. Restoring
+a paid subscription permits restart. A Free customer can delete the paused
+external deployment; confirmed deletion releases its slot for a local mock.
 
 ## Database acceptance
 
