@@ -137,7 +137,7 @@ class SecurityToolOwnershipTest(unittest.TestCase):
         self.assertLess(changes.index('Verify owned security tool setup and cleanup'), changes.index('Determine whether non-docs'))
         self.assertIn('python3 scripts/tests/test_owned_security_tools.py', changes)
         self.assertIn("if: runner.environment == 'github-hosted'", step('Install pinned security audit tools'))
-        self.assertIn('uses: taiki-e/install-action@v2.87.27', step('Install pinned security audit tools'))
+        self.assertIn('uses: taiki-e/install-action@v2.87.31', step('Install pinned security audit tools'))
         self.assertIn("if: runner.environment == 'self-hosted'", step('Prepare job-owned security audit tools on Hetzner'))
 
     def test_direct_and_cargo_subcommands_use_owned_exact_tools(self):
