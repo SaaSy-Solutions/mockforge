@@ -19,7 +19,7 @@ def fixture_environment():
              "RUSTC", "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER",
              "CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER", "CARGO_TARGET_DIR",
              "CARGO_BUILD_JOBS", "CARGO_INCREMENTAL", "CARGO_PROFILE_DEV_DEBUG",
-             "CARGO_PROFILE_TEST_DEBUG", "TMPDIR")
+             "CARGO_PROFILE_TEST_DEBUG", "TMPDIR", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS")
     return {key: os.environ[key] for key in names if key in os.environ}
 
 

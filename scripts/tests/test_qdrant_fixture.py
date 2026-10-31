@@ -6,10 +6,21 @@ import unittest
 from unittest.mock import Mock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'ci'))
-from qdrant_fixture import QdrantFixture
+from qdrant_fixture import QdrantFixture, fixture_environment
 
 
 class LocalEngineTests(unittest.TestCase):
+    @patch.dict('os.environ', {
+        'XDG_RUNTIME_DIR': '/run/user/1000',
+        'DBUS_SESSION_BUS_ADDRESS': 'unix:path=/run/user/1000/bus',
+        'OPENAI_API_KEY': 'must-not-leak',
+    }, clear=True)
+    def test_native_admission_environment_survives_credential_filter(self):
+        environment = fixture_environment()
+        self.assertEqual(environment['XDG_RUNTIME_DIR'], '/run/user/1000')
+        self.assertEqual(environment['DBUS_SESSION_BUS_ADDRESS'], 'unix:path=/run/user/1000/bus')
+        self.assertNotIn('OPENAI_API_KEY', environment)
+
     def fixture(self, context, info=None):
         fixture = QdrantFixture('qdrant/qdrant:v1.19.2', {})
         def command(*args):
