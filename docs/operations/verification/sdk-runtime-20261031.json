@@ -1,0 +1,74 @@
+{
+  "binary_version": "0.3.238",
+  "binary_sha256": "909807fdafc6495435cc100a14965cc67a6acdb6c730fb166c0f7324caca2dbf",
+  "phases": [
+    {
+      "name": "python-environment",
+      "exit_code": 0,
+      "seconds": 3.75,
+      "log": "/tmp/mockforge-sdk-runtime-20261031/sdk-runtime-logs/python-environment.log"
+    },
+    {
+      "name": "python-install",
+      "exit_code": 0,
+      "seconds": 7.22,
+      "log": "/tmp/mockforge-sdk-runtime-20261031/sdk-runtime-logs/python-install.log"
+    },
+    {
+      "name": "python-tests",
+      "exit_code": 0,
+      "seconds": 12.77,
+      "log": "/tmp/mockforge-sdk-runtime-20261031/sdk-runtime-logs/python-tests.log"
+    },
+    {
+      "name": "go-tests",
+      "exit_code": 0,
+      "seconds": 14.42,
+      "log": "/tmp/mockforge-sdk-runtime-20261031/sdk-runtime-logs/go-tests.log"
+    },
+    {
+      "name": "java-tests",
+      "exit_code": 0,
+      "seconds": 22.7,
+      "log": "/tmp/mockforge-sdk-runtime-20261031/sdk-runtime-logs/java-tests.log"
+    },
+    {
+      "name": "browser-install",
+      "exit_code": 0,
+      "seconds": 9.36,
+      "log": "/tmp/mockforge-sdk-runtime-20261031/sdk-runtime-logs/browser-install.log"
+    },
+    {
+      "name": "browser-audit",
+      "exit_code": 0,
+      "seconds": 4.49,
+      "log": "/tmp/mockforge-sdk-runtime-20261031/sdk-runtime-logs/browser-audit.log"
+    },
+    {
+      "name": "browser-tests",
+      "exit_code": 0,
+      "seconds": 10.36,
+      "log": "/tmp/mockforge-sdk-runtime-20261031/sdk-runtime-logs/browser-tests.log"
+    },
+    {
+      "name": "browser-build",
+      "exit_code": 0,
+      "seconds": 11.88,
+      "log": "/tmp/mockforge-sdk-runtime-20261031/sdk-runtime-logs/browser-build.log"
+    },
+    {
+      "name": "browser-integration",
+      "exit_code": 0,
+      "seconds": 5.58,
+      "log": "/tmp/mockforge-sdk-runtime-20261031/sdk-runtime-logs/browser-integration.log"
+    },
+    {
+      "name": "browser-runtime",
+      "exit_code": 0,
+      "seconds": 1.33,
+      "log": "/tmp/mockforge-sdk-runtime-20261031/sdk-runtime-logs/browser-runtime.log"
+    }
+  ],
+  "complete": true,
+  "all_passed": true
+}

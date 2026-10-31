@@ -1,0 +1,695 @@
+{
+  "verified_main": "a1a6c8db47e092e1cc3e723c8e7203ace1bed88b",
+  "initial_count": 49,
+  "merged": 48,
+  "closed_superseded": 1,
+  "outside_initial_queue": [
+    1447
+  ],
+  "pull_requests": [
+    {
+      "number": 1229,
+      "title": "Add bounded verified Free hosting and platform AI allowances",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1229",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T20:18:16Z",
+      "headRefOid": "84e4d2edccd92a36b74adfc7886ba1231079fb16",
+      "mergeCommit": {
+        "oid": "f6784cb72290c59543462d6fb251fd09d0838837"
+      },
+      "initial_head": "6eb4f60b0aab5bae123f1ac9478d9be937c166f2",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1267,
+      "title": "fix(registry): enforce PAT scopes, organization boundaries and SSE credentials",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1267",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T19:49:27Z",
+      "headRefOid": "ebed22b030db14aeb40d47033b41ab588162a7fa",
+      "mergeCommit": {
+        "oid": "4fc02b7e038ae089a50588394d3e06228d59663d"
+      },
+      "initial_head": "922224f21edd6cf4b0c7915bf1e7d94ae2ff8265",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1269,
+      "title": "fix(ui): require auth on admin reads; refuse non-loopback admin without credentials (#1019)",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1269",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T19:57:58Z",
+      "headRefOid": "2ed807a8c96b21d122f5177e9e8eb584051bd13d",
+      "mergeCommit": {
+        "oid": "6f9759fb4671aecc18d2dc01c923902252aea504"
+      },
+      "initial_head": "2ed807a8c96b21d122f5177e9e8eb584051bd13d",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1272,
+      "title": "fix(core): sandbox the fs.readFile template token (#1015)",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1272",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:00:54Z",
+      "headRefOid": "fbe1e9721cc276c576a2a1352b911dd3522cad94",
+      "mergeCommit": {
+        "oid": "7e7be7776b821beeb70213f715022b86f9ae90f3"
+      },
+      "initial_head": "40ade3d6151a6e88dcf5d9a3b6967d78f3237e1f",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1274,
+      "title": "fix(plugins): enforce signature policy in CLI and admin installs",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1274",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T19:57:58Z",
+      "headRefOid": "02c3d5bb5247da7a194cd5c02bb862a9ec98d186",
+      "mergeCommit": {
+        "oid": "a4d7eca5fdd695b3360462936d9f588798472152"
+      },
+      "initial_head": "934b711dc1eba72c5caa7714f11a7454f71f317d",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1275,
+      "title": "fix(registry): accept ?token= only on SSE stream routes and redact it from logs (#1018)",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1275",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T19:49:08Z",
+      "headRefOid": "dd7aa220e439623b645ceb98843798c0a5a48612",
+      "mergeCommit": {
+        "oid": "ebed22b030db14aeb40d47033b41ab588162a7fa"
+      },
+      "initial_head": "1519dd35da6f196963e5747d65599649ad51afd3",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1278,
+      "title": "fix(security): enforce admin auth and plugin trust without breaking existing databases",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1278",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T19:57:56Z",
+      "headRefOid": "a4d7eca5fdd695b3360462936d9f588798472152",
+      "mergeCommit": {
+        "oid": "60a0a16997825ff7c908f70ec73c135418c604dd"
+      },
+      "initial_head": "f5f382b0bf7b4a085911b2a8a77323e4e22f8bc7",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1283,
+      "title": "fix(http): require the management credential on the data-port control plane (#1011)",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1283",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:11:54Z",
+      "headRefOid": "94fecfdd023f68d62930587a81c46132eefb88f8",
+      "mergeCommit": {
+        "oid": "ed0b1531cb2447dc81bfe65de17159eaa01c0e01"
+      },
+      "initial_head": "7ee97ef46f0bae10281a45462dbb0bab43b96c3e",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1287,
+      "title": "fix(test-runner): reject unavailable executors and runs with no work",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1287",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T20:10:53Z",
+      "headRefOid": "392aa4eafe0f007c6db267af286c7cf364f76f14",
+      "mergeCommit": {
+        "oid": "f4a2d924714c394c13d933535249c49a0e5d9922"
+      },
+      "initial_head": "1b97c0fa41749cb3eeed515b7822f8149f5108de",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1289,
+      "title": "docs(seo): docs canonicals, IndexNow, Python SDK install-from-source, neutral comparisons",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1289",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:19:21Z",
+      "headRefOid": "ac5f34f21bda6b49e887d0fff592e6fc85e752e6",
+      "mergeCommit": {
+        "oid": "499c4d2cb0c4fd29e06debdd31da2f01e3c3cae7"
+      },
+      "initial_head": "9aa756b1bfd11de023e0e26f3d4c18dbb5423691",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1312,
+      "title": "ci(deps): bump taiki-e/install-action from 2.87.27 to 2.87.31 in the github-actions group across 1 directory",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1312",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T15:01:15Z",
+      "headRefOid": "086772a1640bd430ea7705e6983e8888348f4775",
+      "mergeCommit": {
+        "oid": "1eb38cd200f12a0b5a2b9c7c03736829e0583046"
+      },
+      "initial_head": "086772a1640bd430ea7705e6983e8888348f4775",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1318,
+      "title": "fix(registry): proxy hosted-mock sub-paths instead of returning 500 (#1280)",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1318",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:54:19Z",
+      "headRefOid": "3b0daf3bba316a78573679964890b5c66be1f1f4",
+      "mergeCommit": {
+        "oid": "64d48b33df5f6231c6fcc9d46b33ce67f78b1616"
+      },
+      "initial_head": "084caf07eb2234237115ba84a36f610356d16947",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1319,
+      "title": "chore(cli): remove the uncompiled registry_commands.rs (#1277)",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1319",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:00:05Z",
+      "headRefOid": "b6c5eb8ef145f6ac857198ddfe6dcfc90184aa88",
+      "mergeCommit": {
+        "oid": "78bedd0949138886b446c4010080674775f7daee"
+      },
+      "initial_head": "6ccb6c092688e5a90ddccfaf678d1cb60a115e27",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1320,
+      "title": "fix(clients): make the editor and browser clients build and test, and run them in CI (#1282)",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1320",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:27:58Z",
+      "headRefOid": "e6252792484c96876f59ac935589e7b185632b2a",
+      "mergeCommit": {
+        "oid": "208c6a6cf4c053ab6d2b25df91ce78c2b18ffac5"
+      },
+      "initial_head": "2af9f357cf4cdde5f6dbc93b0388bf8c774800c3",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1325,
+      "title": "fix(ci): report stale registry fixtures and check disk space",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1325",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:00:11Z",
+      "headRefOid": "9846cbcf506f6d7ba26a83cfb011514e63f2c148",
+      "mergeCommit": {
+        "oid": "bc70e93c18916b3c5c29b7debc1b7eca8d38d32d"
+      },
+      "initial_head": "c99076b0c0561e75f7cb35e1c1cb69caf02cb780",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1329,
+      "title": "refactor(auth): extract authentication crate and preserve claims access",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1329",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T20:27:00Z",
+      "headRefOid": "259a11621b457933cd1aefc7fb4faaaa81117fe6",
+      "mergeCommit": {
+        "oid": "6888a883bc2382825b5e3806cedf1235a3f81a0d"
+      },
+      "initial_head": "3b8ff7f1b827f5f0c5ec4733863626451a246a03",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1330,
+      "title": "fix(sdk): serve dynamic mocks through credentialed HTTP management",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1330",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T19:05:26Z",
+      "headRefOid": "bb9084b3f73a021e56488f04b8812d8d45c2954d",
+      "mergeCommit": {
+        "oid": "01d3a4af7e738947e82a57c7c74ece5beb5f80b2"
+      },
+      "initial_head": "c6e5764067f59cd04653b043ecdaa5f3b57263ca",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1334,
+      "title": "feat(data): add persistent Qdrant RAG storage behind a feature",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1334",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T19:42:52Z",
+      "headRefOid": "c0300d7dd466ceebd3d275c24850794f92dff866",
+      "mergeCommit": {
+        "oid": "44485c00f1bc5e218648bb425857ccab42f009eb"
+      },
+      "initial_head": "8e8b87335691fc0fea30fd724500355069b92312",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1335,
+      "title": "refactor(ui): migrate shared marketplace and hosted controls",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1335",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:14:48Z",
+      "headRefOid": "6104a5de56ae33d7248a80062bfc30b99be78eb4",
+      "mergeCommit": {
+        "oid": "4501c212f6ad32e9a9135dcadf19bfd77b3d2c9d"
+      },
+      "initial_head": "47ac6f87c67b155130c0ded8755a5766a74d4760",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1337,
+      "title": "fix(fidelity): reject incomplete and nonconforming captures in CI",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1337",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:32:43Z",
+      "headRefOid": "e949841bfe30c24361e9448d85c01236bb21e3c2",
+      "mergeCommit": {
+        "oid": "d645b1879d475d395c268870904bb32a80a68e49"
+      },
+      "initial_head": "e07262219c8960450d3910b9ac2ee688fc7256d3",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1338,
+      "title": "feat(fidelity): compare mock definitions with current source specifications",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1338",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:32:34Z",
+      "headRefOid": "e3f9b67088a232691a6e78f76e9bd8b9e831c25a",
+      "mergeCommit": {
+        "oid": "e949841bfe30c24361e9448d85c01236bb21e3c2"
+      },
+      "initial_head": "47a86a1486f71ba94492e531e92b664ece862f1f",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1339,
+      "title": "feat(fidelity): validate HTTP fixture sets and correct route precedence",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1339",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:32:26Z",
+      "headRefOid": "0357c0e1249581b13f29a129691bce46f8b6a3ab",
+      "mergeCommit": {
+        "oid": "e3f9b67088a232691a6e78f76e9bd8b9e831c25a"
+      },
+      "initial_head": "df46f7b6964c70c08aca47c04bff739c36adf7d2",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1340,
+      "title": "fix(fidelity): enforce request contracts independently of server settings",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1340",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:16:00Z",
+      "headRefOid": "b82dfd5dbe6f030624709fa9e341bce996820eb0",
+      "mergeCommit": {
+        "oid": "f8c79270308c85b91f627824299e24eb7df08844"
+      },
+      "initial_head": "b474614729fd1775bb6f9f4097b3ebb912ad212b",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1341,
+      "title": "feat(fidelity): compare definitions and recorded samples in admin UI",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1341",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:15:51Z",
+      "headRefOid": "698b1e62e3584ab6455f6adfc38f9672da2e9dfc",
+      "mergeCommit": {
+        "oid": "b82dfd5dbe6f030624709fa9e341bce996820eb0"
+      },
+      "initial_head": "c18369bb306a28dead44fd69d2dc3c427d38142b",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1342,
+      "title": "fix(fidelity): match serving query parsing and default root servers",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1342",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:15:43Z",
+      "headRefOid": "ecf353b0ad3f21ee61cf49e90873f1e13843d9d2",
+      "mergeCommit": {
+        "oid": "698b1e62e3584ab6455f6adfc38f9672da2e9dfc"
+      },
+      "initial_head": "297bd573ab4a9f946e99d34901574e398f48c01d",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1343,
+      "title": "fix(fidelity): validate cookies from recorded requests",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1343",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:15:35Z",
+      "headRefOid": "f1f71f39f0d9c9c4ade134fc9b9341110bd85f32",
+      "mergeCommit": {
+        "oid": "ecf353b0ad3f21ee61cf49e90873f1e13843d9d2"
+      },
+      "initial_head": "c0b43521b6b266efb17a274559dfa0a900353b42",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1344,
+      "title": "fix(fidelity): validate HTTP headers without name-case mismatches",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1344",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:15:27Z",
+      "headRefOid": "2a947f18c13a4bdc85647407a1aa4e8cb3585206",
+      "mergeCommit": {
+        "oid": "f1f71f39f0d9c9c4ade134fc9b9341110bd85f32"
+      },
+      "initial_head": "3d1465de8c14bae00f0288412cdd80d2ae9a0bd4",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1345,
+      "title": "fix(fidelity): validate referenced parameter schemas with local context",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1345",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:15:19Z",
+      "headRefOid": "a2b170ab27adb9485f87821858c5e66f006bad40",
+      "mergeCommit": {
+        "oid": "2a947f18c13a4bdc85647407a1aa4e8cb3585206"
+      },
+      "initial_head": "1897f489b2c72e7282cb0c186cd171d1a4bdaf68",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1346,
+      "title": "fix(fidelity): validate JSON-content request parameters",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1346",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:15:12Z",
+      "headRefOid": "d87f085ad4d94d679413e19f98ed40e16a337dee",
+      "mergeCommit": {
+        "oid": "a2b170ab27adb9485f87821858c5e66f006bad40"
+      },
+      "initial_head": "13e1c488c887616bdf262c8e6348efed073e5b84",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1347,
+      "title": "feat(fidelity): verify AsyncAPI definitions and recorded messages",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1347",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:15:00Z",
+      "headRefOid": "a350f5cdf8af11fc6e55bb115a496b4b0cdd0f7f",
+      "mergeCommit": {
+        "oid": "d87f085ad4d94d679413e19f98ed40e16a337dee"
+      },
+      "initial_head": "e7c3bd962224e0f779bd7bc93cb78329c50a6aab",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1348,
+      "title": "fix(ai): replay immutable generation snapshots before calling providers",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1348",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T15:05:27Z",
+      "headRefOid": "d5431edc58f3af397ab3c691cd7387edb3fac3dd",
+      "mergeCommit": {
+        "oid": "89a2e0d2b8cf8d997b758a6e7abd86b50093727d"
+      },
+      "initial_head": "d5431edc58f3af397ab3c691cd7387edb3fac3dd",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1349,
+      "title": "feat(ai): bake fixtures with persisted authoring policies",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1349",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T19:07:01Z",
+      "headRefOid": "76a82aa2ab875bb58e99b4ba2fd8f5e4e8e7e514",
+      "mergeCommit": {
+        "oid": "c5998509a35d05acd989e4b2857cd87d9e017b4e"
+      },
+      "initial_head": "caa99006b94bf5e00bc950e6951f544763070795",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1351,
+      "title": "fix(ai): preserve frozen scalar identity and integrity",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1351",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T15:10:06Z",
+      "headRefOid": "5b504f1821635c2a65b7952aaa85e917ea204853",
+      "mergeCommit": {
+        "oid": "5350b65442db5a09c26f68d82513e47dbf3f59c2"
+      },
+      "initial_head": "4cfd5f244c216f6e3211be7f10a4cdcfb09bd49d",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1352,
+      "title": "fix(ai): preserve chat provider settings and snapshot policies",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1352",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T15:09:57Z",
+      "headRefOid": "890df85bf0e1cf09561ae30bef18cc90857b3951",
+      "mergeCommit": {
+        "oid": "5b504f1821635c2a65b7952aaa85e917ea204853"
+      },
+      "initial_head": "636a8317c0639fb5deee760417d61a73a97f5682",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1353,
+      "title": "fix(ai): honor workspace policies in local admin generation",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1353",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T15:09:46Z",
+      "headRefOid": "00930953e95ba9cea1dc017eaa5938cd80714488",
+      "mergeCommit": {
+        "oid": "890df85bf0e1cf09561ae30bef18cc90857b3951"
+      },
+      "initial_head": "ba08e0d46de23ecdc5a5e30ea662f626afa0fd2b",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1355,
+      "title": "fix(ai): preserve authoring settings when runtime AI is disabled",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1355",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T15:09:35Z",
+      "headRefOid": "129b38e2d394350160e77b7da4f9680564f94c4b",
+      "mergeCommit": {
+        "oid": "00930953e95ba9cea1dc017eaa5938cd80714488"
+      },
+      "initial_head": "5394539d449df7d1142469dee63b1a469b775a1c",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1357,
+      "title": "feat(registry): serve HTTP hosted mocks from Cloudflare Containers (#1063)",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1357",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:57:36Z",
+      "headRefOid": "45ae5f29b130a4ef25644889775f533ff7d26ae0",
+      "mergeCommit": {
+        "oid": "721458c1ececad9503b4357522e39c63dd6e2cc2"
+      },
+      "initial_head": "51acc8bed369b8ceaa8b9ab61302c523db121030",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1358,
+      "title": "fix(ai): honor configured providers in debug analysis",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1358",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T15:08:40Z",
+      "headRefOid": "51e7f0cbf392d09055dd694fd83d4a3d75dbd1b8",
+      "mergeCommit": {
+        "oid": "129b38e2d394350160e77b7da4f9680564f94c4b"
+      },
+      "initial_head": "51e7f0cbf392d09055dd694fd83d4a3d75dbd1b8",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1385,
+      "title": "ci(bench): rebuild checkout sources before paired measurements",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1385",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:02:28Z",
+      "headRefOid": "275698306bbb8bc77e62a437b9b149a1695d02b9",
+      "mergeCommit": {
+        "oid": "243903060fd9c2500a938be8ae7f1b2b8387861e"
+      },
+      "initial_head": "a5e77ad54aa37fcefc7f8b3463c2e5056dafcaf8",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1388,
+      "title": "perf(dev): bound local Rust builds and preserve worktree artifact reuse",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1388",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:17:37Z",
+      "headRefOid": "411478e252c6a32e5e389c70f6b90a355ff57fa3",
+      "mergeCommit": {
+        "oid": "063694d2680d6c4ba94735c410f91e931a06d57f"
+      },
+      "initial_head": "010480f8fb26134b8a80a7eb0b3671a4ce87e2a7",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1401,
+      "title": "fix(security): drop the unused SigV4a feature and update ctutils (RUSTSEC-2026-0387, RUSTSEC-2026-0385)",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1401",
+      "state": "CLOSED",
+      "isDraft": true,
+      "closedAt": "2026-10-31T15:09:45Z",
+      "headRefOid": "cd9f2ddb3b1bc37104ab4955ff2a42bcfe19c019",
+      "mergeCommit": null,
+      "initial_head": "cd9f2ddb3b1bc37104ab4955ff2a42bcfe19c019",
+      "resolution": "Superseded by #1391; existing support for SigV4a/MRAP retained."
+    },
+    {
+      "number": 1407,
+      "title": "fix(sdk): refuse credentialed management redirects",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1407",
+      "state": "MERGED",
+      "isDraft": true,
+      "closedAt": "2026-10-31T19:04:45Z",
+      "headRefOid": "927e180e7baa49a459ac009c42c14907d1b9dbbe",
+      "mergeCommit": {
+        "oid": "9083f2e5ee1555a336f4b3e2177733e4b7426fa4"
+      },
+      "initial_head": "927e180e7baa49a459ac009c42c14907d1b9dbbe",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1408,
+      "title": "fix(registry): bind PAT organization inventory to its organization",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1408",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T19:49:08Z",
+      "headRefOid": "2dd1449b7f17edb9baeeb14b2b055bc62edb4e60",
+      "mergeCommit": {
+        "oid": "8344e1add4a8cc9ea122b3da3125b26f9996f178"
+      },
+      "initial_head": "2dd1449b7f17edb9baeeb14b2b055bc62edb4e60",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1409,
+      "title": "fix(auth): keep submitted credentials out of security events",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1409",
+      "state": "MERGED",
+      "isDraft": true,
+      "closedAt": "2026-10-31T19:57:58Z",
+      "headRefOid": "7632ef60a10e44a7ceef684ffea9d6fbe6318db8",
+      "mergeCommit": {
+        "oid": "529139e56c67e56ed08e0f754820cc4cf943c2cc"
+      },
+      "initial_head": "7632ef60a10e44a7ceef684ffea9d6fbe6318db8",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1410,
+      "title": "fix(fidelity): preserve named server variable contracts",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1410",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:14:27Z",
+      "headRefOid": "ac86dbc085b29759c4b4debb7cf72bc8f34c2781",
+      "mergeCommit": {
+        "oid": "d10719ff97f2739344ee856417bf29a9617bee91"
+      },
+      "initial_head": "ac86dbc085b29759c4b4debb7cf72bc8f34c2781",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1418,
+      "title": "deps(deps): bump the cargo-patch-and-minor group with 3 updates",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1418",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T20:28:15Z",
+      "headRefOid": "18130acb5de68b8464a613b69d834b48d4eed389",
+      "mergeCommit": {
+        "oid": "8fe96f889bc6dca71a24ccd39a2342cf42b2a6cf"
+      },
+      "initial_head": "6bf631c9657d14b2021a986faf639c22741b7c71",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1423,
+      "title": "ci(fly-cutover): pin setup-flyctl and disable flyctl prompts",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1423",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:01:26Z",
+      "headRefOid": "b4ad375e110443bf1d1724ae0716bed9e2a07336",
+      "mergeCommit": {
+        "oid": "74c160f0ef54ca34db74d45b60c442bf14ba4539"
+      },
+      "initial_head": "17aa24f2838c2d32e19b68506a397a9ab8c44e75",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1438,
+      "title": "fix(deps): remove vulnerable desktop updater ZIP dependency",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1438",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T20:28:13Z",
+      "headRefOid": "803b95e322b394291f7fbdc71836f666ef53773f",
+      "mergeCommit": {
+        "oid": "a1a6c8db47e092e1cc3e723c8e7203ace1bed88b"
+      },
+      "initial_head": "66f6147c3d0deeacb965756717602c2a9b7305a5",
+      "merge_commit_reachable_from_main": true
+    },
+    {
+      "number": 1442,
+      "title": "release: package issue 79 tools for crates.io in 0.3.238",
+      "url": "https://github.com/SaaSy-Solutions/mockforge/pull/1442",
+      "state": "MERGED",
+      "isDraft": false,
+      "closedAt": "2026-10-31T18:12:51Z",
+      "headRefOid": "be85cce877fbec49b54293a5bc95a6121c094d73",
+      "mergeCommit": {
+        "oid": "2dcddeaa8aebc8cc51b415831ca267f2344869f8"
+      },
+      "initial_head": "a0f9db10ae5b33dfd8ea2abc3920348dd8822fc9",
+      "merge_commit_reachable_from_main": true
+    }
+  ]
+}

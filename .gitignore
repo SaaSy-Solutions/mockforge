@@ -206,3 +206,5 @@ tests/data/
 mutants.out
 compile-check.db
 /.claude/worktrees/
+
+/crates/mockforge-ui/ui/.codex-dependency-owner.json

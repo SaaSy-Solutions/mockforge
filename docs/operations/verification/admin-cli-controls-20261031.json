@@ -1,0 +1,29 @@
+{
+  "tested_source": "0d03586101529ed019f9026dba7f14be6430eca8",
+  "binary_sha256": "3847a9e34ea336d75df01533abfbe94e014be5ba95fc9c620fe1419076a1d6ac",
+  "checks": [
+    {
+      "command": "plugin install --help",
+      "exit_code": 0,
+      "required_flags": [
+        "--allow-unsigned",
+        "--trusted-keys"
+      ]
+    },
+    {
+      "command": "plugin update --help",
+      "exit_code": 0,
+      "required_flags": [
+        "--allow-unsigned",
+        "--trusted-keys"
+      ]
+    },
+    {
+      "command": "plugin install with nonexistent explicit trust store",
+      "exit_code": 1,
+      "stdout": "2026-10-31T19:57:24.634628Z  INFO mockforge_observability::logging: Logging initialized: level=info, format=text\n\ud83d\udd0c Installing plugin from: /tmp/mockforge-admin-cli-absent-plugin-20261031\n",
+      "stderr": "Error: Security violation: Failed to read trust store /tmp/mockforge-admin-cli-absent-trust-20261031.json: No such file or directory (os error 2)\n"
+    }
+  ],
+  "limitation": "No installation into real home; actual installation behavior covered by library and admin integration fixtures. Embedded UI fallback assets; separate frontend production build passed."
+}
