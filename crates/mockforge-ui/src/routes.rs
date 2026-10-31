@@ -275,6 +275,8 @@ pub fn create_admin_router(
         .route("/__mockforge/continuum/enabled", axum::routing::put(set_continuum_enabled))
         .route("/__mockforge/continuum/overrides", get(get_continuum_overrides))
         .route("/__mockforge/continuum/overrides", delete(clear_continuum_overrides))
+        // Stateless fidelity comparison, protected by the admin RBAC layer.
+        .route("/__mockforge/fidelity/compare", post(fidelity::compare).layer(axum::extract::DefaultBodyLimit::max(8 * 1024 * 1024)))
         // Contract diff routes
         .route("/__mockforge/contract-diff/upload", post(contract_diff::upload_request))
         .route("/__mockforge/contract-diff/submit", post(contract_diff::submit_request))
