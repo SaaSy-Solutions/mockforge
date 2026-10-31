@@ -151,6 +151,10 @@ async fn enqueue_for_service(
         tx.rollback().await?;
         return Ok(false);
     };
+    // Roll back explicitly on every early return. Dropping the
+    // transaction only queues the ROLLBACK, so the `FOR UPDATE` row lock
+    // can outlive this call and make the next claim on another pooled
+    // connection skip the row as locked.
     if !svc.has_openapi_spec() {
         warn!(
             service_id = %svc.id,
@@ -160,10 +164,6 @@ async fn enqueue_for_service(
         tx.rollback().await?;
         return Ok(false);
     }
-    // Roll back explicitly when the service is not due. Dropping the
-    // transaction only queues the ROLLBACK, so the `FOR UPDATE` row lock
-    // can outlive this call and make the next claim on another pooled
-    // connection skip the row as locked.
     match probe_is_due(&svc, now, default_secs) {
         Ok(true) => {}
         Ok(false) => {
