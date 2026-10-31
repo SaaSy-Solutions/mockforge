@@ -606,7 +606,7 @@ jobs:
 
     - name: Install pinned security audit tools
       if: runner.environment == 'github-hosted'
-      uses: taiki-e/install-action@v2.87.27
+      uses: taiki-e/install-action@v2.87.31
       with:
         tool: cargo-audit@0.22.2,cargo-deny@0.20.2
         fallback: none

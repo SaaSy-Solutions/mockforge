@@ -22,7 +22,7 @@ class PublishStatusTests(unittest.TestCase):
             ["cargo", "metadata", "--locked", "--no-deps", "--format-version", "1"], cwd=ROOT,
         ))
 
-    def run_publisher(self, mode, dry_run=False):
+    def run_publisher(self, mode, dry_run=False, stale_bundle=False):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / "scripts").mkdir()
@@ -38,6 +38,19 @@ class PublishStatusTests(unittest.TestCase):
                 crate = root / "crates" / name
                 crate.mkdir(parents=True)
                 (crate / "Cargo.toml").write_text('[package]\nname = "fixture"\n')
+            shutil.copyfile(ROOT / "scripts/bundle_cli_tools.py", root / "scripts/bundle_cli_tools.py")
+            bundle_path = Path("crates/mockforge-cli/src/bundled_tools.json")
+            bundled = json.loads((ROOT / bundle_path).read_text())
+            for name in bundled:
+                source = ROOT / name
+                if source.is_file():
+                    target = root / name
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(source, target)
+            (root / bundle_path).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(ROOT / bundle_path, root / bundle_path)
+            if stale_bundle:
+                (root / "scripts/export_github_issue.py").write_text("# changed after bundling\n")
             tools = root / "tools"
             tools.mkdir()
             curl = tools / "curl"
@@ -70,6 +83,12 @@ class PublishStatusTests(unittest.TestCase):
             return subprocess.run(
                 args, cwd=root, env=env, capture_output=True, text=True, timeout=30
             )
+
+    def test_stale_tools_prevent_publication(self):
+        result = self.run_publisher("published", stale_bundle=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("CLI tools bundle is stale", result.stderr)
+        self.assertNotIn("=== mockforge", result.stdout)
 
     def test_all_published_returns_success(self):
         result = self.run_publisher("published")

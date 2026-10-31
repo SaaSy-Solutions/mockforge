@@ -13,11 +13,17 @@ concurrency:
 permissions:
   contents: write
 
+env:
+  # The release and registry-install builds share the host with other jobs.
+  CARGO_BUILD_JOBS: "2"
+
 jobs:
   release:
     name: Create Release
-    runs-on: [self-hosted, linux, x64, rust]
-    timeout-minutes: 120
+    runs-on: [self-hosted, linux, x64, "${{ vars.MOCKFORGE_RELEASE_RUNNER_LABEL || 'rust' }}"]
+    # Cold workspace tests and two install-path builds exceeded two hours
+    # in the last successful release. Keep the bounded build parallelism.
+    timeout-minutes: 360
     env:
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_CACHE_SIZE: "2G"
@@ -84,10 +90,16 @@ jobs:
     - name: Build mockforge binary with all protocols
       run: cargo build --bin mockforge --features all-protocols
 
+    - name: Check bundled CLI tools
+      run: python3 scripts/bundle_cli_tools.py --check
+
     - name: Run tests
       run: cargo test --workspace --release
     - name: Build release binaries
       run: cargo build --workspace --release
+    - name: Verify bundled tools from release binary
+      run: python3 scripts/verify_installed_tools.py --binary target/release/mockforge
+
     - name: sccache stats
       if: always()
       run: sccache --show-stats 2>/dev/null || echo "sccache was not used in this run"
@@ -186,7 +198,7 @@ jobs:
 
   publish:
     name: Publish to crates.io
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: [self-hosted, linux, x64, "${{ vars.MOCKFORGE_RELEASE_RUNNER_LABEL || 'rust' }}"]
     timeout-minutes: 360
     # Publishing to crates.io
     # with broken tests yanks our reputation, not just our deploy.
@@ -227,6 +239,13 @@ jobs:
         chmod +x scripts/publish-crates.sh
         scripts/publish-crates.sh
 
+    - name: Verify installation from crates.io
+      run: |
+        version=$(python3 -c 'import tomllib; print(tomllib.load(open("Cargo.toml", "rb"))["workspace"]["package"]["version"])')
+        install_root=$(mktemp -d "${RUNNER_TEMP}/mockforge-installed.XXXXXXXX")
+        cargo install mockforge-cli --version "=$version" --locked --root "$install_root"
+        python3 scripts/verify_installed_tools.py --binary "$install_root/bin/mockforge"
+
   # Docker image publishing lives in .github/workflows/docker-build.yml
   # (multi-arch push to ghcr.io/saasy-solutions/mockforge on every push to
   # main and on semver tags). GHCR is the canonical registry for MockForge
@@ -234,7 +253,7 @@ jobs:
 
   helm:
     name: Package and Publish Helm Chart
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: [self-hosted, linux, x64, "${{ vars.MOCKFORGE_RELEASE_RUNNER_LABEL || 'rust' }}"]
     timeout-minutes: 15
     # Same release gating rationale as publish.
     needs: release
