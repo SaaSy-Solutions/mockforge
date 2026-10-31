@@ -97,6 +97,18 @@ pub async fn increment_usage(
     org_id: Uuid,
     request_size_bytes: i64,
 ) -> Result<(), ApiError> {
+    record_proxy_usage(pool, redis, org_id, request_size_bytes, false).await
+}
+
+/// Record proxy egress without counting a request again when hard-quota
+/// admission already persisted it. Other callers retain response metering.
+pub(crate) async fn record_proxy_usage(
+    pool: &sqlx::PgPool,
+    redis: Option<&RedisPool>,
+    org_id: Uuid,
+    request_size_bytes: i64,
+    request_already_counted: bool,
+) -> Result<(), ApiError> {
     // Increment in Redis first (fast path)
     if let Some(redis_pool) = redis {
         let period = current_month_period();
@@ -112,7 +124,9 @@ pub async fn increment_usage(
     // request-path (RLS) pool; bind the org whose counter is bumped.
     with_org_context(pool, org_id, |tx| {
         Box::pin(async move {
-            UsageCounter::increment_requests(tx, org_id, 1).await?;
+            if !request_already_counted {
+                UsageCounter::increment_requests(tx, org_id, 1).await?;
+            }
             if request_size_bytes > 0 {
                 UsageCounter::increment_egress(tx, org_id, request_size_bytes).await?;
             }

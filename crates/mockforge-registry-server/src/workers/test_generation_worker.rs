@@ -35,22 +35,21 @@
 use std::time::Duration;
 
 use serde_json::{json, Value};
-use sqlx::{FromRow, PgPool};
+use sqlx::FromRow;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
 use crate::{
     ai::{
-        client::{call_llm, LlmCall, LlmResult},
-        provider::{pick_provider, Provider, ProviderSelection},
-        quota::{check_ai_quota, record_ai_usage},
+        client::{LlmCall, LlmResult},
+        provider::{resolve_provider, Provider, ProviderSelection},
+        quota::check_ai_quota,
     },
     handlers::settings::decrypt_api_key,
     AppState,
 };
 use mockforge_registry_core::models::{
-    organization::Plan, test_generation_job::TestGenerationJob, AuditEventType, BYOKConfig,
-    Organization,
+    test_generation_job::TestGenerationJob, AuditEventType, BYOKConfig, Organization,
 };
 
 /// Default poll cadence. Test-generation jobs are interactive (user
@@ -185,16 +184,34 @@ async fn process_one(state: &AppState, job: TestGenerationJob) {
 /// billing semantics stay identical between user-driven AI requests and
 /// worker-driven test generation.
 async fn process_job(state: &AppState, job: TestGenerationJob) -> Result<Value, WorkerError> {
+    // Validate persisted context before any provider lookup or corpus sampling,
+    // including BYOK calls that do not enter platform-credit admission.
+    let org_id = job.org_id;
+    let job_id = job.id;
+    let workspace_id = job.workspace_id;
+    let actor = job.created_by;
+    let authorized = crate::store::with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM cloud_test_generation_jobs j JOIN workspaces w ON w.id=j.workspace_id AND w.org_id=j.org_id WHERE j.id=$1 AND j.org_id=$2 AND j.workspace_id=$3 AND j.created_by IS NOT DISTINCT FROM $4::uuid AND j.status='running' AND (j.created_by IS NULL OR EXISTS(SELECT 1 FROM org_members m WHERE m.org_id=j.org_id AND m.user_id=j.created_by)))"
+            ).bind(job_id).bind(org_id).bind(workspace_id).bind(actor)
+                .fetch_one(&mut **tx).await?)
+        })
+    }).await.map_err(|e| WorkerError::Internal(format!("job authorization failed: {e}")))?;
+    if !authorized {
+        return Err(WorkerError::ContextDenied);
+    }
     // 1. Org context for plan + BYOK decision.
     let org = Organization::find_by_id(state.db.pool(), job.org_id)
         .await
         .map_err(|e| WorkerError::Internal(format!("org lookup failed: {e}")))?
         .ok_or_else(|| WorkerError::Internal("Organization missing for job".into()))?;
-    let is_paid_plan = matches!(org.plan(), Plan::Pro | Plan::Team);
 
     // 2. BYOK + provider routing — same dispatch ai_studio uses.
     let byok = load_byok_config(state, job.org_id).await?;
-    let provider = pick_provider(is_paid_plan, byok);
+    let provider = resolve_provider(state, &org, byok)
+        .await
+        .map_err(|e| WorkerError::Internal(format!("provider entitlement lookup failed: {e}")))?;
     let selection = provider.selection();
 
     // 3. Pre-call quota check — gates Disabled and quota-exhausted Platform.
@@ -211,9 +228,11 @@ async fn process_job(state: &AppState, job: TestGenerationJob) -> Result<Value, 
 
     // 4. Sample captures.
     let filter = parse_filter(&job.captures_filter);
-    let captures = fetch_captures(state.db.pool(), job.workspace_id, &filter)
-        .await
-        .map_err(|e| WorkerError::Internal(format!("capture sampling failed: {e}")))?;
+    let captures = crate::store::with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move { Ok(fetch_captures(&mut **tx, workspace_id, org_id, &filter).await?) })
+    })
+    .await
+    .map_err(|e| WorkerError::Internal(format!("capture sampling failed: {e}")))?;
     if captures.is_empty() {
         return Err(WorkerError::EmptyCorpus(
             "No matching captures found in this workspace. Record some traffic first or relax the filter.".into(),
@@ -225,26 +244,16 @@ async fn process_job(state: &AppState, job: TestGenerationJob) -> Result<Value, 
     //    platform branches share the rest of the pipeline.
     let (call, provider_label) = build_call_for_provider(&provider, &job.prompt, &captures)?;
 
-    // 6. Invoke.
-    let llm_result = call_llm(call).await.map_err(|e| WorkerError::LlmCall(format!("{e:?}")))?;
-
-    // 7. Meter usage — `record_ai_usage` is a no-op for BYOK, so we can
-    //    call it unconditionally and stay in line with ai_studio's
-    //    accounting semantics.
-    let total_tokens = llm_result.total_tokens() as i64;
-    if let Err(e) = record_ai_usage(state, org.id, selection, total_tokens).await {
-        // Surface as warn — we already have the LLM output, just couldn't
-        // bill it. Returning success would leak credit; failing the job
-        // after a real LLM call would also be bad UX. Tradeoff: log loudly
-        // so SREs notice, and bias toward the user's success path.
-        warn!(
-            job_id = %job.id,
-            org_id = %org.id,
-            tokens = total_tokens,
-            error = ?e,
-            "test_generation_worker: usage metering failed",
-        );
-    }
+    // Reserve platform credits before the provider call and settle its original period.
+    let llm_result = crate::ai::reservation::call_with_budget_attributed(
+        state,
+        &org,
+        selection,
+        call,
+        crate::ai::reservation::CallOrigin::TestGeneration { job_id: job.id },
+    )
+    .await
+    .map_err(|e| WorkerError::LlmCall(format!("{e:?}")))?;
 
     // Audit the AI usage (#866), mirroring the ai_studio metered path.
     // Best-effort: never fails the job. `created_by` is the user who queued
@@ -383,12 +392,13 @@ struct CaptureSample {
     path: String,
     #[sqlx(rename = "effective_status")]
     status: i32,
-    duration_ms: i32,
+    duration_ms: i64,
 }
 
 async fn fetch_captures(
-    pool: &PgPool,
+    executor: impl sqlx::PgExecutor<'_>,
     workspace_id: Uuid,
+    org_id: Uuid,
     filter: &CaptureFilter,
 ) -> sqlx::Result<Vec<CaptureSample>> {
     sqlx::query_as::<_, CaptureSample>(
@@ -398,6 +408,8 @@ async fn fetch_captures(
                COALESCE(duration_ms, 0) AS duration_ms
         FROM runtime_captures
         WHERE workspace_id = $1
+          AND EXISTS(SELECT 1 FROM hosted_mocks d
+                     WHERE d.id=runtime_captures.deployment_id AND d.org_id=$7)
           AND ($2::text IS NULL OR UPPER(method) = $2)
           AND ($3::text IS NULL OR position($3 IN path) > 0)
           AND ($4::int IS NULL
@@ -414,7 +426,8 @@ async fn fetch_captures(
     .bind(filter.status_min)
     .bind(filter.status_max)
     .bind(filter.limit)
-    .fetch_all(pool)
+    .bind(org_id)
+    .fetch_all(executor)
     .await
 }
 
@@ -537,6 +550,7 @@ async fn load_byok_config(
 
 #[derive(Debug)]
 enum WorkerError {
+    ContextDenied,
     ProviderUnavailable(String),
     EmptyCorpus(String),
     LlmCall(String),
@@ -546,6 +560,7 @@ enum WorkerError {
 impl std::fmt::Display for WorkerError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
+            Self::ContextDenied => write!(f, "Test-generation job context is no longer authorized"),
             Self::ProviderUnavailable(m)
             | Self::EmptyCorpus(m)
             | Self::LlmCall(m)
@@ -572,6 +587,10 @@ struct FilterRoundTrip {
     #[serde(default)]
     limit: Option<i64>,
 }
+
+#[cfg(test)]
+#[path = "test_generation_worker/tenant_context_tests.rs"]
+mod tenant_context_tests;
 
 #[cfg(test)]
 mod tests {

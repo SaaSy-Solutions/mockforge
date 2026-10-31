@@ -28,7 +28,25 @@ pub(crate) async fn effective_limits(
     state: &AppState,
     org: &Organization,
 ) -> ApiResult<serde_json::Value> {
-    let mut limits = org.limits_json.clone();
+    // A missed billing webhook must not preserve paid limits after the
+    // subscription has lapsed. Never-billed, manually upgraded orgs retain
+    // their stored plan through effective_plan's existing rules.
+    let plan = crate::handlers::entitlements::effective_plan(state, org).await?;
+    limits_for_plan(state, org, plan).await
+}
+
+/// Apply stored limits and administrator quota overrides to an already
+/// resolved plan, keeping all gates for one proxy request on the same tier.
+pub(crate) async fn limits_for_plan(
+    state: &AppState,
+    org: &Organization,
+    plan: crate::models::Plan,
+) -> ApiResult<serde_json::Value> {
+    let mut limits = if plan == org.plan() {
+        org.limits_json.clone()
+    } else {
+        plan.default_limits()
+    };
     let setting = state.store.get_org_setting(org.id, "quota").await?;
     if let Some(setting) = setting {
         merge_quota_overrides(&mut limits, &setting.setting_value);
@@ -38,7 +56,7 @@ pub(crate) async fn effective_limits(
 
 /// Shallow-merge `overrides` into `limits` in-place. Both must be JSON objects
 /// for any change to occur; otherwise this is a no-op.
-fn merge_quota_overrides(limits: &mut serde_json::Value, overrides: &serde_json::Value) {
+pub(crate) fn merge_quota_overrides(limits: &mut serde_json::Value, overrides: &serde_json::Value) {
     if let (Some(base), Some(over)) = (limits.as_object_mut(), overrides.as_object()) {
         for (k, v) in over {
             base.insert(k.clone(), v.clone());

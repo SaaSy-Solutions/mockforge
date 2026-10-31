@@ -36,6 +36,7 @@ Customer authorizes the Sub-processors below. We impose data-protection obligati
 - **Fly.io:** compute for customer-deployed hosted mocks served at `*.mocks.mockforge.dev` (United States).
 - **Stripe:** payment processing and subscription billing (United States).
 - **Brevo:** transactional email delivery (European Union).
+- **OpenAI:** AI text generation for features that use MockForge's platform AI allowance; requests made with a customer-supplied provider key do not use OpenAI on our behalf (United States). Announced October 15, 2026; processing begins no earlier than November 14, 2026.
 
 ## 8. Assistance and data subject requests
 
@@ -48,6 +49,8 @@ We process Customer Personal Data in the United States. For transfers of persona
 ## 10. Return and deletion
 
 Customer can export Customer Content during the term and for 30 days after termination. We then delete Customer Personal Data from active systems within 30 days, and from backups within 90 days, unless the law requires us to keep it. Security and audit logs that we keep to secure the Service (event type, timestamp, IP address, user agent and pseudonymous identifiers, but no email addresses or usernames) are retained for 400 days from the event and then deleted, including after termination, as described in Section 5 of our [Privacy Policy](/legal/privacy).
+
+Free allowance abuse-prevention identity bindings are private salted digests of verified email addresses. After account deletion they expire after 35 days and a daily cleanup normally removes them within 36 days, as described in the Privacy Policy. They are retained separately from Customer Content to prevent resetting an exhausted monthly allowance.
 
 ## 11. Audits
 

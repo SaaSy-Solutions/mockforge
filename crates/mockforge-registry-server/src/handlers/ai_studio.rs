@@ -5,7 +5,7 @@
 //!
 //!   resolve_org_context ─▶ load_byok_config ─▶ pick_provider
 //!     ─▶ check_ai_quota ─▶ build LlmCall ─▶ call_llm
-//!     ─▶ record_ai_usage ─▶ return content + UsageMeta
+//!     ─▶ reserve budget ─▶ provider call ─▶ settle original period ─▶ return usage
 //!
 //! That pipeline lives in `run_completion`. Public handlers just
 //! build a `PromptInputs` and shape the response.
@@ -13,14 +13,11 @@
 //! See `docs/cloud/CLOUD_AI_STUDIO_DESIGN.md` for the full design.
 
 use axum::{extract::State, http::HeaderMap, Json};
-use mockforge_registry_core::models::{AuditEventType, BYOKConfig, Plan};
+use mockforge_registry_core::models::{AuditEventType, BYOKConfig};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    ai::{
-        call_llm, check_ai_quota, pick_provider, record_ai_usage, LlmCall, Provider,
-        ProviderSelection,
-    },
+    ai::{check_ai_quota, resolve_provider, LlmCall, Provider, ProviderSelection},
     error::{ApiError, ApiResult},
     handlers::settings::decrypt_api_key,
     middleware::{resolve_org_context, AuthUser},
@@ -42,6 +39,8 @@ pub struct UsageMeta {
     pub tokens_used: u64,
     /// Updated monthly counter, for the UI's quota meter.
     pub tokens_used_this_period: i64,
+    /// Credits reserved for outstanding calls, separate from confirmed usage.
+    pub tokens_reserved_this_period: i64,
     /// Monthly platform-token limit. `-1` means unlimited.
     pub tokens_limit: i64,
 }
@@ -240,12 +239,16 @@ pub struct QuotaResponse {
     pub provider: &'static str,
     /// Tokens used this billing period.
     pub tokens_used_this_period: i64,
+    /// Credits reserved for outstanding calls, separate from confirmed usage.
+    pub tokens_reserved_this_period: i64,
     /// Monthly platform-token limit. `-1` means unlimited.
     pub tokens_limit: i64,
     /// Convenience flag: true if a chat call right now would clear the
     /// quota check. False means quota exhausted (Platform) or AI fully
     /// disabled (Free without BYOK).
     pub call_allowed: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deny_reason: Option<String>,
 }
 
 /// `GET /api/v1/ai-studio/quota`
@@ -263,9 +266,7 @@ pub async fn quota(
         .map_err(|_| ApiError::InvalidRequest("Organization not found".into()))?;
     let byok = load_byok_config(&state, org_ctx.org_id).await?;
     // Effective plan (#870) so the quota banner reflects a lapsed subscription.
-    let effective = crate::handlers::entitlements::effective_plan(&state, &org_ctx.org).await?;
-    let is_paid_plan = matches!(effective, Plan::Pro | Plan::Team);
-    let provider = pick_provider(is_paid_plan, byok);
+    let provider = resolve_provider(&state, &org_ctx.org, byok).await?;
     let selection = provider.selection();
     let q = check_ai_quota(&state, &org_ctx.org, selection).await?;
 
@@ -275,9 +276,11 @@ pub async fn quota(
             ProviderSelection::Platform => "platform",
             ProviderSelection::Disabled => "disabled",
         },
-        tokens_used_this_period: q.used,
+        tokens_used_this_period: q.used.saturating_sub(q.reserved),
+        tokens_reserved_this_period: q.reserved,
         tokens_limit: q.limit,
         call_allowed: q.allowed,
+        deny_reason: q.deny_reason,
     }))
 }
 
@@ -481,9 +484,7 @@ pub(crate) async fn run_completion_for_org(
     // 2. Provider routing (pure). Use the *effective* plan (#870) so a
     //    canceled/past-due org loses platform-credit AI access (it falls back
     //    to Disabled without BYOK), instead of keeping it on a stale `plan`.
-    let effective = crate::handlers::entitlements::effective_plan(state, org).await?;
-    let is_paid_plan = matches!(effective, Plan::Pro | Plan::Team);
-    let provider = pick_provider(is_paid_plan, byok);
+    let provider = resolve_provider(state, org, byok).await?;
 
     // 3. Pre-call quota check.
     let quota = check_ai_quota(state, org, provider.selection()).await?;
@@ -496,11 +497,17 @@ pub(crate) async fn run_completion_for_org(
     let llm_call = build_llm_call(&provider, prompt)?;
 
     // 5. Call.
-    let result = call_llm(llm_call).await?;
+    let result = crate::ai::reservation::call_with_budget_attributed(
+        state,
+        org,
+        selection,
+        llm_call,
+        crate::ai::reservation::CallOrigin::OrganizationCompletion { actor_user_id },
+    )
+    .await?;
 
     // 6. Meter (Platform only; BYOK skips the platform quota).
     let total_tokens = result.total_tokens();
-    record_ai_usage(state, org.id, selection, total_tokens as i64).await?;
 
     // 6b. Audit the AI usage (#866) for SOC2 cost-attribution / abuse
     //     forensics. Best-effort: never fails the user's request. The
@@ -526,11 +533,7 @@ pub(crate) async fn run_completion_for_org(
         .await;
 
     // 7. Build response metadata.
-    let billed_now = if matches!(selection, ProviderSelection::Platform) {
-        total_tokens as i64
-    } else {
-        0
-    };
+    let settled_quota = check_ai_quota(state, org, selection).await?;
 
     let meta = UsageMeta {
         provider: match selection {
@@ -539,8 +542,9 @@ pub(crate) async fn run_completion_for_org(
             ProviderSelection::Disabled => "disabled", // unreachable: quota check above
         },
         tokens_used: total_tokens,
-        tokens_used_this_period: quota.used + billed_now,
-        tokens_limit: quota.limit,
+        tokens_used_this_period: settled_quota.used.saturating_sub(settled_quota.reserved),
+        tokens_reserved_this_period: settled_quota.reserved,
+        tokens_limit: settled_quota.limit,
     };
 
     Ok((result.content, meta))
@@ -604,6 +608,7 @@ fn build_llm_call(provider: &Provider, prompt: PromptInputs) -> ApiResult<LlmCal
             })
         }
         Provider::Platform => {
+            crate::ai::provider::require_platform_enabled()?;
             let api_key = std::env::var("MOCKFORGE_PLATFORM_LLM_API_KEY").map_err(|_| {
                 ApiError::Internal(anyhow::anyhow!(
                     "Platform LLM not configured: MOCKFORGE_PLATFORM_LLM_API_KEY missing"

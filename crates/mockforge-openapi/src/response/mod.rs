@@ -211,6 +211,53 @@ impl ResponseGenerator {
         selector: Option<&crate::response_selection::ResponseSelector>,
         _persona: Option<&Persona>,
     ) -> Result<Value> {
+        Self::generate_response_with_policy(
+            spec,
+            operation,
+            status_code,
+            content_type,
+            expand_tokens,
+            scenario,
+            selection_mode,
+            selector,
+            true,
+        )
+    }
+
+    /// Tenant response generation without process-wide fault injection or token expansion.
+    pub(crate) fn generate_hosted_response(
+        spec: &OpenApiSpec,
+        operation: &Operation,
+        status_code: u16,
+        scenario: Option<&str>,
+        selection_mode: crate::response_selection::ResponseSelectionMode,
+        selector: &crate::response_selection::ResponseSelector,
+    ) -> Result<Value> {
+        Self::generate_response_with_policy(
+            spec,
+            operation,
+            status_code,
+            None,
+            false,
+            scenario,
+            Some(selection_mode),
+            Some(selector),
+            false,
+        )
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn generate_response_with_policy(
+        spec: &OpenApiSpec,
+        operation: &Operation,
+        status_code: u16,
+        content_type: Option<&str>,
+        expand_tokens: bool,
+        scenario: Option<&str>,
+        selection_mode: Option<crate::response_selection::ResponseSelectionMode>,
+        selector: Option<&crate::response_selection::ResponseSelector>,
+        allow_process_fault_injection: bool,
+    ) -> Result<Value> {
         // Find the response for the status code
         let response = Self::find_response_for_status(&operation.responses, status_code);
 
@@ -281,7 +328,11 @@ impl ResponseGenerator {
         // pipeline against a known-bad-shape mockforge end-to-end.
         // Non-2xx responses are left alone because their shape is
         // already the "negative" case for clients.
-        body.map(|b| Self::maybe_inject_response_violation(spec, operation, status_code, b))
+        if allow_process_fault_injection {
+            body.map(|b| Self::maybe_inject_response_violation(spec, operation, status_code, b))
+        } else {
+            body
+        }
     }
 
     /// Round 33 (#822) — drop the first required field from a 2xx

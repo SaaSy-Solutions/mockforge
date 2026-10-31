@@ -59,6 +59,7 @@ pub async fn get_runtime(
         .filter(|d| matches!(d.status(), DeploymentStatus::Active) && cloudflare::is_cloudflare(d))
         .ok_or_else(|| ApiError::InvalidRequest("Not found".into()))?;
 
+    cloudflare::require_paid_plan(pool, org_id).await?;
     let env = hosted_mock_runtime_env(&deployment, None).map_err(ApiError::Internal)?;
     let limits = router::resolve_proxy_limits(pool, org_id).await;
     let blocked = router::quota_ceiling_reached(pool, org_id).await.is_some();
@@ -118,7 +119,8 @@ pub async fn report_usage(
 
     apply_usage_batch(pool, deployment_id, org_id, &report).await?;
 
-    let blocked = router::quota_ceiling_reached(pool, org_id).await.is_some();
+    let blocked = cloudflare::require_paid_plan(pool, org_id).await.is_err()
+        || router::quota_ceiling_reached(pool, org_id).await.is_some();
     Ok(Json(UsageResponse { blocked }))
 }
 
@@ -189,8 +191,8 @@ mod tests {
             .execute(&pool).await.unwrap();
         sqlx::query("INSERT INTO organizations (id, name, slug, owner_id) VALUES ($1, 'usage test', $2, $3)")
             .bind(org).bind(format!("usage-{org}")).bind(user).execute(&pool).await.unwrap();
-        sqlx::query("INSERT INTO hosted_mocks (id, org_id, name, slug, config_json) VALUES ($1, $2, 'usage test', 'usage', '{}')")
-            .bind(deployment).bind(org).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO hosted_mocks (id, org_id, name, slug, config_json) VALUES ($1, $2, 'usage test', $3, '{}')")
+            .bind(deployment).bind(org).bind(format!("usage-{deployment}")).execute(&pool).await.unwrap();
         let mut report = UsageReport {
             batch_id: Uuid::new_v4(),
             period_start: Utc::now().date_naive().with_day(1).unwrap(),
@@ -263,6 +265,11 @@ mod tests {
         .unwrap();
         assert_eq!(counts, (7, 14));
         // Only the synthetic fixture rows created above are removed.
+        sqlx::query("DELETE FROM hosted_mocks WHERE id=$1")
+            .bind(deployment)
+            .execute(&pool)
+            .await
+            .unwrap();
         sqlx::query("DELETE FROM organizations WHERE id=$1")
             .bind(org)
             .execute(&pool)

@@ -68,7 +68,22 @@ pub struct DeploymentOrchestrator {
     db: Arc<PgPool>,
     flyio_client: Option<FlyioClient>,
     flyio_org_slug: Option<String>,
+    storage: Option<crate::storage::PluginStorage>,
     cloudflare: Option<CloudflareMocks>,
+}
+
+fn has_external_backend_intent(deployment: &HostedMock) -> bool {
+    !super::local_runtime::is_local(deployment)
+        && (["hosting_backend", "backend"].iter().any(|key| {
+            matches!(
+                deployment.metadata_json.get(*key).and_then(|value| value.as_str()),
+                Some("flyio" | "cloudflare")
+            )
+        }) || deployment
+            .metadata_json
+            .get("flyio_machine_id")
+            .and_then(|value| value.as_str())
+            .is_some())
 }
 
 impl DeploymentOrchestrator {
@@ -83,6 +98,7 @@ impl DeploymentOrchestrator {
             db,
             flyio_client,
             flyio_org_slug: flyio_org_slug.or_else(|| std::env::var("FLYIO_ORG_SLUG").ok()),
+            storage: None,
             cloudflare: CloudflareMocks::from_env(),
         }
     }
@@ -96,6 +112,7 @@ impl DeploymentOrchestrator {
 
     /// The Cloudflare backend, when configured and the deployment qualifies.
     async fn cloudflare_for(&self, deployment: &HostedMock) -> Option<&CloudflareMocks> {
+        cloudflare::require_paid_plan(self.db.as_ref(), deployment.org_id).await.ok()?;
         let cf = self.cloudflare.as_ref()?;
         let plugins = HostedMockPlugin::count_active_by_deployment(self.db.as_ref(), deployment.id)
             .await
@@ -105,19 +122,137 @@ impl DeploymentOrchestrator {
         cloudflare::runs_on_cloudflare(deployment, plugins).then_some(cf)
     }
 
+    /// Use tenant-scoped upload storage for local OpenAPI mocks.
+    pub fn with_storage(mut self, storage: crate::storage::PluginStorage) -> Self {
+        self.storage = Some(storage);
+        self
+    }
+
     /// Start the orchestrator background task
     pub fn start(self: Arc<Self>) -> tokio::task::JoinHandle<()> {
         tokio::spawn(async move {
-            let mut interval = interval(Duration::from_secs(10)); // Check every 10 seconds
+            // Slow provider cleanup must not block new deployment polling.
+            // Both loops belong to this task, so aborting it cancels both
+            // futures instead of leaving an orphan cleanup task running.
+            let cleanup = async {
+                let mut interval = interval(Duration::from_secs(10));
+                loop {
+                    interval.tick().await;
+                    if let Err(e) = self.reconcile_downgraded_backends().await {
+                        error!("Error reconciling downgraded hosting: {}", e);
+                    }
+                    if let Err(e) = self.process_requested_deletions().await {
+                        error!("Error reconciling requested deletions: {}", e);
+                    }
+                }
+            };
+            let provisioning = async {
+                let mut interval = interval(Duration::from_secs(10));
+                loop {
+                    interval.tick().await;
+                    if let Err(e) = self.process_pending_deployments().await {
+                        error!("Error processing pending deployments: {}", e);
+                    }
+                }
+            };
+            tokio::join!(cleanup, provisioning);
+        })
+    }
 
-            loop {
-                interval.tick().await;
+    /// Stop externally reachable paid backends after a subscription downgrade.
+    /// Failed confirmations retain status/capacity and are retried next poll.
+    async fn reconcile_downgraded_backends(&self) -> Result<()> {
+        let deployments = sqlx::query_as::<_, HostedMock>("SELECT * FROM hosted_mocks WHERE deleted_at IS NULL AND deletion_requested_at IS NULL AND capacity_reserved AND (metadata_json->>'hosting_backend' IN ('flyio','cloudflare') OR metadata_json->>'backend' IN ('flyio','cloudflare') OR metadata_json ? 'flyio_machine_id') ORDER BY updated_at ASC")
+            .fetch_all(self.db.as_ref()).await?;
+        for deployment in deployments {
+            if let Err(error) = self.stop_downgraded_backend(&deployment).await {
+                warn!(deployment_id = %deployment.id, %error, "Downgraded backend stop remains unconfirmed");
+            }
+        }
+        Ok(())
+    }
 
-                if let Err(e) = self.process_pending_deployments().await {
-                    error!("Error processing pending deployments: {}", e);
+    async fn stop_downgraded_backend(&self, deployment: &HostedMock) -> Result<()> {
+        if !has_external_backend_intent(deployment) {
+            return Ok(());
+        }
+        let pool = self.db.as_ref();
+        let mut lifecycle = crate::handlers::hosted_capacity::LifecycleGuard::acquire(
+            pool,
+            deployment.org_id,
+            deployment.id,
+        )
+        .await?;
+        let Some(current) = lifecycle.find().await? else {
+            return Ok(());
+        };
+        lifecycle.ensure_not_deleting().await?;
+        let reserved: bool = sqlx::query_scalar(
+            "SELECT capacity_reserved FROM hosted_mocks WHERE id=$1 AND org_id=$2",
+        )
+        .bind(current.id)
+        .bind(current.org_id)
+        .fetch_one(pool)
+        .await?;
+        // Display status is owner-editable and cannot prove provider shutdown.
+        if !reserved || !has_external_backend_intent(&current) {
+            return Ok(());
+        }
+        let org = crate::models::Organization::find_by_id(pool, current.org_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Organization not found"))?;
+        let subscription = crate::models::Subscription::find_by_org(pool, current.org_id).await?;
+        if crate::handlers::entitlements::resolve_effective_plan(
+            org.plan(),
+            subscription.as_ref(),
+            chrono::Utc::now(),
+        ) != crate::models::Plan::Free
+        {
+            return Ok(());
+        }
+        if cloudflare::is_cloudflare(&current) {
+            self.cloudflare
+                .as_ref()
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Cloudflare is not configured; cannot confirm stop")
+                })?
+                .destroy(&current)
+                .await?;
+        } else {
+            let fly = self
+                .flyio_client
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Fly is not configured; cannot confirm stop"))?;
+            let app = current.fly_app_name();
+            if let Some(machine) =
+                current.metadata_json.get("flyio_machine_id").and_then(|v| v.as_str())
+            {
+                fly.stop_machine_confirmed(&app, machine).await?;
+            } else {
+                // A timed-out create may have produced machines without returning IDs.
+                for machine in fly.list_machines(&app).await? {
+                    fly.stop_machine_confirmed(&app, &machine.id).await?;
                 }
             }
-        })
+        }
+        HostedMock::update_status(pool, current.id, DeploymentStatus::Stopped, Some("Paid hosting paused after subscription downgrade; create a local Free mock or restore your subscription")).await?;
+        Ok(())
+    }
+
+    /// Retry only durable, authorized deletion intents, including legacy
+    /// soft-deleted rows whose resources were never confirmed absent.
+    async fn process_requested_deletions(&self) -> Result<()> {
+        let ids: Vec<Uuid> = sqlx::query_scalar(
+            "SELECT id FROM hosted_mocks WHERE (capacity_reserved OR deleted_at IS NULL) AND deletion_requested_at IS NOT NULL ORDER BY updated_at ASC LIMIT 10",
+        )
+        .fetch_all(self.db.as_ref())
+        .await?;
+        for id in ids {
+            if let Err(error) = self.cleanup_deployment(id, false).await {
+                warn!("Cleanup remains unconfirmed for {}: {}", id, error);
+            }
+        }
+        Ok(())
     }
 
     /// Process pending deployments
@@ -133,6 +268,7 @@ impl DeploymentOrchestrator {
             WHERE status IN ('pending', 'deploying')
             AND deployment_url IS NULL
             AND deleted_at IS NULL
+            AND deletion_requested_at IS NULL
             ORDER BY created_at ASC
             LIMIT 10
             "#,
@@ -177,6 +313,30 @@ impl DeploymentOrchestrator {
 
         let pool = self.db.as_ref();
 
+        let mut lifecycle = match crate::handlers::hosted_capacity::LifecycleGuard::acquire(
+            pool,
+            deployment.org_id,
+            deployment.id,
+        )
+        .await
+        {
+            Ok(guard) => guard,
+            Err(crate::error::ApiError::Conflict(_)) => return Ok(()),
+            Err(error) => return Err(error.into()),
+        };
+        let Some(current) = lifecycle.find().await? else {
+            return Ok(());
+        };
+        if lifecycle.deletion_requested().await? {
+            return Ok(());
+        }
+        if !matches!(current.status(), DeploymentStatus::Pending | DeploymentStatus::Deploying)
+            || current.deployment_url.is_some()
+        {
+            return Ok(());
+        }
+        let deployment = &current;
+
         // Update status to deploying
         HostedMock::update_status(pool, deployment.id, DeploymentStatus::Deploying, None)
             .await
@@ -186,12 +346,38 @@ impl DeploymentOrchestrator {
             .await
             .context("Failed to create deployment log")?;
 
-        // HTTP/WebSocket/GraphQL mocks go to Cloudflare Containers when it is
-        // configured; other protocols need Fly.
-        if let Some(cf) = self.cloudflare_for(deployment).await {
+        // Record the selected backend before the first provider request. A
+        // missing machine ID after a timeout must not imply a local deployment.
+        let org = crate::models::Organization::find_by_id(pool, deployment.org_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Organization not found"))?;
+        let subscription =
+            crate::models::Subscription::find_by_org(pool, deployment.org_id).await?;
+        let plan = crate::handlers::entitlements::resolve_effective_plan(
+            org.plan(),
+            subscription.as_ref(),
+            chrono::Utc::now(),
+        );
+        // Free mocks have no externally reachable backend that bypasses the
+        // registry's hard request cap. Paid isolated hosting is unchanged.
+        // Free deployments never reach a configured provider.
+        let cf = if plan == crate::models::Plan::Free {
+            None
+        } else {
+            self.cloudflare_for(deployment).await
+        };
+        let fly = self.flyio_client.as_ref().filter(|_| plan != crate::models::Plan::Free);
+        let backend = if cf.is_some() {
+            "cloudflare"
+        } else {
+            fly.map_or("multitenant", |_| "flyio")
+        };
+        sqlx::query("UPDATE hosted_mocks SET metadata_json = COALESCE(metadata_json, '{}'::jsonb) || jsonb_build_object('hosting_backend', $2::text, 'backend', $2::text) WHERE id = $1 AND org_id = $3")
+            .bind(deployment.id).bind(backend).bind(deployment.org_id).execute(pool).await?;
+        if let Some(cf) = cf {
             self.deploy_to_cloudflare(cf, deployment).await?;
-        } else if let Some(ref flyio_client) = self.flyio_client {
-            self.deploy_to_flyio(flyio_client, deployment).await?;
+        } else if let Some(fly) = fly {
+            self.deploy_to_flyio(fly, deployment).await?;
         } else {
             // Fallback: use multitenant router (single process routing)
             self.deploy_to_multitenant_router(deployment).await?;
@@ -220,7 +406,13 @@ impl DeploymentOrchestrator {
     /// Redeploy on the backend the deployment already uses. Fly deployments
     /// stay on Fly; a Cloudflare deployment that gained a raw-TCP protocol
     /// moves to Fly and its container is stopped.
-    async fn redeploy_on_backend(&self, deployment: &HostedMock) -> Result<()> {
+    pub(crate) async fn redeploy_on_backend(&self, deployment: &HostedMock) -> Result<()> {
+        if super::local_runtime::is_local(deployment) {
+            return self.deploy_to_multitenant_router(deployment).await;
+        }
+        if !super::local_runtime::is_local(deployment) {
+            cloudflare::require_paid_plan(self.db.as_ref(), deployment.org_id).await?;
+        }
         if !cloudflare::is_cloudflare(deployment) {
             return match self.flyio_client {
                 Some(ref flyio_client) => self.redeploy_to_flyio(flyio_client, deployment).await,
@@ -235,13 +427,15 @@ impl DeploymentOrchestrator {
                 "deployment needs a protocol Cloudflare cannot serve and Fly is not configured"
             )
         })?;
-        self.deploy_to_flyio(flyio_client, deployment).await?;
-        if let Some(cf) = self.cloudflare.as_ref() {
-            if let Err(e) = cf.destroy(deployment).await {
-                warn!("Failed to stop Cloudflare container for {}: {:#}", deployment.id, e);
-            }
-        }
-        Ok(())
+        let cf = self.cloudflare.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("Cloudflare is not configured; cannot confirm migration cleanup")
+        })?;
+        cf.destroy(deployment).await?;
+        // Persist the new provider before provisioning: a timeout must leave
+        // cleanup targeting Fly, without an orphaned Cloudflare container.
+        sqlx::query("UPDATE hosted_mocks SET metadata_json = COALESCE(metadata_json, '{}'::jsonb) || '{\"backend\":\"flyio\",\"hosting_backend\":\"flyio\"}'::jsonb WHERE id=$1 AND org_id=$2")
+            .bind(deployment.id).bind(deployment.org_id).execute(self.db.as_ref()).await?;
+        self.deploy_to_flyio(flyio_client, deployment).await
     }
 
     /// Serve a deployment from Cloudflare Containers. Nothing is provisioned up
@@ -489,6 +683,17 @@ impl DeploymentOrchestrator {
 
         let pool = self.db.as_ref();
 
+        let mut lifecycle = crate::handlers::hosted_capacity::LifecycleGuard::acquire(
+            pool,
+            deployment.org_id,
+            deployment.id,
+        )
+        .await?;
+        let current =
+            lifecycle.find().await?.ok_or_else(|| anyhow::anyhow!("Deployment not found"))?;
+        lifecycle.ensure_not_deleting().await?;
+        let deployment = &current;
+
         HostedMock::update_status(pool, deployment.id, DeploymentStatus::Deploying, None)
             .await
             .context("Failed to update deployment status")?;
@@ -630,10 +835,25 @@ impl DeploymentOrchestrator {
     async fn deploy_to_multitenant_router(&self, deployment: &HostedMock) -> Result<()> {
         let pool = self.db.as_ref();
 
+        let refreshed = if deployment.openapi_spec_url.is_some() {
+            let storage = self
+                .storage
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Uploaded specification storage is unavailable"))?;
+            super::spec_source::refresh(pool, storage, deployment).await?
+        } else {
+            deployment.clone()
+        };
+        let deployment = &refreshed;
+
+        // Invalid configuration cannot be reported as an active deployment.
+        let _router = super::local_runtime::prepare(deployment).map_err(anyhow::Error::msg)?;
+
         // For multitenant router, we just need to set the deployment URL
         // The router will handle routing based on org/project/env
         let base_url = std::env::var("MOCKFORGE_BASE_URL")
-            .unwrap_or_else(|_| "https://mocks.mockforge.dev".to_string());
+            .unwrap_or_else(|_| "https://registry.mockforge.dev".to_string());
+        let base_url = base_url.trim_end_matches('/');
 
         let deployment_url =
             format!("{}/mocks/{}/{}", base_url, deployment.org_id, deployment.slug);
@@ -670,54 +890,74 @@ impl DeploymentOrchestrator {
 
     /// Delete a deployment
     pub async fn delete_deployment(&self, deployment_id: Uuid) -> Result<()> {
+        self.cleanup_deployment(deployment_id, true).await
+    }
+
+    async fn cleanup_deployment(&self, deployment_id: Uuid, request_new: bool) -> Result<()> {
         let pool = self.db.as_ref();
 
-        let deployment = HostedMock::find_by_id(pool, deployment_id)
-            .await
-            .context("Failed to find deployment")?
+        let deployment =
+            sqlx::query_as::<_, HostedMock>("SELECT * FROM hosted_mocks WHERE id = $1")
+                .bind(deployment_id)
+                .fetch_optional(pool)
+                .await
+                .context("Failed to find deployment")?
+                .ok_or_else(|| anyhow::anyhow!("Deployment not found"))?;
+
+        let mut lifecycle = crate::handlers::hosted_capacity::LifecycleGuard::acquire(
+            pool,
+            deployment.org_id,
+            deployment.id,
+        )
+        .await?;
+        let deployment = lifecycle
+            .find_for_cleanup()
+            .await?
             .ok_or_else(|| anyhow::anyhow!("Deployment not found"))?;
 
-        // Update status to deleting
-        HostedMock::update_status(pool, deployment_id, DeploymentStatus::Deleting, None).await?;
+        if !request_new && !lifecycle.deletion_requested().await? {
+            return Ok(());
+        }
+        if deployment.deleted_at.is_some() {
+            let reserved: bool = sqlx::query_scalar(
+                "SELECT capacity_reserved FROM hosted_mocks WHERE id = $1 AND org_id = $2",
+            )
+            .bind(deployment_id)
+            .bind(deployment.org_id)
+            .fetch_one(pool)
+            .await?;
+            if !reserved {
+                return Ok(());
+            }
+        }
+        // This also rotates unsuccessful attempts behind other queued intents.
+        lifecycle.request_deletion().await?;
 
         DeploymentLog::create(pool, deployment_id, "info", "Starting deletion", None).await?;
 
+        let local =
+            deployment.metadata_json.get("hosting_backend").and_then(|value| value.as_str())
+                == Some("multitenant");
         if cloudflare::is_cloudflare(&deployment) {
-            if let Some(cf) = self.cloudflare.as_ref() {
-                if let Err(e) = cf.destroy(&deployment).await {
-                    warn!("Failed to stop Cloudflare container for {}: {:#}", deployment_id, e);
-                }
-            }
+            let cf = self.cloudflare.as_ref().ok_or_else(|| {
+                anyhow::anyhow!("Cloudflare is not configured; cannot confirm cleanup")
+            })?;
+            cf.destroy(&deployment).await?;
+        } else if !local {
+            let flyio_client = self.flyio_client.as_ref().ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Hosted deployment provider is not configured; cannot confirm cleanup"
+                )
+            })?;
+            let app_name = format!(
+                "mockforge-{}-{}",
+                &deployment.org_id.simple().to_string()[..8],
+                deployment.slug
+            );
+            flyio_client.delete_app_confirmed(&app_name).await?;
         }
 
-        // Delete from Fly.io if deployed there
-        if let Some(ref flyio_client) = self.flyio_client {
-            if let Some(machine_id) =
-                deployment.metadata_json.get("flyio_machine_id").and_then(|v| v.as_str())
-            {
-                let app_name = deployment.fly_app_name();
-
-                if let Err(e) = flyio_client.delete_machine(&app_name, machine_id).await {
-                    warn!("Failed to delete Fly.io machine: {}", e);
-                }
-                // Delete the Fly.io app after removing the machine
-                if let Err(e) = flyio_client.delete_app(&app_name).await {
-                    warn!("Failed to delete Fly.io app {}: {}", app_name, e);
-                }
-            }
-        }
-
-        // Soft delete in database
-        sqlx::query(
-            r#"
-            UPDATE hosted_mocks
-            SET deleted_at = NOW()
-            WHERE id = $1
-            "#,
-        )
-        .bind(deployment_id)
-        .execute(pool)
-        .await?;
+        lifecycle.complete_deletion().await?;
 
         DeploymentLog::create(pool, deployment_id, "info", "Deletion completed", None).await?;
 
@@ -785,3 +1025,15 @@ mod tests {
         assert!(!env.contains_key("SENTRY_DSN"));
     }
 }
+
+#[cfg(test)]
+#[path = "orchestrator_cleanup_tests.rs"]
+mod cleanup_reconciliation_tests;
+
+#[cfg(test)]
+#[path = "orchestrator_free_boundary_tests.rs"]
+mod free_provider_boundary_tests;
+
+#[cfg(test)]
+#[path = "downgrade_tests.rs"]
+mod downgrade_tests;

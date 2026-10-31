@@ -255,9 +255,10 @@ async fn main() -> Result<()> {
     );
 
     // Start deployment orchestrator for hosted mocks
-    let orchestrator = Arc::new(deployment::orchestrator::DeploymentOrchestrator::from_env(
-        Arc::new(db.pool().clone()),
-    ));
+    let orchestrator = Arc::new(
+        deployment::orchestrator::DeploymentOrchestrator::from_env(Arc::new(db.pool().clone()))
+            .with_storage(state.storage.clone()),
+    );
     let _orchestrator_handle = orchestrator.start();
     tracing::info!("Deployment orchestrator started");
 
