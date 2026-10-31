@@ -223,10 +223,7 @@ pub async fn save_flow_version(
 
 /// `POST /api/v1/flows/{id}/runs`
 ///
-/// Triggers a flow execution. Reuses the #4 test_runs lifecycle with
-/// `kind` = the flow's own kind (scenario / orchestration / state_machine
-/// / chain), so it shares the runner pool, concurrency cap, and
-/// runner_seconds metering with regular test runs.
+/// Triggers a chain flow execution through the test-run lifecycle.
 pub async fn trigger_run(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
@@ -235,6 +232,13 @@ pub async fn trigger_run(
 ) -> ApiResult<Json<TestRun>> {
     // `org_id` is the flow's workspace org, verified against the caller.
     let (flow, org_id) = load_authorized_flow_with_org(&state, user_id, &headers, id).await?;
+    if flow.kind != "chain" {
+        return Err(ApiError::InvalidRequest(format!(
+            "only chain flows are runnable; `{}` flows are not supported",
+            flow.kind
+        )));
+    }
+    crate::run_queue::validate_runnable_test_run_kind(&flow.kind)?;
 
     let org = mockforge_registry_core::models::Organization::find_by_id(state.db.pool(), org_id)
         .await

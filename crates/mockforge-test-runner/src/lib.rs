@@ -14,12 +14,13 @@
 //!         ▼
 //! [ Dispatcher::run(job) ]  selects executor by job.kind
 //!         │
-//!         ├─ kind = "unit" | "integration" | …  → see `executors::test`
-//!         ├─ kind = "chaos_campaign"            → see `executors::chaos`
-//!         ├─ kind = "behavioral_clone"          → see `executors::clone_train`
-//!         ├─ kind = "snapshot_capture" | …      → see `executors::snapshot`
-//!         ├─ kind = "contract_diff" | …         → see `executors::contract`
-//!         └─ kind = "scenario" | "chain" | …    → see `executors::flow`
+//!         ├─ integration / conformance / security kinds → `executors::test`
+//!         ├─ kind = "chaos_campaign"                   → `executors::chaos`
+//!         ├─ kind = "contract_diff"                    → `executors::contract`
+//!         ├─ kind = "fitness_evaluation"               → `executors::fitness`
+//!         ├─ kind = "chain"                            → `executors::chain`
+//!         ├─ kind = "replay"                           → `executors::replay`
+//!         └─ kind = "smoke"                            → `executors::smoke`
 //!         │
 //!         ▼
 //! [ Executor::execute(job) ]  per-kind logic
@@ -31,11 +32,6 @@
 //!     /api/v1/internal/test-runs/{id}/events
 //!     /api/v1/internal/test-runs/{id}/finish
 //! ```
-//!
-//! Phase 1 of this crate is scaffolding — every executor returns
-//! "unimplemented" so the queue drains without crashing, and slices
-//! that own each kind can fill them in incrementally without blocking
-//! each other.
 
 #![warn(missing_docs)]
 #![allow(clippy::missing_errors_doc)]

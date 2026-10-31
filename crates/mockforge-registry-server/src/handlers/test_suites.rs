@@ -1,10 +1,8 @@
 //! Test suite CRUD handlers (cloud-enablement task #4 / Phase 1).
 //!
 //! `test_suites` is the user-authored definition; runs, events, schedules,
-//! and artifacts come in follow-up slices. The `kind` field is open so other
-//! cloud features (#6/#7/#8/#9/#10) reuse the same resource — see
-//! `mockforge_registry_core::models::test_execution::TestSuite` for the
-//! current vocabulary.
+//! and artifacts come in follow-up slices. Creation accepts only kinds backed
+//! by concrete executors; updates preserve the suite's immutable stored kind.
 //!
 //! Routes:
 //!   GET    /api/v1/workspaces/{workspace_id}/test-suites
@@ -86,6 +84,7 @@ pub async fn create_suite(
     if request.kind.trim().is_empty() {
         return Err(ApiError::InvalidRequest("kind must not be empty".into()));
     }
+    crate::run_queue::validate_runnable_test_run_kind(&request.kind)?;
 
     let suite = with_org_context(state.db.runtime_pool(), workspace.org_id, |tx| {
         Box::pin(async move {

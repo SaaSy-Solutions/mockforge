@@ -1,7 +1,6 @@
 //! Architectural fitness function evaluator (#355 item 2).
 //!
-//! Replaces the synthetic `fitness_evaluation` arm of `ContractExecutor`
-//! with real, data-source-backed evaluation. Each fitness function row
+//! Evaluates `fitness_evaluation` runs against real data sources. Each fitness function row
 //! has a `kind` + `config` blob; the executor fetches the definition
 //! from the registry, dispatches on kind, and runs the corresponding
 //! evaluator against live data.
