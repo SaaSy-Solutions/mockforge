@@ -124,6 +124,9 @@ impl DeploymentOrchestrator {
                 let mut interval = interval(Duration::from_secs(10));
                 loop {
                     interval.tick().await;
+                    if let Err(e) = self.reconcile_downgraded_backends().await {
+                        error!("Error reconciling downgraded hosting: {}", e);
+                    }
                     if let Err(e) = self.process_requested_deletions().await {
                         error!("Error reconciling requested deletions: {}", e);
                     }
@@ -140,6 +143,77 @@ impl DeploymentOrchestrator {
             };
             tokio::join!(cleanup, provisioning);
         })
+    }
+
+    /// Stop externally reachable paid backends after a subscription downgrade.
+    /// Failed confirmations retain status/capacity and are retried next poll.
+    async fn reconcile_downgraded_backends(&self) -> Result<()> {
+        let deployments = sqlx::query_as::<_, HostedMock>("SELECT * FROM hosted_mocks WHERE deleted_at IS NULL AND deletion_requested_at IS NULL AND status IN ('active','failed','deploying') AND metadata_json->>'hosting_backend' IS DISTINCT FROM 'multitenant' ORDER BY updated_at ASC")
+            .fetch_all(self.db.as_ref()).await?;
+        for deployment in deployments {
+            if let Err(error) = self.stop_downgraded_backend(&deployment).await {
+                warn!(deployment_id = %deployment.id, %error, "Downgraded backend stop remains unconfirmed");
+            }
+        }
+        Ok(())
+    }
+
+    async fn stop_downgraded_backend(&self, deployment: &HostedMock) -> Result<()> {
+        let pool = self.db.as_ref();
+        let mut lifecycle = crate::handlers::hosted_capacity::LifecycleGuard::acquire(
+            pool,
+            deployment.org_id,
+            deployment.id,
+        )
+        .await?;
+        let Some(current) = lifecycle.find().await? else {
+            return Ok(());
+        };
+        lifecycle.ensure_not_deleting().await?;
+        if super::local_runtime::is_local(&current)
+            || matches!(current.status(), DeploymentStatus::Stopped)
+        {
+            return Ok(());
+        }
+        let org = crate::models::Organization::find_by_id(pool, current.org_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("Organization not found"))?;
+        let subscription = crate::models::Subscription::find_by_org(pool, current.org_id).await?;
+        if crate::handlers::entitlements::resolve_effective_plan(
+            org.plan(),
+            subscription.as_ref(),
+            chrono::Utc::now(),
+        ) != crate::models::Plan::Free
+        {
+            return Ok(());
+        }
+        if cloudflare::is_cloudflare(&current) {
+            self.cloudflare
+                .as_ref()
+                .ok_or_else(|| {
+                    anyhow::anyhow!("Cloudflare is not configured; cannot confirm stop")
+                })?
+                .destroy(&current)
+                .await?;
+        } else {
+            let fly = self
+                .flyio_client
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("Fly is not configured; cannot confirm stop"))?;
+            let app = current.fly_app_name();
+            if let Some(machine) =
+                current.metadata_json.get("flyio_machine_id").and_then(|v| v.as_str())
+            {
+                fly.stop_machine_confirmed(&app, machine).await?;
+            } else {
+                // A timed-out create may have produced machines without returning IDs.
+                for machine in fly.list_machines(&app).await? {
+                    fly.stop_machine_confirmed(&app, &machine.id).await?;
+                }
+            }
+        }
+        HostedMock::update_status(pool, current.id, DeploymentStatus::Stopped, Some("Paid hosting paused after subscription downgrade; create a local Free mock or restore your subscription")).await?;
+        Ok(())
     }
 
     /// Retry only durable, authorized deletion intents, including legacy
@@ -313,7 +387,7 @@ impl DeploymentOrchestrator {
         if super::local_runtime::is_local(deployment) {
             return self.deploy_to_multitenant_router(deployment).await;
         }
-        if cloudflare::is_cloudflare(deployment) {
+        if !super::local_runtime::is_local(deployment) {
             cloudflare::require_paid_plan(self.db.as_ref(), deployment.org_id).await?;
         }
         if !cloudflare::is_cloudflare(deployment) {
@@ -936,3 +1010,7 @@ mod cleanup_reconciliation_tests;
 #[cfg(test)]
 #[path = "orchestrator_free_boundary_tests.rs"]
 mod free_provider_boundary_tests;
+
+#[cfg(test)]
+#[path = "downgrade_tests.rs"]
+mod downgrade_tests;

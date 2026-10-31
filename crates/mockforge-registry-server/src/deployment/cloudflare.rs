@@ -39,7 +39,7 @@ pub(crate) async fn require_paid_plan(
         chrono::Utc::now(),
     ) == crate::models::Plan::Free
     {
-        return Err(crate::error::ApiError::ResourceLimitExceeded("Cloudflare hosting requires a paid plan; create a local Free mock or restore the subscription".into()));
+        return Err(crate::error::ApiError::ResourceLimitExceeded("External hosting requires a paid plan; create a local Free mock or restore the subscription".into()));
     }
     Ok(())
 }

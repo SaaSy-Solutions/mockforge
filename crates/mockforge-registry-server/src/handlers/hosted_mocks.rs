@@ -569,7 +569,7 @@ pub async fn redeploy_deployment(
         return Err(ApiError::InvalidRequest("Deployment not found".to_string()));
     }
 
-    if crate::deployment::cloudflare::is_cloudflare(&deployment) {
+    if !crate::deployment::local_runtime::is_local(&deployment) {
         crate::deployment::cloudflare::require_paid_plan(state.db.pool(), deployment.org_id)
             .await?;
     }
@@ -930,6 +930,8 @@ pub async fn start_deployment(
             .await?;
         lifecycle.reserve_restart().await?;
     } else {
+        crate::deployment::cloudflare::require_paid_plan(state.db.pool(), deployment.org_id)
+            .await?;
         let flyio_token = std::env::var("FLYIO_API_TOKEN").map_err(|_| {
             ApiError::InvalidRequest("Hosted deployment provider is not configured".into())
         })?;
