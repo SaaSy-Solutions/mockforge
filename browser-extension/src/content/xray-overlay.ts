@@ -276,13 +276,7 @@ class XRayOverlay {
     }
 
     private interceptXHR() {
-        const originalOpen = XMLHttpRequest.prototype.open;
         const originalSend = XMLHttpRequest.prototype.send;
-
-        XMLHttpRequest.prototype.open = function(...args) {
-            this._mockforgeXRayUrl = args[1] as string;
-            return originalOpen.apply(this, args as any);
-        };
 
         XMLHttpRequest.prototype.send = function(...args) {
             this.addEventListener('load', function() {
