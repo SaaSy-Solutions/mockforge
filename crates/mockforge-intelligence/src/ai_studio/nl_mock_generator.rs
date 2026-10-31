@@ -4,16 +4,14 @@
 //! It integrates with the existing VoiceCommandParser and VoiceSpecGenerator to leverage
 //! the proven mock generation infrastructure.
 
-use crate::ai_studio::artifact_freezer::{ArtifactFreezer, FreezeMetadata};
+use crate::ai_studio::artifact_freezer::FreezeMetadata;
 use crate::ai_studio::config::DeterministicModeConfig;
+use crate::ai_studio::frozen_generation::{self, FrozenGeneration};
 use crate::intelligent_behavior::IntelligentBehaviorConfig;
 use crate::voice::{command_parser::VoiceCommandParser, spec_generator::VoiceSpecGenerator};
 use mockforge_foundation::Result;
 use mockforge_openapi::OpenApiSpec;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 
 /// Mock generator for creating mocks from natural language
 pub struct MockGenerator {
@@ -73,33 +71,24 @@ impl MockGenerator {
         ai_mode: Option<crate::ai_studio::config::AiMode>,
         deterministic_config: Option<&DeterministicModeConfig>,
     ) -> Result<MockGenerationResult> {
-        // In deterministic mode, check for frozen artifacts first
-        if ai_mode == Some(crate::ai_studio::config::AiMode::GenerateOnceFreeze) {
-            let freezer = ArtifactFreezer::new();
-
-            // Create identifier from description hash
-            let mut hasher = DefaultHasher::new();
-            description.hash(&mut hasher);
-            let description_hash = format!("{:x}", hasher.finish());
-
-            // Try to load frozen artifact
-            if let Some(frozen) = freezer.load_frozen("mock", Some(&description_hash)).await? {
-                // Extract spec from frozen content (remove metadata)
-                let mut spec = frozen.content.clone();
-                if let Some(obj) = spec.as_object_mut() {
-                    obj.remove("_frozen_metadata");
-                }
-
-                return Ok(MockGenerationResult {
-                    spec: Some(spec),
-                    message: format!(
-                        "Loaded frozen mock artifact from {} (deterministic mode)",
-                        frozen.path
-                    ),
-                    parsed_command: None,
-                    frozen_artifact: Some(frozen),
-                });
-            }
+        let snapshot = FrozenGeneration::new(
+            serde_json::json!({"description": description, "workspace_id": _workspace_id}),
+            &self.config,
+            ai_mode,
+            deterministic_config,
+        )?;
+        if let Some(frozen) = snapshot.load("mock").await? {
+            let spec = frozen_generation::payload(&frozen);
+            return Ok(MockGenerationResult {
+                replayed: true,
+                spec: Some(spec),
+                message: format!(
+                    "Loaded frozen mock artifact from {} (deterministic mode)",
+                    frozen.path
+                ),
+                parsed_command: None,
+                frozen_artifact: Some(frozen),
+            });
         }
 
         // Parse the natural language command
@@ -111,60 +100,25 @@ impl MockGenerator {
         // Convert spec to JSON for response
         let spec_json = serde_json::to_value(&spec.spec)?;
 
-        // Auto-freeze if enabled
-        let frozen_artifact = if let Some(config) = deterministic_config {
-            if config.enabled && config.is_auto_freeze_enabled() {
-                let freezer = ArtifactFreezer::new();
-
-                // Calculate prompt hash
-                let mut hasher = Sha256::new();
-                hasher.update(description.as_bytes());
-                let prompt_hash = format!("{:x}", hasher.finalize());
-
-                // Create metadata
-                let metadata = if config.track_metadata {
-                    Some(FreezeMetadata {
-                        llm_provider: Some(self.config.behavior_model.llm_provider.clone()),
-                        llm_model: Some(self.config.behavior_model.model.clone()),
-                        llm_version: None, // Would need to be passed in or retrieved
-                        prompt_hash: Some(prompt_hash),
-                        output_hash: None, // Will be calculated by freezer
-                        original_prompt: Some(description.to_string()),
-                    })
-                } else {
-                    None
-                };
-
-                let freeze_request = crate::ai_studio::artifact_freezer::FreezeRequest {
-                    artifact_type: "mock".to_string(),
-                    content: spec_json.clone(),
-                    format: config.freeze_format.clone(),
-                    path: None,
-                    metadata,
-                };
-
-                freezer.auto_freeze_if_enabled(&freeze_request, config).await?
-            } else {
-                None
-            }
-        } else {
-            None
-        };
-
-        // Record AI pillar usage (ai_generation type=mock)
-        mockforge_foundation::pillar_tracking::track_ai_pillar_telemetry(
-            _workspace_id.map(String::from),
-            None,
-            "ai_generation",
-            serde_json::json!({
-                "type": "mock",
-                "endpoints": parsed.endpoints.len(),
-                "models": parsed.models.len(),
-            }),
-        )
-        .await;
+        let frozen_artifact = snapshot
+            .freeze(
+                "mock",
+                spec_json.clone(),
+                FreezeMetadata {
+                    llm_provider: Some(self.config.behavior_model.llm_provider.clone()),
+                    llm_model: Some(self.config.behavior_model.model.clone()),
+                    llm_version: None,
+                    prompt_hash: None,
+                    output_hash: None,
+                    original_prompt: Some(description.to_string()),
+                },
+            )
+            .await?;
+        let spec_json =
+            frozen_artifact.as_ref().map(frozen_generation::payload).unwrap_or(spec_json);
 
         Ok(MockGenerationResult {
+            replayed: false,
             spec: Some(spec_json),
             message: format!(
                 "Successfully generated API '{}' with {} endpoints and {} models{}",
@@ -224,6 +178,7 @@ impl MockGenerator {
         .await;
 
         Ok(MockGenerationResult {
+            replayed: false,
             spec: Some(spec_json),
             message: format!(
                 "Successfully {} API '{}' with {} endpoints and {} models",
@@ -251,6 +206,10 @@ impl Default for MockGenerator {
 /// Result of mock generation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MockGenerationResult {
+    /// True when generation loaded a verified snapshot without calling a provider.
+    #[serde(default)]
+    pub replayed: bool,
+
     /// Generated OpenAPI spec (if any)
     pub spec: Option<serde_json::Value>,
 

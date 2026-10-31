@@ -6,6 +6,7 @@ use std::path::PathBuf;
 #[cfg(feature = "http")]
 use tokio::net::TcpListener;
 
+mod ai_bake_commands;
 mod ai_commands;
 #[cfg(feature = "amqp")]
 mod amqp_commands;
@@ -39,6 +40,7 @@ mod insomnia_import;
 mod kafka_commands;
 #[allow(dead_code)]
 mod logs_commands;
+mod management_auth;
 mod mcp_server;
 mod mockai_commands;
 mod mod_commands;
@@ -62,10 +64,12 @@ mod shutdown;
 #[allow(dead_code)]
 mod smtp_commands;
 mod snapshot_commands;
+mod status_commands;
 #[allow(dead_code)]
 mod template_commands;
 #[allow(dead_code)]
 mod time_commands;
+mod tools_commands;
 #[cfg(feature = "tunnel")]
 mod tunnel_commands;
 #[cfg(feature = "vbr")]
@@ -680,6 +684,12 @@ struct ServeCliArgs {
 #[derive(Subcommand)]
 #[allow(clippy::large_enum_variant)]
 enum Commands {
+    /// Export the bundled discussion exporter and CVE rule tools
+    Tools {
+        #[command(subcommand)]
+        command: tools_commands::ToolsCommands,
+    },
+
     /// Start mock servers (HTTP, WebSocket, gRPC)
     ///
     /// Examples:
@@ -1143,6 +1153,19 @@ enum Commands {
     #[command(verbatim_doc_comment)]
     VerifyMocks(verify_mocks_commands::VerifyMocksArgs),
 
+    /// Show a project's MockForge state without changing anything
+    ///
+    /// Discovers the configuration file as `serve` does, then reports the
+    /// HTTP port and spec it declares, whether a server answers on that
+    /// port, and the last `verify-mocks --record` result. `--format json`
+    /// prints one versioned document for tools.
+    ///
+    /// Examples:
+    ///   mockforge status
+    ///   mockforge status --dir ./services/api --format json
+    #[command(verbatim_doc_comment)]
+    Status(status_commands::StatusArgs),
+
     /// API governance and safety features
     ///
     /// Manage API change forecasting, semantic drift detection, and threat modeling.
@@ -1175,6 +1198,12 @@ enum Commands {
     TestAi {
         #[command(subcommand)]
         ai_command: ai_commands::AiTestCommands,
+    },
+
+    /// Generate once and bake static AI response fixtures for offline CI
+    Ai {
+        #[command(subcommand)]
+        ai_command: ai_bake_commands::AiCommands,
     },
 
     /// Plugin management
@@ -2850,6 +2879,7 @@ fn cli_command_name(cmd: &Commands) -> &'static str {
         #[cfg(feature = "amqp")]
         Commands::Amqp { .. } => "amqp",
         Commands::Data { .. } => "data",
+        Commands::Ai { .. } => "ai",
         Commands::Admin { .. } => "admin",
         Commands::Sync { .. } => "sync",
         Commands::Quick { .. } => "quick",
@@ -2861,6 +2891,8 @@ fn cli_command_name(cmd: &Commands) -> &'static str {
         Commands::Schema { .. } => "schema",
         Commands::DevSetup { .. } => "dev-setup",
         Commands::Config { .. } => "config",
+        Commands::Status(_) => "status",
+        Commands::Tools { .. } => "tools",
         _ => "other",
     }
 }
@@ -2868,6 +2900,9 @@ fn cli_command_name(cmd: &Commands) -> &'static str {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let cli = Cli::parse();
+    if let Commands::Tools { command } = cli.command {
+        return tools_commands::handle(command).map_err(Into::into);
+    }
 
     // Initialize Sentry first so panics and errors during the rest of startup
     // are captured. No-op at runtime when SENTRY_DSN is unset, so it's safe
@@ -2884,7 +2919,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     // corrupts the protocol stream. Skip logging init entirely for this
     // subcommand so the stream carries JSON-RPC frames only.
     let is_mcp = matches!(cli.command, Commands::Mcp);
-    if !is_mcp {
+    // `status --format json` prints one JSON document on stdout, nothing else.
+    let quiet = is_mcp
+        || matches!(&cli.command, Commands::Status(args) if args.format == status_commands::StatusFormat::Json);
+    if !quiet {
         let initial_logging_config = mockforge_observability::LoggingConfig {
             level: cli.log_level.clone(),
             json_format: false, // Will be overridden by config file if present
@@ -2937,6 +2975,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     .await;
 
     match cli.command {
+        Commands::Tools { .. } => unreachable!("tools handled before service initialization"),
         Commands::Serve(args) => {
             // Issue #79 round 15 — `--shadow` is a thin alias for the
             // env var the server reads at request time. Set it before
@@ -3272,6 +3311,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         Commands::Mcp => {
             mcp_server::run().await?;
         }
+        Commands::Status(args) => {
+            status_commands::handle_status_command(args).await?;
+        }
 
         Commands::ContractDiff { diff_command } => {
             contract_diff_commands::handle_contract_diff(diff_command).await?;
@@ -3284,6 +3326,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         Commands::TestAi { ai_command } => {
             ai_commands::handle_test_ai(ai_command).await?;
+        }
+        Commands::Ai { ai_command } => {
+            ai_bake_commands::handle(ai_command).await?;
         }
 
         Commands::Plugin { plugin_command } => {

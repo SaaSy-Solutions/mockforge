@@ -66,6 +66,11 @@ jobs:
           command -v python3 >/dev/null || { echo "::error::Python 3 is required for security tool ownership regressions."; exit 1; }
           command -v bash >/dev/null || { echo "::error::Bash is required for security tool ownership regressions."; exit 1; }
           python3 scripts/tests/test_owned_security_tools.py
+      - name: Verify local Cargo isolation and admission behavior
+        run: |
+          python3 -m unittest discover -s scripts/tests -p test_dev_cargo.py -v
+          python3 -m unittest discover -s scripts/tests -p test_rust_build_policy.py -v
+          python3 -m unittest discover -s scripts/tests -p test_workload_admission.py -v
       - name: Determine whether non-docs files changed
         id: filter
         env:
@@ -601,7 +606,7 @@ jobs:
 
     - name: Install pinned security audit tools
       if: runner.environment == 'github-hosted'
-      uses: taiki-e/install-action@v2.87.27
+      uses: taiki-e/install-action@v2.87.31
       with:
         tool: cargo-audit@0.22.2,cargo-deny@0.20.2
         fallback: none
@@ -620,6 +625,15 @@ jobs:
 
     - name: Run license and source compliance check
       run: cargo deny check licenses sources bans
+
+    - name: Verify patched SigV4a signer and production S3 SDK compatibility
+      env:
+        CARGO_BUILD_JOBS: "2"
+        CARGO_TARGET_DIR: ${{ runner.temp }}/mockforge-sigv4a-${{ github.run_id }}-${{ github.run_attempt }}
+      run: |
+        python3 scripts/tests/test_sigv4a_container_inputs.py
+        cargo test --locked --manifest-path vendor/aws-sigv4/Cargo.toml --all-features --lib --test crypto_dependencies --test sigv4a_mrap
+        cargo test --locked --manifest-path scripts/security/sigv4a-sdk-tests/Cargo.toml
 
     # The previous `cargo clippy --workspace --all-features ... || true` step
     # used to live here. It ran for 3-5 minutes per CI run but always exited

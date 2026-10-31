@@ -255,12 +255,8 @@ async fn main() -> Result<()> {
     );
 
     // Start deployment orchestrator for hosted mocks
-    let flyio_token = std::env::var("FLYIO_API_TOKEN").ok();
-    let flyio_org_slug = std::env::var("FLYIO_ORG_SLUG").ok();
-    let orchestrator = Arc::new(deployment::orchestrator::DeploymentOrchestrator::new(
+    let orchestrator = Arc::new(deployment::orchestrator::DeploymentOrchestrator::from_env(
         Arc::new(db.pool().clone()),
-        flyio_token,
-        flyio_org_slug,
     ));
     let _orchestrator_handle = orchestrator.start();
     tracing::info!("Deployment orchestrator started");

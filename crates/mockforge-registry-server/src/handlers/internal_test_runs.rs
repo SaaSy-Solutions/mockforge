@@ -33,7 +33,7 @@ use serde::Serialize;
 /// Returns InvalidRequest("Not found") for any auth failure — same
 /// shape the public routes use for cross-org probes, so a leaked /
 /// curl'd request can't enumerate which run-ids exist.
-fn require_internal_auth(headers: &HeaderMap) -> ApiResult<()> {
+pub(crate) fn require_internal_auth(headers: &HeaderMap) -> ApiResult<()> {
     let configured = match std::env::var("MOCKFORGE_INTERNAL_API_TOKEN") {
         Ok(v) if !v.is_empty() => v,
         _ => {
@@ -705,11 +705,16 @@ pub async fn proxy_chaos_toggle(
         base.trim_end_matches('/').trim_end_matches("/__mockforge")
     );
 
+    // Never fall back to a token-less client: the runtime's control plane
+    // requires the management token, and a bare client would only be refused.
     let client = crate::handlers::management_token::proxy_client(
         deployment_id,
         std::time::Duration::from_secs(10),
     )
-    .unwrap_or_else(|_| reqwest::Client::new());
+    .map_err(|e| {
+        tracing::error!(%deployment_id, error = %e, "chaos toggle: proxy client build failed");
+        ApiError::Internal(anyhow::anyhow!("chaos proxy client build failed: {e}"))
+    })?;
 
     let resp = client
         .post(&target)

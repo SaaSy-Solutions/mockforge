@@ -55,7 +55,11 @@
 
 ## Testing & Resilience
 
+- [Mock Fidelity and Drift Detection](user-guide/mock-fidelity.md)
 - [Load Testing](user-guide/load-testing.md)
+  - [Security Rule Test Packs](user-guide/security-rule-test-packs.md)
+  - [Per-CVE Rule Packs](user-guide/cve-packs.md)
+  - [Issue #79: Offline Discussion and CVE Labs](user-guide/issue-79-reference.md)
 - [WAF Testing](user-guide/waf-testing.md)
 - [Chaos Engineering](user-guide/chaos-engineering.md)
 - [Rate Limiting & Traffic Shaping](user-guide/rate-limiting.md)
@@ -103,6 +107,7 @@
 - [Zero-Config Mode (Planned)](user-guide/devx/zero-config-mode.md)
 - [API Architecture Critique (Planned)](user-guide/ai/api-architecture-critique.md)
 - [System Generation (Planned)](user-guide/ai/system-generation.md)
+- [Bake AI Responses for CI (Unreleased)](user-guide/ai/baked-fixtures.md)
 - [Behavioral Simulation (Planned)](user-guide/ai/behavioral-simulation.md)
 
 ## Additional Protocols
