@@ -717,6 +717,10 @@ export function BillingPage() {
 
         {/* Plans Tab */}
         <TabsContent value="plans" className="space-y-4">
+          <p className="text-sm text-muted-foreground">
+            Platform AI allowances require service activation. Check AI Studio for availability;
+            BYOK lets you use your own provider key.
+          </p>
           {annualAvailable && (
             <div className="flex justify-center">
               <div

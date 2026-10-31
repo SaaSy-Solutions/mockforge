@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
+import type { AiQuotaResponse } from '../../../services/api/aiStudio';
 import { CloudAIQuotaBanner } from '../CloudAIQuotaBanner';
 
-const query = vi.hoisted(() => ({ data: {} as Record<string, unknown> }));
+const query = vi.hoisted((): { data: AiQuotaResponse } => ({ data: { provider: 'disabled', call_allowed: false, tokens_used_this_period: 0, tokens_limit: 5000 } }));
 vi.mock('../../../utils/cloudMode', () => ({ isCloudMode: () => true }));
 vi.mock('@tanstack/react-query', () => ({
   useQuery: () => ({ data: query.data, isLoading: false, isError: false }),
@@ -12,6 +13,13 @@ describe('Cloud AI admission feedback', () => {
   beforeEach(() => {
     query.data = { provider: 'platform', call_allowed: false,
       tokens_used_this_period: 0, tokens_reserved_this_period: 0, tokens_limit: 5000 };
+  });
+
+  it('does not suggest a paid upgrade when platform AI is disabled', () => {
+    query.data.provider = 'disabled';
+    render(<CloudAIQuotaBanner />);
+    expect(screen.getByText(/Platform AI is not available.*BYOK key/)).toBeVisible();
+    expect(screen.queryByText(/upgrade to Pro/i)).not.toBeInTheDocument();
   });
 
   it('shows verification guidance without calling unused credits exhausted', () => {

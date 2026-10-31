@@ -45,7 +45,7 @@ const Banner: React.FC = () => {
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 <div className="flex-1">
                     {q.provider === 'disabled'
-                        ? 'AI is not available on this plan. Add a BYOK key in Settings or upgrade to Pro/Team.'
+                        ? 'Platform AI is not available. Add a BYOK key in Settings to use your own provider.'
                         : q.deny_reason ?? ((q.tokens_reserved_this_period ?? 0) > 0
                             ? 'AI credits are reserved by outstanding calls. Wait for settlement or add a BYOK key.'
                             : 'Monthly AI quota exhausted. Upgrade your plan or add a BYOK key.')}

@@ -65,6 +65,10 @@ export function PricingPage() {
         <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
           Choose the plan that's right for you. Start free, upgrade when you need more.
         </p>
+        <p className="text-sm text-muted-foreground mt-3">
+          Platform AI allowances require service activation. Check AI Studio for availability;
+          BYOK lets you use your own provider key.
+        </p>
         {annualAvailable && (
           <div className="mt-6 flex justify-center">
             <div
