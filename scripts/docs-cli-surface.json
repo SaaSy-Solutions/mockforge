@@ -5236,6 +5236,19 @@
      "subcommands": {},
      "variadic": false
     },
+    "validate-spec": {
+     "aliases": {},
+     "flags": {
+      "--format": 1,
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 1,
+     "subcommands": {},
+     "variadic": false
+    },
     "vbr": {
      "aliases": {},
      "flags": {
