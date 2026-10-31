@@ -5135,6 +5135,38 @@
      },
      "variadic": false
     },
+    "tools": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "export": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--output-dir": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      }
+     },
+     "variadic": false
+    },
     "tunnel": {
      "aliases": {},
      "flags": {
@@ -5548,6 +5580,7 @@
      "flags": {
       "--capture-db": 1,
       "--fail-on-drift": 0,
+      "--fixtures": 1,
       "--help": 0,
       "--limit": 1,
       "--log-level": 1,

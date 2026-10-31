@@ -8,12 +8,15 @@ const METHODS: [&str; 8] = [
     "get", "put", "post", "delete", "options", "head", "patch", "trace",
 ];
 
-pub(super) fn operations(document: &Value) -> Result<BTreeMap<String, Value>, String> {
+pub(super) fn operations(
+    document: &Value,
+    max_bytes: usize,
+) -> Result<BTreeMap<String, Value>, String> {
     let paths = document
         .get("paths")
         .and_then(Value::as_object)
         .ok_or_else(|| "definition must contain an OpenAPI paths object".to_string())?;
-    let mut projection = Projection::new(document);
+    let mut projection = Projection::new(document, max_bytes);
     let mut out = BTreeMap::new();
     for (path, item) in paths {
         if !path.starts_with('/') {
@@ -50,7 +53,7 @@ pub(super) fn operations(document: &Value) -> Result<BTreeMap<String, Value>, St
             );
             for inherited in ["security", "servers"] {
                 if !contract.contains_key(inherited) {
-                    if let Some(value) = item.get(inherited).or_else(|| document.get(inherited)) {
+                    if let Some(value) = inherited_value(&item, document, inherited) {
                         contract.insert(
                             inherited.into(),
                             projection.value(
@@ -65,6 +68,11 @@ pub(super) fn operations(document: &Value) -> Result<BTreeMap<String, Value>, St
                         );
                     }
                 }
+            }
+            // Canonical absence represents the root URL default. Keeping it absent
+            // also preserves existing whole-operation added/removed report values.
+            if contract.get("servers") == Some(&serde_json::json!([{"url":"/"}])) {
+                contract.remove("servers");
             }
             if let Some(requirements) = contract.get_mut("security").and_then(Value::as_array_mut) {
                 let mut schemes = Map::new();
@@ -94,4 +102,14 @@ pub(super) fn operations(document: &Value) -> Result<BTreeMap<String, Value>, St
         }
     }
     Ok(out)
+}
+
+/// Ignore an empty root server list, whose OpenAPI meaning is the default `/`.
+/// Keep path/operation overrides intact, including explicit empty arrays.
+fn inherited_value<'a>(item: &'a Value, document: &'a Value, key: &str) -> Option<&'a Value> {
+    item.get(key).or_else(|| {
+        document
+            .get(key)
+            .filter(|value| key != "servers" || !value.as_array().is_some_and(Vec::is_empty))
+    })
 }

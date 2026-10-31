@@ -561,8 +561,11 @@ required fields, enum values and parameters do not count as drift.
 #### Options
 
 - `--spec <path>` (required): OpenAPI spec the mocks were generated from (3.x natively; Swagger 2.0 is up-converted automatically).
-- `--capture-db <path>`: recorder SQLite database holding captured traffic (what `mockforge serve --recorder` writes; the default path is `./mockforge-recordings.db`). Required unless `--mock-spec` is supplied.
-- `--mock-spec <path>`: OpenAPI definition used by the mock, compared against the current source in `--spec`. Required unless `--capture-db` is supplied. May be combined with captured traffic.
+- `--capture-db <path>`: recorder SQLite database holding captured traffic (what `mockforge serve --recorder` writes; the default path is `./mockforge-recordings.db`).
+- `--mock-spec <path>`: OpenAPI definition used by the mock, compared against the current source in `--spec`.
+- `--fixtures <path>`: HTTP replay fixture JSON file or directory. Checks every selected fixture's route, status and JSON response schema, and reports source operations with no fixture. See the [fixture format and scope](../user-guide/mock-fidelity.md#validate-an-http-replay-fixture-set).
+
+Supply at least one of `--capture-db`, `--mock-spec` or `--fixtures`. They can be combined.
 - `--limit <n>`: maximum recent HTTP exchanges to evaluate, newest first (positive integer; default `500`). Other protocols do not consume this limit.
 - `--fail-on-drift`: exit with code 1 when any drift is found — use as a CI gate.
 - `--output <path>`: write the structured drift report as JSON.
@@ -596,26 +599,26 @@ a spec's own `/health` route cannot shadow, then reads uptime from
 probe uses the declared port; a server started with `--http-port` elsewhere is
 not found. `0.0.0.0` and `::` are probed on `127.0.0.1`.
 
-The JSON document (`schema_version` 1):
+The JSON document (`schema_version` 2):
 
 ```json
 {
-  "schema_version": 1,
-  "version": "0.3.237",
+  "schema_version": 2,
+  "version": "0.3.238",
   "dir": "/abs/project",
   "config": { "path": "/abs/project/mockforge.yaml", "error": null },
   "http": { "enabled": true, "host": "0.0.0.0", "port": 3000, "openapi_spec": "./examples/openapi.json" },
   "admin": { "enabled": true, "port": 9080 },
   "server": {
     "url": "http://127.0.0.1:3000/__mockforge/api/health",
-    "reachable": true, "status": "healthy", "version": "0.3.237",
+    "reachable": true, "status": "healthy", "version": "0.3.238",
     "uptime_seconds": 12, "error": null
   },
   "verification": {
-    "schema_version": 1, "recorded_at": "2026-10-26T10:30:43Z",
-    "mockforge_version": "0.3.237", "spec": "examples/openapi.json",
+    "schema_version": 2, "recorded_at": "2026-10-26T10:30:43Z",
+    "mockforge_version": "0.3.238", "spec": "examples/openapi.json",
     "capture_db": "captures.db", "outcome": "faithful",
-    "exchanges_checked": 8, "endpoints_with_drift": 0,
+    "exchanges_checked": 8, "endpoints_with_drift": 0, "endpoints_unverified": 0,
     "unmatched_real_paths": 4, "findings": []
   }
 }
@@ -624,8 +627,12 @@ The JSON document (`schema_version` 1):
 `config` is null when no configuration file exists; `config.error` names why an
 existing one cannot be loaded, and then `http`, `admin` and `server` are null.
 `server` is null when HTTP is disabled. `verification.outcome` is `faithful`,
-`drift` or `no_traffic`. Fields may be added within schema 1; a change that
-breaks readers raises `schema_version`.
+`drift`, `unverified` or `no_traffic`. `unverified` means response media could
+not be checked, without a proven contract violation. Proven drift takes
+precedence when a run contains both. Status and newly recorded verifications
+use schema 2 for this additional outcome; schema-1 verification files remain
+readable with `endpoints_unverified` defaulting to zero. Fields may be added
+within a schema; a change that breaks readers raises `schema_version`.
 
 Capture databases are opened read-only and must already exist. An empty HTTP capture is not drift: the command reports that no traffic was recorded and exits successfully, and with `--record` it stores a `no_traffic` verification. Unknown endpoints, missing responses, undeclared statuses and JSON-schema violations count as drift. Exact status declarations take precedence over status ranges and the default response; local response references are resolved before schema validation.
 

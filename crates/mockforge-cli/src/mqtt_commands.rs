@@ -267,7 +267,7 @@ async fn handle_topics_list() -> Result<(), Box<dyn std::error::Error + Send + S
     println!("📋 Listing active MQTT topics...");
 
     // Connect to MockForge management API
-    let client = reqwest::Client::new();
+    let client = crate::management_auth::management_client_from_env()?;
     let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
         .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
@@ -291,6 +291,7 @@ async fn handle_topics_list() -> Result<(), Box<dyn std::error::Error + Send + S
                 println!("   Make sure MockForge server is running with MQTT support");
             } else {
                 println!("❌ Failed to list topics: HTTP {}", response.status());
+                crate::management_auth::print_unauthorized_hint(response.status());
             }
         }
         Err(e) => {
@@ -307,7 +308,7 @@ async fn handle_topics_clear_retained() -> Result<(), Box<dyn std::error::Error 
     println!("🧹 Clearing retained MQTT messages...");
 
     // Connect to MockForge management API
-    let client = reqwest::Client::new();
+    let client = crate::management_auth::management_client_from_env()?;
     let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
         .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
@@ -320,6 +321,7 @@ async fn handle_topics_clear_retained() -> Result<(), Box<dyn std::error::Error 
                 println!("   Make sure MockForge server is running with MQTT support");
             } else {
                 println!("❌ Failed to clear retained messages: HTTP {}", response.status());
+                crate::management_auth::print_unauthorized_hint(response.status());
             }
         }
         Err(e) => {
@@ -406,7 +408,7 @@ async fn handle_fixtures_load(
     }
 
     // Connect to MockForge management API
-    let client = reqwest::Client::new();
+    let client = crate::management_auth::management_client_from_env()?;
     let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
         .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
@@ -427,6 +429,7 @@ async fn handle_fixtures_load(
                 println!("   Make sure MockForge server is running with MQTT support");
             } else {
                 println!("❌ Failed to load fixtures: HTTP {}", response.status());
+                crate::management_auth::print_unauthorized_hint(response.status());
             }
         }
         Err(e) => {
@@ -444,7 +447,7 @@ async fn handle_fixtures_start_auto_publish() -> Result<(), Box<dyn std::error::
     println!("▶️  Starting auto-publish for all MQTT fixtures...");
 
     // Connect to MockForge management API
-    let client = reqwest::Client::new();
+    let client = crate::management_auth::management_client_from_env()?;
     let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
         .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
@@ -461,6 +464,7 @@ async fn handle_fixtures_start_auto_publish() -> Result<(), Box<dyn std::error::
                 println!("   Make sure MockForge server is running with MQTT support");
             } else {
                 println!("❌ Failed to start auto-publish: HTTP {}", response.status());
+                crate::management_auth::print_unauthorized_hint(response.status());
             }
         }
         Err(e) => {
@@ -478,7 +482,7 @@ async fn handle_fixtures_stop_auto_publish() -> Result<(), Box<dyn std::error::E
     println!("⏹️  Stopping auto-publish for all MQTT fixtures...");
 
     // Connect to MockForge management API
-    let client = reqwest::Client::new();
+    let client = crate::management_auth::management_client_from_env()?;
     let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
         .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
@@ -495,6 +499,7 @@ async fn handle_fixtures_stop_auto_publish() -> Result<(), Box<dyn std::error::E
                 println!("   Make sure MockForge server is running with MQTT support");
             } else {
                 println!("❌ Failed to stop auto-publish: HTTP {}", response.status());
+                crate::management_auth::print_unauthorized_hint(response.status());
             }
         }
         Err(e) => {
@@ -526,7 +531,7 @@ async fn handle_clients_list() -> Result<(), Box<dyn std::error::Error + Send + 
     println!("👥 Listing connected MQTT clients...");
 
     // Connect to MockForge management API
-    let client = reqwest::Client::new();
+    let client = crate::management_auth::management_client_from_env()?;
     let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
         .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
@@ -557,6 +562,7 @@ async fn handle_clients_list() -> Result<(), Box<dyn std::error::Error + Send + 
                 println!("   Make sure MockForge server is running with MQTT support");
             } else {
                 println!("❌ Failed to list clients: HTTP {}", response.status());
+                crate::management_auth::print_unauthorized_hint(response.status());
             }
         }
         Err(e) => {
@@ -575,7 +581,7 @@ async fn handle_clients_disconnect(
     println!("🔌 Disconnecting MQTT client: {}", client_id);
 
     // Connect to MockForge management API
-    let client = reqwest::Client::new();
+    let client = crate::management_auth::management_client_from_env()?;
     let management_url = std::env::var("MOCKFORGE_MANAGEMENT_URL")
         .unwrap_or_else(|_| "http://localhost:8080/__mockforge/api".to_string());
 
@@ -595,6 +601,7 @@ async fn handle_clients_disconnect(
                 println!("   Make sure MockForge server is running with MQTT support");
             } else {
                 println!("❌ Failed to disconnect client: HTTP {}", response.status());
+                crate::management_auth::print_unauthorized_hint(response.status());
             }
         }
         Err(e) => {
