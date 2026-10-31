@@ -14,8 +14,7 @@ This document validates that all power-user workflows can be completed through t
 **Workflow**: Secure login with role-based access control
 
 **Capabilities Validated**:
-- Admin login with username `admin` / password `admin123`
-- Viewer login with username `viewer` / password `viewer123`
+- Admin login with the operator-configured `MOCKFORGE_ADMIN_PASSWORD` (there are no built-in accounts)
 - JWT token generation and validation
 - Session persistence across browser refreshes
 - Automatic token refresh before expiration

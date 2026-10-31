@@ -4,6 +4,7 @@ import { logger } from '@/utils/logger';
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useAuthStore } from '../stores/useAuthStore';
 
 // Read at call time (not module load) so tests can drop cloud mode via
 // vi.stubEnv without stripping the value from every other consumer.
@@ -15,6 +16,23 @@ function isCloudMode(): boolean {
 /** Returns true if the URL is absolute (starts with http:// or https://). */
 function isAbsoluteUrl(url: string): boolean {
   return url.startsWith('http://') || url.startsWith('https://');
+}
+
+/**
+ * EventSource cannot send an Authorization header, and the admin server
+ * requires credentials on every read (#1019). For same-origin streams, pass
+ * the session token as `access_token`; the server accepts it only on
+ * `GET .../sse`. Absolute URLs (other hosts) never receive the token.
+ */
+export function withSseAuth(url: string, token: string | null | undefined): string {
+  if (!token || isAbsoluteUrl(url) || url.startsWith('//')) return url;
+  try {
+    if (new URL(url, window.location.href).origin !== window.location.origin) return url;
+  } catch {
+    return url;
+  }
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}access_token=${encodeURIComponent(token)}`;
 }
 
 export interface SSEHookOptions {
@@ -120,7 +138,7 @@ export function useSSE<T = unknown>(
       if (import.meta.env.DEV) {
         logger.info('SSE: Connecting to', url);
       }
-      const eventSource = new EventSource(url);
+      const eventSource = new EventSource(withSseAuth(url, useAuthStore.getState().token));
       eventSourceRef.current = eventSource;
 
       eventSource.onopen = () => {
