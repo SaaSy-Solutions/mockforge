@@ -44,7 +44,9 @@ impl Context {
                 "description" | "summary" | "externalDocs" | "example" | "examples"
                 | "operationId" | "tags" => None,
                 "schema" => Some(Self::Schema),
-                "content" | "responses" | "headers" | "encoding" => Some(Self::Contracts),
+                "content" | "responses" | "headers" | "encoding" | "variables" => {
+                    Some(Self::Contracts)
+                }
                 "default" | "security" => Some(Self::Literal),
                 _ => Some(Self::Contract),
             },
