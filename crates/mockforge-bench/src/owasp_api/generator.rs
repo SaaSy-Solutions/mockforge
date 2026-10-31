@@ -207,7 +207,6 @@ impl OwaspApiGenerator {
             "concurrency": self.config.concurrency,
             "iterations": self.config.iterations,
             "timeout_ms": self.config.timeout_ms,
-            "report_path": self.config.report_path.to_string_lossy(),
             "categories_tested": categories.iter().map(|c| c.cli_name()).collect::<Vec<_>>(),
             "test_cases": test_cases,
             "operations": self.operations.iter().map(|op| json!({
@@ -349,20 +348,12 @@ export const options = {
     insecureSkipTLSVerify: INSECURE,
 };
 
-// Findings storage
-const findings = [];
+// Attack probes are expected to be rejected, so a 4xx is a correct answer,
+// not a failed request. Only 5xx and network errors count in http_req_failed.
+http.setResponseCallback(http.expectedStatuses({ min: 200, max: 499 }));
 
 // Helper: Log a finding
 function logFinding(category, endpoint, method, description, evidence) {
-    const finding = {
-        category,
-        endpoint,
-        method,
-        description,
-        evidence,
-        timestamp: new Date().toISOString(),
-    };
-    findings.push(finding);
     findingsCounter.add(1);
     vulnerableRate.add(1);
 
@@ -899,29 +890,42 @@ export default function() {
     sleep(0.1);
 }
 
-// Teardown: Output results
-export function teardown(data) {
+export function handleSummary(data) {
+    return {
+        'stdout': textSummary(data, { indent: ' ', enableColors: true }),
+        'summary.json': JSON.stringify(data),
+    };
+}
+
+function textSummary(data, options) {
+    const indent = options.indent || '';
+    const metrics = data.metrics || {};
+    const metricValue = (name, key) => {
+        const metric = metrics[name];
+        return metric && metric.values && metric.values[key] != null
+            ? metric.values[key]
+            : 0;
+    };
+    const requests = metricValue('http_reqs', 'count');
+    const tests = metricValue('owasp_tests_run', 'count');
+    const findings = metricValue('owasp_findings', 'count');
+    let output = '\n';
+
+    output += indent + '='.repeat(60) + '\n';
+    output += indent + 'OWASP API Top 10 Scan Summary\n';
+    output += indent + '='.repeat(60) + '\n\n';
+    output += indent + 'Total Requests: ' + requests + '\n';
+    output += indent + 'Security Tests: ' + tests + '\n';
+    output += indent + 'Total Findings: ' + findings + '\n';
+
+    return output;
+}
+
+export function teardown() {
     console.log('');
     console.log('='.repeat(50));
     console.log('OWASP API Top 10 Scan Complete');
     console.log('='.repeat(50));
-    console.log('Total findings: ' + findings.length);
-
-    if (findings.length > 0) {
-        console.log('');
-        console.log('Findings by category:');
-        const byCategory = {};
-        findings.forEach(f => {
-            byCategory[f.category] = (byCategory[f.category] || 0) + 1;
-        });
-        Object.entries(byCategory).forEach(([cat, count]) => {
-            console.log('  ' + cat + ': ' + count);
-        });
-    }
-
-    // Write JSON report
-    console.log('');
-    console.log('Report written to: {{report_path}}');
 }
 "#.to_string()
     }
@@ -1031,5 +1035,42 @@ function authRequest(method, url) {
             !result.contains("EMPTY_JAR"),
             "Should NOT use shared EMPTY_JAR (accumulates Set-Cookie responses)"
         );
+    }
+
+    #[tokio::test]
+    async fn generated_script_writes_k6_summary_with_owasp_findings() {
+        let directory = tempfile::tempdir().unwrap();
+        let spec_path = directory.path().join("openapi.json");
+        std::fs::write(
+            &spec_path,
+            r#"{
+                "openapi": "3.0.0",
+                "info": {"title": "OWASP fixture", "version": "1.0.0"},
+                "paths": {
+                    "/health": {
+                        "get": {
+                            "responses": {"200": {"description": "healthy"}}
+                        }
+                    }
+                }
+            }"#,
+        )
+        .unwrap();
+        let parser = SpecParser::from_file(&spec_path).await.unwrap();
+        let generator = OwaspApiGenerator::new(
+            OwaspApiConfig::default().with_categories([OwaspCategory::Api8Misconfiguration]),
+            "https://api.example.com".to_string(),
+            &parser,
+        );
+
+        let script = generator.generate().unwrap();
+
+        assert!(script.contains("const findingsCounter = new Counter('owasp_findings');"));
+        assert!(script.contains("export function handleSummary(data)"));
+        assert!(script
+            .contains("http.setResponseCallback(http.expectedStatuses({ min: 200, max: 499 }))"));
+        assert!(script.contains("'summary.json': JSON.stringify(data)"));
+        assert!(script.contains("'stdout': textSummary(data"));
+        assert!(script.contains("metricValue('owasp_findings', 'count')"));
     }
 }
