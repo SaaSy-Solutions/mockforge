@@ -149,3 +149,69 @@ fn inherited_security_compares_the_referenced_scheme_and_scope_sets() {
     source["components"]["securitySchemes"].as_object_mut().unwrap().clear();
     assert!(compare_mock_spec(&mock, &source).is_err());
 }
+
+#[test]
+fn interactive_expansion_budget_rejects_large_values_without_restricting_cli_comparison() {
+    let document = spec(json!({"type":"string","default":"large".repeat(500)}));
+    assert!(compare_mock_spec_with_budget(&document, &document, 1024).is_err());
+    assert_eq!(compare_mock_spec(&document, &document).unwrap().routes_with_drift, 0);
+}
+
+#[test]
+fn root_server_defaults_match_explicit_root_without_hiding_real_server_changes() {
+    let implicit = spec(json!({"type":"string"}));
+    let mut explicit = implicit.clone();
+    explicit["servers"] = json!([{"url":"/"}]);
+    assert_eq!(compare_mock_spec(&implicit, &explicit).unwrap().routes_with_drift, 0);
+    let mut empty = implicit.clone();
+    empty["servers"] = json!([]);
+    assert_eq!(compare_mock_spec(&empty, &explicit).unwrap().routes_with_drift, 0);
+    for location in ["path", "operation"] {
+        let mut inherited = implicit.clone();
+        if location == "path" {
+            inherited["paths"]["/items"]["servers"] = json!([{"url":"/"}]);
+        } else {
+            inherited["paths"]["/items"]["get"]["servers"] = json!([{"url":"/"}]);
+        }
+        assert_eq!(compare_mock_spec(&implicit, &inherited).unwrap().routes_with_drift, 0);
+    }
+    let mut changed = explicit.clone();
+    changed["servers"] = json!([{"url":"/new"}]);
+    let report = compare_mock_spec(&explicit, &changed).unwrap();
+    assert_eq!(report.routes_with_drift, 1);
+    assert!(report.routes[0].deltas.iter().any(|d| d.location.starts_with("/servers")));
+    explicit["paths"]["/items"]["get"]["servers"] = json!([{"url":"/operation"}]);
+    changed["paths"]["/items"]["get"]["servers"] = json!([{"url":"/operation"}]);
+    assert_eq!(compare_mock_spec(&explicit, &changed).unwrap().routes_with_drift, 0);
+}
+
+#[test]
+fn server_variable_names_that_match_metadata_keys_preserve_their_contract() {
+    for name in [
+        "description",
+        "summary",
+        "example",
+        "examples",
+        "operationId",
+        "tags",
+    ] {
+        let mut mock = spec(json!({"type":"string"}));
+        mock["servers"] = json!([{
+            "url": format!("https://{{{name}}}.example.invalid"),
+            "variables": {name: {"default":"before", "enum":["before","after"]}}
+        }]);
+        let mut source = mock.clone();
+        source["servers"][0]["variables"][name]["default"] = json!("after");
+        assert_eq!(
+            compare_mock_spec(&mock, &source).unwrap().routes_with_drift,
+            1,
+            "server variable {name} is a named contract, not documentation"
+        );
+        source = mock.clone();
+        source["servers"][0]["variables"][name]["enum"] = json!(["before"]);
+        assert_eq!(compare_mock_spec(&mock, &source).unwrap().routes_with_drift, 1);
+        source = mock.clone();
+        source["servers"][0]["variables"][name]["description"] = json!("documentation only");
+        assert_eq!(compare_mock_spec(&mock, &source).unwrap().routes_with_drift, 0);
+    }
+}

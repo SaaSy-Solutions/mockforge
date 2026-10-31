@@ -51,6 +51,8 @@ reqwest = { workspace = true }
 sysinfo = { workspace = true }
 html-escape = "0.2"
 once_cell = "1.21"
+mockforge-import = { version = "0.3.236", path = "../mockforge-import" }
+mockforge-contracts = { version = "0.3.236", path = "../mockforge-contracts" }
 mockforge-core = { version = "0.3.236", path = "../mockforge-core" }
 mockforge-openapi = { path = "../mockforge-openapi" }
 mockforge-foundation = { path = "../mockforge-foundation" }

@@ -11,6 +11,7 @@
 
 pub mod builder;
 pub mod generation;
+mod parameter_schema;
 #[doc(hidden)]
 pub mod registry;
 pub mod validation;
@@ -18,7 +19,7 @@ mod validation_policy;
 
 use crate::response::AiGenerator;
 use crate::response_rewriter::{OverrideHook, OverrideRequest, ResponseRewriter};
-use crate::{OpenApiOperation, OpenApiRoute, OpenApiSchema, OpenApiSpec};
+use crate::{OpenApiOperation, OpenApiRoute, OpenApiSpec};
 use axum::extract::{DefaultBodyLimit, Path as AxumPath, RawQuery};
 use axum::http::HeaderMap;
 use axum::response::IntoResponse;
@@ -33,7 +34,6 @@ use mockforge_foundation::latency::LatencyInjector;
 use mockforge_foundation::response_generation_trace::ResponseGenerationTrace;
 use mockforge_foundation::schema_diff::validation_diff;
 use once_cell::sync::Lazy;
-use openapiv3::ParameterSchemaOrContent;
 use serde_json::{json, Map, Value};
 use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::{Arc, Mutex};
@@ -1608,6 +1608,7 @@ impl OpenApiRouteRegistry {
                                 aggregate,
                                 &mut errors,
                                 &mut details,
+                                &self.spec,
                             );
                         }
                         openapiv3::Parameter::Query {
@@ -1650,6 +1651,7 @@ impl OpenApiRouteRegistry {
                                 aggregate,
                                 &mut errors,
                                 &mut details,
+                                &self.spec,
                             );
                         }
                         openapiv3::Parameter::Header { parameter_data, .. } => {
@@ -1660,6 +1662,7 @@ impl OpenApiRouteRegistry {
                                 aggregate,
                                 &mut errors,
                                 &mut details,
+                                &self.spec,
                             );
                         }
                         openapiv3::Parameter::Cookie { parameter_data, .. } => {
@@ -1670,6 +1673,7 @@ impl OpenApiRouteRegistry {
                                 aggregate,
                                 &mut errors,
                                 &mut details,
+                                &self.spec,
                             );
                         }
                     }
@@ -2880,9 +2884,10 @@ fn coerce_value_for_schema(value: &Value, schema: &openapiv3::Schema) -> Value {
                 openapiv3::SchemaKind::Type(openapiv3::Type::Integer(_)) => {
                     // Schema expects integer, try to parse
                     if let Ok(n) = s.parse::<i64>() {
-                        if let Some(num) = serde_json::Number::from_f64(n as f64) {
-                            return Value::Number(num);
-                        }
+                        return Value::Number(n.into());
+                    }
+                    if let Ok(n) = s.parse::<u64>() {
+                        return Value::Number(n.into());
                     }
                     value.clone()
                 }
@@ -2899,67 +2904,6 @@ fn coerce_value_for_schema(value: &Value, schema: &openapiv3::Schema) -> Value {
                     value.clone()
                 }
             }
-        }
-        _ => value.clone(),
-    }
-}
-
-/// Apply style-aware coercion for query params
-fn coerce_by_style(value: &Value, schema: &openapiv3::Schema, style: Option<&str>) -> Value {
-    // Style-aware coercion for query parameters
-    match value {
-        Value::String(s) => {
-            // Check if schema expects an array and we have a delimited string
-            if let openapiv3::SchemaKind::Type(openapiv3::Type::Array(array_type)) =
-                &schema.schema_kind
-            {
-                let delimiter = match style {
-                    Some("spaceDelimited") => " ",
-                    Some("pipeDelimited") => "|",
-                    Some("form") | None => ",", // Default to form style (comma-separated)
-                    _ => ",",                   // Fallback to comma
-                };
-
-                if s.contains(delimiter) {
-                    // Split delimited string into array
-                    let parts: Vec<&str> = s.split(delimiter).map(|s| s.trim()).collect();
-                    let mut array_values = Vec::new();
-
-                    for part in parts {
-                        // Coerce each part based on array item type
-                        if let Some(items_schema) = &array_type.items {
-                            if let Some(items_schema_obj) = items_schema.as_item() {
-                                let part_value = Value::String(part.to_string());
-                                let coerced_part =
-                                    coerce_by_style(&part_value, items_schema_obj, style);
-                                array_values.push(coerced_part);
-                            } else {
-                                // If items schema is a reference or not available, keep as string
-                                array_values.push(Value::String(part.to_string()));
-                            }
-                        } else {
-                            // No items schema defined, keep as string
-                            array_values.push(Value::String(part.to_string()));
-                        }
-                    }
-                    return Value::Array(array_values);
-                }
-            }
-
-            // Try to parse as number first
-            if let Ok(n) = s.parse::<f64>() {
-                if let Some(num) = serde_json::Number::from_f64(n) {
-                    return Value::Number(num);
-                }
-            }
-            // Try to parse as boolean
-            match s.to_lowercase().as_str() {
-                "true" | "1" | "yes" | "on" => return Value::Bool(true),
-                "false" | "0" | "no" | "off" => return Value::Bool(false),
-                _ => {}
-            }
-            // Keep as string
-            value.clone()
         }
         _ => value.clone(),
     }
@@ -3040,10 +2984,15 @@ fn generate_enhanced_422_response(
                             "path",
                             "path parameter",
                             &mut field_errors,
+                            &validator.spec,
                         );
                     }
-                    openapiv3::Parameter::Query { parameter_data, .. } => {
-                        let deep_value = if Some("form") == Some("deepObject") {
+                    openapiv3::Parameter::Query {
+                        parameter_data,
+                        style,
+                        ..
+                    } => {
+                        let deep_value = if matches!(style, openapiv3::QueryStyle::DeepObject) {
                             build_deep_object(&parameter_data.name, query_params)
                         } else {
                             None
@@ -3055,6 +3004,8 @@ fn generate_enhanced_422_response(
                             "query parameter",
                             deep_value,
                             &mut field_errors,
+                            Some(query_style_name(style)),
+                            &validator.spec,
                         );
                     }
                     openapiv3::Parameter::Header { parameter_data, .. } => {
@@ -3064,6 +3015,7 @@ fn generate_enhanced_422_response(
                             "header",
                             "header parameter",
                             &mut field_errors,
+                            &validator.spec,
                         );
                     }
                     openapiv3::Parameter::Cookie { parameter_data, .. } => {
@@ -3073,6 +3025,7 @@ fn generate_enhanced_422_response(
                             "cookie",
                             "cookie parameter",
                             &mut field_errors,
+                            &validator.spec,
                         );
                     }
                 }
@@ -3091,7 +3044,49 @@ fn generate_enhanced_422_response(
     })
 }
 
-/// Helper function to validate a parameter
+/// HTTP header names are ASCII case-insensitive; other parameter names are not.
+/// Prefer the exact spelling so serving's preselected header map stays fast.
+fn parameter_value<'a>(
+    params_map: &'a Map<String, Value>,
+    name: &str,
+    location: &str,
+) -> Option<&'a Value> {
+    params_map.get(name).or_else(|| {
+        if location == "header" {
+            params_map
+                .iter()
+                .find(|(key, _)| key.eq_ignore_ascii_case(name))
+                .map(|(_, value)| value)
+        } else {
+            None
+        }
+    })
+}
+
+fn query_style_name(style: &openapiv3::QueryStyle) -> &'static str {
+    match style {
+        openapiv3::QueryStyle::Form => "form",
+        openapiv3::QueryStyle::SpaceDelimited => "spaceDelimited",
+        openapiv3::QueryStyle::PipeDelimited => "pipeDelimited",
+        openapiv3::QueryStyle::DeepObject => "deepObject",
+    }
+}
+
+fn parameter_failure(
+    data: &openapiv3::ParameterData,
+    location: &str,
+    message: String,
+    aggregate: bool,
+    errors: &mut Vec<String>,
+    details: &mut Vec<Value>,
+) {
+    errors.push(format!("{} parameter '{}' validation failed: {}", location, data.name, message));
+    if aggregate {
+        details.push(json!({"path":format!("{}.{}",location,data.name),"code":"schema_validation","message":message}));
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
 fn validate_parameter(
     parameter_data: &openapiv3::ParameterData,
     params_map: &Map<String, Value>,
@@ -3099,41 +3094,35 @@ fn validate_parameter(
     aggregate: bool,
     errors: &mut Vec<String>,
     details: &mut Vec<Value>,
+    spec: &OpenApiSpec,
 ) {
-    match params_map.get(&parameter_data.name) {
-        Some(v) => {
-            if let ParameterSchemaOrContent::Schema(s) = &parameter_data.format {
-                if let Some(schema) = s.as_item() {
-                    let coerced = coerce_value_for_schema(v, schema);
-                    // Validate the coerced value against the schema
-                    if let Err(validation_error) =
-                        OpenApiSchema::new(schema.clone()).validate(&coerced)
-                    {
-                        let error_msg = validation_error.to_string();
-                        errors.push(format!(
-                            "{} parameter '{}' validation failed: {}",
-                            prefix, parameter_data.name, error_msg
-                        ));
-                        if aggregate {
-                            details.push(serde_json::json!({"path":format!("{}.{}", prefix, parameter_data.name),"code":"schema_validation","message":error_msg}));
-                        }
-                    }
-                }
+    let schema = match parameter_schema::schema(parameter_data, spec) {
+        Ok(schema) => schema,
+        Err(message) => {
+            parameter_failure(parameter_data, prefix, message, aggregate, errors, details);
+            return;
+        }
+    };
+    match parameter_value(params_map, &parameter_data.name, prefix) {
+        Some(value) => {
+            if let Err((_, message)) = parameter_schema::validate_parameter_value(
+                value,
+                schema,
+                parameter_data,
+                spec,
+                None,
+            ) {
+                parameter_failure(parameter_data, prefix, message, aggregate, errors, details);
             }
         }
-        None => {
-            if parameter_data.required {
-                errors.push(format!(
-                    "missing required {} parameter '{}'",
-                    prefix, parameter_data.name
-                ));
-                details.push(serde_json::json!({"path":format!("{}.{}", prefix, parameter_data.name),"code":"required","message":"Missing required parameter"}));
-            }
+        None if parameter_data.required => {
+            errors.push(format!("missing required {} parameter '{}'", prefix, parameter_data.name));
+            details.push(json!({"path":format!("{}.{}",prefix,parameter_data.name),"code":"required","message":"Missing required parameter"}));
         }
+        None => {}
     }
 }
 
-/// Helper function to validate a parameter with deep object support
 #[allow(clippy::too_many_arguments)]
 fn validate_parameter_with_deep_object(
     parameter_data: &openapiv3::ParameterData,
@@ -3144,95 +3133,75 @@ fn validate_parameter_with_deep_object(
     aggregate: bool,
     errors: &mut Vec<String>,
     details: &mut Vec<Value>,
+    spec: &OpenApiSpec,
 ) {
-    match deep_value.as_ref().or_else(|| params_map.get(&parameter_data.name)) {
-        Some(v) => {
-            if let ParameterSchemaOrContent::Schema(s) = &parameter_data.format {
-                if let Some(schema) = s.as_item() {
-                    let coerced = coerce_by_style(v, schema, style); // Use the actual style
-                                                                     // Validate the coerced value against the schema
-                    if let Err(validation_error) =
-                        OpenApiSchema::new(schema.clone()).validate(&coerced)
-                    {
-                        let error_msg = validation_error.to_string();
-                        errors.push(format!(
-                            "{} parameter '{}' validation failed: {}",
-                            prefix, parameter_data.name, error_msg
-                        ));
-                        if aggregate {
-                            details.push(serde_json::json!({"path":format!("{}.{}", prefix, parameter_data.name),"code":"schema_validation","message":error_msg}));
-                        }
-                    }
-                }
+    let schema = match parameter_schema::schema(parameter_data, spec) {
+        Ok(schema) => schema,
+        Err(message) => {
+            parameter_failure(parameter_data, prefix, message, aggregate, errors, details);
+            return;
+        }
+    };
+    match deep_value
+        .as_ref()
+        .or_else(|| parameter_value(params_map, &parameter_data.name, prefix))
+    {
+        Some(value) => {
+            if let Err((_, message)) = parameter_schema::validate_parameter_value(
+                value,
+                schema,
+                parameter_data,
+                spec,
+                style,
+            ) {
+                parameter_failure(parameter_data, prefix, message, aggregate, errors, details);
             }
         }
-        None => {
-            if parameter_data.required {
-                errors.push(format!(
-                    "missing required {} parameter '{}'",
-                    prefix, parameter_data.name
-                ));
-                details.push(serde_json::json!({"path":format!("{}.{}", prefix, parameter_data.name),"code":"required","message":"Missing required parameter"}));
-            }
+        None if parameter_data.required => {
+            errors.push(format!("missing required {} parameter '{}'", prefix, parameter_data.name));
+            details.push(json!({"path":format!("{}.{}",prefix,parameter_data.name),"code":"required","message":"Missing required parameter"}));
         }
+        None => {}
     }
 }
 
-/// Helper function to validate a parameter with detailed error collection
+#[allow(clippy::too_many_arguments)]
 fn validate_parameter_detailed(
     parameter_data: &openapiv3::ParameterData,
     params_map: &Map<String, Value>,
     location: &str,
     value_type: &str,
     field_errors: &mut Vec<Value>,
+    spec: &OpenApiSpec,
 ) {
-    match params_map.get(&parameter_data.name) {
+    let path = format!("{}.{}", location, parameter_data.name);
+    let schema = match parameter_schema::schema(parameter_data, spec) {
+        Ok(schema) => schema,
+        Err(message) => {
+            field_errors.push(json!({"path":path,"expected":"resolvable schema","found":"unresolved","message":message}));
+            return;
+        }
+    };
+    match parameter_value(params_map, &parameter_data.name, location) {
         Some(value) => {
-            if let ParameterSchemaOrContent::Schema(schema) = &parameter_data.format {
-                // Collect detailed validation errors for this parameter
-                let details: Vec<Value> = Vec::new();
-                let param_path = format!("{}.{}", location, parameter_data.name);
-
-                // Apply coercion before validation
-                if let Some(schema_ref) = schema.as_item() {
-                    let coerced_value = coerce_value_for_schema(value, schema_ref);
-                    // Validate the coerced value against the schema
-                    if let Err(validation_error) =
-                        OpenApiSchema::new(schema_ref.clone()).validate(&coerced_value)
-                    {
-                        field_errors.push(json!({
-                            "path": param_path,
-                            "expected": "valid according to schema",
-                            "found": coerced_value,
-                            "message": validation_error.to_string()
-                        }));
-                    }
-                }
-
-                for detail in details {
-                    field_errors.push(json!({
-                        "path": detail["path"],
-                        "expected": detail["expected_type"],
-                        "found": detail["value"],
-                        "message": detail["message"]
-                    }));
-                }
+            if let Err((found, message)) = parameter_schema::validate_parameter_value(
+                value,
+                schema,
+                parameter_data,
+                spec,
+                None,
+            ) {
+                field_errors.push(json!({"path":path,"expected":"valid according to schema","found":found,"message":message}));
             }
         }
-        None => {
-            if parameter_data.required {
-                field_errors.push(json!({
-                    "path": format!("{}.{}", location, parameter_data.name),
-                    "expected": "value",
-                    "found": "missing",
-                    "message": format!("Missing required {} '{}'", value_type, parameter_data.name)
-                }));
-            }
+        None if parameter_data.required => {
+            field_errors.push(json!({"path":path,"expected":"value","found":"missing","message":format!("Missing required {} '{}'",value_type,parameter_data.name)}));
         }
+        None => {}
     }
 }
 
-/// Helper function to validate a parameter with deep object support and detailed errors
+#[allow(clippy::too_many_arguments)]
 fn validate_parameter_detailed_with_deep(
     parameter_data: &openapiv3::ParameterData,
     params_map: &Map<String, Value>,
@@ -3240,50 +3209,36 @@ fn validate_parameter_detailed_with_deep(
     value_type: &str,
     deep_value: Option<Value>,
     field_errors: &mut Vec<Value>,
+    style: Option<&str>,
+    spec: &OpenApiSpec,
 ) {
-    match deep_value.as_ref().or_else(|| params_map.get(&parameter_data.name)) {
+    let path = format!("{}.{}", location, parameter_data.name);
+    let schema = match parameter_schema::schema(parameter_data, spec) {
+        Ok(schema) => schema,
+        Err(message) => {
+            field_errors.push(json!({"path":path,"expected":"resolvable schema","found":"unresolved","message":message}));
+            return;
+        }
+    };
+    match deep_value
+        .as_ref()
+        .or_else(|| parameter_value(params_map, &parameter_data.name, location))
+    {
         Some(value) => {
-            if let ParameterSchemaOrContent::Schema(schema) = &parameter_data.format {
-                // Collect detailed validation errors for this parameter
-                let details: Vec<Value> = Vec::new();
-                let param_path = format!("{}.{}", location, parameter_data.name);
-
-                // Apply coercion before validation
-                if let Some(schema_ref) = schema.as_item() {
-                    let coerced_value = coerce_by_style(value, schema_ref, Some("form")); // Default to form style for now
-                                                                                          // Validate the coerced value against the schema
-                    if let Err(validation_error) =
-                        OpenApiSchema::new(schema_ref.clone()).validate(&coerced_value)
-                    {
-                        field_errors.push(json!({
-                            "path": param_path,
-                            "expected": "valid according to schema",
-                            "found": coerced_value,
-                            "message": validation_error.to_string()
-                        }));
-                    }
-                }
-
-                for detail in details {
-                    field_errors.push(json!({
-                        "path": detail["path"],
-                        "expected": detail["expected_type"],
-                        "found": detail["value"],
-                        "message": detail["message"]
-                    }));
-                }
+            if let Err((found, message)) = parameter_schema::validate_parameter_value(
+                value,
+                schema,
+                parameter_data,
+                spec,
+                style,
+            ) {
+                field_errors.push(json!({"path":path,"expected":"valid according to schema","found":found,"message":message}));
             }
         }
-        None => {
-            if parameter_data.required {
-                field_errors.push(json!({
-                    "path": format!("{}.{}", location, parameter_data.name),
-                    "expected": "value",
-                    "found": "missing",
-                    "message": format!("Missing required {} '{}'", value_type, parameter_data.name)
-                }));
-            }
+        None if parameter_data.required => {
+            field_errors.push(json!({"path":path,"expected":"value","found":"missing","message":format!("Missing required {} '{}'",value_type,parameter_data.name)}));
         }
+        None => {}
     }
 }
 
@@ -3302,6 +3257,11 @@ pub fn create_registry_from_json(json: Value) -> Result<OpenApiRouteRegistry> {
     spec.validate()?;
     Ok(OpenApiRouteRegistry::new(spec))
 }
+
+#[cfg(test)]
+mod parameter_lookup_tests;
+#[cfg(test)]
+mod parameter_schema_tests;
 
 #[cfg(test)]
 mod tests {

@@ -4,6 +4,7 @@
 //! Provides a queryable SQLite database of all interactions.
 
 pub mod api;
+pub mod async_messages;
 pub mod behavioral_cloning;
 pub mod cloud_sync;
 pub mod database;

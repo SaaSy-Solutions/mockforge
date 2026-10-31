@@ -25,7 +25,11 @@ pub(super) fn load(path: &Path) -> Result<Vec<(String, RecordedRequest)>> {
     files.into_iter().map(|path| read(&path)).collect()
 }
 
-fn discover(path: &Path, depth: usize, files: &mut Vec<PathBuf>) -> Result<()> {
+pub(in crate::verify_mocks_commands) fn discover(
+    path: &Path,
+    depth: usize,
+    files: &mut Vec<PathBuf>,
+) -> Result<()> {
     if depth > 64 {
         return Err(Error::config("fixture directory depth exceeds 64"));
     }
@@ -53,6 +57,14 @@ fn discover(path: &Path, depth: usize, files: &mut Vec<PathBuf>) -> Result<()> {
 }
 
 fn read(path: &Path) -> Result<(String, RecordedRequest)> {
+    let data = read_bytes(path)?;
+    let fixture = serde_json::from_slice(&data).map_err(|e| {
+        Error::config(format!("invalid HTTP replay fixture {}: {e}", path.display()))
+    })?;
+    Ok((path.display().to_string(), fixture))
+}
+
+pub(in crate::verify_mocks_commands) fn read_bytes(path: &Path) -> Result<Vec<u8>> {
     let file = fs::File::open(path)?;
     if !file.metadata()?.is_file() {
         return Err(Error::config("fixture must be a regular file"));
@@ -62,8 +74,5 @@ fn read(path: &Path) -> Result<(String, RecordedRequest)> {
     if data.len() as u64 > MAX_FILE_BYTES {
         return Err(Error::config(format!("fixture exceeds 8 MiB: {}", path.display())));
     }
-    let fixture = serde_json::from_slice(&data).map_err(|e| {
-        Error::config(format!("invalid HTTP replay fixture {}: {e}", path.display()))
-    })?;
-    Ok((path.display().to_string(), fixture))
+    Ok(data)
 }
