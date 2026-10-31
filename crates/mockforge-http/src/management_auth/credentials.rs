@@ -19,6 +19,26 @@ impl ControlPlanePolicy {
             .any(|presented| bool::from(presented.as_bytes().ct_eq(expected.as_bytes())))
     }
 
+    pub(super) fn admin_matches(&self, headers: &HeaderMap) -> bool {
+        let Mode::Credentials {
+            admin: Some(admin), ..
+        } = &self.mode
+        else {
+            return false;
+        };
+        headers
+            .get_all(header::AUTHORIZATION)
+            .iter()
+            .filter_map(|value| value.to_str().ok())
+            .any(|value| {
+                crate::auth::admin_auth::basic_credentials_match(
+                    value,
+                    &admin.username,
+                    &admin.password,
+                )
+            })
+    }
+
     pub(super) fn authorize(&self, headers: &HeaderMap) -> Result<(), Denial> {
         match &self.mode {
             Mode::UnauthenticatedLoopback => {
@@ -34,22 +54,8 @@ impl ControlPlanePolicy {
                 token: None,
                 admin: None,
             } => Err(Denial::Locked),
-            Mode::Credentials { admin, .. } => {
-                if self.token_matches(headers) {
-                    return Ok(());
-                }
-                let admin_ok = admin.as_ref().is_some_and(|admin| {
-                    headers.get(header::AUTHORIZATION).and_then(|v| v.to_str().ok()).is_some_and(
-                        |value| {
-                            crate::auth::admin_auth::basic_credentials_match(
-                                value,
-                                &admin.username,
-                                &admin.password,
-                            )
-                        },
-                    )
-                });
-                if admin_ok {
+            Mode::Credentials { .. } => {
+                if self.token_matches(headers) || self.admin_matches(headers) {
                     Ok(())
                 } else {
                     Err(Denial::MissingCredential)

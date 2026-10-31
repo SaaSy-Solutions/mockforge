@@ -133,12 +133,16 @@ async fn outer_gate(
 ) -> Response {
     req.extensions_mut().remove::<Authorized>();
     req.extensions_mut().insert(policy.clone());
-    // Check the token here, then take it off the request so the recorder,
-    // request logs and handlers inside never see (or store) it.
-    if policy.token_matches(req.headers()) {
+    // Authenticate management credentials before removing them, so recording
+    // and handlers never receive them. Unrelated mock Basic auth is preserved.
+    let admin_matches = policy.admin_matches(req.headers());
+    if policy.token_matches(req.headers()) || admin_matches {
         req.extensions_mut().insert(Authorized);
     }
     strip_token(req.headers_mut(), &policy);
+    if admin_matches {
+        req.headers_mut().remove(header::AUTHORIZATION);
+    }
     if req.extensions().get::<Authorized>().is_none()
         && is_reserved_path(req.uri().path())
         && !is_public_reserved(&req)
