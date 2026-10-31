@@ -1,3 +1,5 @@
+import { FidelityPanel } from '../components/fidelity/FidelityPanel';
+import { isCloudMode } from '../utils/cloudMode';
 import { logger } from '@/utils/logger';
 import { useState, useEffect } from 'react';
 import {
@@ -414,6 +416,8 @@ export function ContractDiffPage() {
           )}
         </div>
       </div>
+
+      {!isCloudMode() && selectedProtocol === 'http' && <FidelityPanel />}
 
       {/* Protocol Contract Editor Modal */}
       {showProtocolEditor && (

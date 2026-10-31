@@ -130,6 +130,16 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             get(handlers::internal_test_runs::get_tunnel_reservation_by_subdomain),
         )
         // AI-assisted contract drift scoring (#348). Runner-only.
+        // Cloudflare hosted-mocks Worker: container environment and usage
+        // reports. Same internal bearer token as the test-runner callbacks.
+        .route(
+            "/api/v1/internal/hosted-mocks/runtime/{org_id}/{slug}",
+            get(handlers::internal_hosted_mocks::get_runtime),
+        )
+        .route(
+            "/api/v1/internal/hosted-mocks/{deployment_id}/usage",
+            post(handlers::internal_hosted_mocks::report_usage),
+        )
         .route(
             "/api/v1/internal/contract-diff/score",
             post(handlers::internal_contract_diff::score_contract_drift),

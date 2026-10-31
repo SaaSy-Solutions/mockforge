@@ -99,6 +99,14 @@ Get real-time validation for your `mockforge.yaml` files:
 
 See [CHANGELOG.md](CHANGELOG.md) for detailed release notes.
 
+## Development
+
+```bash
+npm ci
+npm test               # compiles, downloads VS Code 1.85.2 and runs the suite in it
+xvfb-run -a npm test   # Linux without a display
+```
+
 ## Contributing
 
 Found a bug or have a feature request? Please open an issue on our [GitHub repository](https://github.com/SaaSy-Solutions/mockforge).
