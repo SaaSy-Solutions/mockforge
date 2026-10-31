@@ -21,6 +21,7 @@ public class MockServerBuilder {
     private String host;
     private String configFile;
     private String openApiSpec;
+    private String managementToken;
 
     /**
      * Create a new MockServerBuilder
@@ -75,6 +76,17 @@ public class MockServerBuilder {
     }
 
     /**
+     * Set the control-plane management token (default: env var, else random)
+     *
+     * @param managementToken Token sent as X-MockForge-Management-Token
+     * @return This builder for method chaining
+     */
+    public MockServerBuilder managementToken(String managementToken) {
+        this.managementToken = managementToken;
+        return this;
+    }
+
+    /**
      * Build and start the MockServer
      *
      * @return Started MockServer instance
@@ -86,6 +98,7 @@ public class MockServerBuilder {
             .host(host)
             .configFile(configFile)
             .openApiSpec(openApiSpec)
+            .managementToken(managementToken)
             .build();
 
         return MockServer.start(config);
@@ -102,6 +115,7 @@ public class MockServerBuilder {
             .host(host)
             .configFile(configFile)
             .openApiSpec(openApiSpec)
+            .managementToken(managementToken)
             .build();
     }
 }

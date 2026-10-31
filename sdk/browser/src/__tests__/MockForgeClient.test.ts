@@ -132,3 +132,37 @@ describe('MockForgeClient', () => {
         });
     });
 });
+
+describe('MockForgeClient management token', () => {
+    beforeEach(() => {
+        (global.fetch as jest.Mock).mockClear();
+    });
+
+    it('sends X-MockForge-Management-Token on management requests when set', async () => {
+        const client = new MockForgeClient('http://localhost:3000', 'k'.repeat(48));
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({ id: 'm1' }),
+        });
+
+        await client.createMock({ method: 'GET', path: '/x', response: { body: {} } } as any);
+
+        const [, init] = (global.fetch as jest.Mock).mock.calls[0];
+        expect(init.headers['X-MockForge-Management-Token']).toBe('k'.repeat(48));
+    });
+
+    it('omits the header when no token is configured', async () => {
+        const client = new MockForgeClient('http://localhost:3000');
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => [],
+        });
+
+        await client.listMocks();
+
+        const [, init] = (global.fetch as jest.Mock).mock.calls[0];
+        expect(init.headers).not.toHaveProperty('X-MockForge-Management-Token');
+    });
+});
