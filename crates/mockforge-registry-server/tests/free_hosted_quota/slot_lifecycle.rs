@@ -168,10 +168,15 @@ async fn lifecycle_actions_without_a_provider_cannot_claim_success_or_release_ca
                 .await
         };
         match result {
-            Err(ApiError::InvalidRequest(message)) => {
+            Err(ApiError::InvalidRequest(message)) if status == "active" => {
                 assert!(message.contains(expected), "{message}")
             }
-            _ => panic!("an unconfigured lifecycle operation must fail explicitly"),
+            Err(ApiError::ResourceLimitExceeded(message)) if status != "active" => {
+                assert!(message.contains("External hosting requires a paid plan"), "{message}");
+            }
+            _ => {
+                panic!("external lifecycle must reject missing providers or Free plan eligibility")
+            }
         }
         let deletion = CURRENT_ORG
             .scope(

@@ -72,6 +72,20 @@ pub struct DeploymentOrchestrator {
     cloudflare: Option<CloudflareMocks>,
 }
 
+fn has_external_backend_intent(deployment: &HostedMock) -> bool {
+    !super::local_runtime::is_local(deployment)
+        && (["hosting_backend", "backend"].iter().any(|key| {
+            matches!(
+                deployment.metadata_json.get(*key).and_then(|value| value.as_str()),
+                Some("flyio" | "cloudflare")
+            )
+        }) || deployment
+            .metadata_json
+            .get("flyio_machine_id")
+            .and_then(|value| value.as_str())
+            .is_some())
+}
+
 impl DeploymentOrchestrator {
     pub fn new(
         db: Arc<PgPool>,
@@ -148,7 +162,7 @@ impl DeploymentOrchestrator {
     /// Stop externally reachable paid backends after a subscription downgrade.
     /// Failed confirmations retain status/capacity and are retried next poll.
     async fn reconcile_downgraded_backends(&self) -> Result<()> {
-        let deployments = sqlx::query_as::<_, HostedMock>("SELECT * FROM hosted_mocks WHERE deleted_at IS NULL AND deletion_requested_at IS NULL AND capacity_reserved AND metadata_json->>'hosting_backend' IS DISTINCT FROM 'multitenant' ORDER BY updated_at ASC")
+        let deployments = sqlx::query_as::<_, HostedMock>("SELECT * FROM hosted_mocks WHERE deleted_at IS NULL AND deletion_requested_at IS NULL AND capacity_reserved AND (metadata_json->>'hosting_backend' IN ('flyio','cloudflare') OR metadata_json->>'backend' IN ('flyio','cloudflare') OR metadata_json ? 'flyio_machine_id') ORDER BY updated_at ASC")
             .fetch_all(self.db.as_ref()).await?;
         for deployment in deployments {
             if let Err(error) = self.stop_downgraded_backend(&deployment).await {
@@ -159,6 +173,9 @@ impl DeploymentOrchestrator {
     }
 
     async fn stop_downgraded_backend(&self, deployment: &HostedMock) -> Result<()> {
+        if !has_external_backend_intent(deployment) {
+            return Ok(());
+        }
         let pool = self.db.as_ref();
         let mut lifecycle = crate::handlers::hosted_capacity::LifecycleGuard::acquire(
             pool,
@@ -178,7 +195,7 @@ impl DeploymentOrchestrator {
         .fetch_one(pool)
         .await?;
         // Display status is owner-editable and cannot prove provider shutdown.
-        if !reserved || super::local_runtime::is_local(&current) {
+        if !reserved || !has_external_backend_intent(&current) {
             return Ok(());
         }
         let org = crate::models::Organization::find_by_id(pool, current.org_id)

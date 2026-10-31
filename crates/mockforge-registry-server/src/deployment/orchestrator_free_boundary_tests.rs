@@ -49,6 +49,11 @@ async fn free_deployment_never_calls_configured_provider_and_invalid_routes_stay
         let id: Uuid = sqlx::query_scalar("INSERT INTO hosted_mocks (org_id,name,slug,config_json,status) VALUES ($1,'Provider boundary',$2,$3,'pending') RETURNING id")
             .bind(org.id).bind(&label).bind(config).fetch_one(db.pool()).await.unwrap();
         let deployment = HostedMock::find_by_id(db.pool(), id).await.unwrap().unwrap();
+        let lifecycle = crate::handlers::hosted_capacity::LifecycleGuard::acquire(db.pool(), org.id, id).await.unwrap();
+        orchestrator.stop_downgraded_backend(&deployment).await.expect("no external intent must skip cleanup without acquiring the held lifecycle lock");
+        drop(lifecycle);
+        assert_eq!(calls.load(Ordering::SeqCst), 0, "unprovisioned Free deployment has no external backend to stop");
+        assert_eq!(HostedMock::find_by_id(db.pool(), id).await.unwrap().unwrap().status, "pending");
         let result = orchestrator.deploy(&deployment).await;
         if index == 0 { result.unwrap(); } else { assert!(result.is_err()); }
         let stored: (String, Option<String>, String, bool) = sqlx::query_as("SELECT status, internal_url, metadata_json->>'hosting_backend', capacity_reserved FROM hosted_mocks WHERE id=$1")

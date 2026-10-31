@@ -26,6 +26,13 @@ confirmed. Do not promise an immediate hard cap for a previously paid external
 deployment during this transition. Watch the downgrade-stop warnings and resolve
 provider configuration failures before completing a rollout.
 
+Automatic reconciliation identifies external resources from server-owned backend
+intent or a saved Fly machine ID, never display status or user-editable URLs.
+Before rollout, inventory older incomplete provider creations that have neither
+marker nor machine ID. Those ambiguous rows cannot be distinguished safely from
+new unprovisioned mocks and require operator reconciliation against the owned
+provider app before claiming their external resources are stopped.
+
 Stopping preserves deployment configuration and its capacity reservation. Restoring
 a paid subscription permits restart. A Free customer can delete the paused
 external deployment; confirmed deletion releases its slot for a local mock.
