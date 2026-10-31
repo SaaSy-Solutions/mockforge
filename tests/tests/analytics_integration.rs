@@ -3,6 +3,7 @@
 //! Tests that verify analytics data recording, querying, and streaming
 //! work correctly end-to-end.
 
+use mockforge_http::management_auth::MANAGEMENT_TOKEN_HEADER;
 use mockforge_test::MockForgeServer;
 use reqwest::Client;
 use serde_json::Value;
@@ -48,7 +49,11 @@ async fn test_metrics_recording() {
 
     // Query analytics summary endpoint
     let summary_url = format!("{}/__mockforge/analytics/summary?range=5m", base_url);
-    let summary_response = client.get(&summary_url).send().await;
+    let summary_response = client
+        .get(&summary_url)
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
+        .send()
+        .await;
 
     match summary_response {
         Ok(resp) => {
@@ -105,7 +110,11 @@ async fn test_analytics_query() {
 
     for range in time_ranges {
         let url = format!("{}/__mockforge/analytics/summary?range={}", base_url, range);
-        let response = client.get(&url).send().await;
+        let response = client
+            .get(&url)
+            .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
+            .send()
+            .await;
 
         match response {
             Ok(resp) => {
@@ -160,7 +169,11 @@ async fn test_analytics_endpoints() {
 
     // Query endpoints analytics
     let endpoints_url = format!("{}/__mockforge/analytics/endpoints?limit=10", base_url);
-    let response = client.get(&endpoints_url).send().await;
+    let response = client
+        .get(&endpoints_url)
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
+        .send()
+        .await;
 
     match response {
         Ok(resp) => {
@@ -214,7 +227,11 @@ async fn test_analytics_requests_timeseries() {
 
     // Query requests time-series
     let requests_url = format!("{}/__mockforge/analytics/requests?range=5m", base_url);
-    let response = client.get(&requests_url).send().await;
+    let response = client
+        .get(&requests_url)
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
+        .send()
+        .await;
 
     match response {
         Ok(resp) => {
@@ -261,7 +278,11 @@ async fn test_analytics_system_metrics() {
 
     // Query system metrics
     let system_url = format!("{}/__mockforge/analytics/system", base_url);
-    let response = client.get(&system_url).send().await;
+    let response = client
+        .get(&system_url)
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
+        .send()
+        .await;
 
     match response {
         Ok(resp) => {

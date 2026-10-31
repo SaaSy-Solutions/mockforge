@@ -39,7 +39,7 @@ try:
 except ImportError as e:
     print(f"Error: Missing required packages: {e}")
     print("\nInstall with:")
-    print("  pip install mockforge-plugin[fastapi] requests")
+    print("  curl -fsSL -o mockforge_plugin.py https://raw.githubusercontent.com/SaaSy-Solutions/mockforge/main/sdk/python/mockforge_plugin/sdk.py\n  pip install -r requirements.txt")
     sys.exit(1)
 
 # Configure logging

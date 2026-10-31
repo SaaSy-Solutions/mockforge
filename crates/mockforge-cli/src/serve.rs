@@ -1,7 +1,7 @@
 mod feature_selection;
 mod lifecycle;
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[cfg(feature = "chaos")]
 use mockforge_chaos::api::create_chaos_api_router;
@@ -896,12 +896,18 @@ pub async fn handle_serve(
         }
     };
 
+    // Specs supplied through MOCKFORGE_CONFIG / MOCKFORGE_OPENAPI_SPEC_URL are
+    // remote content, so their directory is never a `{{fs.readFile}}` root (#1015).
+    let spec_from_env = serve_args.spec.is_empty()
+        && (std::env::var("MOCKFORGE_CONFIG").is_ok()
+            || std::env::var("MOCKFORGE_OPENAPI_SPEC_URL").is_ok());
+
     // If no spec files provided, check MOCKFORGE_CONFIG env var (inline spec content)
     // or MOCKFORGE_OPENAPI_SPEC_URL env var (URL or local path to spec)
     let spec = if serve_args.spec.is_empty() {
         if let Ok(config_json) = std::env::var("MOCKFORGE_CONFIG") {
             // MOCKFORGE_CONFIG contains the OpenAPI spec as JSON
-            let spec_dir = std::path::Path::new("/tmp/mockforge-specs");
+            let spec_dir = Path::new("/tmp/mockforge-specs");
             let _ = tokio::fs::create_dir_all(spec_dir).await;
             let spec_path = spec_dir.join("spec.json");
             match tokio::fs::write(&spec_path, config_json.as_bytes()).await {
@@ -919,7 +925,7 @@ pub async fn handle_serve(
                 tracing::info!("Downloading spec from URL: {}", spec_url);
                 match reqwest::get(&spec_url).await {
                     Ok(response) if response.status().is_success() => {
-                        let spec_dir = std::path::Path::new("/tmp/mockforge-specs");
+                        let spec_dir = Path::new("/tmp/mockforge-specs");
                         let _ = tokio::fs::create_dir_all(spec_dir).await;
                         let spec_path = spec_dir.join("spec.json");
                         match response.bytes().await {
@@ -974,6 +980,12 @@ pub async fn handle_serve(
 
     // Merge configuration sources
     let mut config = build_server_config_from_cli(&serve_args).await;
+
+    register_template_fs_root(
+        spec_from_env,
+        serve_args.spec_dir.as_deref(),
+        config.http.openapi_spec.as_deref(),
+    );
     feature_selection::validate(&serve_args, &config)?;
     #[cfg(feature = "http")]
     validate_cors_origins(&config)?;
@@ -2154,7 +2166,7 @@ pub async fn handle_serve(
             }
             let (chaos_router, chaos_config_arc, latency_tracker, chaos_api_state) =
                 create_chaos_api_router(chaos_config.clone(), None);
-            http_app = http_app.merge(chaos_router);
+            http_app = http_app.merge(mockforge_http::management_auth::protect(chaos_router));
             println!("✅ Chaos Engineering API available at /api/chaos/*");
 
             // Resilience middleware + dashboard state (#468 Phase 2 + CLI follow-up).
@@ -2400,7 +2412,8 @@ pub async fn handle_serve(
                         }));
 
                         let recorder_router = mockforge_recorder::create_api_router(recorder, None);
-                        http_app = http_app.merge(recorder_router);
+                        http_app = http_app
+                            .merge(mockforge_http::management_auth::protect(recorder_router));
                         println!(
                             "✅ Recorder API available at /api/recorder/* (DB: {})",
                             recorder_config.database_path
@@ -2518,9 +2531,30 @@ pub async fn handle_serve(
         #[cfg(feature = "admin")]
         let resilience_api_state = None;
 
-        // Outermost, after every router is merged: on hosted mocks, control-plane
-        // writes need the deployment's management token (#1085).
-        let http_app = mockforge_http::management_auth::gate_control_plane_writes(http_app);
+        // Outermost, after every router is merged: every control-plane request,
+        // read or write, needs the management credential (#1011, #1085).
+        let http_bind_ip = mockforge_http::resolve_bind_ip(&config.http.host);
+        let control_plane_policy = {
+            use mockforge_http::management_auth::{AdminCredential, ControlPlanePolicy};
+            let admin = match (&config.admin.username, &config.admin.password) {
+                (Some(user), Some(pass)) => AdminCredential::new(user.clone(), pass.clone()),
+                _ => None,
+            };
+            ControlPlanePolicy::from_env(http_bind_ip, admin).map_err(|e| e.to_string())?
+        };
+        if control_plane_policy.is_locked() {
+            println!(
+                "🔒 Control plane (/__mockforge/*, /api/chaos, ...) is locked on the HTTP port: \
+                 set MOCKFORGE_MANAGEMENT_TOKEN (32+ characters) to use it"
+            );
+        } else if control_plane_policy.is_unauthenticated() {
+            tracing::warn!(
+                "MOCKFORGE_INSECURE_MANAGEMENT is set: the control plane on {} needs no \
+                 credential (loopback only)",
+                http_bind_ip
+            );
+        }
+        let http_app = mockforge_http::management_auth::install(http_app, control_plane_policy);
 
         #[cfg(feature = "chaos")]
         let chaos_listener_cfg = if chaos_config.enabled
@@ -2573,6 +2607,8 @@ pub async fn handle_serve(
     ) = http_setup;
     #[cfg(all(feature = "http", not(feature = "admin")))]
     let (http_app, chaos_listener_cfg) = http_setup;
+    // Same resolution the control-plane policy used above.
+    let http_bind_ip = mockforge_http::resolve_bind_ip(&config.http.host);
 
     // Note: OData URI rewrite is applied at the service level in serve_router_with_tls()
 
@@ -2778,7 +2814,8 @@ pub async fn handle_serve(
         let http_app_clone_for_dual = http_app.clone();
         let chaos_listener_cfg_for_dual = chaos_listener_cfg.clone();
         let http_handle = tokio::spawn(async move {
-            mockforge_http::serve_router_with_tls_notify_chaos_shutdown(
+            mockforge_http::serve_router_with_tls_notify_chaos_shutdown_on(
+                http_bind_ip,
                 http_port,
                 http_app,
                 plain_http_tls_config,
@@ -2801,7 +2838,8 @@ pub async fn handle_serve(
             let chaos_listener_cfg_https = chaos_listener_cfg_for_dual.clone();
             Some(tokio::spawn(async move {
                 println!("🔒 HTTPS server listening on https://localhost:{}", https_port);
-                mockforge_http::serve_router_with_tls_notify_chaos_shutdown(
+                mockforge_http::serve_router_with_tls_notify_chaos_shutdown_on(
+                    http_bind_ip,
                     https_port,
                     https_app,
                     https_tls,
@@ -3066,7 +3104,7 @@ pub async fn handle_serve(
                             );
 
                             // Update deployment metadata with tunnel URL
-                            let metadata_path = std::path::Path::new(".mockforge/deployment.json");
+                            let metadata_path = Path::new(".mockforge/deployment.json");
                             if metadata_path.exists() {
                                 if let Ok(metadata_content) = std::fs::read_to_string(metadata_path)
                                 {
@@ -3681,5 +3719,68 @@ mod chaos_yaml_bridge_tests {
         assert_eq!(bridged.corruption_type, CorruptionType::None);
         assert!(bridged.error_pattern.is_none());
         assert!(bridged.request_matcher.is_none());
+    }
+}
+
+/// Default `{{fs.readFile}}` root: the user's spec directory (#1015).
+///
+/// `MOCKFORGE_TEMPLATE_FS_ROOT` overrides this, and hosted mocks ignore it.
+fn template_fs_default_root(
+    spec_from_env: bool,
+    spec_dir: Option<&Path>,
+    openapi_spec: Option<&str>,
+) -> Option<PathBuf> {
+    if spec_from_env {
+        return None;
+    }
+    if let Some(dir) = spec_dir {
+        return Some(dir.to_path_buf());
+    }
+    let spec = Path::new(openapi_spec?);
+    match spec.parent() {
+        Some(parent) if !parent.as_os_str().is_empty() => Some(parent.to_path_buf()),
+        _ => Some(PathBuf::from(".")),
+    }
+}
+
+fn register_template_fs_root(
+    spec_from_env: bool,
+    spec_dir: Option<&Path>,
+    openapi_spec: Option<&str>,
+) {
+    let root = template_fs_default_root(spec_from_env, spec_dir, openapi_spec);
+    if let Some(ref root) = root {
+        tracing::debug!("fs.readFile template root: {}", root.display());
+    }
+    mockforge_core::template_fs::set_default_root(root);
+}
+
+#[cfg(test)]
+mod template_fs_root_tests {
+    use super::*;
+
+    #[test]
+    fn spec_directory_is_the_default_root() {
+        assert_eq!(
+            template_fs_default_root(false, None, Some("specs/api.yaml")),
+            Some(PathBuf::from("specs"))
+        );
+        assert_eq!(
+            template_fs_default_root(false, None, Some("api.yaml")),
+            Some(PathBuf::from("."))
+        );
+        assert_eq!(
+            template_fs_default_root(false, Some(Path::new("/srv/specs")), Some("x/api.yaml")),
+            Some(PathBuf::from("/srv/specs"))
+        );
+    }
+
+    #[test]
+    fn remote_or_missing_spec_has_no_root() {
+        assert_eq!(
+            template_fs_default_root(true, None, Some("/tmp/mockforge-specs/spec.json")),
+            None
+        );
+        assert_eq!(template_fs_default_root(false, None, None), None);
     }
 }

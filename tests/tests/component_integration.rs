@@ -5,6 +5,7 @@
 //! - Data → Protocol (data generation, fixtures)
 //! - Plugin → Protocol (plugin handlers, transformations)
 
+use mockforge_http::management_auth::MANAGEMENT_TOKEN_HEADER;
 use mockforge_test::MockForgeServer;
 use reqwest::Client;
 use serde_json::json;
@@ -57,6 +58,7 @@ async fn test_core_protocol_routing() {
     for route in routes {
         let response = client
             .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+            .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
             .json(&route)
             .send()
             .await
@@ -115,6 +117,7 @@ async fn test_data_protocol_generation() {
     // Create route with data generation tokens
     let stub_response = client
         .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .json(&json!({
             "path": "/api/generated",
             "method": "GET",
@@ -190,6 +193,7 @@ async fn test_data_protocol_fixtures() {
     // Create route that uses fixture
     let stub_response = client
         .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .json(&json!({
             "path": "/api/fixture-test",
             "method": "GET",
@@ -242,6 +246,7 @@ async fn test_plugin_protocol_handlers() {
     // Test plugin API endpoints (Plugin → Protocol integration)
     let plugins_response = client
         .get(format!("http://localhost:{}/__mockforge/plugins", admin_port))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .send()
         .await;
 
@@ -283,6 +288,7 @@ async fn test_plugin_protocol_transformations() {
     // Create route that might use plugin transformation
     let stub_response = client
         .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .json(&json!({
             "path": "/api/transform",
             "method": "POST",
@@ -336,6 +342,7 @@ async fn test_core_data_protocol_integration() {
     // Create route that uses Core routing, Data generation, and Protocol handling
     let stub_response = client
         .post(format!("http://localhost:{}/__mockforge/api/mocks", admin_port))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .json(&json!({
             "path": "/api/integrated",
             "method": "GET",

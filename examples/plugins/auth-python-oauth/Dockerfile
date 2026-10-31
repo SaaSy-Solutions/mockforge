@@ -19,6 +19,8 @@ COPY --from=builder /root/.local /root/.local
 
 # Copy plugin code
 COPY plugin.py .
+# Plugin SDK (not yet on PyPI), vendored as a single module
+ADD https://raw.githubusercontent.com/SaaSy-Solutions/mockforge/main/sdk/python/mockforge_plugin/sdk.py mockforge_plugin.py
 COPY plugin.yaml .
 
 # Make sure scripts in .local are usable
