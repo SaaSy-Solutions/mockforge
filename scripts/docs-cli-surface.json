@@ -28,6 +28,50 @@
      "subcommands": {},
      "variadic": false
     },
+    "ai": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "bake": {
+       "aliases": {},
+       "flags": {
+        "--api-key-env": 1,
+        "--endpoint": 1,
+        "--help": 0,
+        "--log-level": 1,
+        "--max-tokens": 1,
+        "--method": 1,
+        "--model": 1,
+        "--output": 1,
+        "--path": 1,
+        "--prompt-file": 1,
+        "--provider": 1,
+        "--seed": 1,
+        "--status": 1,
+        "--temperature": 1,
+        "--timeout": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 3,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      }
+     },
+     "variadic": false
+    },
     "amqp": {
      "aliases": {},
      "flags": {
@@ -3475,12 +3519,13 @@
       "install": {
        "aliases": {},
        "flags": {
+        "--allow-unsigned": 0,
         "--checksum": 1,
         "--force": 0,
         "--help": 0,
         "--log-level": 1,
-        "--no-verify": 0,
         "--skip-validation": 0,
+        "--trusted-keys": 1,
         "-h": 0,
         "-v": 1
        },
@@ -3533,8 +3578,10 @@
        "aliases": {},
        "flags": {
         "--all": 0,
+        "--allow-unsigned": 0,
         "--help": 0,
         "--log-level": 1,
+        "--trusted-keys": 1,
         "-h": 0,
         "-v": 1
        },
@@ -5135,6 +5182,38 @@
      },
      "variadic": false
     },
+    "tools": {
+     "aliases": {},
+     "flags": {
+      "--help": 0,
+      "--log-level": 1,
+      "-h": 0,
+      "-v": 1
+     },
+     "positionals": 0,
+     "subcommands": {
+      "export": {
+       "aliases": {},
+       "flags": {
+        "--help": 0,
+        "--log-level": 1,
+        "--output-dir": 1,
+        "-h": 0,
+        "-v": 1
+       },
+       "positionals": 1,
+       "subcommands": {},
+       "variadic": false
+      },
+      "help": {
+       "aliases": {},
+       "flags": {},
+       "free": true,
+       "subcommands": {}
+      }
+     },
+     "variadic": false
+    },
     "tunnel": {
      "aliases": {},
      "flags": {
@@ -5548,9 +5627,11 @@
      "flags": {
       "--capture-db": 1,
       "--fail-on-drift": 0,
+      "--fixtures": 1,
       "--help": 0,
       "--limit": 1,
       "--log-level": 1,
+      "--mock-spec": 1,
       "--output": 1,
       "--spec": 1,
       "-c": 1,

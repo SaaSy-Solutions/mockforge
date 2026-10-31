@@ -1,40 +1,36 @@
+import { describe, it, beforeAll, beforeEach, afterEach, expect } from 'vitest';
 /**
  * Integration tests for ForgeConnect
  *
- * These tests require a running MockForge server on localhost:3000
- * Run with: MOCKFORGE_SERVER_URL=http://localhost:3000 npm test -- --testPathPattern=integration
+ * Run against an owned test server supplied by MOCKFORGE_SERVER_URL.
+ * The shared CI driver starts and cleans up that server.
  */
 
 import { ForgeConnect } from '../../core/ForgeConnect';
 
-const MOCKFORGE_URL = process.env.MOCKFORGE_SERVER_URL || 'http://localhost:3000';
+const MOCKFORGE_URL = process.env.MOCKFORGE_SERVER_URL;
+
+if (!MOCKFORGE_URL) throw new Error('Live tests require MOCKFORGE_SERVER_URL for an owned fixture');
 
 describe('ForgeConnect Integration', () => {
     let forgeConnect: ForgeConnect;
 
     beforeAll(async () => {
-        // Check if MockForge is running
-        try {
-            const response = await fetch(`${MOCKFORGE_URL}/health`);
-            if (!response.ok) {
-                throw new Error('MockForge not running');
-            }
-        } catch (error) {
-            console.warn('MockForge server not available, skipping integration tests');
-            return;
-        }
+        const response = await fetch(`${MOCKFORGE_URL}/health`);
+        expect(response.ok).toBe(true);
     });
 
     beforeEach(() => {
         forgeConnect = new ForgeConnect({
             serverUrl: MOCKFORGE_URL,
+            managementToken: process.env.MOCKFORGE_MANAGEMENT_TOKEN,
             mockMode: 'auto',
             enableLogging: false,
         });
     });
 
-    afterEach(() => {
-        forgeConnect.stop();
+    afterEach(async () => {
+        await forgeConnect.stop();
     });
 
     it('should connect to MockForge server', async () => {

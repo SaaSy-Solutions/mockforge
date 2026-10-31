@@ -198,6 +198,15 @@ pub struct CloudRunArtifacts {
 }
 
 impl CloudRunArtifacts {
+    /// Build artifacts from files captured in a run output directory.
+    ///
+    /// A `summary.json` file is parsed through the same path used by cloud
+    /// execution so callers never need to construct `K6Results` separately.
+    pub fn from_files(files: HashMap<String, Vec<u8>>) -> Self {
+        let k6_results = files.get("summary.json").and_then(|bytes| parse_k6_summary(bytes).ok());
+        Self { k6_results, files }
+    }
+
     pub fn get(&self, name: &str) -> Option<&[u8]> {
         self.files.get(name).map(Vec::as_slice)
     }
@@ -529,7 +538,6 @@ pub async fn run_owasp(inputs: CloudOwaspInputs) -> Result<CloudRunArtifacts> {
         None
     };
 
-    let report_path = output_dir.join("owasp-report.json");
     let cmd = BenchCommand {
         spec: vec![spec_path],
         target: inputs.target_url,
@@ -543,7 +551,7 @@ pub async fn run_owasp(inputs: CloudOwaspInputs) -> Result<CloudRunArtifacts> {
         owasp_auth_token: inputs.auth_token,
         owasp_admin_paths: admin_paths_path,
         owasp_id_fields: inputs.id_fields,
-        owasp_report: Some(report_path),
+        owasp_report: None,
         owasp_report_format: inputs.report_format,
         owasp_iterations: inputs.iterations,
         ..default_bench_command(&output_dir)
@@ -824,9 +832,7 @@ fn read_artifacts(output_dir: &Path) -> Result<CloudRunArtifacts> {
         }
     }
 
-    let k6_results = files.get("summary.json").and_then(|bytes| parse_k6_summary(bytes).ok());
-
-    Ok(CloudRunArtifacts { k6_results, files })
+    Ok(CloudRunArtifacts::from_files(files))
 }
 
 fn parse_k6_summary(bytes: &[u8]) -> Result<K6Results> {
@@ -877,6 +883,7 @@ fn parse_k6_summary(bytes: &[u8]) -> Result<K6Results> {
         iterations_completed: json["metrics"]["iterations"]["values"]["count"]
             .as_u64()
             .unwrap_or(0),
+        owasp_findings: json["metrics"]["owasp_findings"]["values"]["count"].as_u64().unwrap_or(0),
     })
 }
 

@@ -16,6 +16,12 @@ use mockforge_core::security::{
     emit_security_event, EventActor, EventOutcome, EventTarget, SecurityEvent, SecurityEventType,
 };
 
+/// `path` equals `prefix` or continues it with `/`
+fn is_segment_prefix(path: &str, prefix: &str) -> bool {
+    path.strip_prefix(prefix)
+        .is_some_and(|rest| rest.is_empty() || rest.starts_with('/'))
+}
+
 /// Authentication middleware function
 pub async fn auth_middleware(
     State(state): State<AuthState>,
@@ -25,8 +31,11 @@ pub async fn auth_middleware(
     let path = req.uri().path().to_string();
     let _method = req.method().clone();
 
-    // Skip authentication for health checks and admin endpoints
-    if path.starts_with("/health") || path.starts_with("/__mockforge") {
+    // Health checks and MockForge's own namespace skip mock-API auth. The
+    // control plane has its own credential (`management_auth`), so this is
+    // not an authorization bypass for it. Match whole segments so a mock
+    // such as `/healthcare` or `/__mockforgeX` still requires auth.
+    if is_segment_prefix(&path, "/health") || is_segment_prefix(&path, "/__mockforge") {
         return next.run(req).await;
     }
 
@@ -124,11 +133,9 @@ pub async fn auth_middleware(
             let event = SecurityEvent::new(SecurityEventType::AuthFailure, None, None)
                 .with_actor(EventActor {
                     user_id: None,
-                    username: auth_header
-                        .as_ref()
-                        .and_then(|h| h.strip_prefix("Bearer "))
-                        .or_else(|| auth_header.as_ref().and_then(|h| h.strip_prefix("Basic ")))
-                        .map(|s| s.to_string()),
+                    // Submitted credentials are not a verified identity, including Basic's
+                    // reversible base64 payload. Never attach them to security events.
+                    username: None,
                     ip_address: ip_address.clone(),
                     user_agent: user_agent.clone(),
                 })

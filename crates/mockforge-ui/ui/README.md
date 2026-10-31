@@ -60,12 +60,12 @@ npm run dev
 npm run build
 ```
 
-## Demo Accounts
+## Signing In
 
-| Role | Username | Password | Permissions |
-|------|----------|----------|-------------|
-| Admin | `admin` | `admin123` | Full access to all features |
-| Viewer | `viewer` | `viewer123` | Read-only access to monitoring |
+There are no built-in accounts or default passwords. Start the server with
+`MOCKFORGE_ADMIN_PASSWORD` (12+ characters) and sign in as `admin` (or
+`MOCKFORGE_ADMIN_USERNAME`). Without it, a loopback-bound admin server allows
+anonymous reads only, and any other bind refuses to start.
 
 ## Technology Stack
 

@@ -1,9 +1,9 @@
 //! Contract-verification probe worker (#671).
 //!
 //! Periodically scans every enabled `MonitoredService` with a non-empty
-//! `openapi_spec_url` and enqueues a `contract_diff` job for each. The
+//! OpenAPI spec URL or inline spec and enqueues a `contract_diff` job for each. The
 //! runner-side `ContractExecutor` (in `mockforge-test-runner`) already
-//! knows how to fetch + parse the spec — this worker just owns the
+//! knows how to load and parse the spec — this worker just owns the
 //! "fire it on schedule, not only when the user clicks the button"
 //! piece that the audit called out as missing.
 //!
@@ -142,20 +142,37 @@ async fn enqueue_for_service(
     let mut tx = pool.begin().await?;
     let Some(svc) = sqlx::query_as::<_, MonitoredService>(
         "SELECT * FROM monitored_services WHERE id = $1 AND enabled = TRUE \
-         AND openapi_spec_url IS NOT NULL AND openapi_spec_url <> '' \
          FOR UPDATE SKIP LOCKED",
     )
     .bind(candidate.id)
     .fetch_optional(&mut *tx)
     .await?
     else {
+        tx.rollback().await?;
         return Ok(false);
     };
+    // Roll back explicitly on every early return. Dropping the
+    // transaction only queues the ROLLBACK, so the `FOR UPDATE` row lock
+    // can outlive this call and make the next claim on another pooled
+    // connection skip the row as locked.
+    if !svc.has_openapi_spec() {
+        warn!(
+            service_id = %svc.id,
+            service_name = %svc.name,
+            "skipping contract probe because the service has no OpenAPI spec",
+        );
+        tx.rollback().await?;
+        return Ok(false);
+    }
     match probe_is_due(&svc, now, default_secs) {
         Ok(true) => {}
-        Ok(false) => return Ok(false),
+        Ok(false) => {
+            tx.rollback().await?;
+            return Ok(false);
+        }
         Err(error) => {
             warn!(service_id = %svc.id, %error, "skipping invalid probe schedule");
+            tx.rollback().await?;
             return Ok(false);
         }
     }
@@ -186,7 +203,7 @@ async fn enqueue_for_service(
     tx.commit().await?;
 
     if let Some(ProbeQueue { redis, storage }) = queue {
-        let spec_url = match svc.openapi_spec_url.as_deref() {
+        let spec_url = match svc.openapi_spec_url() {
             Some(url) => Some(storage.fetch_spec_url(url, run.org_id, RUNNER_FETCH_TTL).await),
             None => None,
         };
@@ -201,6 +218,7 @@ async fn enqueue_for_service(
                     "service_name": svc.name,
                     "base_url": svc.base_url,
                     "openapi_spec_url": spec_url,
+                    "openapi_spec_inline": svc.openapi_spec_inline,
                     "traffic_source": svc.traffic_source,
                     "workspace_id": svc.workspace_id,
                 }),
@@ -304,6 +322,22 @@ mod tests {
         svc.probe_cron = Some("0 * * * * *".into());
         svc.probe_timezone = "invalid".into();
         assert!(probe_is_due(&svc, now, 1800).is_err());
+    }
+
+    #[test]
+    fn inline_specs_are_probeable_and_missing_specs_are_not() {
+        let mut svc = service();
+        svc.openapi_spec_url = None;
+        svc.openapi_spec_inline = Some(serde_json::json!({
+            "openapi": "3.0.0",
+            "paths": {"/health": {"get": {}}}
+        }));
+        assert!(svc.has_openapi_spec());
+
+        svc.openapi_spec_inline = None;
+        assert!(!svc.has_openapi_spec());
+        svc.openapi_spec_inline = Some(serde_json::Value::String("  ".into()));
+        assert!(!svc.has_openapi_spec());
     }
 
     #[test]

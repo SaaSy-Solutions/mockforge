@@ -20,7 +20,9 @@ use mockforge_registry_server::config::Config;
 use mockforge_registry_server::database::Database;
 use mockforge_registry_server::middleware::csrf::csrf_middleware;
 use mockforge_registry_server::middleware::rate_limit::RateLimiterState;
-use mockforge_registry_server::middleware::request_id::request_id_middleware;
+use mockforge_registry_server::middleware::request_id::{
+    redacted_trace_span, request_id_middleware,
+};
 use mockforge_registry_server::redis::RedisPool;
 use mockforge_registry_server::storage::PluginStorage;
 use mockforge_registry_server::store::PgRegistryStore;
@@ -253,12 +255,8 @@ async fn main() -> Result<()> {
     );
 
     // Start deployment orchestrator for hosted mocks
-    let flyio_token = std::env::var("FLYIO_API_TOKEN").ok();
-    let flyio_org_slug = std::env::var("FLYIO_ORG_SLUG").ok();
-    let orchestrator = Arc::new(deployment::orchestrator::DeploymentOrchestrator::new(
+    let orchestrator = Arc::new(deployment::orchestrator::DeploymentOrchestrator::from_env(
         Arc::new(db.pool().clone()),
-        flyio_token,
-        flyio_org_slug,
     ));
     let _orchestrator_handle = orchestrator.start();
     tracing::info!("Deployment orchestrator started");
@@ -443,7 +441,8 @@ fn create_app(state: AppState, rate_limiter: RateLimiterState) -> Router {
         .fallback(deployment::router::custom_domain_fallback)
         .layer(DefaultBodyLimit::max(max_body_size))
         .layer(cors)
-        .layer(TraceLayer::new_for_http())
+        // The default span records the full URI; redact `?token=` (#1018).
+        .layer(TraceLayer::new_for_http().make_span_with(redacted_trace_span::<axum::body::Body>))
         .layer(axum::middleware::from_fn(request_id_middleware))
         .layer(axum::middleware::from_fn(csrf_middleware))
         .layer(axum::Extension(rate_limiter))
