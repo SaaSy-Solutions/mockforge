@@ -17,7 +17,7 @@ RELEASE_HETZNER = "[self-hosted, linux, x64, \"${{ vars.MOCKFORGE_RELEASE_RUNNER
 PLUGIN_MATRIX_ROUTE = '${{ matrix.os == \'ubuntu-latest\' && fromJSON(\'["self-hosted","linux","x64","rust"]\') || matrix.os }}'
 TARGETS = {
     'ci.yml': ['changes', 'test', 'ui-test', 'warning-gate',
-               'warning-ratchet-preview', 'security-audit', 'msrv'],
+               'security-audit', 'msrv'],
     'registry-e2e.yml': ['changes', 'registry-e2e', 'registry-e2e-rls'],
 }
 
@@ -139,7 +139,7 @@ class HetznerRoutingTest(unittest.TestCase):
                                       f'{filename}:{job_id}')
 
     def test_native_preflight_is_read_only_and_fails_closed(self):
-        expected = {'ci.yml': ['test', 'warning-gate', 'warning-ratchet-preview', 'msrv']}
+        expected = {'ci.yml': ['test', 'warning-gate', 'msrv']}
         for filename, ids in expected.items():
             for job_id in ids:
                 block = jobs(filename)[job_id]
