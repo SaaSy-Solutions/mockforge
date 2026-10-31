@@ -3,7 +3,7 @@
  */
 
 export interface ExtensionMessage {
-    type: 'REQUEST_CAPTURED' | 'MOCK_CREATED' | 'MOCK_UPDATED' | 'MOCK_DELETED' | 'CONNECTION_CHANGE' | 'GET_MOCKS' | 'CREATE_MOCK' | 'DELETE_MOCK' | 'GET_CAPTURED_REQUESTS' | 'GET_ENVIRONMENTS' | 'SET_ACTIVE_ENVIRONMENT' | 'GET_ENVIRONMENT_VARIABLES' | 'GET_PERSONAS' | 'SET_ACTIVE_PERSONA' | 'GET_SCENARIOS' | 'SET_ACTIVE_SCENARIO' | 'GET_WORKSPACE_STATE' | 'COMPARE_SNAPSHOTS';
+    type: 'REQUEST_CAPTURED' | 'MOCK_CREATED' | 'MOCK_UPDATED' | 'MOCK_DELETED' | 'CONNECTION_CHANGE' | 'GET_MOCKS' | 'CREATE_MOCK' | 'DELETE_MOCK' | 'GET_CAPTURED_REQUESTS' | 'GET_ENVIRONMENTS' | 'SET_ACTIVE_ENVIRONMENT' | 'GET_ENVIRONMENT_VARIABLES' | 'GET_PERSONAS' | 'SET_ACTIVE_PERSONA' | 'GET_SCENARIOS' | 'SET_ACTIVE_SCENARIO' | 'GET_WORKSPACE_STATE' | 'COMPARE_SNAPSHOTS' | 'UPDATE_MOCK' | 'CREATE_MOCK_WITH_INJECTION';
     payload?: any;
 }
 
@@ -44,6 +44,8 @@ export interface MockConfig {
     enabled?: boolean;
     latency_ms?: number;
     status_code?: number;
+    /** Capture details forwarded to the runtime daemon for reverse injection. */
+    metadata?: Record<string, unknown>;
 }
 
 export interface ConnectionStatus {
