@@ -1,8 +1,29 @@
-> This reference page mirrors the root changelog in [`CHANGELOG.md`](../../../CHANGELOG.md) so the book and repository stay aligned.
-
 ## [Unreleased]
 
 ### Added
+
+- **[Reality]** AsyncAPI 2/3 fidelity compares channel and directional operation contracts, including payload/header schemas, bindings, server/security references and traits. CLI and authenticated admin comparisons can check recorder message samples; the CLI also checks complete recorder-JSON fixture sets. Recorded MQTT, Kafka, AMQP and WebSocket messages use protocol-aware direction, exact JSON/text schema validation and explicit unverified outcomes when capture or format support is incomplete. Capture reads remain read-only and filter message events before the limit. (#849)
+- **[Reality]** The self-hosted Admin UI adds a Mock fidelity panel in Contract Diff for comparing mock/source OpenAPI definitions and optional Flight Recorder HTTP samples. Authenticated comparisons report per-route definition deltas, sample drift, and incomplete coverage, with bounded inputs and paginated details. (#849)
+- **[Reality]** `verify-mocks --fixtures` checks a complete HTTP replay fixture set against its source OpenAPI definition, reporting missing and removed routes, invalid statuses, and field-level JSON response errors. It can run alongside mock-definition and recorder checks. Loading is read-only and rejects empty, malformed, symlinked or excessive fixture inputs. (#849)
+- **[Reality]** `verify-mocks --mock-spec` compares the OpenAPI definition used by a mock with its current source specification. Structured reports include added, removed and changed endpoints, field-level JSON-pointer deltas, and per-route fidelity status. Definition checks can run alone or alongside captured upstream traffic and use the existing `--fail-on-drift` CI gate. (#849)
+
+### Fixed
+
+- **[Reality]** Fidelity checks preserve AsyncAPI server variables whose names match documentation keys. HTTP captures and replay fixtures now report unsupported or ambiguous response media as unverified, and `--fail-on-drift` fails those checks instead of accepting unchecked responses. Recorded verification and project status use schema 2 with an `unverified` outcome and continue reading schema-1 records. (#849)
+- **[Reality]** JSON-content request parameters are decoded and checked against their schemas instead of silently passing validation. JSON types stay distinct, local component references are resolved, malformed JSON fails even without a schema, and unsupported parameter media types fail explicitly. (#849)
+- **[Reality]** Request parameter `schema` references are checked in normal, style-aware and detailed validation instead of silently passing. Local aliases, nested and recursive components retain their schema context; referenced arrays and deep-object values are coerced by declared type, and integer parameters retain 64-bit precision. Unresolved/cyclic references fail explicitly, and parameter validation does not fetch external resources. (#849)
+- **[Reality]** Request conformance checks match HTTP header names without ASCII case differences in normal and detailed validation. A captured `x-trace` now satisfies a declared `X-Trace`; missing headers and invalid values still fail, while cookie, query and path parameter names remain case-sensitive. (#849)
+- **[Reality]** `verify-mocks` reads declared cookie parameters from recorded `Cookie` headers using serving's case and delimiter rules. Previously, even a valid captured cookie was treated as missing. Missing or invalid required cookies still report request drift. (#849)
+- **[Reality]** Fidelity checks treat omitted or empty root server lists as the OpenAPI default `/`, preventing false drift between equivalent Swagger/OpenAPI definitions while retaining real server changes and route overrides. Recorded CLI query parameters now use the serving parser, including form spaces (`+`), encoded literal plus signs and empty values. (#849)
+- **[Reality]** `verify-mocks` enforces captured request contracts even when server validation is set to `off` or `warn`, route overrides disable checking, or shadow mode is enabled. The offline verifier uses an isolated strict registry policy; serving retains its configured behavior. (#849)
+- **[Reality]** Fidelity checks prefer literal path segments over parameters, matching HTTP routing. Previously, registry iteration order could select a parameter route's schema for a literal endpoint, randomly passing invalid responses or failing valid ones. (#849)
+- **[Reality]** `verify-mocks --fail-on-drift` now fails on unknown endpoints, missing responses and undeclared statuses, and validates range/default/referenced response schemas. Empty captures still succeed (and `--record` stores a `no_traffic` verification), databases open read-only, and the positive `--limit` applies to recent HTTP records in SQL rather than silently stopping at 100 or being displaced by other protocols. (#849)
+
+## [0.3.238] - 2026-10-30
+
+### Added
+
+- **[DevX]** `mockforge tools export --output-dir <new-directory>` exports the discussion exporter, CVE tools, Python modules, and Next.js example bundled in the crates.io CLI. A source checkout is no longer required. (#79)
 
 - **[DevX]** CVE monitor and remediation tips for the rule packs: `cve_pack_monitor.py` tracks CISA KEV (actively-exploited CVEs), triages to WAF-actionable CWEs, and writes a candidate pack per CVE enriched with tips aggregated and deduped from NVD, OSV, EPSS and KEV (upgrade-to version, exploitation probability, ransomware use, CISA due date); `cve_pack.py tips <CVE>` prints the same. An optional provider-agnostic `--drafter-cmd` proposes each signature, but the profile schema is the trust boundary — a draft that is not inert marker-only is flagged for review, never run. (#79)
 - **[DevX]** Per-CVE Rule Packs: author a small profile (route, signature header/param names with inert marker values, benign controls, expected block status) and `cve_pack.py` scaffolds it, emits a MockForge mock of the guarded route, and runs the signature plus controls through a supplied load balancer to assert the rule blocks the signature and allows benign traffic. Reuses the Security Rule Test Packs transport; marker-only values mean a profile cannot carry a payload, and runtime/patch evidence stays unverified. (#79)
@@ -18,17 +39,24 @@
 ### Changed
 
 - **[DevX]** `bench-chunked` labels each `--spec` operation's `RPS (started)` and `RPS (overall)` lines `(this operation only)`, so they are not read as the rate for the whole pass. The multi-target summary now prints `load_window=` and `elapsed=` next to `start_rps` and `rps`, and a single `--target` run with `--spec` prints the same figures on a `Pass summary (all operations):` line. The campaign banner says that `--repeat-until` is checked before each pass, so a running pass finishes. (#79)
+- **[UI]** Marketplace navigation and hosted workspace/token controls use the shared Tailwind/CVA controls and Lucide icons instead of MUI compatibility components. Marketplace routes expose native links and current-page state, workspace selection keeps explicit assignment, and control-token guidance covers management requests. (#722)
 
 ### Fixed
 
+
+- **[DevX]** Discussion exports work without GitHub CLI; CVE tips preserve partial feed results and check CISA KEV; unfinished CVE templates are rejected before tests run. (#79)
+
 - **[DevX]** Add a guarded operator for superseded, partially cancelled CI runs stuck on an unassigned completion job. It preserves the fail-closed Rust completion verdict, tries ordinary cancellation first, and revalidates the live PR head and all job guards before force-cancellation. Current-head runs, forks and active workers are refused. (#1191)
 - **[Reality]** MQTT publish and last-will delivery no longer hold broker-wide locks while waiting on subscriber queues, or acquire topic and client locks in the opposite order to new connections. This prevents concurrent CONNECT/publish deadlocks and lets new clients connect while a subscriber is backpressured. (#715)
+- **[DevX]** The editor and browser clients build and test again, and CI now runs them (`Client packages` workflow). The JetBrains plugin never compiled against its target IDE and could not have loaded: it depended on a TOML plugin ID that does not exist, its config file type had no language, and its scenario generator was registered as a menu action instead of an intention. It now builds, passes `./gradlew test buildPlugin`, and ships a Gradle wrapper. The VS Code extension has the test runner `npm test` pointed at, with tests that activate it in VS Code 1.85.2 and check every contributed command is registered. The browser extension type-checks clean, and it now captures request headers: they were read from `onBeforeRequest`, which never includes them. (#1282)
 - **[Docs]** The workspace export/import guide and the configuration reference no longer call `mockforge workspace export`, `import` and `activate` unreleased; they ship in 0.3.236. (#1197)
 - **[Contracts]** Package Intelligence’s database migrations inside its own crate so the published `database` feature builds without a sibling HTTP checkout. Preserve all historical migration filenames and SQL bytes for existing databases. (#632)
 - **[SDK]** Java, Python, Go, and browser dynamic-mock clients use the HTTP serving port and `/__mockforge/api/mocks`. Java sends the server’s mock schema and discovers assigned ports; Python ignores port-zero announcements and cleans up failed starts. Failed management requests surface errors instead of appearing to create local-only stubs. Preserve management-token support on the corrected requests. Browser package builds now gate on strict type checking, and runtime CI exercises real served responses and cleanup. ForgeConnect initializes without requesting environments when no workspace is configured; explicit workspace failures remain visible. Browser tests use Vitest with an audited dependency tree and a separate live-server suite. (#1281, #1282, #1011)
 - **[AI]** AI Studio mock and persona `GenerateOnceFreeze` calls now find and reuse snapshots by their recorded input identity, honor the configured snapshot directory, and verify payload integrity. First use no longer fails when the directory is missing. Snapshot identity includes workspace, model and effective seed, and concurrent publication preserves one completed snapshot. Live-provider sampling remains best effort. (#852)
 
+- **[UI]** Plugin, scenario and template publication encode file bytes in bounded chunks instead of spreading the entire file into a function call. Large uploads no longer fail with a JavaScript argument-stack `RangeError` before reaching the API.
 - **[Cloud]** Cloud test runs no longer get stuck in `running` when the registry rate-limits the runner. The runner's start, event and finish callbacks all come from one IP, so the per-client limit could return 429 to `/finish` and the run never ended. Internal callback routes now skip the rate limit when they carry the internal API token (requests without it are still limited), and the runner retries `/finish` on 429, 5xx and connection errors with backoff (6 attempts over about 30 s). (#1286)
+- **[DevX]** Removed `crates/mockforge-cli/src/registry_commands.rs`. No module declared it, so it was never compiled (it would not have compiled), and its `plugin registry` commands never existed. `docs/PLUGIN_MARKETPLACE_IMPLEMENTATION.md` now lists the real commands. (#1277)
 - **[Cloud]** The SQLite registry store (self-hosted registry admin) now rotates API tokens and lists tokens due for rotation, like the Postgres store. Before, rotation returned an error and the rotation reminder list was always empty. Both stores now generate `mfx_` tokens in one URL-safe format (32 random bytes, unpadded URL-safe base64), so new Postgres tokens no longer contain `+`, `/` or `=`. Existing tokens keep working. (#1266)
 - **[Docs]** The README and `cloud-service/README.md` no longer claim a multi-region deployment or a 99.9% uptime SLA. Production runs in one region (US East) with no contractual SLA. The README now says which RAG storage backends persist: file storage does; the database backend falls back to memory, and vector databases are not built in. It also drops the line saying every documented feature was verified. (#1265)
 - **[Cloud]** The cloud test runner never reports `passed` for a run that did no work. Stubbed job kinds (unit, behavioral clone, snapshots, scenario/orchestration/state-machine flows, verification suites) now finish `errored` with `not_implemented`; `contract_diff` and `replay` error out when their spec or captures are missing instead of passing; every outcome records `summary.work_count`, and a `passed` result with zero work becomes `failed` with `no_work_executed` (#1264).
@@ -47,7 +75,7 @@
 - **[Cloud]** The registry accepts `?token=` as a credential only on the three SSE stream routes (hosted-mock runtime logs, test-run events, test-generation jobs), which browsers' `EventSource` cannot send headers to. Before, every authenticated route accepted it, so tokens could be put in ordinary URLs and end up in proxy logs, browser history and referrers. The check uses the route template axum matched, so trailing slashes, extra segments or encoded variants of a stream URL don't widen it, and `mfx_` API tokens are never accepted from a URL. Request logs and trace spans now redact `token` and `access_token` query values on every route. Header and session-cookie auth are unchanged. **Breaking** for a client that put a token in the query string of a non-stream route; send `Authorization: Bearer` instead. No client in this repo did. (#1018)
 - **[DevX]** Admin server reads need the same credentials as writes. Request logs, recorder state, config and every other `GET /__mockforge/*` route answered anonymous requests (the #1019 fix was closed but never reached main). Bound to anything but loopback, the admin server now refuses to start without `MOCKFORGE_ADMIN_PASSWORD`, `MOCKFORGE_MANAGEMENT_TOKEN` or `JWT_SECRET`. On loopback with nothing configured, anonymous reads still work from the same machine (loopback `Host` required). The overrides API and `/api/resilience/*` are no longer exempt. The JWT fallback secret, previously a constant in the source, is random per process. Log and config responses redact credential headers and URL userinfo. The registry sends each hosted mock's management token on its private-network calls. (#1019)
 - **[DevX]** The admin UI never creates built-in users. `admin` / `admin123`, `editor` / `editor123` and `viewer` / `viewer123` were seeded whenever `JWT_SECRET` was unset outside development, and in dev-auth mode (#1016; the earlier fix was closed but never reached main). The only login is now an operator-set `MOCKFORGE_ADMIN_PASSWORD`; without credentials a loopback admin server allows anonymous reads and any other bind refuses to start. The dev-auth JWT secret no longer falls back to a constant in the source. The login page no longer offers demo accounts.
-- **[DevX]** `{{fs.readFile}}` only reads files under one root: `MOCKFORGE_TEMPLATE_FS_ROOT`, or by default the directory of the spec given to `mockforge serve`. It refuses `..`, percent-encoded and Windows-style paths, symlinks that escape the root, `/proc`, `/sys`, `/dev`, `/etc` and env-like files, and files over `MOCKFORGE_TEMPLATE_FS_MAX_BYTES` (default 1 MiB). It is disabled when no root is configured, for specs from `MOCKFORGE_CONFIG` / `MOCKFORGE_OPENAPI_SPEC_URL`, and on hosted mocks unless `MOCKFORGE_TEMPLATE_FS_ROOT` is set. Previously any spec could read any local file into a response. (#1015)
+- **[DevX]** `{{fs.readFile}}` only reads files under one root: `MOCKFORGE_TEMPLATE_FS_ROOT`, or by default the directory of the spec given to `mockforge serve`. It refuses `..`, percent-encoded and Windows-style paths, symlinks that escape the root, `/proc`, `/sys`, `/dev`, `/etc` and env-like files, and files over `MOCKFORGE_TEMPLATE_FS_MAX_BYTES` (default 1 MiB). It is disabled when no root is configured, for specs from `MOCKFORGE_CONFIG` / `MOCKFORGE_OPENAPI_SPEC_URL`, and on hosted mocks unless `MOCKFORGE_TEMPLATE_FS_ROOT` is set. Pinned directory handles reject symlink replacements after path checks, and nonblocking opens reject named pipes without waiting for a writer. Previously any spec could read any local file into a response. (#1015)
 - **[DevX]** `mockforge plugin install` and `plugin update` now refuse a plugin whose signature is missing or fails verification. Before, a failed check only logged a warning and the plugin installed anyway, and `--skip-validation` skipped the check entirely. Signatures (format v2) now cover every file in the plugin directory, not only `plugin.toml`, so a swapped WASM module, an added file or a `plugin.sig` copied from another plugin fails. Keys can be revoked or given an expiry in a trust store (`--trusted-keys FILE`, `$MOCKFORGE_PLUGIN_TRUSTED_KEYS_FILE` or `~/.mockforge/trusted-keys.json`). `--allow-unsigned` installs a plugin with no `plugin.sig`, for local development only, with a warning; a signature that is present but invalid is still rejected. **Breaking:** unsigned plugins need `--allow-unsigned`, v1 signatures must be re-signed, `--no-verify` is now an alias of `--allow-unsigned`, and `InstallOptions::verify_signature` is replaced by `allow_unsigned`. (#1013)
 - **[DevX]** CORS fails closed. With no configured origins (now the default), the HTTP mock server grants no cross-origin access. Before, it fell back to `Access-Control-Allow-Origin: *` when origins were unset, when any entry failed to parse, or when more than one was listed. Several exact origins now each work, a malformed entry denies all, `*` is never combined with credentials, and `localhost` enables an explicit dev mode. New `MOCKFORGE_CORS_ALLOWED_ORIGINS` sets the list. The admin UI no longer allows `Origin: null` by default and refuses `*` in `CORS_ALLOWED_ORIGINS`. Hosted mocks and the demo set `*` explicitly. **Upgrade note:** browser apps calling a self-hosted mock from another origin need `MOCKFORGE_CORS_ALLOWED_ORIGINS` (for example `localhost`) or `http.cors.allowed_origins`. (#1017)
 - **[Cloud][DevX]** MockForge's control plane on the HTTP port now needs a management credential for reads as well as writes, on hosted and self-hosted servers. This covers `/__mockforge/*` (management API, chains, contract diff, fixtures, MockAI, time travel, route chaos, network profiles, scenarios, the live stream), `/api/chaos`, `/api/recorder`, `/api/verification`, `/api/world-state`, `/api/performance` and the `/api/v1/*` management APIs. Before this, self-hosted servers served all of it to anyone who could reach the port (it always bound `0.0.0.0`), and hosted mocks served every read anonymously. Set `MOCKFORGE_MANAGEMENT_TOKEN` (32+ characters) and send it as `X-MockForge-Management-Token`; the admin user's Basic credentials also work. Without a credential the control plane answers 401. `MOCKFORGE_INSECURE_MANAGEMENT=1` turns the check off only when `MOCKFORGE_HTTP_HOST` is a loopback address; otherwise the server refuses to start. Your mocked API, `/health*` and `/__mockforge/docs` stay public. The HTTP server now binds `MOCKFORGE_HTTP_HOST` instead of always `0.0.0.0`. The CLI, SDKs, IDE and browser extensions and the cloud UI send the token. A mock that shares a control router's prefix (for example `POST /api/v1/auth/login`) is no longer caught by the hosted-mock write gate. (#1011)
@@ -413,226 +441,422 @@
 
 ### Fixed
 
-- **[Reality]** Target-side HTTP protocol violations classify as `"kind": "protocol"` in `conformance-network-events.json` instead of generic `"other"` (#79 round 63 / Srikanth on 0.3.210). A WAF answering blocked security probes with a body that disagreed with its declared `Content-Length` trips Go's `server replied with more than declared Content-Length; truncated`; those events previously mixed in with unclassifiable failures. Also covers `malformed`, `protocol error`, `invalid header`. Evaluated last, so eof/timeout/tls/connect keep their meaning and only `other` is re-labelled. Applied to all three k6 render paths with a regression test guarding both presence and ordering.
+- **[Reality]** Target-side HTTP protocol violations now classify as `"kind": "protocol"` in `conformance-network-events.json` instead of the generic `"other"` (#79 round 63 / Srikanth on 0.3.210). His WAF answered blocked security probes (`1234 OR 1=1`, `waitfor delay`, ...) with a response body that disagreed with its own declared `Content-Length`, which Go's `net/http` rejects as `server replied with more than declared Content-Length; truncated`. Those 2,824 events were landing in the `other` bucket alongside genuinely unclassifiable failures, so a real protocol violation by the target (the class of defect behind request-smuggling and desync bugs) was indistinguishable from noise. The new branch also covers `malformed`, `protocol error`, and `invalid header`, and is evaluated **last** so the existing eof/timeout/tls/connect rules keep their meaning; it only re-labels what would otherwise be `other`. Applied to all three k6 script-generation paths (`generator.rs`, `spec_driven.rs`, `k6_script.hbs`) with a regression test asserting the branch exists, and stays ordered last, in every path so they cannot drift apart.
 
 ## [0.3.210] - 2026-07-24
 
 ### Added
 
-- **[Reality]** New `mockforge bench --no-abort-on-error` / `--abort-on-error-rate <rate>` flags to control the round-60 k6 memory safety valve (#79 round 62 / Srikanth on 0.3.209). The round-60 valve aborts a k6 run whose `http_req_failed` rate crosses 0.95 for 60s (OOM guard on dead targets), but that also stopped legitimate stress tests: Srikanth's WAF/proxy targets legitimately reject ~95.2% of the probe traffic (fast non-2xx, zero transport failures), crossing 0.95 and aborting every run at ~2min. `--no-abort-on-error` drops the `abortOnFail` threshold so the run goes its full duration regardless of error rate; `--abort-on-error-rate` retunes the threshold (default 0.95). Wired through single- and multi-target k6 paths; default behaviour unchanged. Real-binary verified: the generated k6 script omits `abortOnFail` under `--no-abort-on-error` and renders `rate<0.99` under `--abort-on-error-rate 0.99`.
+- **[Reality]** New `mockforge bench --no-abort-on-error` and `--abort-on-error-rate <rate>` flags to control the round-60 k6 memory safety valve (#79 round 62 / Srikanth on 0.3.209). The round-60 valve aborts a k6 run whose `http_req_failed` rate crosses 0.95 for 60s, which prevented an OOM against dead targets but also stopped legitimate stress tests: Srikanth's WAF/proxy targets legitimately reject ~95.2% of the generated probe traffic (fast non-2xx responses, zero transport failures), which crossed 0.95 and aborted every run at ~2 minutes. `--no-abort-on-error` drops the `abortOnFail` threshold entirely so the run executes its full duration regardless of error rate; `--abort-on-error-rate` retunes the threshold (default 0.95) to, for example, keep the dead-target guard but only fire above 99%. Wired through the single-target and multi-target (`--targets-file`) k6 paths; default behaviour is unchanged. Real-binary verified: the generated k6 script drops the `abortOnFail` object under `--no-abort-on-error` and renders `rate<0.99` under `--abort-on-error-rate 0.99`.
 
 ## [0.3.209] - 2026-07-22
 
 ### Added
 
-- **[Reality]** New `mockforge bench --dns-policy <policy>` flag → k6 `--dns "policy=<value>"` (#79 round 61 / Srikanth on 0.3.208). Values: `preferIPv4` (default), `preferIPv6`, `onlyIPv4`, `onlyIPv6`, `any`. Unblocks GEODB IPv6 tests where the target must stay a hostname (proxy routes by Host/SNI) but must be dialed over its AAAA record; k6/Go default to IPv4, which can't be dialed from an IPv6 `--source-ip` (`no suitable address found`). `preferIPv6` picks the AAAA record while keeping the hostname on the wire. Wired through single- and multi-target k6 paths; real-binary verified the launched k6 runs with `--dns policy=preferIPv6`.
+- **[Reality]** New `mockforge bench --dns-policy <policy>` flag that passes k6's DNS resolution policy through as `--dns "policy=<value>"` (#79 round 61 / Srikanth on 0.3.208). Values: `preferIPv4` (k6's default when unset), `preferIPv6`, `onlyIPv4`, `onlyIPv6`, `any`. This unblocks GEODB IPv6 load tests where the target must stay a hostname (the proxy routes by Host/SNI, so a bracket IP can't be used) but the dial has to use the AAAA record: k6/Go default to the A (IPv4) record, which then can't be dialed from an IPv6 `--source-ip` and fails with `no suitable address found`. `--dns-policy preferIPv6` makes k6 pick the AAAA record while keeping the hostname on the wire. Wired through the single-target and multi-target (`--targets-file`) k6 paths. Real-binary verified: `--dns-policy preferIPv6` makes the launched k6 child run with `--dns policy=preferIPv6` in its argv.
 
 ## [0.3.208] - 2026-07-21
 
 ### Fixed
 
-- **[Reality]** k6 no longer OOM-kills (`signal: 9`) when a load target rejects/times-out ~every request (#79 round 60 / Srikanth on 0.3.207). The generated k6 load scripts now carry an `abortOnFail` safety valve on `http_req_failed`: a target failing `>=95%` of requests after a 60s grace period aborts (exit 99) instead of hammering a dead endpoint for the full duration and accumulating per-request memory. Legitimate runs under 95% failure are unaffected. Real-binary verified against a dead target: k6 stops at ~60s instead of running the full scenario. Applies to the standard-load and CRUD-flow templates.
+- **[Reality]** k6 no longer gets OOM-killed (`signal: 9 (SIGKILL)`) when a load target rejects or times out nearly every request (#79 round 60 / Srikanth on 0.3.207: an IPv6 run where the targets were unreachable ran the full 4200s and k6 climbed to an OOM). The generated k6 load scripts now carry an `abortOnFail` safety valve on `http_req_failed`: if a target fails `>=95%` of requests after a 60s grace period, that target's k6 run aborts (exit 99) instead of hammering a dead endpoint for the whole duration and accumulating per-request metric/error memory. Legitimate runs, even heavily degraded ones under 95% failure, are unaffected (the existing pass/fail error threshold is unchanged). Real-binary verified against a dead target (connection refused, 100% failure): k6 now stops at ~60s with "thresholds ... abortOnFail enabled, stopping test prematurely" instead of running the full 180s scenario. Applies to both the standard load and CRUD-flow k6 templates. Separately, the accompanying diagnosis on #79 covers the IPv6 dial failures behind the OOM (source-IP address-family mismatch on hostname targets, TLS/connection refusals on the `:443` targets), which are network/target-side, not memory.
 
 ## [0.3.207] - 2026-07-19
 
 ### Added
 
-- **[Contracts]** New "Security probes (owasp injection)" view in the self-test (#79 round 59 / Srikanth on 0.3.206 was WAF-testing and saw `owasp: 0 caught / 8127 missed` but `Definite issues: none`). The self-test now prints a per-injection-family breakdown of how many OWASP payloads the target accepted (status < 400) vs blocked (4xx), plus a `conformance-owasp-accepted.json` sidecar listing every accepted payload with method + URL. For a WAF each accepted payload is one it did NOT block; for a plain API it is expected (a string field accepts any string). Kept out of "Definite issues" (spec violations only) but surfaced on its own line. Verified against Srikanth's capture (all 8127 payloads across 7 families accepted) and real-binary against `mockforge serve`.
+- **[Contracts]** New "Security probes (owasp injection)" view in the conformance self-test (#79 round 59 / Srikanth on 0.3.206 was testing a WAF and saw `owasp: 0 caught / 8127 missed` but `Definite issues: none`, and asked whether real issues were being hidden). The self-test now prints a per-injection-family breakdown of how many OWASP payloads the target accepted (status < 400) vs blocked (4xx), and writes a `conformance-owasp-accepted.json` sidecar listing every accepted payload with its method + URL. For a WAF / security proxy, each accepted payload is one it did NOT block; for a plain API this is expected (a `string` field accepts any string, so an SQLi string is spec-valid). It is deliberately kept out of "Definite issues" (which is for spec violations), but surfaced on its own line so a security tester sees it without eyeballing the caught/missed rollup. Verified against Srikanth's own capture: the summary reports the target accepted all 8127 injection payloads across all 7 families (sqli / xss / command-injection / path-traversal / ssti / ldap-injection / xxe), and real-binary verified against `mockforge serve` that the section and sidecar render.
 
 ## [0.3.206] - 2026-07-16
 
 ### Fixed
 
-- **[Reality]** Multi-target load no longer fails to start with `exit status: 106` (k6 `CannotStartRESTAPI`) and zero requests (#79 round 58 / Srikanth on 0.3.205). Each parallel k6 was pinned to a fixed REST API port (`6565 + index`) that collides when already taken (orphaned k6 from a prior OOM-killed run, a second bench, a local service). k6 now binds an ephemeral port (`--address localhost:0`) instead; MockForge reads results from `summary.json` on disk, never the API. Real-binary verified with ports 6566/6567 occupied: a load that used to exit 106 on every target now runs.
+- **[Reality]** Multi-target load no longer fails to start with `k6 exited with status: exit status: 106` and zero requests (#79 round 58 / Srikanth on 0.3.205: all 10 targets failed this way, so no traffic ran and `--discard-response-bodies` appeared to "not help"). Exit 106 is k6's `CannotStartRESTAPI`: each parallel k6 was pinned to a FIXED REST API port (`6565 + index` → 6566, 6567, ...), which collides whenever those ports are already taken (orphaned k6 from a previous OOM-killed run, a second concurrent bench, or any local service). Each k6 instance now binds an OS-assigned ephemeral port (`--address localhost:0`) for its REST API, so it can never collide; MockForge never queries that API (results come from `summary.json` on disk). Real-binary verified: with ports 6566 and 6567 deliberately occupied, a multi-target load that previously exited 106 on every target now starts cleanly and generates traffic on all targets.
 
 ### Added
 
-- **[Contracts]** New "Definite issues" view in the self-test (#79 round 58 / Srikanth on 0.3.205 asked for a "for sure this is an issue" filter). A `Definite issues (N)` console section plus a `conformance-definite-issues.json` sidecar surface only unambiguous problems: a spec-valid request the target rejected, or any probe that drew a 5xx. Spec-valid "missed" negatives are excluded. Clarified that a "caught" 4xx is the target correctly rejecting a bad request, not a violation.
+- **[Contracts]** New "Definite issues" view in the conformance self-test (#79 round 58 / Srikanth on 0.3.205 asked for a way to say "for sure this is an issue" without eyeballing every caught/missed row across all APIs). A `Definite issues (N)` section is printed under the `Negatives [...]` summary and a `conformance-definite-issues.json` sidecar is written next to the report. It surfaces only the unambiguous problems that need no per-probe analysis: (1) a spec-valid request the target rejected, and (2) any probe that drew a 5xx (the target crashed instead of replying cleanly). Spec-valid "missed" negatives (which genuinely need judgement) are deliberately excluded. Real-binary verified: a clean target prints "Definite issues: none"; a target that 404s a valid request surfaces it as a `valid_request_rejected` row in both the console and the JSON. Also clarified in the docs that a "caught" 4xx is the target doing its job (rejecting a bad request), not a violation.
 
 ## [0.3.205] - 2026-07-14
 
 ### Added
 
-- **[DevX]** New `mockforge bench --discard-response-bodies` flag exposes `K6_DISCARD_RESPONSE_BODIES=true` as a first-class option (#79 round 57 / Srikanth on 0.3.204 asked for a flag instead of the env var for scale/stress runs). Opts a single-target load run into discarding response bodies (multi-target load already discards by default); no-op on conformance / self-test / extraction runs, which need the body. Real-binary verified: the launched k6 child carries the env var and `data_received` stays at header-only levels.
+- **[DevX]** New `mockforge bench --discard-response-bodies` flag exposes `K6_DISCARD_RESPONSE_BODIES=true` as a first-class option (#79 round 57 / Srikanth on 0.3.204 asked for a flag instead of setting the env var for scale/stress runs). Plain load runs only check status codes but k6 buffers every response body by default, which OOM-kills k6 on long, high-VU runs. The flag opts a single-target load run into discarding bodies (multi-target load already discards by default since 0.3.204); it is a no-op on conformance / self-test / CRUD-extraction runs, which need the body. Verified with the real binary: passing the flag makes the launched k6 child carry `K6_DISCARD_RESPONSE_BODIES=true` and keeps `data_received` at header-only levels, while omitting it leaves the env unset.
 
 ### Changed
 
-- **[DevX]** The self-test console summary prints a one-line legend under the `Negatives [...]` lines explaining "caught" (target rejected a deliberately-bad request with a 4xx) vs "missed" (target accepted it), and that a high "missed" is not automatically a bug because many probes are spec-valid by construction (#79 round 57 / Srikanth on 0.3.204 asked how to read caught vs missed). The self-test-probes and capacity-sizing reference pages gain the same nuance and document the new flag.
+- **[DevX]** The self-test console summary now prints a one-line legend under the `Negatives [...]` lines explaining that "caught" means the target rejected a deliberately-bad request with a 4xx and "missed" means the target accepted it, and that a high "missed" is not automatically a bug because many probes are spec-valid by construction (#79 round 57 / Srikanth on 0.3.204 asked how to read caught vs missed). The self-test-probes reference page gains the same spec-valid nuance (a `string` field accepts any string so an `owasp:sqli` payload is a valid string; an optional query param can be dropped; an unconstrained `{id}` accepts any value), and the capacity-sizing page documents the new flag.
 
 ## [0.3.204] - 2026-07-13
 
 ### Fixed
 
-- **[Contracts]** `parameters:*` negative probes are now recorded in `conformance-request-violations.json`, and the single-target self-test writes that file at all (#79 round 56 / Srikanth on 0.3.203: parameter violations were still absent from the logs). For his Apigee spec the parameter probes are all spec-VALID by construction (dropping the OPTIONAL `$.xgafv` query, adding an oversized/undeclared query param, or an unconstrained `{instance}` path value violate no schema), so the emitted-request validator found nothing to flag and stayed silent. Each `parameters:*` negative that produces no hard breach is now recorded as a typed `parameter_negative_probe` row explaining why it is not a schema violation; the single-target self-test calls the validator too (previously only the multi-target `--targets-file` path did); and `--validate-requests` now implies request capture. Real-binary verified against `mockforge serve` with a custom-verb Apigee spec: the violations file carries all three parameter probes (`uri-too-long`, `bad-path-param`, `missing-query`) alongside the genuine `body_schema_violation` / `query_value_mismatch` rows, in both single-target and `--targets-file` modes.
-- **[Reality]** k6 no longer gets OOM-killed (`signal: 9 (SIGKILL)`) during long, high-concurrency multi-target load runs (#79 round 56 / Srikanth on 0.3.203). The plain-load k6 only checks status codes but was buffering every response body in memory; over a multi-hour run at 10 VUs across 10+ targets the buffered bodies plus k6's metric accumulation exhausted RAM and the kernel OOM-killer sent SIGKILL. The multi-target plain-load path now runs k6 with `K6_DISCARD_RESPONSE_BODIES=true` (safe there because bodies are never inspected). Real-binary verified: the launched k6 child process carries `K6_DISCARD_RESPONSE_BODIES=true` in its environment and `data_received` stays at header-only levels. The flag defaults off and is opt-in per executor; body-inspecting paths (conformance, extraction) are untouched.
+- **[Contracts]** `parameters:*` negative probes are now recorded in `conformance-request-violations.json`, and the single-target self-test writes that file at all (#79 round 56 / Srikanth on 0.3.203: parameter violations were still absent from the logs). Three compounding gaps: (1) for his Apigee spec the parameter probes are all spec-VALID by construction (dropping the OPTIONAL `$.xgafv` query, adding an oversized/undeclared query param, or an unconstrained `{instance}` path value violate no schema), so the emitted-request validator found nothing to flag and stayed silent; (2) the SINGLE-target self-test returned before ever calling the validator (only the r49 multi-target `--targets-file` path invoked it); (3) `--validate-requests` did not enable request capture, so even when the validator ran it had no emitted requests to walk. Now each `parameters:*` negative that produces no hard breach is recorded as a typed `parameter_negative_probe` row with a message explaining why it is not a schema violation (and that rejection is the target's responsibility); the single-target self-test calls the validator too; and `--validate-requests` implies capture. Real-binary verified against `mockforge serve` with a custom-verb Apigee spec: the violations file now contains all three parameter probes (`uri-too-long`, `bad-path-param`, `missing-query`) alongside the genuine `body_schema_violation` / `query_value_mismatch` rows, in both single-target and `--targets-file` modes.
+- **[Reality]** k6 no longer gets OOM-killed (`signal: 9 (SIGKILL)`) during long, high-concurrency multi-target load runs (#79 round 56 / Srikanth on 0.3.203: a ~70-minute run across 10+ targets at 10 VUs each was killed mid-run). The generated plain-load k6 only checks status codes but was buffering every response body in memory; at that VU count over that duration the buffered bodies plus k6's own metric accumulation exhausted RAM and the kernel OOM-killer sent SIGKILL. The multi-target plain-load path now runs k6 with `K6_DISCARD_RESPONSE_BODIES=true` (safe there because bodies are never inspected). Real-binary verified: the launched k6 child process carries `K6_DISCARD_RESPONSE_BODIES=true` in its environment and `data_received` stays at header-only levels. Body-inspecting paths (conformance, extraction) are untouched; the flag defaults off and is opt-in per executor.
+
+## [0.3.203] - 2026-07-12
+
+### Fixed
+
+- **[Contracts]** `--base-path /` no longer voids all conformance validation (#79 round 55 / Srikanth on 0.3.202: a self-test with `--base-path /` wrote an empty violation file even though the console reported thousands of owasp/parameter/request-body misses). Root cause: the self-test URL builder computed the prefix as `"/".trim_end_matches('/')` = `""`, decided `"".starts_with('/')` was false, and produced the prefix `"/"`; prepended to the already-rooted spec path that yielded `<target>//v1/organizations` (double slash), whose template `//v1/organizations` never matched the spec's `/v1/organizations`, so the validator skipped every emitted request and logged nothing (even the OWASP/request-body probes that worked in prior rounds). A shared `base_path_prefix()` now trims slashes from BOTH ends and treats the empty result (`/`, `//`, ``) as no prefix (root), used by both prefix sites; the validator also collapses stray double slashes before matching. Real-binary verified with Srikanth's exact command: the emitted URL is now `.../v1/organizations` (single slash) and the logs populate again (7 owasp + 6 request-body), where 0.3.202 wrote `[]`.
+
+## [0.3.202] - 2026-07-11
+
+### Fixed
+
+- **[Contracts]** Parameter violations now surface in the by-request / by-probe logs, not just OWASP and request-body ones (#79 round 54 / Srikanth on 0.3.200: `parameters` negatives were missed in the console but absent from the violation files). Two gaps: (1) a `parameters:bad-path-param` probe targets a custom-verb path like `/v1/{instance}:reportStatus`, whose templated segment `{instance}:reportStatus` never matched the path template, so the whole request was skipped before any parameter check ran; (2) parameter value validation only covered enum/integer/number/boolean, not string `pattern` / `minLength` / `maxLength`. A new segment matcher binds `{name}`, `{name}:verb`, and `prefix{name}` forms (used by both the path matcher and the path-param extractor), and string length/pattern constraints are now checked. Real-binary verified: a self-test against a spec with a custom-verb path and a `maxLength`-constrained param now writes `parameters:bad-path-param => path.instance: value "self-test-invalid-id" is longer than maxLength 8`. (Probes that drop an OPTIONAL query param or add an extra param stay spec-valid by construction and correctly produce no client-side violation; the full negative-probe record is in `conformance-self-test.json`.)
+- **[Reality]** `--source-ip` now takes effect with `--targets-file` (#79 round 54 / Srikanth on 0.3.200: source-ip was a silent no-op in multi-target mode). The per-target `BenchCommand` clone in `execute_multi_target` hardcoded `source_ips: Vec::new()`, and the `ParallelExecutor` built `K6Executor::new()` without `.with_local_ips`. The source IPs (and geo variants) now flow through the clone and `--local-ips` is passed to each target's k6. Real-binary verified: `bench --targets-file --source-ip 10.99.99.99` now makes k6 fail with `bind: cannot assign requested address` (proving the source IP is applied), where before it connected from the default address.
+
+## [0.3.201] - 2026-07-10
+
+### Added
+
+- **[Reality]** New `mockforge bench-qos` command: a native QoS / DSCP traffic-class load generator (#933 / Srikanth on #79 asked whether bench can emit Voice / Video / Background / Best-Effort traffic in one run to exercise a path's QoS handling). k6 is an application-layer client with no L3/L4 knobs, so this uses raw `socket2` sockets and sets the IPv4 `IP_TOS` (DSCP) byte on each TCP connection BEFORE connect, so the SYN and every segment carry the marking. Presets `voice` (EF/46 → 0xB8), `video` (AF41/34 → 0x88), `best-effort` (0x00), `background` (CS1/8 → 0x20), or `dscpNN` for a raw code point; `--class NAME[:WEIGHT]` is repeatable and mixes classes by relative weight in a single run. `--mss` clamps `TCP_MAXSEG` to approximate small-MTU behavior. Prints a per-class table (dscp, tos byte, requests, ok, p50/p95) and warns if the kernel rejected the marking. Jumbo frames and IP fragmentation are NIC/kernel-level (not socket options), so the command prints the `ip link` / `tc netem` recipes for those; IPv6 `IPV6_TCLASS` is a follow-up. Verified: a unit test reads `IP_TOS` back with getsockopt off the exact generator socket for every preset (the kernel stamps that into outbound IP headers, so it's the wire guarantee), and a real run sent 62,115 successful DSCP-marked requests split across classes, with weighted mixing and the custom-DSCP / MSS options confirmed.
+
+## [0.3.200] - 2026-07-10
+
+### Fixed
+
+- **[Contracts]** Emitted-request validation now reports `owasp:*` and parameter violations, not just request-body ones (#79 round 53 / Srikanth on 0.3.199: the by-request / by-probe logs showed only `request-body:*` rows even though the console reported 7602 missed owasp and 3248 missed parameter negatives). Two causes: (1) every OWASP probe injects into `$.xgafv`, which reaches the wire percent-encoded as `%24.xgafv`; the validator built its query map from the raw query string then looked each parameter up by the spec's DECODED name, so the lookup missed and all 7602 probes were skipped silently. Query keys/values and path segments are now percent-decoded (and `$ref` parameter schemas resolved). (2) A `parameters:missing-query` probe that drops a REQUIRED parameter now surfaces as `query.<name>: required parameter missing`; before, the loop only inspected parameters that were actually sent. Real-binary verified against `mockforge serve`: all seven OWASP checks now appear as e.g. `owasp:sqli => query.$.xgafv: value "' OR '1'='1" is not one of "1" or "2"`.
+- **[Reality]** PUT (and any) request bodies that are not JSON are no longer rejected as missing (#925: every `PUT` with an `application/octet-stream` / XML / urlencoded body returned `400 body: Request body is required but not provided`, while JSON POSTs passed). The handlers derived body presence from `serde_json::from_slice(&bytes).ok()`, so a non-JSON body collapsed to `None` and looked absent. Body presence is now tracked from the raw bytes, `requestBody.required` is honored, and the AI handler no longer uses `Option<Json<Value>>` (which axum yields as `None` for non-JSON). Real-binary verified: PUT octet-stream -> 200, empty body against `required: true` -> 400, JSON schema validation unchanged.
+- **[DevX]** A relative `openapi_spec` config value now resolves from the config file's directory when it does not resolve from the working directory (#928: in Docker, a relative path resolved from `/app` (CWD) instead of `/config` and silently failed to load). Absolute and CWD-resolvable paths are untouched. Verified from a foreign CWD.
+- **[DevX]** `serve` fails fast when a configured OpenAPI spec cannot be loaded, instead of starting "healthy" with zero routes (#929). Clear error names the path; set `MOCKFORGE_ALLOW_MISSING_SPEC=1` to start anyway. Verified against a config-driven bad path.
+- **[DevX]** `http.request_validation` is honored as a deprecated alias for `http.validation.mode`, and unknown `http:` config keys now log a warning instead of being dropped silently (#927).
+- **[DevX]** The Docker image now uses an entrypoint shim so the documented `command: serve --config ...` works (#930: the image only set CMD, so a user `command:` execed `serve` as a binary). The old `command: mockforge serve ...` workaround still works.
+- **[DevX]** The container user now has a real, owned home directory, so `~/.mockforge/scenarios` is writable and the startup "Failed to create scenarios directory: Permission denied" warning is gone (#931).
+- **[Cloud]** Bumped `crossbeam-epoch` to 0.9.20 (RUSTSEC-2026-0204, invalid pointer dereference) and `quinn-proto` to 0.11.15 (RUSTSEC-2026-0185/-0037); both were transitive. Merged the dependabot cargo patch/minor group (14 updates incl. `rustls` 0.23.41, `anyhow` 1.0.103, `tauri` 2.11.5) and the GitHub Actions bump group.
+
+### Note
+
+- **[Contracts]** #926 (stale Content-Type allowlist after a spec change) is addressed by the #928 / #929 fixes: MockForge reads the allowlist fresh from the loaded spec per request with no static cache, so the reported persistence was the relative-path failure silently loading a stale spec. Srikanth's QoS / L3-L4 traffic-generation request is tracked in #933.
+
+## [0.3.199] - 2026-07-06
+
+### Fixed
+
+- **[Contracts]** Emitted-request validation now populates the by-request / by-probe violation logs for specs whose request bodies are `$ref`s (#79 round 52 / Srikanth on 0.3.198: `--conformance-self-test --targets-file` reported thousands of caught request-body negatives but wrote empty `conformance-request-violations-by-request.json` / `-by-probe.json`). Root cause: the client-side body check only fired when the operation's `requestBody` media schema was an inline `ReferenceOr::Item`; the Apigee spec (like most real specs) declares `schema.$ref = #/components/schemas/...`, so `schema_ref.as_item()` returned `None` and every body probe was silently skipped. It also only type-checked STRING values, so a `{"analyticsRegion":12345}` (number-where-string) probe surfaced nothing even when the schema resolved. The validator now resolves the `requestBody` and schema `$ref`s and reuses the same full JSON-Schema validator the custom-checks path uses (`build_validator`), so nested `$ref`s, root-type mismatches, enum violations, and non-string type mismatches all populate the logs. Real-binary verified: a self-test against a `$ref`-bodied spec now writes 16 flat / 8 by-request / 15 by-probe violations (previously empty), e.g. `body/analyticsRegion: 12345 is not of type "string"`, `body$: [] is not of type "object"`. This also makes the OWASP probes' query-vs-body attribution visible (e.g. `owasp:sqli => query.alt: value "%27%20OR..." is not one of "json" or "media"`).
+
+### Added
+
+- **[Contracts]** Multipart upload summary now reports the full HTTP request size alongside the entity body, so a proxy's byte count reconciles (#79 round 52 / Srikanth on 0.3.198: a persistent 264-byte gap between his proxy's `57998271` and MockForge's `57998007`). MockForge's `wire` figure is the exact RFC 7578 `Content-Length`; the 264-byte delta is the top-level HTTP request preface (request-line + `Host` + the script-visible headers + the transport-managed `Content-Length` + the blank line) that a proxy meters but MockForge previously did not surface. The k6 summary now also emits `request N bytes incl H-byte header block`. Verified against a live raw-socket capture: in one k6 run the reported `wire`/`request`/header-block (4838 / 5053 / 215) equalled the bytes k6 actually put on the socket, to the byte. Fixed in both render paths (`generator.rs` + `spec_driven.rs`).
+- **[AI]** The mock MCP server ships a richer default catalog so clients generate more capturable traffic (#79 round 52 / Srikanth on 0.3.198: "Is it possible from mockforge mcp mock server to respond with more tools, resources, prompts so that applications are chatty"). The default `--mcp-mock` catalog now advertises 8 tools (`echo`, `get_status`, `get_time`, `add`, `search_documents`, `get_weather`, `create_ticket`, `fail_tool`), 4 resources, and 3 prompts, and implements `resources/read`, `prompts/get`, and `resources/templates/list` (previously `resources/list` and `prompts/list` were empty and only `tools/list` returned content). A client that lists then reads/gets/calls now exchanges many more request/response pairs. Unknown resource uri / prompt name return a JSON-RPC `INVALID_PARAMS` error. Real-binary verified against `mockforge serve --mcp-mock`.
 
 ## [0.3.198] - 2026-07-02
 
 ### Fixed
 
-- **[Contracts]** Self-test baseline probe filler is now spec-VALID (enum -> first member, boolean -> `true`, string body enums -> a valid member), so a `request-body:*` probe no longer trips spurious `query_value_mismatch` violations on `alt`/`prettyPrint` and body probes no longer show `test-string` enum noise (#79 round 51 / Srikanth on 0.3.196). Verified against `mockforge serve`: by-probe violations dropped 32 -> 12, `request-body:*` query violations now 0.
-- **[Contracts]** Multipart `wire` byte count now prefers k6's `Content-Length` (the exact wire body size a proxy sees) over the reconstructed envelope, closing the 264-byte gap Srikanth reported on 0.3.196 (#79 round 51).
+- **[Contracts]** Self-test probes no longer trip spurious query/body violations that get attributed to the wrong check (#79 round 51 / Srikanth on 0.3.196: a `request-body:content-type-mismatch:multipart` probe reported `query_value_mismatch` on `alt`/`prettyPrint`, "incorrect and confusing"). Root cause: the baseline probe filled every query/path param with the literal `test-value` and every string body property with `test-string`, both invalid against enum/boolean/type constraints, so every probe tripped the same incidental violations regardless of what it was testing. The baseline filler is now spec-VALID: enum -> first member, boolean -> `true`, integer/number -> a valid number, string formats (email/uuid/date/...) -> a plausible value, and enum body properties -> a valid member. Negative probes still override the specific param/body they attack. Real-binary verified against `mockforge serve`: on the Apigee-style spec the by-probe violation count dropped from 32 to 12, every `request-body:*` probe now shows `query_viols=0`, and the `content-type-mismatch` probes are clean. (This also makes the SQLi/OWASP probes truthful: they now show the violation for the param they actually injected, not unrelated filler noise.)
+- **[Contracts]** Multipart `wire` byte count now matches a proxy's observed body length exactly (#79 round 51 / Srikanth on 0.3.196: the r50 reconstructed envelope was 264 bytes short of his proxy's 1955). The k6-side reconstruction from `res.request.body` can drift from the real socket bytes, so `wire` now prefers the request's `Content-Length` header (the exact wire body size k6 puts on the socket, which is what a proxy counts), falling back to the reconstructed envelope only when the header is absent. Fixed in both render paths (`generator.rs` + `spec_driven.rs`).
 
 ### Added
 
-- **[AI][DevX]** New "Agent / LLM / MCP Traffic (Packet-Level)" reference page documenting Agent<->LLM, Agent<->Agent, and MCP interactions at the HTTP-packet level with real captures and PCAP-recording recipes (#79 / Srikanth on 0.3.196).
+- **[AI][DevX]** New reference page "Agent / LLM / MCP Traffic (Packet-Level)" (#79 / Srikanth on 0.3.196 asked for a document explaining Agent<->LLM, Agent<->Agent, and MCP-Agent<->MCP-Server interactions at the HTTP-packet level with PCAP guidance). Documents the wire structure (methods, headers, request/response bodies, SSE streaming, JSON-RPC envelopes) for OpenAI, Anthropic, and MCP using real captures taken against `mockforge serve --llm-mock --mcp-mock`, plus copy-paste `tcpdump`/`tshark`/`mitmproxy`/`SSLKEYLOGFILE` recipes for recording true `.pcap` files.
 
 ## [0.3.197] - 2026-07-01
 
 ### Added
 
-- **[AI]** Mock LLM endpoint real-model modes via `--llm-mock-mode` (#915): `proxy` (forward to `--llm-mock-upstream`), `record` (forward on cassette miss + save, replay on hit), `replay` (cassette only, offline; canned fallback). Default stays pure offline `mock`. New flags `--llm-mock-upstream` / `--llm-mock-api-key` / `--llm-mock-cassette`. Verified against `mockforge serve` by pointing one `--llm-mock` instance at another (no API key).
+- **[AI]** Mock LLM endpoint gains real-model modes via `--llm-mock-mode` (#915, follow-up to #912). The default stays a pure offline `mock`, and three new opt-in modes let it work with a real OpenAI/Anthropic-compatible upstream: `proxy` forwards every request to `--llm-mock-upstream` and returns the real response (combine with `--latency`/`--failures` for chaos on live traffic); `record` forwards on a cassette miss and saves the response to `--llm-mock-cassette`, replaying from the cassette on a hit (real content, deterministic after warm-up); `replay` serves only from the cassette (fully offline), falling back to the canned reply on a miss. New flags: `--llm-mock-mode`, `--llm-mock-upstream`, `--llm-mock-api-key` (or `$OPENAI_API_KEY`/`$ANTHROPIC_API_KEY`), `--llm-mock-cassette`. Upstream/cassette failures degrade to the canned reply so the endpoint never hard-fails a caller. Reuses the existing reqwest client; upstream calls forward the model + messages verbatim (always non-streaming) and streaming clients get the resolved text re-chunked locally. Real-binary verified against `mockforge serve` by pointing one `--llm-mock` instance at another as the upstream (no API key needed): record captured to the cassette then replayed with the upstream stopped; pure `replay` served hits offline and fell back to canned on a miss; `proxy` live-forwarded both OpenAI and Anthropic dialects.
 
 ## [0.3.196] - 2026-06-30
 
 ### Added
 
-- **[AI]** Mock LLM endpoint: `mockforge serve --llm-mock` mounts OpenAI-compatible `POST /v1/chat/completions` + `GET /v1/models` and Anthropic-compatible `POST /v1/messages` with SSE streaming, so an agent can point its base URL at MockForge for scale/offline/failure testing (#912 / #79 Srikanth).
-- **[AI]** Mock MCP server: `mockforge serve --mcp-mock` mounts a JSON-RPC 2.0 endpoint at `POST /mcp` answering `initialize` / `tools/list` / `tools/call` / `resources/list` / `prompts/list`, so an agent acting as an MCP client can talk to MockForge (#913 / #79 Srikanth).
+- **[AI]** Mock LLM endpoint for agent testing (#912 / #79 Srikanth: "Agent Traffic to LLM ... LLM Simulation using MockForge Server"). `mockforge serve --llm-mock` mounts OpenAI-compatible `POST /v1/chat/completions` + `GET /v1/models` and Anthropic-compatible `POST /v1/messages`, so an agent (Cursor, Claude Code, ChatGPT clients, custom agents) can point its base URL at MockForge and receive correctly-shaped, deterministic completions. Responses carry realistic envelopes (ids, `usage`/token counts, `finish_reason`/`stop_reason`) and **SSE streaming** when the caller sets `stream: true` (OpenAI `chat.completion.chunk` deltas + `[DONE]`; Anthropic `message_start`/`content_block_delta`/`message_stop` events). Pure mock (no external model call); echoes the prompt by default so wiring is easy to confirm. Real-binary verified against `mockforge serve`: non-streaming + streaming OpenAI, Anthropic messages, and model list all return spec-shaped payloads.
+- **[AI]** Mock MCP (Model Context Protocol) server for agent-as-MCP-client testing (#913 / #79 Srikanth: "Agent (Acting as MCP Client) Traffic to MCP Servers"). `mockforge serve --mcp-mock` mounts a JSON-RPC 2.0 endpoint at `POST /mcp` answering `initialize`, `tools/list`, `tools/call`, `resources/list`, `prompts/list`, and the `notifications/initialized` notification, with a configurable tool catalog returning canned (or, via an error tool, failing) results. Real-binary verified against `mockforge serve`: `initialize` returns `serverInfo` + capabilities, `tools/list` returns the catalog, and `tools/call echo` reflects its argument.
 
 ## [0.3.195] - 2026-06-30
 
 ### Fixed
 
-- **[Contracts]** Multipart `wire` byte count no longer comes out smaller than `total`; computed as disk-sum payload + ASCII multipart envelope instead of the UTF-8-undercounting `raw.length` (#79 round 50 / Srikanth on 0.3.194).
-- **[Contracts]** `conformance-request-violations-by-request.json` emits one row per URL with the deduped union of all violations and contributing checks, so a URL's owasp/query checks no longer hide in a separate row from its body checks (#79 round 50 / Srikanth on 0.3.194).
-- **[Contracts]** Repeated self-test iterations no longer duplicate the same violation N times in the flat and grouped violation files (#79 round 50 / Srikanth on 0.3.194).
+- **[Contracts]** Multipart `wire` byte count no longer comes out SMALLER than `total` (#79 round 50 / Srikanth on 0.3.194: "wire 56344432 bytes ... is less than file size bytes in disk 57996316"). r49 set `wire = raw.length`, but k6's `res.request.body` is a UTF-8-decoded JS string, so binary part bodies collapse and `raw.length` UNDERcounts (his 58 MB upload read ~1.65 MB low). The multipart envelope is only ~2 KB for 9 parts, so wire can never be less than total. Now wire is computed as the disk-accurate payload sum plus the ASCII envelope (each part: `--boundary` + part headers + the header/body CRLFs + trailing CRLF, then the closing `--boundary--` CRLF) — all ASCII, so byte-accurate even when binary bodies mangle `raw.length`. Fixed identically in both render paths (`generator.rs` + `spec_driven.rs`). Verified by running the emitted k6 JS in node against a body whose `raw.length` undercounts: `wire = total + envelope` and `wire > total`.
+- **[Contracts]** `conformance-request-violations-by-request.json` now emits exactly ONE row per URL (#79 round 50 / Srikanth on 0.3.194: a check seen in by-probe for a URL — e.g. `owasp:ldap-injection` — was missing from the by-request row for that same URL). The r47 grouper keyed on `(method, path, violation-set)`, so a URL with both query/owasp violations and request-body violations split into separate rows and his "find the URL with the most violations, then drill into by-probe" flow only saw one half. Now each `(method, path)` collapses into a single row carrying the deduped UNION of every violation and every contributing `check_name`; per-probe attribution stays in the by-probe sidecar. Real-binary verified against `mockforge serve`: 0 by-request rows miss any check the by-probe file lists for the same URL, and every by-probe URL has a by-request row.
+- **[Contracts]** Repeated self-test iterations no longer duplicate violations in the logs (#79 round 50 / Srikanth on 0.3.194: "I see same violation is getting printed in logs for 22 times. Can this be optimized to print 1 time"). A multi-iteration run captures one probe per iteration, so the flat violation list held N copies of every violation and the grouped rows repeated each `violation_N`. The flat list is now deduped by `(check_name, method, path, violation_type, message)`, and both grouped views dedup identical violations within a row. Real-binary verified against `mockforge serve` with `--conformance-self-test-iterations 3`: the flat file collapsed 246 → 82 entries, 0 grouped rows carry a duplicate violation.
 
 ### Added
 
-- **[Contracts][AI]** New `--security-categories` values `llm-prompt-injection` (OWASP LLM01 prompt-injection/jailbreak) and `dlp` (synthetic PII canaries) for agent-driven AI-attack and data-loss-prevention testing (#79 round 50 / Srikanth on 0.3.194).
+- **[Contracts]** New security-payload categories `llm-prompt-injection` and `dlp` for the `--security-categories` flag (#79 round 50 / Srikanth on 0.3.194: "Does mockforge support ... Agent simulating DLP (credit card, SSN etc), OWASP Top 10 AI Attacks ... via Agent"). `llm-prompt-injection` (OWASP LLM01; aliases `prompt-injection`, `llm01`, `jailbreak`) injects inert prompt-override / jailbreak / chat-template-delimiter / context-exfiltration strings into a target field so an agent (k6 VU) can exercise an LLM-or-LLM-backed-API guardrail. `dlp` (aliases `pii`, `sensitive-data`, `data-leakage`) injects synthetic, documented non-real PII canaries (the 4111… Visa test PAN, reserved `000-00-0000` SSN, AWS `AKIA…EXAMPLE` key shape, PEM private-key shape, reserved-555 phone) for data-loss-prevention egress testing. Both compose with the existing URI/header/body injection and high-risk filtering. Real-binary verified: `--security-test --security-categories "llm-prompt-injection,dlp"` generates a k6 script carrying the new payloads.
+
+## [0.3.194] - 2026-06-29
+
+### Fixed
+
+- **[Contracts]** Violation logs (flat + by-request + by-probe) now write per target in multi-target self-test mode (#79 round 49 / Srikanth on 0.3.193: "I am not seeing any violation requests logs when running [self-test + --targets-file]"). Root cause: `validate_emitted_requests` only read `conformance-requests.json` (the bench export shape), but self-test writes the `CaseCapture` shape to `conformance-self-test-requests.jsonl` instead. Validator now reads whichever file exists, converting JSONL entries into the `{check, method, url, request.body}` shape the rest of the pipeline expects. Plus `execute_multi_target_self_test` calls `validate_emitted_requests_with_base_path` per target after the JSONL is written. Real-binary verified against `mockforge serve` with self-test + `--targets-file`: each target now writes `conformance-request-violations{,-by-request,-by-probe}.json` next to the JSONL.
+- **[Contracts]** `--conformance-self-test-duration` no longer overshoots by a full iteration (#79 round 49 / Srikanth on 0.3.193: "the test ran more than 5 min (or 46 seconds more)"). The round-47 outer loop only checked the deadline AFTER each matrix pass completed, so a 5m budget on a 6m matrix ran 6m total. New `run_self_test_with_deadline` accepts an absolute `Instant`; the per-operation loop checks it before each probe and breaks out mid-iteration when the budget elapses. Real-binary verified: 5s budget with `--conformance-delay 200` ran exactly 5.1s (was minutes of overshoot before).
+
+### Added
+
+- **[Contracts]** Every captured self-test probe now carries an `iteration` counter (#79 round 49 / Srikanth on 0.3.193: "Is it possible to differentiate in the logs what is the iteration count that way I will know how many requests are sent with that violation"). `SelfTestConfig.current_iteration` is stamped on `CaseCapture` so the JSONL line carries the loop counter (1-indexed). command.rs bumps it before each `run_self_test_with_deadline` call. Defaults to 1 for older clients / single-iteration runs so existing JSONL deserialises unchanged.
+- **[Contracts]** Multipart summary now surfaces both `total` (disk-sum payload) and `wire` (total + multipart envelope) byte counts (#79 round 49 / Srikanth on 0.3.193: "Our Proxy shows Total Byte Length as 57998271 Bytes, Where as mockforge shows ... 57996316 Bytes which is correct. I see a diff of 1955 bytes"). The diff is the multipart envelope (boundary lines, per-part `Content-Disposition` / `Content-Type` headers, CRLFs, final closing boundary), not a bug. New format: `<multipart/form-data; boundary=...; N part(s); total <disk-sum> bytes (wire <disk-sum + envelope> bytes w/ envelope): ...>`. Real-binary verified with a 256000 + 18 byte upload pair: `total 256018 bytes (wire 256434 bytes w/ envelope)`. The 416-byte delta matches the actual k6-emitted envelope size.
+
+## [0.3.193] - 2026-06-28
+
+### Fixed
+
+- **[Contracts]** Multipart upload total bytes now match the sum of per-file disk sizes, not the JS string length (#79 round 48 / Srikanth on 0.3.192: "Only the Total sum of bytes is little incorrect, It should be 57996316 but I see 56344432"). Per-file counts were already exact from r47's `__mfUploadSizes` map; the `totalBytes` line still used `raw.length` (UTF-16 code units). Now `totalBytes` is recomputed as `parts.reduce((acc, p) => acc + p.bytes, 0)` after the per-file overlay, only when every part's size came from disk; falls back to raw.length when any size is unknown. Real-binary verified against `mockforge serve` with a 256 KB binary + 18 byte JSON pair: total reports `256018 bytes`, exactly matching `disk_size(binary) + disk_size(json)`.
+- **[Contracts]** `--conformance-self-test --conformance-self-test-iterations N` and `--conformance-self-test-duration <DUR>` now actually loop when paired with `--targets-file` (#79 round 48 / Srikanth on 0.3.192: "I ran following commands to test conformance-sef-test duration, but the test ended immediately" — both iterations=10 and duration=5m did exactly one matrix pass). Root cause: the multi-target dispatch returned into `execute_multi_target_conformance` (regular k6 flow), never reaching the r47 self-test iteration loop. New `execute_multi_target_self_test` runs the self-test driver against every target with the same iteration / duration logic and writes per-target JSONL, JSON report, and `conformance-network-events.json`. Real-binary verified against `mockforge serve` with 2 targets and `--iterations 3`: each target ran exactly 3 iterations (positives 0/3, negatives 0/21 + 0/6 + 0/48 per target), per-target reports written under `target_0/` and `target_1/`.
+- **[Contracts]** Plain `mockforge bench --use-k6` (no `--conformance`) now writes `conformance-network-events.json` (#79 round 48 / Srikanth on 0.3.192: "I now see the file ... which has no failure info even though I see 18 request failed due to multiple network operations"). The r47 marker only existed in the conformance generator; the plain-bench Handlebars template skipped it. Now emits `MOCKFORGE_NETWORK_EVENT:` whenever `res.status === 0` directly inside the `k6_script.hbs` request loop, with the same classification logic the conformance + self-test paths use (`connect / timeout / tls / other` plus an EOF-detection branch that classifies EOF as `connect` since k6's `Request Failed error=EOF` is a mid-stream connection drop). The CLI executor already harvests the marker. Real-binary verified: plain k6 bench against a closed port writes `conformance-network-events.json` with one entry, `kind: "connect"`, `error_code: 1212`, `message: "dial: connection refused"`.
+- **[Contracts]** Grouped violation rows now pick a representative `check_name` that matches the dominant violation type (#79 round 48 / Srikanth on 0.3.192: "In the check_name I see body:json but for the violation it is showing some issue with query parameters. Little misleading"). The round-46 grouper returned the alphabetically first contributing check. New logic inspects the row's first violation_type and picks the contributing check whose name prefix matches (e.g. `query_value_mismatch` → prefer a `param:query:*` check). Falls back to first when nothing matches. Real-binary verified: a query-only spec now reports `check_name: "param:query:string:/orgs"` for query violations instead of the alphabetically first `constraint:enum:/orgs`.
+
+### Added
+
+- **[Contracts]** New `conformance-request-violations-by-probe.json` sidecar emits one row per `(check_name, method, path)` with its full violation list (#79 round 48 / Srikanth on 0.3.192: "Can I assume all this checks has some violation either in the incoming request or outgoing response if yes then how can I see all this violation individually? Do we have any other Logs pointing each of those so that I can fix in one go?"). Unlike the by-request file (which collapses identical violation sets across check names), the by-probe file preserves the per-probe view so the user sees WHICH spec-probing pattern (`body:json`, `schema:string`, `constraint:enum`, `method:POST`, etc.) surfaced WHICH violation. Sorted by `(method, path, check_name)` so probes against the same endpoint group visually. Real-binary verified: 30 flat violations expand to 10 by-probe rows (one per contributing check), versus 1 collapsed row in the by-request file.
+
+## [0.3.192] - 2026-06-27
+
+### Fixed
+
+- **[Contracts]** Multipart upload byte counts now come from the on-disk file size, not the k6 JS string length (#79 round 47 / Srikanth on 0.3.191: "file bytes are incorrect" with 8/9 file sizes mismatching by ~3-4%). Root cause: k6's `res.request.body` lossy-decodes binary bytes into a UTF-16 string where multi-byte UTF-8 sequences collapse to single code units, so `partBody.length` undercounted. Fix: at script-gen time `std::fs::metadata()` reads each upload's actual size into a per-check JS map (`globalThis.__mfUploadSizes[checkName][fieldName]`) at init scope; the captureExchange summariser overlays those exact counts onto the boundary-derived parts list when it builds the body summary. Real-binary verified against `mockforge serve` with a 256 KB binary file + a 18 byte JSON file: export reads `'binary':'binary-test.bin' (application/octet-stream, 256000 bytes), 'text':'json.json' (application/json, 18 bytes)`, matching disk exactly.
+- **[Contracts]** `--auth-bearer` / `--conformance-basic-auth` now fire on plain `mockforge bench` runs too, not just under `--conformance` (#79 round 47 / Srikanth on 0.3.191: "I tried following command it did not work for bench" — same `--conformance-basic-auth user:pass` he used on 0.3.190 with conformance was being silently dropped on a non-conformance bench). Extended `parse_headers()` to fold the conformance auth shortcuts (`--conformance-basic-auth`, the round-46 `--auth-bearer` collected via `conformance_headers`) into the shared header map after parsing `--header` entries; explicit `--header "Authorization: ..."` still wins. `--conformance-api-key` stays conformance-only (its semantics are probe-style, not header-style), with a one-line warning when set without `--conformance`. Real-binary verified: `mockforge bench --conformance-basic-auth alice:s3cr3t --use-k6 ...` produces `Authorization: Basic YWxpY2U6czNjcjN0` in every emitted request; same for `--auth-bearer eyJhbGc...` → `Authorization: Bearer eyJhbGc...`.
+- **[Contracts]** `conformance-network-events.json` now populates under both `--conformance-self-test` and `--use-k6` paths, not just the round-46 native executor (#79 round 47 / Srikanth on 0.3.191: "I did not see network logs in the mockforge bench and conformance traffic"). For self-test, added a `network_events: Option<Arc<Mutex<Vec<NetworkEvent>>>>` sink on `SelfTestConfig`; every `reqwest::Error` from `send().await` is classified into `connect / timeout / tls / body / decode / request / other` and pushed, then drained to disk at run end (writes an empty array on a clean run, the cleanest signal that connectivity stayed up). For k6, the captureExchange JS now emits a separate `MOCKFORGE_NETWORK_EVENT:` log line whenever `res.status === 0`, decoding k6's `error_code` ranges (1200s=connect, 1300s=tls, 1400s=timeout); the CLI executor harvests that marker into the same file. Real-binary verified pointing self-test at `http://127.0.0.1:1`: 26 wire-level `connect` events captured with RFC-3339 timestamps. Same target via `--use-k6`: 10 events, every one carrying `error_code: 1212`, kind `connect`.
+- **[Contracts]** Round-46 grouped violations file no longer shows the same violation set under three different check names (#79 round 47 / Srikanth on 0.3.191: "Only thing is we have same violations on 3 different check name, not clear as to what is the difference"). The grouper now keys on `(method, url, sorted-violation-set)` and lists every contributing probe in a `checks: [...]` array. Real-binary verified against `mockforge serve` with a 3-violation POST: 30 flat per-violation entries collapse from 10 grouped rows down to 1 row carrying all 10 contributing check names in `checks: [...]`.
+
+### Added
+
+- **[Contracts]** New `categories` array on `ServerConformanceViolation` lists EVERY distinct location the validator's `details[]` payload surfaced, not just the priority winner (#79 round 47 / Srikanth on 0.3.191: "I will not know other violations until previous ones are fixed. Is it possible to give a option to show all the violation irrespective of the order"). `category` keeps its single-location shape for dashboards that filter by one category; `categories: ["query","request-body"]` shows everything that's broken in one place so the user can address all violations in parallel. Older clients without the field deserialise as empty and fall back to `category`. Real-binary verified: a POST with both query enum and body enum violations returns `category: "query"` AND `categories: ["query", "request-body"]`.
+- **[Contracts]** `--conformance-self-test-iterations N` and `--conformance-self-test-duration <DUR>` knobs let the self-test probe matrix loop (#79 round 47 / Srikanth on 0.3.191: "Is there a way I can run conformance-self-test for longer duration or the duration I specify to simulate and test all the network related problems. Currently for some of the specs it runs and finishes quickly cant even try to do any network triggers"). Iterations defaults to 1; duration accepts the same shorthand as `--duration` (`120s`, `5m`, `1h`). When both are set, duration wins (iterations becomes the floor). Per-category caught / missed counters sum across iterations via a new `SelfTestReport::merge_iteration` helper. Real-binary verified: `--conformance-self-test-iterations 3` runs every probe three times (positives 0/3, negatives 21/0/6/0/48/0 — exactly 3× the single-iter counts); `--conformance-self-test-duration 6s` runs for 6 seconds wall-clock then exits.
+
+## [0.3.191] - 2026-06-26
+
+### Fixed
+
+- **[Contracts]** Multipart upload no longer lands `[]` in `conformance-requests.json` (#79 round 46 / Srikanth on 0.3.190: "I now see blank entry in conformance-requests.json"). Two stacked fixes. (1) The `extract_exchange_json` parser used a naive `replace("\\\\","\\").replace("\\\"","\"")` chain that mishandled the `\\\\\"` sequences logfmt emits when a multipart body contains JSON-encoded backslashes (binary PNG/PEM bytes from a real upload). Replaced with a single character-by-character logfmt unescaper that walks the `msg="..."` field byte-for-byte, finding the closing unescaped `"` and handling `\\` → `\` and `\"` → `"` once each. Tolerates trailing logfmt fields (`vu=`, `iter=`, etc.). (2) For multipart Content-Type, the k6 capture path now NEVER ships raw body bytes through JSON.stringify — even with the parser fixed, k6's logfmt encoder can't escape every binary byte JSON.stringify produces. Instead the captureExchange function walks the boundary chain inline (cap 100 parts) and emits a structured summary `<multipart/form-data; boundary=...; N part(s); total M bytes: 'name':'filename' (Content-Type, N bytes), ...>` derived from the actual parts. Strictly more useful than the raw envelope and always JSON-safe. Real-binary verified against `mockforge serve` with a 2-file multipart upload: `body` field now reads `<multipart/form-data; boundary=...; 2 part(s); total 719 bytes: 'json':'json.json' (application/json, 18 bytes), 'photo':'photo.png' (image/png, 307 bytes)>`. Four new regression tests pin the parser behaviour (logfmt round-trip with backslash escapes, raw mode, trailing-field tolerance, double-backslash adjacent to escaped quote).
+- **[Contracts]** Server-side violation `summary` now shows the actual + expected value inline instead of just the bare rule name (#79 round 46 / Srikanth on 0.3.190: "Here Not able to understand what is actual value in the request and what is expected"). New `infer_got_expected` walks the validator's `details[].message` text and pulls the quoted got/expected pair, producing `query.lang (enum: got "zzz", expected one of "en", "fr")` instead of `query.lang (enum)`. Same logic mirrored into the TUI's local copy so an older server still gets the upgraded summary at render time. Real-binary verified against `mockforge serve`: a POST with 3 mixed query+body violations records `summary: "3 query violation(s): body (enum: got \"basic\", expected one of \"free\", \"paid\"), query.$.xgafv (enum: got \"zzz\", expected one of \"1\", \"2\"), query.prettyPrint (type: got \"abc\", expected type \"boolean\")"`.
+- **[Contracts]** Classifier priority order now documents and handles HTTP-method violations (#79 round 46 / Srikanth on 0.3.190: "In the classifier order you mentioned: query > header > cookie > path > body — Where is http method violation coming?"). Method-not-allowed rejections (where the spec declares the path but not the method) emit a prose-only reason with no structured `"path"` field, so the old per-loc chain missed them. Added an explicit check that runs AHEAD of the per-loc chain: full order is now `content-type > http-methods > query > header > cookie > path > body`.
+
+### Added
+
+- **[Contracts]** New `conformance-request-violations-by-request.json` sidecar grouping every wire-level violation by `(check, method, url)` (#79 round 46 / Srikanth on 0.3.190: "I see three different messages, is this message for 3 different requests or for 1 request. if it is 1 request can we have 1 line item mentioning violation 1 = message1, violation2 = message2"). One row per emitted request; each row carries a `violation_count` plus `violation_1`, `violation_2`, ... entries. The original flat `conformance-request-violations.json` stays as-is for tooling that wants the per-violation shape. Real-binary verified against `mockforge serve` with a 2-op spec mixing query enum / query type / body enum: 30 flat entries collapse to 10 grouped requests (each carrying 3 violations).
+- **[Contracts]** `mockforge bench --auth-bearer <TOKEN>` shortcut (#79 round 46 / Srikanth on 0.3.190: "If I have LDAP(tried user:password did not work), SAML, JWT Auth, How Should I send user credentials..."). Folded into the existing `--conformance-header` plumbing so it flows through every conformance / self-test / multi-target path without separate wiring. De-dupes against an explicit `--conformance-header "Authorization:..."` if the user already supplied one. Help text documents the LDAP fallback (`--conformance-basic-auth user:pass` for LDAP gateways accepting Basic) and the SAML pattern (exchange the assertion for a session cookie at the IdP first, then forward via `--conformance-header "Cookie: <session>"`). Real-binary verified against `mockforge serve` with `--auth-bearer "<jwt>"`: every emitted request carries `Authorization: Bearer <jwt>` in its export.
+- **[Contracts]** New `conformance-network-events.json` log captures wire-level failures with timestamps and a classified `kind` (#79 round 46 / Srikanth on 0.3.190: "Is there a way or logs in mockforge client to understand timestamp range of traffic drops and client reason for traffic drop"). The native conformance executor's `request.send().await` error path now pushes one entry per failure (`{timestamp, check, method, url, kind, message}`) and drains the sink to disk at the end of the run. `kind` is classified by reqwest's typed errors into `connect` (TCP refused / no route), `timeout` (request didn't complete in the configured budget), `tls` (cert / handshake rejection), `body` / `decode` / `request`, with `other` as the catch-all. Real-binary verified by pointing the bench at `http://127.0.0.1:1` (closed port): 10 wire-level events recorded, all classified as `kind: "connect"`, every entry stamped with an RFC-3339 timestamp.
+
+## [0.3.190] - 2026-06-23
+
+### Fixed
+
+- **[Contracts]** Request/response body exports raised from 2000 bytes to 65536 bytes with a clear truncation marker (#79 round 45 / Srikanth on 0.3.189: "Now I see it is showing some details with one of the partial multi file upload data" with a 13MB rl_app_prof.json cut mid-PEM). The 2000-byte cap was inherited from r41 when bodies were typically small JSON; multipart uploads with even one PEM cert immediately overran it. All 8 captureExchange / captureFailure body capture sites (4 in `generator.rs`, 4 in `spec_driven.rs`, both native executor capture sites in `conformance/executor.rs`) now cap at 65536 bytes and append `<truncated at 65536 bytes; full body was N bytes>` so the consumer can tell a truncation from a full payload. Real-binary verified against `mockforge serve` with a 100KB upload: captured 65591 chars (65536 body + marker), marker reports the original 100246 bytes.
+- **[Contracts]** TUI conformance export now carries the `summary` field (#79 round 45 / Srikanth on 0.3.189: "I am not seeing any summary info" in his exported TUI JSON). v0.3.189 added `summary` to the server-side `ServerConformanceViolation` but the TUI dedup wrapper (`DedupedViolation`) silently dropped it during the LIFO collapse. Now persisted on every dedup group — lifted verbatim from the server when it arrived populated (newer mockforge servers), or rebuilt locally from `reason` via a TUI-resident `summarize_reason_local` when an older server skipped the field (older mockforge). Three new unit tests pin all three branches. Also fixed a label mismatch where the summary said `request-body violation(s)` while the violation's `category` said `query`: both now follow the classifier priority order (`query > header > cookie > path > body`) so the labels agree.
+- **[Contracts]** `--validate-requests` now actually fires when paired with the NATIVE executor (#79 round 45 / Srikanth on 0.3.189: "I am still not seeing any conformance failure logs or conformance-request logs are also not capturing any failures info"). Round 44 wired `validate_emitted_requests` into the `--use-k6` branch only; Srikanth's bench command doesn't pass `--use-k6`, so his run never reached it. Now wired into all three execution paths: single-target k6, single-target native, multi-target native. Plus broadened to validate REQUEST BODY (top-level `required` + enum/type on direct string properties) and PATH PARAMETERS (extract from URL via template zipping) on top of round 44's query params. Real-binary verified against `mockforge serve` with a 2-operation spec mixing query enum, query type, path enum, and required body enum: `--validate-requests --export-requests` (no `--use-k6`) wrote 32 entries to `conformance-request-violations.json` covering all 4 violation kinds. Also takes `--base-path` so the Apigee-style `/api/v1/...` on the wire matches `/v1/...` in the spec.
+
+## [0.3.189] - 2026-06-22
+
+### Fixed
+
+- **[Contracts]** k6 chain-context cookies / vars now persist across `chain_iterations` (#79 round 44 / Srikanth on 0.3.188: "I see in 2nd and 3rd GET Request Cookie is going... below screenshots send empty cookie for all 3 GETs"). v0.3.186's round-41 fresh-jar work hoisted the `let __ctx_cookie_X = ''` declarations INSIDE the `for (let __iter ...)` loop, so every iteration created a fresh empty binding that shadowed whatever the previous iteration had captured. Captures from iteration N were invisible to GET in iteration N+1, so a chain like `extract.cookies: [albsessid]` on POST followed by `Cookie: "albsessid=${cookie:albsessid}"` on GET emitted `Cookie: albsessid=` on every GET. The declarations now sit at GROUP scope (above the iter loop) so a single binding persists across iterations. Real-binary verified against a Python mock that issues unique `albsessid` per request: GET 1 sends `albsessid=` (no capture yet, correct), GET 2 carries iteration-1's `sess-1-...`, GET 3 carries iteration-2's `sess-2-...`, all 48 POSTs carry the correct iteration-N capture.
+- **[Contracts]** Multipart upload exchange capture is now resilient to JSON.stringify failures (#79 round 44 / Srikanth on 0.3.188: "MOCKFORGE_UPLOAD_PARTS appears in console and k6-output.log but the request having this URL is sent out by k6 ... is not getting captured neither in conformance-requests.json log nor conformance-failure-details.json"). For a multi-file upload with body bytes that JSON.stringify can't roundtrip (lone surrogates, very long URLs, etc.), the primary stringify could throw and the entire `MOCKFORGE_EXCHANGE` line was lost so the request disappeared from the export. `__captureExchange` (in both `generator.rs` and `spec_driven.rs`) now wraps the build + stringify in try/catch and on failure emits a minimal `MOCKFORGE_EXCHANGE` entry with `{check, method, url, status, _export_error}` so the row never silently drops. A last-resort hand-rolled JSON literal covers the catastrophic case where even the fallback stringify fails. Applies to both the custom-checks generator and the spec-driven self-test generator.
+
+### Added
+
+- **[Contracts]** `--validate-requests` now also retrospectively validates each emitted request against the OpenAPI spec when paired with `--export-requests` (#79 round 44 / Srikanth on 0.3.188: "Any reason why validate-requests in mockforge client are not catching all this query param or body params or path params violation issues and record in conformance-request-failure logs?"). The existing pass only validates the custom YAML SHAPE at config time (missing path / required param / wrong method) — it never inspected the actual wire-level requests the bench fired. New `validate_emitted_requests` runs after the k6 process exits: walks `conformance-requests.json`, matches each entry to the spec, and emits a `RequestViolation` per query value that violates the parameter's schema (enum / type:integer / type:number / type:boolean). Output is appended to `conformance-request-violations.json` so a single file holds both the YAML-shape pass and the wire-level pass. Real-binary verified against a 1-operation Apigee-style spec with a `lang` enum: 13 emitted-request violations recorded across all self-test probes that sent `?lang=test-value`.
+- **[Contracts]** Server-side conformance violations now carry a short `summary` field next to the full `reason` JSON (#79 round 44 / Srikanth on 0.3.188: "What is the difference between Validation error: and errors... both the errors are overwhelming to view"). The TUI / admin API / report tables can show the summary at a glance instead of unpacking the validator's `details` + `errors` payload. Shape: `"<N> <category> violation(s): <name> (<rule>), ..."` with `<rule>` mapped from common validator messages (`enum`, `type`, `min`, `max`, `pattern`, `required`, `schema`). Up to 5 items listed before truncating with `+N more`. Built once at `record()` time and persisted on the `ServerConformanceViolation` struct alongside `reason`; older clients that read the buffer JSON see an empty `summary` and can fall back to `reason`.
+
+## [0.3.188] - 2026-06-21
+
+### Fixed
+
+- **[Contracts]** `mockforge serve` now emits response headers declared in `responses.<code>.headers` instead of silently dropping them (#79 round 43, surfaced during the round-42 bench-vs-serve sweep). A spec like `responses.200.headers.Set-Cookie: { schema: { type: string } }` would return `200 OK` from `mockforge serve` with the cookie missing — the validator's `validate_response_headers` already understood the shape but the synthesiser was never wired up, so any contract test or k6 chain that relied on the server issuing a `Set-Cookie` would skip the cookie-based path entirely. New `OpenApiRoute::mock_response_headers_for_status` walks the matched response's `headers` map and produces schema-aware placeholder values: cookie-shaped (`mockforge_session=mockforge-synthetic; Path=/`) for `Set-Cookie`, the nil UUID for `format: uuid` strings, RFC-3339 epoch for `format: date-time`, `0` / `true` for integer / boolean, generic placeholder for plain strings, and `mockforge-mock-value` for any unresolved `$ref`. Both router builders (`build_router_with_context` and `build_router_with_mockai`) merge the synthesised list into the response via `inject_spec_response_headers`, preserving axum's existing `content-type` / `vary` / `x-rate-limit-*` headers (never overwrites). Three new unit tests pin the contract: cookie shape, UUID format, and the unmatched-status no-op. Real-binary verified: `GET /login` with the test spec returns `set-cookie: mockforge_session=mockforge-synthetic; Path=/` and `x-request-id: 00000000-0000-0000-0000-000000000000`; `POST /auth/login` (MockAI router path) likewise emits `set-cookie`.
+
+## [0.3.187] - 2026-06-21
+
+### Fixed
+
+- **[Contracts]** `mockforge serve` no longer rejects every `multipart/form-data` upload with `400 body: Request body is required but not provided` (#79 round 42 / Srikanth on 0.3.186, surfaced while re-verifying the round-41 multi-file upload report against `mockforge serve` instead of a hand-rolled mock). The MockAI-enabled OpenAPI router (`build_router_with_mockai`, the active path since v0.3.176) only ran `serde_json::from_slice` on the raw body, so a multipart envelope quietly failed to parse, `body` stayed `None`, and the spec's `requestBody.required: true` made the validator emit "body required" before the request ever reached the multipart extractor. The router now sniffs `Content-Type` for `multipart/form-data` and runs `extract_multipart_from_bytes` to build a synthetic JSON object (one entry per form field) so the validator sees the body exists and schema validation can run against the fields. File parts contribute their tmpfile path. Empty / malformed multipart envelopes still surface as "body present" so the validator does not 400 — schema mismatches surface as their own validation errors downstream. Real-binary verified against `mockforge serve --spec uploads.json --http-port N` with 9 distinct file parts (json / html / css / js / xml / csv / txt / md / pdf): every part hits the server and the request returns `200 OK` instead of the prior `400`. Without this fix the round-41 multi-file bench cannot exercise `mockforge serve` end-to-end — it 400s before any check runs.
+
+## [0.3.186] - 2026-06-21
+
+### Fixed
+
+- **[Contracts]** k6 custom checks now use a fresh per-request cookie jar so `${cookie:NAME}` substitution is the only source of truth (#79 round 41 / Srikanth on 0.3.185: "I see there are two cookies getting sent in all the 16 POST Requests"). v0.3.184 wired the substitution but k6's per-VU jar ALSO auto-collected the GET response's `Set-Cookie` and re-injected it on every subsequent request, so the POST went out with two copies of `albsessid` in its `Cookie:` header. Now a `__custom_jar_factory = () => new http.CookieJar()` lives at init scope and every chain request carries `jar: __custom_jar_factory()` in its params. Real-binary verified: 48 POSTs across 3 chain iterations land with a single `Cookie: albsessid=abc-xyz` each. Also addresses his "have ... without Cookie in GET" ask: with no shared jar, iteration K+1 GET does not carry cookies from iteration K unless the user explicitly forwards them via `${cookie:NAME}`.
+- **[Contracts]** Chain-iterations summary aggregation now sums per-occurrence executions instead of unique check names (#79 round 41 / Srikanth on 0.3.185: "Configured Chain Iteration = 3 but I see requests are getting sent 3 times in conformance-request logs but in the category column I see it shows 2"). With `chain_iterations: 3` and `custom:get` + `custom:post (repeat 16 parallel)`, the per-request log records 51 requests but the summary table previously printed `Custom: 2 / 0 / 2 / 100%` because each unique top-level check name was added with `+1`. Now a new `is_primary_custom_check` helper skips `:header:` / `:body:` sub-checks (so a check with N header assertions does not appear as N+1 requests) and the row sums `(passes, fails)` per primary check. Same YAML now prints `Custom: 51 / 0 / 51 / 100%` — exactly the 3 GET + 48 POST that went on the wire.
+- **[Contracts]** Validator violation category labels now reflect WHERE the failure happened, not the prose of the error message (#79 round 41 / Srikanth on 0.3.185: "GET (ideally should not have request body so GET falling under request body category is little weird [sic]) and POST (ideally should not have query params but I see violation on query params)"). The classifier in `mockforge-openapi::openapi_routes::classify_validation_reason` now reads the structured `"path":"<loc>.<name>"` field from the validator's JSON details FIRST, so a query violation gets `category: query`, a header violation gets `headers`, a cookie one gets `cookies`, and only body violations stay `request-body`. The older heuristic remains as a fallback for callers that do not embed a structured path. Real-binary verified against the Google Apigee spec from #888: `POST /v1/organizations?$.xgafv=test-value` records `category: query` (was `request-body`).
+- **[Contracts]** k6 multi-file upload now logs every part it is about to send + `--export-requests` shows a multipart summary instead of an empty body (#79 round 41 / Srikanth on 0.3.185: "I could only see 5 out of 9 Files in the PCAP. Is there a way from Logs I can confirm all the files in multiple upload are sent from mockforge client" + "When run without Spec the export request file has blank entry"). Each upload check now emits one tagged log line per check at request-build time (`MOCKFORGE_UPLOAD_PARTS: <name> <N> files: <field>:<filename> (<ct>), ...`) so a `grep MOCKFORGE_UPLOAD_PARTS` in k6 stdout confirms every part left the client. `--export-requests` now surfaces a brief `<multipart upload; body bytes not surfaced by k6 res.request.body>` string when k6's `res.request.body` is empty (it is for multipart uploads — k6 serialises the form internally and does not expose the bytes JS-side), so the export no longer shows a blank `request.body` for multi-file checks.
+
+## [0.3.185] - 2026-06-20
+
+### Fixed
+
+- **[Contracts]** OpenAPI request validator now picks up path-level parameters and resolves `$ref` parameters, so query / header / cookie violations are detected on specs that follow the OpenAPI 3.0 §4.7.10.1 inheritance pattern (#888 / #79 round 40 / Srikanth on 0.3.183: "Our Proxy is detecting below Violation ... But mockforge server and client doesnt show this violation"). The Google Apigee spec he attached defines the shared auth / format query params (`$.xgafv`, `prettyPrint`, `key`, `oauth_token`, etc.) once at PATH level via `$ref` to `#/components/parameters/*`, then inherits them on every operation. v0.3.184's `spec::operations_for_path` cloned each `Operation` but ignored `path_item.parameters`, so the inherited params never reached the validator; even when they did, the validator's `p_ref.as_item()` call skipped `ReferenceOr::Reference` entries, so a path-level enum violation walked past validation silently. Two helpers in `mockforge-openapi::spec`: `merge_path_params_into_operation` (operation-wins-on-collision per the spec) and `resolve_parameter_ref` (one-level `$ref` walk with tail-resolve for chained refs). Both run once at registry build time inside `operations_for_path`, so both registry builders (`openapi_routes.rs` and `openapi_routes/registry.rs`) pick up the merged + resolved list. New unit test pins the override semantics against a minimal repro spec. Real-binary verified against Srikanth's exact spec: `POST /v1/organizations?$.xgafv=test-value&prettyPrint=test-value` went from `200 OK` (silently passed) to `400` with both violations recorded on `/__mockforge/api/conformance/violations` (`'$.xgafv' validation failed: "test-value" is not one of "1" or "2"`, `'prettyPrint' validation failed: "test-value" is not of type "boolean"`).
+
+## [0.3.184] - 2026-06-20
+
+### Fixed
+
+- **[Contracts]** `mockforge bench --use-k6` now emits a working multipart upload when a custom check has `upload` / `uploads` (#79 round 39 / Srikanth on 0.3.183: "I tried with single file upload ... I see file data is not getting upload"). v0.3.183 only wired the YAML's file-upload knobs into the native executor, so the same YAML under `--use-k6` produced a k6 script that called `http.post(url, null, {})` and the file content was lost entirely. The k6 generator now hoists `const __file_N = open('...', 'b')` to script-init scope (k6 rejects `open()` inside the VU function) and folds every `http.file()` part into a single `http.post(url, form, { headers })` call. Mid-config warning surfaces (`body` wins over `upload`/`uploads`) are emitted as JS comments next to the request line.
+- **[Contracts]** `mockforge bench --use-k6` now honours `extract` capture and `${var:NAME}` / `${cookie:NAME}` / `${header:NAME}` substitution end-to-end (#79 round 39 / Srikanth on 0.3.183: "I am seeing some unknown data in Cookie" / "I am not seeing 16 Request of POST being sent in parallel rather seeing only 1 Request"). Chain context variables (`let __ctx_cookie_X = ''`, `let __ctx_var_X = ''`) are pre-declared at the top of the group so a later check that reads a captured value never throws `ReferenceError`. After each check's `let res = ...` line the emitter writes `__ctx_cookie_X = res.cookies['X'][0].value` for cookies, a case-insensitive header lookup for `__ctx_var_X`, and a parsed-JSON dotted-path walk for body fields. Substitution itself produces template-literal-safe text in one pass — `${cookie:session}` becomes `${__ctx_cookie_session}` (intentional interpolation), unrelated `${...}` shapes escape to `\${...}` so they end up as literal text in the request without breaking out of the template. `repeat: count: N, mode: parallel` now emits `http.batch([N entries])` (k6's natural concurrency primitive) so 16 parallel writes fire as one batch instead of one request; `mode: sequential` emits a `for` loop. Both branches honour multipart uploads and chain-context substitution. Real-binary verified against a local mock: 16 POSTs land carrying the captured `albsessid` cookie, body is the expected JSON, body length matches.
+- **[Contracts]** Reference checks (the 47 built-in `/conformance/...` probes) are skipped when the user passes `--conformance-custom` without `--spec` and without an explicit `--conformance-category` (#79 round 39 / Srikanth on 0.3.183: "In the exported request I see it is sending request to api/conformance/params/hello and some other URLs"). v0.3.183 ran the customs ALONGSIDE the references against any target, so the request log filled with irrelevant 404s on `/api/conformance/params/hello` etc. The skip applies to both the native executor (`NativeConformanceExecutor::execute`) and the k6 generator (`ConformanceGenerator::generate`) so the behaviour matches across execution modes.
+
+## [0.3.183] - 2026-06-19
+
+### Added
+
+- **[Cloud]** `mockforge serve --admin-host <addr>` lets the admin port bind on a non-loopback interface so a `mockforge-tui` (or admin UI in a browser) on another machine can connect (#79 round 38 / Srikanth on 0.3.182: "admin ports are opening only on 127.0.0.1 so I am able to open the mockforge tui UI on the Server locally but when I access the server from some other machine via mockforge TUI connections are getting refused"). Default stays loopback for safety. Pass `0.0.0.0` to expose on every IPv4 interface or `::` to dual-stack bind on IPv6 + IPv4-mapped-IPv6. Real-binary verified: `--admin-host 0.0.0.0` binds the admin port on `0.0.0.0:N`, and `curl` from the host's eth0 IP returns 200 on `/__mockforge/api/conformance/violations`.
+- **[Contracts]** Bench custom checks now support file uploads as `multipart/form-data` (#79 round 38 / Srikanth on 0.3.182: "Do we have a way to do Single file upload and multi file upload options(All types of content-type or file extensions example .exe, .jpg, .json, .docx, .xml etc) in mockforge bench"). New YAML fields on `CustomCheck`: `upload: { path, content_type, field_name, filename? }` for a single file, `uploads: [{...}, {...}]` for multi-file requests. Bytes are read off disk at construction time so a missing file is surfaced before the run starts (not mid-stream). New `CheckBody::Multipart` variant + `reqwest::multipart::Form` wiring in the executor's send path; `mime_str` failures fall back to `application/octet-stream` so a typo in `content_type` still sends bytes. Brief summary in `--export-requests` output (`<2 file(s): a.jpg (image/jpeg, 1234 bytes), b.json (application/json, 56 bytes)>`) instead of dumping raw multipart envelopes. `body` wins over `upload`/`uploads` when both are set (mistake gets a stderr warning).
+- **[Contracts]** Bench custom checks now support cookie + CSRF capture and reuse across a chain of requests (#79 round 38 / Srikanth on 0.3.182: "Get a cookie and csrf token on first request from the server, use that cookie and csrf token in 16 subsequent requests that should be sent in parallel" Sequence 1 + sequential Sequence 2, iterable any number of times). New YAML fields on `CustomCheck`: `extract: { cookies: [...], headers: { var: header }, body_fields: { var: dotted.path } }` captures values from the response; `repeat: { count: N, mode: parallel | sequential }` fires the check N times (parallel uses `tokio::join_all`; sequential runs one-after-another). Top-level `chain_iterations: N` on `CustomConformanceConfig` repeats the whole `custom_checks` list N times, with a fresh chain context per iteration (no leakage between iterations). Substitution tokens in path / headers / bodies: `${var:NAME}`, `${cookie:NAME}`, `${header:NAME}`. Unknown tokens preserved verbatim so a missing capture is visible in the request log rather than silently sending an empty string. JSON body walks only touch string leaves so numbers / arrays / booleans are unchanged. Multipart bodies pass through unchanged. 4 new unit tests cover substitution and extraction (token shapes, missing-capture graceful skip, full `ConformanceCheck` round-trip). Real-binary verified end-to-end: 2-iteration chain (login + 4 parallel + 3 sequential do-work) produces login: 2, do-work-parallel: 8, do-work-sequential: 6, total: 110; `${var:user_id}` was substituted to `42` from the login JSON response, `${var:csrf}` left verbatim because the mock server doesn't synthesize `X-CSRF-Token` (correct: missing capture stays visible).
+
+### Documentation
+
+- **[Contracts]** New `book/src/reference/bench-custom-checks.md` page with the YAML reference for the round-38 features (file uploads, cookie/CSRF chain, repeat semantics, chain iterations) plus copy-paste recipes for Srikanth's exact Sequence 1 (parallel 16 writes after login) and Sequence 2 (sequential writes after login) scenarios.
+- **[Cloud]** New "Accessing the admin port from another machine" subsection in `book/src/getting-started/quick-start.md` documenting `--admin-host 0.0.0.0` + the security note about pairing it with `auth_required: true` outside trusted networks.
+
+## [0.3.182] - 2026-06-18
+
+### Added
+
+- **[DevX]** TUI conformance-violation exports now carry the bench client's `mockforge_version` + `client_sent_at` so a user grepping the export can line a row up with the bench JSONL row that produced it (#79 round 37 / #876 follow-up / Srikanth on 0.3.181: "client time is 24 hour format and mockforge tui exported logs has time 12 hour format"). v0.3.181 added the two fields to the server-side `ServerConformanceViolation`, but the TUI's `DedupedViolation` dropped them on export, so the only timestamps in the file were the *server's* `first_seen` / `last_seen` (when the server *recorded* the violation), not the *client's* `client_sent_at` (when the bench *sent* the probe). Three changes: (1) `ConformanceViolation` (TUI's mirror struct) deserializes the two new server fields; (2) `DedupedViolation` gains `client_mockforge_version` + `min_client_sent_at` / `max_client_sent_at` Option fields (skip_serializing_if for back-compat with older servers); (3) dedup logic extracted to a pure `dedup_violations` helper so the aggregation can be unit-tested. The min/max bracket the client-side send window across all hits in the dedup group; the version is the latest observed (handles upgrade-mid-run). Three new unit tests cover happy-path aggregation, back-compat with unstamped servers, and mixed-version groups.
+- **[DevX]** `mockforge-tui --admin-url URL1 --admin-url URL2` now adds all URLs to a server rotation (#79 round 37 / Srikanth on 0.3.181: "Can I connect Mockforge tui to multiple Server IPs and see Logs at the same time by switching Tabs based on Server IPs"). Inside the TUI, `Ctrl-]` cycles to the next server, `Ctrl-[` to the previous, and the header shows `[2/3] http://h2:9080` so the user always knows which server's data they are looking at. Single-server runs (the default) are unchanged: the rotation key is a no-op and the header indicator falls back to the original single-URL layout. `TuiConfig` gains `extra_servers: Vec<String>` (`#[serde(default)]`) + `all_admin_urls()` for dedup + primary-first ordering; `App::rotate_server(step)` swaps the active `MockForgeClient` and backdates `last_health_check` so the connectivity indicator updates on the next tick. `keybindings::Action::{NextServer, PrevServer}` map to `Ctrl-]` / `Ctrl-[`; help overlay documents both. Four new tests cover the rotation: wrap forward + backward, single-server no-op, and the dedup/primary-first ordering.
+
+### Documentation
+
+- **[DevX]** New "Recipes" section in `book/src/user-guide/chaos-engineering.md` with copy-paste recipes for mixed 4xx/5xx via `--chaos-http-errors`, slow backend via `--chaos-latency-ms` / `--chaos-latency-range`, real timeouts (504 after a sleep) via the `timeout_errors` YAML knob, per-endpoint chaos via `routes-with-chaos.yaml` (multiple `fault_types` entries pick uniformly so a list of three statuses gives ~equal weight), and a retry/backoff exercise that combines them (#79 round 37 / Srikanth Q-c: "Can you share some examples where for some of the APIs or API Endpoint(Method + Path) in specs we have to send different 5xx responses from Server using mockforge serve --chaos and Also slow responses from Server so that Client Timeouts for few APIs or API Endpoints"). Plus a note about confirming what actually fired via `GET /api/chaos/status`.
+- **[DevX]** Windows install path documented in `book/src/getting-started/installation.md` (#79 round 37 / Srikanth Q-d carry-over: "Do we have mockforge-tui installer for Windows?"). First-class signed Windows binaries are not published today; the working install path is `cargo install mockforge-cli --locked` with Rustup, or Docker Desktop / WSL2 for users who prefer no compile step. First-class signed Windows binaries (no compile step, no SmartScreen warning, winget) tracked at #884.
 
 ## [0.3.181] - 2026-06-17
 
 ### Fixed
 
-- **[DevX]** Capture-viewer HTML status badge colour now follows the probe's `expected_status_range`; a variant-b 400 reads green to match the `exp 2xx-4xx` badge (#79 round 36 / #875 / Srikanth).
+- **[DevX]** Capture-viewer HTML (`conformance-self-test-requests.html`) status badge colour now agrees with the `exp 2xx-4xx` badge it sits next to (#79 round 36 / #875 / Srikanth on 0.3.180). Round 35 made variant-b embedded-content probes pass on 4xx in the JSONL + JSON report, but the per-card badge in the capture viewer still rendered a 400 in red because `statusClass(c)` colored by the raw 200..400 range, ignoring `expected_status_range`. Now `statusClass` consults `isMismatch(c)` whenever the capture knows its expected range (older captures without the field fall back to the round-23 raw-range behaviour for backwards compat). The top-of-page summary line and the "matched expected" / "mismatch" filter checkboxes use the same logic via a new `probe_passed` Rust helper. Two new unit tests cover the `2xx-4xx` / `4xx` / `2xx-3xx` / legacy / error branches of `probe_passed`, and snapshot the summary line for a mixed variant-b + positive capture. Real-binary verified against Srikanth's exact `POST /api/appliance/local-accounts` scenario.
+
+### Added
+
+- **[Contracts]** Conformance probes now stamp the client mockforge version and send-time on both sides for cross-correlation (#79 round 36 follow-up / #876 / Srikanth's r36 ask: "good to also have what mockforge tui version the request came from and at what time the request was sent ... on both client and server logs"). `mockforge bench --conformance-self-test` sets two outbound headers on every probe: `X-Mockforge-Client-Version` (from `CARGO_PKG_VERSION`) and `X-Mockforge-Client-Sent-At` (RFC3339). The same values are written into the JSONL line as `mockforge_version` + `client_sent_at` (both `#[serde(default)]` so older captures still load) and rendered as a dedicated `Client:` row in the capture HTML viewer. On the server side, `ServerConformanceViolation` gains `client_mockforge_version: Option<String>` + `client_sent_at: Option<DateTime<Utc>>`, populated by a shared `read_client_stamps` helper at every header-bearing record site (content-type mismatch + body validation on both router builders). The admin endpoint `/__mockforge/api/conformance/violations` surfaces both fields. Header constants live in `mockforge-foundation` so bench and openapi cannot drift. Real-binary verified end-to-end: a probe sent at `T` shows the same `mockforge_version` and `client_sent_at` in the bench JSONL row, in the request headers, in the admin endpoint response, and in the capture HTML.
+
+### Documentation
+
+- **[DevX]** New `book/src/reference/conformance-self-test-probes.md` sections covering the content-type-mismatch probe family (rounds 27 / 28 / 32, `request-body:content-type-mismatch:{xml,yaml,multipart,urlencoded}`, expected `415`) and the variant-b embedded-content family (round 27 / 35, `request-body:embedded-content:*`, expected `2xx-4xx`, only `5xx` is a finding). Rewrote the "How 'passed' is decided" section to describe the tristate `ExpectedOutcome` enum (`Success` / `ClientError` / `NotServerError`) introduced in round 35, with the per-probe assignment table. New "What `--inject-response-violations` changes" section clarifies that the flag modifies response bodies only (drops the first declared required field on synthesized 2xx responses) and does NOT change response status; points users at `mockforge serve --chaos` and `mockforge route-chaos` for status-class chaos. Notes that the bench never deliberately elicits a `5xx`, so a `5xx` is always a server-side finding (#79 round 36 follow-up / #877 / Srikanth's r36 ask for a published probe taxonomy).
 
 ## [0.3.180] - 2026-06-16
 
 ### Fixed
 
-- **[Contracts]** Embedded-content variant-b probes no longer flag 4xx responses as mismatches; only 5xx counts as failure (#79 round 35 / #859 / Srikanth).
+- **[Contracts]** Embedded-content variant-b probes (`request-body:embedded-content:xml/yaml/multipart/urlencoded`) no longer flag 4xx responses as mismatches (#79 round 35 / #859 / Srikanth on 0.3.179: 4 noise rows on `POST /api/appliance/local-accounts` and ~268 similar rows across the vCenter spec). The round-27 design only ever wanted to catch 5xx server crashes; a 4xx from the server's pattern / format validator on the field we inject into is correct behavior. Replaced the older `expected_4xx: bool` flag on `send_case` / `send_case_with_extra` with a tristate `ExpectedOutcome` enum (`Success` / `ClientError` / `NotServerError`); variant-b probes opt into `NotServerError` so the pass calculation is `actual_status >= 200 && actual_status < 500`. `expected_status_range` on `CaseCapture` carries the new `"2xx-4xx"` value, which the HTML viewer + `jq` filters pick up automatically. `CaseOutcome.expected_4xx` keeps its old semantics (negative-probe flag), so `report_html.rs` is unchanged. Reproduced locally against the exact `POST /appliance/local-accounts` route Srikanth flagged: 4 embedded-content rows go from 4 misses to 4 passes on v0.3.180. Two new unit tests cover the pass-rule and the string-label table.
 
 ## [0.3.179] - 2026-06-15
 
 ### Fixed
 
-- **[DevX]** `response_schema_error` strips description/example fields from the focused schema before truncation so `type` survives (#79 round 34 / #827 / Srikanth).
-- **[Contracts]** Per-endpoint summary `path` column matches the URL user sent: `base_path` prefixed (#79 round 34 / #828 / Srikanth).
-- **[Contracts]** Embedded-content variant-b probes skip when positive sample has no string field, instead of synthesizing a non-conforming envelope (#79 round 34 / #829 / Srikanth).
+- **[DevX]** `response_schema_error` strips `description` / `example` / `examples` / `summary` / `title` / `externalDocs` / `xml` from the focused schema before serializing, so the actually-useful constraint keywords (`type`, `required`, `properties`, `format`, `min*`/`max*`, `pattern`, `oneOf`/`anyOf`/`allOf`/`not`) survive the 300-char truncation cap (#79 round 34 / #827 / Srikanth on 0.3.178: vCenter's `enabled: boolean` property had a multi-paragraph description that ate the budget before `"type":"boolean"` could appear). Two new unit tests assert (1) the vCenter-shaped case keeps `"type":"boolean"` in the printed schema and (2) `strip_schema_noise` keeps every constraint keyword while dropping every prose key.
+- **[Contracts]** Per-endpoint summary `path` column now matches the URL the user actually sent (#79 round 34 / #828 / Srikanth on 0.3.178: searched for `/api/appliance/access/consolecli` in `conformance-per-endpoint.json` and didn't find it because round 33 stored just the spec template `/appliance/access/consolecli`). The bench now constructs `path_template` as `base_path + op.path` and stamps that on every `CaseCapture`, matching the same prefix logic `build_url_with_base` already uses. New unit test asserts the prefixed value flows through to `PerEndpointSummary.path`.
+- **[Contracts]** Embedded-content variant-b probes are skipped when the positive sample body has no string field (#79 round 34 / #829 / Srikanth on 0.3.178: PUT `/api/appliance/access/consolecli` expects `{enabled: boolean}` but the round-27 fallback envelope `{"data": <snippet>}` was structurally different, so the server correctly 400'd and the bench misreported the `2xx-3xx` expectation as a miss). `embed_payload_in_first_string_field` now returns `Option<String>`; the variant-b loop `continue`s when the helper returns `None`. Three test cases cover Srikanth's exact `{"enabled":true}` shape, the no-string scalar-only case, and invalid-JSON samples.
 
 ## [0.3.178] - 2026-06-14
 
 ### Added
 
-- **[Contracts]** Per-endpoint summary groups by spec path template, with a `spec` label for multi-spec runs (#79 round 33 / #823 / Srikanth).
-- **[Contracts]** `MOCKFORGE_INJECT_RESPONSE_VIOLATIONS=true` (+ `--inject-response-violations`) intentionally drops one required field from 2xx response bodies for negative-testing downstream proxies (#79 round 33 / #822 / Srikanth).
+- **[Contracts]** Per-endpoint summary now groups by the spec's path TEMPLATE rather than the resolved URL, and rows carry a `spec` label for multi-spec runs (#79 round 33 / #823 / Srikanth's r32 follow-up). On a v1 run that exercised `/users/X` and `/users/Y` as 1000 distinct VU iterations, the report exploded to 1000 rows; on v2 those collapse into a single `(GET, /users/{id})` row. `CaseCapture` gains `path_template: String` and `spec_label: Option<String>` (both default-via-serde so older JSONL captures still load). HTML section only renders the Spec column when at least one row has a label, so single-spec runs stay tidy. New tests cover template collapsing, multi-spec separation, the HTML column toggle, and legacy-fallback to resolved path.
+- **[Contracts]** `MOCKFORGE_INJECT_RESPONSE_VIOLATIONS=true` env var + `mockforge serve --inject-response-violations` CLI flag (#79 round 33 / #822 / Srikanth's r32 follow-up: "can we add those as a negative response tests from mockforge server side"). When enabled, the OpenAPI response generator drops the first declared required field from every synthesized 2xx response body, so the caller can exercise their proxy / conformance pipeline against a known-bad-shape mockforge end-to-end. Off by default. No-op for non-2xx, non-Object schemas, schemas without `required`, and bodies that already don't carry the field.
 
 ## [0.3.177] - 2026-06-14
 
 ### Fixed
 
-- **[Contracts]** Server-side conformance buffer now records `content-types` (415) violations from the MockAI router path too (#79 round 32 / Srikanth).
-- **[Install]** `cargo install mockforge-cli` no longer requires `protobuf-compiler` on Ubuntu 16.04 / RHEL 7; `mockforge-grpc` build uses a vendored `protoc` when `PROTOC` is unset (#79 round 32 / Srikanth).
+- **[Contracts]** Server-side conformance buffer now records `content-types` violations from the MockAI-enabled router path too (#79 round 32 / Srikanth on 0.3.176: "in the client I see response status as 415 for label `request-body:content-type-mismatch:xml` request but in the server I see only 400"). Root cause: the MockAI request handler took `body: Option<Json<Value>>`, and axum's `Json` extractor 415s a request whose `Content-Type` isn't `application/json` BEFORE the handler runs, so the buffer never got a chance to record the violation. The handler now takes raw `axum::body::Bytes`, runs the same `check_request_content_type` precheck the non-MockAI router already had (records the violation with category `content-types` and the configured validation status, default 415), and parses the body as JSON manually for the validator / fingerprint / MockAI paths. The existing `check_request_content_type_flags_mismatch` test covers the logic; the wiring is in `build_router_with_mockai`.
+- **[Install]** `cargo install mockforge-cli` no longer requires `protobuf-compiler` on the build host (#79 round 32 / Srikanth's VM1 Ubuntu 16.04 install error "Could not find `protoc`"). `mockforge-grpc/build.rs` now picks the `protoc` binary from the `protoc-bin-vendored` crate when the user hasn't pointed `PROTOC` at their own copy; user-set `PROTOC` still wins (empty string treated as unset). Build verified against the vCenter spec build with `PROTOC` cleared from the environment.
 
 ### Added
 
-- **[Contracts]** Per-endpoint traffic summary (sent count, status-class breakdown, request/response/query length p95) in `bench-results/conformance-per-endpoint.json` and a new section in `conformance-report.html` (#79 round 32 / Srikanth).
+- **[Contracts]** Per-endpoint traffic summary derived from the conformance self-test capture (#79 round 32 / Srikanth's Q6 ask). Two surfaces:
+  - JSON sidecar at `bench-results/conformance-per-endpoint.json` for automation pipelines. One entry per `(method, resolved URL path)` with `sent`, `status_2xx` / `status_3xx` / `status_4xx` / `status_5xx` / `errors`, plus `request_body_len` / `response_body_len` / `query_len` with samples / avg / p50 / p95 / max.
+  - HTML section "Per-endpoint traffic summary" spliced into `bench-results/conformance-report.html`.
+  - Grouping is by RESOLVED path for v1, not the spec template (so `/foo/X` and `/foo/Y` are distinct rows). A future round will collapse to the spec template once we surface `op.path` on each `CaseCapture`. 4 new unit tests cover the bucketing, query-string strip, p95 calculation, and empty-input HTML.
 
 ## [0.3.176] - 2026-06-10
 
 ### Fixed
 
-- **[Contracts]** Write requests (POST / PUT / PATCH / DELETE) now return spec-shape response bodies instead of MockAI's hardcoded `{id, status, data}` envelope (#79 round 31 follow-up / Srikanth).
+- **[Contracts]** `mockforge serve` POST / PUT / PATCH / DELETE responses now match the spec's response schema instead of MockAI's hardcoded `{id, status, data}` envelope (#79 round 31 follow-up / Srikanth's vCenter `Archive.Info` `comment` finding). Root cause: MockAI is wired on by default through the reality engine's `ModerateRealism` level (`reality.enabled = true` → `mockai.enabled = true`), and its `generate_response_body` for the Create / Update / PartialUpdate / Delete mutation kinds returned a hardcoded envelope that ignored the OpenAPI 2xx response schema. Result: every write operation came back as `{"id":"generated_id","status":"created","data":<echoed body>}`, missing whichever required fields the spec actually defined (e.g. the six fields on vCenter's `Appliance.Recovery.Backup.SystemName.Archive.Info`). The function now returns `{}` for every mutation kind, which the calling site already handles as "fall through to the OpenAPI ResponseGenerator", so the response body becomes spec-shape automatically and required fields are populated. New regression test enumerates every `MutationType` and asserts each returns `{}`. Real-binary verified against the exact vCenter route from Srikanth's r31 report: the response now contains `comment`, `location`, `parts`, `system_name`, `timestamp`, `version`.
 
 ## [0.3.175] - 2026-06-10
 
 ### Fixed
 
-- **[DevX]** For `required field missing` errors, the printed schema is now the missing property's own sub-schema, not the entire parent object (#79 round 31 / Srikanth).
-- **[Install]** `cargo install mockforge-cli` no longer requires OpenSSL 1.1+; the workspace is fully rustls-only (#79 round 31).
+- **[DevX]** `response_schema_error` now shows the missing property's own sub-schema for `required field missing` errors instead of the entire parent object schema (#79 round 31 / Srikanth on 0.3.174 against the vCenter `Appliance.Recovery.Backup.SystemName.Archive.Info` spec). The prior output dumped the parent's multi-paragraph description and every sibling property schema then truncated at 300 chars, which buried which field was missing and why. The walker now strips the surrounding quotes from `property` (jsonschema's Display impl wraps the name in `"..."`), descends one more step into `properties[<missing>]`, and prints just that. New test covers the vCenter scenario and asserts the parent description + sibling names don't leak into the suffix.
+- **[Install]** `cargo install mockforge-cli` no longer requires a system OpenSSL 1.1+ at runtime, so it works on Ubuntu 16.04 / RHEL 7 / boxes that only ship OpenSSL 1.0.2 (#79 round 31 / Srikanth's "few clients which runs ubuntu 16.04 and openssl version 1.0.2"). Two fixes: (1) the TLS stack is now rustls-only (workspace `reqwest`, `lettre`, and the `sqlx` uses in `mockforge-tunnel` + `mockforge-vbr` all dropped `*-native-tls` features); `cargo tree -i native-tls` against `mockforge-cli` comes back empty. (2) `git2` (via `mockforge-plugin-loader` and `mockforge-scenarios`) was still pulling `openssl-sys` for its HTTPS clone path, so we enabled `vendored-openssl` on it; that statically links a known-good OpenSSL into `libgit2-sys`/`libssh2-sys` so the binary no longer needs `libssl.so` at runtime. Also converted four crates that hand-wrote `reqwest = { version = "0.12", features = ["json"] }` to inherit the workspace dep so the default-tls drift can't reappear.
 
 ### Added
 
-- **[Server]** `mockforge serve --conformance-buffer-size N` and `--conformance-buffer-unique` CLI flags mirror the round-29/round-30 env vars (#79 round 31 / Srikanth).
+- **[Server]** `mockforge serve --conformance-buffer-size N` and `--conformance-buffer-unique` CLI flags (#79 round 31 / Srikanth: "is it possible give in the mockforge server command as opposed to environmental variable which I sometime forget"). Both mirror the round-29/round-30 env vars; flag values win when both are set. Surfaced in `mockforge serve --help` under "Server Configuration".
 
 ## [0.3.174] - 2026-06-09
 
 ### Fixed
 
-- **[DevX]** `response_schema_error` now prints only the sub-schema at the offending JSON Pointer instead of the full top-level schema (#79 round 30 / Srikanth).
+- **[DevX]** `response_schema_error` now prints only the sub-schema at the offending JSON Pointer instead of the full top-level schema (#79 round 30 / Srikanth on 0.3.173 asking what the message reads as for nested fields). A `{"name": 123}` mismatch against `{"type":"object","properties":{"name":{"type":"string"}}}` now reads `response body at /name: expected type string; expected schema {"type":"string"}`, not `... expected schema {"properties":{"name":{"type":"string"}},"type":"object"}`. Walker descends through `properties` (and `items` for arrays) following the instance pointer; falls back to the full schema when the path can't be resolved (additionalProperties, oneOf/allOf, unresolved $refs).
 
 ### Added
 
-- **[Contracts]** `MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE=true` switches the violation buffer from FIFO to dedup-by-signature; every duplicate bumps a new `occurrences` field on the entry instead of consuming a new buffer slot (#79 round 30 / Srikanth).
+- **[Contracts]** `MOCKFORGE_CONFORMANCE_BUFFER_UNIQUE=true` switches the server-side conformance violation buffer from FIFO to dedup-by-signature (#79 round 30 / Srikanth on 0.3.173: "Can we have this buffer for unique violation as opposed to duplicate violation"). Every duplicate of an already-buffered `(method, path, status, category, reason)` hits its existing entry and bumps the new `occurrences` field on `ServerConformanceViolation` instead of consuming a new slot — so 10M requests with 150 distinct violation kinds keep all 150 visible in a 256-slot buffer, instead of being clobbered by the most common offender. New `occurrences: u32` field on the violation struct (defaults to `1` on older payloads via serde default). TUI's export-time dedup grouping now sums `occurrences` per group so the headline counts reflect the true server-side hit count under unique mode. Three new tests cover dedup, multi-signature distinction, and FIFO-order eviction inside the unique buffer.
 
 ## [0.3.173] - 2026-06-08
 
 ### Fixed
 
-- **[DevX]** `response_schema_error` message reads `response body root: ...` / `response body at /<path>: ...` instead of the ambiguous `at /: ...` (#79 round 29 / Srikanth).
+- **[DevX]** `response_schema_error` message now explicitly names the response body as the location (#79 round 29 / Srikanth on 0.3.172). The prior `at /: expected type string; expected schema {...}` read as a URL path to readers unfamiliar with JSON Pointer syntax; Srikanth couldn't tell whether `/` referred to the URL root or the response body root. New format: `response body root: ...` for top-level and `response body at /name: ...` for nested fields. Two new tests cover the root and nested cases.
 
 ### Added
 
-- **[Contracts]** `MOCKFORGE_CONFORMANCE_BUFFER_SIZE` env var raises the server-side violation ring buffer above the default 256, capped at 64k (#79 round 29 / Srikanth).
-- **[Contracts]** Bench capacity advisory at run start when `targets × VUs ≥ 150`; estimates RAM / CPU and links to the new sizing doc.
-- **[DevX]** New book page `reference/bench-capacity-sizing.md` with sizing table, formulas, and sharding guide.
+- **[Contracts]** `MOCKFORGE_CONFORMANCE_BUFFER_SIZE` env var raises the server-side conformance violation ring buffer cap above the default 256 (#79 round 29 / Srikanth: TUI shows 10,145 violations seen but export only had 114 unique entries). Capped at 64k entries to keep peak memory bounded. Empty / zero / unparsable values fall back to the default. Includes an ignored-by-default unit test (`effective_buffer_size_respects_env_var`) that exercises the parser — run with `cargo test -p mockforge-foundation -- --ignored --test-threads=1` because it touches process-wide env.
+- **[Contracts]** Capacity advisory printed at bench start when `targets × VUs ≥ 150` (#79 round 29 / Srikanth's "5 VUs against 50 targets hung my 15 GB VM"). Prints `targets`, `VUs`, estimated `RPS-total`, estimated CPU cores and RAM GB, and points to the new sizing doc. Heuristic, errs on the warning side; doesn't block the run.
+- **[DevX]** New book page `reference/bench-capacity-sizing.md` with a sizing table (1 → 100 targets, 10 → 500 RPS each), the per-VU / per-target RAM and CPU formulas, symptoms of under-provisioning, and a `jq`-based sharding recipe for >50 targets. Surfaced in `SUMMARY.md` next to the probe-label reference.
 
 ## [0.3.172] - 2026-06-07
 
 ### Fixed
 
-- **[Contracts]** Content-type-swap probes now send only ONE Content-Type (the reqwest header-append bug let axum's JSON extractor accept). Smoke test: same 4 probes that returned 204 on 0.3.171 now return 415 (#79 round 28).
-- **[Contracts]** Server-side `check_request_content_type` flags Content-Type mismatches against `requestBody.content` keys; records a `content-types` category violation. (#79 round 28)
-- **[DevX]** `response_schema_error` embeds the expected schema JSON: `at /: expected type string; expected schema {"type":"string"}`. (#79 round 28)
+- **[Contracts]** Content-type-swap probes now actually send only the wrong Content-Type (#79 round 28). My round-25 fix relied on reqwest's `.header(k, v)` being last-write-wins, but it actually APPENDS — so each content-type-swap probe was sending BOTH `Content-Type: application/json` (from the body block) AND `Content-Type: application/xml` (from `extra_headers`). Axum's `Json<>` extractor picked the JSON one and accepted, server returned 204, the spec violation Srikanth was investigating never showed up in the conformance buffer. Now `send_case_with_extra` builds a `HeaderMap` ourselves, where `.insert()` replaces, so the override actually replaces. Smoke-confirmed: the same 4 content-type-mismatch probes that returned 204 on 0.3.171 now return 415 on this build.
+- **[Contracts]** Server-side `OpenApiRouteRegistry::check_request_content_type` flags Content-Type mismatches against the spec's declared `requestBody.content` keys (#79 round 28 / Srikanth's main r27 ask). Called from the live-server route handler before the body schema validator; on mismatch records a `content-types` category violation in the conformance buffer with the configured validation status (defaults to 415). Stripping the `; charset=...` suffix so the comparison is type/subtype only; case-insensitive matching.
+- **[DevX]** `response_schema_error` now embeds the expected schema in the message (#79 round 28 / Srikanth: "what does at /: mean? would be good to put as `expected schema {...}`"). Format: `at <path>: <kind>; expected schema <compact JSON>`. Schemas are truncated to 300 chars to keep JSONL lines bounded.
 
 ### Added
 
-- **[Contracts]** `expected_status_range` field on every `CaseCapture`; `exp 4xx`/`exp 2xx-3xx` badge on every card. (#79 round 28)
-- **[DevX]** "Only show mismatches" checkbox + per-cat clickable counts in the per-op `By category` column. (#79 round 28)
+- **[Contracts]** `expected_status_range` field on every `CaseCapture` (#79 round 28 / Srikanth: "Is it possible to put expected response code status in both jsonl and jsonl report"). Values: `"2xx-3xx"` for positive probes, `"4xx"` for negatives. Persisted in the JSONL so `jq` can filter mismatches, and rendered as a small `exp 4xx`/`exp 2xx-3xx` badge on every card in the HTML viewer.
+- **[DevX]** HTML capture viewer: new "only show mismatches" checkbox in the toolbar (#79 round 28 / Srikanth: "Also a filter or checkbox to get the request whose response code is not matching"). Filters across the whole capture (cross-page), composes with the status checkboxes and search box, recomputes pagination immediately.
+- **[DevX]** HTML report: per-category counts in the per-operation `By category` column are now clickable links (#79 round 28 / Srikanth: "Is it possible to give link to the count for By category column also"). Each `cat:N` jumps to `#miss-cat-<cat>` in the drill-down table. Cap-aware: only emits links when the category has a surviving row in the truncated drill-down.
 
 ## [0.3.171] - 2026-06-06
 
 ### Fixed
 
-- **[DevX]** Capture HTML viewer paginates with cross-page filters; the round-25 + round-26 1000-card cap that hid 4xx/5xx probes is gone (#79 round 27 / Srikanth d3).
+- **[DevX]** Capture HTML viewer now paginates with cross-page filters (#79 round 27 / Srikanth d3). The round-25 + round-26 1000-card cap silently hid 4xx/5xx probes past the cap; he had to fall back to `jq` to find errors. The viewer now embeds the full capture as a JSON array in a `<script id="captureData">` element, filters in JS over the whole array, and renders only the current page (50 cards) of the filtered subset. First/Prev/Next/Last buttons plus a "Jump to page" input. "(N of M shown)" banner appears when filters narrow the set. The 1000-card cap is gone; the JSONL still has the full set for grep / jq workflows.
 
 ### Added
 
-- **[Contracts]** Content-type swap variant (b): four `request-body:embedded-content:*` probes per JSON operation send a valid JSON envelope with an XML/YAML/multipart/urlencoded snippet stuffed into a string field. Flags servers that crash on the embedded content (#79 round 27 / Srikanth k variant b).
+- **[Contracts]** Content-type swap variant (b) probes (#79 round 27 / Srikanth k variant b). Companion to the round-25 variant-a probes. Where variant (a) lies about Content-Type (sends XML/YAML/multipart/urlencoded body as `Content-Type: application/json`), variant (b) keeps Content-Type honest as `application/json` and the body parses as valid JSON, but a string field's value carries an XML / YAML / multipart / urlencoded snippet. Labels: `request-body:embedded-content:xml/yaml/multipart/urlencoded`. Expected status is 2xx-3xx because the envelope IS spec-shape; a 5xx flags a server that crashed trying to parse the embedded snippet (a real bug), while a 4xx flags a narrower-than-expected string field validator (often correct server behaviour). Helper `embed_payload_in_first_string_field` walks the sample body depth-first, replaces the first string leaf with the snippet, and falls back to `{"data": "<snippet>"}` when no string field exists.
 
 ## [0.3.170] - 2026-06-06
 
 ### Fixed
 
-- **[Contracts]** TUI Conformance tab: detail modal now snapshots the violation's text at Enter time (#79 round 26 / Srikanth re-test of 0.3.169). The round-25 identity-key re-anchor only worked when the clicked violation survived the 256-cap buffer; under heavy traffic it got evicted and `selected` stayed at a stale index. Snapshot + Esc-clear fixes it; regression tests cover both the index-shift and the on_data refresh path.
-- **[DevX]** `response_schema_error` is now human-readable ("`at /: expected type string`") instead of broken Rust debug syntax (#79 round 26 / Srikanth). Falls back to `jsonschema`'s `Display` impl for the long-tail kinds.
-- **[DevX]** HTML report `Negatives by category` is now a single grouped table with a Family column prepended (#79 round 26 / Srikanth d2). The standalone family rollup section is gone; one table carries both axes.
+- **[Contracts]** TUI Conformance tab: detail modal now snapshots the violation's text at Enter time and renders from the snapshot, not from a live `selected_violation()` lookup (#79 round 26 / Srikanth on 0.3.169 "still see same behavior"). My round-25 identity-key re-anchor only worked when the user's clicked violation was still in the new buffer; under heavy traffic the 256-cap evicted it, leaving `TableState.selected` at the same numeric index pointing at a different request. The snapshot captures the detail string when Enter fires (`detail_snapshot: Option<String>`) so the modal text is frozen at that moment; Esc drops the snapshot for the next Enter. Two regression tests cover the index-shift scenario AND the on_data refresh path.
+- **[DevX]** `response_schema_error` no longer renders Rust debug syntax. The round-25 formatter did `format!("{:?}", first.kind).split('(').next()` on `Type { kind: Single(JsonType::String) }`, which produced "`at /: Type { kind: Single`" (mismatched brace, cryptic). Now it switches on the `ValidationErrorKind` variant and emits human-readable messages: "`at /: expected type string`", "`at /name: required field missing: id`", etc. Falls back to `jsonschema`'s `Display` impl for the long-tail kinds. Three new unit tests cover the common scenarios.
+- **[DevX]** HTML report removes the duplicate `Negatives by category` section (#79 round 26 / Srikanth d2). The standalone family rollup is gone; a single `Negatives by category` table now carries a Family column prepended, with per-row PASS/FAIL badges and clickable mismatch counts (`#miss-cat-<cat>` anchors). One table, both family + category resolution, no redundancy.
 
 ## [0.3.169] - 2026-06-05
 
 ### Fixed
 
-- **[Contracts]** TUI Conformance tab: selecting a row no longer jumps to a different request when new traffic arrives on the next refresh tick (#79 round 25 / Srikanth follow-up).
-- **[DevX]** Capture HTML viewer no longer hangs the browser at 9000+ probes: `content-visibility: auto` per card, 200 ms debounced filter, hard cap at 1000 rendered cards with `Showing N of M` banner (#79 round 25 / Srikanth d follow-up).
+- **[Contracts]** TUI Conformance tab: selecting a row no longer jumps to a different request when new traffic arrives on the next refresh tick (#79 round 25 / Srikanth follow-up on r24). The 5-second tick was replacing `self.violations`, but `TableState.selected` was a numeric index, so the cursor stayed at the same row position while the row's underlying violation changed. The refresh now re-anchors selection by a `(timestamp, method, path, status)` identity key (and `(timestamp, method, path)` for the Unknown view), so the cursor stays on the SAME violation the user clicked. Falls back to position-based behaviour when the prior selection has been evicted by the buffer cap.
+- **[DevX]** Capture HTML viewer no longer hangs the browser at 9000+ probes (#79 round 25 / Srikanth d follow-up). Three changes: (1) `content-visibility: auto` on every card (browser only paints what's in the viewport), (2) 200 ms debounce on the search-box input so typing doesn't trigger a full DOM walk per keystroke, (3) hard cap at 1000 rendered cards with a `Showing N of M` banner pointing users to the JSONL for the full set. The 9700-probe capture from Srikanth's vCenter run was the trigger.
 
 ### Added
 
-- **[Contracts]** Content-type swap probe family `request-body:content-type-mismatch:<variant>` (#79 round 25 / Srikanth k). Four probes per JSON operation: xml / yaml / multipart / urlencoded.
-- **[Contracts]** `--validate-response-schemas` flag (#79 round 25 / closes round 21.3 / Srikanth a2 + a3). Validates every probe's response body against the spec's response schema for the actual status returned. Mismatches surface as `response_schema_error` in the JSONL and a red "Response schema mismatch" section in the per-probe HTML viewer card. Opt-in.
-- **[DevX]** HTML report: `Negatives by category family` rollup (Request body / Parameters / Security family) and a per-operation `By category` column showing mismatch breakdown (#79 round 25 / Srikanth d remainder).
+- **[Contracts]** Content-type swap probe family `request-body:content-type-mismatch:<variant>` (#79 round 25 / Srikanth k variant a). For operations declaring a JSON request body, the self-test driver now sends four probes per operation that lie about Content-Type while keeping the JSON payload: `application/xml`, `application/yaml`, `multipart/form-data`, and `application/x-www-form-urlencoded` (the URL-encoded variant Srikanth added in his round-23 g follow-up). A spec-compliant server should return 415 (or 400). A 2xx means the server is silently accepting payloads outside its declared content negotiation. Skips operations without a JSON body. Required reordering the `Content-Type` header pass in `send_case_with_extra` (body's default now runs FIRST so extra_headers' override wins last) so the probe can actually transmit the wrong content type. Regression test `content_type_swap_probes_fire_for_json_bodies` covers the variant set and the body-less-op skip.
+- **[Contracts]** `--validate-response-schemas` flag on `mockforge bench --conformance-self-test` (#79 round 25 / Srikanth a2 + a3 / closes round 21.3). When set alongside `--conformance-self-test-capture`, every probe's response body is validated against the spec's response schema for the ACTUAL status returned (not just 200), via a per-status `response_schemas: BTreeMap<u16, Value>` map populated from the OpenAPI annotator. Mismatches land in a new `response_schema_error` field on each `CaseCapture` (serialised in the JSONL, surfaced as a red "Response schema mismatch" section in the per-probe HTML viewer card). Validation is opt-in because JSON-Schema validation of large response bodies adds wall-clock time on big specs.
+- **[DevX]** HTML report gets two new views (#79 round 25 / Srikanth d remainder). (1) A `Negatives by category family` rollup table that groups related categories under a family name (`Request body` / `Parameters` / `Security family` = `security` + `owasp`). Family membership is hard-coded so adding a new probe family won't surprise users with a relabelled row until the map is updated; the detailed per-category table above keeps the full resolution. (2) A `By category` column on the per-operation results table showing the mismatch breakdown per op (e.g. `parameters:2 security:1`), so a reader can see which probe families an operation fails without expanding the drill-down.
 
 ## [0.3.168] - 2026-06-04
 
 ### Fixed
 
-- **[Contracts]** Geo-source-IP headers now ride on every self-test probe, not just the positive case (#79 round 24 / Srikanth f). Four negative-probe call sites and the security-probe path were dropping the geo IP. Regression test (`geo_headers_present_on_every_probe_with_capture`) added.
-- **[DevX]** Clickable count cells in the HTML report no longer dead-end when `--report-missed-cap` crops the drill-down (#79 round 24 / Srikanth e). Counts only link when their target row actually survives the truncation.
+- **[Contracts]** Geo-source-IP headers now ride on every self-test probe, not just the positive case (#79 round 24 / Srikanth f). Four negative-probe call sites (schema mutation, uri-too-long, missing-header, OWASP injection) and the security-probe path were passing `op.header_params` directly, so the `effective_op_headers` geo-IP append got dropped. Confirmed via Srikanth's round-23 capture: positive probes carried `X-Forwarded-For: 203.0.113.0`, negatives showed `geo={}`. A new regression test (`geo_headers_present_on_every_probe_with_capture`) asserts that every captured probe carries one of the configured forwarded-IP headers.
+- **[DevX]** Clickable count cells in the HTML report no longer dead-end when `--report-missed-cap` crops the drill-down (#79 round 24 / Srikanth e). The category and per-operation tables now consult a pre-computed anchor set: counts are linked only when their target `#miss-cat-*` / `#miss-op-*` row actually survives the truncation, otherwise the count renders as plain text.
 
 ### Added
 
-- **[DevX]** `--conformance-self-test-capture` now also emits a browser-viewable `conformance-self-test-requests.html` alongside the JSONL (#79 round 24 / Srikanth d). Self-contained, includes a filter toolbar and expandable per-probe cards.
+- **[DevX]** Browser-viewable HTML alongside the JSONL capture (#79 round 24 / Srikanth d). `--conformance-self-test-capture` now emits both `conformance-self-test-requests.jsonl` (existing, grep-able / streamable) AND `conformance-self-test-requests.html` (new, self-contained: open in a browser, no external CSS/JS, includes a toolbar with full-text filter and PASS / FAIL / error checkboxes, one expandable card per probe showing request headers + body, response headers + body, and any transport error). Closes Srikanth's "Currently json line is plain text, not easy to parse" follow-up.
+
+### Notes
+
+- Response-body shape validation (round 21.3 / a2 / a3) and the per-category column / category-family grouping view in the Per-operation table remain queued. The (k) content-type swap probes are explicitly queued now with URL-encoded added to the swap set (Srikanth's g follow-up).
 
 ## [0.3.167] - 2026-06-03
 
@@ -643,140 +867,185 @@
 
 ### Added
 
-- **[Contracts][DevX]** `--conformance-self-test-capture` flag (#79 round 23 / Srikanth c-iii deferred from round 22.5). When set alongside `--conformance-self-test`, every probe records method, URL, request headers/body and response status/headers/body to `conformance-self-test-requests.jsonl` (one JSON object per line) next to the JSON/HTML report. Bodies cap at 16 KiB per direction with `request_body_truncated` / `response_body_truncated` flags.
+- **[Contracts][DevX]** `--conformance-self-test-capture` flag (#79 round 23 / Srikanth c-iii deferred from round 22.5). When set alongside `--conformance-self-test`, every probe records method, URL, request headers/body and response status/headers/body to `conformance-self-test-requests.jsonl` (one JSON object per line) next to the JSON/HTML report. Bodies cap at 16 KiB per direction with `request_body_truncated` / `response_body_truncated` flags. Confirms geo-source-ip headers actually shipped and explains why a negative probe came back 200 instead of 4xx, without re-running under `RUST_LOG=trace`.
 - **[DevX]** HTML conformance report: count-cells in the "Negatives by category" and "Per-operation results" tables are now clickable links into the drill-down table below (#79 round 23 / Srikanth d). `#miss-cat-<category>` jumps to the first row of that category; `#miss-op-<method>_<path-slug>` jumps to the first row for that operation.
 - **[DevX]** HTML conformance report wording: "missed/caught" renamed to "Mismatched (non-4xx) / Matched (4xx)" across the cards, category table, per-operation table, and drill-down heading; the category status badge is now a plain `PASS`/`FAIL` (replacing "all caught" / "rejection gaps") since the count column already conveys magnitude (#79 round 23 / Srikanth d wording).
+
+### Notes
+
+- Response-body shape validation (round 21.3 / Srikanth a2 / a3) and the per-category column / category-family grouping view in the Per-operation table remain queued for a future round; this release prioritises the regressions and unblockers in Srikanth's round-22 review.
 
 ## [0.3.166] - 2026-06-02
 
 ### Fixed
-- TUI Conformance: Enter in the Unknown view (`u`) opens Unknown Path Detail instead of the (wrong) Violation Detail (#79 round 22.1).
-- `--source-ip` / `--geo-source-ip` emit a warning when used with `--use-k6` since k6 can't bind a VU to a source IP (#79 round 22.2).
+
+- **[Contracts]** TUI Conformance tab: pressing **Enter** while toggled to the Unknown view (`u`) now opens the **Unknown Path Detail** modal instead of the (wrong) Violation Detail (#79 round 22.1 / Srikanth (f)). The 'u' toggle switched the underlying data buffer but the Enter handler routed unconditionally to the violation modal; now both the handler's "has rows" check and the modal title and body are view-aware. `selected_unknown()` and `selected_unknown_detail()` are the new symmetric accessors.
+- **[Contracts][DevX]** `--source-ip` and `--geo-source-ip` now emit a hard warning when set alongside `--use-k6` or the default `--conformance` k6 path (#79 round 22.2 / Srikanth (g1)). k6 cannot bind a VU to a source IP from the script side, so `--source-ip` silently took only the first IP and never rotated. The warning replaces the silent partial behaviour with an explicit explanation and points users at `--conformance-self-test` (the native driver) which honours the source-IP pool. A separate warning fires for `--geo-source-ip` until round 22.3 lands (now in the same release).
 
 ### Added
-- `--geo-source-ip` headers wired into the k6 template; the rendered script rotates X-Forwarded-For / True-Client-IP / CF-Connecting-IP per iteration (#79 round 22.3).
-- `--source-ip` / `--geo-source-ip` accept `start-end` IPv4 ranges (e.g. `10.0.0.5-10.0.0.27`) alongside CIDR and comma-separated lists (#79 round 22.4).
-- HTML report header links to the probe-label reference; "gaps" badge wording clarified to "rejection gaps" (#79 round 22.6).
+
+- **[Contracts][DevX]** `--geo-source-ip` headers are now rotated through the k6 template too (#79 round 22.3 / Srikanth (g2)). Pre-round-22.3, the geo-IP rotation only applied to the self-test driver; the k6 bench path silently ignored it. The rendered k6 script now declares `GEO_SOURCE_IPS` + `GEO_SOURCE_HEADERS` constants and merges a rotating `__geoHeaders` object into every request's `requestHeaders` via spread. `K6Config` gains `geo_source_ips` and `geo_source_headers` fields; `K6ScriptTemplateData` gains `has_geo_source` + JSON-serialised siblings for the template's triple-brace embedding. Default header set (when only `--geo-source-ip` is passed) is the standard three: `X-Forwarded-For`, `True-Client-IP`, `CF-Connecting-IP`.
+- **[Contracts][DevX]** `--source-ip` and `--geo-source-ip` now accept `start-end` IPv4 range syntax alongside CIDR and comma-separated lists (#79 round 22.4 / Srikanth (h)). Pass `--source-ip 10.0.0.5-10.0.0.27` for 23 hosts without finding a clean prefix. Same 256-host cap as CIDR; backwards ranges (`end < start`) are rejected with a warning. IPv6 ranges are intentionally rejected because the `:` separator would collide with the address literal; use CIDR for IPv6.
+- **[DevX]** HTML conformance report header now links to the probe-label reference page in the docs (#79 round 22.6 first slice). The "rejection gaps" wording replaces the vaguer "gaps" label on the category status badge, so the badge names what it actually measures.
+
+### Notes
+
+- The fuller HTML usability sweep (clickable links from missed counts to drill-down anchors, per-category column in the Per-operation table, category-family grouping view) is queued for round 23 / v0.3.167 alongside response-body shape validation (carried over from round 21.3).
 
 ## [0.3.165] - 2026-06-01
 
 ### Added
-- `--report-missed-cap N` flag for the HTML drill-down (#79 round 21.1). Default 200; `0` = no cap.
-- HTML missed-negative table gains an **Expected** column (#79 round 21.1). Addresses Srikanth's (a1).
-- New book page: [Conformance Self-Test Probes](conformance-self-test-probes.md) (#79 round 21.2). Canonical reference for every probe label.
+
+- **[DevX]** `--report-missed-cap N` flag on `mockforge bench --conformance-self-test` (#79 round 21.1) — controls the HTML conformance report's "Missed negatives" drill-down. Defaults to 200 rows (preserves prior behaviour); pass `0` for no cap to dump every missed probe into the HTML. The JSON report always carries the full set regardless; this flag only sizes the HTML drill-down so a 50 000-violation run does not produce a multi-megabyte browser-choking file by default.
+- **[DevX]** HTML missed-negative table now carries an **Expected** column (#79 round 21.1) — each row tells you the expected status range (`2xx-3xx (accept)` for positives, `4xx (reject)` for negatives) alongside the Actual status, so the report self-explains without the reader having to remember which probes are 4xx-expecting. Addresses Srikanth's (a1) ask from round 18.
+- **[DevX]** New book page **Conformance Self-Test Probes** (`reference/conformance-self-test-probes.md`, #79 round 21.2) — canonical reference for every probe label the self-test driver can emit. Covers request-body, parameters, security, OWASP, plus how `passed` is decided, bucket totals interpretation, and the HTML drill-down cap. Surfaced under Reference in `SUMMARY.md`.
 
 ### Notes
-- Response-body shape validation alongside the response-code check (a2 / a3) is queued for a separate release.
+
+- Response-body shape validation alongside the response-code check (Srikanth's a2 / a3 follow-up) is deferred to a separate release. It needs a non-trivial design pass (multi-status response schema map, body-size cap to avoid OOM on large responses) and was held back to keep this release focused on the HTML UX and docs.
 
 ## [0.3.164] - 2026-06-01
 
 ### Fixed
-- Shadow mode now gates `200` on the configured `--base-path` (#79 round 20). Paths outside the configured prefix (e.g. `/api123/...` when server is `/api`) return `404` even with `--shadow` enabled, matching pre-shadow semantics. `path_in_base` checks at the segment boundary, so `/api123` is not under `/api`.
+
+- **[Reality][Contracts]** Shadow mode now gates its `200` response on the configured `--base-path` (#79 round 20). Pre-round-20, `mockforge serve --shadow --base-path /api` returned `200 {"shadow":true,"matched":false}` for *any* unmatched path, including ones outside the configured prefix (Srikanth's report: client used `/api123/...` against a server configured for `/api` and saw `200` instead of `404`). Now `dynamic_mock_fallback` calls `path_in_base()` which checks at the segment boundary (`/api123` is NOT under `/api`), and only returns the shadow `200` when the path is actually under the configured surface. Outside the surface still 404s in shadow mode, matching pre-shadow semantics. The CLI's `--base-path` flag propagates to the management layer via a new `MOCKFORGE_API_BASE_PATH` env var; `ManagementState::new()` reads it and `ManagementState::with_base_path()` is exposed for callers that want to set it programmatically. Empty or `/` paths normalise to "no prefix gate" (the pre-round-20 behaviour, useful when neither client nor server has a base path).
 
 ## [0.3.163] - 2026-06-01
 
 ### Fixed
-- Live-server route handler now resolves nested `$ref` pointers against the spec's components (#79 round 19) — third schema-validator call site, missed by round 18.3. Dotted-name vCenter schemas resolve.
+
+- **[Contracts]** Live-server request-body validator now resolves nested `$ref` pointers against the spec's components map (#79 round 19) — Srikanth's vCenter 0.3.162 run still produced 120 `"Failed to create schema validator: Pointer '/components/schemas/Esx.Settings.Inventory.EntitySpec' does not exist"` violations against schemas that DO exist in the spec. Round 18.3 fixed the bench-side + the `validation::validate_request_body` helper, but missed a third call site in `openapi_routes.rs::validate_request_with_all` (line 1250 + 1267) that used `OpenApiSchema::new(...).validate()` with a naked validator. Switched both branches to `schema_ref_resolver::build_validator(&schema, &spec)` which inlines the components. Dotted-name schemas (`Esx.Settings.Inventory.EntitySpec`, `Vapi.Std.DynamicID`, etc.) now resolve correctly.
 
 ### Added
-- `--source-ip` and `--geo-source-ip` accept CIDR ranges (`10.0.0.0/28`, `2001:db8::/126`) capped at 256 hosts per range. IPv4 + IPv6 supported (#79 round 19).
+
+- **[Contracts][DevX]** `--source-ip` and `--geo-source-ip` now accept CIDR ranges (#79 round 19 — Srikanth's follow-up on round 18.5 (j)). Pass `--source-ip 10.0.0.0/28` to bind 16 hosts, `--geo-source-ip 2001:db8::/126` for 4 IPv6 hosts, or mix all three forms in one CLI value: `--geo-source-ip 10.0.0.0/30,2001:db8::1,203.0.113.42`. CIDR expansion is capped at 256 hosts per range to guard against `/8` typos blowing up the bench client; the cap is logged when triggered. IPv4 and IPv6 supported.
 
 ## [0.3.162] - 2026-05-31
 
-Issue #79 rounds 17.1–18.5 consolidated into a single release. Intermediate version numbers (0.3.153–0.3.161) were never published.
+Issue #79 rounds 17.1 through 18.5 — TUI clipboard + non-violating counter, schema-driven negatives, security probes, spec-level audits, OWASP/WAF unification, HTML report, base-path bug, schema-`$ref` resolution, OWASP coverage hints, GEODB multi-source-IP testing. Squash-merged from PRs #729 / #731 / #732 / #736 / #737 / #738 / #740 / #741 / #742 / #744. Version chain compressed from incremental 0.3.153–0.3.161 into a single 0.3.162 release; the intermediate version numbers were never published to crates.io.
 
-### Added
-- TUI Conformance: **`c`** copies the selected violation to clipboard (round 17.1); `total_ok` counter alongside `total_seen` for accurate pass/fail ratio (round 17.1).
-- `--conformance-self-test` schema-driven body mutator (round 17.2), security probes (round 17.3), spec-level audit (round 17.4), OWASP/WAF unification (round 17.5), self-contained HTML report (round 17.6).
-- GEODB multi-source-IP testing (round 18.5): `--source-ip` (real bind) + `--geo-source-ip` (forwarded-IP headers).
+### Added — TUI / Admin
+
+- **[Contracts][DevX]** TUI Conformance detail view gains a **`c`** keystroke to copy the selected violation to the system clipboard as pretty-printed JSON (round 17.1) — Srikanth's (c-i) ask. Uses `arboard` with default features so it works on X11, Wayland, macOS NSPasteboard, and Win32 without per-platform setup. On a clipboard-less TTY the failure surfaces in the flash strip instead of silently no-op'ing.
+- **[Contracts]** New `total_ok` lifetime counter on the conformance violations API (round 17.1) — Srikanth's (f) follow-up. Each request that *passes* the validator bumps the counter; the admin API returns `total_ok` alongside `total_seen`, and the TUI title now reads e.g. `Conformance Violations (256 buffered, 256 shown, 517498/522830 validated failed)`. Gives the real pass/fail ratio under sustained traffic instead of just the violation count.
+
+### Added — Self-test
+
+- **[Contracts][DevX]** Schema-driven request-body mutator for `--conformance-self-test` (round 17.2) — when both a positive sample AND a resolved request-body schema are available, the self-test now emits per-field negatives (type mismatch, required-field removal, min/max bound breaks, pattern miss, enum out-of-range, additional-property), plus a URI-too-long parameter probe. Labels carry the field path (e.g. `request-body:type-mismatch:user.email`). Bounded by `SCHEMA_MUTATION_CAP = 12` per operation (top 20 properties, top 5 required) so a 100-property body on a 22 000-operation spec doesn't produce a runaway test matrix.
+- **[Contracts][DevX][Security]** Security probes (round 17.3) — operations declaring a security requirement now get bad-credential negatives (`security:bad-bearer`, `security:bad-basic`, `security:bad-apikey:<name>`, `security:no-auth`) plus auth-stripping so the probe's credential is the only thing the server sees. Surfaces validators that don't enforce auth even when the spec says they should.
+- **[Contracts][DevX]** Spec-level audit alongside `--conformance-self-test` (round 17.4) — pure audit of the OpenAPI document (no network I/O) covering `servers` (missing/localhost-only/relative-only), `callbacks` (unsecured webhook ops), `polymorphism` (`oneOf` / `anyOf` without `discriminator`), and a datatype coverage map. Writes `conformance-spec-audit.json` next to the self-test JSON.
+- **[Contracts][DevX][Security]** OWASP / WAF unification into `--conformance-self-test` (round 17.5) — folds one canonical payload per OWASP category (`owasp:sqli`, `owasp:xss`, `owasp:command-injection`, `owasp:path-traversal`, `owasp:ssti`, `owasp:ldap-injection`, `owasp:xxe`) into the existing self-test driver. Injects into the first query param or first string body field; skips operations with no injectable surface. 7 probes max per operation; server should return 4xx (5xx = crashed on payload).
+- **[Contracts][DevX]** Self-contained HTML conformance report (round 17.6) — `--conformance-self-test` writes `conformance-report.html` next to the JSON. Inline CSS, no external assets. Sections: headline cards, negatives by category, per-operation results, missed-negative drill-down (capped at 200 rows), and an optional spec-audit section when a round-17.4 audit JSON is present.
+
+### Added — GEODB multi-source-IP
+
+- **[Contracts][DevX]** GEODB / multi-source-IP testing in `--conformance-self-test` (round 18.5). `--source-ip <IP>` (repeatable) builds a pool of reqwest clients bound via `local_address()`; `--geo-source-ip <IP>` rotates fake source IPs across `X-Forwarded-For` / `True-Client-IP` / `CF-Connecting-IP` (configurable via `--geo-source-header`). Self-test only for v0; bench / k6 path lands in a follow-up.
 
 ### Changed
-- OWASP coverage table now explains the "-" rows with actionable category hints (round 18.4).
+
+- **[Contracts][DevX]** OWASP coverage table now appends an "Untested OWASP categories" footer that tells you exactly which `--conformance-categories` value to add for each uncovered OWASP category (round 18.4). Removes the "Not Working" confusion when a user-selected subset of categories doesn't cover the full OWASP Top 10.
 
 ### Fixed
-- `--conformance-self-test` honours `--base-path` (round 18.1); hard warning when every positive returns the same status (round 18.1); accurate bench header before spec parse (round 18.2).
-- Request-body validator resolves nested `$ref` pointers against the spec's components map (round 18.3) — fixes the `Vcenter.VM.DiskCloneSpec` "Pointer does not exist" class of failures.
+
+- **[Contracts][DevX]** `--conformance-self-test` now honours `--base-path` (round 18.1) — pre-fix every positive 404'd on deployments served behind a path prefix.
+- **[Contracts][DevX]** Self-test now emits a hard warning when every positive case fails with the same status code, instead of silently treating 404s as "negatives caught" (round 18.1).
+- **[DevX]** Bench header no longer prints `Operations: 0 endpoints` before the spec is parsed (round 18.2). Shows `(analyzing spec…)` until the count is known.
+- **[Contracts]** Request-body validator now resolves nested `$ref` pointers against the spec's components map (round 18.3) — pre-fix specs whose component schemas had dotted names (`Vcenter.VM.DiskCloneSpec`) or were referenced from nested schemas failed with `Pointer '/components/schemas/X' does not exist`. New `schema_ref_resolver::build_validator(&schema, &spec)` inlines the components into the validator's document context.
 
 ## [0.3.152] - 2026-05-28
 
 ### Changed
 
-- **[Contracts][DevX]** TUI Conformance export (`e`) now deduplicates by `(method, path, category, reason)` with a `count` + `first_seen` / `last_seen` window (#79 round 16).
-- **[DevX]** `--conformance-self-test` produces negatives for two previously-zero-coverage shapes: operations with a required body but no synthesised sample, and operations whose only spec input is a path parameter (`parameters:bad-path-param` probe).
+- **[Contracts][DevX]** TUI Conformance export (`e`) now deduplicates by `(method, path, category, reason)` and sorts by occurrence count descending (#79 round 16) — Srikanth's (c-ii) ask: under sustained traffic the export was 256 mostly-identical rows. Each group now carries a `count` and `first_seen` / `last_seen` window so the time range is preserved while the file collapses from "256 rows of mostly the same thing" to a ranked unique-violation list. The TUI table itself still shows each occurrence (unchanged). The flash message now reads `exported N unique violation(s) (M occurrences) to …`.
+- **[DevX]** `mockforge bench --conformance --conformance-self-test` now produces negatives for two previously-zero-coverage shapes (#79 round 16 (h)) — addresses Srikanth's "always all passing" report on operations that fell through the gaps:
+  1. **Operations with a required body but no synthesised sample** — the `request-body:empty` and `request-body:wrong-type` negatives now fire whenever the spec declares a request body content type, regardless of whether the body annotator could produce a positive sample.
+  2. **Operations with a path-param and no required body / query / header** — emits a new `parameters:bad-path-param` probe that substitutes the first path parameter with `"self-test-invalid-id"`. Operations whose spec types the param as integer / UUID / regex-patterned will catch this (4xx); operations that allow free-form strings will let it through. Either outcome is informative — a category that's all-`missed` is the spec telling you path-param types are loose.
 
 ## [0.3.151] - 2026-05-27
 
 ### Added
 
-- **[Reality]** `mockforge serve --shadow` CLI flag (#79 round 15) — first-class flag for shadow mode (alias for `MOCKFORGE_SHADOW_MODE=true`) so it can't be forgotten.
-- **[Contracts][DevX]** Lifetime "seen total" counters for conformance violations + unknown paths — admin API `total_seen` field and TUI titles now show the true lifetime count alongside the 256-cap buffered count.
+- **[Reality]** `mockforge serve --shadow` CLI flag (#79 round 15) — Srikanth's (g) ask: a first-class flag for shadow mode instead of only `MOCKFORGE_SHADOW_MODE=true`, so it can't be silently forgotten. Sets the env var under the hood; the `👻 SHADOW MODE ON` startup banner still prints.
+- **[Contracts][DevX]** Lifetime "seen total" counters for conformance violations and unknown paths (#79 round 15) — the ring buffers cap at 256 entries, which made a 656k-request run look like "only 256". Both the admin API (`total_seen` field) and the TUI titles now show the true lifetime count alongside the buffered count (e.g. `Conformance Violations (256 buffered, 256 shown, 4821 seen total)`). Answers Srikanth's (f) question.
 
 ### Changed
 
-- **[DevX]** Per-violation server log under target `mockforge::conformance` (enable with `RUST_LOG=mockforge::conformance=debug`) showing method/path/status/category/reason.
-- **[DevX]** TUI Conformance detail view + Top Offending Endpoints panel now wrap long lines so big paths/reasons are fully readable.
+- **[DevX]** Server-side per-violation debug log (#79 round 15) — each recorded conformance violation now emits a `tracing::debug!` line under target `mockforge::conformance` with method/path/status/category/reason. Enable precisely with `RUST_LOG=mockforge::conformance=debug` to get grep-able server-side logs of *why* each request was rejected, without turning on firehose debug logging. Srikanth's (b)/(d) ask for "why is this a violation" via logs.
+- **[DevX]** TUI Conformance tab readability (#79 round 15) — the `Enter` violation-detail view and the Top Offending Endpoints panel now wrap long lines, so big Microsoft Graph paths and validation reasons are fully visible instead of clipped at the right edge. Srikanth's (c) ask. (`Enter` for full detail, `j`/`k` to scroll.)
 
 ## [0.3.150] - 2026-05-26
 
 ### Fixed
 
-- **[Reality]** Server no longer OOM-killed at startup on large specs (#79 round 14) — router construction cloned the entire routes Vec into every per-route handler (O(N²) memory; ~260 GB for an 11,422-op spec). Fixed by sharing one validator via `Arc` across all handlers. Reproduced + verified with a 22,000-operation synthetic spec.
+- **[Reality]** Server no longer OOM-killed at startup on large specs (#79 round 14) — building the OpenAPI router cloned the *entire* routes Vec into every per-route handler closure (each closure captured its own `clone_for_validation()`), making router construction **O(N²) in memory**: ~260 GB resident for an 11,422-operation spec (Microsoft Graph), which the OOM killer reaped immediately after the `Stored N routes` log line. Srikanth hit this on 0.3.148/0.3.149. Fixed by sharing a single validator across all handlers via `Arc` (per-closure cost drops from a full deep clone to an 8-byte pointer). Applies to all three router builders (`build_router_with_context`, `build_router_with_mockai`, `build_router_with_ai`). Reproduced with a 22,000-operation synthetic spec: pre-fix died with `memory allocation failed` right after `Stored 22000 routes`; post-fix starts and serves cleanly.
 
 ### Added
 
-- **[Reality][Contracts]** Server-side **shadow mode** (`MOCKFORGE_SHADOW_MODE=true`) (#79 round 14) — returns 200 for unknown paths and spec violations while still recording them to the conformance + unknown-paths buffers (report-only / monitor mode for proxy-replay traffic). Startup prints a `👻 SHADOW MODE ON` banner.
-- **[Contracts][DevX]** Status column on the TUI unknown-paths view — surfaces the HTTP status the server returned (404 normally, 200 in shadow mode).
+- **[Reality][Contracts]** Server-side **shadow mode** (`MOCKFORGE_SHADOW_MODE=true`) (#79 round 14) — Srikanth's (a) ask. When enabled, the server returns **200** for requests it would normally reject — unknown paths (instead of 404) and spec violations (instead of 400/422) — while *still* recording them to the conformance + unknown-paths buffers. A "report-only" / monitor mode: replay proxy traffic through MockForge non-blocking and capture every violation for cross-checking, without the rejections breaking the client flow. Unknown paths get a minimal `{"shadow":true,"matched":false}` 200 stub; spec-violating requests fall through to normal response synthesis. Startup prints a `👻 SHADOW MODE ON` banner so the behavior is never a surprise.
+- **[Contracts][DevX]** Status column on the TUI unknown-paths view (#79 round 14) — the unknown-paths feed now carries the HTTP status the server actually returned (404 normally, 200 in shadow mode), surfaced as a colored `Status` column in the `u`-toggled unknown-paths view so you can tell at a glance which requests shadow mode let through.
 
 ## [0.3.149] - 2026-05-25
 
 ### Added
 
-- **[Contracts][DevX]** `mockforge bench --conformance --conformance-self-test` (#79 round 13 (4)) — positive + per-category negative driver. Sends one valid request and per-category negatives (empty body / wrong-type body / missing required query / missing required header) per spec operation; reports how many the server correctly rejected with 4xx. Writes `conformance-self-test.json` and emits a warning when any negative slipped through.
+- **[Contracts][DevX]** `mockforge bench --conformance --conformance-self-test` (#79 round 13 (4)) — positive + per-category negative driver against a live server. For each annotated operation in `--spec`: sends one valid request (expect 2xx) plus per-category negatives (empty body, wrong-type body, missing required query param, missing required header) and reports how many the server correctly rejected with 4xx. Writes `conformance-self-test.json` to the output dir; prints a one-line-per-category pass/fail summary; emits a warning when any negative case slipped through. Useful for verifying the round-13 (3) validator-bypass fix took effect against the user's spec.
 
 ## [0.3.148] - 2026-05-25
 
 ### Fixed
 
-- **[Contracts][DevX]** Conformance buffer now actually fires on the default-flow handlers (#79 round 13) — the MockAI and AI handlers bypassed validation entirely, so violations never populated for default-flow routes. Extracted `OpenApiRouteRegistry::run_validation_with_recording` and called it at the entry of each handler.
+- **[Contracts][DevX]** Conformance buffer now actually fires on the default-flow handlers (#79 round 13) — v0.3.145–0.3.147 wired the buffer infrastructure but the recording call only ran from `build_router_with_context`. The MockAI handler (`build_router_with_mockai`) and AI generator handler (`build_router_with_ai`) — both of which serve every request when their respective backends are enabled — bypassed validation entirely, so violations never populated for the default-flow routes Srikanth was hitting. Extracted the validate-then-record block into `OpenApiRouteRegistry::run_validation_with_recording` and called it at the entry of each handler closure. Confirmed with `curl -X POST .../users -d '{}'` against the demo spec now returning **HTTP 400** with the violation showing up in `GET /__mockforge/api/conformance/violations`.
 
 ### Added
 
-- **[Contracts]** New `response-shape` violation category — surfaces when a requested status code isn't defined in the spec for that operation.
-- **[Contracts][DevX]** New `unknown-paths` feed + admin endpoint + TUI view — separate ring buffer tracks requests whose path didn't match any spec route. `GET /__mockforge/api/conformance/unknown-paths`; TUI `u` toggles between violations and unknown-paths views.
+- **[Contracts]** New `response-shape` violation category (#79 round 13) — when a request asks for a status code the spec doesn't define for that operation (e.g. spec only defines 2xx/4xx but `X-Mockforge-Response-Status: 200` is sent), record the mismatch under category `response-shape` instead of silently falling back to the default response. Addresses Srikanth's (c) question.
+- **[Contracts][DevX]** New `unknown-paths` feed + admin endpoint + TUI view (#79 round 13) — separate bounded ring buffer (`mockforge_foundation::unknown_paths`) tracks requests whose path didn't match any route in the loaded spec. Exposed at `GET /__mockforge/api/conformance/unknown-paths` (DELETE clears). TUI Conformance tab gains a `u` keystroke to toggle between violations view and unknown-paths view; the existing filter / pause / export / clear / top-endpoints controls work for both. Addresses Srikanth's (a) question — useful for cross-checking a proxy's path coverage against the server's loaded spec.
 
 ## [0.3.147] - 2026-05-25
 
 ### Changed
 
-- **[DevX]** TUI `Conformance` tab moved before `Verification` (#79 round 12 follow-up) — Verification's `Tab` cycles internal fields so it acts as a dead-end for plain Tab nav. Putting Conformance earlier in the strip keeps it reachable.
+- **[DevX]** TUI `Conformance` tab moved before `Verification` (#79 round 12 follow-up) — Verification consumes `Tab` to cycle its internal fields, so Tab-navigating past it required clicking elsewhere to break the focus. Putting Conformance before Verification keeps it reachable via plain Tab from the earlier screens. Srikanth's ask.
 
 ## [0.3.146] - 2026-05-25
 
 ### Fixed
 
-- **[DevX]** TUI `Conformance` tab now appears + admin server exposes the violations endpoint (#79 round 12 hotfix) — v0.3.145 had two bugs: (1) `ScreenId::Conformance` was added to the enum but `ConformanceScreen::new()` was missing from `App::new`'s screens vec, so the tab silently dropped from the header; (2) the endpoint was only wired into `mockforge-http`'s management router (mock-traffic port), not the admin server the TUI polls. Fixed both, plus added an `app_screens_match_screen_id_all` regression test.
+- **[DevX]** TUI `Conformance` tab now appears in the tab strip + admin server exposes the violations endpoint (#79 round 12 hotfix)
+  - **Bug 1 — invisible tab.** v0.3.145 added `ScreenId::Conformance` to the enum but forgot to push `ConformanceScreen::new()` onto `App::new`'s screens vec. `render_header` iterates `self.screens` so it rendered the other 22 tabs and silently dropped the new one. Fixed; also added a `debug_assert_eq!(screens.len(), ScreenId::ALL.len())` and a `app_screens_match_screen_id_all` unit test so any future enum/vec drift fails before tagging instead of after.
+  - **Bug 2 — admin server didn't expose the endpoint.** The TUI client polls the admin URL (`http://localhost:9080`) at `/__mockforge/api/conformance/violations`, but v0.3.145 only wired the route into `mockforge-http`'s management router (which runs on the *mock-traffic* HTTP port, not the admin port). TUI got the SPA HTML fallback. Added matching `get_conformance_violations` / `clear_conformance_violations` handlers in `mockforge-ui` and routed them at the same path on the admin server — both ports now serve it.
 
 ## [0.3.145] - 2026-05-24
 
 ### Added
 
-- **[Contracts][DevX]** New `Conformance` TUI screen + `/__mockforge/api/conformance/violations` endpoint (#79 round 12) — server-side counterpart to the bench-side conformance suite; every incoming request the OpenAPI router rejects for a spec violation (400/422) is captured to a bounded ring buffer and rendered in a new TUI tab.
+- **[Contracts][DevX]** New `Conformance` TUI screen + `/__mockforge/api/conformance/violations` endpoint (#79 round 12)
+  - Server-side counterpart to the bench-side conformance suite. Every incoming request the OpenAPI router rejects for a spec violation (400/422) is now captured into a bounded ring buffer in `mockforge-foundation::conformance_violations`, served by `GET /__mockforge/api/conformance/violations`, and rendered in a new TUI tab that shows method, path, status, category, client IP, and the rejection reason. Lets you cross-check what your proxy thinks happened against what MockForge thinks happened — Srikanth's ask on Issue #79.
+  - **Extras beyond the ask** to make the cross-check-with-proxy workflow easier:
+    - `m` / `s` / `c` cycle method / status-band / category filters (status cycles `any → 4xx → 422 → 5xx`); useful when 200+ violations need scoping.
+    - `p` pauses the 5-second auto-refresh so the row under your cursor doesn't move while investigating.
+    - `e` exports the current (filtered) view to `conformance-violations-<ts>.json` in CWD — drop it next to your proxy logs and `jq` across both sides.
+    - `D` clears the server-side ring buffer (`DELETE /__mockforge/api/conformance/violations`); useful between test runs.
+    - New per-endpoint count panel shows the top offending `METHOD path` pairs in the current filtered view — quickly highlights *which* endpoints violate most, not just which categories.
 
 ### Fixed
 
-- **[DevX]** `mockforge bench --conformance --operations 'METHOD,…'` now actually filters (#79 round 12) — `execute_conformance_test` was silently ignoring `self.operations` / `self.exclude_operations`. Also relaxed `SpecParser::filter_operations` to accept method-only form (`"GET"`) without requiring `"GET /path"`.
-- **[Reality]** Multi-target bench summary now includes connection + iteration counts (#79 round 12).
-- **[Cloud]** `pillar_tracking` no longer drives `sqlx::pool::acquire` "slow acquire" spam under load (#79 round 12) — added a 20-task in-flight cap at the recorder entry so over-pressure events are dropped immediately instead of queuing on the analytics-DB pool's 30s acquire timeout.
+- **[DevX]** `mockforge bench --conformance --operations 'METHOD,…'` now actually filters (#79 round 12)
+  - Srikanth ran `--conformance --operations "GET,POST"` and saw DELETE/PATCH exercised anyway. `execute_conformance_test` never applied `self.operations` (or `self.exclude_operations`) when annotating spec operations — those flags were silently dropped. Now applied the same way the regular bench path does, including the existing wildcard / method-only syntax. Also: `SpecParser::filter_operations` now accepts the method-only form `"GET"` (same as `exclude_operations` already supported) instead of requiring `"GET /path"`.
+- **[Reality]** Multi-target bench summary now includes connection + iteration counts (#79 round 12)
+  - Srikanth's `--targets-file` runs were missing the `Connections opened` / `Iterations` lines that single-target runs surface. `AggregatedMetrics` gained `total_connections_opened` / `total_iterations_completed` plus per-target `Connections: N  Iterations: M` lines under each target, and the new aggregate shows a `Connection reuse NOT detected` warning when the cross-target sum > 5 × VUs.
+- **[Cloud]** `pillar_tracking` no longer drives `sqlx::pool::acquire` "slow acquire" spam under load (#79 round 12)
+  - Round 11 silenced per-event WARNs but the analytics-DB pool still saturated (each event spawned a tokio task that waited 30s on the 10-connection pool). Added an in-flight task cap (default 20, 2× the pool size) at the recorder entry point so over-pressure events are dropped immediately and counted toward the existing aggregated WARN. No more `sqlx::pool::acquire: acquired connection, but time to acquire exceeded slow threshold` storms.
 
 ## [0.3.144] - 2026-05-24
 
 ### Fixed
 
 - **[Reality]** OpenAPI router accepts request bodies up to 50 MiB by default (was 2 MiB axum default) — closes the "200 OK before all chunk requests arrived" PCAP behaviour Srikanth reported on Issue #79
-  - Root cause: axum 0.8's `Bytes` and `Option<Json<Value>>` extractors enforce a 2 MiB `DefaultBodyLimit`. Above that, the body gets truncated and the handler runs without consuming the rest of the request — hyper sends the response and TLS Close Notify *while the client is still uploading the body*. Reproduced locally with a 3 MiB JSON body to the demo spec.
-  - Fix: every `OpenApiRouteRegistry::build_router_*` variant now mounts `axum::extract::DefaultBodyLimit::max(...)` with a 50 MiB default, configurable via `MOCKFORGE_HTTP_BODY_LIMIT_MB`.
+  - Root cause: axum 0.8's `Bytes` and `Option<Json<Value>>` extractors enforce a 2 MiB `DefaultBodyLimit`. Above that, the body gets truncated and the handler runs without consuming the rest of the request — hyper sends the response and TLS Close Notify *while the client is still uploading the body*. Srikanth saw this on a 10 MB chunked PATCH: status 200, response sent at TCP seq 1070094 while the proxy was still pushing chunks at 1070094+1434, 1071528+1434, etc. Reproduced locally with a 3 MiB JSON body to the demo spec — body got truncated at ~2 MiB, JSON parse failed mid-stream, response went out, curl logged `* HTTP error before end of send, stop sending`.
+  - Fix: every `OpenApiRouteRegistry::build_router_*` variant now mounts `axum::extract::DefaultBodyLimit::max(...)` with a 50 MiB default, configurable via `MOCKFORGE_HTTP_BODY_LIMIT_MB`. 50 MiB covers realistic mock-traffic without giving an untrusted client an unlimited memory-fill vector. Set the env var to a smaller or larger number if your specific workload demands it.
 - **[Cloud]** `pillar_tracking` no longer floods logs with one WARN per dropped event under load (#79 round 11)
-  - Per-event failures are now DEBUG; a single aggregated `pillar_tracking: dropped X events in the last 60s due to analytics-DB pressure` WARN fires at most every 60 seconds.
+  - Under sustained `mockforge bench --rps 100` load against an admin-enabled `mockforge serve`, the analytics DB pool saturated and every failed event emitted `WARN ... Failed to record pillar usage event: pool timed out`. Pillar tracking is best-effort metrics — losing events under load is acceptable, but the WARN-spam was not. Per-event failures are now DEBUG; a single aggregated `pillar_tracking: dropped X events in the last 60s due to analytics-DB pressure` WARN fires at most every 60 seconds.
 
 ## [0.3.143] - 2026-05-23
 
@@ -820,6 +1089,11 @@ Issue #79 rounds 17.1–18.5 consolidated into a single release. Intermediate ve
 
 ## [0.3.139] - 2026-05-19
 
+### Fixed
+
+- **[Cloud]** Drop unnecessary `std::time::` qualifier in `incident_dispatcher` PagerDuty timeout
+  - `Duration` is already imported at the top of `crates/mockforge-registry-server/src/workers/incident_dispatcher.rs`, so the fully-qualified `std::time::Duration::from_millis(200)` at line 698 was tripping the workspace-wide `-Dunused_qualifications` ratchet. The Incremental Warning Gate started failing on this when PR #573 landed; this clears it without touching behaviour.
+
 ### Added
 
 - **[DevX]** Adaptive pre-flight latency probe for `--vus` sizing (#79 round 8)
@@ -833,27 +1107,46 @@ Issue #79 rounds 17.1–18.5 consolidated into a single release. Intermediate ve
 ### Added
 
 - **[Cloud][Reality]** Cloud-mode **Time Travel** — controllable virtual clock on hosted-mock deployments (#466, #527)
+  - 7 clock-control endpoints proxied (`status`, `enable`, `disable`, `advance`, `set`, `scale`, `reset`) over Fly 6PN. Wire format mirrors cloudResilience and cloudWorldState: `{ runtime_state: "live" | "unreachable", data }`. The runtime-unreachable branch disables the control fieldset so users don't fire mutations that'll bounce back.
+  - New `CloudTimeTravelView` reuses the local TimeTravelPage shape. Cron jobs + mutation rules stay local-only — they manage scenario state, not a hosted mock's single-process clock.
+  - **Note:** these entries were originally written into the 0.3.137 changelog block — the PRs landed after the v0.3.137 tag (efa43d20) was published to crates.io, so they actually ship in 0.3.138.
 - **[Cloud][AI]** Cloud-mode **Test Generator** — async LLM jobs over runtime_captures (#469, #529)
+  - New `cloud_test_generation_jobs` table + 4 CRUD endpoints + SSE stream (`GET .../jobs/{id}/stream`) for live progress.
+  - Background tokio worker drains the queue with `FOR UPDATE SKIP LOCKED` claims, processes up to `TEST_GENERATION_WORKER_CONCURRENCY` (default 4) jobs in parallel per tick, dispatched via the same `ai::client` + `ai::quota` pipeline `ai_studio` uses. BYOK skips the platform token quota; paid plans without BYOK succeed via the platform key.
+  - Worker is forgiving: best-effort JSON parse strips ```` ```json ```` fences, recovers from prose wrappers, falls back to a `{ raw_content }` wrapper. Cancellation race is safe — terminal writes are gated on `WHERE status = 'running'`.
+  - New `CloudTestGeneratorView` with job timeline, create form, expandable detail rows, and SSE-driven sub-second updates on expanded non-terminal rows.
 - **[Cloud][Reality]** Real-time runtime-logs SSE via Fly NATS subscription (#556, #559)
+  - The registry now subscribes to Fly's NATS log stream and re-broadcasts deployment logs over SSE so the cloud UI can render live logs without polling. Replaces the previous pull-based log endpoint.
 - **[Cloud][Reality]** OTLP gRPC trace receiver alongside HTTP/JSON (#548, #566)
+  - Registry exposes a standard `:4317` OTLP gRPC endpoint in addition to the existing HTTP/JSON path. Hosted mocks can now use OpenTelemetry SDKs configured for either transport.
 - **[Cloud][Reality]** Per-capture cloud forwarder with backpressure + retry (#553, #564)
+  - `mockforge-recorder` gained a registry-bound forwarder that streams individual captures to the cloud control plane with exponential-backoff retries and a bounded in-memory buffer for backpressure. Replaces the old end-of-recording bulk upload.
 - **[Cloud][Reality]** Trust-root boot — plugin host fetches + refreshes active trust roots from registry (#549, #565)
+  - The plugin host fetches the active set of plugin trust roots from the registry on boot and refreshes them on a schedule, so signed manifests written against rotated trust roots verify without a host redeploy.
 - **[Cloud][Reality]** HSM-backed platform signing-root rotation via AWS KMS (#550, #567)
+  - Platform signing roots can now be rotated end-to-end via AWS KMS without exposing private key material to host code. Replaces the file-backed signing root used in earlier versions.
 - **[Cloud][Reality]** Email notification channel via EmailService (#551, #557)
+  - Registry's notification dispatcher gained an Email transport alongside Slack, so cloud incidents/alerts can fan out to email recipients configured per-organization.
 - **[Cloud][Reality]** PagerDuty notification channel via Events API v2 (#552, #558)
+  - Same dispatcher gained a PagerDuty Events API v2 transport. Incidents created in cloud can now page on-call rotations directly.
 - **[CI][Reality]** Nightly hosted-mocks smoke workflow (#554, #563)
+  - New `hosted-mocks-smoke.yml` runs nightly against the production Fly deployments to catch regressions that pass per-PR CI but break in cloud. Outputs feed the runtime daemon's smoke incidents tab.
 
 ### Changed
 
-- **[DevX]** `pr_generation` moved out of `mockforge-core` into `mockforge-intelligence`; intelligence → core dep cycle broken (#562 phase 1, #571)
+- **[DevX]** `pr_generation` moved out of `mockforge-core` into `mockforge-intelligence`; the intelligence → core dependency cycle was broken (#562 phase 1, #571)
+  - `mockforge-intelligence` dropped its `mockforge-core` dep, freeing `mockforge-core` to take a `mockforge-intelligence` dep without Cargo rejecting it. The two real uses (`mockforge_core::Result` and `mockforge_core::scenarios::ScenarioDefinition`) moved to `mockforge_foundation::Result` and `mockforge-http::handlers::behavioral_cloning`.
+  - Backwards compat: `mockforge_core::pr_generation` is preserved as `pub use mockforge_intelligence::pr_generation;` — existing call sites compile unchanged. External callers (`mockforge-recorder`, `mockforge-pipelines`, `mockforge-http`, `mockforge-collab`) updated to import from the new home.
 - **[DevX]** ADR auditing `mockforge-http` for intelligence/proxy extraction (#555, #561)
+  - Documentation-only ADR (`docs/adr/0001-mockforge-http-extraction.md`) recording the dependency analysis and migration plan that #562 phase 1 acts on.
 
 ### Fixed
 
 - **[DevX]** CI rust-cache no longer poisons builds with dangling `target/*.d` paths (#446, #570)
-- **[UI][Cloud]** CloudTestGeneratorView import path corrected (#547)
-
-> **Note:** Time Travel (#527) and Test Generator (#529) were initially attributed to 0.3.137 in the historical changelog block below. Both PRs landed after the v0.3.137 tag (efa43d20) had already been published, so they actually ship in 0.3.138.
+  - Root cause: every workflow set `CARGO_HOME=/tmp/cargo-mockforge-${{ github.run_id }}` (unique per run) so the next run's `Swatinem/rust-cache@v2` restored a `target/` whose `.d` files referenced the *previous* run's CARGO_HOME — long since deleted. Surfaced as `error: could not compile <crate> ... (never executed) No such file or directory (os error 2)` on chronically red jobs.
+  - Fix: switched every `CARGO_HOME` to `runner.name` (stable per machine) and added `with: env-vars: "CARGO_HOME"` to all 13 `Swatinem/rust-cache@v2` invocations so the cache key partitions by runner.
+- **[UI][Cloud]** CloudTestGeneratorView import path corrected (`stores/useWorkspaceStore`) (#547)
+  - Minor follow-up to #529; runtime error on cloud mode without it.
 
 ## [0.3.137] - 2026-05-18
 
@@ -878,72 +1171,196 @@ Issue #79 rounds 17.1–18.5 consolidated into a single release. Intermediate ve
 ### Changed
 
 - **[CI][Reality]** `release.yml` gates Fly deploy + crates.io publish + Helm chart push on the `release` job's `cargo test --workspace --release` (#447, #526)
-  - All three downstream jobs (`deploy-registry`, `publish`, `helm`) now `needs: release`. A tag with red tests no longer ships to Fly / crates.io / the Helm repo.
-- **[DevX]** `pr_generation` moved out of `mockforge-core` into `mockforge-intelligence` and the intelligence → core cycle was broken (#562 phase 1, #571)
-  - `mockforge-intelligence` dropped its `mockforge-core` dep, freeing `mockforge-core` to take a `mockforge-intelligence` dep. `mockforge_core::pr_generation` is preserved as a `pub use` re-export for backwards compat.
+  - All three downstream jobs (`deploy-registry`, `publish`, `helm`) now `needs: release`. A tag with red tests no longer ships to Fly / crates.io / the Helm repo. Cost is a few minutes of latency on a green deploy; benefit is no more "release auto-deploys broken code" surprises.
+
+- **[Architecture]** `ai_studio` (the final AI cluster module) moved whole to `mockforge-intelligence` (Issue #562 phase 8 — **campaign complete**)
+  - 17 files / ~7,200 LOC: `api_critique`, `artifact_freezer`, `behavioral_simulator`, `budget_manager`, `chat_orchestrator`, `config`, `contract_diff_handler`, `conversation_store`, `debug_analyzer`, `debug_context`, `debug_context_integrator`, `nl_mock_generator`, `org_controls`, `org_controls_db`, `persona_generator`, `system_generator`, `mod`.
+  - All inter-AI deps (`ai_contract_diff`, `contract_validation`, `failure_analysis`, `intelligent_behavior`, `reality`, `voice`) became sibling modules in `mockforge-intelligence` after phases 2–7, so `crate::*` paths in the moved code resolved without rewriting. Only externals needing swap: `crate::{OpenApiSpec, Result}` → `mockforge_foundation::Result` + `mockforge_openapi::OpenApiSpec`, and `crate::pillar_tracking` → `mockforge_foundation::pillar_tracking`.
+  - Backwards compat: `pub use mockforge_intelligence::ai_studio;` in `mockforge-core/src/lib.rs`. All `mockforge_core::ai_studio::*` callers (mockforge-http handlers, mockforge-ui handlers) keep compiling unchanged.
+  - `mockforge-intelligence` gained `dirs`, `once_cell`, `sqlx` (optional under new `database` feature). `mockforge-core`'s `database` feature now activates `mockforge-intelligence/database` too, so the `database`-gated `org_controls_db` sqlx surface continues to work end-to-end.
+  - **Issue #562 complete.** All 4 AI cluster modules from the original deferral note are now in `mockforge-intelligence`: `ai_contract_diff`, `intelligent_behavior`, `threat_modeling`, `ai_studio`. The 7-phase campaign also re-homed `pillars`, `pillar_tracking`, `chaos_utilities` to `mockforge-foundation` and migrated supporting modules `contract_validation`, `failure_analysis`, `reality`, plus 6 of 7 `voice` files (the 7th, `voice_workspace`, stays in core because its multi_tenant/scenarios/workspace deps would require their own multi-day extractions).
+
+- **[Architecture]** `voice` split: 6 leaf files moved to `mockforge-intelligence`, `workspace_builder` stays in core (Issue #562 phase 7)
+  - The wall: `voice` (3,769 LOC across 7 files) was the last AI cluster blocker. Scoping showed all heavy deps (`multi_tenant`, `scenarios`, `workspace`, `contract_drift`, `reality_continuum`) are concentrated in a single file (`workspace_builder.rs`, 536 LOC). The other 6 files (3,233 LOC) only depend on `mockforge-openapi` + sibling `intelligent_behavior` + `mockforge-foundation`.
+  - Split, not whole-move: `command_parser`, `conversation`, `hook_transpiler`, `spec_generator`, `workspace_scenario_generator`, `mod` → `mockforge_intelligence::voice`. `workspace_builder` renamed to `mockforge_core::voice_workspace` (stays in core; needs the heavy deps and the imports go back through `crate::voice::*` shim).
+  - Backwards compat: new `mockforge_core::voice` shim consolidates both halves with `pub use mockforge_intelligence::voice::*; pub use crate::voice_workspace::{BuiltWorkspace, WorkspaceBuilder};` plus sub-module re-exports (`command_parser`, `spec_generator`, etc.) so existing path-style imports keep working. `mockforge-ui` handler updated one import (`workspace_builder::WorkspaceBuilder` → `WorkspaceBuilder` since it now comes through the top-level shim).
+  - Brings `ai_studio` to **0 dirty sub-files**. Phase 8 will move ai_studio whole.
+
+- **[Architecture]** `reality` moved to `mockforge-intelligence`, `chaos_utilities` re-homed to `mockforge-foundation` (Issue #562 phase 6)
+  - `reality.rs` (541 LOC) holds `ChaosConfig` as a struct field — moving it to intelligence required `ChaosConfig` to live in a crate intelligence can depend on (foundation). `chaos_utilities.rs` (500 LOC) only depends on `failure_injection` + `latency`, both already in foundation, so the move is mechanical.
+  - The `RealityEngine::apply_to_config` inherent method (which pokes at concrete `ServerConfig` sub-structs) moved to `mockforge_core::reality_apply::apply_reality_to_server_config` as a free function. Keeping it on `RealityEngine` would have forced intelligence → core dep again. CLI updated to use the new helper (one call site).
+  - Backwards compat: `mockforge_core::{chaos_utilities, reality}` preserved as `pub use`. Existing `RealityEngine`, `RealityConfig`, `RealityLevel`, `ChaosConfig`, etc. continue resolving via `mockforge_core::*` for all 5+ external callers (cli, http, ui, registry, scenarios, etc.).
+  - Brings `ai_studio` to **1 dirty sub-file**: `nl_mock_generator.rs` (depends on `voice`). After phase 7 extracts voice, `ai_studio` moves whole in phase 8.
+
+- **[Architecture]** `contract_validation` + `failure_analysis` moved to `mockforge-intelligence` (Issue #562 phase 5)
+  - Both modules are tiny leaves with near-zero core coupling: `contract_validation.rs` (590 LOC, single file, only `serde` non-internal deps) and `failure_analysis/` (4 files / ~512 LOC, only depends on sibling `intelligent_behavior`). Inline `crate::openapi::OpenApiSpec` and `crate::pillar_tracking::record_contracts_usage` references in `contract_validation` swapped to their home crates (`mockforge_openapi` / `mockforge_foundation::pillar_tracking`).
+  - Backwards compat: `mockforge_core::{contract_validation, failure_analysis}` preserved as `pub use mockforge_intelligence::*;`. Zero churn for 4 external callers (mockforge-ui handlers, mockforge-cli, in-core ai_studio + workspace).
+  - Brings `ai_studio` one step closer to a clean whole-module move: 5 dirty sub-files → 3 dirty (debug_context + debug_context_integrator still need `reality`; nl_mock_generator still needs `voice`).
+
+- **[Architecture]** `ai_contract_diff` moved to `mockforge-intelligence`, `pillars` + `pillar_tracking` re-homed to `mockforge-foundation` (Issue #562 phase 4)
+  - Phase 3 deferred `ai_contract_diff` because its `DiffAnalyzer::analyze_with_recommendations` called `crate::pillar_tracking::record_ai_usage` — an analytics global living in `mockforge-core` that would have re-introduced an intelligence → core dep. Phase 4 unblocks it by promoting `pillars.rs` (568 LOC) and `pillar_tracking.rs` (207 LOC) to `mockforge-foundation`. Both files were already self-contained (only depend on `serde`/`chrono`/`once_cell`/`async_trait`/`tracing`), so the move is mechanical.
+  - With pillar_tracking in foundation, `ai_contract_diff` (7 files / ~2,380 LOC) moves cleanly to `mockforge-intelligence`. The single `pillar_tracking::record_ai_usage("ai_generation", {"type":"contract_diff",...})` call site is preserved — analytics dashboards keep receiving contract-diff usage events unchanged.
+  - Backwards compat: `mockforge_core::pillars`, `mockforge_core::pillar_tracking`, and `mockforge_core::ai_contract_diff` are all preserved as `pub use` re-exports. Every existing call site — 10+ files using `pillar_tracking` (ui, registry-server, scenarios, http, cli, ai_studio, voice, contract_validation, workspace) and the 5+ files using `ai_contract_diff` (http, cli, in-core consumers) — keeps compiling unchanged.
+  - `mockforge-foundation` gained `once_cell` + `tracing` workspace deps (both already used by every dependent crate; this just makes the dep direct).
+  - `ai_studio` remains in core — needs `reality`, `voice`, `failure_analysis`, and `contract_validation` extracted first (12 of 17 sub-files are otherwise clean post-phase-4, but a partial split would fracture module identity). Documented in `mockforge-intelligence/src/lib.rs`.
+
+- **[Architecture]** `threat_modeling` (security analyzers) moved out of `mockforge-core::contract_drift` into `mockforge-intelligence` (Issue #562 phase 3)
+  - 8 files / ~1,300 LOC: `dos_analyzer`, `error_analyzer`, `pii_detector`, `remediation_generator`, `schema_analyzer`, `threat_analyzer`, `types`, `mod`.
+  - Foreign deps swapped to their home crates: `crate::Result` → `mockforge_foundation::Result`, `crate::openapi::OpenApiSpec` → `mockforge_openapi::OpenApiSpec`. `crate::intelligent_behavior::*` stays as `crate::intelligent_behavior::*` because it's now a sibling module in `mockforge-intelligence` (phase 2 moved it there).
+  - Backwards compat: `mockforge_core::contract_drift::threat_modeling` is preserved as `pub use mockforge_intelligence::threat_modeling;` from `mockforge-core/src/contract_drift/mod.rs`. External callers (`mockforge-http`, `mockforge-cli`) continue to import via the `mockforge_core::contract_drift::threat_modeling` path — zero caller-side churn.
+  - `ai_contract_diff` was scoped out of this phase because its `DiffAnalyzer::analyze_with_recommendations` calls `crate::pillar_tracking::record_ai_usage`, which is an analytics global living in `mockforge-core` and would either need re-homing or a callback-injection refactor to move cleanly. Documented as a phase-4 prerequisite in `mockforge-intelligence/src/lib.rs`.
+
+- **[Architecture]** `intelligent_behavior` (AI cluster leaf) moved out of `mockforge-core` into `mockforge-intelligence` (Issue #562 phase 2)
+  - With the cycle broken in phase 1, the leaf of the AI cluster could move. `intelligent_behavior`'s only foreign deps were `mockforge_core::Result` (now `mockforge_foundation::Result`) and `mockforge_core::openapi::OpenApiSpec` / `openapi_routes::OpenApiRouteRegistry` / `openapi::response::ResponseGenerator` — all of which already live in `mockforge-openapi` (the core paths were just re-exports). `mockforge-openapi` itself depends only on `mockforge-foundation`, so the migration stays cycle-safe.
+  - 24 files (~7,800 LOC) moved: `behavior`, `cache`, `condition_evaluator`, `config`, `context`, `embedding_client`, `history`, `llm_client`, `memory`, `mockai`, `mutation_analyzer`, `openapi_generator`, `pagination_intelligence`, `relationship_inference`, `rule_generator`, `rules`, `session`, `spec_suggestion`, `sub_scenario`, `types`, `validation_generator`, `visual_layout`.
+  - Backwards compat: `mockforge_core::intelligent_behavior` is preserved as `pub use mockforge_intelligence::intelligent_behavior;`. Every existing `crate::intelligent_behavior::*` import inside `mockforge-core` (`voice`, `reality`, `graph`, `ai_contract_diff`, `ai_studio`, `contract_drift`, `failure_analysis`) keeps compiling unchanged. External callers (`mockforge-chaos`, `mockforge-cli`, `mockforge-http`, `mockforge-ui`, `mockforge-vbr`, workspace `tests/`) continue to import via the `mockforge_core` re-export — no caller-side churn this phase.
+  - `mockforge-intelligence` grew `mockforge-openapi`, `indexmap`, `openapiv3`, `regex`, `sha2`, and `tokio` deps. Per-doctest fix: the `mockforge_core::intelligent_behavior` usage example in `mod.rs` was retargeted to `mockforge_intelligence::intelligent_behavior`.
+  - This unblocks phase-3 follow-ups (`ai_contract_diff`, `threat_modeling`) — each can now also use the `pub use mockforge_intelligence::*;` shim pattern since the `intelligent_behavior::{config, llm_client, types}` they all depend on is reachable from the intelligence side. `ai_studio` remains blocked until `reality`/`voice`/`failure_analysis`/`contract_validation` are extracted.
+
+- **[DevX]** `pr_generation` moved out of `mockforge-core` into `mockforge-intelligence` and the intelligence → core cycle was broken (Issue #562 phase 1, #571)
+  - Why this matters: the ADR for #555 (`docs/adr/0001-mockforge-http-extraction.md`) and the `mockforge-intelligence/src/lib.rs` docstring both identified the bidirectional `mockforge-core` ↔ `mockforge-intelligence` dependency as the blocker behind every other AI submodule extraction. With the cycle broken, future moves (`behavioral_economics`, `ai_contract_diff`, `ai_studio`, etc.) become mechanical — they no longer have to fight the dep graph.
+  - How the cycle was broken: `mockforge-intelligence` dropped its `mockforge-core` dep entirely. The two real uses (`mockforge_core::Result` and `mockforge_core::scenarios::ScenarioDefinition`) became `mockforge_foundation::Result` (zero-cost swap — `core::Result` already re-exports `foundation::Result`) and a one-method move of `SequenceLearner::generate_sequence_scenario` into `mockforge-http::handlers::behavioral_cloning` (its only caller). That freed `mockforge-core` to take a `mockforge-intelligence` dep without Cargo rejecting it.
+  - Backwards compat: `mockforge_core::pr_generation` is preserved as `pub use mockforge_intelligence::pr_generation;`. Every existing `crate::pr_generation::*` import inside core (e.g., `config::mod` and `drift_gitops::handler`) keeps compiling unchanged. External callers (`mockforge-recorder`, `mockforge-pipelines`, `mockforge-http`, `mockforge-collab`) updated to import from the new home; the `mockforge_core::pr_generation` path remains valid for any out-of-tree consumers.
+  - `mockforge-intelligence` gained a `schema` feature mirroring core's (so the migrated types still gate their `JsonSchema` derive the same way) and grew the deps `pr_generation` needs (`base64`, `reqwest`, `urlencoding`, `mockforge-foundation`).
 
 ### Fixed
 
-- **[DevX]** CI rust-cache no longer poisons builds with dangling `target/*.d` paths (#446, #570)
-  - `CARGO_HOME` switched from per-run to per-runner-name so cached dep-info paths remain valid across runs on the same runner. `Swatinem/rust-cache@v2` invocations now partition the cache key by runner.
+- **[DevX]** CI rust-cache no longer poisons builds with dangling `target/*.d` paths (Issue #446, #570)
+  - Root cause: every workflow set `CARGO_HOME=/tmp/cargo-mockforge-${{ github.run_id }}` (unique per run) so the next run's `Swatinem/rust-cache@v2` restored a `target/` whose `.d` files referenced the *previous* run's CARGO_HOME — long since deleted. Surfaced as `error: could not compile <crate> ... (never executed) No such file or directory (os error 2)` on chronically red jobs (Test stable, Incremental Warning Gate, Code Coverage).
+  - Fix: switched every `CARGO_HOME` to `runner.name` (stable per machine, still unique across the 7 sibling runners that share the host) so cached dep-info paths remain valid across runs on the same runner. Added `with: env-vars: "CARGO_HOME"` to all 13 `Swatinem/rust-cache@v2` invocations so the cache key partitions by runner — different runners can't restore each other's caches and re-introduce the same staleness across the runner pool.
 - **[Reality]** Client-side "Connections opened" counter now appears for `--rps`-only runs (#79 round 6 follow-up, #543)
   - Root cause: the parser was reading `http_req_connecting.values.count` from k6's `summary.json`, but k6's Trend metric never emits a `count` field — only `avg/min/med/max/p(90)/p(95)`. The field was always absent, so `tcp_connect_samples` was always 0 and the connection-count line never printed for non-`--cps` runs.
   - Fix: the generated k6 script now declares a dedicated `mockforge_connections_opened` Counter and increments it whenever `res.timings.connecting > 0` (i.e. a fresh TCP socket was opened). The Rust parser reads this Counter's `count` directly. Works for both `--cps` runs (≈ total requests) and pooled-reuse runs (≈ `vus_max`).
   - Also: TCP-connect / TLS-handshake timing lines now print whenever the Trend has a non-zero `avg`, not when `count > 0` (which was unreliable). New `test_connections_opened_counter_present` regression test guards both the Counter declaration and the per-request increment.
-
 - **[Reality]** `--scenario constant` now runs at full VU concurrency from t=0 (#79 round 6 follow-up, #543)
   - Root cause: Srikanth reported that `--vus 5 -d 600s` took until the ~6-minute mark to reach 5 VUs and then ramped DOWN. The k6 template always wrote `startVUs: 0`, so even `--scenario constant`'s single `{duration: '600s', target: 5}` stage made `ramping-vus` linearly interpolate from 0 → 5 across the whole window.
   - Fix: for `Constant`, `startVUs` is seeded at `max_vus` so concurrency is at full from the start. Ramping scenarios (`RampUp`/`Spike`/`Stress`/`Soak`) still start at 0 and let their stages drive the curve. Guarded by `test_constant_scenario_starts_at_target_vus`.
 - **[Cloud][Reality]** Cloud Resilience dashboard could not reach hosted mocks over Fly 6PN (#468 follow-up, #542, #544)
   - `mockforge serve --admin` was binding the admin port to `127.0.0.1`, so the registry proxy's `{fly-app}.internal:9080` reach failed silently (#542 — bind dual-stack). UI's `/api/resilience/*` paths also sat behind auth middleware that doesn't run in proxied cloud mode, so the proxy's outbound calls 401'd (#544 — explicit exempt prefix). Both fixes were needed for the cloud Resilience tab to render live state instead of perpetual `runtime_state: unreachable`.
 - **[UI][Build]** Allow `esbuild` / `vue-demi` build scripts under pnpm 11's managed-builds policy (#525, #533)
-  - `pnpm-workspace.yaml` declares the two packages in `onlyBuiltDependencies` so production docker builds succeed.
+  - `pnpm-workspace.yaml` declares the two packages in `onlyBuiltDependencies` so production docker builds succeed. Fix split across two commits because the first round (#525) put the allowlist in the wrong file.
 - **[UI][Build]** Pin pnpm to 10.15.0 in the docker stages (#525 follow-up, #536)
-  - 10.15.0 predates the managed-builds policy that triggered #525 in the first place.
+  - 10.15.0 predates the managed-builds policy that triggered #525 in the first place. Single-pin keeps build behaviour consistent across local + CI + cloud regardless of pnpm's release cadence.
 - **[UI][Cloud]** Hide `api-explorer` from cloud sidebar (#459 follow-up, #537)
+  - API Explorer is still reachable from the HostedMocksPage "Open" action, so it doesn't need a standalone cloud sidebar slot.
 - **[CI][Docker]** Explicit cosign login so signature push to GHCR succeeds (#546)
+  - GHCR rejected the unsigned cosign push with 401 after PAT-vs-GITHUB_TOKEN cleanup; cosign now logs in explicitly before push.
 
 ### Cloud-parity meta tracker
 
 This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/459) — the cloud-parity meta tracker for the 14 "Local only" nav items. **14 / 14** addressed: 8 shipped end-to-end across prior releases (Graph #460, Virtual Backends #461, Logs #462, Metrics-folded #463, World State #464, Observability #465, Performance-folded #467, Resilience #468), 4 explicitly kept local-only (Proxy Inspector #470, SMTP Mailbox #471, MQTT Broker #472, Kafka Broker #473), 2 land in this release (Time Travel #466, Test Generator #469).
 
+## [0.3.136] - 2026-05-15
+
+### Added
+
+- **[Registry][Security]** Usage-limit enforcement + `past_due` read-only mode — closes launch blocker #449 (#515)
+  - **429 spec body for quota exhaustion:** new `ApiError::UsageLimitExceeded { limit_type, current, max, period }` returns the `{"error":"usage_limit_exceeded","limit":"…","current":N,"max":M}` shape from the issue. Wired into both the hosted-mock proxy's inline `enforce_monthly_quota` and the previously-dead `org_rate_limit_middleware`, so the same response shape comes out of every path that ever has to reject for quota. Free-tier orgs no longer have an unbounded request budget; Pro/Team orgs trip 429 at their plan ceiling instead of silently consuming Team-tier volume on a Pro plan.
+  - **`past_due` read-only mode after 24h grace:** new `past_due_writes_blocked` middleware on the authenticated route stack. Once an org is in `past_due` past the 24h grace window (introduced in #507), write methods outside an explicit billing/auth/support/legal allowlist return 402 PaymentRequired. Reads + recovery paths (billing portal, support, legal) stay fully reachable so the customer can self-serve out of dunning. Closes the "customer keeps consuming compute through the 7–10 day Stripe retry window" leak.
+  - **402 on past_due deploys (criterion 8):** the deploy-time past_due gate now returns 402 PaymentRequired via a new `ApiError::PaymentRequired` variant, distinct from the old 400 InvalidRequest — billing-state failure is a distinct response class from a malformed request.
+  - **Integration coverage:** new `crates/mockforge-registry-server/tests/usage_limits_e2e.rs` exercises the free→429-with-spec-body path, past_due→402 on the deploy handler, past_due→402 on `POST /api/v1/workspaces` (proves the route-wide middleware works, not just the inline check), and confirms reads + billing endpoints stay reachable. Gated `#[ignore]` for DATABASE_URL availability; run via the registry's E2E job.
+  - This closes the last 3 of #449's 8 acceptance criteria; the deploy/workspace/member gates (#479), `requests_per_30d` hosted-mock proxy enforcement (#494), and 24h past_due grace window (#507) had already shipped in earlier patches.
+
+### Fixed
+
+- **[Reality]** Drained workspace-wide `unused_qualifications` regressions in `mockforge-http::counting_listener` (9 sites, from #520) and `mockforge-registry-server::handlers::resilience` (1 site, from #522) (#515, second commit)
+  - Both PRs ran the warning gate's scoped check (`mockforge-cli` + `mockforge-ui`) only, so the workspace-wide `unused_qualifications` ratchet (graduated workspace-wide in #500-#511) caught these on rebase rather than at merge time. Trivial removals of redundant `tower::`, `std::pin::`, `std::task::`, and `serde::` prefixes where the inner item is already in scope.
+
+## [0.3.135] - 2026-05-15
+
+### Added
+
+- **[Cloud][Reality]** Cloud-mode Resilience dashboard — end-to-end live state from hosted-mock deployments (#468)
+  - **Phase 1 (#517) — cloud scaffold:** registry exposes `/api/v1/hosted-mocks/{deployment_id}/resilience/{circuit-breakers, bulkheads, summary}` and POST reset endpoints. UI's `ResiliencePage` branches on `isCloudMode()` and calls the registry instead of the never-mounted local `/api/resilience/*` routes. Originally workspace-scoped; #522 corrected the scope (see below) — circuit-breaker / bulkhead state lives in a specific mockforge process so it must be deployment-scoped.
+  - **Phase 2 (#518) — middleware in the runtime:** new `mockforge_chaos::resilience_middleware` axum layer wires every HTTP request through the existing `CircuitBreakerManager` + `BulkheadManager`. Per-endpoint circuit breaker keyed by `"{METHOD} {path}"`; bulkhead keyed on a configurable service string (defaults to `"http"`); only 5xx counts as a breaker failure (4xx stays out of the per-endpoint failure budget). Bulkhead saturation returns 503 + `Retry-After: 1` without recording on the breaker. `mockforge serve` now layers the middleware on the HTTP app and mounts `mockforge_chaos::create_resilience_router` on the admin port; `default_resilience_state()` returns a `(MiddlewareState, ResilienceApiState)` pair backed by the same `Arc<...Manager>` instances so the dashboard reflects what the middleware records.
+  - **CLI flags wired (#519):** existing `--circuit-breaker` / `--bulkhead` flags (and the nine threshold/limit knobs that come with them) actually turn the middleware on. New `resilience_state_from_configs(circuit, bulkhead)` builder takes `Option<CircuitBreakerConfig>` / `Option<BulkheadConfig>` overrides; `serve.rs` threads the CLI values into both `ChaosConfig` (so `/api/chaos/*` reports identical settings) and the resilience state. When both flags are unset, behaviour is identical to before — middleware short-circuits per-request, effectively free.
+  - **Phase 3 (#522) — runtime proxy + admin enable:** registry now `reqwest`-proxies `/api/v1/hosted-mocks/{deployment_id}/resilience/*` over Fly 6PN to `http://{HostedMock::fly_app_name}.internal:9080/api/resilience/*` (3-second timeout, fail-fast). `runtime_state` is now `"live" | "unreachable"` — dropped `"pending"` because every non-live state is some form of unreachable with a real proxy in place. **The orchestrator now injects `MOCKFORGE_ADMIN_ENABLED=true` on every Fly deploy** (both `deploy_to_flyio` and `redeploy_to_flyio`); without that, the admin server wouldn't start in cloud and the proxy would have returned `unreachable` for every deployment that ever existed. UI gains a deployment selector: auto-selects the first active deployment in the org, shows a `<select>` only when >1 exists, renders a helpful empty state when none.
+- **[Cloud]** Cloud-mode Virtual Backends — consistency lifecycle presets (#516, #461)
+  - Registry endpoints for managing virtual-backend lifecycle (provisioning, eventual consistency, primary/secondary fan-out) with cloud-side persistence and audit. UI lifecycle picker now drives cloud-mode workspaces without falling back to the local-only surface.
+
+### Fixed
+
+- **[Security]** `lettre` 0.11.21 → 0.11.22 to clear RUSTSEC-2026-0141 (critical, published 2026-05-14) (#521)
+  - Patch-level bump in Cargo.lock; no API surface change.
+  - Drive-by clippy cleanup in `mockforge-registry` to unblock the warning ratchet on the lettre commit.
+
+## [0.3.134] - 2026-05-14
+
+### Added
+
+- **[Reality]** Server-side HTTP connection lifecycle gauges (#79 round 6, Srikanth's "how many connections are opened at a time")
+  - `CountingMakeService` (in `mockforge-http`) now wraps each per-connection service in a `TrackedService` whose `Drop` impl records the close. The pair of `record_accept` / `record_close` increments give an exact live `connections_open` gauge plus cumulative `connections_total_opened` / `connections_total_closed` counters in `mockforge_foundation::rate_counters`.
+  - Works for both plain HTTP (`axum::serve`) and HTTPS (`axum_server::bind_rustls`) paths — only successfully accepted connections (post-TLS-handshake for HTTPS) are counted. A `record_close` always fires per `record_accept`, even for make-service errors, so the gauge stays balanced.
+  - When `MOCKFORGE_HTTP_LOG_CONN=1` is set, each connection close emits an INFO log line under target `mockforge_http::conn_diag` with `duration_ms` and `requests` (number served before close). Combined with the existing per-request `http_conn_diag` line, this tells you with certainty whether MockForge closed the socket after 1 request (versus the peer closing) — the exact missing piece for diagnosing Srikanth's FIN-from-server PCAP.
+  - Exposed in the admin/UI `SystemInfo` response: `connections_open`, `connections_total_opened`, `connections_total_closed`, `peak_connections_open`. Surfaced in the TUI dashboard's stats panel as `Conns Open: N (peak M)  Opened: X  Closed: Y` — a live multiplexing / churn indicator.
+- **[Reality]** Bench client summary always shows connection-open counts when k6 made TCP sockets (#79 round 6, Srikanth's "open connection on the client")
+  - Previously the `Connections opened`, `TCP connect avg/max`, and `TLS handshake avg/max` lines only printed in `--cps` mode. Now they print whenever `http_req_connecting.count > 0`, so non-`--cps` runs can also see distinct connections opened vs request count — i.e. whether the client actually pooled connections.
+  - New `Peak concurrent VUs` line surfaces `vus_max` as the upper bound on simultaneously-open client connections, paired with the server-side `Conns Open` gauge for cross-checking.
+
+## [0.3.133] - 2026-05-13
+
+### Fixed
+
+- **[Reality]** `mockforge bench --rps N` produced 0 requests under the default `ramp-up` scenario (#79 follow-up, Srikanth's 5th-round reply)
+  - Root cause: the k6 script template derived `preAllocatedVUs` / `maxVUs` / `duration` for the `constant-arrival-rate` executor from the *last* stage of the chosen scenario. The default scenario is `ramp-up`, whose last stage is the ramp-DOWN with `target: 0` — so `preAllocatedVUs: 0` and the bench completed with zero requests. Without `--rps`, the bench used `ramping-vus` which honors all stages, so the bug was specific to `--rps`.
+  - Fix: when `target_rps` is set, the script now uses the configured `--vus` directly for `preAllocatedVUs` / `maxVUs` and the full `--duration` for the executor duration, ignoring scenario stages (which don't apply to open-model load anyway).
+  - Regression test added in `mockforge_bench::k6_gen::tests::test_rps_with_ramp_up_uses_full_vu_pool_and_duration` that asserts the generated script contains `preAllocatedVUs: 100` and `duration: '600s'` for a 100-VU / 600s / `--rps 100` invocation with the default ramp-up scenario.
+
+### Added
+
+- **[Reality]** `mockforge bench --cps` now reports connections-per-second in the end-of-run summary (#79 follow-up, Srikanth's 5th-round reply)
+  - With `--cps` (which sets k6's `noConnectionReuse: true`), every request opens a fresh TCP/TLS connection, so connections/sec equals request rate. Previously the summary only printed `RPS:`; users running CPS-stress benches had to read it from k6's raw output.
+  - The terminal summary now prints `CPS:`, `Total Connections:`, and — when k6 has samples — TCP-connect and TLS-handshake `avg/max` timings. `K6Results` exposes `tcp_connect_*` / `tls_handshake_*` fields so SDK consumers can read the same numbers programmatically.
+- **[Reality]** Opt-in `MOCKFORGE_HTTP_LOG_CONN=1` env var emits per-request HTTP-version / Connection-header diagnostic log (#79 follow-up, Srikanth's 5th-round reply)
+  - Srikanth's PCAP showed HTTP/1.1 requests arriving at MockForge with no `Connection` header but MockForge sending FIN after each response. The only way to confirm what MockForge actually sees on the wire is to log the version + headers from hyper's view. New middleware in `mockforge_http::middleware::conn_diagnostics` emits one INFO log line per request with `method`, `path`, `version`, `req_connection`, `req_keep_alive`, `req_host`, `peer`, `resp_status`, `resp_connection`, `resp_keep_alive`, and a `close_decision` field summarizing the keep-alive outcome (e.g. `keep-alive (HTTP/1.1 default — no Connection: close)`).
+  - Disabled by default — the log is too noisy for normal operation. Truthy values: `1`, `true`, `yes`, `on`.
+
 ## [0.3.132] - 2026-05-12
 
 ### Added
 
-- **[Reality]** Full chaos fault-category coverage in stats and `/metrics` (#79 round-4)
-  - `connection_error` fault now records at the HTTP layer when `connection_error_kind: http_503` (previously only TCP-level kinds had counters). New `jitter` and `bandwidth_throttle` counters + matching Prometheus histograms (`mockforge_chaos_jitter_ms`, `mockforge_chaos_bandwidth_throttle_ms{direction}`). `ChaosStatsSnapshot` gains mean latency, jitter samples + mean offset, and bandwidth-throttle totals. TUI Chaos `Fault Stats` panel renders all of them.
+- **[Reality]** Surface every chaos fault category in `/api/chaos/stats`, `/metrics`, and the TUI Chaos screen (#79 follow-up, Srikanth's 4th-round reply)
+  - `connection_error` fault is now recorded at the HTTP layer when `connection_error_kind: http_503` (the default). Previously only TCP-level kinds (`TcpReset`/`TcpClose`) showed up in counters, so configs that enabled `connection_errors: true` produced 503s but no stats — exactly Srikanth's "no connection_error in TUI" observation.
+  - New `jitter` fault counter + `mockforge_chaos_jitter_ms` histogram: jitter is reported separately from total injected latency so users can see jitter activity even when the base delay is zero.
+  - New `bandwidth_throttle` fault counter + `mockforge_chaos_bandwidth_throttle_ms{direction}` histogram: counts how often `bandwidth_limit_bps` actually delayed a transfer and accumulates the artificial wait time, keyed by `request` vs `response` direction.
+  - `ChaosStatsSnapshot` adds: `latency_avg_ms_by_endpoint`, `jitter_samples_by_endpoint`, `jitter_avg_ms_by_endpoint`, `bandwidth_throttle_samples_by_direction`, `bandwidth_throttle_total_ms`.
+  - TUI Chaos `Fault Stats` panel now shows mean latency, jitter sample counts + mean offset, bandwidth-throttle activity by direction, and total throttle delay.
 - **[Reality]** Bench client surfaces server-injected chaos signals (#79 item 7)
-  - HTTP chaos middleware stamps `X-Mockforge-Injected-Latency-Ms`, `-Injected-Jitter-Ms`, and `-Fault` response headers. Generated k6 script reads them into custom trends (`mockforge_server_injected_latency_ms`, `mockforge_server_injected_jitter_ms`) and a counter (`mockforge_server_fault_total`). Bench summary prints a new `Server-Injected (chaos)` block alongside client-observed latency.
-- **[DevX]** New bench CLI flags `--rps` and `--cps` (#79 item 8)
-  - `--rps N` switches the k6 executor from `ramping-vus` to `constant-arrival-rate` at `N` requests/sec (and drops the per-iteration `sleep(1)` that previously capped throughput at ~2 RPS). `--cps` sets `noConnectionReuse: true` so each request opens a fresh TCP/TLS connection — useful for stressing connection-limit chaos and TCP-level fault injection.
+  - HTTP chaos middleware stamps three response headers when faults fire: `X-Mockforge-Injected-Latency-Ms`, `X-Mockforge-Injected-Jitter-Ms`, `X-Mockforge-Fault` (e.g. `partial_response`).
+  - The k6 script generated by `mockforge bench` reads those headers into custom trends (`mockforge_server_injected_latency_ms`, `mockforge_server_injected_jitter_ms`) and a counter (`mockforge_server_fault_total`). End-of-run bench summary now prints a `Server-Injected (chaos)` block alongside the existing client-observed latency.
+- **[Reality]** New bench CLI flags `--rps` and `--cps` (#79 item 8)
+  - `--rps N`: switches the generated k6 script from the legacy `ramping-vus` executor to `constant-arrival-rate` at `N` requests/sec, with `--vus` becoming the pre-allocated VU pool. The per-iteration `sleep(1)` that capped throughput at ~1 req/VU/sec is dropped when `--rps` is set. Use this to drive enough traffic to exercise rate-limit / connection-limit chaos that Srikanth couldn't trigger at the legacy default 2 RPS.
+  - `--cps`: sets `noConnectionReuse: true` on every request so each one opens a fresh TCP/TLS connection — useful for hitting connection-limit thresholds and TCP-level fault injection.
 - **[Reality]** Opt-in `MOCKFORGE_HTTP_KEEPALIVE_HINT=1` advertises `Connection: keep-alive` + `Keep-Alive: timeout=N, max=M` on every response (#79 item 2 workaround)
-  - For proxies (F5/Avi/HAProxy/nginx) that read those headers when deciding to pool upstream sockets. Best-effort signal; the actual fix for the FIN-after-response pattern is upstream HTTP/1.1 negotiation in the proxy itself.
+  - For proxies whose upstream pool decisions read those response headers (F5/Avi/HAProxy/nginx in some configs). Won't undo a downstream `Connection: close`. Documented in the issue thread as a best-effort signal; the actual fix for the FIN/RST pattern Srikanth observed is upstream HTTP/1.1 negotiation (`proxy_http_version 1.1` for nginx, equivalent on other proxies).
 
 ## [0.3.131] - 2026-05-10
 
 ### Added
 
 - **[Reality]** TUI Chaos screen now surfaces live fault-injection counts (#79 follow-up)
-  - New `ChaosStatsSnapshot` and `GET /api/chaos/stats` (+ admin passthrough at `/__mockforge/chaos/stats`).
-  - Fault Stats panel below Settings shows totals + per-fault-type counts. Older servers without the endpoint fall back to the 2-panel layout.
+  - New `mockforge_chaos::metrics::ChaosStatsSnapshot` — JSON-serializable view of `CHAOS_METRICS` keyed by `fault_type → endpoint → count`, plus per-type totals, grand total, rate-limit violations, and latency injection sample counts.
+  - New `GET /api/chaos/stats` (chaos crate) and `GET /__mockforge/chaos/stats` (admin passthrough) endpoints expose the snapshot as JSON.
+  - `ChaosScreen` adds a **Fault Stats** panel below Settings showing total faults, per-type counts (sorted desc by frequency), rate-limit violations, and latency injection samples. Best-effort: older servers without the new endpoint fall back to the existing 2-panel layout, so client/server version mismatches don't break the screen.
 
 ## [0.3.130] - 2026-05-10
 
 ### Fixed
 
-- **[Reality]** `mockforge_chaos_*` counters silently absent from `/metrics` (#79 follow-up)
-  - Chaos counters register against the global `prometheus::default_registry()`; `/metrics` was exporting only the local `MetricsRegistry`. The two were disjoint, so chaos counters never surfaced. `metrics_handler` now gathers from both. No format change for scrapers.
-- **[Reality]** `LatencyInjectionConfig` / `RateLimitingConfig` / `NetworkShapingConfig` rejected partial YAML
-  - Missing fields broke the whole config load (e.g. `traffic_shaping:` without `max_connections`). Adding `Default` + `#[serde(default)]` makes partial YAML parse cleanly.
+- **[Reality]** `mockforge_chaos_*` counters silently absent from `/metrics` (#79 follow-up, Srikanth's 3rd-round reply)
+  - Root cause: chaos counters register against `prometheus::default_registry()` (via `register_counter_vec!`), but the `/metrics` exporter gathered only from a *separate* local `MetricsRegistry` created in `mockforge-observability`. The two registries were disjoint, so even when `record_fault(...)` fired (wired in 0.3.128), nothing appeared at `/metrics` — Srikanth ran a bench that produced 80 failures and `curl /metrics | grep mockforge_chaos_` returned empty.
+  - Fix: `metrics_handler` now extends the local registry's metric families with `prometheus::default_registry().gather()` before encoding, so both registries surface in the same response. No format change for clients — chaos metrics now appear alongside protocol metrics.
+- **[Reality]** Chaos sub-configs (`LatencyInjectionConfig`, `RateLimitingConfig`, `NetworkShapingConfig`) failed YAML parse if any field was omitted (#79 follow-up)
+  - All three structs lacked `Default` and `#[serde(default)]`, so a `traffic_shaping:` block missing `max_connections` would fail the whole config load. Srikanth hit this and worked around it manually. Adding the derives makes partial YAML parse cleanly with sensible zero defaults.
 
 ## [0.3.129] - 2026-05-09
 
 ### Added
 
 - **[Reality]** YAML config now exposes every chaos `fault_injection` field (#79 follow-up)
-  - `mockforge_core::config::FaultConfig` gains `connection_error_kind`, `partial_responses` + `partial_response_probability`, `payload_corruption` + `payload_corruption_probability`, `corruption_type`, `error_pattern` (Burst / Random / Sequential), `mockai_enabled`, and `request_matcher`. All `#[serde(default)]` so existing chaos.yaml files keep parsing.
-  - The bridge in `serve.rs` now maps every field through to `mockforge_chaos::config::FaultInjectionConfig`; previously these were silently defaulted at YAML load time and only the `PUT /api/chaos/config/faults` REST API could set them.
+  - `mockforge_core::config::FaultConfig` gains the fields it was missing relative to `mockforge_chaos::config::FaultInjectionConfig`: `connection_error_kind` (`http_503` / `tcp_reset` / `tcp_close`), `partial_responses` + `partial_response_probability`, `payload_corruption` + `payload_corruption_probability`, `corruption_type` (`none` / `random_bytes` / `truncate` / `bit_flip`), `error_pattern` (Burst / Random / Sequential), `mockai_enabled`, and `request_matcher` (source IPs, headers, body-size bounds, chunked-only). All new fields use `#[serde(default)]` so existing chaos.yaml files continue to parse unchanged.
+  - The bridge in `serve.rs` (`fault_config_to_chaos`) now maps every field through to the chaos crate's runtime `FaultInjectionConfig`. Previously `--config chaos.yaml` set them to defaults silently and operators had to use the `PUT /api/chaos/config/faults` REST API to configure them.
+  - Tests cover round-trip parsing of the full YAML shape from the issue-#79 reply, backward-compat parsing of legacy YAML without the new fields, snake_case enum encoding, and end-to-end bridge preservation of every new field.
 
 ## [0.3.128] - 2026-05-09
 
@@ -963,18 +1380,317 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
 ### Fixed
 
 - **[Reality]** TPS / RPS200 dashboard counters stuck at 0 under load (#351, #79)
-  - Metrics middleware (`collect_http_metrics`) was never `.layer()`d on the production router built in `serve.rs`. CPS still advanced because `CountingMakeService` wraps the make-service at a different layer.
+  - Root cause: `record_response()` lives inside `collect_http_metrics`, but the middleware was exported from `mockforge-http` and never `.layer()`d onto the production router built in `serve.rs`. CPS kept ticking because `CountingMakeService` wraps the make-service at a different layer.
   - Layer `collect_http_metrics` as the outermost wrapper on `http_app` so every response — including chaos-mutated ones — bumps the rate counters the dashboard sampler reads.
+  - Regression test pins the actual counter delta on a 2xx response, not just the response status.
 
 ### Added
 
 - **[DevX]** `bench-chunked` accepts `--base-path`, humantime `--duration`, `--validate-requests`, `--export-requests` (#352, #79)
-  - `--base-path <PATH>` prepends to every spec-derived operation path before URL construction. CLI > spec.servers > none.
-  - `-d 600s` / `--duration <DURATION>` switched from bare seconds (u64) to humantime parsing.
-  - `--validate-requests` and `--export-requests` mirror the flags already on `mockforge bench`.
+  - `--base-path <PATH>` prepends to every spec-derived operation path before URL construction. CLI > spec.servers > none, matching `mockforge bench`. No-op without `--spec`.
+  - `-d 600s` / `--duration <DURATION>` switched from bare seconds (u64) to humantime parsing — `30s`, `5m`, `1h`, or bare seconds all parse.
+  - `--validate-requests` (OpenAPI request validation) and `--export-requests` (per-request JSON export) now mirror the same flags on `mockforge bench`.
+  - The full Microsoft Graph invocation reported in #79 now parses end-to-end:
+    ```
+    mockforge bench-chunked --chunk-size-bytes 4096 --total-size-bytes 10485760 \
+      --chunk-interval-ms 50 --spec microsoft-graph.yaml \
+      --target https://192.168.2.86 --base-path /v1.0 \
+      --validate-requests --export-requests --insecure -d 600s
+    ```
 - **[DevX]** Supervisor wrappers for unattended runs under heavy traffic (#350, #79)
-  - `deploy/systemd/mockforge.service` — systemd unit with `Restart=always`.
-  - `deploy/scripts/run-forever.sh` — bash supervisor that restarts the binary after any non-clean exit.
+  - `deploy/systemd/mockforge.service` — systemd unit with `Restart=always`, resource limits, and hardening directives. Documents the install dance and the two knobs (`MemoryMax`, `LimitNOFILE`) most likely to matter at high concurrency.
+  - `deploy/scripts/run-forever.sh` — bash supervisor that restarts the binary after any non-clean exit. Forwards SIGINT/SIGTERM so Ctrl-C stops cleanly. Useful on macOS / non-systemd hosts and ad-hoc bench rigs.
+  - `deploy/systemd/README.md` picks between them.
+
+## [0.3.126] - 2026-05-03
+
+### Added
+
+- **[Observability]** TPS / RPS200 / CPS rate metrics in TUI dashboard + persistent CSV (#326, #79)
+  - **TPS** — successful (200..=399) responses per second
+  - **RPS200** — 200-OK responses per second
+  - **CPS** — accepted TCP connections per second (works for both plain HTTP via `axum::serve` and HTTPS via `axum_server::Server::serve` — make-service wrapper instead of listener wrapper)
+  - Each shown current + lifetime peak in the *Request Stats* panel
+  - Three new columns appended to the `MOCKFORGE_METRICS_LOG_FILE` CSV: `tps,rps_200,cps`. Old positional CSV parsers keep working
+  - New `mockforge-foundation::rate_counters` module hosts the global atomic counters
+- **[CLI]** `--https-port` for nginx-style dual HTTP+HTTPS listeners (#327, #79)
+  - When set, the existing `--http-port` listener stays plain HTTP and a parallel TLS listener spins up on `--https-port`, sharing the same router and admin UI
+  - Example: `mockforge serve --http-port 80 --https-port 443 --tls-cert server.pem --tls-key key.pem`
+  - `--https-port` requires `--tls-cert` + `--tls-key` and must differ from `--http-port`
+- **[Reality]** `bench-chunked --spec` to drive the native chunked bench from POST/PUT/PATCH operations in an OpenAPI spec (#328, #79)
+  - When `--spec` is set, `--target` becomes the base URL and the bench iterates each matching operation sequentially, each running for `--duration`
+  - `--operation-id <id>` narrows to a single op
+- **[Reality]** `bench-chunked` now captures and prints up to five non-2xx response samples — status, `Server` header, first 256 bytes of body (#329, #79)
+  - Critical for diagnosing the "503 from bench, 200 in MockForge log" pattern (almost always an upstream proxy timing out on a slow chunked upload)
+  - Hint output for 5xx spells out the proxy-timeout math: each request takes >= `(total_size_bytes / chunk_size_bytes) * chunk_interval_ms` ms
+
+### Changed
+
+- **[Reality]** `bench-chunked` CLI help: `--total-size-bytes` is now explicitly documented as **per-request** (not total over the run), with the chunks-per-request formula in the help text. Resolves repeat user confusion (#328, #79)
+
+## [0.3.125] - 2026-05-02
+
+### Added
+
+- **[Chaos]** Per-request fault matchers (#306, #79):
+  - `request_matcher.source_ips` — CIDR or bare IP allowlist
+  - `request_matcher.headers` — case-insensitive name + optional exact value
+  - `request_matcher.min_body_size_bytes` — only requests with body ≥ N
+  - `request_matcher.chunked_only` — only `Transfer-Encoding: chunked` requests
+  - AND across fields, OR within a list. Empty matcher matches everything (back-compat)
+  - Applies to all five fault paths: HTTP errors, timeouts, partial responses, payload corruption, connection errors
+- **[Chaos]** TCP-level connection errors via `ChaosTcpListener` (#306, #79):
+  - `connection_error_kind: tcp_reset` — TCP RST at accept time (`SO_LINGER=0` then drop). Clients see `ECONNRESET`
+  - `connection_error_kind: tcp_close` — TCP FIN at accept time. Clients see EOF before any HTTP response
+  - `connection_error_kind: http_503` (default) — application-layer 503 on a healthy connection (back-compat)
+- **[Reality]** `mockforge bench-chunked` — native Rust chunked-encoding traffic generator (#306, #79)
+  - Bypasses k6 entirely. Each worker streams body via `reqwest::Body::wrap_stream`, no Content-Length, guaranteed wire chunking
+  - Supports `--concurrency`, `--duration`, `--chunk-size-bytes`, `--total-size-bytes`, `--chunk-interval-ms`, `--header`, `--insecure`
+- **[TUI]** Peak metrics tracked alongside current values in the dashboard (#306, #79)
+  - CPU, memory, error-rate now show `current (peak X)`
+- **[Observability]** Persistent metrics CSV via `MOCKFORGE_METRICS_LOG_FILE` env var (#306, #79)
+  - 10-second sampling, `timestamp,cpu_pct,mem_mb,total_reqs,err_rate` per row
+  - Survives restarts; charts in any spreadsheet, Grafana, or dashboarding tool
+
+### Changed
+
+- **[Chaos]** `timeout_errors: true` now actually `tokio::sleep(timeout_ms)` then returns **504 Gateway Timeout**, applied uniformly to chunked and non-chunked. Previously this flag was incorrectly mapped to body truncation (#306, #79)
+- **[Chaos]** `partial_response` now distinguishes chunked vs non-chunked truncation (#306, #79):
+  - Non-chunked: truncates body but keeps original `Content-Length` header — clients see unexpected EOF
+  - Chunked: truncates before terminating chunk — no `0\r\n\r\n`, real protocol violation
+- **[Reality]** k6 templates: `bench --chunked-request-bodies` adds `Transfer-Encoding: chunked` header (best-effort — k6/Go's `net/http` may still send Content-Length based on body type)
+
+### Notes
+
+- Adds new public fields to `FaultInjectionConfig`, `K6Config`, and `K6ScriptTemplateData`. External callers building these via struct literal (without `..Default::default()`) need a trivial update.
+
+## [0.3.124] - 2026-04-30
+
+### Fixed
+
+- **[Core]** `cargo test --doc -p mockforge-core` now passes cleanly — stale doctests against types that moved out during the openapi/foundation extractions are marked `ignore` (#285)
+  - Validation release: closes out the chronic CI red on every release tag from v0.3.117 onward
+
+## [0.3.123] - 2026-04-30
+
+### Fixed
+
+- **[UI]** `test_static_assets_content_length` skips its size assertion when no Vite build is present, so `release.yml` (which doesn't run `pnpm`) stops failing (#284)
+  - Validation release for the chronic release-CI red
+
+## [0.3.122] - 2026-04-30
+
+### Fixed
+
+- **[UI]** `admin_ui_build` tests skip cleanly when `ui/dist/index.html` is missing (#283)
+  - Validation release for the chronic release-CI red
+
+## [0.3.121] - 2026-04-29
+
+### Fixed
+
+- **[Registry]** Drop duplicate migration that blocked all sqlite migrations (#282)
+  - `_000010_user_notification_and_preferences.sql` was a stale orphan (byte-identical to `_000011_`) that violated `_sqlx_migrations.UNIQUE(version)` against the legitimate `_000010_federation_scenario_activations.sql`
+  - 26 sqlite tests in `mockforge-registry-core` were failing on every release until this landed
+
+## [0.3.120] - 2026-04-29
+
+### Fixed
+
+- **[HTTP]** Mocks created via `POST /__mockforge/api/mocks` now honor `MOCKFORGE_RESPONSE_TEMPLATE_EXPAND` (#281)
+  - Previously, OpenAPI-loaded route handlers expanded `{{faker.email}}`, `{{uuid}}`, `{{randInt …}}`, etc., but mocks registered through the management API shipped the literal template strings to clients
+  - The Node.js SDK and any test setup that creates mocks programmatically were affected
+- **[CI]** `release.yml`'s test step now pre-builds `mockforge` with `--features all-protocols` so e2e tests have a binary that actually starts the WebSocket and gRPC listeners (#281)
+- **[Test]** `test_data_protocol_generation` no longer asserts that a JSON-string field magically becomes a JSON number after in-string template expansion (it doesn't, and never has) (#281)
+
+## [0.3.119] - 2026-04-29
+
+### Added
+
+- **[HTTP]** `--no-rate-limit` CLI flag and `MOCKFORGE_RATE_LIMIT_ENABLED=false` env var to fully disable the per-IP HTTP rate limiter (#280, #79)
+  - `MOCKFORGE_RATE_LIMIT_DISABLED=true` is a documented alias
+  - Reported by @srikr while load-testing the api.github.com spec — sustained load was hitting the default 1000 RPM / 2000 burst limits and returning 429s with `Retry-After: 60`
+  - Workaround prior to this release was setting `MOCKFORGE_RATE_LIMIT_RPM=100000000` / `MOCKFORGE_RATE_LIMIT_BURST=100000000`; that still works and is unchanged
+
+## [0.3.104] – [0.3.118] — 2026-03-29 to 2026-04-23
+
+These releases predate the `chore(release): bump workspace to X.Y.Z`
+commit convention introduced in 0.3.119, so there's no single commit
+to lift detail from per version. Per-release notes are auto-generated
+on each GitHub release page:
+
+- <https://github.com/SaaSy-Solutions/mockforge/releases>
+
+The crates are all published and resolvable on crates.io
+(`cargo search mockforge-cli` lists every version).
+
+## [0.3.103] - 2026-03-28
+
+### Added
+
+- **[Reality]** Field-level schema validation errors in conformance failure details (#79)
+  - Violations now show specific field path, violation type, expected/actual values
+  - Uses `jsonschema::validate()` instead of `is_valid()` for detailed error reporting
+  - Displayed in terminal output and `conformance-failure-details.json`
+- **[Reality]** HAR-to-YAML generator: `mockforge har-to-conformance --har file.har` (#79)
+  - Converts browser HAR captures to custom compliance YAML
+  - Auto-detects base URL, filters static assets, extracts response headers and JSON body field types
+  - Output compatible with `--conformance-custom`
+- **[Reality]** Multi-target conformance: `--conformance` + `--targets-file` now works (#79)
+  - Runs conformance tests against each target sequentially using native executor
+  - Per-target reports in `output/target_N/conformance-report.json`
+  - Combined summary in `multi-target-conformance-summary.json`
+
+## [0.3.102] - 2026-03-28
+
+### Fixed
+
+- **[Reality]** Add `summary.json` to spec-driven conformance `handleSummary` (#79)
+  - Custom conformance tests (via `--conformance-custom`) now generate `summary.json`
+
+## [0.3.101] - 2026-03-26
+
+### Fixed
+
+- **[Reality]** Skip automatic Authorization (Basic/Bearer) headers when Cookie header is provided via `--conformance-header` (#79)
+  - Users managing session-based auth no longer get conflicting Basic Auth headers
+- **[Reality]** Add `summary.json` output to reference conformance generator's `handleSummary` (#79)
+
+## [0.3.100] - 2026-03-24
+
+### Fixed
+
+- **[Core]** Prevent panic on conflicting parameter names in OpenAPI routes (#79)
+  - Routes with different param names at the same position (e.g., `{attestation_id}` vs `{subject_digest}`) now canonicalize to first-registered names
+  - Fixes crashes when loading GitHub, Xero, and similar real-world specs
+  - Applied to all 4 router builders
+- **[Core]** Swagger 2.0 `formData` parameters now properly converted to OpenAPI 3 `requestBody` (#79)
+  - `application/x-www-form-urlencoded` for regular fields, `multipart/form-data` for file uploads
+
+## [0.3.99] - 2026-03-23
+
+### Fixed
+
+- **[Core]** Fix param name conflict panic — same as v0.3.100 (v0.3.99 publish was overwritten by concurrent process)
+
+## [0.3.98] - 2026-03-22
+
+### Fixed
+
+- **[Reality]** Fix zero stats in multi-target summary — removed deprecated `--summary-export` flag; rely solely on `handleSummary()` for writing `summary.json` (#79)
+- **[Reality]** Fix failed_requests metric reading `.fails` (success count) instead of `.passes` (failure count) from k6 Rate metric (#79)
+- **[Reality]** Fix k6 script path not found when CWD is set to output dir — now uses absolute script path (#79)
+- **[Reality]** Fix `--summary-export` absolute path for CWD mismatch (#79)
+- **[Reality]** Fix k6 API server port conflict in multi-target mode — each parallel instance gets a unique port (#79)
+- **[Reality]** Treat k6 exit code 99 (thresholds crossed) as warning, still parse results (#79)
+- **[Reality]** Warn when `--conformance` is used with `--targets-file` (not yet supported) (#79)
+- **[Core]** Downgrade contract diff `$ref` resolver warnings from WARN to DEBUG (#79)
+
+### Added
+
+- **[Reality]** Total elapsed time in multi-target summary output and `aggregated_summary.json` (#79)
+- **[Reality]** `all_targets.csv` file with per-target metrics for easy parsing (#79)
+- **[UI]** Host header column in admin dashboard Recent Logs (#79)
+- **[TUI]** Client IP and Host columns in both Dashboard and Logs screens (#79)
+
+## [0.3.91] - 2026-03-17
+
+### Fixed
+
+- **[HTTP]** Fix double-slash in conformance URLs when `--target` has trailing slash (#79)
+- **[HTTP]** Apply OData rewrite layer to TLS/HTTPS server path (was only on non-TLS) (#79)
+- **[CLI]** Downgrade non-actionable WARN messages to DEBUG/INFO (MockAI key, proto dir, auth backend, JWT secret) (#79)
+
+## [0.3.90] - 2026-03-16
+
+### Added
+
+- **[Core]** OData function call path support via URI rewrite layer (#79)
+  - Handles paths like `(period='{period}')` for Microsoft Graph compatibility
+  - Mock responses generated for OData function endpoints
+
+## [0.3.89] - 2026-03-15
+
+### Fixed
+
+- **[Core]** Gracefully skip OData function call paths in OpenAPI specs instead of failing (#79)
+
+## [0.3.88] - 2026-03-14
+
+### Added
+
+- **[Reality]** `--conformance-delay` flag to add delay between conformance requests (#79)
+- **[Reality]** k6 output logging to file for debugging (#79)
+- **[Reality]** 429 rate-limit detection and error clarity in conformance output (#79)
+
+### Fixed
+
+- **[Cloud]** End-to-end deployment pipeline, storage fallback, remaining console errors
+- **[CLI]** Load OpenAPI spec from `MOCKFORGE_CONFIG` env var for cloud deployments
+- **[Cloud]** Auto-detect Fly.io registry images for cross-app pulls
+
+## [0.3.85] - 2026-03-12
+
+### Added
+
+- **[Reality]** Native conformance executor with API, UI dashboard, and SDK integration (#79)
+- **[Reality]** Conformance report UX improvements and custom test authoring (#79)
+- **[Reality]** Full request/response detail capture for conformance failures (#79)
+- **[Reality]** OWASP API Top 10 coverage mapping in conformance reports (#79)
+
+### Fixed
+
+- **[Reality]** Eliminate misleading error rate in conformance output (#79)
+- **[Reality]** Deduplicate native executor checks, write failure details file (#79)
+- **[Reality]** Custom conformance checks now emit failure details (#79)
+- **[Core/Bench]** Resolve 3 conformance test failures (#79)
+- **[UI/Bench]** Fix empty routes and add endpoint details to conformance (#79)
+
+## [0.3.80] - 2026-03-10
+
+### Fixed
+
+- **[Analytics]** Make migrations idempotent with `IF NOT EXISTS` guards (#79)
+- **[TUI]** Add g/G and PgUp/PgDn to routes screen status hint (#79)
+- **[UI/Bench]** Fix routes proxy, improve OWASP coverage reporting (#79)
+
+### Added
+
+- **[Cloud]** Cloud mode support, auth fixes, runtime error hardening
+- **[Cloud]** Deployment deletion CLI command and background cleanup worker
+- **[HTTP/UI]** API explorer for hosted mock deployments
+
+### Changed
+
+- **[Refactor]** Architectural overhaul — 10 workstreams across core, UI, CI
+- **[Perf]** Replace linear route scan with matchit trie-based matching
+- **[Refactor]** Extract chaos modules from core into mockforge-chaos
+- **[Refactor]** Split config.rs and openapi/response.rs into submodules
+- **[Refactor]** Restrict 8 internal modules to pub(crate), add 35 GraphQL tests
+- **[Refactor]** Implement MockProtocolServer trait for all 10 protocols
+
+## [0.3.76] - 2026-03-08
+
+### Fixed
+
+- **[UI/TUI]** Implement 11 missing admin API endpoints that caused "40 Errs" in the TUI dashboard (#79)
+  - The TUI polls `/__mockforge/chaos`, `/__mockforge/recorder/status`, `/__mockforge/world-state`, `/__mockforge/federation/peers`, and `/__mockforge/vbr/status` every 2-30 seconds
+  - These endpoints previously returned 404, incrementing the TUI error counter ~22 times/minute
+  - All 5 GET endpoints now return valid JSON with real data from live subsystem instances
+  - 6 POST/DELETE mutation endpoints (`chaos/toggle`, `recorder/start`, `recorder/stop`, `chaos/scenarios/{name}` start/stop) are auth-gated via RBAC
+  - Added 5 new handler modules: `chaos_api`, `recorder_api`, `world_state_proxy`, `federation_api`, `vbr_api`
+  - 26 E2E tests verified against a real running server (GET responses, auth rejection, auth acceptance, state mutations)
+- **[CLI]** Admin server now creates real subsystem instances instead of returning empty defaults (#79)
+  - Recorder: created from `--recorder-db` config when `--recorder` flag is passed
+  - VBR engine: created with in-memory storage backend (lightweight, no disk side-effects)
+  - Federation: empty instance created so the TUI shows a valid (but empty) federation state
+- **[TUI]** Error counter capped at 999 to prevent unbounded growth (#79)
+- **[CLI]** Fix pre-existing `clippy::print_literal` warning in cloud commands
+
+### Added
+
+- **[Federation]** `Federation::empty()` constructor for creating a default empty federation instance
+- **[CLI]** `mockforge-federation` added as a dependency for admin server integration
 
 ## [0.3.73] - 2026-03-05
 
@@ -997,7 +1713,7 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
 
 ### Changed
 
-- **[Bench]** Spec-driven conformance generator now sends `X-Mockforge-Response-Status` header for `response:400` and `response:404` checks (#79)
+- **[Reality]** Spec-driven conformance generator now sends `X-Mockforge-Response-Status` header for `response:400` and `response:404` checks (#79)
   - Tells the mock server which status code to return, enabling accurate status-code conformance testing
 
 ## [0.3.72] - 2026-03-04
@@ -1008,17 +1724,17 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
   - `validate_auth_config_on_startup()` now logs a warning instead of returning an error
   - Auto-generated JWT secret fallback so the admin UI works out of the box
   - Default users are seeded even without `ENVIRONMENT=development`, so login works immediately
-- **[Bench]** Fix duplicate session ID in conformance Cookie headers (#79)
+- **[Reality]** Fix duplicate session ID in conformance Cookie headers (#79)
   - Removed invalid `noCookies: true` from k6 options (not a real k6 option; k6 silently ignores it)
   - Added `http.cookieJar().clear(BASE_URL)` before and after each request when custom Cookie headers are present
   - Prevents k6's internal cookie jar from re-sending server `Set-Cookie` values alongside custom headers
   - Applied to both reference-mode (`generator.rs`) and spec-driven (`spec_driven.rs`) generators
-- **[Bench]** Fix missing single-quote escaping in spec-driven `format_headers()` (#79)
+- **[Reality]** Fix missing single-quote escaping in spec-driven `format_headers()` (#79)
   - Header values containing single quotes are now properly escaped, matching `generator.rs` behavior
 
 ### Added
 
-- **[Bench]** Conformance report now shows individual failed checks with pass/fail counts (#79)
+- **[Reality]** Conformance report now shows individual failed checks with pass/fail counts (#79)
   - New "Failed Checks" section after the category summary table lists each check that failed
   - When not using `--conformance-all-operations`, prints a tip suggesting it for endpoint-level detail
 
@@ -1026,23 +1742,23 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
 
 ### Fixed
 
-- **[Bench]** Remove dead `CUSTOM_HEADERS` JS const from conformance generators (#79)
+- **[Reality]** Remove dead `CUSTOM_HEADERS` JS const from conformance generators (#79)
   - Custom header values are now inlined directly into each request instead of referencing an unused JS constant
   - Eliminates confusing dead code in generated k6 scripts
-- **[Bench]** Add `noCookies: true` to k6 options when Cookie header is in custom headers (#79)
+- **[Reality]** Add `noCookies: true` to k6 options when Cookie header is in custom headers (#79)
   - Prevents k6's automatic cookie jar from duplicating cookies on subsequent requests
   - Fixes duplicate session ID / authentication failures reported by @srikr
-- **[Bench]** Fix conformance report file not found after k6 execution (#79)
+- **[Reality]** Fix conformance report file not found after k6 execution (#79)
   - `handleSummary` now writes `conformance-report.json` to an absolute path matching the output directory
   - Previously wrote to a relative path based on k6's CWD, causing the CLI to report "Conformance report not generated"
 
 ### Added
 
-- **[Bench]** `--conformance-all-operations` flag for full-endpoint conformance testing (#79)
+- **[Reality]** `--conformance-all-operations` flag for full-endpoint conformance testing (#79)
   - Default mode tests one representative operation per feature check (fast feature-coverage)
   - New flag tests ALL operations with path-qualified check names (e.g., `method:GET:/api/users`)
   - Addresses user confusion about "only 5 endpoints tested"
-- **[Bench]** Conformance coverage summary output (#79)
+- **[Reality]** Conformance coverage summary output (#79)
   - After generating conformance tests, prints "Conformance: N operations analyzed, M unique checks generated"
   - When using default mode with fewer checks than operations, shows tip about `--conformance-all-operations`
 
@@ -1061,40 +1777,40 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
 
 ### Fixed
 
-- **[Bench]** Spec-driven conformance: global security requirement detection (#79)
+- **[Reality]** Spec-driven conformance: global security requirement detection (#79)
   - `annotate_security()` now falls back to `spec.security` (root-level) when an operation has no operation-level security defined
   - APIs that only define security globally are now correctly detected
-- **[Bench]** Spec-driven conformance: SecurityScheme type resolution (#79)
+- **[Reality]** Spec-driven conformance: SecurityScheme type resolution (#79)
   - Security schemes are now resolved from `components.securitySchemes` to detect actual type (`HTTP/bearer`, `APIKey`, `HTTP/basic`) instead of relying on name heuristics alone
   - A scheme named "myAuth" that is actually an `apiKey` type is now correctly identified
   - Name-based heuristic retained as fallback for unresolvable schemes
-- **[Bench]** Spec-driven conformance: ContentNegotiation detection (#79)
+- **[Reality]** Spec-driven conformance: ContentNegotiation detection (#79)
   - `ContentNegotiation` feature is now detected when a response defines multiple content types (e.g., both `application/json` and `application/xml`)
   - Previously only worked in reference mode
-- **[Bench]** CLI help text for `--conformance-categories` now includes `response-validation` (#79)
+- **[Reality]** CLI help text for `--conformance-categories` now includes `response-validation` (#79)
 
 ### Added
 
-- **[Bench]** 5 new conformance tests: ResponseValidation with schema check, global security, SecurityScheme resolution, ContentNegotiation detection, single-type negative case (#79)
+- **[Reality]** 5 new conformance tests: ResponseValidation with schema check, global security, SecurityScheme resolution, ContentNegotiation detection, single-type negative case (#79)
 
 ## [0.3.56] - 2026-02-14
 
 ### Added
 
-- **[Bench]** Conformance category filtering (#79)
+- **[Reality]** Conformance category filtering (#79)
   - New `--conformance-categories` flag to run only specific conformance categories (e.g., `--conformance-categories "parameters,security"`)
   - Case-insensitive category matching with validation against known categories
-- **[Bench]** Spec-driven conformance testing (#79)
+- **[Reality]** Spec-driven conformance testing (#79)
   - When `--conformance --spec my-api.json` is provided, analyzes the user's actual OpenAPI spec to detect which features their API exercises
   - Generates conformance tests against real endpoints instead of reference `/conformance/` paths
   - Full `$ref` resolution with cycle detection for parameters, schemas, request bodies, and responses
   - Detects: parameter types, request body formats, schema types/composition/formats/constraints, response codes, security schemes
-- **[Bench]** Response schema validation (#79)
+- **[Reality]** Response schema validation (#79)
   - In spec-driven mode, validates response bodies against OpenAPI response schemas
   - `SchemaValidatorGenerator` produces JavaScript validation expressions from OpenAPI schemas
   - Supports object (required fields, property types), array, string (format regex, enum, length), integer/number (range), boolean validation
   - Wrapped in try-catch for resilient k6 execution
-- **[Bench]** SARIF 2.1.0 report output (#79)
+- **[Reality]** SARIF 2.1.0 report output (#79)
   - New `--conformance-report-format sarif` flag outputs conformance results in SARIF 2.1.0 format
   - Compatible with GitHub Code Scanning, VS Code SARIF Viewer, and CI/CD pipelines
   - Maps each conformance feature to a SARIF rule with OpenAPI spec section links
@@ -1104,16 +1820,16 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
 
 ### Added
 
-- **[Bench]** Per-server stats in multi-target mode (#79)
+- **[Reality]** Per-server stats in multi-target mode (#79)
   - `K6Results` now parses RPS, VUs, and full latency breakdown (min/med/p90/p95/p99/max) from k6 `summary.json`
   - `AggregatedMetrics` includes `total_rps`, `avg_rps`, `total_vus_max`
   - Multi-target reporter shows per-target RPS, VUs, and full latency breakdown
   - `aggregated_summary.json` includes all new metrics in both aggregated and per-target sections
-- **[Bench]** Per-target spec support for multi-target mode (#79)
+- **[Reality]** Per-target spec support for multi-target mode (#79)
   - Targets file JSON format now supports `"spec"` field for per-target OpenAPI specs
   - Each target can use a different spec file for heterogeneous fan-out
   - Example: `[{"url": "https://server1", "spec": "spec_a.json"}, {"url": "https://server2", "spec": "spec_b.json"}]`
-- **[Bench]** OpenAPI 3.0.0 conformance testing (#79)
+- **[Reality]** OpenAPI 3.0.0 conformance testing (#79)
   - New `--conformance` flag generates and runs comprehensive k6 scripts exercising 47 OpenAPI 3.0.0 features across 10 categories (Parameters, Request Bodies, Schema Types, Composition, String Formats, Constraints, Response Codes, HTTP Methods, Content Negotiation, Security)
   - Reports per-category pass/fail rates with colored terminal output
   - Supports `--conformance-api-key`, `--conformance-basic-auth`, `--conformance-report` for security scheme testing
@@ -1123,7 +1839,7 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
 
 ### Fixed
 
-- **[Bench]** fix(bench): deliver CRS payloads as path injection + form-encoded body (#79)
+- **[Reality]** fix(bench): deliver CRS payloads as path injection + form-encoded body (#79)
   - Added `inject_as_path` field to `SecurityPayload` — URI payloads without query params (e.g., CRS 942101: `POST /1234%20OR%201=1`) now replace the request path via `encodeURI()` so WAFs inspect `REQUEST_FILENAME` instead of `ARGS`
   - Added `form_encoded_body` field to `SecurityPayload` — body payloads from CRS tests (e.g., 942432: `var=;;dd foo bar`) now sent as `application/x-www-form-urlencoded` so WAFs parse form data into `ARGS` for character counting
   - Updated `k6_script.hbs` and `k6_crud_flow.hbs` templates to handle both new delivery mechanisms
@@ -1134,7 +1850,7 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
 
 ### Fixed
 
-- **[Bench]** fix(bench): URL-encode URI payloads + strip form keys from body payloads (#79)
+- **[Reality]** fix(bench): URL-encode URI payloads + strip form keys from body payloads (#79)
   - URI security payloads now wrapped in `encodeURIComponent()` for valid HTTP transport — WAFs decode before inspection (fixes 942101)
   - Form-encoded body payloads now have form key prefix stripped (`var=;;dd foo bar` → `;;dd foo bar`) so WAF ARGS parsing sees the attack payload directly (fixes 942432)
   - Confirmed SQLi detection: 45/46 rules (97.8%), up from 43/46 (93.5%)
@@ -1143,7 +1859,7 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
 
 ### Fixed
 
-- **[Bench]** fix(bench): Group multi-part WAFBench payloads + decode body payloads + fix Cookie/CookieJar conflict (#79)
+- **[Reality]** fix(bench): Group multi-part WAFBench payloads + decode body payloads + fix Cookie/CookieJar conflict (#79)
   - Multi-part CRS test cases (URI + headers + body) now grouped by `group_id` and sent together in one HTTP request instead of being split across separate requests (fixes 942290)
   - Body payloads from CRS YAML files are now form-URL-decoded before injection (`%22+WAITFOR+DELAY+%27` → `" WAITFOR DELAY '`) so WAFs see actual SQL patterns in JSON bodies (fixes 942240, 942320, 942432)
   - URI payloads from path-only CRS tests are now URL-decoded and stripped of leading `/` artifact (fixes 942101)
@@ -1156,7 +1872,7 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
 
 ### Fixed
 
-- **[Bench]** fix(bench): Accept all WAFBench CRS payloads without attack-pattern filter (#79)
+- **[Reality]** fix(bench): Accept all WAFBench CRS payloads without attack-pattern filter (#79)
   - Removed overly strict `attack-pattern` category filter that was silently dropping valid CRS test cases
   - All CRS YAML test cases now loaded regardless of their `attack_type` metadata
 
@@ -1164,7 +1880,7 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
 
 ### Fixed
 
-- **[Bench]** fix(bench): Use per-request CookieJar instead of shared EMPTY_JAR (#79)
+- **[Reality]** fix(bench): Use per-request CookieJar instead of shared EMPTY_JAR (#79)
   - Each HTTP request now creates its own `new http.CookieJar()` instead of sharing a global empty jar
   - Prevents cookie cross-contamination between requests in security testing
 
@@ -1172,7 +1888,7 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
 
 ### Fixed
 
-- **[Bench]** fix(bench): Send raw security payloads + use dedicated empty cookie jar (#79)
+- **[Reality]** fix(bench): Send raw security payloads + use dedicated empty cookie jar (#79)
   - Security payloads now sent as raw strings without additional encoding
   - Dedicated empty CookieJar per request prevents k6's default cookie accumulation
 
@@ -1180,7 +1896,7 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
 
 ### Fixed
 
-- **[Bench]** fix(bench): Cycle security payloads per-operation + clear cookies in API2 tests (#79)
+- **[Reality]** fix(bench): Cycle security payloads per-operation + clear cookies in API2 tests (#79)
   - Security payloads now cycle per-operation block (each API endpoint gets a different payload)
   - Previously all operations in one VU iteration used the same payload
   - OWASP API2 (Broken Auth) tests now properly clear cookies between requests
@@ -1196,7 +1912,7 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
 
 ### Fixed
 
-- **[Bench]** fix(bench): Security payloads now injected + cookie dedup in all templates (#79)
+- **[Reality]** fix(bench): Security payloads now injected + cookie dedup in all templates (#79)
   - Security payloads now properly injected in both k6_script.hbs and k6_crud_flow.hbs templates
   - Cookie deduplication applied to all HTTP request paths in both templates
   - Comprehensive test suite added for issue #79 security pipeline
@@ -1210,13 +1926,13 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
 
 ### Fixed
 
-- **[Bench]** fix(bench): WAFBench payloads now distributed across VUs for better coverage (#79)
+- **[Reality]** fix(bench): WAFBench payloads now distributed across VUs for better coverage (#79)
   - Changed payload cycling to use VU-based offset: `(__VU - 1) % payloads.length`
   - Previously all 50 VUs started at index 0 and cycled through same sequence
   - Now each VU starts at a different payload, maximizing attack coverage in shorter test runs
   - With 50 VUs and 30 payloads, all payloads are tested from the start
 
-- **[Bench]** fix(bench): OWASP API tests now include custom headers in all requests (#79)
+- **[Reality]** fix(bench): OWASP API tests now include custom headers in all requests (#79)
   - Added `CUSTOM_HEADERS` to API8 verbose error test (malformed JSON body test)
   - Added `CUSTOM_HEADERS` to API9 discovery paths test
   - Added `CUSTOM_HEADERS` to API9 API versions test
@@ -1226,7 +1942,7 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
 
 ### Fixed
 
-- **[Bench]** fix(bench): Security payloads now actually applied to requests in k6 scripts (#79)
+- **[Reality]** fix(bench): Security payloads now actually applied to requests in k6 scripts (#79)
   - Updated k6_script.hbs template to call `getNextSecurityPayload()` and `applySecurityPayload()`
   - Previously, security payload functions were defined but never called in generated scripts
   - Security payloads now properly injected into request bodies for POST/PUT/PATCH
@@ -1236,10 +1952,10 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
 
 ### Fixed
 
-- **[Bench]** fix(bench): XSS payloads now inject into ALL string fields, not just the first one (#79)
+- **[Reality]** fix(bench): XSS payloads now inject into ALL string fields, not just the first one (#79)
   - Removed `break` statement from `applySecurityPayload()` loop in security_payloads.rs
   - Ensures WAF can detect payloads regardless of which field it scans
-- **[Bench]** fix(bench): Added `jar: null` to remaining OWASP HTTP calls to prevent cookie duplication (#79)
+- **[Reality]** fix(bench): Added `jar: null` to remaining OWASP HTTP calls to prevent cookie duplication (#79)
   - Fixed testBrokenAuth empty token test
   - Fixed testMisconfiguration verbose error test
   - Fixed testInventory discovery paths and API versions checks
@@ -1251,11 +1967,11 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
 
 ### Fixed
 
-- **[Bench]** fix(bench): WAFBench XSS attacks now properly injected into request body (#79)
+- **[Reality]** fix(bench): WAFBench XSS attacks now properly injected into request body (#79)
   - Removed location check from `applySecurityPayload()` - ALL payloads now injected into body for POST/PUT
   - WAFBench payloads correctly pass location info (uri/header/body) to k6 scripts
   - Header payloads include header name for proper injection into specified headers
-- **[Bench]** fix(bench): Cookie header duplication in OWASP and security tests (#79)
+- **[Reality]** fix(bench): Cookie header duplication in OWASP and security tests (#79)
   - Added `jar: null` to all HTTP request params to disable k6's automatic cookie jar
   - Prevents duplicate cookies when user provides Cookie header via `--headers` flag
   - Applied to k6_script.hbs, k6_crud_flow.hbs, and OWASP generator
@@ -1264,40 +1980,40 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
 
 ### Fixed
 
-- **[Bench]** fix(bench): pass custom headers from `--headers` flag to OWASP tests (#79)
+- **[Reality]** fix(bench): pass custom headers from `--headers` flag to OWASP tests (#79)
   - Cookie and other custom headers are now included in all OWASP request helpers
   - Fixes issue where `avi-sessionid=None` was being sent instead of actual cookie values
-- **[Bench]** fix(bench): WAFBench loader now handles single YAML file paths (#79)
+- **[Reality]** fix(bench): WAFBench loader now handles single YAML file paths (#79)
   - Previously only directories or glob patterns were supported
   - Single file paths like `/path/to/941100.yaml` now work correctly
-- **[Bench]** Verified CRS v3.3 format compatibility with full CoreRuleSet test suite
+- **[Reality]** Verified CRS v3.3 format compatibility with full CoreRuleSet test suite
   - Tested with 175 files, 1512 payloads (692 XSS, 505 SQLi, 304 Command Injection, 11 Path Traversal)
 
 ## [0.3.37] - 2026-01-12
 
 ### Added
 
-- **[Bench]** feat(bench): add WAFBench cycle-all mode (`--wafbench-cycle-all`) to test all payloads sequentially (#79)
-- **[Bench]** feat(bench): add `--owasp-iterations` parameter to control OWASP test iterations per VU (#79)
-- **[Bench]** feat(bench): OWASP tests now respect `--vus` parameter for concurrent testing (#79)
+- **[Reality]** feat(bench): add WAFBench cycle-all mode (`--wafbench-cycle-all`) to test all payloads sequentially (#79)
+- **[Reality]** feat(bench): add `--owasp-iterations` parameter to control OWASP test iterations per VU (#79)
+- **[Reality]** feat(bench): OWASP tests now respect `--vus` parameter for concurrent testing (#79)
 
 ### Fixed
 
-- **[Bench]** fix(bench): WAFBench payloads now properly injected in standard bench mode (not just CRUD flow)
-- **[Bench]** fix(bench): OWASP APIs now use random UUIDs per request instead of static IDs for BOLA testing (#79)
-- **[Bench]** fix(bench): OWASP auth tokens with special characters (quotes, backslashes) now properly escaped (#79)
-- **[Bench]** fix(bench): prevent Handlebars double-escaping of pre-escaped JavaScript values
-- **[Bench]** fix(bench): WAFBench security payloads now integrated into CRUD flow requests (#79)
-- **[Bench]** fix(owasp): use `http.del()` instead of `http.delete()` for k6 compatibility (#79)
-- **[Bench]** fix(owasp): add `--base-path` support for OWASP API testing (#79)
-- **[Bench]** fix(bench): remove undefined `totalRequestCount` variable reference
-- **[Bench]** fix(bench): support CRS v3.3 WAFBench format and pass `--insecure` to OWASP tests
+- **[Reality]** fix(bench): WAFBench payloads now properly injected in standard bench mode (not just CRUD flow)
+- **[Reality]** fix(bench): OWASP APIs now use random UUIDs per request instead of static IDs for BOLA testing (#79)
+- **[Reality]** fix(bench): OWASP auth tokens with special characters (quotes, backslashes) now properly escaped (#79)
+- **[Reality]** fix(bench): prevent Handlebars double-escaping of pre-escaped JavaScript values
+- **[Reality]** fix(bench): WAFBench security payloads now integrated into CRUD flow requests (#79)
+- **[Reality]** fix(owasp): use `http.del()` instead of `http.delete()` for k6 compatibility (#79)
+- **[Reality]** fix(owasp): add `--base-path` support for OWASP API testing (#79)
+- **[Reality]** fix(bench): remove undefined `totalRequestCount` variable reference
+- **[Reality]** fix(bench): support CRS v3.3 WAFBench format and pass `--insecure` to OWASP tests
 
 ## [0.3.33] - 2026-01-10
 
 ### Fixed
 
-- **[Bench]** fix(bench): multiple fixes for OWASP and WAFBench testing
+- **[Reality]** fix(bench): multiple fixes for OWASP and WAFBench testing
   - Support CRS v3.3 format in WAFBench parser
   - Pass `--insecure` flag to OWASP tests for self-signed certificates
 
@@ -1305,48 +2021,48 @@ This release closes [#459](https://github.com/SaaSy-Solutions/mockforge/issues/4
 
 ### Fixed
 
-- **[Bench]** fix(bench): fix extracted value substitution in CRUD flows
-- **[Bench]** fix(bench): OWASP k6 configuration improvements
+- **[Reality]** fix(bench): fix extracted value substitution in CRUD flows
+- **[Reality]** fix(bench): OWASP k6 configuration improvements
 
 ## [0.3.30] - 2026-01-07
 
 ### Added
 
-- **[Bench]** feat(bench): add `merge_body` support for CRUD flows - merge extracted values with request body
-- **[Bench]** feat(bench): add `inject_attacks` data model for security testing in CRUD flows
+- **[Reality]** feat(bench): add `merge_body` support for CRUD flows - merge extracted values with request body
+- **[Reality]** feat(bench): add `inject_attacks` data model for security testing in CRUD flows
 
 ## [0.3.28] - 2026-01-06
 
 ### Added
 
-- **[Bench]** feat(bench): add nested path extraction for CRUD flows (e.g., `results[0].id`)
-- **[Bench]** feat(bench): add filter extraction for CRUD flows (e.g., `results[?name=='test'].id`)
+- **[Reality]** feat(bench): add nested path extraction for CRUD flows (e.g., `results[0].id`)
+- **[Reality]** feat(bench): add filter extraction for CRUD flows (e.g., `results[?name=='test'].id`)
 
 ## [0.3.27] - 2026-01-05
 
 ### Added
 
-- **[Bench]** feat(bench): add full body extraction for CRUD flows
-- **[Bench]** feat(bench): add key filtering for extracted values
+- **[Reality]** feat(bench): add full body extraction for CRUD flows
+- **[Reality]** feat(bench): add key filtering for extracted values
 
 ## [0.3.26] - 2026-01-04
 
 ### Added
 
-- **[Bench]** feat(bench): add aliased extraction for CRUD flow value chaining
+- **[Reality]** feat(bench): add aliased extraction for CRUD flow value chaining
   - Extract values with aliases (e.g., `id as poolId`) for use in subsequent requests
 
 ## [0.3.24] - 2026-01-03
 
 ### Fixed
 
-- **[Bench]** fix(bench): use correct variable name in CRUD flow extracted value replacement
+- **[Reality]** fix(bench): use correct variable name in CRUD flow extracted value replacement
 
 ## [0.3.22] - 2026-01-02
 
 ### Added
 
-- **[Bench]** feat(bench): add OWASP API Security Top 10 testing mode (#79)
+- **[Reality]** feat(bench): add OWASP API Security Top 10 testing mode (#79)
   - Test for BOLA (API1), Broken Auth (API2), Mass Assignment (API3), Resource Consumption (API4)
   - Test for Function Auth (API5), SSRF (API7), Misconfiguration (API8), Inventory (API9), Unsafe Consumption (API10)
   - Configurable test categories with `--owasp-categories`

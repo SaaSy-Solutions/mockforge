@@ -16,12 +16,13 @@ that a target is actually vulnerable or patched (that stays unverified).
 import argparse
 import http.client
 import json
+import sys
 import uuid
 from functools import partial
 from pathlib import Path
 
 from cve_pack_evidence import observe, verdict
-from cve_pack_profile import SCHEMA_VERSION, cases, load, validate
+from cve_pack_profile import SCHEMA_VERSION, cases, load
 from cve_pack_server import to_openapi
 from security_rule_pack_transport import recorder, request, target_url
 
@@ -219,9 +220,11 @@ def _new(args):
     if out.exists() and not args.force:
         raise ValueError(f"{out} exists; pass --force to overwrite")
     skeleton = dict(SKELETON, cve=args.cve)
-    validate({**skeleton, "cve": "CVE-2000-00000"})  # shape self-check
     out.write_text(json.dumps(skeleton, indent=2) + "\n")
-    print(f"wrote {out}; fill route, signature and expected status from the advisory")
+    print(
+        f"Wrote unfinished template to {out}. No CVE lookup or simulation was performed. "
+        "Replace the placeholder title, reference, route and signature using the advisory before server/run/probe."
+    )
     return 0
 
 
@@ -238,15 +241,25 @@ def _tips(args):
 
     if not cve_ok(args.cve):
         raise ValueError("cve must look like CVE-YYYY-NNNN")
-    print(json.dumps(tips(args.cve, fetcher=Fetcher(timeout=args.timeout)), indent=2))
-    return 0
+    if not 0 < args.timeout <= 120:
+        raise ValueError("timeout must be >0 and <=120")
+    report = tips(args.cve, fetcher=Fetcher(timeout=args.timeout))
+    print(json.dumps(report, indent=2))
+    if not report["complete"]:
+        print(
+            "Some feeds are unavailable; partial results are above. Retry later or check access to the URLs in feed_errors.",
+            file=sys.stderr,
+        )
+    return 0 if report["complete"] else 1
 
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
 
-    p_new = sub.add_parser("new", help="write a profile skeleton")
+    p_new = sub.add_parser(
+        "new", help="write an unfinished template; does not look up or simulate a CVE"
+    )
     p_new.add_argument("cve")
     p_new.add_argument("--output")
     p_new.add_argument("--force", action="store_true")
@@ -268,7 +281,7 @@ def main(argv=None):
 
     p_probe = sub.add_parser(
         "probe",
-        help="send the signature at a site you do NOT control (CDN/WAF) and "
+        help="send the signature at an authorized target without an origin recorder and "
         "report the front end's response; no origin correlation",
     )
     p_probe.add_argument("profile")

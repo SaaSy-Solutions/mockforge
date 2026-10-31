@@ -2,6 +2,7 @@
 //!
 //! End-to-end tests for HTTP/REST protocol functionality
 
+use mockforge_http::management_auth::MANAGEMENT_TOKEN_HEADER;
 use mockforge_test::MockForgeServer;
 use reqwest::Client;
 use serde_json::json;
@@ -52,6 +53,7 @@ async fn test_http_basic_get() {
     let client = Client::new();
     let stub_response = client
         .post(format!("http://localhost:{}/__mockforge/api/mocks", management_port))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .json(&json!({
             "path": "/api/users",
             "method": "GET",
@@ -105,6 +107,7 @@ async fn test_http_post_stub_status() {
     let client = Client::new();
     let stub_response = client
         .post(format!("http://localhost:{}/__mockforge/api/mocks", management_port))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .json(&json!({
             "path": "/api/users",
             "method": "POST",
@@ -163,6 +166,7 @@ async fn test_http_dynamic_stub_creation() {
     // Create stub via Admin API
     let stub_response = client
         .post(format!("http://localhost:{}/__mockforge/api/mocks", management_port))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .json(&json!({
             "path": "/api/test",
             "method": "GET",
@@ -212,6 +216,7 @@ async fn test_http_stub_update() {
     // Create initial stub
     let create_response = client
         .post(format!("http://localhost:{}/__mockforge/api/mocks", management_port))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .json(&json!({
             "path": "/api/update-test",
             "method": "GET",
@@ -235,6 +240,7 @@ async fn test_http_stub_update() {
             "http://localhost:{}/__mockforge/api/mocks/{}",
             management_port, stub_id
         ))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .json(&json!({
             "id": stub_id,
             "path": "/api/update-test",
@@ -285,6 +291,7 @@ async fn test_http_stub_deletion() {
     // Create stub
     let create_response = client
         .post(format!("http://localhost:{}/__mockforge/api/mocks", management_port))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .json(&json!({
             "path": "/api/delete-test",
             "method": "GET",
@@ -317,6 +324,7 @@ async fn test_http_stub_deletion() {
             "http://localhost:{}/__mockforge/api/mocks/{}",
             management_port, stub_id
         ))
+        .header(MANAGEMENT_TOKEN_HEADER, server.management_token())
         .send()
         .await
         .expect("Failed to delete stub");

@@ -1,52 +1,38 @@
-/**
- * MarketplaceTabs
- *
- * Shared tab bar for the three marketplace pages — Templates, Scenarios, Plugins.
- * Rendered at the top of each page so users can switch without leaving the
- * content area. Deep links (`/template-marketplace`, `/scenario-marketplace`,
- * `/plugin-registry`) continue to work.
- */
+/** Shared route navigation for the three marketplace pages. */
+import { Clapperboard, FileText, Puzzle } from 'lucide-react';
+import { NavLink, useLocation } from 'react-router-dom';
+import { Button } from '../ui/button';
+import { cn } from '../../utils/cn';
 
-import React from 'react';
-import { Tabs, Tab, Box } from '@mui/material';
-import {
-  Description as TemplateIcon,
-  Movie as ScenarioIcon,
-  Extension as PluginIcon,
-} from '@mui/icons-material';
-import { useLocation, useNavigate } from 'react-router-dom';
-
-const tabs: Array<{ path: string; label: string; icon: React.ReactElement }> = [
-  { path: '/template-marketplace', label: 'Templates', icon: <TemplateIcon fontSize="small" /> },
-  { path: '/scenario-marketplace', label: 'Scenarios', icon: <ScenarioIcon fontSize="small" /> },
-  { path: '/plugin-registry', label: 'Plugins', icon: <PluginIcon fontSize="small" /> },
+const tabs = [
+  { path: '/template-marketplace', label: 'Templates', icon: FileText },
+  { path: '/scenario-marketplace', label: 'Scenarios', icon: Clapperboard },
+  { path: '/plugin-registry', label: 'Plugins', icon: Puzzle },
 ];
 
-export const MarketplaceTabs: React.FC = () => {
-  const location = useLocation();
-  const navigate = useNavigate();
-  const current = tabs.findIndex((t) => t.path === location.pathname);
-
+export function MarketplaceTabs() {
+  const { pathname } = useLocation();
   return (
-    <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
-      <Tabs
-        value={current === -1 ? 0 : current}
-        onChange={(_, idx) => navigate(tabs[idx].path)}
-        aria-label="Marketplace sections"
-        variant="scrollable"
-      >
-        {tabs.map((t) => (
-          <Tab
-            key={t.path}
-            label={t.label}
-            icon={t.icon}
-            iconPosition="start"
-            sx={{ minHeight: 48 }}
-          />
+    <nav aria-label="Marketplace sections" className="mb-6 overflow-x-auto border-b border-border">
+      <ul className="flex w-max min-w-full list-none">
+        {tabs.map(({ path, label, icon: Icon }) => (
+          <li key={path}>
+            <Button asChild variant="ghost" className={cn(
+              'h-12 gap-2 rounded-none border-b-2 px-4',
+              pathname === path
+                ? 'border-primary text-primary'
+                : 'border-transparent text-muted-foreground',
+            )}>
+              <NavLink to={path} end>
+                <Icon className="h-4 w-4" aria-hidden="true" />
+                {label}
+              </NavLink>
+            </Button>
+          </li>
         ))}
-      </Tabs>
-    </Box>
+      </ul>
+    </nav>
   );
-};
+}
 
 export default MarketplaceTabs;
