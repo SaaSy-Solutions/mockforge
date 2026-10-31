@@ -14,6 +14,14 @@ def _auth_headers(management_token: Optional[str]) -> Dict[str, str]:
     return {}
 
 
+def _raise_management_status(response: requests.Response) -> None:
+    """Credential-bearing control requests must never follow or accept redirects."""
+    if 300 <= response.status_code < 400:
+        response.close()
+        raise requests.exceptions.HTTPError("Management API redirects are not allowed", response=response)
+    response.raise_for_status()
+
+
 class VerificationCount:
     """Count assertion for verification"""
 
@@ -57,8 +65,9 @@ def _make_verification_request(
             json=data,
             headers=_auth_headers(management_token),
             timeout=timeout,
+            allow_redirects=False,
         )
-        response.raise_for_status()
+        _raise_management_status(response)
         result_data = response.json()
         return VerificationResult(**result_data)
     except requests.exceptions.RequestException as e:
@@ -239,8 +248,9 @@ def count(
             json=data,
             headers=_auth_headers(management_token),
             timeout=timeout,
+            allow_redirects=False,
         )
-        response.raise_for_status()
+        _raise_management_status(response)
         result = response.json()
         return result.get("count", 0)
     except requests.exceptions.RequestException:

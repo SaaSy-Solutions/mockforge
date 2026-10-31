@@ -33,7 +33,7 @@ use serde::Serialize;
 /// Returns InvalidRequest("Not found") for any auth failure — same
 /// shape the public routes use for cross-org probes, so a leaked /
 /// curl'd request can't enumerate which run-ids exist.
-fn require_internal_auth(headers: &HeaderMap) -> ApiResult<()> {
+pub(crate) fn require_internal_auth(headers: &HeaderMap) -> ApiResult<()> {
     let configured = match std::env::var("MOCKFORGE_INTERNAL_API_TOKEN") {
         Ok(v) if !v.is_empty() => v,
         _ => {
