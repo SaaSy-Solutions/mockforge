@@ -55,6 +55,7 @@ pub struct OpenApiRouteRegistry {
     custom_fixture_loader: Option<Arc<crate::custom_fixture::CustomFixtureLoader>>,
     /// Override rules applied to every generated response (optional)
     overrides: Option<Arc<dyn OverrideHook>>,
+    isolated: bool,
 }
 
 /// Validation mode for request/response validation
@@ -237,6 +238,7 @@ impl OpenApiRouteRegistry {
             honor_serve_validation_policy: true,
             custom_fixture_loader: None,
             overrides: None,
+            isolated: false,
         }
     }
 
@@ -276,6 +278,7 @@ impl OpenApiRouteRegistry {
             honor_serve_validation_policy: true,
             custom_fixture_loader: None,
             overrides: None,
+            isolated: false,
         }
     }
 
@@ -306,6 +309,7 @@ impl OpenApiRouteRegistry {
             honor_serve_validation_policy: self.honor_serve_validation_policy,
             custom_fixture_loader: self.custom_fixture_loader.clone(),
             overrides: self.overrides.clone(),
+            isolated: self.isolated,
         }
     }
 
@@ -436,6 +440,30 @@ impl OpenApiRouteRegistry {
             ..Default::default()
         };
         self.build_router_with_context(ctx)
+    }
+
+    /// Build only this specification's operations for a hosted tenant.
+    /// Does not inherit process environment, fixture files, override hooks,
+    /// management endpoints, AI providers or global conformance recording.
+    pub fn build_hosted_router(mut self) -> Router {
+        self.isolated = true;
+        self.options = ValidationOptions::default();
+        self.custom_fixture_loader = None;
+        self.overrides = None;
+        let ctx = RouterContext {
+            enable_full_validation: true,
+            add_spec_endpoint: false,
+            ..Default::default()
+        };
+        self.build_router_with_context(ctx)
+    }
+
+    fn environment_value(&self, name: &str) -> Option<String> {
+        if self.isolated {
+            None
+        } else {
+            std::env::var(name).ok()
+        }
     }
 
     /// Build an Axum router using a shared RouterContext.
@@ -618,7 +646,7 @@ impl OpenApiRouteRegistry {
                     .get("X-Mockforge-Scenario")
                     .and_then(|v| v.to_str().ok())
                     .map(|s| s.to_string())
-                    .or_else(|| std::env::var("MOCKFORGE_HTTP_SCENARIO").ok());
+                    .or_else(|| validator.environment_value("MOCKFORGE_HTTP_SCENARIO"));
 
                 let status_override = headers
                     .get("X-Mockforge-Response-Status")
@@ -626,11 +654,14 @@ impl OpenApiRouteRegistry {
                     .and_then(|s| s.parse::<u16>().ok());
 
                 // (e) Generate mock response for this request with scenario support
-                let (selected_status, mock_response) = route_clone
-                    .mock_response_with_status_and_scenario_and_override(
+                let (selected_status, mock_response) = if validator.isolated {
+                    route_clone.hosted_response(scenario.as_deref(), status_override)
+                } else {
+                    route_clone.mock_response_with_status_and_scenario_and_override(
                         scenario.as_deref(),
                         status_override,
-                    );
+                    )
+                };
 
                 // (f) Validation (if full validation is enabled)
                 if ctx.enable_full_validation {
@@ -741,8 +772,8 @@ impl OpenApiRouteRegistry {
                     {
                         let status_code =
                             validator.options.validation_status.unwrap_or_else(|| {
-                                std::env::var("MOCKFORGE_VALIDATION_STATUS")
-                                    .ok()
+                                validator
+                                    .environment_value("MOCKFORGE_VALIDATION_STATUS")
                                     .and_then(|s| s.parse::<u16>().ok())
                                     .unwrap_or(415)
                             });
@@ -755,7 +786,8 @@ impl OpenApiRouteRegistry {
                                         .map(|s| s.to_string())
                                 },
                             );
-                        mockforge_foundation::conformance_violations::record(
+                        if !validator.isolated {
+                            mockforge_foundation::conformance_violations::record(
                             mockforge_foundation::conformance_violations::ServerConformanceViolation {
                                 timestamp: Utc::now(),
                                 method: method.to_string(),
@@ -771,6 +803,7 @@ impl OpenApiRouteRegistry {
                                 categories: Vec::new(),
                             },
                         );
+                        }
                         let status = axum::http::StatusCode::from_u16(status_code)
                             .unwrap_or(axum::http::StatusCode::UNSUPPORTED_MEDIA_TYPE);
                         let payload = serde_json::json!({
@@ -807,8 +840,8 @@ impl OpenApiRouteRegistry {
                         // Choose status: prefer options.validation_status, fallback to env, else 400
                         let status_code =
                             validator.options.validation_status.unwrap_or_else(|| {
-                                std::env::var("MOCKFORGE_VALIDATION_STATUS")
-                                    .ok()
+                                validator
+                                    .environment_value("MOCKFORGE_VALIDATION_STATUS")
                                     .and_then(|s| s.parse::<u16>().ok())
                                     .unwrap_or(400)
                             });
@@ -839,7 +872,9 @@ impl OpenApiRouteRegistry {
                             })
                         };
 
-                        record_validation_error(&payload);
+                        if !validator.isolated {
+                            record_validation_error(&payload);
+                        }
 
                         // Issue #79 round 12 — also push to the workspace-wide
                         // server-conformance violation ring buffer so the TUI's
@@ -873,7 +908,8 @@ impl OpenApiRouteRegistry {
                                         .map(|s| s.to_string())
                                 },
                             );
-                        mockforge_foundation::conformance_violations::record(
+                        if !validator.isolated {
+                            mockforge_foundation::conformance_violations::record(
                             mockforge_foundation::conformance_violations::ServerConformanceViolation {
                                 timestamp: Utc::now(),
                                 method: method.to_string(),
@@ -889,6 +925,7 @@ impl OpenApiRouteRegistry {
                                 categories: Vec::new(),
                             },
                         );
+                        }
 
                         let status = axum::http::StatusCode::from_u16(status_code)
                             .unwrap_or(axum::http::StatusCode::BAD_REQUEST);
@@ -914,8 +951,8 @@ impl OpenApiRouteRegistry {
                 // Treating it as a forcing override (not just OR) lets tests and
                 // ad-hoc operator overrides disable token expansion explicitly.
                 let mut final_response = mock_response.clone();
-                let env_expand: Option<bool> = std::env::var("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
-                    .ok()
+                let env_expand: Option<bool> = validator
+                    .environment_value("MOCKFORGE_RESPONSE_TEMPLATE_EXPAND")
                     .map(|v| v == "1" || v.eq_ignore_ascii_case("true"));
                 let expand = match env_expand {
                     Some(v) => v,
@@ -1062,7 +1099,12 @@ impl OpenApiRouteRegistry {
         // Issue #79 — raise the body-size cap above axum's 2 MiB default so
         // large chunked uploads don't get truncated mid-extraction. See
         // `openapi_body_limit_bytes` for the rationale.
-        router.layer(DefaultBodyLimit::max(openapi_body_limit_bytes()))
+        let body_limit = if self.isolated {
+            10 * 1024 * 1024
+        } else {
+            openapi_body_limit_bytes()
+        };
+        router.layer(DefaultBodyLimit::max(body_limit))
     }
 
     /// Build an Axum router from the OpenAPI spec with latency injection support

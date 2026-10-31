@@ -63,9 +63,36 @@ pub async fn effective_plan(state: &AppState, org: &Organization) -> ApiResult<P
     Ok(resolve_effective_plan(stored, sub.as_ref(), Utc::now()))
 }
 
+/// Free resources consume platform capacity; require the owning account's
+/// verified identity before admitting a new call or deployment. BYOK AI callers
+/// use their own provider credits and do not invoke this platform-funding gate.
+pub(crate) async fn require_verified_free_owner(
+    state: &AppState,
+    org: &Organization,
+) -> ApiResult<()> {
+    if effective_plan(state, org).await? != Plan::Free {
+        return Ok(());
+    }
+    let org_id = org.id;
+    let verified = with_org_context(state.db.runtime_pool(), org_id, |tx| {
+        Box::pin(async move {
+            Ok(sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS(SELECT 1 FROM organizations o JOIN users u ON u.id=o.owner_id WHERE o.id=$1 AND u.is_verified)"
+            ).bind(org_id).fetch_one(&mut **tx).await?)
+        })
+    }).await?;
+    if !verified {
+        return Err(crate::error::ApiError::ValidationFailed(
+            "Verify the organization owner's email before using Free platform-funded resources"
+                .into(),
+        ));
+    }
+    Ok(())
+}
+
 /// Pure decision core for [`effective_plan`], split out so it's unit-testable
 /// without a database. `now` is injected for deterministic grace-window tests.
-fn resolve_effective_plan(
+pub(crate) fn resolve_effective_plan(
     stored: Plan,
     sub: Option<&Subscription>,
     now: chrono::DateTime<Utc>,
