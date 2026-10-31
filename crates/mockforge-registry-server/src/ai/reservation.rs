@@ -178,7 +178,7 @@ pub async fn call_with_budget_attributed(
     match selection {
         ProviderSelection::Disabled => return Err(ApiError::PermissionDenied),
         ProviderSelection::Byok => return call_llm(call).await,
-        ProviderSelection::Platform => {}
+        ProviderSelection::Platform => super::provider::require_platform_enabled()?,
     }
     crate::handlers::entitlements::require_verified_free_owner(state, org).await?;
     let reservation = reserve(state, org, &mut call, origin).await?;

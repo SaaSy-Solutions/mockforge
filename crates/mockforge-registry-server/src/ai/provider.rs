@@ -18,7 +18,26 @@ pub async fn resolve_provider(
 ) -> ApiResult<Provider> {
     let limits = effective_limits(state, org).await?;
     let credits = limits.get("ai_tokens_per_month").and_then(|v| v.as_i64()).unwrap_or(0);
-    Ok(pick_provider(credits != 0, byok))
+    Ok(pick_provider(platform_enabled() && credits != 0, byok))
+}
+
+/// Operator activation is separate from credentials and plan allowances.
+pub(crate) fn platform_enabled() -> bool {
+    activation_enabled(std::env::var("MOCKFORGE_PLATFORM_LLM_ENABLED").ok().as_deref())
+}
+
+fn activation_enabled(value: Option<&str>) -> bool {
+    matches!(value, Some("true"))
+}
+
+pub(crate) fn require_platform_enabled() -> ApiResult<()> {
+    if platform_enabled() {
+        Ok(())
+    } else {
+        Err(crate::error::ApiError::ResourceLimitExceeded(
+            "Platform AI is not enabled; configure your own provider key to use AI".into(),
+        ))
+    }
 }
 
 /// Selected provider for a single AI request.
@@ -74,6 +93,14 @@ pub fn pick_provider(has_platform_credits: bool, byok: Option<BYOKConfig>) -> Pr
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn activation_requires_explicit_true() {
+        for value in [None, Some(""), Some("false"), Some("1"), Some("TRUE")] {
+            assert!(!activation_enabled(value));
+        }
+        assert!(activation_enabled(Some("true")));
+    }
 
     fn enabled_byok() -> BYOKConfig {
         BYOKConfig {

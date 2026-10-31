@@ -608,6 +608,7 @@ fn build_llm_call(provider: &Provider, prompt: PromptInputs) -> ApiResult<LlmCal
             })
         }
         Provider::Platform => {
+            crate::ai::provider::require_platform_enabled()?;
             let api_key = std::env::var("MOCKFORGE_PLATFORM_LLM_API_KEY").map_err(|_| {
                 ApiError::Internal(anyhow::anyhow!(
                     "Platform LLM not configured: MOCKFORGE_PLATFORM_LLM_API_KEY missing"

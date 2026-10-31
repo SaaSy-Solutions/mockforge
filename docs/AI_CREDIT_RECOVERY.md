@@ -1,5 +1,24 @@
 # Recovering uncertain platform AI credits
 
+## Platform AI activation
+
+Platform-funded AI is disabled unless `MOCKFORGE_PLATFORM_LLM_ENABLED=true`.
+An API key or positive allowance alone does not activate it. Provider selection
+and execution both enforce this switch, including previously queued work.
+BYOK remains available while platform AI is disabled.
+
+Before enabling, the operator must align the configured provider and endpoint
+with the published privacy disclosure and its effective date (currently
+November 14, 2026 for OpenAI). Confirm the provider credentials, spending limits,
+and the migration and recovery preflight below. This change does not activate
+platform AI or certify a production deployment. Endpoint and model overrides
+remain operator configuration; do not enable an undisclosed provider.
+
+Local allowance tests that contact only a loopback fixture must explicitly set
+`MOCKFORGE_PLATFORM_LLM_ENABLED=true`; run the disabled-platform regression
+separately with that variable unset. Never use production provider credentials
+for these tests.
+
 Platform AI admission reserves a bounded budget before contacting a provider.
 An interrupted or failed response may leave the reservation `uncertain` because
 the provider could have consumed credits. Age alone never releases that budget.
