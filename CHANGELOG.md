@@ -2,6 +2,7 @@
 
 ### Fixed
 
+- **[Cloud]** Path-based hosted-mock URLs work below the mock's root. `/mocks/{org}/{slug}/<path>` returned HTTP 500 "Wrong number of path arguments" for every sub-path, so only `/mocks/{org}/{slug}` itself was reachable. Sub-paths and query strings now proxy to the deployment, and a trailing slash (`/mocks/{org}/{slug}/`) serves the mock's root instead of 404. (#1280)
 - **[Security]** Require verified email-domain ownership for every SAML and OIDC login, including existing organization members, before resolving a global user identity.
 
 ## [0.3.238] - 2026-10-30
