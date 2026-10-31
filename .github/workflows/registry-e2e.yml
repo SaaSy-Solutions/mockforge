@@ -47,7 +47,9 @@ jobs:
         with:
           fetch-depth: 0
       - name: Test registry dependency scope
-        run: python3 scripts/tests/test_registry_security_scope.py
+        run: |
+          python3 scripts/tests/test_registry_security_scope.py
+          python3 scripts/tests/test_registry_fixture_reporting.py
       - name: Determine whether registry files changed
         id: filter
         env:
