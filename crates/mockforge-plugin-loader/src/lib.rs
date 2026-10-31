@@ -229,6 +229,12 @@ pub struct PluginLoaderConfig {
     pub trusted_keys: Vec<String>,
     /// Key data storage (key_id -> key_bytes)
     pub key_data: std::collections::HashMap<String, Vec<u8>>,
+    /// Revoked key IDs. Signatures from these keys are rejected even if
+    /// the key is also listed in `trusted_keys`.
+    pub revoked_keys: Vec<String>,
+    /// Per-key expiry. Signatures from a key are rejected at or after
+    /// its expiry instant.
+    pub key_expires_at: std::collections::HashMap<String, chrono::DateTime<chrono::Utc>>,
     /// Maximum plugins to load
     pub max_plugins: usize,
     /// Plugin loading timeout
@@ -246,6 +252,8 @@ impl Default for PluginLoaderConfig {
             allow_unsigned: false,
             trusted_keys: vec!["trusted-dev-key".to_string()],
             key_data: std::collections::HashMap::new(),
+            revoked_keys: Vec::new(),
+            key_expires_at: std::collections::HashMap::new(),
             max_plugins: 100,
             load_timeout_secs: 30,
             debug_logging: false,
