@@ -1,7 +1,0 @@
-{
-  "task": "free-hosted-current-main-ui",
-  "worktree": "/mnt/projects/mockforge-worktrees/fix-free-hosted-tier-current-main/crates/mockforge-ui/ui",
-  "copied_from": "/mnt/projects/mockforge-worktrees/fix-cloud-deployed-playwright-contracts/crates/mockforge-ui/ui/node_modules",
-  "donor_retained": true,
-  "at": "2026-10-14T02:21:18.448072+00:00"
-}
