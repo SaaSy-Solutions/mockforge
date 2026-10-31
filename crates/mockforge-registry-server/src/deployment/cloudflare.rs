@@ -51,8 +51,9 @@ impl CloudflareMocks {
             edge_token: edge_token.to_string(),
             http: reqwest::Client::builder()
                 .timeout(Duration::from_secs(30))
+                .redirect(reqwest::redirect::Policy::none())
                 .build()
-                .unwrap_or_default(),
+                .ok()?,
         })
     }
 
@@ -170,6 +171,68 @@ pub(crate) mod tests {
         let cf = CloudflareMocks::new("https://mocks.mockforge.dev/", "edge-secret").unwrap();
         let d = deployment(&[], json!({}));
         assert_eq!(cf.public_url(&d), format!("https://mocks.mockforge.dev/{}/shop", d.org_id));
+    }
+
+    #[tokio::test]
+    async fn admin_redirects_never_forward_the_edge_secret() {
+        use axum::{http::StatusCode, routing::any, Router};
+        use std::sync::{
+            atomic::{AtomicUsize, Ordering},
+            Arc,
+        };
+        for status in [301, 302, 307, 308] {
+            let hits = Arc::new(AtomicUsize::new(0));
+            let seen = hits.clone();
+            let sink = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let target = format!("http://{}/stolen", sink.local_addr().unwrap());
+            let sink_task = tokio::spawn(async move {
+                axum::serve(
+                    sink,
+                    Router::new().fallback(any(move || {
+                        let seen = seen.clone();
+                        async move {
+                            seen.fetch_add(1, Ordering::SeqCst);
+                            StatusCode::OK
+                        }
+                    })),
+                )
+                .await
+                .unwrap();
+            });
+            let origin_hits = Arc::new(AtomicUsize::new(0));
+            let origin_seen = origin_hits.clone();
+            let origin = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let base = format!("http://{}", origin.local_addr().unwrap());
+            let origin_task = tokio::spawn(async move {
+                axum::serve(
+                    origin,
+                    Router::new().fallback(any(move |headers: axum::http::HeaderMap| {
+                        let target = target.clone();
+                        let origin_seen = origin_seen.clone();
+                        async move {
+                            assert_eq!(headers.get(EDGE_TOKEN_HEADER).unwrap(), "edge-secret");
+                            origin_seen.fetch_add(1, Ordering::SeqCst);
+                            (StatusCode::from_u16(status).unwrap(), [("location", target)])
+                        }
+                    })),
+                )
+                .await
+                .unwrap();
+            });
+            let result = CloudflareMocks::new(&base, "edge-secret")
+                .unwrap()
+                .restart(&deployment(&[], json!({})))
+                .await;
+            origin_task.abort();
+            sink_task.abort();
+            assert_eq!(
+                origin_hits.load(Ordering::SeqCst),
+                1,
+                "admin request did not reach its origin"
+            );
+            assert_eq!(hits.load(Ordering::SeqCst), 0, "secret forwarded for {status}");
+            assert!(result.is_err(), "redirect {status} was accepted");
+        }
     }
 
     #[test]
