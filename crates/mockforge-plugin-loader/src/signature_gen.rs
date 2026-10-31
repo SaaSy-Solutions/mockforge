@@ -3,56 +3,47 @@
 //! This module provides utilities for generating plugin signatures during development.
 //! It's primarily used for testing and plugin development workflows.
 
-use crate::signature::{PluginSignature, SignatureAlgorithm};
+use crate::signature::{
+    compute_artifact_payload, PluginSignature, SignatureAlgorithm, SIGNATURE_FILE,
+};
 use crate::{LoaderResult, PluginLoaderError};
 use ring::rand::SystemRandom;
 use ring::signature::KeyPair;
 use std::fs;
 use std::path::Path;
 
-/// Sign a plugin manifest with Ed25519
+/// Sign a plugin directory with Ed25519
 ///
 /// This function:
-/// 1. Reads the plugin manifest (plugin.toml)
-/// 2. Computes SHA-256 hash of the manifest
-/// 3. Signs the hash with the provided private key
-/// 4. Writes the signature to plugin.sig
+/// 1. Builds the v2 artifact payload over every file in the plugin
+///    directory (see [`compute_artifact_payload`])
+/// 2. Signs the payload with the provided PKCS#8 private key
+/// 3. Writes the signature to `plugin.sig`
+///
+/// Re-run it after any file in the plugin changes.
 pub fn sign_plugin_ed25519(
     plugin_dir: &Path,
     key_id: &str,
     private_key_bytes: &[u8],
 ) -> LoaderResult<PluginSignature> {
-    // Read manifest
-    let manifest_file = plugin_dir.join("plugin.toml");
-    if !manifest_file.exists() {
-        return Err(PluginLoaderError::security("Plugin manifest (plugin.toml) not found"));
-    }
+    let payload = compute_artifact_payload(plugin_dir)?;
+    let hash = ring::digest::digest(&ring::digest::SHA256, &payload);
 
-    let manifest_content = fs::read(&manifest_file).map_err(|e| {
-        PluginLoaderError::security(format!("Failed to read plugin manifest: {}", e))
-    })?;
-
-    // Compute hash
-    let hash = ring::digest::digest(&ring::digest::SHA256, &manifest_content);
-    let hash_bytes = hash.as_ref();
-
-    // Sign the manifest content (not just the hash)
     let key_pair = ring::signature::Ed25519KeyPair::from_pkcs8(private_key_bytes).map_err(|e| {
         PluginLoaderError::security(format!("Failed to parse Ed25519 private key: {:?}", e))
     })?;
 
-    let signature_bytes = key_pair.sign(&manifest_content);
+    let signature_bytes = key_pair.sign(&payload);
 
-    // Create signature object
     let signature = PluginSignature::new(
         SignatureAlgorithm::Ed25519,
         key_id.to_string(),
         signature_bytes.as_ref().to_vec(),
-        hash_bytes.to_vec(),
+        hash.as_ref().to_vec(),
     );
 
     // Write signature file
-    let sig_file = plugin_dir.join("plugin.sig");
+    let sig_file = plugin_dir.join(SIGNATURE_FILE);
     let sig_json = serde_json::to_string_pretty(&signature).map_err(|e| {
         PluginLoaderError::security(format!("Failed to serialize signature: {}", e))
     })?;

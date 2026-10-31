@@ -74,6 +74,7 @@ pub mod migration;
 pub mod pillar_analytics;
 pub mod playground;
 pub mod plugin;
+mod plugin_install_security;
 pub mod protocol_contracts;
 pub mod recorder_api;
 pub mod vbr_api;
@@ -3802,6 +3803,8 @@ pub struct PluginInstallRequest {
     pub skip_validation: bool,
     #[serde(default)]
     pub no_verify: bool,
+    #[serde(default)]
+    pub allow_unsigned: bool,
     pub checksum: Option<String>,
 }
 
@@ -3884,6 +3887,7 @@ pub async fn install_plugin(
     }
 
     let force = request.force;
+    let allow_unsigned = request.allow_unsigned;
     let checksum = request.checksum.clone();
     let state_for_install = state.clone();
 
@@ -3915,7 +3919,11 @@ pub async fn install_plugin(
                         ));
                     }
 
-                    let loader = PluginLoader::new(PluginLoaderConfig::default());
+                    let verified_config = plugin_install_security::verified_plugin_config(
+                        &plugin_root,
+                        allow_unsigned,
+                    )?;
+                    let loader = PluginLoader::new(verified_config.clone());
                     let manifest = loader
                         .validate_plugin(&plugin_root)
                         .await
@@ -3925,19 +3933,10 @@ pub async fn install_plugin(
                     let plugin_name = manifest.info.name.clone();
                     let plugin_version = manifest.info.version.to_string();
 
-                    let parent_dir = plugin_root
-                        .parent()
-                        .unwrap_or_else(|| std::path::Path::new("."))
-                        .to_string_lossy()
-                        .to_string();
-
-                    let runtime_loader = PluginLoader::new(PluginLoaderConfig {
-                        plugin_dirs: vec![parent_dir],
-                        ..PluginLoaderConfig::default()
-                    });
+                    let runtime_loader = PluginLoader::new(verified_config);
 
                     runtime_loader
-                        .load_plugin(&plugin_id)
+                        .load_plugin_from_path(&plugin_root)
                         .await
                         .map_err(|e| format!("Failed to load plugin into runtime: {}", e))?;
 
