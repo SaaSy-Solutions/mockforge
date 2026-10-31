@@ -1,0 +1,88 @@
+{
+  "scope": "Selected actual log excerpts; not full transcripts or complete logs",
+  "receipts": [
+    {
+      "name": "admin-policy",
+      "tested_source": "0d035861",
+      "original_log": "/tmp/mockforge-admin-native-policy.log",
+      "log_sha256": "294f24c5a51a89d6ec50f2cde36cea4cc1a2aa3408281d9117afb94119fd9e08",
+      "result_lines": [
+        "test result: ok. 126 passed; 0 failed; 0 ignored; 0 measured; 508 filtered out; finished in 1.62s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "test result: ok. 61 passed; 0 failed; 0 ignored; 0 measured; 111 filtered out; finished in 0.07s",
+        "test result: ok. 116 passed; 0 failed; 0 ignored; 0 measured; 373 filtered out; finished in 20.10s"
+      ],
+      "note": "Before merge; 304 tests"
+    },
+    {
+      "name": "admin-integrations",
+      "tested_source": "0d035861",
+      "original_log": "/tmp/mockforge-admin-native-integration.log",
+      "log_sha256": "a1c9398df0f6c881563a1150e1ccbd2f24ae8776d6299a674ffe1c1f9ae8e554",
+      "result_lines": [
+        "test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s"
+      ],
+      "note": "Before merge; four integrations"
+    },
+    {
+      "name": "admin-migration-red",
+      "tested_source": "45b4ec4d",
+      "original_log": "/tmp/mockforge-admin-migrations-red.log",
+      "log_sha256": "0a6d6b6be8c89501a65e70f30c8960b31c81d03fd6728cb9783f397ab18619cc",
+      "result_lines": [
+        "test historical_database_upgrades_and_preserves_operator_credentials ... FAILED",
+        "historical migration checksum must remain valid: VersionMismatch(1)",
+        "test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "error: test failed, to rerun pass `-p mockforge-ui --test admin_auth_migrations`"
+      ],
+      "note": "Expected pre-fix failure"
+    },
+    {
+      "name": "sso",
+      "tested_source": "82de5faa",
+      "original_log": "/tmp/mockforge-sso-combined-tests-20261031.log",
+      "log_sha256": "b46eaf4d29dd8ac7cd31fe1db0699ac49d84f71e160a8bdb58d1a78ab75b28ed",
+      "result_lines": [
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 576 filtered out; finished in 0.72s"
+      ],
+      "note": "Before merge; domain/provisioning tests, not a full signed callback"
+    },
+    {
+      "name": "ai",
+      "tested_source": "f2b7dcc2",
+      "original_log": "/tmp/mockforge-fidelity-review-20261031/ai-batched-tests.log",
+      "log_sha256": "d3dca5d6d470c6755879a03b728a4fb370f90c4c9b4192b4aa99c9848ef0a5af",
+      "result_lines": [
+        "test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 554 filtered out; finished in 0.17s",
+        "test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 1232 filtered out; finished in 0.01s",
+        "test result: ok. 84 passed; 0 failed; 1 ignored; 0 measured; 298 filtered out; finished in 0.24s",
+        "test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 450 filtered out; finished in 0.70s"
+      ],
+      "note": "Before merge"
+    },
+    {
+      "name": "fidelity-frontend",
+      "tested_source": "0357c0e1",
+      "original_log": "/tmp/mockforge-fidelity-review-20261031/latest-frontend-tests.log",
+      "log_sha256": "c6e9ebfb0a0fcb19f045ecc2df5bf63bf8d238bc2825082e0cf21ad2f19d122e",
+      "result_lines": [
+        " Test Files  2 passed (2)",
+        "      Tests  11 passed (11)"
+      ],
+      "note": "AFTER merge; timing gap disclosed"
+    },
+    {
+      "name": "fidelity-types",
+      "tested_source": "0357c0e1",
+      "original_log": "/tmp/mockforge-fidelity-review-20261031/latest-frontend-types.log",
+      "log_sha256": "786404f79b3a66196a6fcd63da5b7b00cdce735c214952b2a09546d396819656",
+      "result_lines": [
+        "> ui-v2@0.0.0 type-check /mnt/build/worktrees/mockforge-merge-fidelity-20261031/crates/mockforge-ui/ui",
+        "> tsc -b"
+      ],
+      "note": "AFTER merge; timing gap disclosed"
+    }
+  ]
+}
