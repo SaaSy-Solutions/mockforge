@@ -51,10 +51,10 @@ See the [complete Pillars documentation](docs/PILLARS.md) for detailed informati
 | **HTTP/REST** | ✅ | ✅ | ✅ | ✅ |
 | **gRPC** | ✅ Built-in + HTTP bridge | ⚠️ Via `wiremock-grpc-extension` | ✅ | — |
 | **WebSocket** | ✅ Scripted replay + JSONPath | ⚠️ WireMock 4.x beta | ⚠️ For AI-protocol (MCP/A2A) servers | ✅ |
-| **GraphQL** | ✅ Schema-based | ⚠️ Via `wiremock-graphql-extension` | — | — |
-| **Kafka** | ✅ Mock broker | — | — | — |
-| **MQTT** | ✅ Broker (3.1.1 & 5.0) | — | — | — |
-| **AMQP/RabbitMQ** | ✅ Broker (0.9.1) | — | — | — |
+| **GraphQL** | ✅ Schema-based | ⚠️ Via `wiremock-graphql-extension` | ✅ | — |
+| **Kafka** | ✅ Mock broker | — | ✅ AsyncAPI broker mocking | — |
+| **MQTT** | ✅ Broker (3.1.1 & 5.0) | — | ✅ AsyncAPI broker mocking | — |
+| **AMQP/RabbitMQ** | ✅ Broker (0.9.1) | — | ✅ AsyncAPI broker mocking | — |
 | **SMTP** | ✅ Email server | — | — | — |
 | **FTP** | ✅ File transfer | — | — | — |
 | **TCP** | ✅ Raw TCP | — | — | — |
@@ -74,7 +74,7 @@ See the [complete Pillars documentation](docs/PILLARS.md) for detailed informati
 
 ✅ supported · ⚠️ partial, extension, beta or paid tier · — not found in the vendor's documentation (not a claim that it's missing).
 
-Competitor cells come from each vendor's own docs ([WireMock](https://wiremock.org/docs/), [MockServer](https://www.mock-server.com/), [Mockoon](https://mockoon.com/features/)) as of October 2026. Corrections are welcome via an issue or PR.
+Competitor cells come from each vendor's own docs ([WireMock](https://wiremock.org/docs/), [MockServer](https://www.mock-server.com/), [Mockoon](https://mockoon.com/features/)) as of October 2026. Protocol references: [WireMock WebSockets](https://wiremock.org/docs/websockets/), [MockServer protocols](https://www.mock-server.com/), and [Mockoon WebSockets](https://mockoon.com/docs/latest/api-endpoints/websockets/). Corrections are welcome via an issue or PR.
 
 MockForge also includes features we haven't compared across tools: client generation (React, Vue, Angular, Svelte), LLM-driven mock generation, data drift, AI event streams for WebSocket, built-in payload encryption (AES-256/ChaCha20), Git-backed workspace sync, and cross-endpoint referential-integrity validation.
 

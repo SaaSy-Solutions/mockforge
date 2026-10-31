@@ -22,7 +22,7 @@ from pathlib import Path
 
 from generate_docs_sitemap import DEFAULT_BASE_URL, chapter_pages
 
-CANONICAL_RE = re.compile(r'\s*<link rel="canonical"[^>]*>')
+CANONICAL_RE = re.compile(r'\s*<link rel="canonical"[^>]*>\s*')
 
 
 def inject(page: str, url: str) -> str:
@@ -31,7 +31,7 @@ def inject(page: str, url: str) -> str:
     head_close = page.find("</head>")
     if head_close == -1:
         raise ValueError("no </head> in page")
-    return page[:head_close] + "    " + tag + "\n    " + page[head_close:]
+    return page[:head_close].rstrip() + "\n    " + tag + "\n" + page[head_close:]
 
 
 def main() -> int:

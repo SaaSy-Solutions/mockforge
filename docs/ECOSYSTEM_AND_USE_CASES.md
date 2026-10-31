@@ -922,7 +922,7 @@ for i := 0; i < 100; i++ {
 | **Failure Injection** | ✅ Configurable rates | ✅ Scenarios |
 | **Timeout Simulation** | ✅ Built-in | ✅ Built-in |
 | **Network Profiles** | ✅ 3G, 4G, 5G presets | — |
-| **Chaos Patterns** | ✅ Faker, UUIDs, time | ✅ Handlebars |
+| **Chaos Patterns** | ✅ | ✅ Delays and faults |
 
 ---
 
