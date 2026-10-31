@@ -111,7 +111,7 @@ export class RequestInterceptor {
 
             // Inject OAuth token if configured
             if (self.oauthPassthrough && !shouldBypass) {
-                headers = self.oauthPassthrough.injectToken(headers) as Headers;
+                headers = self.oauthPassthrough.injectToken(new Headers(headers));
             }
 
             let response: Response;
@@ -236,7 +236,7 @@ export class RequestInterceptor {
                 headers: {},
             });
 
-            return self.originalXHROpen.call(this, method, url, async, username, password);
+            return self.originalXHROpen.call(this, method, url, async ?? true, username, password);
         };
 
         // Intercept send()
@@ -333,7 +333,7 @@ export class RequestInterceptor {
                         ) || this.status < 400; // Always capture successful requests
 
                         if (shouldTrigger) {
-                            self.captureCallback!(captured).catch(err => {
+                            Promise.resolve().then(() => self.captureCallback?.(captured)).catch(err => {
                                 console.warn('[ForgeConnect] Error in capture callback:', err);
                             });
                         }

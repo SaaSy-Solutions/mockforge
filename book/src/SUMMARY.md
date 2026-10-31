@@ -107,6 +107,7 @@
 - [Zero-Config Mode (Planned)](user-guide/devx/zero-config-mode.md)
 - [API Architecture Critique (Planned)](user-guide/ai/api-architecture-critique.md)
 - [System Generation (Planned)](user-guide/ai/system-generation.md)
+- [Bake AI Responses for CI (Unreleased)](user-guide/ai/baked-fixtures.md)
 - [Behavioral Simulation (Planned)](user-guide/ai/behavioral-simulation.md)
 
 ## Additional Protocols

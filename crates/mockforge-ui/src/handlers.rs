@@ -338,6 +338,10 @@ pub struct AdminState {
     pub smoke_test_results: Arc<RwLock<Vec<SmokeTestResult>>>,
     /// Import history (protected by RwLock)
     pub import_history: Arc<RwLock<Vec<ImportHistoryEntry>>>,
+    /// The same live workspace registry mounted by the admin workspace API.
+    pub workspace_registry: Option<Arc<RwLock<mockforge_core::MultiTenantWorkspaceRegistry>>>,
+    /// AI conversation storage, shared by chat requests.
+    pub ai_conversations: Arc<mockforge_core::ai_studio::ConversationStore>,
     /// Workspace persistence
     pub workspace_persistence: Arc<WorkspacePersistence>,
     /// Plugin registry (protected by RwLock)
@@ -642,6 +646,8 @@ impl AdminState {
             })),
             smoke_test_results: Arc::new(RwLock::new(Vec::new())),
             import_history: Arc::new(RwLock::new(Vec::new())),
+            workspace_registry: None,
+            ai_conversations: mockforge_core::ai_studio::get_conversation_store(),
             workspace_persistence: Arc::new(WorkspacePersistence::new("./workspaces")),
             plugin_registry: Arc::new(RwLock::new(PluginRegistry::new())),
             reality_engine: Arc::new(RwLock::new(mockforge_core::RealityEngine::new())),

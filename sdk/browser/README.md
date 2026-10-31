@@ -41,6 +41,11 @@ const forgeConnect = new ForgeConnect({
 await forgeConnect.initialize();
 ```
 
+Workspace environments are optional. Without `workspaceId`, initialization
+connects to the mock server without requesting workspace environments. To use
+environment switching or variables, supply an existing workspace ID; errors
+from that workspace are reported rather than silently ignored.
+
 ### Auto-Create Mocks for Failed Requests
 
 ```typescript

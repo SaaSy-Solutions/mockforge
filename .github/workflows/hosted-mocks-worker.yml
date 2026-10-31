@@ -1,0 +1,44 @@
+name: Hosted mocks Worker
+
+# Type-check and unit-test the Cloudflare Worker that serves hosted mocks
+# (deploy/cloudflare/hosted-mocks). Deploys are manual (`pnpm deploy`).
+
+on:
+  pull_request:
+    paths:
+      - 'deploy/cloudflare/hosted-mocks/**'
+      - '.github/workflows/hosted-mocks-worker.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'deploy/cloudflare/hosted-mocks/**'
+      - '.github/workflows/hosted-mocks-worker.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: hosted-mocks-worker-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: Hosted mocks Worker (type-check + test)
+    runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: deploy/cloudflare/hosted-mocks
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+      - name: Enable pnpm
+        run: corepack enable
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm type-check
+      - run: pnpm test
