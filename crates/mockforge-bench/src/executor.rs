@@ -739,6 +739,9 @@ impl K6Executor {
             iterations_completed: json["metrics"]["iterations"]["values"]["count"]
                 .as_u64()
                 .unwrap_or(0),
+            owasp_findings: json["metrics"]["owasp_findings"]["values"]["count"]
+                .as_u64()
+                .unwrap_or(0),
         })
     }
 }
@@ -806,6 +809,9 @@ pub struct K6Results {
     /// the run and not every operation in the spec was exercised.
     #[serde(default)]
     pub iterations_completed: u64,
+    /// Findings reported by the OWASP API generator's `owasp_findings` counter.
+    #[serde(default)]
+    pub owasp_findings: u64,
 }
 
 impl K6Results {

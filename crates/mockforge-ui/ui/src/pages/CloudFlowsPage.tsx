@@ -32,13 +32,13 @@ import { Button } from '../components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '../components/ui/Dialog';
 import { Input } from '../components/ui/input';
 
-const KIND_OPTIONS: FlowKind[] = ['scenario', 'orchestration', 'state_machine', 'chain'];
+type RunnableFlowKind = Extract<FlowKind, 'chain'>;
 
-const STARTER_CONFIG: Record<FlowKind, Record<string, unknown>> = {
-    scenario: { nodes: [{ id: 'start', name: 'start' }, { id: 'end', name: 'end' }] },
-    orchestration: { nodes: [{ id: 'fetch', name: 'fetch' }, { id: 'process', name: 'process' }] },
-    state_machine: { states: [{ id: 'idle', name: 'idle' }, { id: 'running', name: 'running' }] },
-    chain: { steps: [{ id: 'request', name: 'request' }, { id: 'assert', name: 'assert' }] },
+const HISTORIC_KIND_FILTERS: FlowKind[] = ['scenario', 'orchestration', 'state_machine', 'chain'];
+const CREATE_KIND_OPTIONS: RunnableFlowKind[] = ['chain'];
+
+const STARTER_CONFIG: Record<RunnableFlowKind, Record<string, unknown>> = {
+    chain: { links: [] },
 };
 
 export const CloudFlowsPage: React.FC = () => {
@@ -60,8 +60,8 @@ const CloudView: React.FC = () => {
     const activeWorkspace = useWorkspaceStore((s) => s.activeWorkspace);
     const queryClient = useQueryClient();
     const [showCreate, setShowCreate] = useState(false);
-    const [draft, setDraft] = useState<{ kind: FlowKind; name: string; description: string }>({
-        kind: 'scenario',
+    const [draft, setDraft] = useState<{ kind: RunnableFlowKind; name: string; description: string }>({
+        kind: 'chain',
         name: '',
         description: '',
     });
@@ -89,7 +89,7 @@ const CloudView: React.FC = () => {
             }),
         onSuccess: () => {
             setShowCreate(false);
-            setDraft({ kind: 'scenario', name: '', description: '' });
+            setDraft({ kind: 'chain', name: '', description: '' });
             queryClient.invalidateQueries({ queryKey: ['cloud', 'flows', workspaceId] });
         },
     });
@@ -130,9 +130,8 @@ const CloudView: React.FC = () => {
                         Saved Flows
                     </h1>
                     <p className="text-gray-600 dark:text-gray-400">
-                        Versioned scenario / orchestration / state-machine / chain definitions.
-                        Triggers reuse the test_runs lifecycle so live events stream on the Cloud
-                        Test Runs page.
+                        Versioned flow definitions. New runnable flows use chains; historic kinds
+                        remain visible for existing workspaces.
                     </p>
                 </div>
                 <div className="flex gap-2">
@@ -154,7 +153,7 @@ const CloudView: React.FC = () => {
             </div>
 
             <div className="mb-4 flex gap-2">
-                {(['all', ...KIND_OPTIONS] as const).map((k) => (
+                {(['all', ...HISTORIC_KIND_FILTERS] as const).map((k) => (
                     <button
                         key={k}
                         onClick={() => setKindFilter(k)}
@@ -315,9 +314,9 @@ const FlowRow: React.FC<{
 );
 
 const CreateModal: React.FC<{
-    state: { kind: FlowKind; name: string; description: string };
+    state: { kind: RunnableFlowKind; name: string; description: string };
     setState: React.Dispatch<
-        React.SetStateAction<{ kind: FlowKind; name: string; description: string }>
+        React.SetStateAction<{ kind: RunnableFlowKind; name: string; description: string }>
     >;
     onClose: () => void;
     onSubmit: () => void;
@@ -330,7 +329,7 @@ const CreateModal: React.FC<{
                 <DialogHeader className="flex-col items-start">
                     <DialogTitle id="new-flow-title">New Flow</DialogTitle>
                     <DialogDescription>
-                        Start with a two-node configuration, then edit your flow after creation.
+                        Create a chain, then add its HTTP links in the JSON editor.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="py-6 space-y-4">
@@ -338,9 +337,9 @@ const CreateModal: React.FC<{
                     <div className="space-y-2">
                         <label htmlFor="flow-kind" className="block text-sm font-medium">Kind</label>
                         <select id="flow-kind" value={state.kind}
-                            onChange={(e) => setState({ ...state, kind: e.target.value as FlowKind })}
+                            onChange={(e) => setState({ ...state, kind: e.target.value as RunnableFlowKind })}
                             className="w-full px-3 py-2 bg-background text-foreground border border-input rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                            {KIND_OPTIONS.map((kind) => <option key={kind} value={kind}>{kind.replace('_', ' ')}</option>)}
+                            {CREATE_KIND_OPTIONS.map((kind) => <option key={kind} value={kind}>{kind.replace('_', ' ')}</option>)}
                         </select>
                     </div>
                     <div className="space-y-2">
