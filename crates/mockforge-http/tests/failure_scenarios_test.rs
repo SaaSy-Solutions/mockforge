@@ -230,6 +230,12 @@ async fn test_management_endpoints_work_with_failed_spec() {
     tokio::fs::write(&spec_path, "not even json at all!@#$").await.unwrap();
 
     let router = build_router(Some(spec_path.to_string_lossy().to_string()), None, None).await;
+    // The control plane needs the management credential (#1011).
+    let token = "management-token-for-failed-spec-test-0123456789";
+    let router = mockforge_http::management_auth::install(
+        router,
+        mockforge_http::management_auth::ControlPlanePolicy::with_token(token).unwrap(),
+    );
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -242,7 +248,12 @@ async fn test_management_endpoints_work_with_failed_spec() {
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let client = reqwest::Client::new();
+    let mut headers = reqwest::header::HeaderMap::new();
+    headers.insert(
+        mockforge_http::management_auth::MANAGEMENT_TOKEN_HEADER,
+        reqwest::header::HeaderValue::from_static(token),
+    );
+    let client = reqwest::Client::builder().default_headers(headers).build().unwrap();
     let base_url = format!("http://{}", addr);
 
     // Test health endpoint

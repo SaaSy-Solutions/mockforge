@@ -128,7 +128,7 @@ impl AdminActionPermissions {
 
             // Read operations require appropriate read permissions
             "get_dashboard" | "get_logs" | "get_metrics" | "get_routes" | "get_fixtures"
-            | "get_config" => {
+            | "get_config" | "verify_fidelity" => {
                 vec![Permission::WorkspaceRead, Permission::MockRead]
             }
 
@@ -327,6 +327,7 @@ pub async fn rbac_middleware(mut request: Request, next: Next) -> Result<Respons
 
     // Map route to action name
     let action_name = match (method, path) {
+        ("POST", "/__mockforge/fidelity/compare") => "verify_fidelity",
         (_, p) if p.contains("/config/latency") => "update_latency",
         (_, p) if p.contains("/config/faults") => "update_faults",
         (_, p) if p.contains("/config/proxy") => "update_proxy",
