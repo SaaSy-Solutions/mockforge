@@ -20,7 +20,7 @@ env:
 jobs:
   release:
     name: Create Release
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: [self-hosted, linux, x64, "${{ vars.MOCKFORGE_RELEASE_RUNNER_LABEL || 'rust' }}"]
     timeout-minutes: 120
     env:
       SCCACHE_GHA_ENABLED: "true"
@@ -196,7 +196,7 @@ jobs:
 
   publish:
     name: Publish to crates.io
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: [self-hosted, linux, x64, "${{ vars.MOCKFORGE_RELEASE_RUNNER_LABEL || 'rust' }}"]
     timeout-minutes: 360
     # Publishing to crates.io
     # with broken tests yanks our reputation, not just our deploy.
@@ -251,7 +251,7 @@ jobs:
 
   helm:
     name: Package and Publish Helm Chart
-    runs-on: [self-hosted, linux, x64, rust]
+    runs-on: [self-hosted, linux, x64, "${{ vars.MOCKFORGE_RELEASE_RUNNER_LABEL || 'rust' }}"]
     timeout-minutes: 15
     # Same release gating rationale as publish.
     needs: release
