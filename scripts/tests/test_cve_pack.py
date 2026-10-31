@@ -208,6 +208,35 @@ class RunTests(unittest.TestCase):
 
 
 class CliTests(unittest.TestCase):
+    def test_unfinished_template_rejected_by_server_run_probe(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = Path(d) / "profile.json"
+            cve_pack.main(["new", "CVE-2026-109618", "--output", str(out)])
+            for command in ("server", "run", "probe"):
+                args = [command, str(out)]
+                if command != "server":
+                    args += [
+                        "--target",
+                        "http://127.0.0.1:1",
+                        "--report",
+                        str(Path(d) / "report.json"),
+                    ]
+                with self.assertRaises(SystemExit) as raised:
+                    cve_pack.main(args)
+                self.assertEqual(raised.exception.code, 2)
+            self.assertFalse((Path(d) / "report.json").exists())
+
+    def test_placeholder_signature_cannot_be_used_with_completed_metadata(self):
+        profile = dict(
+            cve_pack.SKELETON,
+            cve="CVE-2026-109618",
+            title="Reviewed title",
+            references=["https://example.com/advisory"],
+            route="/test",
+        )
+        with self.assertRaisesRegex(cpp.ProfileError, "unfinished template"):
+            cpp.validate(profile)
+
     def test_new_writes_skeleton(self):
         with tempfile.TemporaryDirectory() as d:
             out = Path(d) / "p.json"

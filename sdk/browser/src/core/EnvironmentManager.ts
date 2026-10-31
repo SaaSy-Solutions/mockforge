@@ -34,6 +34,7 @@ export class EnvironmentManager {
      * Refresh the list of environments
      */
     async refreshEnvironments(): Promise<Environment[]> {
+        if (!this.workspaceId) return [];
         this.environments = await this.client.listEnvironments(this.workspaceId);
         return this.environments;
     }
@@ -56,6 +57,7 @@ export class EnvironmentManager {
      * Refresh the active environment
      */
     async refreshActiveEnvironment(): Promise<Environment | null> {
+        if (!this.workspaceId) return null;
         this.activeEnvironment = await this.client.getActiveEnvironment(this.workspaceId);
         return this.activeEnvironment;
     }
@@ -64,7 +66,7 @@ export class EnvironmentManager {
      * Set the active environment
      */
     async setActiveEnvironment(environmentId: string): Promise<void> {
-        await this.client.setActiveEnvironment(this.workspaceId, environmentId);
+        await this.client.setActiveEnvironment(this.requireWorkspaceId(), environmentId);
         await this.refreshEnvironments();
         await this.refreshActiveEnvironment();
     }
@@ -77,7 +79,7 @@ export class EnvironmentManager {
             return this.environmentVariables[environmentId];
         }
 
-        const variables = await this.client.getEnvironmentVariables(this.workspaceId, environmentId);
+        const variables = await this.client.getEnvironmentVariables(this.requireWorkspaceId(), environmentId);
         this.environmentVariables[environmentId] = variables;
         return variables;
     }
@@ -86,7 +88,7 @@ export class EnvironmentManager {
      * Set an environment variable
      */
     async setEnvironmentVariable(environmentId: string, key: string, value: string): Promise<void> {
-        await this.client.setEnvironmentVariable(this.workspaceId, environmentId, key, value);
+        await this.client.setEnvironmentVariable(this.requireWorkspaceId(), environmentId, key, value);
 
         // Update local cache
         if (!this.environmentVariables[environmentId]) {
@@ -121,6 +123,11 @@ export class EnvironmentManager {
      * Get workspace ID
      */
     getWorkspaceId(): string | undefined {
+        return this.workspaceId;
+    }
+
+    private requireWorkspaceId(): string {
+        if (!this.workspaceId) throw new Error('Configure workspaceId to use workspace environments');
         return this.workspaceId;
     }
 }

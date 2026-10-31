@@ -75,12 +75,22 @@ The extension auto-discovers MockForge on:
 
 To use a custom URL, the extension will save it in storage after first successful connection.
 
+If the server sets `MOCKFORGE_MANAGEMENT_TOKEN`, enter the same value in the X-Ray DevTools panel's
+"Management token" field. It is kept in `chrome.storage.local` (never synced) and sent as
+`X-MockForge-Management-Token`.
+
 ## Development
 
 ### Build
 
 ```bash
 npm run build
+```
+
+### Test
+
+```bash
+npm test   # type-check (tsc --noEmit), then build
 ```
 
 ### Watch Mode

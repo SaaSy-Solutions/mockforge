@@ -11,6 +11,11 @@ import json
 import sys
 import tempfile
 import unittest
+import io
+import contextlib
+import http.client
+import urllib.error
+from unittest.mock import patch
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -176,6 +181,77 @@ class EnrichTests(unittest.TestCase):
         # references deduped across OSV + NVD + KEV
         self.assertEqual(len(t["references"]), len(set(t["references"])))
         self.assertIn("https://nextjs.example/advisory", t["references"])
+
+    def test_standalone_tips_fetches_kev(self):
+        report = enrich.tips("CVE-2025-29927", fetcher=FakeFetcher())
+        self.assertTrue(report["actively_exploited"])
+        self.assertTrue(report["complete"])
+
+    def test_failed_feeds_preserve_other_results(self):
+        for prefix in (
+            feeds.KEV_URL,
+            feeds.NVD_URL,
+            feeds.OSV_VULN_URL,
+            feeds.EPSS_URL,
+        ):
+            with self.subTest(prefix=prefix):
+                fake = FakeFetcher()
+                original = fake.get_json
+
+                def get(url):
+                    if url.startswith(prefix):
+                        raise ConnectionResetError("reset")
+                    return original(url)
+
+                fake.get_json = get
+                report = enrich.tips("CVE-2025-29927", fetcher=fake)
+                self.assertFalse(report["complete"])
+                self.assertTrue(report["feed_errors"][0]["url"].startswith(prefix))
+                if prefix == feeds.KEV_URL:
+                    self.assertIsNone(report["actively_exploited"])
+                else:
+                    self.assertTrue(report["actively_exploited"])
+                if prefix != feeds.EPSS_URL:
+                    self.assertIsNotNone(report["epss"])
+
+    def test_all_feeds_down_returns_unknown_not_negative(self):
+        report = enrich.tips(
+            "CVE-2026-109618",
+            fetcher=feeds.Fetcher(
+                responses={"https://": http.client.RemoteDisconnected()}
+            ),
+        )
+        self.assertEqual(len(report["feed_errors"]), 4)
+        self.assertIsNone(report["actively_exploited"])
+        self.assertIsNone(report["known_ransomware"])
+        self.assertIn("available feed data", report["advice"])
+
+    def test_osv_missing_record_is_not_an_outage(self):
+        fake = FakeFetcher()
+        original = fake.get_json
+
+        def get(url):
+            if url.startswith(feeds.OSV_VULN_URL):
+                raise urllib.error.HTTPError(url, 404, "not found", {}, None)
+            return original(url)
+
+        fake.get_json = get
+        report = enrich.tips("CVE-2025-29927", fetcher=fake)
+        self.assertTrue(report["complete"])
+
+    def test_tips_cli_outputs_partial_json_and_failure_exit(self):
+        cli = _load("cve_pack")
+        import cve_pack_feeds
+
+        fake = feeds.Fetcher(responses={"https://": ConnectionResetError()})
+        output = io.StringIO()
+        with (
+            patch.object(cve_pack_feeds, "Fetcher", return_value=fake),
+            contextlib.redirect_stdout(output),
+            contextlib.redirect_stderr(io.StringIO()),
+        ):
+            self.assertEqual(cli.main(["tips", "CVE-2026-109618"]), 1)
+        self.assertFalse(json.loads(output.getvalue())["complete"])
 
 
 class TriageTests(unittest.TestCase):

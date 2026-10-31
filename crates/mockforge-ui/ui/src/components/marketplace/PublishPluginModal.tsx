@@ -5,6 +5,7 @@
  */
 
 import React, { useState } from 'react';
+import { bytesToBase64 } from '@/utils/binaryEncoding';
 import { apiErrorMessage } from '@/utils/errorHandling';
 import { authenticatedFetch } from '@/utils/apiClient';
 import { useAuthStore } from '@/stores/useAuthStore';
@@ -141,7 +142,7 @@ export const PublishPluginModal: React.FC<PublishPluginModalProps> = ({
 
       // Read and encode WASM file
       const fileBuffer = await wasmFile.arrayBuffer();
-      const base64Wasm = btoa(String.fromCharCode(...new Uint8Array(fileBuffer)));
+      const base64Wasm = bytesToBase64(new Uint8Array(fileBuffer));
 
       // Calculate checksum
       const checksum = await calculateChecksum(fileBuffer);
