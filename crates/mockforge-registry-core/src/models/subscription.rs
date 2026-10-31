@@ -250,6 +250,15 @@ impl UsageCounter {
         let period_start = NaiveDate::from_ymd_opt(period_start.year(), period_start.month(), 1)
             .unwrap_or(period_start);
 
+        Self::get_or_create_for_period(executor, org_id, period_start).await
+    }
+
+    /// Use the admission's captured UTC month for coordinated account/org ledgers.
+    pub async fn get_or_create_for_period(
+        executor: impl sqlx::PgExecutor<'_>,
+        org_id: Uuid,
+        period_start: NaiveDate,
+    ) -> sqlx::Result<Self> {
         sqlx::query_as::<_, Self>(
             r#"
             INSERT INTO usage_counters (org_id, period_start)
@@ -263,6 +272,26 @@ impl UsageCounter {
         .bind(period_start)
         .fetch_one(executor)
         .await
+    }
+
+    /// Admit and count one request only while below the monthly hard limit.
+    ///
+    /// Call inside a transaction: the counter upsert locks the monthly row,
+    /// serializing admission across concurrent proxy requests.
+    pub async fn try_increment_requests(
+        conn: &mut sqlx::PgConnection,
+        org_id: Uuid,
+        limit: i64,
+    ) -> sqlx::Result<(bool, i64)> {
+        let counter = Self::get_or_create_current(&mut *conn, org_id).await?;
+        let used: Option<i64> = sqlx::query_scalar(
+            "UPDATE usage_counters SET requests = requests + 1, updated_at = NOW() WHERE id = $1 AND requests < $2 RETURNING requests",
+        )
+        .bind(counter.id)
+        .bind(limit)
+        .fetch_optional(conn)
+        .await?;
+        Ok((used.is_some(), used.unwrap_or(counter.requests)))
     }
 
     /// Increment request count

@@ -1,7 +1,12 @@
 ## [Unreleased]
 
+### Changed
+
+- **[DevX]** Extract authentication middleware, token lifecycle and OAuth2/OIDC endpoints into `mockforge-auth`. Preserve HTTP authentication and OAuth2 handler import paths and shared state types; keep the risk-simulation implementation with its engine. (#635)
+
 ### Added
 
+- **[Cloud]** Share Free hosted capacity, monthly request limits and platform AI credits across a verified owner’s organizations. Preserve spent allowances through account recreation, bound deleted identity retention, retain uncertain provider budgets, and require audited usage evidence plus execution fences for stopped-call recovery. Keep provider execution connections separate from API requests. (#834, #868) The Privacy Policy and DPA disclose OpenAI as the platform AI sub-processor, with processing beginning no earlier than November 14, 2026.
 - **[Reality]** AsyncAPI 2/3 fidelity compares channel and directional operation contracts, including payload/header schemas, bindings, server/security references and traits. CLI and authenticated admin comparisons can check recorder message samples; the CLI also checks complete recorder-JSON fixture sets. Recorded MQTT, Kafka, AMQP and WebSocket messages use protocol-aware direction, exact JSON/text schema validation and explicit unverified outcomes when capture or format support is incomplete. Capture reads remain read-only and filter message events before the limit. (#849)
 - **[Reality]** The self-hosted Admin UI adds a Mock fidelity panel in Contract Diff for comparing mock/source OpenAPI definitions and optional Flight Recorder HTTP samples. Authenticated comparisons report per-route definition deltas, sample drift, and incomplete coverage, with bounded inputs and paginated details. (#849)
 - **[Reality]** `verify-mocks --fixtures` checks a complete HTTP replay fixture set against its source OpenAPI definition, reporting missing and removed routes, invalid statuses, and field-level JSON response errors. It can run alongside mock-definition and recorder checks. Loading is read-only and rejects empty, malformed, symlinked or excessive fixture inputs. (#849)
@@ -9,6 +14,7 @@
 
 ### Fixed
 
+- **[Auth]** Authenticated handlers can extract `AuthClaims` with Axum’s standard extractor; middleware stores raw claims and the legacy wrapper while preserving credential-safe security events. (#635)
 - **[Security]** Admin database upgrades preserve the shipped SQLx migration checksum and remove only unchanged built-in accounts in a new migration. Operator credentials and unrelated sessions are retained. (#1016)
 - **[AI]** Use the selected provider/model for direct and chat debugging instead of a default cloud client. Apply workspace validation and seed overrides to the debug endpoints, including when runtime MockAI is disabled.
 - **[AI]** Keep the chosen provider/model and seed when applying Reality presets. Baked fixtures disable presets and reject cached configurations that would re-enable them. (#852)

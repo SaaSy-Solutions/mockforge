@@ -23,6 +23,27 @@ pub const BACKEND_CLOUDFLARE: &str = "cloudflare";
 /// Header carrying the shared secret on registry-to-Worker admin calls.
 pub const EDGE_TOKEN_HEADER: &str = "x-mockforge-edge-token";
 
+/// Edge requests cannot participate in the registry's atomic Free allowance.
+/// Re-check effective subscription state even for an already deployed container.
+pub(crate) async fn require_paid_plan(
+    pool: &sqlx::PgPool,
+    org_id: uuid::Uuid,
+) -> crate::error::ApiResult<()> {
+    let org = crate::models::Organization::find_by_id(pool, org_id)
+        .await?
+        .ok_or(crate::error::ApiError::PermissionDenied)?;
+    let subscription = crate::models::Subscription::find_by_org(pool, org_id).await?;
+    if crate::handlers::entitlements::resolve_effective_plan(
+        org.plan(),
+        subscription.as_ref(),
+        chrono::Utc::now(),
+    ) == crate::models::Plan::Free
+    {
+        return Err(crate::error::ApiError::ResourceLimitExceeded("External hosting requires a paid plan; create a local Free mock or restore the subscription".into()));
+    }
+    Ok(())
+}
+
 /// Client for the hosted-mocks Worker's admin endpoints.
 #[derive(Clone)]
 pub struct CloudflareMocks {

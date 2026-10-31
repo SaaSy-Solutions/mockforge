@@ -37,6 +37,9 @@ pub struct FlyioMachine {
     pub id: String,
     pub name: String,
     pub state: String,
+    /// Current Machine version, required for stopped-state confirmation.
+    #[serde(default)]
+    pub instance_id: Option<String>,
     pub region: String,
     pub image_ref: Option<FlyioImageRef>,
     pub config: FlyioMachineConfig,
@@ -205,6 +208,14 @@ impl FlyioClient {
         }
     }
 
+    #[cfg(test)]
+    pub(super) fn for_test_endpoint(base_url: String) -> Self {
+        Self {
+            api_token: uuid::Uuid::new_v4().to_string(),
+            base_url,
+        }
+    }
+
     /// Get the API token (used for Fly.io registry auth)
     pub fn api_token(&self) -> &str {
         &self.api_token
@@ -335,6 +346,7 @@ impl FlyioClient {
 
         let response = client
             .get(&url)
+            .timeout(std::time::Duration::from_secs(15))
             .header("Authorization", format!("Bearer {}", self.api_token))
             .send()
             .await
@@ -360,6 +372,7 @@ impl FlyioClient {
 
         let response = client
             .post(&url)
+            .timeout(std::time::Duration::from_secs(15))
             .header("Authorization", format!("Bearer {}", self.api_token))
             .header("Content-Type", "application/json")
             .json(&serde_json::json!({}))
@@ -383,6 +396,7 @@ impl FlyioClient {
 
         let response = client
             .post(&url)
+            .timeout(std::time::Duration::from_secs(15))
             .header("Authorization", format!("Bearer {}", self.api_token))
             .header("Content-Type", "application/json")
             .send()
@@ -398,6 +412,57 @@ impl FlyioClient {
         Ok(())
     }
 
+    /// Wait for a provider-confirmed state; stopped waits are scoped to the
+    /// instance returned before requesting shutdown, as required by Fly.
+    async fn wait_for_state(
+        &self,
+        app_name: &str,
+        machine_id: &str,
+        state: &str,
+        instance_id: Option<&str>,
+    ) -> Result<()> {
+        let url = format!("{}/v1/apps/{}/machines/{}/wait", self.base_url, app_name, machine_id);
+        let client = reqwest::Client::new();
+        let mut request = client
+            .get(url)
+            .header("Authorization", format!("Bearer {}", self.api_token))
+            .timeout(std::time::Duration::from_secs(15))
+            .query(&[("state", state), ("timeout", "10")]);
+        if let Some(instance_id) = instance_id {
+            request = request.query(&[("instance_id", instance_id)]);
+        }
+        let response = request.send().await.context("Failed to confirm Fly.io machine state")?;
+        if !response.status().is_success() {
+            anyhow::bail!("Fly.io did not confirm machine state {}: {}", state, response.status());
+        }
+        let confirmation: serde_json::Value =
+            response.json().await.context("Invalid Fly.io state confirmation response")?;
+        if confirmation.get("ok").and_then(serde_json::Value::as_bool) != Some(true) {
+            anyhow::bail!("Fly.io state confirmation did not acknowledge success");
+        }
+        Ok(())
+    }
+
+    /// Start a machine and confirm it reached the running state.
+    pub async fn start_machine_confirmed(&self, app_name: &str, machine_id: &str) -> Result<()> {
+        self.start_machine(app_name, machine_id).await?;
+        self.wait_for_state(app_name, machine_id, "started", None).await
+    }
+
+    /// Stop a machine and confirm shutdown before a capacity slot is released.
+    pub async fn stop_machine_confirmed(&self, app_name: &str, machine_id: &str) -> Result<()> {
+        let machine = self.get_machine(app_name, machine_id).await?;
+        if machine.state == "stopped" {
+            return Ok(());
+        }
+        let instance_id = machine
+            .instance_id
+            .as_deref()
+            .ok_or_else(|| anyhow::anyhow!("Fly.io machine response lacks instance_id"))?;
+        self.stop_machine(app_name, machine_id).await?;
+        self.wait_for_state(app_name, machine_id, "stopped", Some(instance_id)).await
+    }
+
     /// Delete a machine
     pub async fn delete_machine(&self, app_name: &str, machine_id: &str) -> Result<()> {
         let client = reqwest::Client::new();
@@ -408,13 +473,15 @@ impl FlyioClient {
 
         let response = client
             .delete(&url)
+            .timeout(std::time::Duration::from_secs(15))
+            .query(&[("force", "true")])
             .header("Authorization", format!("Bearer {}", self.api_token))
             .send()
             .await
             .context("Failed to delete Fly.io machine")?;
 
         let status = response.status();
-        if !status.is_success() {
+        if !status.is_success() && status != reqwest::StatusCode::NOT_FOUND {
             let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
             anyhow::bail!("Failed to delete Fly.io machine: {} - {}", status, error_text);
         }
@@ -429,18 +496,51 @@ impl FlyioClient {
 
         let response = client
             .delete(&url)
+            .timeout(std::time::Duration::from_secs(15))
+            .query(&[("force", "true")])
             .header("Authorization", format!("Bearer {}", self.api_token))
             .send()
             .await
             .context("Failed to delete Fly.io app")?;
 
         let status = response.status();
-        if !status.is_success() {
+        if !status.is_success() && status != reqwest::StatusCode::NOT_FOUND {
             let error_text = response.text().await.unwrap_or_else(|_| "Unknown error".to_string());
             anyhow::bail!("Failed to delete Fly.io app: {} - {}", status, error_text);
         }
 
         Ok(())
+    }
+
+    /// Delete all app resources and confirm absence. An accepted deletion is
+    /// not proof that cleanup finished; keep the deployment retryable until
+    /// the app-details endpoint returns 404.
+    pub async fn delete_app_confirmed(&self, app_name: &str) -> Result<()> {
+        self.delete_app(app_name).await?;
+        let client = reqwest::Client::new();
+        let url = format!("{}/v1/apps/{}", self.base_url, app_name);
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(10);
+        loop {
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                anyhow::bail!("Fly.io app deletion is not yet confirmed; retry cleanup");
+            }
+            let response = client
+                .get(&url)
+                .timeout(remaining)
+                .header("Authorization", format!("Bearer {}", self.api_token))
+                .send()
+                .await
+                .context("Failed to confirm Fly.io app deletion")?;
+            let status = response.status();
+            if status == reqwest::StatusCode::NOT_FOUND {
+                return Ok(());
+            }
+            if !status.is_success() {
+                anyhow::bail!("Fly.io app absence is unconfirmed: {}", status);
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(100).min(remaining)).await;
+        }
     }
 
     /// Allocate a shared IPv4 and a dedicated IPv6 address for an app
@@ -705,5 +805,220 @@ mod guest_tests {
         assert!(json.contains("\"guest\""));
         assert!(json.contains("\"memory_mb\":512"));
         assert!(json.contains("\"cpu_kind\":\"shared\""));
+    }
+}
+
+#[cfg(test)]
+mod lifecycle_wire_tests {
+    use super::*;
+    use axum::{
+        extract::Request,
+        http::{Method, StatusCode},
+        response::IntoResponse,
+        routing::any,
+        Json, Router,
+    };
+    use std::sync::{Arc, Mutex};
+
+    #[tokio::test]
+    async fn app_cleanup_requires_confirmed_absence_and_preserves_provider_failures() {
+        use std::collections::VecDeque;
+        // Accepted cleanup must observe disappearance; a present app or an
+        // inaccessible existence check must never count as completed cleanup.
+        for (statuses, succeeds, expected_calls) in [
+            (vec![StatusCode::ACCEPTED, StatusCode::OK, StatusCode::NOT_FOUND], true, 3),
+            (vec![StatusCode::NOT_FOUND, StatusCode::NOT_FOUND], true, 2),
+            (vec![StatusCode::ACCEPTED, StatusCode::SERVICE_UNAVAILABLE], false, 2),
+            (vec![StatusCode::INTERNAL_SERVER_ERROR], false, 1),
+        ] {
+            let remaining = Arc::new(Mutex::new(VecDeque::from(statuses)));
+            let calls = Arc::new(Mutex::new(Vec::new()));
+            let captured = calls.clone();
+            let router = Router::new().fallback(any(move |request: Request| {
+                let remaining = remaining.clone();
+                let captured = captured.clone();
+                async move {
+                    captured
+                        .lock()
+                        .unwrap()
+                        .push((request.method().clone(), request.uri().to_string()));
+                    remaining.lock().unwrap().pop_front().expect("unexpected provider call")
+                }
+            }));
+            let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+            let client = FlyioClient {
+                api_token: uuid::Uuid::new_v4().to_string(),
+                base_url: format!("http://{}", listener.local_addr().unwrap()),
+            };
+            let task = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+            let result = client.delete_app_confirmed("app-fixture").await;
+            task.abort();
+            assert_eq!(result.is_ok(), succeeds);
+            let calls = calls.lock().unwrap();
+            assert_eq!(calls.len(), expected_calls);
+            assert_eq!(calls[0].0, Method::DELETE);
+            assert!(calls[0].1.contains("force=true"));
+            for call in calls.iter().skip(1) {
+                assert_eq!(call.0, Method::GET);
+                assert_eq!(call.1, "/v1/apps/app-fixture");
+            }
+        }
+    }
+
+    struct Fixture {
+        client: FlyioClient,
+        requests: Arc<Mutex<Vec<(Method, String)>>>,
+        task: tokio::task::JoinHandle<()>,
+    }
+
+    impl Drop for Fixture {
+        fn drop(&mut self) {
+            self.task.abort();
+        }
+    }
+
+    async fn fixture(
+        machine_state: &str,
+        instance: Option<&str>,
+        wait_status: StatusCode,
+    ) -> Fixture {
+        fixture_with_response(machine_state, instance, wait_status, serde_json::json!({"ok":true}))
+            .await
+    }
+
+    async fn fixture_with_response(
+        machine_state: &str,
+        instance: Option<&str>,
+        wait_status: StatusCode,
+        wait_body: serde_json::Value,
+    ) -> Fixture {
+        let machine = serde_json::json!({
+            "id":"machine-fixture", "name":"fixture", "state":machine_state,
+            "instance_id":instance, "region":"iad", "image_ref":null,
+            "config":{"image":"fixture", "env":{}, "services":[], "checks":null}
+        });
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let captured = requests.clone();
+        let router = Router::new().fallback(any(move |request: Request| {
+            let captured = captured.clone();
+            let machine = machine.clone();
+            let wait_body = wait_body.clone();
+            async move {
+                let method = request.method().clone();
+                let uri = request.uri().to_string();
+                let path = request.uri().path().to_string();
+                captured.lock().unwrap().push((method.clone(), uri));
+                if path.ends_with("/wait") {
+                    return (wait_status, Json(wait_body)).into_response();
+                }
+                if method == Method::GET {
+                    return Json(machine).into_response();
+                }
+                if method == Method::DELETE {
+                    return StatusCode::NOT_FOUND.into_response();
+                }
+                StatusCode::OK.into_response()
+            }
+        }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base_url = format!("http://{}", listener.local_addr().unwrap());
+        let task = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+        // This value has no authority outside the local fixture and is never
+        // captured: the fixture records only methods and non-secret URIs.
+        let client = FlyioClient {
+            api_token: uuid::Uuid::new_v4().to_string(),
+            base_url,
+        };
+        Fixture {
+            client,
+            requests,
+            task,
+        }
+    }
+
+    #[tokio::test]
+    async fn accepted_start_with_failed_confirmation_returns_error() {
+        let f = fixture("starting", Some("instance-fixture"), StatusCode::GATEWAY_TIMEOUT).await;
+        assert!(f
+            .client
+            .start_machine_confirmed("app-fixture", "machine-fixture")
+            .await
+            .is_err());
+        let calls = f.requests.lock().unwrap();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].0, Method::POST);
+        assert!(calls[1].1.contains("state=started"));
+    }
+
+    #[tokio::test]
+    async fn confirmed_start_waits_for_started() {
+        let f = fixture("starting", Some("instance-fixture"), StatusCode::OK).await;
+        f.client
+            .start_machine_confirmed("app-fixture", "machine-fixture")
+            .await
+            .unwrap();
+        let calls = f.requests.lock().unwrap();
+        assert_eq!(calls.len(), 2);
+        assert!(calls[1].1.contains("state=started"));
+    }
+
+    #[tokio::test]
+    async fn successful_http_status_without_acknowledgment_is_not_confirmation() {
+        for body in [
+            serde_json::json!({"ok":false}),
+            serde_json::json!({"ok":"true"}),
+            serde_json::json!({}),
+        ] {
+            let f =
+                fixture_with_response("starting", Some("instance-fixture"), StatusCode::OK, body)
+                    .await;
+            assert!(f
+                .client
+                .start_machine_confirmed("app-fixture", "machine-fixture")
+                .await
+                .is_err());
+        }
+    }
+
+    #[tokio::test]
+    async fn stop_wait_uses_provider_instance_id() {
+        let f = fixture("started", Some("instance-fixture"), StatusCode::OK).await;
+        f.client.stop_machine_confirmed("app-fixture", "machine-fixture").await.unwrap();
+        let calls = f.requests.lock().unwrap();
+        assert_eq!(calls.len(), 3);
+        assert!(calls[1].1.ends_with("/stop"));
+        assert!(calls[2].1.contains("state=stopped"));
+        assert!(calls[2].1.contains("instance_id=instance-fixture"));
+    }
+
+    #[tokio::test]
+    async fn already_stopped_does_not_request_another_stop() {
+        let f = fixture("stopped", None, StatusCode::GATEWAY_TIMEOUT).await;
+        f.client.stop_machine_confirmed("app-fixture", "machine-fixture").await.unwrap();
+        assert_eq!(f.requests.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn missing_instance_id_does_not_claim_confirmation() {
+        let f = fixture("started", None, StatusCode::OK).await;
+        assert!(f.client.stop_machine_confirmed("app-fixture", "machine-fixture").await.is_err());
+        assert_eq!(f.requests.lock().unwrap().len(), 1);
+    }
+
+    #[tokio::test]
+    async fn failed_stop_confirmation_returns_error() {
+        let f = fixture("started", Some("instance-fixture"), StatusCode::GATEWAY_TIMEOUT).await;
+        assert!(f.client.stop_machine_confirmed("app-fixture", "machine-fixture").await.is_err());
+    }
+
+    #[tokio::test]
+    async fn deletion_is_forced_and_already_missing_resources_are_idempotent() {
+        let f = fixture("started", Some("instance-fixture"), StatusCode::OK).await;
+        f.client.delete_machine("app-fixture", "machine-fixture").await.unwrap();
+        f.client.delete_app("app-fixture").await.unwrap();
+        let calls = f.requests.lock().unwrap();
+        assert_eq!(calls.len(), 2);
+        assert_eq!(calls[0].0, Method::DELETE);
+        assert!(calls[0].1.contains("force=true"));
     }
 }

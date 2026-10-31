@@ -23,13 +23,14 @@ MockForge Cloud offers three pricing tiers designed to meet the needs of individ
 - ✅ **1 plugin** publish limit
 - ✅ **3 templates** publish limit
 - ✅ **1 scenario** publish limit
-- ✅ **BYOK (Bring Your Own Key)** for AI features
+- ✅ **1 hosted HTTP mock** with a shared monthly request allowance
+- ✅ **5,000 platform AI tokens** per month; BYOK remains supported
 - ✅ **Basic plugin marketplace** access
 - ✅ **Community support** (best effort)
 
 **Limitations:**
-- ❌ No hosted mock deployments
-- ❌ No included AI tokens (BYOK only)
+- Hosted capacity and monthly allowances are shared across the verified owner’s Free organizations.
+- Email verification is required for hosting and platform AI.
 - ❌ Limited publishing to marketplace
 
 **Best for:**
@@ -109,8 +110,8 @@ MockForge Cloud offers three pricing tiers designed to meet the needs of individ
 | **Projects** | 1 | 10 | Unlimited |
 | **Collaborators** | 1 | 5 | 20 |
 | **Environments** | 1 | 3 | 10 |
-| **Hosted Mocks** | ❌ | ✅ | ✅ |
-| **AI Tokens (Included)** | 0 (BYOK only) | 100,000 | 1,000,000 |
+| **Hosted Mocks** | 1 HTTP mock | ✅ | ✅ |
+| **AI Tokens (Included)** | 5,000 | 100,000 | 1,000,000 |
 | **Plugin Publishing** | 1 | 10 | Unlimited |
 | **Template Publishing** | 3 | 50 | Unlimited |
 | **Scenario Publishing** | 1 | 20 | Unlimited |
@@ -175,7 +176,7 @@ Separate configurations for dev, staging, and production. Each environment can h
 Deploy your mock definitions as live, accessible HTTP endpoints in the cloud. Each deployment gets a unique URL.
 
 ### AI Tokens
-Used for AI-powered features like intelligent mock generation and data synthesis. Free plan requires BYOK (Bring Your Own Key).
+Used for AI-powered features like intelligent mock generation and data synthesis. Free includes a small metered platform allowance; BYOK (Bring Your Own Key) remains available.
 
 ### Marketplace Publishing
 Publish your plugins, templates, and scenarios to the MockForge Marketplace for others to use (or keep them private to your organization).
@@ -184,7 +185,7 @@ Publish your plugins, templates, and scenarios to the MockForge Marketplace for 
 
 ## BYOK (Bring Your Own Key) - Free Plan
 
-On the Free plan, AI features require you to provide your own API keys for AI providers:
+Free includes 5,000 platform AI tokens per month after email verification. You can optionally configure your own provider key; enabled BYOK takes precedence and uses your provider’s billing rather than platform credits:
 
 **Supported Providers:**
 - OpenAI (GPT-3.5, GPT-4)
