@@ -4,7 +4,7 @@
 
 This directory holds operations material (runbook, incident response, launch checklist) for the managed MockForge service.
 
-> **Current production topology.** MockForge Cloud runs in a single region (US East, Ashburn) on one host, behind Cloudflare. There is no multi-region deployment or failover, and no contractual uptime SLA. Production health is checked by an automated smoke test every 15 minutes (`.github/workflows/production-smoke.yml`). The "Architecture" and "Features" sections below describe the original design target, not what runs today.
+> **Current production topology.** MockForge Cloud runs in a single region (US East, Ashburn) on one host, behind Cloudflare. There is no multi-region deployment or failover, and no contractual uptime SLA. Production health is checked by an automated smoke test on every push to main and hourly (`.github/workflows/production-smoke.yml`). The "Architecture" and "Features" sections below describe the original design target, not what runs today.
 
 ---
 
