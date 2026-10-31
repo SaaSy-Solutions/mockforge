@@ -8109,6 +8109,8 @@ dependencies = [
  "base64 0.22.1",
  "blake3 1.8.3",
  "bytes",
+ "cap-fs-ext",
+ "cap-std",
  "chacha20poly1305",
  "chrono",
  "criterion",
