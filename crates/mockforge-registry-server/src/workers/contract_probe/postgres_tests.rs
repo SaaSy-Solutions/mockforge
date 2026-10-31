@@ -111,6 +111,27 @@ async fn due_claims_serialize_and_failed_timestamp_rolls_back_run() {
         .unwrap());
     assert_eq!(count_runs(&pool, interval.id).await, 2);
 
+    let missing_spec = seed_service(&pool, workspace, None).await;
+    sqlx::query("UPDATE monitored_services SET openapi_spec_url=NULL WHERE id=$1")
+        .bind(missing_spec.id)
+        .execute(&pool)
+        .await
+        .unwrap();
+    // Hold a different connection so the lock check cannot reuse the claim connection.
+    let mut observer = pool.acquire().await.unwrap();
+    assert!(!enqueue_for_service(&pool, None, &missing_spec, fire, 1800).await.unwrap());
+    assert_eq!(count_runs(&pool, missing_spec.id).await, 0);
+    sqlx::query("BEGIN").execute(&mut *observer).await.unwrap();
+    sqlx::query("SELECT id FROM monitored_services WHERE id=$1 FOR UPDATE NOWAIT")
+        .bind(missing_spec.id)
+        .fetch_one(&mut *observer)
+        .await
+        .expect("skipped probes must release their row lock before returning");
+    sqlx::query("ROLLBACK").execute(&mut *observer).await.unwrap();
+    drop(observer);
+    let untouched = MonitoredService::find_by_id(&pool, missing_spec.id).await.unwrap().unwrap();
+    assert!(untouched.last_probed_at.is_none());
+
     let rollback = seed_service(&pool, workspace, Some("0 */5 * * * *")).await;
     sqlx::query(&format!(
         "CREATE FUNCTION reject_fixture_probe_timestamp() RETURNS trigger AS $$ \
