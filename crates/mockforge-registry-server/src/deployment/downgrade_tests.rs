@@ -52,7 +52,8 @@ async fn downgraded_fly_stop_retries_without_releasing_capacity_before_confirmat
         .await
         .unwrap();
     // Owners can change display status; that must not hide a running backend.
-    sqlx::query("UPDATE hosted_mocks SET status='stopped' WHERE id=$1")
+    // Legacy rows have the server-owned machine ID but no backend marker.
+    sqlx::query("UPDATE hosted_mocks SET status='stopped', metadata_json=metadata_json-'hosting_backend' WHERE id=$1")
         .bind(id)
         .execute(&pool)
         .await
