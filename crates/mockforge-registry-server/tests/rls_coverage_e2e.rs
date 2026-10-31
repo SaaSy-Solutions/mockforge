@@ -1018,11 +1018,14 @@ async fn api_tokens_round_trip_and_token_authentication() {
         access_token: token.clone(),
         ..e.clone()
     };
-    assert_contains(
+    // Token management is reserved for interactive sessions (#1263): even a
+    // valid API token cannot list tokens.
+    let body = expect_status(
         "list tokens via API token",
-        &list_ids(&t, "list tokens via API token", "/api/v1/tokens").await,
-        &token_id,
+        StatusCode::FORBIDDEN,
+        t.get("/api/v1/tokens").await,
     );
+    assert_eq!(body["error_code"], "TOKEN_NOT_ALLOWED", "list tokens via API token: {body}");
     let body = ok(
         "org usage via API token",
         t.get(&format!("/api/v1/organizations/{org}/usage")).await,
