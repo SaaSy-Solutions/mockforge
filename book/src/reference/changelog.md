@@ -2,7 +2,11 @@
 
 ## [Unreleased]
 
+## [0.3.238] - 2026-10-30
+
 ### Added
+
+- **[DevX]** `mockforge tools export --output-dir <new-directory>` exports the discussion exporter, CVE tools, Python modules, and Next.js example bundled in the crates.io CLI. A source checkout is no longer required. (#79)
 
 - **[DevX]** CVE monitor and remediation tips for the rule packs: `cve_pack_monitor.py` tracks CISA KEV (actively-exploited CVEs), triages to WAF-actionable CWEs, and writes a candidate pack per CVE enriched with tips aggregated and deduped from NVD, OSV, EPSS and KEV (upgrade-to version, exploitation probability, ransomware use, CISA due date); `cve_pack.py tips <CVE>` prints the same. An optional provider-agnostic `--drafter-cmd` proposes each signature, but the profile schema is the trust boundary — a draft that is not inert marker-only is flagged for review, never run. (#79)
 - **[DevX]** Per-CVE Rule Packs: author a small profile (route, signature header/param names with inert marker values, benign controls, expected block status) and `cve_pack.py` scaffolds it, emits a MockForge mock of the guarded route, and runs the signature plus controls through a supplied load balancer to assert the rule blocks the signature and allows benign traffic. Reuses the Security Rule Test Packs transport; marker-only values mean a profile cannot carry a payload, and runtime/patch evidence stays unverified. (#79)
@@ -20,6 +24,8 @@
 - **[DevX]** `bench-chunked` labels each `--spec` operation's `RPS (started)` and `RPS (overall)` lines `(this operation only)`, so they are not read as the rate for the whole pass. The multi-target summary now prints `load_window=` and `elapsed=` next to `start_rps` and `rps`, and a single `--target` run with `--spec` prints the same figures on a `Pass summary (all operations):` line. The campaign banner says that `--repeat-until` is checked before each pass, so a running pass finishes. (#79)
 
 ### Fixed
+
+- **[DevX]** Discussion exports work without GitHub CLI; CVE tips preserve partial feed results and check CISA KEV; unfinished CVE templates are rejected before tests run. (#79)
 
 - **[DevX]** Add a guarded operator for superseded, partially cancelled CI runs stuck on an unassigned completion job. It preserves the fail-closed Rust completion verdict, tries ordinary cancellation first, and revalidates the live PR head and all job guards before force-cancellation. Current-head runs, forks and active workers are refused. (#1191)
 - **[Reality]** MQTT publish and last-will delivery no longer hold broker-wide locks while waiting on subscriber queues, or acquire topic and client locks in the opposite order to new connections. This prevents concurrent CONNECT/publish deadlocks and lets new clients connect while a subscriber is backpressured. (#715)
