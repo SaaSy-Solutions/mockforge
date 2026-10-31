@@ -230,7 +230,10 @@ a live upstream still returns the fixture's response. Unsupported response media
 (such as `text/plain` or `application/problem+json`) and ambiguous media without
 a recorded Content-Type remain `not-verified`, with a `response-unverified`
 finding. They do not count as proven response drift. The top-level
-`endpoints_unverified` count covers HTTP fixture and capture checks.
+`endpoints_unverified` count covers HTTP fixture and capture checks. With
+`--record`, a run containing only unverified findings keeps the outcome
+`unverified` for `mockforge status`; proven drift takes precedence when both
+occur. These recorded reports and status output use schema 2.
 
 A fixture file has this shape:
 

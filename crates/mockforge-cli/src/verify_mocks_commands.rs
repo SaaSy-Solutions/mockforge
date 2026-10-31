@@ -361,8 +361,10 @@ fn verification_record(
         VerificationFinding, VerificationOutcome, VerificationRecord, VERIFICATION_SCHEMA_VERSION,
     };
     // Definition drift found without traffic is still drift.
-    let outcome = if !report.findings.is_empty() {
+    let outcome = if report.endpoints_with_drift > 0 {
         VerificationOutcome::Drift
+    } else if report.endpoints_unverified > 0 {
+        VerificationOutcome::Unverified
     } else if report.exchanges_checked == 0 {
         VerificationOutcome::NoTraffic
     } else {
@@ -377,6 +379,7 @@ fn verification_record(
         outcome,
         exchanges_checked: report.exchanges_checked,
         endpoints_with_drift: report.endpoints_with_drift,
+        endpoints_unverified: report.endpoints_unverified,
         unmatched_real_paths: report.unmatched_real_paths,
         findings: report
             .findings

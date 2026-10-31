@@ -258,3 +258,23 @@ async fn recorded_response_media_is_not_inferred_from_an_unrelated_json_schema()
     assert_eq!(report["endpoints_unverified"], 1);
     assert_eq!(report["findings"][0]["kind"], "response-unverified");
 }
+
+#[test]
+fn persisted_verdict_distinguishes_unverified_evidence_and_prioritizes_proven_drift() {
+    let mut report = empty_capture_report(std::path::Path::new("api.json"));
+    report.endpoints_unverified = 1;
+    report.findings.push(DriftFinding {
+        endpoint: "GET /items".into(),
+        kind: "response-unverified".into(),
+        detail: "Unsupported media".into(),
+    });
+    let record = verification_record(&report, None);
+    assert_eq!(record.outcome, crate::status_commands::VerificationOutcome::Unverified);
+    assert_eq!(record.endpoints_unverified, 1);
+    assert_eq!(record.endpoints_with_drift, 0);
+    report.endpoints_with_drift = 1;
+    assert_eq!(
+        verification_record(&report, None).outcome,
+        crate::status_commands::VerificationOutcome::Drift
+    );
+}

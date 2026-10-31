@@ -23,7 +23,7 @@
 
 ### Fixed
 
-- **[Reality]** Fidelity checks preserve AsyncAPI server variables whose names match documentation keys. HTTP captures and replay fixtures now report unsupported or ambiguous response media as unverified, and `--fail-on-drift` fails those checks instead of accepting unchecked responses. (#849)
+- **[Reality]** Fidelity checks preserve AsyncAPI server variables whose names match documentation keys. HTTP captures and replay fixtures now report unsupported or ambiguous response media as unverified, and `--fail-on-drift` fails those checks instead of accepting unchecked responses. Recorded verification and project status use schema 2 with an `unverified` outcome and continue reading schema-1 records. (#849)
 
 - **[Reality]** JSON-content request parameters are decoded and checked against their schemas instead of silently passing validation. JSON types stay distinct, local component references are resolved, malformed JSON fails even without a schema, and unsupported parameter media types fail explicitly. (#849)
 - **[Reality]** Request parameter `schema` references are checked in normal, style-aware and detailed validation instead of silently passing. Local aliases, nested and recursive components retain their schema context; referenced arrays and deep-object values are coerced by declared type, and integer parameters retain 64-bit precision. Unresolved/cyclic references fail explicitly, and parameter validation does not fetch external resources. (#849)
