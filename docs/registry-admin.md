@@ -185,6 +185,17 @@ Scopes: `read:packages`, `publish:packages`, `deploy:mocks`,
 `admin:org`, `read:usage`, `manage:billing`. The plaintext token is
 returned **once** in the response — clients must save it immediately.
 
+The hosted registry enforces these scopes on every token-authenticated
+route (`crates/mockforge-registry-server/src/middleware/token_scope.rs`;
+the per-route list is `token_scope_routes.txt` beside it). Hosted mocks,
+workspaces, test suites and runs, captures and the other cloud mock
+resources need `deploy:mocks`. Token management, account security, SSO,
+GDPR, platform admin and promotion approvals reject tokens and need a
+signed-in session. A token only acts on its own organization. Scope names
+match exactly, and no scope implies another. Routes that are not listed
+reject tokens. A token without the required scope gets
+`403 INSUFFICIENT_SCOPE`, which names the scope it needs.
+
 ```json
 {
   "token": "mfx_AbCdEfGhIjKlMnOpQrStUvWxYz1234567890==",

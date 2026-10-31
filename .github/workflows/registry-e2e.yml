@@ -347,6 +347,7 @@ jobs:
             --test rls_join_coverage_e2e \
             --test cross_tenant_chaos_capture_e2e \
             --test seed_credentials_neutralised \
+            --test token_scope_e2e \
             -- --ignored --nocapture --test-threads=1
 
       - name: Dump registry-server log on failure
