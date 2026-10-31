@@ -42,6 +42,12 @@ async fn optional_routes_follow_features_and_basic_mocking_stays_available() {
         SharedOverrides::load(Vec::new()).await,
     )
     .await;
+    // The control plane needs the management credential (#1011).
+    let token = "management-token-for-optional-routes-0123456789";
+    let app = mockforge_http::management_auth::install(
+        app,
+        mockforge_http::management_auth::ControlPlanePolicy::with_token(token).unwrap(),
+    );
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     let _server = Server(tokio::spawn(async move {
@@ -67,7 +73,20 @@ async fn optional_routes_follow_features_and_basic_mocking_stays_available() {
         ("/api/world-state/graph", cfg!(feature = "world-state")),
         ("/api/performance/status", cfg!(feature = "performance-profiling")),
     ] {
-        let response = client.get(format!("http://{address}{path}")).send().await.unwrap();
+        let unauthenticated = client.get(format!("http://{address}{path}")).send().await.unwrap();
+        // The reserved namespace needs the credential even where nothing is mounted.
+        let expected = if enabled || path.starts_with("/__mockforge") {
+            401
+        } else {
+            404
+        };
+        assert_eq!(unauthenticated.status().as_u16(), expected, "{path}");
+        let response = client
+            .get(format!("http://{address}{path}"))
+            .header(mockforge_http::management_auth::MANAGEMENT_TOKEN_HEADER, token)
+            .send()
+            .await
+            .unwrap();
         assert_eq!(response.status().as_u16(), if enabled { 200 } else { 404 }, "{path}");
     }
 }

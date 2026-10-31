@@ -1,16 +1,13 @@
 import { useState } from 'react';
 import { Copy, KeyRound } from 'lucide-react';
 import { Button } from '../ui/button';
-import { fetchJsonWithErrorBody } from '@/services/api/client';
-
-interface ManagementToken {
-  token: string;
-  header: string;
-}
+import { fetchManagementToken, type ManagementToken } from '@/hooks/useManagementToken';
 
 /**
- * Reveals the credential used to manage a hosted mock from an external client.
- * Send it in the returned header when calling MockForge control routes.
+ * Reveals a hosted mock's management token. Every control-plane route on the
+ * mock (`/__mockforge/*` except the docs page, chaos, time travel, recorder),
+ * reads as well as writes, needs it in the X-MockForge-Management-Token
+ * header; only the mocked API itself does not.
  */
 export function ManagementTokenField({ deploymentId }: { deploymentId: string }) {
   const [value, setValue] = useState<ManagementToken | null>(null);
@@ -20,11 +17,7 @@ export function ManagementTokenField({ deploymentId }: { deploymentId: string })
   const reveal = async () => {
     setError(null);
     try {
-      setValue(
-        (await fetchJsonWithErrorBody(
-          `/api/v1/hosted-mocks/${encodeURIComponent(deploymentId)}/management-token`,
-        )) as ManagementToken,
-      );
+      setValue(await fetchManagementToken(deploymentId));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not load the token');
     }
@@ -60,8 +53,8 @@ export function ManagementTokenField({ deploymentId }: { deploymentId: string })
       )}
       <p className="text-xs text-muted-foreground">
         {value
-          ? `Send as ${value.header} on requests to /__mockforge/* and other MockForge control routes.`
-          : 'Needed to change this mock through its management API from curl or your own client.'}
+          ? `Send as ${value.header} on every request to /__mockforge/* and other MockForge control routes, reads included. Your mocked API doesn't need it.`
+          : 'Needed to read or change this mock through its management API from curl or your own client.'}
       </p>
       {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
     </div>

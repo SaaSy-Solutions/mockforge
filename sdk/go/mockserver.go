@@ -4,10 +4,13 @@ package mockforge
 import (
 	"bufio"
 	"bytes"
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"regexp"
 	"strconv"
@@ -21,6 +24,31 @@ type MockServerConfig struct {
 	Host        string
 	ConfigFile  string
 	OpenAPISpec string
+	// ManagementToken is the control-plane credential. It is passed to the
+	// CLI as MOCKFORGE_MANAGEMENT_TOKEN and sent as
+	// X-MockForge-Management-Token on every SDK control-plane request.
+	// Default: $MOCKFORGE_MANAGEMENT_TOKEN, else a random 64-char hex token.
+	ManagementToken string
+}
+
+// ManagementTokenHeader carries the management credential on control-plane requests.
+const ManagementTokenHeader = "X-MockForge-Management-Token"
+
+// resolveManagementToken returns the explicit token, else the
+// MOCKFORGE_MANAGEMENT_TOKEN env var, else a fresh random hex token. It
+// returns "" only if the system CSPRNG fails; Start reports that as an error.
+func resolveManagementToken(explicit string) string {
+	if explicit != "" {
+		return explicit
+	}
+	if fromEnv := os.Getenv("MOCKFORGE_MANAGEMENT_TOKEN"); fromEnv != "" {
+		return fromEnv
+	}
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(buf)
 }
 
 // ResponseStub represents a stubbed HTTP response
@@ -41,7 +69,9 @@ type MockServer struct {
 	host      string
 	adminPort int
 	stubs     []ResponseStub
-	portMutex sync.RWMutex // Protects port and adminPort during detection
+	// managementToken is sent on every control-plane request.
+	managementToken string
+	portMutex       sync.RWMutex // Protects port and adminPort during detection
 }
 
 // NewMockServer creates a new mock server with the given configuration
@@ -51,15 +81,42 @@ func NewMockServer(config MockServerConfig) *MockServer {
 	}
 
 	return &MockServer{
-		config: config,
-		port:   config.Port,
-		host:   config.Host,
-		stubs:  make([]ResponseStub, 0),
+		config:          config,
+		port:            config.Port,
+		host:            config.Host,
+		stubs:           make([]ResponseStub, 0),
+		managementToken: resolveManagementToken(config.ManagementToken),
 	}
+}
+
+// ManagementToken returns the control-plane credential this server uses.
+func (m *MockServer) ManagementToken() string {
+	return m.managementToken
+}
+
+// controlRequest performs a control-plane request carrying the management token.
+func (m *MockServer) controlRequest(method, url string, body []byte) (*http.Response, error) {
+	var reader io.Reader
+	if body != nil {
+		reader = bytes.NewReader(body)
+	}
+	req, err := http.NewRequest(method, url, reader)
+	if err != nil {
+		return nil, err
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set(ManagementTokenHeader, m.managementToken)
+	return http.DefaultClient.Do(req)
 }
 
 // Start starts the mock server
 func (m *MockServer) Start() error {
+	if m.managementToken == "" {
+		return fmt.Errorf("mockforge: could not generate a management token")
+	}
+
 	args := []string{"serve"}
 
 	if m.config.ConfigFile != "" {
@@ -81,6 +138,7 @@ func (m *MockServer) Start() error {
 	args = append(args, "--admin", "--admin-port", "0")
 
 	m.cmd = exec.Command("mockforge", args...)
+	m.cmd.Env = append(os.Environ(), "MOCKFORGE_MANAGEMENT_TOKEN="+m.managementToken)
 
 	// Capture stdout and stderr for port detection
 	stdoutPipe, err := m.cmd.StdoutPipe()
@@ -263,10 +321,10 @@ func (m *MockServer) StubResponseWithOptions(
 			return err
 		}
 
-		resp, err := http.Post(
+		resp, err := m.controlRequest(
+			http.MethodPost,
 			fmt.Sprintf("http://%s:%d/__mockforge/api/mocks", m.host, m.adminPort),
-			"application/json",
-			bytes.NewBuffer(mockConfigJSON),
+			mockConfigJSON,
 		)
 		if err == nil {
 			resp.Body.Close()
@@ -282,7 +340,11 @@ func (m *MockServer) ClearStubs() error {
 
 	if m.adminPort != 0 {
 		// Get all mocks and delete them one by one
-		resp, err := http.Get(fmt.Sprintf("http://%s:%d/__mockforge/api/mocks", m.host, m.adminPort))
+		resp, err := m.controlRequest(
+			http.MethodGet,
+			fmt.Sprintf("http://%s:%d/__mockforge/api/mocks", m.host, m.adminPort),
+			nil,
+		)
 		if err == nil {
 			var result struct {
 				Mocks []struct {
@@ -293,16 +355,13 @@ func (m *MockServer) ClearStubs() error {
 				resp.Body.Close()
 				// Delete each mock
 				for _, mock := range result.Mocks {
-					req, err := http.NewRequest(
-						"DELETE",
+					deleteResp, err := m.controlRequest(
+						http.MethodDelete,
 						fmt.Sprintf("http://%s:%d/__mockforge/api/mocks/%s", m.host, m.adminPort, mock.ID),
 						nil,
 					)
 					if err == nil {
-						deleteResp, err := http.DefaultClient.Do(req)
-						if err == nil {
-							deleteResp.Body.Close()
-						}
+						deleteResp.Body.Close()
 					}
 				}
 			} else {
@@ -368,7 +427,11 @@ func (m *MockServer) ListFixtures() ([]FixtureInfo, error) {
 		return nil, fmt.Errorf("admin port not available")
 	}
 
-	resp, err := http.Get(fmt.Sprintf("http://%s:%d/__mockforge/fixtures", host, adminPort))
+	resp, err := m.controlRequest(
+		http.MethodGet,
+		fmt.Sprintf("http://%s:%d/__mockforge/fixtures", host, adminPort),
+		nil,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list fixtures: %w", err)
 	}
@@ -399,7 +462,11 @@ func (m *MockServer) DownloadFixture(fixtureID string) ([]byte, error) {
 		return nil, fmt.Errorf("admin port not available")
 	}
 
-	resp, err := http.Get(fmt.Sprintf("http://%s:%d/__mockforge/fixtures/%s/download", host, adminPort, fixtureID))
+	resp, err := m.controlRequest(
+		http.MethodGet,
+		fmt.Sprintf("http://%s:%d/__mockforge/fixtures/%s/download", host, adminPort, fixtureID),
+		nil,
+	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to download fixture: %w", err)
 	}
