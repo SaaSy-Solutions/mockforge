@@ -109,78 +109,104 @@ fn router(state: AdminState) -> Router {
         .with_state(state)
 }
 
-fn payload<'a>(response: &'a Value, path: &str, key: &str) -> &'a Value {
+/// Handler payload: chat nests the generated artifact one level deeper.
+fn handler_data<'a>(response: &'a Value, path: &str) -> &'a Value {
+    let data = &response["data"];
     if path == "/chat" {
-        &response["data"]["data"][key]
+        &data["data"]
     } else {
-        &response["data"][key]
+        data
     }
 }
 
+fn payload<'a>(response: &'a Value, path: &str, key: &str) -> &'a Value {
+    &handler_data(response, path)[key]
+}
+
+/// Request field carrying the prompt text, keyed by handler route.
+const PROMPT_FIELDS: [(&str, &str); 3] = [
+    ("/chat", "message"),
+    ("/debug", "test_logs"),
+    ("/debug-context", "test_logs"),
+];
+
+/// Build a handler request body; generation routes default to `description`.
+fn request_body(path: &str, text: &str, workspace_id: Option<&str>) -> Value {
+    let field = PROMPT_FIELDS
+        .iter()
+        .find(|(route, _)| *route == path)
+        .map_or("description", |(_, field)| field);
+    let mut body = json!({"workspace_id":workspace_id});
+    body[field] = json!(text);
+    body
+}
+
+/// Every pairing of `left` and `right`, so table-driven tests stay flat.
+fn product<A: Copy, B: Copy>(left: &[A], right: &[B]) -> Vec<(A, B)> {
+    left.iter().flat_map(|a| right.iter().map(move |b| (*a, *b))).collect()
+}
+
+/// Generation routes, prompts, and the payload key each one returns.
+const GENERATION_CASES: [(&str, &str, &str); 4] = [
+    ("/chat", "Create a user API", "spec"),
+    ("/chat", "Generate a user persona", "persona"),
+    ("/mock", "Create a user API", "spec"),
+    ("/persona", "Generate a user persona", "persona"),
+];
+
 #[tokio::test]
 async fn persisted_policy_replays_through_all_generation_handlers() {
-    for (path, message, key) in [
-        ("/chat", "Create a user API", "spec"),
-        ("/chat", "Generate a user persona", "persona"),
-        ("/mock", "Create a user API", "spec"),
-        ("/persona", "Generate a user persona", "persona"),
-    ] {
-        for format in ["json", "yaml"] {
-            let fixture = Fixture::new();
-            let requests = Arc::new(Mutex::new(Vec::new()));
-            let provider = Server::start(
-                Router::new()
-                    .route("/generate", post(provider_reply))
-                    .with_state(requests.clone()),
-            )
-            .await;
-            let state = state(&fixture, format!("{}/generate", provider.url));
-            let workspace = workspace(&state, &fixture, format).await;
-            let api = Server::start(router(state.clone())).await;
-            let client = reqwest::Client::new();
-            let body = if path == "/chat" {
-                json!({"message":message,"workspace_id":workspace.id})
-            } else {
-                json!({"description":message,"workspace_id":workspace.id})
-            };
-            let first = client.post(format!("{}{path}", api.url)).json(&body).send().await.unwrap();
-            assert_eq!(first.status(), StatusCode::OK);
-            let first: Value = first.json().await.unwrap();
-            assert_eq!(first["success"], true, "{first}");
-            assert!(payload(&first, path, key).is_object(), "{first}");
-            {
-                let requests = requests.lock().unwrap();
-                assert_eq!(requests.len(), 1);
-                assert_eq!(requests[0]["seed"], 42);
-                assert_eq!(requests[0]["model"], "workspace-test-model");
-            }
-            provider.task.abort();
-            drop(api);
-            let restarted = Server::start(router(state)).await;
-            let second: Value = client
-                .post(format!("{}{path}", restarted.url))
-                .json(&body)
-                .send()
-                .await
-                .unwrap()
-                .json()
-                .await
-                .unwrap();
-            assert_eq!(second["success"], true, "{second}");
-            assert_eq!(payload(&first, path, key), payload(&second, path, key));
-            if path == "/chat" {
-                assert_eq!(second["data"]["tokens_used"], 0);
-                assert_eq!(second["data"]["cost_usd"], 0.0);
-            }
-            assert_eq!(requests.lock().unwrap().len(), 1);
-            let entries: Vec<_> = std::fs::read_dir(fixture.0.join("snapshots")).unwrap().collect();
-            assert_eq!(entries.len(), 1);
-            let bundle = entries[0].as_ref().unwrap().path();
-            let payload = bundle.join(format!("payload.{format}"));
-            assert!(payload.is_file());
-            let text = std::fs::read_to_string(payload).unwrap();
-            assert!(!text.contains("original_prompt"));
+    for ((path, message, key), format) in product(&GENERATION_CASES, &["json", "yaml"]) {
+        let fixture = Fixture::new();
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let provider = Server::start(
+            Router::new()
+                .route("/generate", post(provider_reply))
+                .with_state(requests.clone()),
+        )
+        .await;
+        let state = state(&fixture, format!("{}/generate", provider.url));
+        let workspace = workspace(&state, &fixture, format).await;
+        let api = Server::start(router(state.clone())).await;
+        let client = reqwest::Client::new();
+        let body = request_body(path, message, Some(&workspace.id));
+        let first = client.post(format!("{}{path}", api.url)).json(&body).send().await.unwrap();
+        assert_eq!(first.status(), StatusCode::OK);
+        let first: Value = first.json().await.unwrap();
+        assert_eq!(first["success"], true, "{first}");
+        assert!(payload(&first, path, key).is_object(), "{first}");
+        {
+            let requests = requests.lock().unwrap();
+            assert_eq!(requests.len(), 1);
+            assert_eq!(requests[0]["seed"], 42);
+            assert_eq!(requests[0]["model"], "workspace-test-model");
         }
+        provider.task.abort();
+        drop(api);
+        let restarted = Server::start(router(state)).await;
+        let second: Value = client
+            .post(format!("{}{path}", restarted.url))
+            .json(&body)
+            .send()
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+        assert_eq!(second["success"], true, "{second}");
+        assert_eq!(payload(&first, path, key), payload(&second, path, key));
+        if path == "/chat" {
+            assert_eq!(second["data"]["tokens_used"], 0);
+            assert_eq!(second["data"]["cost_usd"], 0.0);
+        }
+        assert_eq!(requests.lock().unwrap().len(), 1);
+        let entries: Vec<_> = std::fs::read_dir(fixture.0.join("snapshots")).unwrap().collect();
+        assert_eq!(entries.len(), 1);
+        let bundle = entries[0].as_ref().unwrap().path();
+        let payload = bundle.join(format!("payload.{format}"));
+        assert!(payload.is_file());
+        let text = std::fs::read_to_string(payload).unwrap();
+        assert!(!text.contains("original_prompt"));
     }
 }
 
@@ -201,28 +227,23 @@ async fn invalid_or_missing_workspace_never_reaches_provider() {
         .unwrap();
     let api = Server::start(router(state)).await;
     let client = reqwest::Client::new();
-    for path in ["/chat", "/mock", "/persona"] {
-        for (id, status) in [
-            ("not-present", StatusCode::NOT_FOUND),
-            ("../other", StatusCode::BAD_REQUEST),
-            ("corrupt", StatusCode::INTERNAL_SERVER_ERROR),
-        ] {
-            let body = if path == "/chat" {
-                json!({"message":"Create a user API","workspace_id":id})
-            } else {
-                json!({"description":"Create a user API","workspace_id":id})
-            };
-            assert_eq!(
-                client
-                    .post(format!("{}{path}", api.url))
-                    .json(&body)
-                    .send()
-                    .await
-                    .unwrap()
-                    .status(),
-                status
-            );
-        }
+    let invalid = [
+        ("not-present", StatusCode::NOT_FOUND),
+        ("../other", StatusCode::BAD_REQUEST),
+        ("corrupt", StatusCode::INTERNAL_SERVER_ERROR),
+    ];
+    for (path, (id, status)) in product(&["/chat", "/mock", "/persona"], &invalid) {
+        let body = request_body(path, "Create a user API", Some(id));
+        assert_eq!(
+            client
+                .post(format!("{}{path}", api.url))
+                .json(&body)
+                .send()
+                .await
+                .unwrap()
+                .status(),
+            status
+        );
     }
     assert!(requests.lock().unwrap().is_empty());
 }
@@ -408,12 +429,7 @@ async fn workspace_api_and_generation_share_live_registry_policy() {
 
 #[tokio::test]
 async fn authoring_defaults_work_with_runtime_mockai_disabled() {
-    for (path, message, key) in [
-        ("/chat", "Create a user API", "spec"),
-        ("/chat", "Generate a user persona", "persona"),
-        ("/mock", "Create a user API", "spec"),
-        ("/persona", "Generate a user persona", "persona"),
-    ] {
+    for (path, message, key) in GENERATION_CASES {
         let fixture = Fixture::new();
         let requests = Arc::new(Mutex::new(Vec::new()));
         let provider = Server::start(
@@ -431,11 +447,7 @@ async fn authoring_defaults_work_with_runtime_mockai_disabled() {
         let workspace = workspace(&state, &fixture, "json").await;
         let api = Server::start(router(state.clone()).layer(Extension(defaults.clone()))).await;
         let client = reqwest::Client::new();
-        let body = if path == "/chat" {
-            json!({"message":message,"workspace_id":workspace.id})
-        } else {
-            json!({"description":message,"workspace_id":workspace.id})
-        };
+        let body = request_body(path, message, Some(&workspace.id));
         let first: Value = client
             .post(format!("{}{path}", api.url))
             .json(&body)
@@ -505,14 +517,7 @@ async fn debug_provider_reply(
 }
 
 fn debug_body(path: &str, workspace_id: Option<&str>) -> Value {
-    let key = if path == "/chat" {
-        "message"
-    } else {
-        "test_logs"
-    };
-    let mut body = json!({"workspace_id":workspace_id});
-    body[key] = json!("debug GET /users 500 test failure");
-    body
+    request_body(path, "debug GET /users 500 test failure", workspace_id)
 }
 
 #[tokio::test]
@@ -530,40 +535,33 @@ async fn debug_handlers_keep_provider_and_workspace_seed_with_runtime_on_or_off(
         let defaults = AiAuthoringDefaults::new(
             state.mockai.as_ref().unwrap().read().await.get_config().clone(),
         );
-        if !runtime_enabled {
-            state.mockai = None;
-        }
+        state.mockai = state.mockai.take().filter(|_| runtime_enabled);
         let workspace = workspace(&state, &fixture, "json").await;
         let api = Server::start(router(state).layer(Extension(defaults))).await;
         let client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(5))
             .build()
             .unwrap();
-        for path in ["/debug", "/debug-context", "/chat"] {
-            for (workspace_id, seed) in [(Some(workspace.id.as_str()), 42), (None, 7)] {
-                let before = requests.lock().unwrap().len();
-                let response = client
-                    .post(format!("{}{path}", api.url))
-                    .json(&debug_body(path, workspace_id))
-                    .send()
-                    .await
-                    .unwrap();
-                assert_eq!(response.status(), StatusCode::OK);
-                let body: Value = response.json().await.unwrap();
-                assert_eq!(body["success"], true, "{body}");
-                let data = if path == "/chat" {
-                    &body["data"]["data"]
-                } else {
-                    &body["data"]
-                };
-                assert_eq!(data["root_cause"], "fixture root cause", "{body}");
-                let requests = requests.lock().unwrap();
-                assert_eq!(requests.len() - before, 2, "{path}");
-                for request in &requests[before..] {
-                    assert_eq!(request["model"], "workspace-test-model");
-                    assert_eq!(request["seed"], seed);
-                }
-            }
+        let scopes = [(Some(workspace.id.as_str()), 42), (None, 7)];
+        for (path, (workspace_id, seed)) in product(&["/debug", "/debug-context", "/chat"], &scopes)
+        {
+            let before = requests.lock().unwrap().len();
+            let response = client
+                .post(format!("{}{path}", api.url))
+                .json(&debug_body(path, workspace_id))
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK);
+            let body: Value = response.json().await.unwrap();
+            assert_eq!(body["success"], true, "{body}");
+            let data = handler_data(&body, path);
+            assert_eq!(data["root_cause"], "fixture root cause", "{body}");
+            let requests = requests.lock().unwrap();
+            assert_eq!(requests.len() - before, 2, "{path}");
+            let sent = &requests[before..];
+            assert!(sent.iter().all(|r| r["model"] == "workspace-test-model"), "{path}");
+            assert!(sent.iter().all(|r| r["seed"] == seed), "{path}");
         }
     }
 }
@@ -584,19 +582,18 @@ async fn direct_debug_handlers_validate_workspace_before_provider_calls() {
         .timeout(std::time::Duration::from_secs(5))
         .build()
         .unwrap();
-    for path in ["/debug", "/debug-context"] {
-        for (id, expected) in [
-            ("../missing", StatusCode::BAD_REQUEST),
-            ("missing-workspace", StatusCode::NOT_FOUND),
-        ] {
-            let response = client
-                .post(format!("{}{path}", api.url))
-                .json(&debug_body(path, Some(id)))
-                .send()
-                .await
-                .unwrap();
-            assert_eq!(response.status(), expected);
-        }
+    let invalid = [
+        ("../missing", StatusCode::BAD_REQUEST),
+        ("missing-workspace", StatusCode::NOT_FOUND),
+    ];
+    for (path, (id, expected)) in product(&["/debug", "/debug-context"], &invalid) {
+        let response = client
+            .post(format!("{}{path}", api.url))
+            .json(&debug_body(path, Some(id)))
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), expected);
     }
     assert!(requests.lock().unwrap().is_empty());
 }
