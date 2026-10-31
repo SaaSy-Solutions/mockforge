@@ -9,13 +9,31 @@ import { MockConfig, ConnectionStatus, Environment, EnvironmentVariable } from '
 /**
  * Client for interacting with MockForge management API
  */
+export const MANAGEMENT_TOKEN_HEADER = 'X-MockForge-Management-Token';
+
 export class MockForgeClient {
     private baseUrl: string;
     private connected: boolean = false;
     private lastError?: string;
+    private managementToken?: string;
 
-    constructor(baseUrl: string) {
+    constructor(baseUrl: string, managementToken?: string) {
         this.baseUrl = baseUrl.replace(/\/$/, ''); // Remove trailing slash
+        this.managementToken = managementToken || undefined;
+    }
+
+    /**
+     * Set (or clear) the management token sent on control-plane requests
+     */
+    setManagementToken(token: string | undefined): void {
+        this.managementToken = token || undefined;
+    }
+
+    /**
+     * Headers carrying the management credential, if configured
+     */
+    private authHeaders(): Record<string, string> {
+        return this.managementToken ? { [MANAGEMENT_TOKEN_HEADER]: this.managementToken } : {};
     }
 
     /**
@@ -48,7 +66,7 @@ export class MockForgeClient {
             }
 
             // If no health endpoint works, try the mocks endpoint
-            const response = await fetch(`${this.baseUrl}/mocks`, {
+            const response = await fetch(`${this.baseUrl}/__mockforge/api/mocks`, {
                 method: 'GET',
                 headers: {
                     'Accept': 'application/json',
@@ -89,7 +107,7 @@ export class MockForgeClient {
      * List all mocks
      */
     async listMocks(): Promise<MockConfig[]> {
-        const response = await this.request('/mocks', {
+        const response = await this.request('/__mockforge/api/mocks', {
             method: 'GET',
         });
 
@@ -105,7 +123,7 @@ export class MockForgeClient {
      * Get a specific mock by ID
      */
     async getMock(id: string): Promise<MockConfig> {
-        const response = await this.request(`/mocks/${id}`, {
+        const response = await this.request(`/__mockforge/api/mocks/${encodeURIComponent(id)}`, {
             method: 'GET',
         });
 
@@ -120,7 +138,7 @@ export class MockForgeClient {
      * Create a new mock
      */
     async createMock(mock: MockConfig): Promise<MockConfig> {
-        const response = await this.request('/mocks', {
+        const response = await this.request('/__mockforge/api/mocks', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -140,12 +158,12 @@ export class MockForgeClient {
      * Update an existing mock
      */
     async updateMock(id: string, mock: MockConfig): Promise<MockConfig> {
-        const response = await this.request(`/mocks/${id}`, {
+        const response = await this.request(`/__mockforge/api/mocks/${encodeURIComponent(id)}`, {
             method: 'PUT',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify(mock),
+            body: JSON.stringify({ ...mock, id }),
         });
 
         if (!response.ok) {
@@ -159,7 +177,7 @@ export class MockForgeClient {
      * Delete a mock
      */
     async deleteMock(id: string): Promise<void> {
-        const response = await this.request(`/mocks/${id}`, {
+        const response = await this.request(`/__mockforge/api/mocks/${encodeURIComponent(id)}`, {
             method: 'DELETE',
         });
 
@@ -208,6 +226,7 @@ export class MockForgeClient {
             ...options,
             headers: {
                 'Accept': 'application/json',
+                ...this.authHeaders(),
                 ...options.headers,
             },
         });
