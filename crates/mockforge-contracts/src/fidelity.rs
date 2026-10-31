@@ -1,4 +1,4 @@
-//! Structural fidelity between a mock's OpenAPI definition and its source.
+//! Structural fidelity between a mock definition and its OpenAPI/AsyncAPI source.
 //!
 //! This is a definition comparison, rather than a compatibility policy: added
 //! optional fields and new operations are drift too. No network access occurs.
@@ -7,6 +7,8 @@ use serde::Serialize;
 use serde_json::Value;
 use std::collections::BTreeSet;
 
+pub mod async_sample;
+mod asyncapi;
 mod context;
 mod delta;
 mod operations;
@@ -55,7 +57,7 @@ pub struct FidelityReport {
     pub routes: Vec<RouteFidelity>,
 }
 
-/// Compare OpenAPI 3 definitions. Inputs must be parsed/validated by the caller.
+/// Compare OpenAPI 3 or AsyncAPI 2/3 definitions. Inputs must be parsed/validated by the caller.
 /// Local references are resolved, including recursive schemas; unsupported or
 /// missing references and excessive expansion return an error, never a pass.
 pub fn compare_mock_spec(mock: &Value, source: &Value) -> Result<FidelityReport, String> {
@@ -69,10 +71,17 @@ pub fn compare_mock_spec_with_budget(
     source: &Value,
     max_bytes: usize,
 ) -> Result<FidelityReport, String> {
-    let mock_routes = operations(mock, max_bytes)?;
-    let source_routes = operations(source, max_bytes)?;
+    let asynchronous = mock.get("asyncapi").is_some();
+    if asynchronous != source.get("asyncapi").is_some() {
+        return Err("Cannot compare OpenAPI and AsyncAPI definitions".into());
+    }
+    let (mock_routes, source_routes) = if asynchronous {
+        (asyncapi::operations(mock, max_bytes)?, asyncapi::operations(source, max_bytes)?)
+    } else {
+        (operations(mock, max_bytes)?, operations(source, max_bytes)?)
+    };
     if mock_routes.is_empty() && source_routes.is_empty() {
-        return Err("neither definition contains an HTTP operation to compare".into());
+        return Err("neither definition contains an operation or channel to compare".into());
     }
     let endpoints: BTreeSet<_> = mock_routes.keys().chain(source_routes.keys()).collect();
     let mut routes = Vec::with_capacity(endpoints.len());

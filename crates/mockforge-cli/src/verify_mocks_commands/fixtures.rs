@@ -4,7 +4,7 @@ use super::{match_template, responses, OpenApiRouteRegistry, Value};
 use serde::Serialize;
 use std::{collections::BTreeMap, path::Path};
 
-mod files;
+pub(super) mod files;
 
 #[derive(Debug, Serialize)]
 pub(super) struct FixtureFinding {
@@ -70,20 +70,37 @@ pub(super) fn verify(
         });
         route.files.push(file.clone());
         if let Some((template, _)) = matched {
-            if let Some(response) = responses::check_response_drift(
+            let media = fixture
+                .response_headers
+                .iter()
+                .find(|(name, _)| name.eq_ignore_ascii_case("content-type"))
+                .map(|(_, value)| value.as_str());
+            match responses::check_response(
                 registry,
                 spec,
                 &method,
                 &template,
                 fixture.status_code,
+                media,
                 Some(fixture.response_body.as_bytes()),
             ) {
-                route.findings.push(FixtureFinding {
-                    file: Some(file.clone()),
-                    kind: "response".into(),
-                    detail: response.detail.clone(),
-                    response: Some(response),
-                });
+                responses::ResponseAssessment::Verified => {}
+                responses::ResponseAssessment::Drift(response) => {
+                    route.findings.push(FixtureFinding {
+                        file: Some(file.clone()),
+                        kind: "response".into(),
+                        detail: response.detail.clone(),
+                        response: Some(response),
+                    });
+                }
+                responses::ResponseAssessment::Unverified(detail) => {
+                    route.findings.push(FixtureFinding {
+                        file: Some(file.clone()),
+                        kind: "response-unverified".into(),
+                        detail,
+                        response: None,
+                    });
+                }
             }
         } else {
             route.findings.push(FixtureFinding {
@@ -104,7 +121,11 @@ pub(super) fn verify(
                 response: None,
             });
         }
-        if !route.findings.is_empty() {
+        if !route.findings.is_empty()
+            && route.findings.iter().all(|finding| finding.kind == "response-unverified")
+        {
+            route.status = "not-verified".into();
+        } else if !route.findings.is_empty() {
             route.status = "drift-detected".into();
             if route.change == "unchanged" {
                 route.change = "changed".into();

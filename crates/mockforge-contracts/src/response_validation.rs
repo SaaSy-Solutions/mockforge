@@ -37,22 +37,65 @@ impl ResponseDrift {
     }
 }
 
-/// Response-side drift: validate the recorded body against the declared
-/// JSON schema for the actual status code, returning structured drift details.
-/// Status selection is exact, range, then default; local response references
-/// are resolved before schema validation. No network access occurs.
-pub fn check_response_drift(
+/// Result of checking a recorded response against the supported contract.
+pub enum ResponseAssessment {
+    /// The recorded response satisfies the supported checks.
+    Verified,
+    /// The recorded response violates its declared contract.
+    Drift(ResponseDrift),
+    /// The contract or recorded media cannot be checked by this validator.
+    Unverified(String),
+}
+
+/// Validate status and JSON response bodies without treating unsupported media
+/// as verified. Status selection is exact, range, then default.
+pub fn check_response(
     registry: &OpenApiRouteRegistry,
     spec: &Value,
     method: &str,
     template: &str,
     status: u16,
+    content_type: Option<&str>,
     body: Option<&[u8]>,
-) -> Option<ResponseDrift> {
+) -> ResponseAssessment {
     let response = match response_definition(registry, spec, method, template, status) {
         Ok(response) => response,
-        Err(drift) => return Some(drift),
+        Err(drift) => return ResponseAssessment::Drift(drift),
     };
+    let media = content_type
+        .map(|value| value.split(';').next().unwrap_or(value).trim().to_ascii_lowercase());
+    if let Some(content) = response.get("content").and_then(Value::as_object) {
+        if !content.is_empty()
+            && (!content.contains_key("application/json")
+                || media.as_deref().is_some_and(|value| value != "application/json")
+                || (media.is_none() && content.len() > 1))
+        {
+            return ResponseAssessment::Unverified(
+                "Response media could not be checked by the JSON sample validator".into(),
+            );
+        }
+        if content.contains_key("application/json")
+            && body.is_some_and(|bytes| {
+                !bytes.is_empty() && serde_json::from_slice::<Value>(bytes).is_err()
+            })
+        {
+            return ResponseAssessment::Drift(ResponseDrift::message(
+                "Recorded JSON response body is not valid JSON",
+            ));
+        }
+    }
+    match check_json_schema(registry, &response, status, body) {
+        Some(drift) => ResponseAssessment::Drift(drift),
+        None => ResponseAssessment::Verified,
+    }
+}
+
+fn check_json_schema(
+    registry: &OpenApiRouteRegistry,
+    response: &Value,
+    status: u16,
+    body: Option<&[u8]>,
+) -> Option<ResponseDrift> {
     let schema = response.pointer("/content/application~1json/schema")?;
     let Some(bytes) = body else {
         return Some(ResponseDrift::message(format!(
@@ -142,8 +185,83 @@ mod tests {
         let registry = OpenApiRouteRegistry::new(
             mockforge_openapi::spec::OpenApiSpec::from_json(spec.clone()).unwrap(),
         );
-        assert!(check_response_drift(&registry, &spec, "GET", "/items", 200, None).is_none());
-        let drift = check_response_drift(&registry, &spec, "GET", "/absent", 200, None).unwrap();
+        assert!(matches!(
+            check_response(&registry, &spec, "GET", "/items", 200, None, None),
+            ResponseAssessment::Verified
+        ));
+        let ResponseAssessment::Drift(drift) =
+            check_response(&registry, &spec, "GET", "/absent", 200, None, None)
+        else {
+            panic!("missing route must be drift")
+        };
         assert!(drift.detail.contains("absent"));
+    }
+    #[test]
+    fn response_media_is_verified_only_when_supported_and_unambiguous() {
+        for (content, media, expected) in [
+            (
+                serde_json::json!({"text/plain":{"schema":{"type":"string","enum":["ok"]}}}),
+                Some("text/plain"),
+                "unverified",
+            ),
+            (
+                serde_json::json!({"application/problem+json":{"schema":{"type":"integer"}}}),
+                Some("application/problem+json"),
+                "unverified",
+            ),
+            (serde_json::json!({"application/json":{},"text/plain":{}}), None, "unverified"),
+            (serde_json::json!({"application/json":{}}), Some("text/plain"), "unverified"),
+            (
+                serde_json::json!({"application/json":{"schema":{"type":"integer"}}}),
+                Some("Application/JSON; charset=utf-8"),
+                "verified",
+            ),
+            (
+                serde_json::json!({"application/json":{"schema":{"type":"integer"}}}),
+                None,
+                "verified",
+            ),
+        ] {
+            let spec = serde_json::json!({"openapi":"3.0.3","info":{"title":"media","version":"1"},
+                "paths":{"/items":{"get":{"responses":{"200":{"description":"ok","content":content}}}}}});
+            let registry = OpenApiRouteRegistry::new(
+                mockforge_openapi::spec::OpenApiSpec::from_json(spec.clone()).unwrap(),
+            );
+            let actual =
+                match check_response(&registry, &spec, "GET", "/items", 200, media, Some(b"1")) {
+                    ResponseAssessment::Verified => "verified",
+                    ResponseAssessment::Unverified(_) => "unverified",
+                    ResponseAssessment::Drift(_) => "drift",
+                };
+            assert_eq!(actual, expected, "media {media:?}, contract {content}");
+            assert!(
+                matches!(
+                    check_response(&registry, &spec, "GET", "/items", 418, media, Some(b"1")),
+                    ResponseAssessment::Drift(_)
+                ),
+                "unsupported media must not hide undeclared status"
+            );
+        }
+    }
+
+    #[test]
+    fn declared_json_without_a_schema_still_rejects_malformed_json() {
+        let spec = serde_json::json!({"openapi":"3.0.3","info":{"title":"media","version":"1"},
+            "paths":{"/items":{"get":{"responses":{"200":{"description":"ok","content":{"application/json":{}}}}}}}});
+        let registry = OpenApiRouteRegistry::new(
+            mockforge_openapi::spec::OpenApiSpec::from_json(spec.clone()).unwrap(),
+        );
+        assert!(matches!(
+            check_response(
+                &registry,
+                &spec,
+                "GET",
+                "/items",
+                200,
+                Some("application/json"),
+                Some(b"not json")
+            ),
+            ResponseAssessment::Drift(_)
+        ));
     }
 }
