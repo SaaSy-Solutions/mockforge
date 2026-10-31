@@ -20,7 +20,9 @@ curl -fL --retry 3 https://github.com/actions/runner/releases/download/v2.338.2/
 echo 'baebf204307bac6193480852732f0aba2ae97b6c5597c244f4d5558390147c40  runner.tar.gz' | sha256sum --check
 tar -xzf runner.tar.gz
 rustup toolchain install 1.96.0 --profile minimal --component clippy --component rustfmt
-for name in cargo rustc rustdoc rustfmt cargo-fmt cargo-clippy clippy-driver; do ln -s rustup ".cargo/bin/$name"; done
+for name in cargo rustc rustdoc rustfmt cargo-fmt cargo-clippy clippy-driver; do
+  if ! test -x ".cargo/bin/$name"; then ln -s rustup ".cargo/bin/$name"; fi
+done
 rustup default 1.96.0
 docker version --format '{{.Server.Version}}'
 SETUP
