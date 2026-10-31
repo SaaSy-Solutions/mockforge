@@ -4,6 +4,9 @@
 import argparse
 import html
 import json
+import os
+import urllib.error
+import urllib.request
 import re
 import subprocess
 import sys
@@ -16,10 +19,47 @@ def github_json(endpoint, *, paginate=False):
     if paginate:
         command += ["--paginate", "--slurp"]
     command += [endpoint]
-    result = subprocess.run(
-        command, check=True, capture_output=True, text=True, timeout=120
-    )
+    try:
+        result = subprocess.run(
+            command, check=True, capture_output=True, text=True, timeout=120
+        )
+    except FileNotFoundError:
+        return github_http_json(endpoint, paginate=paginate)
     return json.loads(result.stdout)
+
+
+def github_http_json(endpoint, *, paginate=False):
+    """Use the public REST API when GitHub CLI is unavailable."""
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "User-Agent": "mockforge-issue-export",
+    }
+    token = os.environ.get("GH_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    pages = []
+    page = 1
+    while True:
+        suffix = f"&page={page}" if paginate else ""
+        request = urllib.request.Request(
+            f"https://api.github.com/{endpoint}{suffix}", headers=headers
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=120) as response:
+                data = json.load(response)
+        except urllib.error.HTTPError as error:
+            raise ValueError(
+                f"GitHub API returned HTTP {error.code}. For rate limits or private repositories, "
+                "set GH_TOKEN or GITHUB_TOKEN, or install gh and run gh auth login."
+            ) from None
+        if not paginate:
+            return data
+        if not isinstance(data, list):
+            raise ValueError("GitHub comments response must be a list")
+        pages.append(data)
+        if len(data) < 100:
+            return pages
+        page += 1
 
 
 def fetch_snapshot(repository, number):
