@@ -24,6 +24,8 @@
 
 ### Fixed
 
+- **[Security]** Admin SSE connections check the browser-resolved origin before attaching session credentials, including uppercase schemes, whitespace, and backslash URL forms.
+
 - **[DevX]** Discussion exports work without GitHub CLI; CVE tips preserve partial feed results and check CISA KEV; unfinished CVE templates are rejected before tests run. (#79)
 
 - **[DevX]** Add a guarded operator for superseded, partially cancelled CI runs stuck on an unassigned completion job. It preserves the fail-closed Rust completion verdict, tries ordinary cancellation first, and revalidates the live PR head and all job guards before force-cancellation. Current-head runs, forks and active workers are refused. (#1191)

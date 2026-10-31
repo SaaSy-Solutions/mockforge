@@ -26,6 +26,11 @@ function isAbsoluteUrl(url: string): boolean {
  */
 export function withSseAuth(url: string, token: string | null | undefined): string {
   if (!token || isAbsoluteUrl(url) || url.startsWith('//')) return url;
+  try {
+    if (new URL(url, window.location.href).origin !== window.location.origin) return url;
+  } catch {
+    return url;
+  }
   const separator = url.includes('?') ? '&' : '?';
   return `${url}${separator}access_token=${encodeURIComponent(token)}`;
 }

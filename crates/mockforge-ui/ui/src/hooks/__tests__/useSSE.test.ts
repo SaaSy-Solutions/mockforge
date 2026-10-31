@@ -213,6 +213,14 @@ describe('useLogsSSE', () => {
 });
 
 describe('withSseAuth', () => {
+  it.each(['HTTPS://evil.example/sse', '  https://evil.example/sse', '/\\evil.example/sse', '\\\\evil.example/sse', '\n//evil.example/sse'])(
+    'does not attach credentials to browser-normalized external URL %s', (url) => {
+      const resolved = new URL(url, window.location.href);
+      expect(resolved.origin).not.toBe(window.location.origin);
+      expect(withSseAuth(url, 'private-session-token')).toBe(url);
+    },
+  );
+
   it('adds the session token to same-origin streams', () => {
     expect(withSseAuth('/__mockforge/logs/sse', 'a.b.c')).toBe(
       '/__mockforge/logs/sse?access_token=a.b.c',
