@@ -87,6 +87,12 @@ If the server sets `MOCKFORGE_MANAGEMENT_TOKEN`, enter the same value in the X-R
 npm run build
 ```
 
+### Test
+
+```bash
+npm test   # type-check (tsc --noEmit), then build
+```
+
 ### Watch Mode
 
 ```bash
