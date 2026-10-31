@@ -274,3 +274,68 @@ async fn free_ai_allowance_and_canceled_paid_fallback_match_the_quota_response()
         assert!(!after.call_allowed);
     }
 }
+
+#[tokio::test]
+#[ignore = "requires isolated Postgres, local provider, and MOCKFORGE_PLATFORM_LLM_ENABLED unset"]
+async fn disabled_platform_blocks_direct_execution_and_preserves_byok() {
+    use mockforge_registry_server::ai::{
+        reservation::call_with_budget, resolve_provider, LlmCall, ProviderSelection,
+    };
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    assert!(
+        std::env::var("MOCKFORGE_PLATFORM_LLM_ENABLED").is_err(),
+        "run this regression separately with activation unset"
+    );
+    let state = state().await;
+    let org = organization(&state, Plan::Free).await;
+    let calls = Arc::new(AtomicUsize::new(0));
+    let provider = serve(Router::new().route("/v1/chat/completions", axum::routing::post({
+        let calls = calls.clone();
+        move || { let calls = calls.clone(); async move {
+            calls.fetch_add(1, Ordering::SeqCst);
+            axum::Json(json!({"choices":[{"message":{"content":"done"}}],"usage":{"prompt_tokens":1,"completion_tokens":1}}))
+        }}
+    }))).await;
+    let call = || LlmCall {
+        provider: "openai".into(),
+        model: "fixture".into(),
+        api_key: "synthetic-fixture-key".into(),
+        base_url: Some(provider.url.clone()),
+        system: "system".into(),
+        user: "user".into(),
+        temperature: 0.0,
+        max_tokens: 10,
+    };
+    assert!(call_with_budget(&state, &org, ProviderSelection::Platform, call())
+        .await
+        .is_err());
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        0,
+        "disabled direct/queued platform execution contacted provider"
+    );
+    let reservations: i64 =
+        sqlx::query_scalar("SELECT COUNT(*) FROM ai_token_reservations WHERE org_id=$1")
+            .bind(org.id)
+            .fetch_one(state.db.pool())
+            .await
+            .unwrap();
+    assert_eq!(reservations, 0, "disabled platform must not reserve credits");
+    assert_eq!(
+        resolve_provider(&state, &org, None).await.unwrap().selection(),
+        ProviderSelection::Disabled
+    );
+    let byok = mockforge_registry_core::models::BYOKConfig {
+        provider: "openai".into(),
+        api_key: "encrypted-fixture".into(),
+        base_url: Some(provider.url.clone()),
+        model: None,
+        enabled: true,
+    };
+    assert_eq!(
+        resolve_provider(&state, &org, Some(byok)).await.unwrap().selection(),
+        ProviderSelection::Byok
+    );
+    assert!(call_with_budget(&state, &org, ProviderSelection::Byok, call()).await.is_ok());
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+}
