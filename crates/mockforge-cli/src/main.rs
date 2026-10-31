@@ -69,6 +69,7 @@ mod template_commands;
 mod time_commands;
 #[cfg(feature = "tunnel")]
 mod tunnel_commands;
+mod validate_spec_commands;
 #[cfg(feature = "vbr")]
 mod vbr_commands;
 #[cfg(feature = "recorder")]
@@ -1156,6 +1157,19 @@ enum Commands {
     ///   mockforge status --dir ./services/api --format json
     #[command(verbatim_doc_comment)]
     Status(status_commands::StatusArgs),
+
+    /// Validate one local OpenAPI document without changing anything
+    ///
+    /// Reads the OpenAPI 2.0 or 3.x file (JSON or YAML) and checks it with
+    /// the validator `generate` uses. `--format json` prints one versioned
+    /// document for tools. Exits 0 when valid, 1 when it has errors, and 2
+    /// when it could not be read as an OpenAPI document.
+    ///
+    /// Examples:
+    ///   mockforge validate-spec api.yaml
+    ///   mockforge validate-spec ./specs/openapi.json --format json
+    #[command(verbatim_doc_comment)]
+    ValidateSpec(validate_spec_commands::ValidateSpecArgs),
 
     /// API governance and safety features
     ///
@@ -2876,6 +2890,7 @@ fn cli_command_name(cmd: &Commands) -> &'static str {
         Commands::DevSetup { .. } => "dev-setup",
         Commands::Config { .. } => "config",
         Commands::Status(_) => "status",
+        Commands::ValidateSpec(_) => "validate-spec",
         _ => "other",
     }
 }
@@ -2901,7 +2916,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     let is_mcp = matches!(cli.command, Commands::Mcp);
     // `status --format json` prints one JSON document on stdout, nothing else.
     let quiet = is_mcp
-        || matches!(&cli.command, Commands::Status(args) if args.format == status_commands::StatusFormat::Json);
+        || matches!(&cli.command, Commands::Status(args) if args.format == status_commands::StatusFormat::Json)
+        || matches!(&cli.command, Commands::ValidateSpec(args) if args.format == validate_spec_commands::ValidateSpecFormat::Json);
     if !quiet {
         let initial_logging_config = mockforge_observability::LoggingConfig {
             level: cli.log_level.clone(),
@@ -3292,6 +3308,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         }
         Commands::Status(args) => {
             status_commands::handle_status_command(args).await?;
+        }
+
+        Commands::ValidateSpec(args) => {
+            validate_spec_commands::handle_validate_spec_command(args).await?;
         }
 
         Commands::ContractDiff { diff_command } => {

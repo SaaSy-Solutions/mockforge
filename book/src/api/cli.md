@@ -603,6 +603,52 @@ The JSON document (`schema_version` 1):
 
 `config` is null when no configuration file exists; `config.error` names why an
 existing one cannot be loaded, and then `http`, `admin` and `server` are null.
+
+### `validate-spec` - OpenAPI Validation, Read Only
+
+Validate one local OpenAPI 2.0 or 3.x document (JSON or YAML) with the
+validator `generate` uses, without generating, starting or writing anything.
+Only a local file is read; a URL is refused, not fetched.
+
+```bash
+mockforge validate-spec api.yaml
+mockforge validate-spec ./specs/openapi.json --format json
+```
+
+#### Options
+
+- `<spec>` (required): the OpenAPI document.
+- `--format text|json`: `json` prints one document and nothing else on stdout.
+
+Exit codes: `0` when the document is valid (warnings allowed), `1` when it has
+errors, `2` when it could not be read as an OpenAPI document. The JSON document
+is printed in every case.
+
+The JSON document (`schema_version` 1):
+
+```json
+{
+  "schema_version": 1,
+  "mockforge_version": "0.3.237",
+  "spec": "api.json",
+  "openapi": "3.1",
+  "valid": false,
+  "errors": 1,
+  "warnings": 0,
+  "findings": [
+    {
+      "severity": "error", "rule": "MISSING_INFO", "path": "/info",
+      "message": "Missing 'info' section in OpenAPI 3.1 spec",
+      "suggestion": "Add an 'info' section with 'title' and 'version' fields"
+    }
+  ]
+}
+```
+
+`openapi` is `"2.0"`, `"3.0"`, `"3.1"`, or null when the document is not
+OpenAPI. A document that could not be validated has one error finding whose
+`rule` is `UNREADABLE`, `INVALID_SYNTAX` or `NOT_OPENAPI`. `path` is a JSON
+pointer when the validator names the field.
 `server` is null when HTTP is disabled. `verification.outcome` is `faithful`,
 `drift` or `no_traffic`. Fields may be added within schema 1; a change that
 breaks readers raises `schema_version`.
