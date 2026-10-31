@@ -1,3 +1,5 @@
 ts	phase	decision	why	evidence	result
 2026-10-31T00:00:00Z	inventory	Inventory 49 open PRs including eight drafts and dependent branches	Merge dependencies in order and distinguish queued checks from failures	https://github.com/SaaSy-Solutions/mockforge/pulls	49 open; none merged in this pass yet
 2026-10-31T15:00:34.080727+00:00	audit	Correct the initial row timestamp: 00:00 was a placeholder, not the observation time	Use the actual recorded time for this inventory checkpoint	scripts/ci/pr_merge_inventory.py	Inventory confirmed during this turn
+2026-10-31T15:03:34Z	merge	Merged PR 1312 after reviewing the two-line installer update	Required Security Audit and Registry E2E checks passed; 20 focused ownership tests passed	https://github.com/SaaSy-Solutions/mockforge/pull/1312	merged 1eb38cd200f12a0b5a2b9c7c03736829e0583046
+2026-10-31T15:03:35Z	capacity	Prepare two isolated temporary runners on existing FSN02 capacity	Old host is healthy but queue is long; FSN02 has 108 GiB available and 499 GiB disk free	scripts/ci/provision_merge_runner.sh	planned 16 GiB hard memory and four CPUs per runner
