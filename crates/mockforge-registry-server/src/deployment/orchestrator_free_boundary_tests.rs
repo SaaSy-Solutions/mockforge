@@ -34,7 +34,8 @@ async fn free_deployment_never_calls_configured_provider_and_invalid_routes_stay
     });
     let orchestrator = DeploymentOrchestrator {
         db: Arc::new(db.pool().clone()),
-        flyio_client: Some(FlyioClient::for_test_endpoint(endpoint)),
+        flyio_client: Some(FlyioClient::for_test_endpoint(endpoint.clone())),
+        cloudflare: CloudflareMocks::new(&endpoint, "fixture-edge-token"),
         storage: None,
         flyio_org_slug: Some("fixture".into()),
     };

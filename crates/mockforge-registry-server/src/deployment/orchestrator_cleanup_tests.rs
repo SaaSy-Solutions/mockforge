@@ -67,6 +67,7 @@ async fn failed_cleanup_retries_legacy_tombstones_without_trusting_display_statu
     let endpoint = format!("http://{}", listener.local_addr().unwrap());
     let server = tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
     let worker = DeploymentOrchestrator {
+        cloudflare: None,
         db: Arc::new(db.pool().clone()),
         flyio_client: Some(FlyioClient::for_test_endpoint(endpoint)),
         storage: None,
