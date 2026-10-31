@@ -5,7 +5,7 @@
  */
 import { Container } from "@cloudflare/containers";
 import { waitUntilServing } from "./health";
-import { admit, SecondWindow } from "./limits";
+import { admit, boundBody, SecondWindow } from "./limits";
 import { fetchRuntime, UsageMeter } from "./registry";
 import type { AdminAction } from "./routing";
 import { type Env, H_OP, H_ORG, H_SLUG, json, type Runtime } from "./shared";
@@ -16,6 +16,8 @@ export class HostedMock extends Container<Env> {
 	enableInternet = true; // spec URLs, log/capture ingest, upstream proxying
 
 	private runtime: Runtime | null = null;
+	private runtimeLoadedAt = 0;
+	private runtimeRefresh: Promise<Runtime | null> | null = null;
 	private window: SecondWindow | null = null;
 	private readonly usage = new UsageMeter();
 
@@ -32,8 +34,10 @@ export class HostedMock extends Container<Env> {
 		const rejected = admit(request, runtime, this.window, Date.now());
 		if (rejected) return rejected;
 
+		const bounded = await boundBody(request, runtime.limits.max_body_bytes);
+		if (bounded instanceof Response) return bounded;
 		await this.ensureRunning(runtime);
-		const forwarded = new Request(request);
+		const forwarded = new Request(bounded);
 		for (const name of [H_ORG, H_SLUG]) forwarded.headers.delete(name);
 		const response = await this.containerFetch(forwarded, this.defaultPort);
 		if (this.usage.record(response)) this.ctx.waitUntil(this.flushUsage());
@@ -56,11 +60,23 @@ export class HostedMock extends Container<Env> {
 	}
 
 	private async loadRuntime(org: string, slug: string): Promise<Runtime | null> {
-		if (this.runtime) return this.runtime;
+		// Refresh even blocked mocks, allowing upgrades and a new billing month
+		// to take effect without waiting for a container restart.
+		if (this.runtime && Date.now() - this.runtimeLoadedAt < 30_000) return this.runtime;
+		if (this.runtimeRefresh) return this.runtimeRefresh;
+		this.runtimeRefresh = this.refreshRuntime(org, slug);
+		try { return await this.runtimeRefresh; }
+		finally { this.runtimeRefresh = null; }
+	}
+
+	private async refreshRuntime(org: string, slug: string): Promise<Runtime | null> {
 		const runtime = await fetchRuntime(this.env, org, slug);
+		this.runtime = runtime;
+		this.runtimeLoadedAt = Date.now();
 		if (runtime) {
-			this.runtime = runtime;
-			this.window = new SecondWindow(Math.max(1, runtime.limits.rps));
+			const rps = Math.max(1, runtime.limits.rps);
+			if (this.window) this.window.setLimit(rps);
+			else this.window = new SecondWindow(rps);
 		}
 		return runtime;
 	}
