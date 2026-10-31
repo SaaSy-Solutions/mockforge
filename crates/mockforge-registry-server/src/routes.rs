@@ -1166,6 +1166,10 @@ pub fn create_router(state: AppState) -> Router<AppState> {
 
     // Admin routes (require admin JWT + rate limiting)
     let admin_routes = Router::new()
+        .route(
+            "/api/v1/admin/organizations/{org_id}/ai-reservations/{reservation_id}/reconcile",
+            post(handlers::ai_credit_reconciliation::reconcile),
+        )
         .route("/api/v1/admin/plugins/{name}/verify", post(handlers::admin::verify_plugin))
         .route("/api/v1/admin/plugins/{name}/takedown", post(handlers::admin::takedown_plugin))
         .route("/api/v1/admin/plugins/{name}/restore", post(handlers::admin::restore_plugin))

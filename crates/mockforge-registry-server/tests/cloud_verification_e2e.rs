@@ -785,6 +785,13 @@ async fn observability_alert_http_and_worker_lifecycle() {
     }
     // Remove only this test's synthetic organizations; shared CI fixture lives.
     for id in [org, foreign_org] {
+        // Synthetic deployments have no provider resources, so they can be
+        // removed directly to satisfy the unfinished-cleanup guard (#1229).
+        sqlx::query("DELETE FROM hosted_mocks WHERE org_id=$1")
+            .bind(id)
+            .execute(&pool)
+            .await
+            .unwrap();
         sqlx::query("DELETE FROM organizations WHERE id=$1")
             .bind(id)
             .execute(&pool)
