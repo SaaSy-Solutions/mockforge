@@ -1,0 +1,3 @@
+ts	phase	decision	why	evidence	result
+2026-10-31T00:00:00Z	inventory	Inventory 49 open PRs including eight drafts and dependent branches	Merge dependencies in order and distinguish queued checks from failures	https://github.com/SaaSy-Solutions/mockforge/pulls	49 open; none merged in this pass yet
+2026-10-31T15:00:34.080727+00:00	audit	Correct the initial row timestamp: 00:00 was a placeholder, not the observation time	Use the actual recorded time for this inventory checkpoint	scripts/ci/pr_merge_inventory.py	Inventory confirmed during this turn
