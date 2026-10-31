@@ -13,6 +13,10 @@ concurrency:
 permissions:
   contents: write
 
+env:
+  # The release and registry-install builds share the host with other jobs.
+  CARGO_BUILD_JOBS: "2"
+
 jobs:
   release:
     name: Create Release
