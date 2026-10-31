@@ -1,7 +1,19 @@
 import * as vscode from 'vscode';
-import { MockForgeClient } from '../services/mockforgeClient';
+import { MockForgeClient, getManagementToken } from '../services/mockforgeClient';
 import { MocksTreeDataProvider } from '../providers/mocksTreeProvider';
 import { Logger } from '../utils/logger';
+
+/**
+ * Terminal for `mockforge serve`; passes the configured management token so
+ * the server and this extension share the same control-plane credential.
+ */
+function createServerTerminal(name: string): vscode.Terminal {
+    const token = getManagementToken();
+    return token
+        // eslint-disable-next-line @typescript-eslint/naming-convention
+        ? vscode.window.createTerminal({ name, env: { MOCKFORGE_MANAGEMENT_TOKEN: token } })
+        : vscode.window.createTerminal(name);
+}
 
 /**
  * Command handler for starting the MockForge server
@@ -23,7 +35,7 @@ export function registerStartServerCommand(
             }
 
             // Open terminal with mockforge serve command
-            const terminal = vscode.window.createTerminal('MockForge Server');
+            const terminal = createServerTerminal('MockForge Server');
             terminal.sendText('mockforge serve');
             terminal.show();
             vscode.window.showInformationMessage('Starting MockForge server in terminal...');
@@ -62,7 +74,7 @@ export function registerStopServerCommand(
                     'Open Terminal'
                 ).then((selection: string | undefined) => {
                     if (selection === 'Open Terminal') {
-                        vscode.window.createTerminal('MockForge').show();
+                        createServerTerminal('MockForge').show();
                     }
                 });
             } catch {
@@ -95,7 +107,7 @@ export function registerRestartServerCommand(
                 'Open Terminal'
             ).then((selection: string | undefined) => {
                 if (selection === 'Open Terminal') {
-                    const terminal = vscode.window.createTerminal('MockForge');
+                    const terminal = createServerTerminal('MockForge');
                     terminal.sendText('mockforge serve');
                     terminal.show();
                 }

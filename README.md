@@ -46,39 +46,37 @@ See the [complete Pillars documentation](docs/PILLARS.md) for detailed informati
 
 | Feature | MockForge | WireMock | MockServer | Mockoon |
 |---------|-----------|----------|------------|---------|
-| **Language** | Rust | Java | Java/JavaScript | JavaScript |
-| **Multi-Language SDKs** | ✅ Rust, Node.js, Python, Go, Java, .NET | ⚠️ Java native, clients for others | ⚠️ Java/JS native, clients for others | ⚠️ JS native, clients for others |
-| **Performance** | ⚡ High (native Rust) | Medium | Medium | Medium |
-| **HTTP/REST** | ✅ Full | ✅ Full | ✅ Full | ✅ Full |
-| **gRPC Native** | ✅ Full + HTTP Bridge | ❌ No | ❌ No | ⚠️ Limited |
-| **WebSocket** | ✅ Scripted Replay + JSONPath | ❌ No | ⚠️ Basic | ❌ No |
-| **GraphQL** | ✅ Yes | ⚠️ Via HTTP | ⚠️ Via HTTP | ✅ Yes |
-| **Kafka** | ✅ Full Mock Broker | ❌ No | ❌ No | ❌ No |
-| **MQTT** | ✅ Full Broker (3.1.1 & 5.0) | ❌ No | ❌ No | ❌ No |
-| **AMQP/RabbitMQ** | ✅ Full Broker (0.9.1) | ❌ No | ❌ No | ❌ No |
-| **SMTP** | ✅ Full Email Server | ❌ No | ❌ No | ❌ No |
-| **FTP** | ✅ Full File Transfer | ❌ No | ❌ No | ❌ No |
-| **TCP** | ✅ Raw TCP Mocking | ❌ No | ❌ No | ❌ No |
-| **Client Generation** | ✅ React, Vue, Angular, Svelte | ❌ No | ❌ No | ❌ No |
-| **TLS/mTLS** | ✅ HTTPS + Mutual TLS | ⚠️ TLS only | ⚠️ TLS only | ⚠️ TLS only |
-| **Admin UI** | ✅ Modern React UI | ⚠️ Basic | ✅ Yes | ✅ Desktop App |
-| **Data Generation** | ✅ Advanced (Faker + RAG) | ⚠️ Basic | ⚠️ Basic | ⚠️ Templates |
-| **AI-Driven Mocking** | ✅ LLM-powered generation | ❌ No | ❌ No | ❌ No |
-| **Data Drift** | ✅ Evolving mock data | ❌ No | ❌ No | ❌ No |
-| **AI Event Streams** | ✅ Narrative-driven WebSocket | ❌ No | ❌ No | ❌ No |
-| **Plugin System** | ✅ WASM-based | ⚠️ Java extensions | ⚠️ JavaScript | ❌ No |
-| **E2E Encryption** | ✅ Built-in (AES-256/ChaCha20) | ❌ No | ⚠️ TLS only | ⚠️ TLS only |
-| **Workspace Sync** | ✅ Git integration + file watching | ❌ No | ❌ No | ⚠️ Cloud sync (Pro) |
-| **Cross-Endpoint Validation** | ✅ Referential integrity checks | ❌ No | ❌ No | ❌ No |
-| **OpenAPI Support** | ✅ Full + Auto-generation | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Template Expansion** | ✅ Advanced (faker, time, UUIDs) | ⚠️ Basic | ⚠️ Basic | ✅ Handlebars |
-| **Deployment** | Binary, Docker, Cargo | JAR, Docker, Maven | JAR/NPM, Docker | Desktop, NPM, Docker |
-| **Stateful Mocking** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Request Matching** | ✅ JSONPath, Regex, Schema | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Latency Simulation** | ✅ Configurable profiles | ✅ Yes | ✅ Yes | ✅ Yes |
-| **Fault Injection** | ✅ Yes | ✅ Yes | ✅ Yes | ✅ Yes |
-| **CLI Tool** | ✅ Full-featured | ✅ Yes | ✅ Yes | ✅ Yes |
+| **Language** | Rust | Java | Java | TypeScript |
+| **Language SDKs / clients** | Rust, Node.js, Python, Go, Java, .NET | Java native; clients for other languages | Clients for Java, JavaScript, Python, Ruby, Go, .NET, Rust, PHP | — |
+| **HTTP/REST** | ✅ | ✅ | ✅ | ✅ |
+| **gRPC** | ✅ Built-in + HTTP bridge | ⚠️ Via `wiremock-grpc-extension` | ✅ | — |
+| **WebSocket** | ✅ Scripted replay + JSONPath | ⚠️ WireMock 4.x beta | ⚠️ For AI-protocol (MCP/A2A) servers | ✅ |
+| **GraphQL** | ✅ Schema-based | ⚠️ Via `wiremock-graphql-extension` | ✅ | — |
+| **Kafka** | ✅ Mock broker | — | ✅ AsyncAPI broker mocking | — |
+| **MQTT** | ✅ Broker (3.1.1 & 5.0) | — | ✅ AsyncAPI broker mocking | — |
+| **AMQP/RabbitMQ** | ✅ Broker (0.9.1) | — | ✅ AsyncAPI broker mocking | — |
+| **SMTP** | ✅ Email server | — | — | — |
+| **FTP** | ✅ File transfer | — | — | — |
+| **TCP** | ✅ Raw TCP | — | — | — |
+| **TLS/mTLS** | ✅ HTTPS + mutual TLS | ✅ HTTPS + client-certificate auth | ✅ HTTPS + mutual TLS | ✅ TLS |
+| **UI** | ✅ Web admin UI (React) | ⚠️ Admin API; web UI in WireMock Cloud | ✅ Web dashboard | ✅ Desktop app |
+| **Response templating** | ✅ Faker, time, UUIDs | ✅ Handlebars | ✅ Velocity, Mustache, JavaScript | ✅ Handlebars + Faker.js |
+| **Fake data generation** | ✅ Faker + RAG | ⚠️ Via Faker extension (`RandomExtension`) | — | ✅ Faker.js helpers |
+| **OpenAPI** | ✅ Serve from spec + generation | ⚠️ Import in WireMock Cloud; OSS stubs are hand-written | ✅ Mocks + validation from spec | ✅ Import/export |
+| **Extensions** | ✅ WASM plugins | ✅ Java extensions | — | — |
+| **Deployment** | Binary, Docker, Cargo | JAR, Docker, Maven | JAR, Docker, Helm, npm, Testcontainers | Desktop, CLI (npm), Docker |
+| **Stateful mocking** | ✅ | ✅ Scenarios | ✅ Stateful scenarios | ✅ CRUD routes + data buckets |
+| **Request matching** | ✅ JSONPath, regex, schema | ✅ | ✅ | ✅ Response rules |
+| **Latency simulation** | ✅ Configurable profiles | ✅ | ✅ | ✅ |
+| **Fault injection** | ✅ | ✅ | ✅ | ⚠️ Error/random responses |
+| **CLI** | ✅ | ✅ Standalone JAR | ✅ | ✅ |
 | **License** | MIT/Apache-2.0 | Apache-2.0 | Apache-2.0 | MIT |
+
+✅ supported · ⚠️ partial, extension, beta or paid tier · — not found in the vendor's documentation (not a claim that it's missing).
+
+Competitor cells come from each vendor's own docs ([WireMock](https://wiremock.org/docs/), [MockServer](https://www.mock-server.com/), [Mockoon](https://mockoon.com/features/)) as of October 2026. Protocol references: [WireMock WebSockets](https://wiremock.org/docs/websockets/), [MockServer protocols](https://www.mock-server.com/), and [Mockoon WebSockets](https://mockoon.com/docs/latest/api-endpoints/websockets/). Corrections are welcome via an issue or PR.
+
+MockForge also includes features we haven't compared across tools: client generation (React, Vue, Angular, Svelte), LLM-driven mock generation, data drift, AI event streams for WebSocket, built-in payload encryption (AES-256/ChaCha20), Git-backed workspace sync, and cross-endpoint referential-integrity validation.
 
 ## 🌐 Multi-Language Ecosystem
 

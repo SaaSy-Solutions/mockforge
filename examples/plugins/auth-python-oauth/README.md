@@ -23,7 +23,9 @@ A production-ready OAuth2 authentication plugin for MockForge, written in Python
 ### Local Development
 
 ```bash
-# Install dependencies
+# Vendor the plugin SDK (not yet on PyPI) and install dependencies
+curl -fsSL -o mockforge_plugin.py \
+  https://raw.githubusercontent.com/SaaSy-Solutions/mockforge/main/sdk/python/mockforge_plugin/sdk.py
 pip install -r requirements.txt
 
 # Set environment variables
@@ -264,8 +266,9 @@ artillery quick --count 100 --num 10 http://localhost:8080/plugin/authenticate
 # Check Python version
 python --version  # Should be 3.9+
 
-# Verify dependencies
-pip list | grep mockforge-plugin
+# Verify dependencies (and that mockforge_plugin.py is vendored next to plugin.py)
+pip list | grep -iE 'fastapi|uvicorn'
+python -c 'import mockforge_plugin'
 
 # Check environment variables
 env | grep OAUTH

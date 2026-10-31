@@ -2,6 +2,7 @@
 //!
 //! CLI commands for chaos orchestration and AI-powered spec suggestion.
 
+use crate::management_auth::{management_client, print_unauthorized_hint};
 use clap::Subcommand;
 use std::path::PathBuf;
 
@@ -20,6 +21,11 @@ pub(crate) enum OrchestrateCommands {
         /// Base URL for API requests
         #[arg(long, default_value = "http://localhost:3000")]
         base_url: String,
+
+        /// Management token for the server's control plane
+        /// (sent as X-MockForge-Management-Token)
+        #[arg(long, env = "MOCKFORGE_MANAGEMENT_TOKEN", hide_env_values = true)]
+        management_token: Option<String>,
     },
 
     /// Get orchestration status
@@ -27,6 +33,11 @@ pub(crate) enum OrchestrateCommands {
         /// Base URL for API requests
         #[arg(long, default_value = "http://localhost:3000")]
         base_url: String,
+
+        /// Management token for the server's control plane
+        /// (sent as X-MockForge-Management-Token)
+        #[arg(long, env = "MOCKFORGE_MANAGEMENT_TOKEN", hide_env_values = true)]
+        management_token: Option<String>,
     },
 
     /// Stop running orchestration
@@ -34,6 +45,11 @@ pub(crate) enum OrchestrateCommands {
         /// Base URL for API requests
         #[arg(long, default_value = "http://localhost:3000")]
         base_url: String,
+
+        /// Management token for the server's control plane
+        /// (sent as X-MockForge-Management-Token)
+        #[arg(long, env = "MOCKFORGE_MANAGEMENT_TOKEN", hide_env_values = true)]
+        management_token: Option<String>,
     },
 
     /// Validate an orchestration file
@@ -63,7 +79,11 @@ pub(crate) async fn handle_orchestrate(
     command: OrchestrateCommands,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match command {
-        OrchestrateCommands::Start { file, base_url } => {
+        OrchestrateCommands::Start {
+            file,
+            base_url,
+            management_token,
+        } => {
             println!("\u{1f680} Starting chaos orchestration from: {}", file.display());
 
             // Read orchestration file
@@ -75,7 +95,7 @@ pub(crate) async fn handle_orchestrate(
             };
 
             // Send to API
-            let client = reqwest::Client::new();
+            let client = management_client(management_token.as_deref())?;
             let url = format!("{}/api/chaos/orchestration/import", base_url);
 
             let response = client
@@ -100,13 +120,17 @@ pub(crate) async fn handle_orchestrate(
                 println!("   Use the API to start the orchestration");
             } else {
                 eprintln!("\u{274c} Failed to import orchestration: {}", response.status());
+                print_unauthorized_hint(response.status());
             }
         }
 
-        OrchestrateCommands::Status { base_url } => {
+        OrchestrateCommands::Status {
+            base_url,
+            management_token,
+        } => {
             println!("\u{1f4ca} Checking orchestration status...");
 
-            let client = reqwest::Client::new();
+            let client = management_client(management_token.as_deref())?;
             let url = format!("{}/api/chaos/orchestration/status", base_url);
 
             let response = client.get(&url).send().await?;
@@ -126,13 +150,17 @@ pub(crate) async fn handle_orchestrate(
                 }
             } else {
                 eprintln!("\u{274c} Failed to get status: {}", response.status());
+                print_unauthorized_hint(response.status());
             }
         }
 
-        OrchestrateCommands::Stop { base_url } => {
+        OrchestrateCommands::Stop {
+            base_url,
+            management_token,
+        } => {
             println!("\u{1f6d1} Stopping orchestration...");
 
-            let client = reqwest::Client::new();
+            let client = management_client(management_token.as_deref())?;
             let url = format!("{}/api/chaos/orchestration/stop", base_url);
 
             let response = client.post(&url).send().await?;
@@ -145,6 +173,7 @@ pub(crate) async fn handle_orchestrate(
                 );
             } else {
                 eprintln!("\u{274c} Failed to stop orchestration: {}", response.status());
+                print_unauthorized_hint(response.status());
             }
         }
 
@@ -587,4 +616,29 @@ pub(crate) async fn handle_suggest(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod management_token_tests {
+    use super::*;
+    use clap::{CommandFactory, Parser};
+
+    #[derive(Parser)]
+    struct TestCli {
+        #[command(subcommand)]
+        cmd: OrchestrateCommands,
+    }
+
+    #[test]
+    fn management_token_flag_parses_on_status() {
+        TestCli::command().debug_assert();
+        let cli = TestCli::try_parse_from(["t", "status", "--management-token", "tok"])
+            .expect("status accepts --management-token");
+        match cli.cmd {
+            OrchestrateCommands::Status {
+                management_token, ..
+            } => assert_eq!(management_token.as_deref(), Some("tok")),
+            _ => panic!("expected status"),
+        }
+    }
 }
