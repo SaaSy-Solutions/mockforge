@@ -265,6 +265,11 @@ mod tests {
         .unwrap();
         assert_eq!(counts, (7, 14));
         // Only the synthetic fixture rows created above are removed.
+        sqlx::query("DELETE FROM hosted_mocks WHERE id=$1")
+            .bind(deployment)
+            .execute(&pool)
+            .await
+            .unwrap();
         sqlx::query("DELETE FROM organizations WHERE id=$1")
             .bind(org)
             .execute(&pool)

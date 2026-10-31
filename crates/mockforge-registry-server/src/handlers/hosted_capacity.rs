@@ -269,6 +269,11 @@ mod lifecycle_lock_tests {
             .create_user(&tag, &format!("{tag}@example.invalid"), "disabled-test-account")
             .await
             .unwrap();
+        sqlx::query("UPDATE users SET is_verified=TRUE WHERE id=$1")
+            .bind(user.id)
+            .execute(db.pool())
+            .await
+            .unwrap();
         let org = store
             .create_organization("Lock fixture", &tag, user.id, Plan::Free)
             .await

@@ -88,6 +88,11 @@ async fn downgraded_fly_stop_retries_without_releasing_capacity_before_confirmat
         "released capacity must not authorize further provider operations"
     );
     task.abort();
+    sqlx::query("DELETE FROM hosted_mocks WHERE id=$1")
+        .bind(id)
+        .execute(&pool)
+        .await
+        .unwrap();
     sqlx::query("DELETE FROM organizations WHERE id=$1")
         .bind(org)
         .execute(&pool)
