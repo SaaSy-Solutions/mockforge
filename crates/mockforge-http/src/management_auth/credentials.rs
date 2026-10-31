@@ -117,10 +117,11 @@ pub(super) fn strip_token(headers: &mut HeaderMap, policy: &ControlPlanePolicy) 
     } = &policy.mode
     {
         let bearer_is_token = headers
-            .get(header::AUTHORIZATION)
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| v.strip_prefix("Bearer "))
-            .is_some_and(|t| bool::from(t.trim().as_bytes().ct_eq(expected.as_bytes())));
+            .get_all(header::AUTHORIZATION)
+            .iter()
+            .filter_map(|v| v.to_str().ok())
+            .filter_map(|v| v.strip_prefix("Bearer "))
+            .any(|t| bool::from(t.trim().as_bytes().ct_eq(expected.as_bytes())));
         if bearer_is_token {
             headers.remove(header::AUTHORIZATION);
         }
