@@ -20,7 +20,7 @@ def run_test(environment, name, phase=None):
     current = dict(environment)
     if phase:
         current["QDRANT_TEST_PHASE"] = phase
-    process = subprocess.Popen(["cargo", "test", "--locked", "-p", "mockforge-data",
+    process = subprocess.Popen([str(ROOT / "scripts/dev/cargo"), "test", "--locked", "-p", "mockforge-data",
                                 "--features", "qdrant", "--test", "qdrant_storage", name,
                                 "--", "--exact", "--ignored", "--test-threads=1"], cwd=ROOT, env=current,
                                start_new_session=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)

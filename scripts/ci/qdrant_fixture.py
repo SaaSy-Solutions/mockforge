@@ -64,8 +64,14 @@ class QdrantFixture:
 
     def start(self):
         context = json.loads(self.docker("context", "inspect"))
-        if not context[0]["Endpoints"]["docker"]["Host"].startswith("unix://"):
-            raise RuntimeError("Qdrant fixture requires a local Unix-socket Docker context")
+        if context:
+            local = context[0].get("Endpoints", {}).get("docker", {}).get("Host", "").startswith("unix://")
+        else:
+            # Podman's Docker-compatible CLI has no Docker context inventory.
+            info = json.loads(self.docker("info", "--format", "{{json .}}"))
+            local = info.get("host", {}).get("serviceIsRemote") is False
+        if not local:
+            raise RuntimeError("Qdrant fixture requires a local Docker or Podman engine")
         self.local_context = True
         self.docker("pull", self.image)
         self.docker("volume", "create", "--label", LABEL + "=" + self.owner, self.volume)
