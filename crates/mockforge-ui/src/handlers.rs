@@ -68,6 +68,7 @@ pub mod contract_diff;
 pub mod coverage_metrics;
 pub mod failure_analysis;
 pub mod federation_api;
+pub mod fidelity;
 pub mod graph;
 pub mod health;
 pub mod migration;

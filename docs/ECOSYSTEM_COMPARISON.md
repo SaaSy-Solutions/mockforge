@@ -23,7 +23,7 @@ This document provides a detailed side-by-side comparison of MockForge and WireM
 |---------|-----------|----------|
 | **Embedded Mode** | ✅ All 6 languages | ✅ Java only |
 | **Standalone Mode** | ✅ All languages | ✅ All languages |
-| **Template Support** | ✅ Advanced (faker, UUIDs, time) | ⚠️ Basic |
+| **Template Support** | ✅ Faker, UUIDs, time | ✅ Handlebars (Faker via extension) |
 | **Type Safety** | ✅ TypeScript, Rust, Go | ⚠️ Java only |
 | **Test Framework Integration** | ✅ All major frameworks | ✅ JUnit, TestNG (Java) |
 | **CLI Requirement** | Optional (Rust embeds directly) | Optional (standalone mode) |
@@ -37,22 +37,20 @@ This document provides a detailed side-by-side comparison of MockForge and WireM
 | **Language Support** | ✅ 6 languages natively | ✅ Java natively, clients for others |
 | **Embedded Testing** | ✅ All languages | ✅ Java only |
 | **Test Framework** | ✅ All major frameworks | ✅ JUnit, TestNG |
-| **Template Support** | ✅ Advanced | ⚠️ Basic |
+| **Template Support** | ✅ Faker, UUIDs, time | ✅ Handlebars |
 | **Setup Complexity** | ⚡ Low (native SDKs) | ⚠️ Medium (requires server for non-Java) |
 
-**Winner**: MockForge (broader language support with native embedding)
 
 ### 2. Integration Tests
 
 | Aspect | MockForge | WireMock |
 |--------|-----------|----------|
-| **Multi-Protocol** | ✅ HTTP, gRPC, WebSocket, GraphQL | ⚠️ HTTP only |
+| **Multi-Protocol** | ✅ HTTP, gRPC, WebSocket, GraphQL | ⚠️ HTTP; gRPC and GraphQL via extensions; WebSocket in 4.x beta |
 | **Stateful Mocking** | ✅ Full support | ✅ Full support |
 | **Scenario Switching** | ✅ Header-based | ✅ State machine |
-| **Protocol-Specific** | ✅ Native gRPC, WebSocket | ❌ HTTP only |
-| **Service Composition** | ✅ Multi-protocol in one server | ⚠️ HTTP only |
+| **Protocol-Specific** | ✅ Built-in gRPC, WebSocket | ⚠️ gRPC via `wiremock-grpc-extension`; WebSocket in 4.x beta |
+| **Service Composition** | ✅ Multi-protocol in one server | — |
 
-**Winner**: MockForge (multi-protocol support)
 
 ### 3. Service Virtualization
 
@@ -60,11 +58,10 @@ This document provides a detailed side-by-side comparison of MockForge and WireM
 |--------|-----------|----------|
 | **Proxy Mode** | ✅ Full support | ✅ Full support |
 | **Record/Replay** | ✅ Built-in | ✅ Built-in |
-| **OpenAPI Integration** | ✅ Auto-generate from spec | ⚠️ Manual mapping |
-| **Multi-Protocol Proxy** | ✅ HTTP, gRPC, WebSocket | ⚠️ HTTP only |
-| **Conditional Routing** | ✅ Advanced rules | ✅ Basic rules |
+| **OpenAPI Integration** | ✅ Auto-generate from spec | ⚠️ Import in WireMock Cloud; hand-written stubs in OSS |
+| **Multi-Protocol Proxy** | ✅ HTTP, gRPC, WebSocket | ✅ HTTP (others not documented) |
+| **Conditional Routing** | ✅ | ✅ Request matching |
 
-**Winner**: Tie (both strong, MockForge has better OpenAPI integration)
 
 ### 4. Development/Stub Environments
 
@@ -72,12 +69,11 @@ This document provides a detailed side-by-side comparison of MockForge and WireM
 |--------|-----------|----------|
 | **Standalone Mode** | ✅ Full support | ✅ Full support |
 | **Configuration Files** | ✅ YAML/JSON | ✅ JSON |
-| **Workspace Sync** | ✅ Git integration | ❌ No |
-| **Admin UI** | ✅ Modern React UI | ⚠️ Basic |
-| **Docker Support** | ✅ Official images | ✅ Community images |
-| **Team Collaboration** | ✅ Workspace sync | ⚠️ Manual sharing |
+| **Workspace Sync** | ✅ Git integration | — |
+| **Admin UI** | ✅ React web UI | ⚠️ Admin API; web UI in WireMock Cloud |
+| **Docker Support** | ✅ Official images | ✅ Official images |
+| **Team Collaboration** | ✅ Workspace sync | ⚠️ Via WireMock Cloud |
 
-**Winner**: MockForge (workspace sync and better Admin UI)
 
 ### 5. Isolating from Flaky Dependencies
 
@@ -86,32 +82,30 @@ This document provides a detailed side-by-side comparison of MockForge and WireM
 | **Latency Injection** | ✅ Fixed, Normal, Exponential | ✅ Fixed, LogNormal |
 | **Failure Injection** | ✅ Configurable rates | ✅ Scenarios |
 | **Timeout Simulation** | ✅ Built-in | ✅ Built-in |
-| **Network Profiles** | ✅ 3G, 4G, 5G presets | ⚠️ Manual configuration |
-| **Chaos Patterns** | ✅ Advanced | ⚠️ Basic |
-| **Failure Scenarios** | ✅ Rich set | ✅ Basic set |
+| **Network Profiles** | ✅ 3G, 4G, 5G presets | — |
+| **Chaos Patterns** | ✅ | ✅ Delays and faults |
+| **Failure Scenarios** | ✅ | ✅ |
 
-**Winner**: MockForge (more advanced chaos engineering features)
 
 ### 6. Simulating APIs That Don't Exist Yet
 
 | Aspect | MockForge | WireMock |
 |--------|-----------|----------|
-| **OpenAPI Support** | ✅ Full auto-generation | ⚠️ Manual mapping |
-| **GraphQL Support** | ✅ Native schema mocking | ❌ No |
-| **gRPC Support** | ✅ Native proto mocking | ❌ No |
-| **AI Enhancement** | ✅ LLM-powered generation | ❌ No |
-| **Schema Validation** | ✅ Built-in | ⚠️ Manual |
-| **Data Generation** | ✅ RAG-powered | ⚠️ Basic |
+| **OpenAPI Support** | ✅ Full auto-generation | ⚠️ Import in WireMock Cloud; hand-written stubs in OSS |
+| **GraphQL Support** | ✅ Schema-based mocking | ⚠️ Via `wiremock-graphql-extension` |
+| **gRPC Support** | ✅ Proto-based mocking | ⚠️ Via `wiremock-grpc-extension` |
+| **AI Enhancement** | ✅ LLM-powered generation | — |
+| **Schema Validation** | ✅ Built-in | — |
+| **Data Generation** | ✅ Faker + RAG | ⚠️ Via Faker extension |
 
-**Winner**: MockForge (comprehensive spec support and AI enhancement)
 
 ## Feature Parity Analysis
 
 ### MockForge Advantages
 
 1. **Multi-Protocol Support**
-   - Native gRPC, WebSocket, GraphQL support
-   - WireMock is HTTP-only
+   - Built-in gRPC, WebSocket, GraphQL, Kafka, MQTT, AMQP, SMTP, FTP, TCP
+   - WireMock covers HTTP in core, with gRPC and GraphQL via extensions and WebSocket in the 4.x beta
 
 2. **Multi-Language Native SDKs**
    - 6 languages with native embedding
@@ -121,22 +115,19 @@ This document provides a detailed side-by-side comparison of MockForge and WireM
    - LLM-powered mock generation
    - Data drift simulation
    - AI event streams
-   - WireMock has no AI features
 
 4. **Advanced Data Generation**
    - RAG-powered synthetic data
    - Relationship awareness
-   - WireMock has basic data generation
 
 5. **Workspace Synchronization**
    - Git integration
    - File watching
-   - WireMock has no workspace sync
 
 6. **Modern Admin UI**
    - React-based interface
    - Real-time monitoring
-   - WireMock has basic UI
+   - Open-source WireMock is driven by its Admin API; its web UI is part of WireMock Cloud
 
 ### WireMock Advantages
 
@@ -235,7 +226,8 @@ npm install @mockforge/sdk
 
 **Python**:
 ```bash
-pip install mockforge-sdk
+# Not yet on PyPI; install from the repository
+pip install "mockforge-sdk @ git+https://github.com/SaaSy-Solutions/mockforge.git#subdirectory=sdk/python"
 ```
 
 **Go**:
@@ -277,15 +269,7 @@ await server.stubResponse('GET', '/api/users/123', {
 
 ## Performance Comparison
 
-| Metric | MockForge | WireMock |
-|--------|-----------|----------|
-| **Startup Time** | ~50ms (Rust native) | ~200ms (JVM startup) |
-| **Request Latency** | ~0.1ms (native) | ~1ms (JVM overhead) |
-| **Memory Usage** | ~10MB (Rust binary) | ~100MB (JVM heap) |
-| **Throughput** | ~100K req/sec | ~10K req/sec |
-| **Concurrent Connections** | 10K+ | 1K+ |
-
-**Note**: Performance metrics vary based on hardware and workload. MockForge's Rust-native implementation provides better performance characteristics, while WireMock's JVM-based approach offers better tooling and ecosystem integration.
+We have not published a side-by-side benchmark of MockForge and WireMock under identical conditions, so this guide makes no performance claims about WireMock. MockForge runs as a native Rust binary with no JVM; WireMock runs on the JVM and benefits from its mature tooling and ecosystem. Benchmark both against your own workload.
 
 ## When to Choose MockForge
 

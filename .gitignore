@@ -185,6 +185,9 @@ crates/mockforge-ui/analytics.db-shm
 crates/mockforge-ui/analytics.db-wal
 vscode-extension/out/
 vscode-extension/*.vsix
+vscode-extension/.vscode-test/
+browser-extension/dist/
+browser-extension/*.zip
 
 # Pre-commit cache
 .cache/

@@ -119,7 +119,7 @@ mockforge serve --ai-enabled
 ```bash
 # Install SDK for your language
 npm install @mockforge/sdk  # Node.js
-pip install mockforge-sdk   # Python
+pip install "mockforge-sdk @ git+https://github.com/SaaSy-Solutions/mockforge.git#subdirectory=sdk/python"  # Python (not yet on PyPI)
 # Or use the playground
 mockforge serve --playground
 ```

@@ -14,6 +14,11 @@ import {
 } from '@mui/icons-material';
 import { ApiReferenceReact as ApiReference } from '@scalar/api-reference-react';
 import '@scalar/api-reference-react/style.css';
+import {
+  managementDocsUrl,
+  managementHeaders,
+  useManagementToken,
+} from '@/hooks/useManagementToken';
 
 interface DeploymentContext {
   id: string;
@@ -38,26 +43,59 @@ interface ApiExplorerPageProps {
 
 export const ApiExplorerPage: React.FC<ApiExplorerPageProps> = ({ deployment, onBack }) => {
   const [hasSpec, setHasSpec] = useState<boolean | null>(null);
+  const [spec, setSpec] = useState<Record<string, unknown> | null>(null);
   const [routes, setRoutes] = useState<RouteInfo[]>([]);
   const [copied, setCopied] = useState(false);
 
-  const specUrl = `${deployment.deployment_url}/__mockforge/api/spec`;
+  const isStoppedOrFailed = deployment.status === 'stopped' || deployment.status === 'failed';
+
+  // `/__mockforge/api/spec` and `/__mockforge/routes` on the hosted mock
+  // require the deployment's management token, reads included.
+  const management = useManagementToken(deployment.id, !isStoppedOrFailed);
+  const token = management.token;
+  const tokenHeader = management.header;
 
   useEffect(() => {
-    // Check if the deployment has a spec available
-    fetch(specUrl, { credentials: 'include' })
-      .then((r) => {
-        setHasSpec(r.ok);
-        if (!r.ok) {
-          // Fall back to loading routes
-          return fetch(`${deployment.deployment_url}/__mockforge/routes`, { credentials: 'include' })
-            .then((rr) => rr.json())
-            .then((data) => setRoutes(data.routes || []))
-            .catch(() => {});
+    if (!token) return;
+    let cancelled = false;
+    const headers = managementHeaders({ token, header: tokenHeader });
+    fetch(`${deployment.deployment_url}/__mockforge/api/spec`, {
+      credentials: 'include',
+      headers,
+    })
+      .then(async (r) => {
+        if (r.ok) {
+          const body: unknown = await r.json();
+          if (typeof body === 'object' && body !== null) {
+            if (!cancelled) {
+              setSpec(body as Record<string, unknown>);
+              setHasSpec(true);
+            }
+            return;
+          }
         }
+        if (cancelled) return;
+        setHasSpec(false);
+        // Fall back to loading routes
+        return fetch(`${deployment.deployment_url}/__mockforge/routes`, {
+          credentials: 'include',
+          headers,
+        })
+          .then((rr) => rr.json())
+          .then((data: { routes?: RouteInfo[] }) => {
+            if (!cancelled) setRoutes(data.routes || []);
+          })
+          .catch(() => {});
       })
-      .catch(() => setHasSpec(false));
-  }, [specUrl, deployment.deployment_url]);
+      .catch(() => {
+        if (!cancelled) setHasSpec(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, tokenHeader, deployment.deployment_url]);
+
+  const tokenUnavailable = !isStoppedOrFailed && management.status === 'unavailable';
 
   const handleCopyUrl = () => {
     navigator.clipboard.writeText(deployment.deployment_url).then(() => {
@@ -65,8 +103,6 @@ export const ApiExplorerPage: React.FC<ApiExplorerPageProps> = ({ deployment, on
       setTimeout(() => setCopied(false), 2000);
     });
   };
-
-  const isStoppedOrFailed = deployment.status === 'stopped' || deployment.status === 'failed';
 
   return (
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -111,7 +147,7 @@ export const ApiExplorerPage: React.FC<ApiExplorerPageProps> = ({ deployment, on
         <Button
           size="small"
           startIcon={<OpenInNewIcon />}
-          href={`${deployment.deployment_url}/__mockforge/docs`}
+          href={managementDocsUrl(deployment.deployment_url, token)}
           target="_blank"
           rel="noopener noreferrer"
         >
@@ -129,16 +165,27 @@ export const ApiExplorerPage: React.FC<ApiExplorerPageProps> = ({ deployment, on
           </Box>
         )}
 
-        {!isStoppedOrFailed && hasSpec === null && (
+        {tokenUnavailable && (
+          <Box sx={{ p: 4 }}>
+            <Alert severity="warning">
+              The API explorer is unavailable: reading this deployment&apos;s spec and routes
+              requires its management token, which your account can&apos;t access.
+            </Alert>
+          </Box>
+        )}
+
+        {!isStoppedOrFailed && !tokenUnavailable && hasSpec === null && (
           <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 300 }}>
             <CircularProgress />
           </Box>
         )}
 
-        {!isStoppedOrFailed && hasSpec === true && (
+        {!isStoppedOrFailed && !tokenUnavailable && hasSpec === true && spec && (
           <ApiReference
             configuration={{
-              url: specUrl,
+              // Hand Scalar the spec we already fetched with the token so it
+              // doesn't make its own unauthenticated request.
+              content: spec,
               theme: 'default',
               hideDownloadButton: false,
               servers: [{ url: deployment.deployment_url, description: 'Mock deployment' }],
@@ -146,7 +193,7 @@ export const ApiExplorerPage: React.FC<ApiExplorerPageProps> = ({ deployment, on
           />
         )}
 
-        {!isStoppedOrFailed && hasSpec === false && (
+        {!isStoppedOrFailed && !tokenUnavailable && hasSpec === false && (
           <Box sx={{ p: 4 }}>
             <Alert severity="info" sx={{ mb: 3 }}>
               No OpenAPI spec loaded for this deployment. Showing registered routes instead.
