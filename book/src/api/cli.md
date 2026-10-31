@@ -539,11 +539,34 @@ longer match how clients actually call them.
 mockforge verify-mocks --spec openapi.json --capture-db recorder.sqlite
 ```
 
+To compare the OpenAPI definition used to generate an existing mock against
+its current source specification, use `--mock-spec`. Both inputs can be supplied
+to check definitions and captured traffic together:
+
+```bash
+mockforge verify-mocks --spec upstream-current.yaml --mock-spec mock-generated-from.yaml \
+  --fail-on-drift --output fidelity.json
+```
+
+The JSON report's `definition.routes` includes every method/path with a
+`verified` or `drift-detected` status. Its `change` is `added`, `removed`,
+`changed`, or `unchanged`, from the mock to the source. Each delta includes a
+JSON-pointer `location` and the corresponding `mock` and `source` values.
+Changes to nested schema types, properties, required fields, constraints,
+parameters, request bodies and responses are reported. Local references are
+resolved, including recursive schemas. Unresolved/external references and
+excessive expansion fail explicitly. Documentation text and the ordering of
+required fields, enum values and parameters do not count as drift.
+
 #### Options
 
 - `--spec <path>` (required): OpenAPI spec the mocks were generated from (3.x natively; Swagger 2.0 is up-converted automatically).
-- `--capture-db <path>` (required): recorder SQLite database holding captured traffic (what `mockforge serve --recorder` writes; the default path is `./mockforge-recordings.db`).
-- `--limit <n>`: maximum exchanges to evaluate, oldest first (default `500`).
+- `--capture-db <path>`: recorder SQLite database holding captured traffic (what `mockforge serve --recorder` writes; the default path is `./mockforge-recordings.db`).
+- `--mock-spec <path>`: OpenAPI definition used by the mock, compared against the current source in `--spec`.
+- `--fixtures <path>`: HTTP replay fixture JSON file or directory. Checks every selected fixture's route, status and JSON response schema, and reports source operations with no fixture. See the [fixture format and scope](../user-guide/mock-fidelity.md#validate-an-http-replay-fixture-set).
+
+Supply at least one of `--capture-db`, `--mock-spec` or `--fixtures`. They can be combined.
+- `--limit <n>`: maximum recent HTTP exchanges to evaluate, newest first (positive integer; default `500`). Other protocols do not consume this limit.
 - `--fail-on-drift`: exit with code 1 when any drift is found — use as a CI gate.
 - `--output <path>`: write the structured drift report as JSON.
 - `--record`: keep this run's result as the project's latest verification, in
@@ -576,11 +599,11 @@ a spec's own `/health` route cannot shadow, then reads uptime from
 probe uses the declared port; a server started with `--http-port` elsewhere is
 not found. `0.0.0.0` and `::` are probed on `127.0.0.1`.
 
-The JSON document (`schema_version` 1):
+The JSON document (`schema_version` 2):
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "version": "0.3.238",
   "dir": "/abs/project",
   "config": { "path": "/abs/project/mockforge.yaml", "error": null },
@@ -592,10 +615,10 @@ The JSON document (`schema_version` 1):
     "uptime_seconds": 12, "error": null
   },
   "verification": {
-    "schema_version": 1, "recorded_at": "2026-10-26T10:30:43Z",
+    "schema_version": 2, "recorded_at": "2026-10-26T10:30:43Z",
     "mockforge_version": "0.3.238", "spec": "examples/openapi.json",
     "capture_db": "captures.db", "outcome": "faithful",
-    "exchanges_checked": 8, "endpoints_with_drift": 0,
+    "exchanges_checked": 8, "endpoints_with_drift": 0, "endpoints_unverified": 0,
     "unmatched_real_paths": 4, "findings": []
   }
 }
@@ -604,8 +627,16 @@ The JSON document (`schema_version` 1):
 `config` is null when no configuration file exists; `config.error` names why an
 existing one cannot be loaded, and then `http`, `admin` and `server` are null.
 `server` is null when HTTP is disabled. `verification.outcome` is `faithful`,
-`drift` or `no_traffic`. Fields may be added within schema 1; a change that
-breaks readers raises `schema_version`.
+`drift`, `unverified` or `no_traffic`. `unverified` means response media could
+not be checked, without a proven contract violation. Proven drift takes
+precedence when a run contains both. Status and newly recorded verifications
+use schema 2 for this additional outcome; schema-1 verification files remain
+readable with `endpoints_unverified` defaulting to zero. Fields may be added
+within a schema; a change that breaks readers raises `schema_version`.
+
+Capture databases are opened read-only and must already exist. An empty HTTP capture is not drift: the command reports that no traffic was recorded and exits successfully, and with `--record` it stores a `no_traffic` verification. Unknown endpoints, missing responses, undeclared statuses and JSON-schema violations count as drift. Exact status declarations take precedence over status ranges and the default response; local response references are resolved before schema validation.
+
+Capture databases are opened read-only and must already exist. Empty HTTP captures fail rather than report a passing check. Unknown endpoints, missing responses, undeclared statuses and JSON-schema violations count as drift. Exact status declarations take precedence over status ranges and the default response; local response references are resolved before schema validation.
 
 ### `sync` - Workspace Synchronization Daemon
 
