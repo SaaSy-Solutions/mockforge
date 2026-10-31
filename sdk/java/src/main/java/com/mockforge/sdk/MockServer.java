@@ -47,12 +47,12 @@ public class MockServer {
 
     private final MockServerConfig config;
     private Process process;
-    private int port;
+    private volatile int port;
     private final String host;
-    private int adminPort = 0;
     private final List<ResponseStub> stubs = new ArrayList<>();
     private final OkHttpClient httpClient;
     private final String managementToken;
+    private final MockManagementClient management;
 
     /**
      * Create a new MockServer with the given configuration
@@ -66,6 +66,8 @@ public class MockServer {
         final String token = this.managementToken;
         // Every request this client makes carries the management credential.
         this.httpClient = new OkHttpClient.Builder()
+            .followRedirects(false)
+            .followSslRedirects(false)
             .connectTimeout(1, TimeUnit.SECONDS)
             .readTimeout(1, TimeUnit.SECONDS)
             .addInterceptor(chain -> chain.proceed(
@@ -73,6 +75,7 @@ public class MockServer {
                     .header(MANAGEMENT_TOKEN_HEADER, token)
                     .build()))
             .build();
+        this.management = new MockManagementClient(httpClient, host, () -> port, managementToken);
     }
 
     /**
@@ -135,15 +138,8 @@ public class MockServer {
             args.add(config.getOpenApiSpec());
         }
 
-        if (port != 0) {
-            args.add("--http-port");
-            args.add(String.valueOf(port));
-        }
-
-        // Enable admin API for dynamic stub management
-        args.add("--admin");
-        args.add("--admin-port");
-        args.add("0"); // Auto-assign port
+        args.add("--http-port");
+        args.add(String.valueOf(port));
 
         ProcessBuilder processBuilder = new ProcessBuilder(args);
         processBuilder.redirectErrorStream(true);
@@ -151,49 +147,11 @@ public class MockServer {
 
         try {
             process = processBuilder.start();
-            waitForServer();
+            CliStartup.readServerOutput(process, () -> port, detected -> port = detected);
+            CliStartup.waitForServer(process, httpClient, host, () -> port, STARTUP_TIMEOUT_SECONDS, HEALTH_CHECK_INTERVAL_MS);
         } catch (IOException e) {
             throw MockServerException.serverStartFailed("Failed to start MockForge process", e);
         }
-    }
-
-    /**
-     * Wait for the server to be ready by polling the health endpoint
-     */
-    private void waitForServer() throws MockServerException {
-        long startTime = System.currentTimeMillis();
-        long timeout = TimeUnit.SECONDS.toMillis(STARTUP_TIMEOUT_SECONDS);
-
-        Request request = new Request.Builder()
-            .url(String.format("http://%s:%d/health", host, port))
-            .build();
-
-        while (System.currentTimeMillis() - startTime < timeout) {
-            try (Response response = httpClient.newCall(request).execute()) {
-                if (response.isSuccessful()) {
-                    // Server is ready
-                    return;
-                }
-            } catch (IOException e) {
-                // Server not ready yet, continue polling
-            }
-
-            try {
-                Thread.sleep(HEALTH_CHECK_INTERVAL_MS);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                throw MockServerException.serverStartFailed("Interrupted while waiting for server", e);
-            }
-        }
-
-        // If we get here, server didn't start in time
-        if (process != null) {
-            process.destroyForcibly();
-        }
-        throw MockServerException.healthCheckTimeout(
-            (int) timeout,
-            port
-        );
     }
 
     /**
@@ -262,54 +220,17 @@ public class MockServer {
             throw MockServerException.invalidConfig("ResponseStub cannot be null");
         }
 
+        management.create(stub);
         stubs.add(stub);
-
-        // If admin API is available, use it to add the stub dynamically
-        if (adminPort != 0) {
-            try {
-                String stubJson = GSON.toJson(stub);
-                RequestBody requestBody = RequestBody.create(
-                    stubJson,
-                    MediaType.get("application/json; charset=utf-8")
-                );
-
-                Request request = new Request.Builder()
-                    .url(String.format("http://%s:%d/api/stubs", host, adminPort))
-                    .post(requestBody)
-                    .build();
-
-                try (Response response = httpClient.newCall(request).execute()) {
-                    if (!response.isSuccessful()) {
-                        // Log warning but continue - stub is stored locally
-                        System.err.println("Warning: Failed to add stub via admin API");
-                    }
-                }
-            } catch (IOException e) {
-                // Silently fail - stub is stored locally as fallback
-            }
-        }
     }
 
     /**
-     * Clear all stubs
+     * Clear all stubs through the HTTP management API.
+     * @throws IllegalStateException if the server cannot list or delete its mocks
      */
     public void clearStubs() {
+        management.clear();
         stubs.clear();
-
-        if (adminPort != 0) {
-            try {
-                Request request = new Request.Builder()
-                    .url(String.format("http://%s:%d/api/stubs", host, adminPort))
-                    .delete()
-                    .build();
-
-                try (Response response = httpClient.newCall(request).execute()) {
-                    // Ignore response - best effort
-                }
-            } catch (IOException e) {
-                // Silently fail
-            }
-        }
     }
 
     /**

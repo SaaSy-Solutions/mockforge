@@ -1,3 +1,4 @@
+import { describe, it, beforeEach, afterEach, expect } from 'vitest';
 /**
  * Unit tests for WebSocketClient management-token subprotocols
  */

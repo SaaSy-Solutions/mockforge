@@ -1,6 +1,8 @@
 """Tests for MockServer"""
 
 import pytest
+import requests
+import shutil
 from mockforge_sdk import MockServer
 
 
@@ -44,13 +46,13 @@ class TestMockServerIsRunning:
 
 
 # Integration tests that require MockForge CLI
-@pytest.mark.skip(reason="Requires MockForge CLI to be installed")
+@pytest.mark.skipif(shutil.which("mockforge") is None, reason="Requires MockForge CLI on PATH")
 class TestMockServerIntegration:
     """Integration tests (require MockForge CLI)"""
 
     def test_start_and_stop(self):
         """Should start and stop server"""
-        server = MockServer(port=3456)
+        server = MockServer(port=0)
         server.start()
         assert server.is_running() is True
         server.stop()
@@ -58,16 +60,21 @@ class TestMockServerIntegration:
 
     def test_context_manager(self):
         """Should work as context manager"""
-        with MockServer(port=3457) as server:
+        with MockServer(port=0) as server:
             assert server.is_running() is True
         assert server.is_running() is False
 
     def test_stub_response(self):
         """Should stub a response"""
-        with MockServer(port=3458) as server:
-            server.stub_response('GET', '/test', {'message': 'hello'})
-            # Would test actual HTTP request here
-            assert True
+        with MockServer(port=0) as server:
+            server.stub_response('GET', '/test', {'message': 'hello'}, status=202,
+                                 headers={'X-SDK-Control': 'python'})
+            response = requests.get(server.url() + '/test', timeout=5)
+            assert response.status_code == 202
+            assert response.json() == {'message': 'hello'}
+            assert response.headers['X-SDK-Control'] == 'python'
+            server.clear_stubs()
+            assert requests.get(server.url() + '/test', timeout=5).status_code == 404
 
 
 class TestManagementToken:

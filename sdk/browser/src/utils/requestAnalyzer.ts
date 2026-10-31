@@ -205,6 +205,7 @@ export function shouldCreateMock(
  */
 export interface InferredSchema {
     type: string;
+    format?: string;
     properties?: Record<string, InferredSchema>;
     items?: InferredSchema;
     required?: string[];

@@ -8,6 +8,7 @@ export default {
     {
       file: 'dist/index.js',
       format: 'cjs',
+      exports: 'named',
       sourcemap: true,
     },
     {
@@ -18,6 +19,7 @@ export default {
     {
       file: 'dist/index.umd.js',
       format: 'umd',
+      exports: 'named',
       name: 'ForgeConnect',
       sourcemap: true,
     },
