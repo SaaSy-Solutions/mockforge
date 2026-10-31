@@ -121,6 +121,42 @@
         "{\"policy_sha256\": \"5de45082645bb5f7236dc78f2c41fdd6ee4dcabe4c199be8abe34273f18bad7e\", \"workload_class\": \"targeted-test\", \"admission_class\": \"HEAVY_BUILD\", \"admission_slot\": 2, \"pressure_wait_seconds\": 0.0, \"classification_reason\": \"Unknown or unmeasured workload\", \"minimum_available_mib\": 16384, \"max_concurrent\": 4, \"reserved_checks\": 2, \"limits\": {\"memory_mib\": 12288, \"cpu_percent\": 200, \"jobs\": 2}, \"cargo_command\": \"test\", \"worktree\": \"7b7576d80b7d16aa\", \"admission_seconds\": 0.001, \"execution_seconds\": 530.965, \"exit_status\": 0}"
       ],
       "note": "Before merge; fresh owned PostgreSQL databases after failed fixture remnants"
+    },
+    {
+      "name": "freehosting-normal-units",
+      "tested_source": "5c225e82",
+      "original_log": "/tmp/mockforge-freehost-registry-units-20261031.log",
+      "log_sha256": "625981e5cf3a710605305fa427b5b261759af2907ab4963a9a1d5c8bc665bab2",
+      "result_lines": [
+        "test middleware::token_scope::tests::route_inventory::every_authenticated_route_is_classified ... FAILED",
+        "test result: FAILED. 622 passed; 1 failed; 17 ignored; 0 measured; 0 filtered out; finished in 91.58s",
+        "test result: ok. 1 passed; 0 failed; 41 ignored; 0 measured; 0 filtered out; finished in 0.01s",
+        "{\"policy_sha256\": \"5de45082645bb5f7236dc78f2c41fdd6ee4dcabe4c199be8abe34273f18bad7e\", \"workload_class\": \"targeted-test\", \"admission_class\": \"HEAVY_BUILD\", \"admission_slot\": 2, \"pressure_wait_seconds\": 0.0, \"classification_reason\": \"Unknown or unmeasured workload\", \"minimum_available_mib\": 16384, \"max_concurrent\": 4, \"reserved_checks\": 2, \"limits\": {\"memory_mib\": 12288, \"cpu_percent\": 200, \"jobs\": 2}, \"cargo_command\": \"test\", \"worktree\": \"7b7576d80b7d16aa\", \"admission_seconds\": 0.0, \"execution_seconds\": 96.675, \"exit_status\": 101}"
+      ],
+      "note": "622 normal library tests passed; one inventory entry failed and was corrected in86dd0d95;17 ignored; hosting isolation integration also passed"
+    },
+    {
+      "name": "freehosting-final-boundaries",
+      "tested_source": "86dd0d95",
+      "original_log": "/tmp/mockforge-freehost-final-boundaries-20261031.log",
+      "log_sha256": "4a99caf48542c573386ba6f5ec5e177bfba154cb96a7b9ae95cedbeec6d69cb4",
+      "result_lines": [
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 639 filtered out; finished in 0.01s",
+        "test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.17s",
+        "{\"policy_sha256\": \"5de45082645bb5f7236dc78f2c41fdd6ee4dcabe4c199be8abe34273f18bad7e\", \"workload_class\": \"targeted-test\", \"admission_class\": \"HEAVY_BUILD\", \"admission_slot\": 1, \"pressure_wait_seconds\": 0.0, \"classification_reason\": \"Unknown or unmeasured workload\", \"minimum_available_mib\": 16384, \"max_concurrent\": 4, \"reserved_checks\": 2, \"limits\": {\"memory_mib\": 12288, \"cpu_percent\": 200, \"jobs\": 2}, \"cargo_command\": \"test\", \"worktree\": \"7b7576d80b7d16aa\", \"admission_seconds\": 137.026, \"execution_seconds\": 105.187, \"exit_status\": 0}"
+      ],
+      "note": "Corrected inventory and actual disabled-platformAI boundary both passed before merge"
+    },
+    {
+      "name": "auth-extracted-units",
+      "tested_source": "8e83bd1f",
+      "original_log": "/tmp/mockforge-auth-lib-tests-20261031.log",
+      "log_sha256": "b4b4cbdb868efaf541fc3c8fa18dc76ab6515bd4b82da1943ff9034c4db6c0bf",
+      "result_lines": [
+        "test result: ok. 113 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.23s",
+        "{\"policy_sha256\": \"5de45082645bb5f7236dc78f2c41fdd6ee4dcabe4c199be8abe34273f18bad7e\", \"workload_class\": \"targeted-test\", \"admission_class\": \"HEAVY_BUILD\", \"admission_slot\": 2, \"pressure_wait_seconds\": 0.0, \"classification_reason\": \"Unknown or unmeasured workload\", \"minimum_available_mib\": 16384, \"max_concurrent\": 4, \"reserved_checks\": 2, \"limits\": {\"memory_mib\": 12288, \"cpu_percent\": 200, \"jobs\": 2}, \"cargo_command\": \"test\", \"worktree\": \"a4bb4bcf8c7f7163\", \"admission_seconds\": 5.126, \"execution_seconds\": 271.221, \"exit_status\": 0}"
+      ],
+      "note": "113 extracted auth unit tests passed; HTTP integrations pending"
     }
   ]
 }
