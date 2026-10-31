@@ -9,13 +9,31 @@ import { MockConfig, ConnectionStatus, Environment, EnvironmentVariable } from '
 /**
  * Client for interacting with MockForge management API
  */
+export const MANAGEMENT_TOKEN_HEADER = 'X-MockForge-Management-Token';
+
 export class MockForgeClient {
     private baseUrl: string;
     private connected: boolean = false;
     private lastError?: string;
+    private managementToken?: string;
 
-    constructor(baseUrl: string) {
+    constructor(baseUrl: string, managementToken?: string) {
         this.baseUrl = baseUrl.replace(/\/$/, ''); // Remove trailing slash
+        this.managementToken = managementToken || undefined;
+    }
+
+    /**
+     * Set (or clear) the management token sent on control-plane requests
+     */
+    setManagementToken(token: string | undefined): void {
+        this.managementToken = token || undefined;
+    }
+
+    /**
+     * Headers carrying the management credential, if configured
+     */
+    private authHeaders(): Record<string, string> {
+        return this.managementToken ? { [MANAGEMENT_TOKEN_HEADER]: this.managementToken } : {};
     }
 
     /**
@@ -208,6 +226,7 @@ export class MockForgeClient {
             ...options,
             headers: {
                 'Accept': 'application/json',
+                ...this.authHeaders(),
                 ...options.headers,
             },
         });

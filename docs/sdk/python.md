@@ -4,11 +4,17 @@ Build MockForge plugins in Python that run as remote services.
 
 ## Installation
 
-```bash
-pip install mockforge-plugin
+The Python plugin SDK is not yet packaged or published to PyPI (there is no
+`mockforge-plugin` package). It is a single file,
+[`sdk/python/mockforge_plugin/sdk.py`](https://github.com/SaaSy-Solutions/mockforge/blob/main/sdk/python/mockforge_plugin/sdk.py);
+vendor it into your project as `mockforge_plugin.py` so the imports below work:
 
-# With FastAPI support (recommended)
-pip install mockforge-plugin[fastapi]
+```bash
+curl -fsSL -o mockforge_plugin.py \
+  https://raw.githubusercontent.com/SaaSy-Solutions/mockforge/main/sdk/python/mockforge_plugin/sdk.py
+
+# FastAPI + uvicorn are required to serve the plugin
+pip install fastapi uvicorn
 ```
 
 ## Overview
