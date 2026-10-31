@@ -25,6 +25,13 @@ public class MockServerConfig {
     private String openApiSpec;
 
     /**
+     * Control-plane credential, passed to the CLI as MOCKFORGE_MANAGEMENT_TOKEN
+     * and sent as X-MockForge-Management-Token. Default: the
+     * MOCKFORGE_MANAGEMENT_TOKEN env var, else a random token per server.
+     */
+    private String managementToken;
+
+    /**
      * Default constructor
      */
     public MockServerConfig() {}
@@ -55,6 +62,11 @@ public class MockServerConfig {
             return this;
         }
 
+        public Builder managementToken(String managementToken) {
+            config.managementToken = managementToken;
+            return this;
+        }
+
         public MockServerConfig build() {
             return config;
         }
@@ -81,6 +93,10 @@ public class MockServerConfig {
         return openApiSpec;
     }
 
+    public String getManagementToken() {
+        return managementToken;
+    }
+
     // Setters
     public void setPort(int port) {
         this.port = port;
@@ -96,5 +112,9 @@ public class MockServerConfig {
 
     public void setOpenApiSpec(String openApiSpec) {
         this.openApiSpec = openApiSpec;
+    }
+
+    public void setManagementToken(String managementToken) {
+        this.managementToken = managementToken;
     }
 }

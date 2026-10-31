@@ -55,6 +55,7 @@
 
 ## Testing & Resilience
 
+- [Mock Fidelity and Drift Detection](user-guide/mock-fidelity.md)
 - [Load Testing](user-guide/load-testing.md)
   - [Security Rule Test Packs](user-guide/security-rule-test-packs.md)
   - [Per-CVE Rule Packs](user-guide/cve-packs.md)

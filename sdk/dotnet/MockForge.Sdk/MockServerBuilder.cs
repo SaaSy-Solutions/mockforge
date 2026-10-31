@@ -22,6 +22,7 @@ public class MockServerBuilder
     private string? _host;
     private string? _configFile;
     private string? _openApiSpec;
+    private string? _managementToken;
 
     /// <summary>
     /// Create a new MockServerBuilder
@@ -77,6 +78,17 @@ public class MockServerBuilder
     }
 
     /// <summary>
+    /// Set the control-plane management token (default: env var, else random)
+    /// </summary>
+    /// <param name="managementToken">Token sent as X-MockForge-Management-Token</param>
+    /// <returns>This builder for method chaining</returns>
+    public MockServerBuilder ManagementToken(string managementToken)
+    {
+        _managementToken = managementToken;
+        return this;
+    }
+
+    /// <summary>
     /// Build and start the MockServer asynchronously
     /// </summary>
     /// <returns>Started MockServer instance</returns>
@@ -88,7 +100,8 @@ public class MockServerBuilder
             Port = _port ?? 0,
             Host = _host ?? "127.0.0.1",
             ConfigFile = _configFile,
-            OpenApiSpec = _openApiSpec
+            OpenApiSpec = _openApiSpec,
+            ManagementToken = _managementToken
         };
 
         return await MockServer.StartAsync(config);
@@ -105,7 +118,8 @@ public class MockServerBuilder
             Port = _port ?? 0,
             Host = _host ?? "127.0.0.1",
             ConfigFile = _configFile,
-            OpenApiSpec = _openApiSpec
+            OpenApiSpec = _openApiSpec,
+            ManagementToken = _managementToken
         };
     }
 }
