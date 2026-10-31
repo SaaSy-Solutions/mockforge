@@ -47,6 +47,23 @@ const DEFAULT_MOCK_RPS_LIMIT: i64 = 100;
 /// off proxy traffic once monthly usage reaches `N ×` the plan limit.
 const DEFAULT_OVERAGE_CEILING_MULT: i64 = 0;
 
+/// Path-based hosted-mock URL with nothing after the slug.
+const MOCK_ROUTE: &str = "/mocks/{org_id}/{slug}";
+/// The same with a trailing slash; the wildcard below needs a non-empty path.
+const MOCK_ROUTE_SLASH: &str = "/mocks/{org_id}/{slug}/";
+/// Path-based hosted-mock URL with a sub-path proxied to the deployment.
+const MOCK_SUBPATH_ROUTE: &str = "/mocks/{org_id}/{slug}/{*path}";
+
+/// Captures shared by both mock routes. Extracted by name, so the wildcard
+/// `path` capture is ignored here: a 2-tuple extractor rejected every
+/// sub-path request with a 500 before the handler ran (#1280). The proxied
+/// path comes from the raw URI so percent-encoding survives.
+#[derive(serde::Deserialize)]
+struct MockRoute {
+    org_id: String,
+    slug: String,
+}
+
 /// Multitenant router that routes requests to deployed mock services
 pub struct MultitenantRouter;
 
@@ -55,15 +72,19 @@ impl MultitenantRouter {
     /// Routes are nested under `/mocks/` to avoid conflicts with API routes
     pub fn create_router() -> Router<AppState> {
         Router::new()
-            .route("/mocks/{org_id}/{slug}/{*path}", any(Self::route_request))
-            .route("/mocks/{org_id}/{slug}", any(Self::route_request))
+            .route(MOCK_SUBPATH_ROUTE, any(Self::route_request))
+            .route(MOCK_ROUTE_SLASH, any(Self::route_request))
+            .route(MOCK_ROUTE, any(Self::route_request))
     }
 
     /// Route request to the appropriate mock service
     async fn route_request(
         State(state): State<AppState>,
         method: Method,
-        Path((org_id_str, slug)): Path<(String, String)>,
+        Path(MockRoute {
+            org_id: org_id_str,
+            slug,
+        }): Path<MockRoute>,
         uri: Uri,
         headers: HeaderMap,
         body: axum::body::Body,
@@ -558,6 +579,35 @@ async fn enforce_rps(
 mod tests {
     use super::*;
     use serde_json::json;
+
+    /// Both mock routes, with the real patterns, reach a handler using the
+    /// real extractor (#1280).
+    #[tokio::test]
+    async fn mock_routes_extract_org_and_slug_with_and_without_a_subpath() {
+        use tower::ServiceExt;
+        async fn echo(Path(route): Path<MockRoute>) -> String {
+            format!("{}|{}", route.org_id, route.slug)
+        }
+        let app = Router::new()
+            .route(MOCK_SUBPATH_ROUTE, any(echo))
+            .route(MOCK_ROUTE_SLASH, any(echo))
+            .route(MOCK_ROUTE, any(echo));
+        for uri in [
+            "/mocks/org-1/shop",
+            "/mocks/org-1/shop/",
+            "/mocks/org-1/shop/__mockforge/health",
+            "/mocks/org-1/shop/api/v1/users/42?x=1",
+        ] {
+            let response = app
+                .clone()
+                .oneshot(axum::http::Request::get(uri).body(axum::body::Body::empty()).unwrap())
+                .await
+                .unwrap();
+            assert_eq!(response.status(), StatusCode::OK, "{uri}");
+            let body = axum::body::to_bytes(response.into_body(), 1024).await.unwrap();
+            assert_eq!(&body[..], b"org-1|shop", "{uri}");
+        }
+    }
 
     #[test]
     fn monthly_limit_pro_plan_default() {

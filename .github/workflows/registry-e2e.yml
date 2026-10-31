@@ -47,7 +47,9 @@ jobs:
         with:
           fetch-depth: 0
       - name: Test registry dependency scope
-        run: python3 scripts/tests/test_registry_security_scope.py
+        run: |
+          python3 scripts/tests/test_registry_security_scope.py
+          python3 scripts/tests/test_registry_fixture_reporting.py
       - name: Determine whether registry files changed
         id: filter
         env:
@@ -79,6 +81,10 @@ jobs:
     if: ${{ needs.changes.outputs.registry == 'true' }}
     runs-on: ${{ (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) && fromJSON('["self-hosted","linux","x64","rust"]') || 'ubuntu-latest' }}
     timeout-minutes: 45
+    permissions:
+      contents: read
+      # Report stale fixtures only after confirming their run has completed.
+      actions: read
 
     env:
       # Per-job endpoints are exported after Docker allocates free loopback ports.
@@ -202,6 +208,38 @@ jobs:
           cargo build -p mockforge-registry-server \
             || (echo "::warning::first build failed, retrying once" \
                 && cargo build -p mockforge-registry-server)
+
+      # If the runner worker itself dies (e.g. ENOSPC on 2026-10-17/18), no
+      # `always()` teardown runs and the project keeps running on the shared
+      # host. Report leftovers from completed runs for operator review.
+      # This job owns only its current fixture; it never deletes other runs'.
+      - name: Report fixtures left by completed runs
+        if: runner.environment == 'self-hosted'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          projects="$(timeout --signal=KILL 30s docker compose ls -a -q)" || { echo "::warning::cannot list Compose projects; skipping report"; exit 0; }
+          while IFS= read -r project; do
+            [[ "$project" =~ ^mf-e2e-([0-9]+)-[0-9]+-[a-f0-9]{32}$ ]] || continue
+            run_id="${BASH_REMATCH[1]}"
+            [ "$run_id" = "$GITHUB_RUN_ID" ] && continue
+            status="$(gh api "repos/$GH_REPO/actions/runs/$run_id" --jq .status 2>/dev/null)" || continue
+            [ "$status" = completed ] || continue
+            echo "::warning::Docker fixture $project from completed run $run_id retained for operator review"
+          done <<< "$projects"
+
+      - name: Check free disk for Docker fixtures
+        if: runner.environment == 'self-hosted'
+        run: |
+          docker_root="$(timeout --signal=KILL 20s docker info --format '{{.DockerRootDir}}')"
+          for path in "$docker_root" "$GITHUB_WORKSPACE"; do
+            free_kb="$(df -Pk "$path" | awk 'NR==2 {print $4}')"
+            if [ "${free_kb:-0}" -lt 10485760 ]; then
+              echo "::error::Only $((${free_kb:-0} / 1048576)) GiB free on the filesystem holding $path (need 10 GiB); the runner would crash mid-job and leak this run's fixture."
+              exit 1
+            fi
+          done
 
       - name: Allocate run-owned fixture state
         run: |
@@ -386,7 +424,9 @@ jobs:
           # back to Compose's checkout-derived default and remove a sibling.
           if [ -n "${COMPOSE_PROJECT_NAME:-}" ]; then
             [[ "$COMPOSE_PROJECT_NAME" == mf-e2e-* ]]
-            timeout --signal=KILL 60s docker compose -f docker-compose.e2e.yml down --timeout 10 -v
+            # The cleanup-evidence step below is the pass/fail arbiter.
+            timeout --signal=KILL 60s docker compose -f docker-compose.e2e.yml down --timeout 10 -v --remove-orphans \
+              || echo "::warning::docker compose down failed for $COMPOSE_PROJECT_NAME"
           fi
 
       - name: Verify owned fixture cleanup evidence

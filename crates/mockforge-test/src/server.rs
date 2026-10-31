@@ -5,7 +5,7 @@ use crate::error::{Error, Result};
 use crate::health::{HealthCheck, HealthStatus};
 use crate::port_reservation::PortReservation;
 use crate::process::ManagedProcess;
-use crate::scenario::ScenarioManager;
+use crate::scenario::{non_blank, ScenarioManager, MANAGEMENT_TOKEN_ENV};
 use parking_lot::Mutex;
 use serde_json::Value;
 use std::path::Path;
@@ -22,6 +22,33 @@ pub struct MockForgeServer {
     grpc_port: Option<u16>,
     admin_port: Option<u16>,
     metrics_port: Option<u16>,
+    management_token: String,
+}
+
+/// Random 64-hex-character management token (two v4 UUIDs, 244 random bits).
+fn generate_management_token() -> String {
+    format!("{}{}", uuid::Uuid::new_v4().simple(), uuid::Uuid::new_v4().simple())
+}
+
+/// Pick the management token for a spawned server and pin it in `env_vars`.
+///
+/// Precedence: `config.management_token`, then `MOCKFORGE_MANAGEMENT_TOKEN` in
+/// `config.env_vars`, then the parent environment, then a freshly generated token.
+fn resolve_management_token(config: &mut ServerConfig) -> String {
+    let from_env_vars = config
+        .env_vars
+        .iter()
+        .rev()
+        .find(|(k, _)| k == MANAGEMENT_TOKEN_ENV)
+        .and_then(|(_, v)| non_blank(Some(v)));
+    let token = non_blank(config.management_token.as_deref())
+        .or(from_env_vars)
+        .or_else(|| non_blank(std::env::var(MANAGEMENT_TOKEN_ENV).ok().as_deref()))
+        .unwrap_or_else(generate_management_token);
+    config.env_vars.retain(|(k, _)| k != MANAGEMENT_TOKEN_ENV);
+    config.env_vars.push((MANAGEMENT_TOKEN_ENV.to_string(), token.clone()));
+    config.management_token = Some(token.clone());
+    token
 }
 
 impl MockForgeServer {
@@ -82,6 +109,8 @@ impl MockForgeServer {
             info!("Auto-assigned gRPC port: {}", port);
         }
 
+        let management_token = resolve_management_token(&mut resolved_config);
+
         // Spawn the process
         let process = ManagedProcess::spawn_reserved(&resolved_config, reservations)?;
         let http_port = process.http_port();
@@ -100,7 +129,8 @@ impl MockForgeServer {
         info!("MockForge server is healthy and ready");
 
         // Create scenario manager
-        let scenario = ScenarioManager::new("localhost", http_port);
+        let scenario =
+            ScenarioManager::with_management_token("localhost", http_port, Some(&management_token));
 
         Ok(Self {
             process: Arc::new(Mutex::new(process)),
@@ -111,12 +141,19 @@ impl MockForgeServer {
             grpc_port: resolved_config.grpc_port,
             admin_port: resolved_config.admin_port,
             metrics_port: resolved_config.metrics_port,
+            management_token,
         })
     }
 
     /// Get the HTTP port the server is running on
     pub fn http_port(&self) -> u16 {
         self.http_port
+    }
+
+    /// Management token the server was started with; send it as
+    /// `X-MockForge-Management-Token` on control-plane requests.
+    pub fn management_token(&self) -> &str {
+        &self.management_token
     }
 
     /// Get the WebSocket port if configured
@@ -338,6 +375,12 @@ impl MockForgeServerBuilder {
         self
     }
 
+    /// Set the management token (default: env or a random token)
+    pub fn management_token(mut self, token: impl Into<String>) -> Self {
+        self.config_builder = self.config_builder.management_token(token);
+        self
+    }
+
     /// Build and start the MockForge server
     pub async fn build(self) -> Result<MockForgeServer> {
         let config = self.config_builder.build();
@@ -360,6 +403,43 @@ where
 mod tests {
     use super::*;
     use std::time::Duration;
+
+    #[test]
+    fn test_generated_management_token_is_long_random_hex() {
+        let a = generate_management_token();
+        let b = generate_management_token();
+        assert!(a.len() >= 32);
+        assert!(a.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_ne!(a, b);
+    }
+
+    #[test]
+    fn test_resolve_management_token_prefers_explicit_and_pins_env() {
+        let mut config = ServerConfig::builder()
+            .env_var(MANAGEMENT_TOKEN_ENV, "from-env-vars")
+            .management_token("explicit")
+            .build();
+        assert_eq!(resolve_management_token(&mut config), "explicit");
+        let pinned: Vec<_> =
+            config.env_vars.iter().filter(|(k, _)| k == MANAGEMENT_TOKEN_ENV).collect();
+        assert_eq!(pinned, vec![&(MANAGEMENT_TOKEN_ENV.to_string(), "explicit".to_string())]);
+    }
+
+    #[test]
+    fn test_resolve_management_token_uses_env_vars_entry() {
+        let mut config =
+            ServerConfig::builder().env_var(MANAGEMENT_TOKEN_ENV, "from-env-vars").build();
+        assert_eq!(resolve_management_token(&mut config), "from-env-vars");
+        assert_eq!(config.management_token.as_deref(), Some("from-env-vars"));
+    }
+
+    #[test]
+    fn test_resolve_management_token_never_empty() {
+        let mut config = ServerConfig::builder().management_token("   ").build();
+        let token = resolve_management_token(&mut config);
+        assert!(!token.trim().is_empty());
+        assert!(config.env_vars.iter().any(|(k, v)| k == MANAGEMENT_TOKEN_ENV && v == &token));
+    }
 
     #[test]
     fn test_builder_creation() {
