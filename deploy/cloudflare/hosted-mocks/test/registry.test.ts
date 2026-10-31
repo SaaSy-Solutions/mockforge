@@ -89,6 +89,24 @@ describe("UsageMeter", () => {
 		expect(fetchMock).toHaveBeenCalledOnce();
 		expect(JSON.parse(String(fetchMock.mock.calls[0][1].body))).toMatchObject({ requests: 10, egress_bytes: 100 });
 	});
+	it("keeps recording while a usage acknowledgement is pending", async () => {
+		let release = () => {};
+		let started = () => {};
+		const pending = new Promise<void>((resolve) => { release = resolve; });
+		const sending = new Promise<void>((resolve) => { started = resolve; });
+		vi.stubGlobal("fetch", vi.fn(async () => {
+			started(); await pending; return Response.json({ blocked: false });
+		}));
+		const meter = new UsageMeter(storage());
+		await meter.record(ok());
+		const flush = meter.flush(env, "dep-1");
+		await sending;
+		let recorded = false;
+		const record = meter.record(ok()).then(() => { recorded = true; });
+		try { await vi.waitFor(() => expect(recorded).toBe(true), { timeout: 500 }); }
+		finally { release(); await record; await flush; }
+	});
+
 	it("replays the committed batch when clearing its durable receipt fails", async () => {
 		const store = storage();
 		const meter = new UsageMeter(store);
