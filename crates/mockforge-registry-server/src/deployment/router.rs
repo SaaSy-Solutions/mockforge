@@ -114,6 +114,11 @@ impl MultitenantRouter {
         // Proxying them here would count every request twice and drop
         // WebSocket upgrades, so send the client to the edge URL instead.
         if crate::deployment::cloudflare::is_cloudflare(&deployment) {
+            if let Err(error) =
+                super::cloudflare::require_paid_plan(state.db.pool(), deployment.org_id).await
+            {
+                return Ok(error.into_response());
+            }
             if let Some(ref edge_url) = deployment.deployment_url {
                 let path = uri.path();
                 let rest =
@@ -232,6 +237,14 @@ pub async fn custom_domain_fallback(
             StatusCode::INTERNAL_SERVER_ERROR
         })?
         .ok_or(StatusCode::NOT_FOUND)?;
+
+    if super::cloudflare::is_cloudflare(&deployment) {
+        if let Err(error) =
+            super::cloudflare::require_paid_plan(state.db.pool(), deployment.org_id).await
+        {
+            return Ok(error.into_response());
+        }
+    }
 
     // Apply the same Free hard cap and paid overage policy as path routing.
     let admission = match enforce_monthly_quota(&state, deployment.org_id).await {

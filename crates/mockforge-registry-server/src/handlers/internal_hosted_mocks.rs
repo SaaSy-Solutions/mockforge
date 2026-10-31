@@ -59,6 +59,7 @@ pub async fn get_runtime(
         .filter(|d| matches!(d.status(), DeploymentStatus::Active) && cloudflare::is_cloudflare(d))
         .ok_or_else(|| ApiError::InvalidRequest("Not found".into()))?;
 
+    cloudflare::require_paid_plan(pool, org_id).await?;
     let env = hosted_mock_runtime_env(&deployment, None).map_err(ApiError::Internal)?;
     let limits = router::resolve_proxy_limits(pool, org_id).await;
     let blocked = router::quota_ceiling_reached(pool, org_id).await.is_some();
@@ -118,7 +119,8 @@ pub async fn report_usage(
 
     apply_usage_batch(pool, deployment_id, org_id, &report).await?;
 
-    let blocked = router::quota_ceiling_reached(pool, org_id).await.is_some();
+    let blocked = cloudflare::require_paid_plan(pool, org_id).await.is_err()
+        || router::quota_ceiling_reached(pool, org_id).await.is_some();
     Ok(Json(UsageResponse { blocked }))
 }
 

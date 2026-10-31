@@ -569,6 +569,11 @@ pub async fn redeploy_deployment(
         return Err(ApiError::InvalidRequest("Deployment not found".to_string()));
     }
 
+    if crate::deployment::cloudflare::is_cloudflare(&deployment) {
+        crate::deployment::cloudflare::require_paid_plan(state.db.pool(), deployment.org_id)
+            .await?;
+    }
+
     // Only allow redeployment of active or failed deployments
     let status = deployment.status();
     if !matches!(status, DeploymentStatus::Active | DeploymentStatus::Failed) {
@@ -921,6 +926,8 @@ pub async fn start_deployment(
         let _router = crate::deployment::local_runtime::prepare(&refreshed)
             .map_err(ApiError::InvalidRequest)?;
     } else if crate::deployment::cloudflare::is_cloudflare(&deployment) {
+        crate::deployment::cloudflare::require_paid_plan(state.db.pool(), deployment.org_id)
+            .await?;
         lifecycle.reserve_restart().await?;
     } else {
         let flyio_token = std::env::var("FLYIO_API_TOKEN").map_err(|_| {

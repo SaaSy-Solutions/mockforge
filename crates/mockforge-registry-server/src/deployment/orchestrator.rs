@@ -98,6 +98,7 @@ impl DeploymentOrchestrator {
 
     /// The Cloudflare backend, when configured and the deployment qualifies.
     async fn cloudflare_for(&self, deployment: &HostedMock) -> Option<&CloudflareMocks> {
+        cloudflare::require_paid_plan(self.db.as_ref(), deployment.org_id).await.ok()?;
         let cf = self.cloudflare.as_ref()?;
         let plugins = HostedMockPlugin::count_active_by_deployment(self.db.as_ref(), deployment.id)
             .await
@@ -274,7 +275,7 @@ impl DeploymentOrchestrator {
         } else {
             fly.map_or("multitenant", |_| "flyio")
         };
-        sqlx::query("UPDATE hosted_mocks SET metadata_json = jsonb_set(COALESCE(metadata_json, '{}'::jsonb), '{hosting_backend}', to_jsonb($2::text)) WHERE id = $1 AND org_id = $3")
+        sqlx::query("UPDATE hosted_mocks SET metadata_json = COALESCE(metadata_json, '{}'::jsonb) || jsonb_build_object('hosting_backend', $2::text, 'backend', $2::text) WHERE id = $1 AND org_id = $3")
             .bind(deployment.id).bind(backend).bind(deployment.org_id).execute(pool).await?;
         if let Some(cf) = cf {
             self.deploy_to_cloudflare(cf, deployment).await?;
@@ -312,6 +313,9 @@ impl DeploymentOrchestrator {
         if super::local_runtime::is_local(deployment) {
             return self.deploy_to_multitenant_router(deployment).await;
         }
+        if cloudflare::is_cloudflare(deployment) {
+            cloudflare::require_paid_plan(self.db.as_ref(), deployment.org_id).await?;
+        }
         if !cloudflare::is_cloudflare(deployment) {
             return match self.flyio_client {
                 Some(ref flyio_client) => self.redeploy_to_flyio(flyio_client, deployment).await,
@@ -326,13 +330,15 @@ impl DeploymentOrchestrator {
                 "deployment needs a protocol Cloudflare cannot serve and Fly is not configured"
             )
         })?;
-        self.deploy_to_flyio(flyio_client, deployment).await?;
-        if let Some(cf) = self.cloudflare.as_ref() {
-            if let Err(e) = cf.destroy(deployment).await {
-                warn!("Failed to stop Cloudflare container for {}: {:#}", deployment.id, e);
-            }
-        }
-        Ok(())
+        let cf = self.cloudflare.as_ref().ok_or_else(|| {
+            anyhow::anyhow!("Cloudflare is not configured; cannot confirm migration cleanup")
+        })?;
+        cf.destroy(deployment).await?;
+        // Persist the new provider before provisioning: a timeout must leave
+        // cleanup targeting Fly, without an orphaned Cloudflare container.
+        sqlx::query("UPDATE hosted_mocks SET metadata_json = COALESCE(metadata_json, '{}'::jsonb) || '{\"backend\":\"flyio\",\"hosting_backend\":\"flyio\"}'::jsonb WHERE id=$1 AND org_id=$2")
+            .bind(deployment.id).bind(deployment.org_id).execute(self.db.as_ref()).await?;
+        self.deploy_to_flyio(flyio_client, deployment).await
     }
 
     /// Serve a deployment from Cloudflare Containers. Nothing is provisioned up

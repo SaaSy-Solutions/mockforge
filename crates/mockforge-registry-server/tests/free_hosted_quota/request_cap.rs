@@ -198,3 +198,60 @@ async fn free_defaults_and_migration_preserve_custom_grants_and_paid_limits() {
     let after = Organization::find_by_id(state.db.pool(), paid.id).await.unwrap().unwrap();
     assert_eq!(after.limits_json, paid.limits_json);
 }
+
+#[tokio::test]
+#[ignore = "requires isolated Postgres and MOCKFORGE_INTERNAL_API_TOKEN fixture"]
+async fn downgraded_cloudflare_mock_cannot_bypass_free_cap() {
+    use axum::{
+        extract::{Path, State},
+        http::HeaderMap,
+    };
+    use chrono::Datelike;
+    use mockforge_registry_server::handlers::internal_hosted_mocks::{
+        get_runtime, report_usage, UsageReport,
+    };
+    let state = state().await;
+    let org = organization(&state, Plan::Pro).await;
+    let slug = deployment(&state, &org, "https://fixture.invalid").await;
+    let id: Uuid = sqlx::query_scalar("UPDATE hosted_mocks SET deployment_url='https://fixture.invalid', metadata_json='{\"backend\":\"cloudflare\",\"hosting_backend\":\"cloudflare\"}'::jsonb WHERE org_id=$1 AND slug=$2 RETURNING id")
+        .bind(org.id).bind(&slug).fetch_one(state.db.pool()).await.unwrap();
+    let mut headers = HeaderMap::new();
+    let token =
+        std::env::var("MOCKFORGE_INTERNAL_API_TOKEN").expect("local internal token required");
+    headers.insert("authorization", format!("Bearer {token}").parse().unwrap());
+    assert!(get_runtime(State(state.clone()), Path((org.id, slug.clone())), headers.clone())
+        .await
+        .is_ok());
+    let proxy = serve(MultitenantRouter::create_router().with_state(state.clone())).await;
+    let client = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+    let url = format!("{}/mocks/{}/{}", proxy.url, org.id, slug);
+    assert_eq!(client.get(&url).send().await.unwrap().status(), StatusCode::TEMPORARY_REDIRECT);
+    sqlx::query("UPDATE organizations SET plan='free' WHERE id=$1")
+        .bind(org.id)
+        .execute(state.db.pool())
+        .await
+        .unwrap();
+    assert!(get_runtime(State(state.clone()), Path((org.id, slug)), headers.clone())
+        .await
+        .is_err());
+    let response = client.get(&url).send().await.unwrap();
+    assert!(!response.status().is_success() && !response.status().is_redirection());
+    assert!(response.headers().get("location").is_none());
+    let result = report_usage(
+        State(state.clone()),
+        Path(id),
+        headers,
+        axum::Json(UsageReport {
+            batch_id: Uuid::new_v4(),
+            period_start: chrono::Utc::now().date_naive().with_day(1).unwrap(),
+            requests: 1,
+            egress_bytes: 1,
+        }),
+    )
+    .await
+    .unwrap();
+    assert!(result.blocked, "usage acknowledgement must stop an already cached edge runtime");
+}
