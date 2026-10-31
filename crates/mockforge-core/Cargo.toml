@@ -20,6 +20,8 @@ rustdoc-args = ["--cfg", "docsrs"]
 missing_docs = "deny"
 
 [dependencies]
+cap-std = "3.4.6"
+cap-fs-ext = "3.4.6"
 mockforge-foundation = { path = "../mockforge-foundation", default-features = false }
 # `pr_generation` lives in mockforge-intelligence (Issue #562 phase 1);
 # re-exported from `crate::pr_generation` for in-crate and external callers.
