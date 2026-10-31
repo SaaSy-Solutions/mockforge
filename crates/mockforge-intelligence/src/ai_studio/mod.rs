@@ -45,6 +45,7 @@ pub mod conversation_store;
 pub mod debug_analyzer;
 pub mod debug_context;
 pub mod debug_context_integrator;
+mod frozen_generation;
 pub mod nl_mock_generator;
 pub mod org_controls;
 #[cfg(feature = "database")]
