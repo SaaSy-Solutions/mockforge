@@ -9,7 +9,7 @@ const FLUSH_EVERY_MS = 30_000;
 export async function fetchRuntime(env: Env, org: string, slug: string): Promise<Runtime | null> {
 	const res = await fetch(
 		`${env.REGISTRY_URL}/api/v1/internal/hosted-mocks/runtime/${org}/${encodeURIComponent(slug)}`,
-		{ headers: { authorization: `Bearer ${env.REGISTRY_INTERNAL_TOKEN}` } },
+		{ redirect: "error", signal: AbortSignal.timeout(10_000), headers: { authorization: `Bearer ${env.REGISTRY_INTERNAL_TOKEN}` } },
 	);
 	if (!res.ok) {
 		await res.body?.cancel();
@@ -18,51 +18,98 @@ export async function fetchRuntime(env: Env, org: string, slug: string): Promise
 	return (await res.json()) as Runtime;
 }
 
-/** Counts successful responses and reports them to the registry in batches. */
-export class UsageMeter {
-	private requests = 0;
-	private egress = 0;
-	private lastFlush = Date.now();
+interface Counts { requests: number; egress_bytes: number }
+export interface UsageBatch extends Counts {
+	batch_id: string;
+	deployment_id: string;
+	period_start: string;
+}
+export interface UsageState {
+	counts: Record<string, Counts>;
+	pending: UsageBatch | null;
+}
+/** The subset of durable storage needed for crash-safe reports. */
+export interface UsageStorage {
+	get(key: string): Promise<UsageState | undefined>;
+	put(key: string, value: UsageState): Promise<void>;
+}
+const USAGE_KEY = "usage-v1";
 
-	/** Records a response; true when a report is due. */
-	record(response: Response): boolean {
-		if (response.status < 200 || response.status >= 300) return false;
-		this.requests++;
-		this.egress += Number(response.headers.get("content-length") ?? "256") || 256;
-		return this.requests >= FLUSH_EVERY_REQUESTS || Date.now() - this.lastFlush >= FLUSH_EVERY_MS;
+/** Durable counts and immutable batches, serialized across overlapping requests. */
+export class UsageMeter {
+	private lastFlush = Date.now();
+	private tail: Promise<unknown> = Promise.resolve();
+	constructor(private readonly storage: UsageStorage) {}
+
+	private serial<T>(operation: () => Promise<T>): Promise<T> {
+		const result = this.tail.then(operation);
+		this.tail = result.catch(() => {});
+		return result;
+	}
+	private async read(): Promise<UsageState> {
+		return await this.storage.get(USAGE_KEY) ?? {
+			counts: {}, pending: null,
+		};
 	}
 
-	/**
-	 * Sends unreported counts and returns the registry's quota verdict, or null
-	 * when nothing was sent. Failed reports keep their counts for next time.
-	 */
-	async flush(env: Env, deploymentId: string): Promise<boolean | null> {
-		if (this.requests === 0) return null;
-		const requests = this.requests;
-		const egress = this.egress;
-		this.requests = 0;
-		this.egress = 0;
-		this.lastFlush = Date.now();
-		try {
-			const res = await fetch(
-				`${env.REGISTRY_URL}/api/v1/internal/hosted-mocks/${deploymentId}/usage`,
-				{
-					method: "POST",
-					headers: {
-						authorization: `Bearer ${env.REGISTRY_INTERNAL_TOKEN}`,
-						"content-type": "application/json",
-					},
-					body: JSON.stringify({ requests, egress_bytes: egress }),
-				},
-			);
-			if (!res.ok) throw new Error(`usage report returned ${res.status}`);
-			const { blocked } = (await res.json()) as { blocked: boolean };
+	record(response: Response): Promise<boolean> {
+		return this.serial(async () => {
+			if (response.status < 200 || response.status >= 300) return false;
+			const state = await this.read();
+			const period = `${new Date().toISOString().slice(0, 7)}-01`;
+			const counts = state.counts[period] ?? { requests: 0, egress_bytes: 0 };
+			counts.requests++;
+			const declared = Number(response.headers.get("content-length") ?? "256");
+			counts.egress_bytes += Number.isSafeInteger(declared) && declared >= 0 ? declared : 256;
+			state.counts[period] = counts;
+			await this.storage.put(USAGE_KEY, state);
+			return state.pending !== null || Object.values(state.counts).reduce((total, count) => total + count.requests, 0) >= FLUSH_EVERY_REQUESTS ||
+				Date.now() - this.lastFlush >= FLUSH_EVERY_MS;
+		});
+	}
+
+	flush(env: Pick<Env, "REGISTRY_URL" | "REGISTRY_INTERNAL_TOKEN">, deploymentId: string): Promise<boolean | null> {
+		return this.serial(async () => {
+			let blocked: boolean | null = null;
+			try {
+				const state = await this.read();
+				while (state.pending || Object.keys(state.counts).length > 0) {
+					if (!state.pending) {
+						const [period, counts] = Object.entries(state.counts)[0];
+						state.pending = {
+							...counts, batch_id: crypto.randomUUID(), deployment_id: deploymentId,
+							period_start: period,
+						};
+						delete state.counts[period];
+						// Persist the identity and payload BEFORE the network can commit it.
+						await this.storage.put(USAGE_KEY, state);
+					}
+					const batch = state.pending;
+					const res = await fetch(
+						`${env.REGISTRY_URL}/api/v1/internal/hosted-mocks/${batch.deployment_id}/usage`,
+						{
+							method: "POST", redirect: "error", signal: AbortSignal.timeout(10_000),
+							headers: { authorization: `Bearer ${env.REGISTRY_INTERNAL_TOKEN}`, "content-type": "application/json" },
+							body: JSON.stringify(batch),
+						},
+					);
+					if (!res.ok) {
+						await res.body?.cancel();
+						throw new Error(`usage report returned ${res.status}`);
+					}
+					const result: unknown = await res.json();
+					if (!result || typeof result !== "object" || !("blocked" in result) || typeof result.blocked !== "boolean") {
+						throw new Error("invalid usage verdict");
+					}
+					blocked = result.blocked;
+					state.pending = null;
+					await this.storage.put(USAGE_KEY, state);
+					this.lastFlush = Date.now();
+				}
+			} catch (error) {
+				console.error("hosted mock usage report failed", error);
+			}
 			return blocked;
-		} catch (error) {
-			this.requests += requests;
-			this.egress += egress;
-			console.error("hosted mock usage report failed", error);
-			return null;
-		}
+		});
 	}
 }

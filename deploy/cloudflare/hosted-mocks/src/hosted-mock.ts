@@ -19,7 +19,7 @@ export class HostedMock extends Container<Env> {
 	private runtimeLoadedAt = 0;
 	private runtimeRefresh: Promise<Runtime | null> | null = null;
 	private window: SecondWindow | null = null;
-	private readonly usage = new UsageMeter();
+	private readonly usage = new UsageMeter(this.ctx.storage);
 
 	override async fetch(request: Request): Promise<Response> {
 		const org = request.headers.get(H_ORG);
@@ -40,7 +40,7 @@ export class HostedMock extends Container<Env> {
 		const forwarded = new Request(bounded);
 		for (const name of [H_ORG, H_SLUG]) forwarded.headers.delete(name);
 		const response = await this.containerFetch(forwarded, this.defaultPort);
-		if (this.usage.record(response)) this.ctx.waitUntil(this.flushUsage());
+		if (await this.usage.record(response)) this.ctx.waitUntil(this.flushUsage());
 		return response;
 	}
 

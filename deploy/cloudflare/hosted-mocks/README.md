@@ -13,15 +13,24 @@ AMQP, SMTP or raw TCP, or that have plugins attached, run on Fly instead
 2. On a cold start the Durable Object reads the mock's environment and limits from
    the registry (`GET /api/v1/internal/hosted-mocks/runtime/{org}/{slug}`, internal
    token), starts the container with that environment, and waits for `/health/live`.
+   It refreshes runtime limits every 30 seconds, including while quota-blocked.
 3. It enforces the plan's body cap and requests-per-second cap, forwards the request,
    and reports request counts to the registry every 100 requests or 30 seconds
    (`POST /api/v1/internal/hosted-mocks/{id}/usage`). The registry answers whether
-   the org is over its quota ceiling; if so, requests get 429.
+   the org is over its quota ceiling; if so, requests get 429. Bodies are read up to
+   the byte cap before forwarding, including requests without Content-Length.
+4. Successful response counts are persisted in Durable Object storage, bucketed
+   by their UTC month. Each report has a persisted batch UUID; retries reuse that
+   UUID and payload. The registry atomically records the receipt and both counters,
+   so a lost acknowledgement or object eviction cannot double-charge a batch.
 
 The registry calls `POST /__mockforge-edge/<org>/<slug>/{restart,destroy}` with the
 `x-mockforge-edge-token` header when a mock is redeployed, stopped or deleted.
 
 ## Deploy
+
+Deploy the registry and its database migrations before this Worker; usage reports
+require the `hosted_mock_usage_batches` receipt table.
 
 Requires the Workers Paid plan (Containers) and Docker with buildx 0.13 or later
 (wrangler builds the image from `Dockerfile` and pushes it to Cloudflare's registry).
