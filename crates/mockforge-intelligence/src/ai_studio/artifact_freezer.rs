@@ -12,8 +12,10 @@ use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
 use tokio::fs;
 
+mod bundles;
 mod discovery;
 mod loading;
+mod provenance;
 mod publication;
 mod rendering;
 
@@ -90,6 +92,12 @@ impl ArtifactFreezer {
 
         let (frozen_content, content_str) = rendering::render(request, output_hash.as_deref())?;
 
+        // Non-object JSON values cannot carry embedded provenance without changing type.
+        if !frozen_content.is_object() {
+            provenance::write(&path, &rendering::provenance(request, output_hash.as_deref())?)
+                .await?;
+        }
+
         // Write to file
         fs::write(&path, content_str).await.map_err(|e| {
             mockforge_foundation::Error::io_with_context("write frozen artifact", e.to_string())
@@ -130,7 +138,7 @@ impl ArtifactFreezer {
             object.remove("_frozen_metadata");
         }
         let current_hash = content_hash(&content)?;
-        Ok(artifact.output_hash.as_ref().is_none_or(|stored| *stored == current_hash))
+        Ok(artifact.output_hash.as_ref().is_some_and(|stored| *stored == current_hash))
     }
 
     /// Freeze multiple artifacts at once

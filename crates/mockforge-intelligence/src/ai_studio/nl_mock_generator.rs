@@ -80,6 +80,7 @@ impl MockGenerator {
         if let Some(frozen) = snapshot.load("mock").await? {
             let spec = frozen_generation::payload(&frozen);
             return Ok(MockGenerationResult {
+                replayed: true,
                 spec: Some(spec),
                 message: format!(
                     "Loaded frozen mock artifact from {} (deterministic mode)",
@@ -117,6 +118,7 @@ impl MockGenerator {
             frozen_artifact.as_ref().map(frozen_generation::payload).unwrap_or(spec_json);
 
         Ok(MockGenerationResult {
+            replayed: false,
             spec: Some(spec_json),
             message: format!(
                 "Successfully generated API '{}' with {} endpoints and {} models{}",
@@ -176,6 +178,7 @@ impl MockGenerator {
         .await;
 
         Ok(MockGenerationResult {
+            replayed: false,
             spec: Some(spec_json),
             message: format!(
                 "Successfully {} API '{}' with {} endpoints and {} models",
@@ -203,6 +206,10 @@ impl Default for MockGenerator {
 /// Result of mock generation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MockGenerationResult {
+    /// True when generation loaded a verified snapshot without calling a provider.
+    #[serde(default)]
+    pub replayed: bool,
+
     /// Generated OpenAPI spec (if any)
     pub spec: Option<serde_json::Value>,
 
