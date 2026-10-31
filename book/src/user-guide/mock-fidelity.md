@@ -4,7 +4,8 @@ Keep the definition behind a generated mock aligned with its current source
 API. `verify-mocks` reports which routes changed and where their contracts
 differ, and can fail CI when drift appears.
 
-The `--mock-spec` comparison described here is **unreleased**. Check
+The definition comparisons, fixture checks and AsyncAPI support described here
+are **unreleased**. Check
 `mockforge verify-mocks --help` for availability in your installed version.
 
 ## Compare a mock definition with its source
@@ -51,7 +52,95 @@ aliases and excessive expansion fail explicitly. Omitted or empty root server
 lists match the explicit default URL `/`. Path and operation server overrides
 remain effective, and changes to non-default server URLs still produce drift.
 
-## Check captured upstream traffic
+## Compare AsyncAPI definitions and messages
+
+AsyncAPI 2.x and 3.x JSON/YAML definitions use the same command:
+
+```bash
+mockforge verify-mocks --spec events-current.yaml \
+  --mock-spec events-mock.yaml --fail-on-drift --output events-fidelity.json
+```
+
+The report includes channel declarations and each directional operation, with
+field-level changes to payload/header schemas, message selections, bindings,
+servers, security and traits. Local component references and recursive schemas
+retain their meaning. Operation identities are retained when multiple AsyncAPI 3
+operations share one channel. OpenAPI and AsyncAPI documents cannot be compared
+with each other.
+
+AsyncAPI 2 `publish` describes messages consumed by the application, and
+`subscribe` describes messages produced by it. These appear as `RECEIVE` and
+`SEND` operations respectively. AsyncAPI 3 uses explicit `receive`/`send` actions.
+Channel entries are named `CHANNEL <identifier>`; AsyncAPI 3 operation entries
+include their operation identifier in brackets.
+
+To check recorded messages against a current AsyncAPI contract:
+
+```bash
+mockforge verify-mocks --spec events-current.yaml \
+  --capture-db message-capture.db --fail-on-drift --output message-fidelity.json
+```
+
+The database opens read-only. Message events are selected in SQL before applying
+`--limit`, so unrelated HTTP traffic, connections and broker control packets do
+not consume the limit. No response record is required for a one-way message. The
+validator uses the recorder's view of the mock server:
+
+| Recorder event | Operation checked |
+| --- | --- |
+| MQTT/AMQP `publish`, Kafka `produce`, WebSocket `INBOUND` | `RECEIVE` |
+| MQTT/AMQP `deliver`, Kafka `consume`, WebSocket `OUTBOUND` | `SEND` |
+
+Message payloads declared as JSON are parsed and checked without type coercion.
+For example, a string `"2"` does not satisfy an integer schema. `text/plain`
+payloads are checked as strings. JSON Schema draft-07 and the default AsyncAPI
+schema format are supported, including AsyncAPI 3 multi-format wrappers for
+payloads and headers. Local recursive references are bundled without copying
+unused components or fetching external resources. Explicit schema dialects other
+than draft-07 and alternate `$id` resolution bases remain `not-verified`; their
+constraints are never silently interpreted using a different schema dialect.
+
+The `sample` report distinguishes `verified`, `drift-detected`, `not-verified`
+and `not-sampled` routes. Unsupported schema formats/media, missing payload or
+header capture, and ambiguous attribution remain `not-verified`; the command
+never treats missing evidence as a valid message. If several source operations
+share a channel and direction, the capture does not prove which operation ran.
+A payload invalid for every possible operation still produces channel drift.
+WebSocket frame records containing a connection ID use the matching connection
+record to recover the original path. If that record is unavailable, attribution
+remains unverified. Preserve connection records in JSON exports.
+
+`--fail-on-drift` fails on proven message drift **and on unverified message
+checks**. A diagnostic run without the flag still writes the incomplete report.
+Routes not observed in a captured sample remain `not-sampled`; capture checking
+does not require traffic for every source operation.
+
+## Validate asynchronous message fixtures
+
+With an AsyncAPI source, `--fixtures` accepts recorder-format JSON exchanges: a
+single exchange, an array, or a directory containing JSON exchange files. For
+example, an MQTT fixture for an `orders` channel is:
+
+```json
+[{"request":{"id":"fixture-order","protocol":"Mqtt",
+  "timestamp":"2026-10-20T00:00:00Z","method":"publish","path":"orders",
+  "headers":"{}","body":"{\"id\":1}","body_encoding":"utf8"}}]
+```
+
+```bash
+mockforge verify-mocks --spec events-current.yaml --fixtures ./message-fixtures \
+  --fail-on-drift --output fixture-fidelity.json
+```
+
+Every fixture is checked; `--limit` applies only to capture databases. A complete
+fixture set must cover the declared channels and operations. Missing fixtures
+produce findings instead of passing silently. The loader rejects symlinks and
+non-regular inputs, files larger than 8 MiB, directories deeper than 64 levels,
+more than 10,000 JSON files/exchanges, and sets exceeding 64 MiB. An empty or
+malformed set fails. The structured `fixtures` result records `files_checked`,
+its `validation_scope`, and the per-route `assessment`.
+
+## Check captured upstream HTTP traffic
 
 Recorded query strings use the same form parser as HTTP serving: `+` means a
 space, `%2B` means a literal plus sign, and a parameter without `=` has an empty
@@ -137,7 +226,14 @@ per-route status, source filenames and findings. Response-schema findings retain
 field names, messages and expected/actual values. Replay fixtures store a request
 fingerprint and response, so this mode validates routes, statuses and JSON
 response bodies. It cannot validate the original request body or establish that
-a live upstream still returns the fixture's response.
+a live upstream still returns the fixture's response. Unsupported response media
+(such as `text/plain` or `application/problem+json`) and ambiguous media without
+a recorded Content-Type remain `not-verified`, with a `response-unverified`
+finding. They do not count as proven response drift. The top-level
+`endpoints_unverified` count covers HTTP fixture and capture checks. With
+`--record`, a run containing only unverified findings keeps the outcome
+`unverified` for `mockforge status`; proven drift takes precedence when both
+occur. These recorded reports and status output use schema 2.
 
 A fixture file has this shape:
 
@@ -197,8 +293,9 @@ not a cloud registry feature yet.
 
 ## Use the result in CI
 
-With `--fail-on-drift`, detected drift returns exit code 1. Without that flag,
-drift is reported but does not fail the command. Invalid inputs still return a
+With `--fail-on-drift`, detected drift or unverified response media returns
+exit code 1. Without that flag, these findings are reported but do not fail
+the command. Invalid inputs still return a
 nonzero exit code. Preserve the JSON report as a CI artifact so reviewers can
 see which definitions or captured exchanges failed.
 
