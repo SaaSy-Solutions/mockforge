@@ -39,3 +39,10 @@ the separate `mockforge79` account and `mockforge-issue79-release` label.
 Its limits are MemoryHigh=12 GiB, MemoryMax=16 GiB, MemorySwapMax=2 GiB,
 CPUQuota=400%, and TasksMax=2048. The provider rejected creation of another
 server because of CPU quotas; no additional server was created.
+
+The v0.3.236 release's Create Release job ran from 21:21 to 23:52 UTC on
+October 16, before the workflow acquired a 120-minute timeout. The new
+isolated run exposed that insufficient budget for cold workspace and install
+builds. The v0.3.237 run was cancelled during its initial build, before any
+publication, and its tag was preserved. Version 0.3.238 raises the release
+job limit to 360 minutes while retaining the two-job Cargo limit and all tests.

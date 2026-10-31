@@ -21,7 +21,9 @@ jobs:
   release:
     name: Create Release
     runs-on: [self-hosted, linux, x64, "${{ vars.MOCKFORGE_RELEASE_RUNNER_LABEL || 'rust' }}"]
-    timeout-minutes: 120
+    # Cold workspace tests and two install-path builds exceeded two hours
+    # in the last successful release. Keep the bounded build parallelism.
+    timeout-minutes: 360
     env:
       SCCACHE_GHA_ENABLED: "true"
       SCCACHE_CACHE_SIZE: "2G"

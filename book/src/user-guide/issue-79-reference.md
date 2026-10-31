@@ -6,10 +6,10 @@ traffic test can establish. Advisory references were checked on **2026-10-24**.
 
 ## Save every comment and search offline
 
-With Python 3.11+ and MockForge 0.3.237 or later:
+With Python 3.11+ and MockForge 0.3.238 or later:
 
 ```bash
-cargo install mockforge-cli --version 0.3.237 --locked
+cargo install mockforge-cli --version 0.3.238 --locked
 mockforge tools export --output-dir mockforge-tools
 cd mockforge-tools
 ```

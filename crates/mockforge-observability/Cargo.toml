@@ -45,7 +45,7 @@ sysinfo = { version = "0.37", optional = true }
 tracing-opentelemetry = { version = "0.22", optional = true }
 
 # MockForge tracing integration (optional)
-mockforge-tracing = { version = "0.3.237", path = "../mockforge-tracing", optional = true }
+mockforge-tracing = { version = "0.3.238", path = "../mockforge-tracing", optional = true }
 
 # Server-side Sentry error tracking (feature: `sentry`). Same 0.36 line as
 # mockforge-registry-server so the workspace only pulls one sentry tree.

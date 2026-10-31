@@ -98,7 +98,7 @@ exclude = ["vendor/aws-sigv4"]
 
 # Workspace-wide package metadata
 [workspace.package]
-version = "0.3.237"
+version = "0.3.238"
 edition = "2021"
 rust-version = "1.96.0"
 authors = ["SaaSy Solutions LLC <ray.clanan@saasysolutionsllc.com>"]

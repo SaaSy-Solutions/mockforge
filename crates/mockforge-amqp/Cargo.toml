@@ -14,8 +14,8 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-mockforge-core = { version = "0.3.237", path = "../mockforge-core" }
-mockforge-recorder = { version = "0.3.237", path = "../mockforge-recorder" }
+mockforge-core = { version = "0.3.238", path = "../mockforge-core" }
+mockforge-recorder = { version = "0.3.238", path = "../mockforge-recorder" }
 tokio.workspace = true
 lapin = "2.3"
 serde.workspace = true
