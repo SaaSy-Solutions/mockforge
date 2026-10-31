@@ -5,7 +5,7 @@
 
 use base64::Engine;
 use chrono;
-use jsonwebtoken::{decode, decode_header, Algorithm, DecodingKey, Validation};
+use jsonwebtoken::{decode, decode_header, errors::ErrorKind, Algorithm, DecodingKey, Validation};
 use serde_json::Value;
 use tracing::debug;
 
@@ -85,7 +85,7 @@ pub async fn authenticate_jwt(state: &AuthState, auth_header: &str) -> Option<Au
     let header = match decode_header(token) {
         Ok(h) => h,
         Err(e) => {
-            debug!("Failed to decode JWT header: {}", e);
+            debug!("Failed to decode JWT header: {}", jwt_error_category(e.kind()));
             return Some(AuthResult::Failure("Invalid JWT format".to_string()));
         }
     };
@@ -223,9 +223,31 @@ pub async fn authenticate_jwt(state: &AuthState, auth_header: &str) -> Option<Au
             Some(AuthResult::Success(auth_claims))
         }
         Err(e) => {
-            debug!("JWT validation failed: {}", e);
-            Some(AuthResult::Failure(format!("Invalid JWT token: {}", e)))
+            let category = jwt_error_category(e.kind());
+            debug!("JWT validation failed: {}", category);
+            Some(AuthResult::Failure(format!("Invalid JWT token: {}", category)))
         }
+    }
+}
+
+// Parser errors can quote submitted header/claim values. Keep diagnostics useful
+// without forwarding their Display/Debug payloads to logs, events or responses.
+fn jwt_error_category(kind: &ErrorKind) -> &'static str {
+    match kind {
+        ErrorKind::InvalidToken => "InvalidToken",
+        ErrorKind::InvalidSignature => "InvalidSignature",
+        ErrorKind::ExpiredSignature => "ExpiredSignature",
+        ErrorKind::InvalidIssuer => "InvalidIssuer",
+        ErrorKind::InvalidAudience => "InvalidAudience",
+        ErrorKind::InvalidSubject => "InvalidSubject",
+        ErrorKind::ImmatureSignature => "ImmatureSignature",
+        ErrorKind::InvalidAlgorithm => "InvalidAlgorithm",
+        ErrorKind::InvalidAlgorithmName => "InvalidAlgorithmName",
+        ErrorKind::MissingRequiredClaim(_) => "MissingRequiredClaim",
+        ErrorKind::Json(_) => "InvalidJson",
+        ErrorKind::Base64(_) => "InvalidBase64",
+        ErrorKind::Utf8(_) => "InvalidUtf8",
+        _ => "JWT validation error",
     }
 }
 

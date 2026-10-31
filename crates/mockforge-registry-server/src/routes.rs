@@ -8,7 +8,9 @@ use axum::{
 
 use crate::handlers;
 use crate::middleware::past_due_writes::past_due_writes_blocked_middleware;
-use crate::middleware::{auth_middleware, rate_limit_middleware, rls_org_scope_middleware};
+use crate::middleware::{
+    auth_middleware, rate_limit_middleware, rls_org_scope_middleware, token_scope_middleware,
+};
 use crate::AppState;
 
 pub fn create_router(state: AppState) -> Router<AppState> {
@@ -130,6 +132,16 @@ pub fn create_router(state: AppState) -> Router<AppState> {
             get(handlers::internal_test_runs::get_tunnel_reservation_by_subdomain),
         )
         // AI-assisted contract drift scoring (#348). Runner-only.
+        // Cloudflare hosted-mocks Worker: container environment and usage
+        // reports. Same internal bearer token as the test-runner callbacks.
+        .route(
+            "/api/v1/internal/hosted-mocks/runtime/{org_id}/{slug}",
+            get(handlers::internal_hosted_mocks::get_runtime),
+        )
+        .route(
+            "/api/v1/internal/hosted-mocks/{deployment_id}/usage",
+            post(handlers::internal_hosted_mocks::report_usage),
+        )
         .route(
             "/api/v1/internal/contract-diff/score",
             post(handlers::internal_contract_diff::score_contract_drift),
@@ -1123,6 +1135,11 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // user_id auth stamped, and everything downstream (including any future
         // middleware) runs inside the org scope.
         .route_layer(middleware::from_fn_with_state(state.clone(), rls_org_scope_middleware))
+        // `mfx_` API token scopes and org binding. Runs right after auth and
+        // before RLS, so the org it pins is what RLS and handlers resolve.
+        // Fails closed: a route missing from the policy rejects tokens. See
+        // `middleware/token_scope.rs` and `token_scope_routes.txt`.
+        .route_layer(middleware::from_fn(token_scope_middleware))
         .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
         .route_layer(middleware::from_fn(rate_limit_middleware));
 
@@ -1168,6 +1185,8 @@ pub fn create_router(state: AppState) -> Router<AppState> {
         // aggregates to a single org. Cross-org queries behind these routes must
         // run on the owner pool (`PgRegistryStore::with_owner_pool`), which
         // bypasses RLS by design.
+        // Platform-admin routes are session-only for API tokens.
+        .route_layer(middleware::from_fn(token_scope_middleware))
         .route_layer(middleware::from_fn_with_state(state.clone(), auth_middleware))
         .route_layer(middleware::from_fn(rate_limit_middleware));
 

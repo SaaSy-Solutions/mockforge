@@ -44,8 +44,9 @@ export class NextJSAdapter {
 
         // Get server URL from environment if not provided
         if (!this.config.serverUrl && typeof window !== 'undefined') {
-            const envUrl = (window as any).process?.env?.[this.config.envVarName] ||
-                          (window as any).__NEXT_DATA__?.env?.[this.config.envVarName];
+            const envVarName = this.config.envVarName || 'NEXT_PUBLIC_MOCKFORGE_URL';
+            const envUrl = (window as any).process?.env?.[envVarName] ||
+                          (window as any).__NEXT_DATA__?.env?.[envVarName];
             if (envUrl) {
                 this.config.serverUrl = envUrl;
             }

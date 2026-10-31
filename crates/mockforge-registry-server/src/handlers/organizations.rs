@@ -5,15 +5,15 @@
 use axum::{
     extract::{Path, State},
     http::HeaderMap,
-    Json,
+    Extension, Json,
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
     error::{ApiError, ApiResult},
-    middleware::AuthUser,
-    models::{AuditEventType, OrgRole, Plan},
+    middleware::{AuthType, AuthUser},
+    models::{ApiToken, AuditEventType, OrgRole, Plan},
     AppState,
 };
 
@@ -102,9 +102,31 @@ pub async fn create_organization(
 pub async fn list_organizations(
     State(state): State<AppState>,
     AuthUser(user_id): AuthUser,
+    Extension(auth_type): Extension<AuthType>,
+    token: Option<Extension<ApiToken>>,
 ) -> ApiResult<Json<Vec<OrganizationResponse>>> {
-    // Get all organizations where user is owner or member
-    let orgs = state.store.list_organizations_by_user(user_id).await?;
+    // PAT identity is organization-bound even when its user belongs to other organizations.
+    // Keep interactive sessions' existing user-wide inventory separate.
+    let orgs = if matches!(auth_type, AuthType::ApiToken) {
+        let Extension(token) = token.ok_or(ApiError::AuthRequired)?;
+        if token.user_id.is_some_and(|id| id != user_id) {
+            return Err(ApiError::AuthRequired);
+        }
+        match state.store.find_organization_by_id(token.org_id).await? {
+            Some(org) => {
+                if org.owner_id == user_id
+                    || state.store.find_org_member(org.id, user_id).await?.is_some()
+                {
+                    vec![org]
+                } else {
+                    Vec::new()
+                }
+            }
+            None => Vec::new(),
+        }
+    } else {
+        state.store.list_organizations_by_user(user_id).await?
+    };
 
     // Convert to response format
     let responses: Vec<OrganizationResponse> = orgs

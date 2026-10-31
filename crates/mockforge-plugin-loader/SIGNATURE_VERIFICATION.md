@@ -36,7 +36,8 @@ save_keypair(
 ## Signing a Plugin
 
 To sign a plugin, you need:
-1. The plugin directory containing `plugin.toml`
+1. The finished plugin directory (manifest, WASM module and any other files).
+   Sign last: changing any file afterwards invalidates the signature.
 2. Your private key (PKCS#8 format)
 3. A key ID to identify which key was used
 
@@ -63,12 +64,22 @@ The `plugin.sig` file is JSON:
 
 ```json
 {
+  "format_version": 2,
   "algorithm": "ED25519",
   "key_id": "my-signing-key",
   "signature": "hex-encoded-signature-bytes",
-  "signed_content_hash": "hex-encoded-sha256-hash-of-manifest"
+  "signed_content_hash": "hex-encoded-sha256-of-the-artifact-payload"
 }
 ```
+
+The signature covers the **artifact payload** built by
+`compute_artifact_payload`: a domain-separated, length-prefixed list of every
+file in the plugin directory (except the top-level `plugin.sig`), sorted by
+relative path, each with its SHA-256. Symlinks and non-UTF-8 file names are
+rejected.
+
+Format v1 (no `format_version` field) signed only `plugin.toml` and is
+rejected: re-sign the plugin.
 
 ## Verifying Signatures
 
@@ -90,33 +101,54 @@ let mut key_data = HashMap::new();
 key_data.insert("my-signing-key".to_string(), public_key);
 
 // Configure loader
-let config = PluginLoaderConfig {
+let mut config = PluginLoaderConfig {
     trusted_keys: vec!["my-signing-key".to_string()],
     key_data,
     allow_unsigned: false,  // Reject unsigned plugins
     ..Default::default()
 };
+
+// Optional: expire or revoke keys
+config.key_expires_at.insert("my-signing-key".to_string(), expiry);
+config.revoked_keys.push("old-signing-key".to_string());
+```
+
+Or load a trust store file (the format the CLI's `--trusted-keys` reads):
+
+```rust
+use mockforge_plugin_loader::TrustStoreFile;
+
+let mut config = PluginLoaderConfig::default();
+TrustStoreFile::load(Path::new("trusted-keys.json"))?.apply_to(&mut config)?;
+```
+
+```json
+{ "keys": [ { "key_id": "my-signing-key", "public_key": "<hex>",
+              "expires_at": "2027-01-01T00:00:00Z", "revoked": false } ] }
 ```
 
 ### Using the Installer
 
-The `PluginInstaller` automatically verifies signatures when `verify_signature` is enabled:
+`PluginInstaller` always verifies the signature before validating or loading
+a plugin, for every source. A missing or failed signature aborts the install.
+`skip_validation` does not skip it.
 
 ```rust
 use mockforge_plugin_loader::{PluginInstaller, InstallOptions};
 
 let installer = PluginInstaller::new(config).unwrap();
 
-let options = InstallOptions {
-    verify_signature: true,  // Enable signature verification
-    force: false,
-    skip_validation: false,
-    expected_checksum: None,
-};
+// Default options: signature required
+installer.install("./my-plugin", InstallOptions::default()).await?;
 
-// This will verify the signature before installing
-installer.install("./my-plugin", options).await.unwrap();
+// Local development only: accept a plugin with no plugin.sig.
+// A plugin.sig that is present but fails verification is still rejected.
+let dev = InstallOptions { allow_unsigned: true, ..Default::default() };
+installer.install("./my-dev-plugin", dev).await?;
 ```
+
+The CLI equivalent is `mockforge plugin install <source> --allow-unsigned`
+(`--no-verify` is an alias). It prints a warning on every use.
 
 ### Manual Verification
 
@@ -139,24 +171,28 @@ match result {
 ### Verification Process
 
 The signature verification process:
-1. Reads `plugin.sig` from the plugin directory
-2. Checks that the signing key ID is in the trusted keys list
-3. Retrieves the corresponding public key from `key_data`
-4. Computes SHA-256 hash of `plugin.toml`
-5. Verifies the hash matches the signed content hash
-6. Verifies the cryptographic signature using the public key
+1. Reads `plugin.sig` from the plugin directory and rejects formats other than v2
+2. Rejects revoked key IDs (`revoked_keys`)
+3. Checks that the signing key ID is in the trusted keys list
+4. Rejects keys at or past their `key_expires_at`
+5. Retrieves the corresponding public key from `key_data`
+6. Recomputes the artifact payload over every file in the plugin directory
+7. Verifies its SHA-256 matches the signed content hash
+8. Verifies the cryptographic signature over the payload using the public key
 
 ### What is Protected
 
-- **Plugin Manifest**: The `plugin.toml` file is signed and verified
-- **Tampering Detection**: Any modification to the manifest after signing will cause verification to fail
-- **Key Trust**: Only signatures from trusted keys are accepted
+- **Whole artifact**: the manifest, the WASM binary and every other file
+- **Tampering detection**: modifying, adding or removing any file fails verification
+- **Artifact binding**: a `plugin.sig` copied onto a different plugin fails
+- **Key trust**: only trusted, unrevoked, unexpired keys are accepted
 
 ### What is NOT Protected
 
-- **Plugin Code**: The WASM binary itself is not directly signed (only the manifest that references it)
-- **Configuration Files**: Additional files in the plugin directory are not signed
-- **Replay Attacks**: Signatures don't include timestamps or nonces
+- **Replay of an old release**: a correctly signed older version still verifies;
+  revoke or expire the key to stop accepting its signatures
+- **Signing time**: expiry is checked against the current clock, not a signed
+  timestamp
 
 ### Best Practices
 
@@ -179,6 +215,8 @@ let config = PluginLoaderConfig {
 ```
 
 This is useful during plugin development but should be disabled in production.
+It only covers a missing `plugin.sig`. A signature that is present is always
+verified, and failures are never downgraded to warnings.
 
 ## Troubleshooting
 
@@ -197,11 +235,18 @@ This is useful during plugin development but should be disabled in production.
 ### "Signature verification failed"
 - The signature is invalid or corrupted
 - The public key doesn't match the private key used for signing
-- The plugin manifest was modified after signing
 
-### "Plugin manifest hash does not match"
-- The `plugin.toml` was modified after signing
-- Re-sign the plugin with the correct manifest content
+### "Plugin contents do not match the signed hash"
+- A file in the plugin directory was modified, added or removed after signing,
+  or the `plugin.sig` belongs to a different plugin
+- Re-sign the finished plugin directory
+
+### "Unsupported plugin signature format v1"
+- The plugin was signed by an older release that covered only `plugin.toml`
+- Re-sign it
+
+### "has been revoked" / "expired at"
+- The key is listed as revoked or is past its expiry in your trust store
 
 ## Example: Complete Workflow
 
@@ -232,14 +277,9 @@ let config = PluginLoaderConfig {
     ..Default::default()
 };
 
-// 4. Install plugin with verification
+// 4. Install plugin (signature verification is always on)
 let installer = PluginInstaller::new(config).unwrap();
-let options = InstallOptions {
-    verify_signature: true,
-    ..Default::default()
-};
-
-installer.install("./my-plugin", options).await.unwrap();
+installer.install("./my-plugin", InstallOptions::default()).await.unwrap();
 println!("Plugin installed and verified!");
 ```
 
