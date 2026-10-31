@@ -43,7 +43,7 @@
   "author": "MockForge Contributors",
   "license": "MIT",
   "devDependencies": {
-    "@rollup/plugin-commonjs": "^25.0.7",
+    "@rollup/plugin-commonjs": "^29.0.3",
     "@rollup/plugin-node-resolve": "^15.2.3",
     "@rollup/plugin-typescript": "^11.1.5",
     "@types/node": "^22.0.0",
