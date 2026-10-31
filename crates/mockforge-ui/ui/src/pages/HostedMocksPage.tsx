@@ -9,6 +9,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PageHeader, EmptyState as DSEmptyState } from '@/components/ui/DesignSystem';
 import { useHostedMockStream } from '@/hooks/useHostedMockStream';
+import { managementDocsUrl, useManagementToken } from '@/hooks/useManagementToken';
 import { useFlyRuntimeLogs } from '@/hooks/useFlyRuntimeLogs';
 import { useRuntimeRequests } from '@/hooks/useRuntimeRequests';
 import {
@@ -244,11 +245,22 @@ export const HostedMocksPage: React.FC = () => {
   // structured request log events (method/path/status/latency).
   const streamEnabled = detailsOpen && selectedDeployment?.status === 'active';
   const streamUrl = streamEnabled ? selectedDeployment?.deployment_url : undefined;
+  // The stream and the docs link both need the deployment's management
+  // token; without HostedMockUpdate the registry refuses it and the stream
+  // is shown as unavailable instead of retrying.
+  const managementToken = useManagementToken(
+    selectedDeployment?.deployment_url ? selectedDeployment.id : null,
+    detailsOpen,
+  );
+  const streamTokenUnavailable = !!streamEnabled && managementToken.status === 'unavailable';
   const {
     connected: streamConnected,
     logs: streamLogs,
     metrics: streamMetrics,
-  } = useHostedMockStream(streamUrl, { enabled: !!streamEnabled });
+  } = useHostedMockStream(streamUrl, {
+    enabled: !!streamEnabled,
+    managementToken: managementToken.token,
+  });
 
   // Fly runtime logs (container stdout/stderr) via the registry server's SSE
   // proxy. Complementary to the deployment WS stream above: works even when
@@ -1805,6 +1817,11 @@ export const HostedMocksPage: React.FC = () => {
                       Live streaming connected — new requests will appear automatically
                     </Alert>
                   )}
+                  {streamTokenUnavailable && (
+                    <Alert severity="info" sx={{ mb: 2 }}>
+                      Live streaming unavailable: the management token is required.
+                    </Alert>
+                  )}
                   {streamLogs.length > 0 && (
                     <Box>
                       <Typography variant="subtitle2" sx={{ mb: 1 }}>
@@ -2379,6 +2396,11 @@ export const HostedMocksPage: React.FC = () => {
 
               {detailsTab === 6 && (
                 <Box>
+                  {streamTokenUnavailable && (
+                    <Alert severity="info" sx={{ mb: 2 }}>
+                      Live metrics unavailable: the management token is required.
+                    </Alert>
+                  )}
                   {streamConnected && streamMetrics && (
                     <Box sx={{ mb: 3 }}>
                       <Alert severity="success" sx={{ mb: 2 }}>
@@ -2666,7 +2688,10 @@ export const HostedMocksPage: React.FC = () => {
                   </Button>
                   <Button
                     startIcon={<OpenInNewIcon />}
-                    href={`${selectedDeployment.deployment_url}/__mockforge/docs`}
+                    href={managementDocsUrl(
+                      selectedDeployment.deployment_url,
+                      managementToken.token,
+                    )}
                     target="_blank"
                     rel="noopener noreferrer"
                   >
