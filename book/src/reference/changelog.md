@@ -14,6 +14,7 @@
 - **[DevX]** `mockforge status [--dir <path>] [--format json]` reports a project's MockForge state without starting or writing anything: the configuration file `serve` would use, the HTTP port and spec it declares, whether a MockForge server answers there (through the management API, which a spec's own `/health` cannot shadow), and the last recorded `verify-mocks` result. The JSON form is a versioned document (`schema_version` 1) for editors and agent hosts such as Aether. `verify-mocks --record` keeps a run's result in `.mockforge/reports/verify-mocks.json` for it. (#1420)
 
 - **[Cloud]** Trial owners get an email three days before their Pro or Team trial ends. The registry now handles Stripe's `customer.subscription.trial_will_end` webhook and sends the reminder through the same email path as the other billing emails, honoring the owner's email-notification setting. It gives the end date and price, and says the plan continues if a payment method is on file and otherwise drops to Free. (#714)
+- **[AI]** Add a feature-gated Qdrant RAG storage backend with persistent chunk upserts, server-side filtered vector search, paged document reads, native snapshots, health checks and real-server restart acceptance. Enable `mockforge-data/qdrant` to use `StorageFactory::create_vector_db`. (#717)
 
 ### Changed
 
