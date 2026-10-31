@@ -244,7 +244,8 @@ generated/
 
 ### Deterministic Mode
 
-Honors workspace `ai.deterministic_mode` setting:
+AI Studio generation methods accept a `DeterministicModeConfig`, corresponding
+to these workspace settings when the calling application forwards them:
 
 ```yaml
 ai:
@@ -254,7 +255,54 @@ ai:
     freeze_format: yaml
 ```
 
-When enabled, AI outputs are frozen to deterministic YAML/JSON.
+When enabled with auto-freeze, the generated artifacts are saved as YAML/JSON.
+Saving each generation does not by itself prevent another provider call.
+The admin chat path currently does not forward these workspace settings.
+
+#### Generate once and replay a snapshot (unreleased fix)
+
+`MockGenerator::generate` and `PersonaGenerator::generate` accept
+`AiMode::GenerateOnceFreeze`. In that mode, the first successful generation
+is saved under the configured `freeze_directory`. Later calls with identical
+inputs and provider settings load that snapshot before initializing a provider,
+including after restarting the application or disconnecting the provider.
+
+```rust,ignore
+use mockforge_intelligence::ai_studio::{
+    config::{AiMode, DeterministicModeConfig}, MockGenerator,
+};
+use mockforge_intelligence::intelligent_behavior::IntelligentBehaviorConfig;
+
+let mut behavior = IntelligentBehaviorConfig::default();
+behavior.behavior_model.seed = Some(42);
+let snapshots = DeterministicModeConfig {
+    freeze_directory: "fixtures/ai-snapshots".into(),
+    freeze_format: "json".into(),
+    ..Default::default()
+};
+let result = MockGenerator::with_config(behavior)
+    .generate(
+        "Create a user API",
+        Some("my-workspace"),
+        Some(AiMode::GenerateOnceFreeze),
+        Some(&snapshots),
+    )
+    .await?;
+let snapshot_path = result.frozen_artifact.unwrap().path;
+```
+
+Commit the snapshot files. Snapshot identity includes the description, workspace,
+provider/model settings and effective seed; changing those inputs creates a
+different snapshot. API-key rotation does not change the identity. Optional
+prompt/provider provenance can be disabled with `track_metadata: false`;
+the identity and payload hash remain for lookup and integrity checking.
+Modified payloads cause an error rather than a silent regeneration. Concurrent
+publishers return the same completed snapshot without replacing it.
+
+This freezes the generated specification or persona, including any examples
+already present. It does not turn schema-driven random response generation into
+fixed response examples. For byte-identical HTTP assertions, commit explicit
+response data and disable or pin runtime templates, clocks and stateful behavior.
 
 ### Seeded Generation (#852)
 
@@ -377,4 +425,3 @@ tasks, and real-time collaboration.
 - [AI Studio](llm-studio.md) - AI features overview
 - [API Architecture Critique](api-architecture-critique.md) - API analysis
 - [Behavioral Simulation](behavioral-simulation.md) - AI behavioral simulation
-
