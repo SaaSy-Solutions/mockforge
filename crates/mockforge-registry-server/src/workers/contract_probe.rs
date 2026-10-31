@@ -149,13 +149,22 @@ async fn enqueue_for_service(
     .fetch_optional(&mut *tx)
     .await?
     else {
+        tx.rollback().await?;
         return Ok(false);
     };
+    // Roll back explicitly when the service is not due. Dropping the
+    // transaction only queues the ROLLBACK, so the `FOR UPDATE` row lock
+    // can outlive this call and make the next claim on another pooled
+    // connection skip the row as locked.
     match probe_is_due(&svc, now, default_secs) {
         Ok(true) => {}
-        Ok(false) => return Ok(false),
+        Ok(false) => {
+            tx.rollback().await?;
+            return Ok(false);
+        }
         Err(error) => {
             warn!(service_id = %svc.id, %error, "skipping invalid probe schedule");
+            tx.rollback().await?;
             return Ok(false);
         }
     }

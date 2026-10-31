@@ -109,6 +109,23 @@ impl MultitenantRouter {
             return Err(StatusCode::SERVICE_UNAVAILABLE);
         }
 
+        // Cloudflare-served mocks are metered and rate limited at the edge.
+        // Proxying them here would count every request twice and drop
+        // WebSocket upgrades, so send the client to the edge URL instead.
+        if crate::deployment::cloudflare::is_cloudflare(&deployment) {
+            if let Some(ref edge_url) = deployment.deployment_url {
+                let path = uri.path();
+                let rest =
+                    path.strip_prefix(&format!("/mocks/{}/{}", org_id_str, slug)).unwrap_or("");
+                let location = build_target_url(edge_url, rest, uri.query());
+                return Ok((
+                    StatusCode::TEMPORARY_REDIRECT,
+                    [(axum::http::header::LOCATION, location)],
+                )
+                    .into_response());
+            }
+        }
+
         // Soft-enforce the org's monthly `requests_per_30d` plan limit (#449,
         // #748). Default policy is "no cutoff" — mocks keep responding past the
         // allotment; only an opt-in abuse ceiling
@@ -392,59 +409,63 @@ fn overage_cutoff(limit: i64, ceiling_mult: i64) -> Option<i64> {
 /// take the proxy offline. The body cap and per-second RPS check (added in
 /// #450) remain absolute safety floors regardless of this soft quota.
 async fn enforce_monthly_quota(state: &AppState, org_id: Uuid) -> Result<(), Response> {
-    // No ceiling configured → no cutoff, and no need to touch the DB on the
-    // hot path. This is the default that matches the pricing copy.
-    let mult = overage_ceiling_mult();
-    if mult <= 0 {
-        return Ok(());
-    }
-
-    let org = match Organization::find_by_id(state.db.pool(), org_id).await {
-        Ok(Some(org)) => org,
-        Ok(None) => {
-            tracing::warn!("Org {} not found while enforcing monthly quota", org_id);
-            return Ok(());
-        }
-        Err(e) => {
-            tracing::error!("DB error loading org {} for monthly quota check: {}", org_id, e);
-            return Ok(());
-        }
-    };
-
-    let Some(limit) = monthly_request_limit(&org.limits_json) else {
-        return Ok(()); // unlimited plan (Team)
-    };
-
-    let Some(cutoff) = overage_cutoff(limit, mult) else {
-        return Ok(());
-    };
-
-    let used = match UsageCounter::get_or_create_current(state.db.pool(), org_id).await {
-        Ok(counter) => counter.requests,
-        Err(e) => {
-            tracing::error!("Failed to read usage counter for org {}: {}", org_id, e);
-            return Ok(()); // fail open on DB read errors
-        }
-    };
-
-    if used >= cutoff {
-        tracing::warn!(
-            "Hosted-mock overage ceiling reached for org {}: {}/{} ({}× plan limit {})",
-            org_id,
-            used,
-            cutoff,
-            mult,
-            limit
-        );
-        Err(ApiError::UsageLimitExceeded {
+    match quota_ceiling_reached(state.db.pool(), org_id).await {
+        None => Ok(()),
+        Some((used, cutoff)) => Err(ApiError::UsageLimitExceeded {
             limit_type: "requests".to_string(),
             current: used,
             max: cutoff,
             period: current_month_period(),
         }
-        .into_response())
+        .into_response()),
+    }
+}
+
+/// `Some((used, cutoff))` when the org has hit the opt-in hosted-mock overage
+/// ceiling (`MOCKFORGE_HOSTED_OVERAGE_CEILING_MULT`), otherwise `None`. Fails
+/// open on database errors, like the rest of the hot path.
+pub(crate) async fn quota_ceiling_reached(pool: &sqlx::PgPool, org_id: Uuid) -> Option<(i64, i64)> {
+    // No ceiling configured → no cutoff, and no need to touch the DB on the
+    // hot path. This is the default that matches the pricing copy.
+    let mult = overage_ceiling_mult();
+    if mult <= 0 {
+        return None;
+    }
+
+    let org = match Organization::find_by_id(pool, org_id).await {
+        Ok(Some(org)) => org,
+        Ok(None) => {
+            tracing::warn!("Org {} not found while enforcing monthly quota", org_id);
+            return None;
+        }
+        Err(e) => {
+            tracing::error!("DB error loading org {} for monthly quota check: {}", org_id, e);
+            return None;
+        }
+    };
+
+    // Unlimited plan (Team), or a multiplier that yields no cutoff.
+    let cutoff = overage_cutoff(monthly_request_limit(&org.limits_json)?, mult)?;
+
+    let used = match UsageCounter::get_or_create_current(pool, org_id).await {
+        Ok(counter) => counter.requests,
+        Err(e) => {
+            tracing::error!("Failed to read usage counter for org {}: {}", org_id, e);
+            return None; // fail open on DB read errors
+        }
+    };
+
+    if used >= cutoff {
+        tracing::warn!(
+            "Hosted-mock overage ceiling reached for org {}: {}/{} ({}x plan limit)",
+            org_id,
+            used,
+            cutoff,
+            mult
+        );
+        Some((used, cutoff))
     } else {
-        Ok(())
+        None
     }
 }
 
@@ -483,11 +504,11 @@ fn bump_proxy_usage(state: &AppState, org_id: Uuid, response: &Response) {
 /// `limits_json`. See `get_default_limits` in mockforge-registry-core for the
 /// per-plan defaults.
 #[derive(Debug, Clone, Copy)]
-struct ProxyLimits {
+pub(crate) struct ProxyLimits {
     /// Max inbound request body size in bytes (cap → HTTP 413)
-    max_body_bytes: usize,
+    pub(crate) max_body_bytes: usize,
     /// Per-deployment requests-per-second cap (overage → HTTP 429)
-    rps: i64,
+    pub(crate) rps: i64,
 }
 
 /// Derive proxy caps from a raw `limits_json` value. Pure helper — extracted
@@ -522,7 +543,7 @@ fn proxy_limits_from_json(limits_json: &serde_json::Value) -> ProxyLimits {
 /// On any DB error or missing org we return the conservative built-in defaults
 /// rather than failing the request — the caps exist to *prevent* runaway cost,
 /// so an unavailable database shouldn't open the floodgates.
-async fn resolve_proxy_limits(pool: &sqlx::PgPool, org_id: Uuid) -> ProxyLimits {
+pub(crate) async fn resolve_proxy_limits(pool: &sqlx::PgPool, org_id: Uuid) -> ProxyLimits {
     let limits_json = match Organization::find_by_id(pool, org_id).await {
         Ok(Some(org)) => org.limits_json,
         Ok(None) => {
