@@ -100,6 +100,7 @@ serde_json = { workspace = true }
 vergen = { version = "8.0", features = ["build", "git", "gitcl"] }
 
 [dev-dependencies]
+sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "migrate", "macros"] }
 tempfile = { workspace = true }
 axum = { workspace = true, features = ["macros"] }
 tokio = { workspace = true, features = ["rt", "macros"] }
