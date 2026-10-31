@@ -191,8 +191,8 @@ mod tests {
             .execute(&pool).await.unwrap();
         sqlx::query("INSERT INTO organizations (id, name, slug, owner_id) VALUES ($1, 'usage test', $2, $3)")
             .bind(org).bind(format!("usage-{org}")).bind(user).execute(&pool).await.unwrap();
-        sqlx::query("INSERT INTO hosted_mocks (id, org_id, name, slug, config_json) VALUES ($1, $2, 'usage test', 'usage', '{}')")
-            .bind(deployment).bind(org).execute(&pool).await.unwrap();
+        sqlx::query("INSERT INTO hosted_mocks (id, org_id, name, slug, config_json) VALUES ($1, $2, 'usage test', $3, '{}')")
+            .bind(deployment).bind(org).bind(format!("usage-{deployment}")).execute(&pool).await.unwrap();
         let mut report = UsageReport {
             batch_id: Uuid::new_v4(),
             period_start: Utc::now().date_naive().with_day(1).unwrap(),

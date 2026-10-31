@@ -25,7 +25,7 @@ async fn downgraded_fly_stop_retries_without_releasing_capacity_before_confirmat
     .await
     .unwrap();
     sqlx::query("INSERT INTO organizations(id,name,slug,owner_id,plan) VALUES($1,'downgrade fixture',$2,$3,'pro')").bind(org).bind(format!("downgrade-{org}")).bind(user).execute(&pool).await.unwrap();
-    sqlx::query("INSERT INTO hosted_mocks(id,org_id,name,slug,config_json,status,metadata_json,capacity_reserved) VALUES($1,$2,'fixture','downgrade','{}','active','{\"hosting_backend\":\"flyio\",\"flyio_machine_id\":\"owned-machine\"}',TRUE)").bind(id).bind(org).execute(&pool).await.unwrap();
+    sqlx::query("INSERT INTO hosted_mocks(id,org_id,name,slug,config_json,status,metadata_json,capacity_reserved) VALUES($1,$2,'fixture',$3,'{}','active','{\"hosting_backend\":\"flyio\",\"flyio_machine_id\":\"owned-machine\"}',TRUE)").bind(id).bind(org).bind(format!("downgrade-{id}")).execute(&pool).await.unwrap();
     let deployment = HostedMock::find_by_id(&pool, id).await.unwrap().unwrap();
     let confirmed = Arc::new(AtomicBool::new(false));
     let stops = Arc::new(AtomicUsize::new(0));
